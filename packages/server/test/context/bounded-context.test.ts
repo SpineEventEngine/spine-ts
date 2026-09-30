@@ -521,7 +521,7 @@ describe("BoundedContext assembly", () => {
     const tenantIndex = internalTenantIndex(context);
 
     expect(tenantIndex.tenantMode).toBe("single-tenant");
-    await expect(tenantIndex.all()).resolves.toEqual([]);
+    await expect(tenantIndex.all()).resolves.toEqual([tenant("SINGLE_TENANT")]);
     await expect(tenantIndex.keep(tenant("tenant-a"))).rejects.toThrow(
       'Single-tenant context "Tasks" does not accept tenant recording.',
     );

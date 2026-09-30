@@ -840,15 +840,6 @@
     "rule": "standalone-function",
     "file": "packages/server/src/services/spine-services.ts",
     "kind": "function-declaration",
-    "identity": "maskedState()#1",
-    "name": "maskedState",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration maskedState()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/services/spine-services.ts",
-    "kind": "function-declaration",
     "identity": "normalizedComposite()#1",
     "name": "normalizedComposite",
     "disposition": "migration-debt",
@@ -957,15 +948,6 @@
     "rule": "standalone-function",
     "file": "packages/server/src/services/spine-services.ts",
     "kind": "function-declaration",
-    "identity": "requiredQueryMask()#1",
-    "name": "requiredQueryMask",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration requiredQueryMask()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/services/spine-services.ts",
-    "kind": "function-declaration",
     "identity": "resolveMessagePath()#1",
     "name": "resolveMessagePath",
     "disposition": "migration-debt",
@@ -975,28 +957,10 @@
     "rule": "standalone-function",
     "file": "packages/server/src/services/spine-services.ts",
     "kind": "function-declaration",
-    "identity": "resolveQueryMask()#1",
-    "name": "resolveQueryMask",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration resolveQueryMask()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/services/spine-services.ts",
-    "kind": "function-declaration",
     "identity": "stateRouteIdField()#1",
     "name": "stateRouteIdField",
     "disposition": "migration-debt",
     "reason": "Pre-T-0080 observed standalone declaration stateRouteIdField()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/services/spine-services.ts",
-    "kind": "function-declaration",
-    "identity": "subscriptionFieldMask()#1",
-    "name": "subscriptionFieldMask",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration subscriptionFieldMask()#1 requires remediation by the assigned slice."
   },
   {
     "rule": "standalone-function",

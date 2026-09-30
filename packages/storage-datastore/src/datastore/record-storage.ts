@@ -99,6 +99,9 @@ export interface DatastorePageQuery {
 
 /**
  * Returns one bounded Datastore page and its explicit keyset continuation.
+ *
+ * @typeParam I Record identifier type in the page.
+ * @typeParam R Generated record message type in the page.
  */
 export interface DatastorePage<I, R extends Message> {
   // prettier-ignore
@@ -138,13 +141,31 @@ export interface DatastorePageCursor {
 
 /**
  * Private flat Datastore-entity codec for one record storage handle.
+ *
+ * @typeParam I Identifier type encoded in Datastore keys.
+ * @typeParam R Generated record message type encoded as payload bytes.
  */
 class FlatEntityCodec<I, R extends Message> {
   readonly #kind: string;
+
   readonly #namespace: string | undefined;
+
   readonly #idColumn: DatastoreIdColumn<I>;
+
   readonly #columnMapping: DatastoreColumnMapping;
 
+  /**
+   * Initializes the Datastore kind, tenant namespace, ID codec, and column mapping.
+   *
+   * @param context Storage tenant context.
+   * @param recordSpec Generated record and column contract.
+   * @param client Datastore client supplying the default namespace.
+   * @param maxClientSideScan Maximum local materialization budget.
+   * @param group Optional storage group used in the physical kind.
+   * @param kind Optional explicit physical kind.
+   * @param namespaceConverter Converts tenant IDs to Datastore namespaces.
+   * @param stringifiers Converts message-valued IDs and columns.
+   */
   constructor(
     context: StorageContext,
     private readonly recordSpec: RecordSpec<I, R>,
@@ -170,13 +191,36 @@ class FlatEntityCodec<I, R extends Message> {
     this.#columnMapping = new DatastoreColumnMapping(stringifiers);
   }
 
+  /**
+   * Builds a namespaced Datastore key for a record identifier.
+   *
+   * @param client Datastore client that creates keys.
+   * @param id Typed record identifier.
+   * @returns Physical key for this kind and namespace.
+   */
   key(client: Datastore, id: I): ReturnType<Datastore["key"]> {
     return client.key({
-      path: [this.#kind, this.#idColumn.value(id)],
+      path: [this.#kind, this.idName(id)],
       ...(this.#namespace === undefined ? {} : { namespace: this.#namespace }),
     });
   }
 
+  /**
+   * Returns the canonical Datastore key name for a logical record ID.
+   * @param id Typed record identifier.
+   * @returns Key name shared by equivalent logical IDs.
+   */
+  idName(id: I): string {
+    return this.#idColumn.value(id);
+  }
+
+  /**
+   * Encodes record bytes and declared materialized columns as entity properties.
+   *
+   * @param record Generated record to serialize.
+   * @param columns Materialized column values by declared name.
+   * @returns Datastore property map including the binary payload.
+   */
   encode(record: R, columns: ReadonlyMap<string, unknown>): Record<string, unknown> {
     const data: Record<string, unknown> = {
       [payloadProperty]: Buffer.from(
@@ -191,6 +235,13 @@ class FlatEntityCodec<I, R extends Message> {
     return data;
   }
 
+  /**
+   * Decodes a record ID from an entity's physical key.
+   *
+   * @param entity Raw Datastore entity.
+   * @param client Client whose key symbol identifies the entity key.
+   * @returns Typed record identifier.
+   */
   id(entity: Record<string | symbol, unknown>, client: Datastore): I {
     const key = datastoreKey(entity, client.KEY);
     const name = datastoreKeyName(key);
@@ -200,23 +251,47 @@ class FlatEntityCodec<I, R extends Message> {
     return this.#idColumn.read(name);
   }
 
+  /**
+   * Reads declared column values from a decoded entity record.
+   *
+   * @param entity Raw Datastore entity.
+   * @returns Declared column values by name.
+   */
   columns(entity: Record<string | symbol, unknown>): ReadonlyMap<string, unknown> {
     return new Map(
       this.recordSpec.columns.map((column) => [column.name, column.valueIn(this.decode(entity))]),
     );
   }
 
+  /**
+   * Marks the binary record payload as excluded from Datastore indexes.
+   *
+   * @param data Entity property map being saved.
+   * @returns Payload property name to leave unindexed.
+   */
   unindexedProperties(data: Readonly<Record<string, unknown>>): readonly string[] {
     void data;
     return [payloadProperty];
   }
 
+  /**
+   * Creates a provider query for this handle's kind and namespace.
+   *
+   * @param client Datastore client that creates queries.
+   * @returns Query scoped to this record family.
+   */
   createQuery(client: Datastore): ReturnType<Datastore["createQuery"]> {
     return this.#namespace === undefined
       ? client.createQuery(this.#kind)
       : client.createQuery(this.#namespace, this.#kind);
   }
 
+  /**
+   * Validates a declared column and returns its Datastore property name.
+   *
+   * @param column Requested record column name.
+   * @returns Datastore property name for the column.
+   */
   columnProperty(column: string): string {
     if (!this.recordSpec.columns.some((candidate) => candidate.name === column)) {
       throw new Error(`Datastore record column "${column}" is not declared.`);
@@ -224,14 +299,31 @@ class FlatEntityCodec<I, R extends Message> {
     return column;
   }
 
+  /**
+   * Returns a row limit with one sentinel beyond the local scan budget.
+   *
+   * @returns Provider row limit used to detect budget overflow.
+   */
   queryLimit(): number {
     return this.maxClientSideScan + 1;
   }
 
+  /**
+   * Returns the tenant namespace selected for this handle.
+   *
+   * @returns Datastore namespace, if tenant scoping requires one.
+   */
   namespace(): string | undefined {
     return this.#namespace;
   }
 
+  /**
+   * Converts a declared record column value to its provider representation.
+   *
+   * @param column Declared record column name.
+   * @param value Runtime column value.
+   * @returns Datastore-compatible column value.
+   */
   columnValue(column: string, value: unknown): unknown {
     const declared = this.recordSpec.columns.find((candidate) => candidate.name === column);
     if (declared === undefined)
@@ -239,6 +331,14 @@ class FlatEntityCodec<I, R extends Message> {
     return ColumnMappings.value(this.#columnMapping, declared.type, value);
   }
 
+  /**
+   * Captures ordered values and the physical key from the final page entity.
+   *
+   * @param entity Last raw Datastore entity in a page.
+   * @param order Provider ordering used for the page.
+   * @param keySymbol Client symbol for the physical entity key.
+   * @returns Stable keyset continuation for the next page.
+   */
   pageCursor(
     entity: Record<string | symbol, unknown>,
     order: readonly { readonly property: string; readonly direction: "asc" | "desc" }[],
@@ -258,6 +358,12 @@ class FlatEntityCodec<I, R extends Message> {
     return { values, key };
   }
 
+  /**
+   * Decodes a generated record from an entity's binary payload.
+   *
+   * @param entity Raw Datastore entity containing the payload.
+   * @returns Generated record without unknown fields.
+   */
   decode(entity: Record<string | symbol, unknown>): R {
     const payload = entity[payloadProperty];
 
@@ -317,6 +423,9 @@ function cursorJson(_key: string, value: unknown): unknown {
 
 /**
  * Provides one Datastore-backed storage handle for a record family.
+ *
+ * @typeParam I Record identifier type used by this handle.
+ * @typeParam R Generated record message type stored by this handle.
  */
 export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
   // prettier-ignore
@@ -325,6 +434,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
    * Declares atomic conditional mutations for compatible Datastore handles.
    */
   override readonly atomicCompareAndSet = true;
+
   readonly #codec: FlatEntityCodec<I, R>;
 
   /**
@@ -542,7 +652,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
   protected override queryCapabilities(): StorageQueryCapabilities {
     return {
       comparisons: ["equal", "greaterThan", "lessThan", "greaterOrEqual", "lessOrEqual"],
-      features: ["order", "mask", "limit"],
+      features: ["order", "limit"],
     };
   }
 
@@ -554,19 +664,91 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
   protected override async queryPlanRecordEntries(
     plan: NormalizedQueryPlan<I>,
   ): Promise<readonly RecordEntry<I, R>[]> {
-    if (plan.predicate !== undefined && DatastoreQueryPushdown.legal(plan) === undefined)
+    const legal = DatastoreQueryPushdown.legal(plan);
+    const largeIds =
+      plan.exhaustive && plan.predicate !== undefined
+        ? DatastoreQueryPushdown.largeIdSet(plan.predicate, plan.order)
+        : undefined;
+    if (plan.predicate !== undefined && legal === undefined && largeIds === undefined)
       throw new TypeError(
         "Datastore normalized query has an illegal predicate or inequality ordering.",
       );
     for (const order of plan.order ?? []) this.#codec.columnProperty(order.column);
-    const query = this.#codec.createQuery(this.client);
-    DatastoreQueryPushdown.plan(
-      query,
-      plan,
-      (id) => this.#codec.key(this.client, id),
-      (column) => this.#codec.columnProperty(column),
-      (column, value) => this.#codec.columnValue(column, value),
-    );
+    if (plan.exhaustive) {
+      if (largeIds !== undefined) return this.largeIdPlanEntries(largeIds);
+      return this.exhaustivePlanEntries(plan, true);
+    }
+    return this.boundedPlanEntries(plan);
+  }
+
+  /**
+   * Reads a mandatory large ID set through provider-legal key batches.
+   *
+   * @param ids Explicit IDs that every matching record must have.
+   * @returns Unique candidates for global predicate and ordering evaluation.
+   */
+  private async largeIdPlanEntries(ids: readonly I[]): Promise<readonly RecordEntry<I, R>[]> {
+    const unique = new Map<string, I>();
+    for (const id of ids) unique.set(this.#codec.idName(id), id);
+    const selected = [...unique.values()];
+    const entries: RecordEntry<I, R>[] = [];
+    for (let start = 0; start < selected.length; start += 30) {
+      const batch = selected.slice(start, start + 30);
+      entries.push(
+        ...(await this.exhaustivePlanEntries(
+          { exhaustive: true, predicate: { kind: "ids", ids: batch } },
+          true,
+        )),
+      );
+    }
+    return entries;
+  }
+
+  /**
+   * Reads every provider page before storage applies the global query semantics.
+   *
+   * @param plan Validated normalized query plan.
+   * @param pushdown Whether the provider can apply the predicate and ordering.
+   * @returns Every candidate entry in provider page order.
+   */
+  private async exhaustivePlanEntries(
+    plan: NormalizedQueryPlan<I>,
+    pushdown: boolean,
+  ): Promise<readonly RecordEntry<I, R>[]> {
+    const entries: RecordEntry<I, R>[] = [];
+    let cursor: Buffer | string | undefined;
+    const seen = new Set<string>();
+    for (;;) {
+      const query = this.planQuery(plan, pushdown);
+      query.limit(128);
+      if (cursor !== undefined) query.start(cursor);
+      const response = await this.provider(() => this.client.runQuery(query, wrappedReadOptions));
+      entries.push(
+        ...DatastoreResults.entities(response).map((entity) => ({
+          id: this.#codec.id(entity, this.client),
+          record: this.#codec.decode(entity),
+        })),
+      );
+      const info = DatastoreResults.queryInfo(response);
+      if (!info.more) return entries;
+      const next = info.cursor;
+      const key = typeof next === "string" ? next : next.toString("base64");
+      if (seen.has(key)) throw new Error("Datastore query continuation did not advance.");
+      seen.add(key);
+      cursor = next;
+    }
+  }
+
+  /**
+   * Reads one bounded provider result for public and Process Manager plans.
+   *
+   * @param plan Validated normalized query plan.
+   * @returns Candidate entries within the provider's configured bound.
+   */
+  private async boundedPlanEntries(
+    plan: NormalizedQueryPlan<I>,
+  ): Promise<readonly RecordEntry<I, R>[]> {
+    const query = this.planQuery(plan, true);
     const providerLimit = Math.min(
       this.#codec.queryLimit(),
       plan.limit ?? Number.POSITIVE_INFINITY,
@@ -583,6 +765,30 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
       id: this.#codec.id(entity, this.client),
       record: this.#codec.decode(entity),
     }));
+  }
+
+  /**
+   * Builds one Datastore query with safe predicate and order pushdown.
+   *
+   * @param plan Normalized query plan to translate.
+   * @param pushdown Whether the plan is legal for provider filtering.
+   * @returns Query without a page bound or cursor.
+   */
+  private planQuery(
+    plan: NormalizedQueryPlan<I>,
+    pushdown: boolean,
+  ): ReturnType<Datastore["createQuery"]> {
+    const query = this.#codec.createQuery(this.client);
+    if (pushdown)
+      DatastoreQueryPushdown.plan(
+        query,
+        plan,
+        (id) => this.#codec.key(this.client, id),
+        (column) => this.#codec.columnProperty(column),
+        (column, value) => this.#codec.columnValue(column, value),
+      );
+    if (plan.exhaustive && (!pushdown || (plan.order?.length ?? 0) === 0)) query.order("__key__");
+    return query;
   }
 
   /**
@@ -627,6 +833,14 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     throw new Error("Datastore compare-and-set retry limit was reached.");
   }
 
+  /**
+   * Executes one transactional compare-and-set attempt against the stored payload.
+   *
+   * @param id Record slot selected for mutation.
+   * @param expected Required prior materialized record, or absence.
+   * @param next Replacement materialized record, or deletion.
+   * @returns True when the expected payload matched and commit completed.
+   */
   private async attemptCompareAndSet(
     id: I,
     expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
@@ -700,6 +914,13 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     );
   }
 
+  /**
+   * Executes a provider operation and hides provider error details from callers.
+   *
+   * @typeParam T Result produced by the provider operation.
+   * @param operation Provider request to execute.
+   * @returns Provider result after successful execution.
+   */
   private async provider<T>(operation: () => Promise<T>): Promise<T> {
     try {
       return await operation();
@@ -723,39 +944,54 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
 }
 
 /**
- * Converts values between Spine records and the Datastore provider representation.
+ * Compares decoded query values and persisted payload bytes.
  */
-const RecordValues = Object.freeze(
-  new (class {
-    // prettier-ignore
+class RecordValueMethods {
+  // prettier-ignore
 
-    /**
-     * Compares canonical local values for equality.
-     */
-    equal(left: unknown, right: unknown): boolean {
+  /**
+   * Compares canonical local values for equality.
+   *
+   * @param left First decoded query value.
+   * @param right Second decoded query value.
+   * @returns True when the query evaluator considers the values equal.
+   */
+  equal(left: unknown, right: unknown): boolean {
       return StorageQueryValues.equal(left, right);
     }
 
-    /**
-     * Compares canonical local values for ordering.
-     */
-    compare(left: unknown, right: unknown): number {
-      return StorageQueryValues.compare(left, right);
-    }
+  /**
+   * Compares canonical local values for ordering.
+   *
+   * @param left First decoded query value.
+   * @param right Second decoded query value.
+   * @returns Signed query sort comparison.
+   */
+  compare(left: unknown, right: unknown): number {
+    return StorageQueryValues.compare(left, right);
+  }
 
-    /**
-     * Compares two persisted payload byte arrays.
-     */
-    payloadEqual(left: unknown, right: unknown): boolean {
-      return (
-        left instanceof Uint8Array &&
-        right instanceof Uint8Array &&
-        left.byteLength === right.byteLength &&
-        left.every((value, index) => value === right[index])
-      );
-    }
-  })(),
-);
+  /**
+   * Compares two persisted payload byte arrays.
+   *
+   * @param left First persisted payload candidate.
+   * @param right Second persisted payload candidate.
+   * @returns True only when both are byte arrays with identical bytes.
+   */
+  payloadEqual(left: unknown, right: unknown): boolean {
+    return (
+      left instanceof Uint8Array &&
+      right instanceof Uint8Array &&
+      left.byteLength === right.byteLength &&
+      left.every((value, index) => value === right[index])
+    );
+  }
+}
+
+/**
+ * Exposes comparisons for decoded query values and persisted payload bytes.
+ */
+const RecordValues = Object.freeze(new RecordValueMethods());
 
 /**
  * Raised when a query would exceed the adapter's configured finite client-side scan budget.
@@ -774,6 +1010,12 @@ export class DatastoreQueryLimitError extends Error {
   }
 }
 
+/**
+ * Pairs a decoded record with its materialized query columns.
+ *
+ * @typeParam I Record identifier type.
+ * @typeParam R Generated record message type.
+ */
 interface QueriedEntry<I, R extends Message> extends RecordEntry<I, R> {
   readonly columns: ReadonlyMap<string, unknown>;
 }
@@ -787,6 +1029,13 @@ class DatastoreQueryPushdownHelper {
 
   /**
    * Translates the legacy record-query surface.
+   *
+   * @typeParam I Record identifier type used by the query.
+   * @param query Mutable Datastore query receiving filters and ordering.
+   * @param recordQuery Legacy record query to translate.
+   * @param keyFor Converts a record ID to a Datastore key.
+   * @param columnProperty Resolves a declared column to a property name.
+   * @param columnValue Converts a column value for the provider.
    */
   translate<I>(
       query: ReturnType<Datastore["createQuery"]>,
@@ -834,6 +1083,13 @@ class DatastoreQueryPushdownHelper {
 
   /**
    * Applies the all-or-nothing legal portion of a normalized query plan.
+   *
+   * @typeParam I Record identifier type used by the plan.
+   * @param query Mutable Datastore query receiving safe clauses.
+   * @param plan Normalized plan whose predicate and ordering are inspected.
+   * @param keyFor Converts a record ID to a Datastore key.
+   * @param columnProperty Resolves a declared column to a property name.
+   * @param columnValue Converts a column value for the provider.
    */
   plan<I>(
     query: ReturnType<Datastore["createQuery"]>,
@@ -856,6 +1112,10 @@ class DatastoreQueryPushdownHelper {
 
   /**
    * Returns the predicate only when every clause satisfies provider restrictions.
+   *
+   * @typeParam I Record identifier type in ID predicates.
+   * @param plan Normalized plan checked for supported predicate shape and ordering.
+   * @returns Predicate when Datastore can execute it completely.
    */
   legal<I>(plan: NormalizedQueryPlan<I>): NormalizedQueryPredicate<I> | undefined {
     const predicate = plan.predicate;
@@ -883,7 +1143,44 @@ class DatastoreQueryPushdownHelper {
   }
 
   /**
+   * Finds a mandatory ID set too wide for one Datastore IN filter.
+   *
+   * @typeParam I Identifier type in the predicate.
+   * @param predicate Predicate checked for a mandatory large ID set.
+   * @param order Ordering checked against any inequality comparison.
+   * @returns A required large ID set, or undefined for other shapes.
+   */
+  largeIdSet<I>(
+    predicate: NormalizedQueryPredicate<I>,
+    order: NormalizedQueryPlan<I>["order"],
+  ): readonly I[] | undefined {
+    const leaves = predicate.kind === "all" ? predicate.predicates : [predicate];
+    if (leaves.some((leaf) => leaf.kind !== "ids" && leaf.kind !== "comparison")) return undefined;
+    const large = leaves.find((leaf) => leaf.kind === "ids" && leaf.ids.length > 30);
+    if (large?.kind !== "ids") return undefined;
+    const narrowed = leaves.map((leaf) =>
+      leaf.kind === "ids" && leaf.ids.length > 30 ? { ...leaf, ids: leaf.ids.slice(0, 1) } : leaf,
+    );
+    const representative: NormalizedQueryPredicate<I> =
+      predicate.kind === "all"
+        ? { kind: "all", predicates: narrowed }
+        : { kind: "ids", ids: large.ids.slice(0, 1) };
+    const legal = this.legal({
+      predicate: representative,
+      ...(order === undefined ? {} : { order }),
+    });
+    return legal === undefined ? undefined : large.ids;
+  }
+
+  /**
    * Adds one already-legal normalized predicate to the provider query.
+   *
+   * @typeParam I Record identifier type in ID predicates.
+   * @param query Mutable Datastore query receiving provider filters.
+   * @param predicate Normalized predicate approved for provider execution.
+   * @param keyFor Converts a record ID to a Datastore key.
+   * @param columnProperty Resolves a declared column to a property name.
+   * @param columnValue Converts a comparison value for the provider.
    */
   predicate<I>(
     query: ReturnType<Datastore["createQuery"]>,
@@ -935,20 +1232,20 @@ class DatastoreQueryPushdownHelper {
 const DatastoreQueryPushdown = Object.freeze(new DatastoreQueryPushdownHelper());
 
 /**
- * Selects safe provider bounds for direct record queries.
+ * Selects safe provider bounds for direct legacy record queries.
  */
-const DatastoreRecordQuery = Object.freeze(
-  new (class {
-    // prettier-ignore
+class DatastoreRecordQueryMethods {
+  // prettier-ignore
 
-    /**
-     * Returns a caller limit only when it cannot change local query semantics.
-     *
-     * @param query Supplies the requested record query.
-     * @param scanLimit Supplies the configured materialization limit.
-     * @returns The finite provider row bound.
-     */
-    limit<I>(query: RecordQuery<I>, scanLimit: number): number {
+  /**
+   * Returns a caller limit only when it cannot change local query semantics.
+   *
+   * @typeParam I Record identifier type in the legacy query.
+   * @param query Supplies the requested record query.
+   * @param scanLimit Supplies the configured materialization limit.
+   * @returns The finite provider row bound.
+   */
+  limit<I>(query: RecordQuery<I>, scanLimit: number): number {
       const requestedLimit = query.limit;
       if (requestedLimit !== undefined && this.isKeysetPage(query)) return requestedLimit;
       if (
@@ -963,32 +1260,37 @@ const DatastoreRecordQuery = Object.freeze(
       return scanLimit;
     }
 
-    /**
-     * Returns whether a legacy query is exactly an ascending identifier keyset page.
-     *
-     * @param query The record query to classify.
-     * @returns `true` when Datastore can apply its limit and continuation completely.
-     */
-    isKeysetPage<I>(query: RecordQuery<I>): boolean {
-      const order = query.sort;
-      const continuation = query.after;
-      const continuationValue = continuation?.values[0];
-      return (
-        query.limit !== undefined &&
-        query.ids === undefined &&
-        query.filters === undefined &&
-        query.offset === undefined &&
-        order?.length === 1 &&
-        order[0]?.field === "id" &&
-        order[0].direction !== "desc" &&
-        (continuation === undefined ||
-          (continuation.values.length === 1 &&
-            continuationValue?.field === "id" &&
-            RecordValues.equal(continuationValue.value, continuation.id)))
-      );
-    }
-  })(),
-);
+  /**
+   * Returns whether a legacy query is exactly an ascending identifier keyset page.
+   *
+   * @typeParam I Record identifier type in the legacy query.
+   * @param query The record query to classify.
+   * @returns `true` when Datastore can apply its limit and continuation completely.
+   */
+  isKeysetPage<I>(query: RecordQuery<I>): boolean {
+    const order = query.sort;
+    const continuation = query.after;
+    const continuationValue = continuation?.values[0];
+    return (
+      query.limit !== undefined &&
+      query.ids === undefined &&
+      query.filters === undefined &&
+      query.offset === undefined &&
+      order?.length === 1 &&
+      order[0]?.field === "id" &&
+      order[0].direction !== "desc" &&
+      (continuation === undefined ||
+        (continuation.values.length === 1 &&
+          continuationValue?.field === "id" &&
+          RecordValues.equal(continuationValue.value, continuation.id)))
+    );
+  }
+}
+
+/**
+ * Provides the bounded legacy record-query checks used by this adapter.
+ */
+const DatastoreRecordQuery = Object.freeze(new DatastoreRecordQueryMethods());
 
 /**
  * Applies record-query filtering, ordering, continuation, and paging locally.
@@ -999,6 +1301,12 @@ class LocalQueryResultsHelper {
 
   /**
    * Applies one legacy record query to materialized candidate entries.
+   *
+   * @typeParam I Record identifier type in the candidates.
+   * @typeParam R Generated record message type in the candidates.
+   * @param entries Materialized candidates with declared column values.
+   * @param query Legacy filter, ordering, continuation, and paging request.
+   * @returns Selected record entries after local query evaluation.
    */
   apply<I, R extends Message>(
       entries: readonly QueriedEntry<I, R>[],
@@ -1020,6 +1328,12 @@ class LocalQueryResultsHelper {
 
   /**
    * Tests whether a candidate satisfies the ID and equality filters.
+   *
+   * @typeParam I Record identifier type in the candidate.
+   * @typeParam R Generated record message type in the candidate.
+   * @param entry Candidate record with materialized columns.
+   * @param query Legacy ID and column filters.
+   * @returns True when the candidate satisfies every requested filter.
    */
   matches<I, R extends Message>(entry: QueriedEntry<I, R>, query: RecordQuery<I>): boolean {
     return (
@@ -1035,7 +1349,14 @@ class LocalQueryResultsHelper {
   }
 
   /**
-   * Orders candidates by requested sort fields and canonical ID tie-breaker.
+   * Compares candidates by requested sort fields and canonical ID tie-breaker.
+   *
+   * @typeParam I Record identifier type in the candidates.
+   * @typeParam R Generated record message type in the candidates.
+   * @param left First candidate entry.
+   * @param right Second candidate entry.
+   * @param orders Requested field order in priority order.
+   * @returns Signed sort comparison with ID as final tie-breaker.
    */
   order<I, R extends Message>(
     left: QueriedEntry<I, R>,
@@ -1054,6 +1375,13 @@ class LocalQueryResultsHelper {
 
   /**
    * Compares a candidate with a normalized continuation cursor.
+   *
+   * @typeParam I Record identifier type in the candidate and cursor.
+   * @typeParam R Generated record message type in the candidate.
+   * @param entry Candidate record with materialized columns.
+   * @param orders Requested field order used by the cursor.
+   * @param after Continuation cursor from the preceding page.
+   * @returns Signed comparison after applying order directions and ID tie-breaker.
    */
   continuation<I, R extends Message>(
     entry: QueriedEntry<I, R>,
@@ -1073,7 +1401,13 @@ class LocalQueryResultsHelper {
   }
 
   /**
-   * Obtains an ID or indexed column value from a candidate.
+   * Reads an ID or indexed column value from a candidate.
+   *
+   * @typeParam I Record identifier type in the candidate.
+   * @typeParam R Generated record message type in the candidate.
+   * @param entry Candidate record with materialized columns.
+   * @param field ID or declared column name.
+   * @returns Candidate ID or stored column value.
    */
   value<I, R extends Message>(entry: QueriedEntry<I, R>, field: string): unknown {
     return field === "id" ? entry.id : entry.columns.get(field);
@@ -1093,7 +1427,10 @@ class DatastoreTransactionsHelper {
   // prettier-ignore
 
   /**
-   * Redacts credential-like errors while preserving safe provider failures.
+   * Replaces transaction errors with a stable public failure message.
+   *
+   * @param error Provider failure whose details must be hidden.
+   * @returns New error without provider details.
    */
   redact(error: unknown): Error {
       void error;
@@ -1101,7 +1438,10 @@ class DatastoreTransactionsHelper {
     }
 
   /**
-   * Identifies a safe-to-retry Datastore transaction conflict.
+   * Checks for a safe-to-retry Datastore transaction conflict.
+   *
+   * @param error Provider failure to classify.
+   * @returns True for non-sensitive Datastore conflict code 10.
    */
   retry(error: unknown): boolean {
     return (
@@ -1113,6 +1453,9 @@ class DatastoreTransactionsHelper {
 
   /**
    * Waits using exponential jitter before a bounded CAS retry.
+   *
+   * @param attempt Zero-based retry attempt used for backoff.
+   * @returns Completes after the randomized delay.
    */
   async wait(attempt: number): Promise<void> {
     const exponentialDelay = casRetryDelayMs * 2 ** attempt;
@@ -1134,7 +1477,10 @@ class DatastoreResultsHelper {
   // prettier-ignore
 
   /**
-   * Extracts the optional first entity from a Datastore read response.
+   * Reads the optional first entity from a Datastore read response.
+   *
+   * @param response Raw provider read response.
+   * @returns First validated entity, if a row was returned.
    */
   first(response: unknown): Record<string | symbol, unknown> | undefined {
       if (!Array.isArray(response))
@@ -1144,7 +1490,10 @@ class DatastoreResultsHelper {
     }
 
   /**
-   * Extracts entity rows from a Datastore query response.
+   * Reads entity rows from a Datastore query response.
+   *
+   * @param response Raw provider query response.
+   * @returns Validated entity objects in provider order.
    */
   entities(response: unknown): readonly Record<string | symbol, unknown>[] {
     if (!Array.isArray(response) || !Array.isArray(response[0])) {
@@ -1154,12 +1503,16 @@ class DatastoreResultsHelper {
   }
 
   /**
-   * Extracts the provider continuation and the remaining-row indication.
+   * Reads the provider continuation and the remaining-row indication.
+   *
+   * @param response Raw provider query response.
+   * @returns Validated cursor and whether another page exists.
    */
-  queryInfo(response: unknown): {
-    readonly cursor: Buffer | string | undefined;
-    readonly more: boolean;
-  } {
+  queryInfo(
+    response: unknown,
+  ):
+    | { readonly cursor: Buffer | string; readonly more: true }
+    | { readonly cursor: Buffer | string | undefined; readonly more: false } {
     if (!Array.isArray(response) || typeof response[1] !== "object" || response[1] === null)
       throw new Error("Datastore returned an invalid query response.");
     const info = response[1] as Record<string, unknown>;
@@ -1173,16 +1526,22 @@ class DatastoreResultsHelper {
       throw new Error("Datastore returned an invalid query response.");
     const more =
       moreResults === "MORE_RESULTS_AFTER_LIMIT" || moreResults === "MORE_RESULTS_AFTER_CURSOR";
-    if (more && !(cursor instanceof Buffer || typeof cursor === "string"))
-      throw new Error("Datastore returned an invalid query response.");
+    if (more) {
+      if (!(cursor instanceof Buffer || typeof cursor === "string"))
+        throw new Error("Datastore returned an invalid query response.");
+      return { cursor, more: true };
+    }
     return {
       cursor: cursor instanceof Buffer || typeof cursor === "string" ? cursor : undefined,
-      more,
+      more: false,
     };
   }
 
   /**
    * Validates one provider entity object.
+   *
+   * @param value Candidate entity returned by Datastore.
+   * @returns Record-like entity object.
    */
   entity(value: unknown): Record<string | symbol, unknown> {
     if (typeof value !== "object" || value === null) {

@@ -10,16 +10,9 @@ import { pathToFileURL } from "node:url";
 import { create } from "@bufbuild/protobuf";
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
-import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
+import { SignalEnvelopes } from "@spine-event-engine/core";
 import { UserIdSchema } from "@spine-event-engine/proto";
-import {
-  CommandService,
-  QueryIdSchema,
-  QuerySchema,
-  QueryService,
-  TargetFiltersSchema,
-  TargetSchema,
-} from "@spine-event-engine/proto/client";
+import { CommandService, QueryIdSchema, QueryService } from "@spine-event-engine/proto/client";
 import { SignalMetadata } from "@spine-event-engine/server";
 
 import { CreateTaskSchema } from "../dist/generated/spine/examples/todo/task_commands_pb.js";
@@ -27,7 +20,7 @@ import {
   TaskIdSchema,
   TaskListIdSchema,
 } from "../dist/generated/spine/examples/todo/task_id_pb.js";
-import { TaskListSchema } from "../dist/generated/spine/examples/todo/task_list_pb.js";
+import { TaskListQuery } from "../dist/generated/spine/examples/todo/task_list_query.js";
 import { SmokeTaskLists } from "../dist/src/smoke-task-lists.js";
 
 const baseUrl = process.env.SPINE_TODO_BASE_URL ?? "http://127.0.0.1:8080";
@@ -118,21 +111,14 @@ async function readTaskListEventually(id, context) {
 }
 
 function createTaskListQuery(id, context, attempt) {
-  return create(QuerySchema, {
-    id: create(QueryIdSchema, { value: `smoke-query-${id}-${attempt}` }),
-    target: create(TargetSchema, {
-      type: TypeUrls.derive(TaskListSchema),
-      criterion: {
-        case: "filters",
-        value: create(TargetFiltersSchema, {
-          idFilter: {
-            id: [AnyMessages.pack(TaskListIdSchema, create(TaskListIdSchema, { value: id }))],
-          },
-        }),
-      },
-    }),
-    context,
-  });
+  // The generated module supplies columns; the direct gRPC call still carries actor context.
+  const query = TaskListQuery.create()
+    .byId(create(TaskListIdSchema, { value: id }))
+    .build()
+    .build();
+  query.id = create(QueryIdSchema, { value: `smoke-query-${id}-${attempt}` });
+  query.context = context;
+  return query;
 }
 
 async function withTimeout(promise, label, timeoutMs) {

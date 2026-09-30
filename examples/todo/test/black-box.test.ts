@@ -13,7 +13,8 @@
  */
 
 import { create, type MessageShape } from "@bufbuild/protobuf";
-import { Int32ValueSchema, type Any } from "@bufbuild/protobuf/wkt";
+import { type Any } from "@bufbuild/protobuf/wkt";
+import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import { createClient, type Client } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
 import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
@@ -23,22 +24,16 @@ import {
   EventContextSchema,
   EventIdSchema,
   EventSchema,
+  ResponseSchema,
+  StatusSchema,
   UserIdSchema,
   ValidationErrorSchema,
 } from "@spine-event-engine/proto";
-import {
-  CompositeFilter_CompositeOperator,
-  CompositeFilterSchema,
-  Filter_Operator,
-  FilterSchema,
-  TargetFiltersSchema,
-  TargetSchema,
-} from "@spine-event-engine/proto/client";
+import { TargetFiltersSchema, TargetSchema } from "@spine-event-engine/proto/client";
 import {
   EntityStateWithVersionSchema,
   QueryIdSchema,
   QueryResponseSchema,
-  QuerySchema,
   type Query,
   type QueryResponse,
 } from "@spine-event-engine/proto/client";
@@ -89,6 +84,7 @@ import {
 } from "../generated/spine/examples/todo/task_id_pb.js";
 import { TaskAssigneeSchema } from "../generated/spine/examples/todo/task_assignee_pb.js";
 import { TaskListSchema, type TaskList } from "../generated/spine/examples/todo/task_list_pb.js";
+import { TaskListQuery } from "../generated/spine/examples/todo/task_list_query.js";
 import {
   TaskAlreadyAssignedSchema,
   TaskAlreadyDoneSchema,
@@ -1027,6 +1023,74 @@ describe("@spine-event-engine/example-todo", () => {
     expect(rows[0]?.id?.value).toBe("task-column-second");
     expect(rows[0]?.openTaskCount).toBe(1);
     expect(rows[0]?.tasks[0]?.title).toBe("Second");
+  });
+
+  it("reads a complete open list through the generated-query Node client example", async () => {
+    const { TaskListReader } = await import("../dist/src/docs/query-client.js");
+    await withRemoteTodo(async ({ baseUrl, commands }) => {
+      await postRemoteCommand(
+        commands,
+        createTaskCommand("command-doc-query", "task-doc-query", "Documented task"),
+        "documented query command acknowledgement",
+      );
+      await vi.waitFor(async () => {
+        const rows = await TaskListReader.readOpen(baseUrl, "task-doc-query");
+        expect(rows).toHaveLength(1);
+        expect(rows[0]?.tasks[0]?.title).toBe("Documented task");
+        expect(rows[0]?.openTaskCount).toBe(1);
+      });
+    });
+  });
+
+  it("skips absent and foreign states in the generated-query client example", async () => {
+    const { TaskListReader } = await import("../dist/src/docs/query-client.js");
+    const list = create(TaskListSchema, { id: create(TaskListIdSchema, { value: "list" }) });
+    const response = create(QueryResponseSchema, {
+      response: create(ResponseSchema, {
+        status: create(StatusSchema, {
+          status: { case: "ok", value: create(EmptySchema) },
+        }),
+      }),
+      message: [
+        create(EntityStateWithVersionSchema),
+        create(EntityStateWithVersionSchema, {
+          state: AnyMessages.pack(TaskIdSchema, create(TaskIdSchema, { value: "foreign" })),
+        }),
+        create(EntityStateWithVersionSchema, { state: AnyMessages.pack(TaskListSchema, list) }),
+      ],
+    });
+
+    expect(TaskListReader.states(response)).toEqual([list]);
+  });
+
+  it("rejects a failed generated-query response and accepts an empty successful one", async () => {
+    const { TaskListReader } = await import("../dist/src/docs/query-client.js");
+    const failure = create(QueryResponseSchema, {
+      response: create(ResponseSchema, {
+        status: create(StatusSchema, {
+          status: {
+            case: "error",
+            value: create(ErrorSchema, {
+              type: "INVALID_QUERY",
+              message: "TaskList query rejected its filter.",
+            }),
+          },
+        }),
+      }),
+    });
+    const empty = create(QueryResponseSchema, {
+      response: create(ResponseSchema, {
+        status: create(StatusSchema, {
+          status: { case: "ok", value: create(EmptySchema) },
+        }),
+      }),
+    });
+
+    expect(() => TaskListReader.states(failure)).toThrow("TaskList query rejected its filter.");
+    expect(TaskListReader.states(empty)).toEqual([]);
+    expect(() => TaskListReader.states(create(QueryResponseSchema))).toThrow(
+      "TaskList query failed.",
+    );
   });
 
   it("subscribes to task-list updates and receives projection-driven changes", async () => {
@@ -2159,65 +2223,27 @@ function createCommandMetadata(commandId: string) {
 }
 
 function createTaskListQuery() {
-  return create(QuerySchema, {
-    id: create(QueryIdSchema, { value: "query-task-list" }),
-    target: create(TargetSchema, {
-      type: TypeUrls.derive(TaskListSchema),
-      criterion: {
-        case: "includeAll",
-        value: true,
-      },
-    }),
-    context: createActorContext(),
-  });
+  const query = TaskListQuery.create().build().build();
+  query.id = create(QueryIdSchema, { value: "query-task-list" });
+  query.context = createActorContext();
+  return query;
 }
 
 function createTaskListIdQuery(id = "task-list-query") {
-  return create(QuerySchema, {
-    id: create(QueryIdSchema, { value: "query-task-list-by-id" }),
-    target: create(TargetSchema, {
-      type: TypeUrls.derive(TaskListSchema),
-      criterion: {
-        case: "filters",
-        value: create(TargetFiltersSchema, {
-          idFilter: {
-            id: [AnyMessages.pack(TaskListIdSchema, create(TaskListIdSchema, { value: id }))],
-          },
-        }),
-      },
-    }),
-    context: createActorContext(),
-  });
+  const query = TaskListQuery.create()
+    .byId(create(TaskListIdSchema, { value: id }))
+    .build()
+    .build();
+  query.id = create(QueryIdSchema, { value: "query-task-list-by-id" });
+  query.context = createActorContext();
+  return query;
 }
 
 function createOpenTaskCountQuery(openTaskCount: number) {
-  return create(QuerySchema, {
-    id: create(QueryIdSchema, { value: "query-task-list-column" }),
-    target: create(TargetSchema, {
-      type: TypeUrls.derive(TaskListSchema),
-      criterion: {
-        case: "filters",
-        value: create(TargetFiltersSchema, {
-          filter: [
-            create(CompositeFilterSchema, {
-              filter: [
-                create(FilterSchema, {
-                  fieldPath: { fieldName: ["open_task_count"] },
-                  value: AnyMessages.pack(
-                    Int32ValueSchema,
-                    create(Int32ValueSchema, { value: openTaskCount }),
-                  ),
-                  operator: Filter_Operator.EQUAL,
-                }),
-              ],
-              operator: CompositeFilter_CompositeOperator.ALL,
-            }),
-          ],
-        }),
-      },
-    }),
-    context: createActorContext(),
-  });
+  const query = TaskListQuery.create().openTaskCount().is(openTaskCount).build().build();
+  query.id = create(QueryIdSchema, { value: "query-task-list-column" });
+  query.context = createActorContext();
+  return query;
 }
 
 function createTaskListTopic(id?: string) {

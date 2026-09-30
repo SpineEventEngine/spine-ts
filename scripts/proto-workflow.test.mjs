@@ -1,4 +1,6 @@
 import {
+  chmodSync,
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -34,7 +36,107 @@ import {
   writeStagedTemplate,
   withCopyrightHeader,
 } from "./proto-workflow.mjs";
+import { fixtureRunner, generateProtoFixtures } from "./generate-proto-fixtures.mjs";
 import { writeSpineProtoArtifacts } from "./generate-spine-proto-artifacts.mjs";
+
+describe("internal fixture Buf boundary", () => {
+  it.each(["core", "server"])(
+    "keeps negative descriptors while selecting %s query paths",
+    (fixture) => {
+      const root = mkdtempSync(join(tmpdir(), "spine-fixture-boundary-"));
+      try {
+        writeFileSync(
+          join(root, "buf.gen.yaml"),
+          [
+            "version: v2",
+            "plugins:",
+            "  - local: protoc-gen-es",
+            "    out: output",
+            "  - local:",
+            "      - node",
+            "      - rejection-generator.js",
+            "    out: output",
+            "  - local:",
+            "      - node",
+            "      - entity-query-generator.js",
+            "    out: output",
+            "",
+          ].join("\n"),
+        );
+        const executable = join(root, "record-buf.mjs");
+        writeFileSync(
+          executable,
+          '#!/usr/bin/env node\nimport { appendFileSync } from "node:fs";\n' +
+            'appendFileSync("calls.jsonl", JSON.stringify(process.argv.slice(2)) + "\\n");\n',
+        );
+        chmodSync(executable, 0o755);
+        const result = fixtureRunner(fixture)(
+          executable,
+          [
+            "generate",
+            "--template",
+            "buf.gen.yaml",
+            "--path",
+            "entity-metadata/invalid-column.proto",
+            "--path",
+            "entity-metadata/project_states.proto",
+          ],
+          { cwd: root, encoding: "utf8", timeout: 10_000, maxBuffer: 1_000_000 },
+        );
+        expect(result.status).toBe(0);
+        const calls = readFileSync(join(root, "calls.jsonl"), "utf8")
+          .trim()
+          .split("\n")
+          .map((line) => JSON.parse(line));
+        expect(calls[0]).toContain("entity-metadata/invalid-column.proto");
+        expect(readFileSync(join(root, "buf.fixtures.base.yaml"), "utf8")).not.toContain(
+          "entity-query-generator",
+        );
+        if (fixture === "core") {
+          expect(calls).toHaveLength(1);
+        } else {
+          expect(calls).toHaveLength(2);
+          expect(calls[1]).toContain("entity-metadata/project_states.proto");
+          expect(calls[1]).not.toContain("entity-metadata/invalid-column.proto");
+        }
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it("rolls back a different invalid server fixture column", async () => {
+    const root = process.cwd();
+    const live = join(root, "packages/server/test-fixtures");
+    const stage = mkdtempSync(join(live, ".fixture-query-test-"));
+    const executable = prepareProtoToolsBootstrap(root);
+    try {
+      for (const name of ["package.json", "spine-proto.json", "proto"])
+        cpSync(join(live, name), join(stage, name), { recursive: true });
+      await generateProtoFixtures(executable, stage, stage, "server");
+      const manifest = readFileSync(join(stage, "spine-proto-manifest.json"), "utf8");
+      const query = join(stage, "generated/entity-metadata/project_states_query.ts");
+      const priorQuery = readFileSync(query, "utf8");
+      expect(existsSync(join(stage, "generated/entity-metadata/invalid-column_pb.ts"))).toBe(true);
+      expect(existsSync(join(stage, "generated/entity-metadata/invalid-column_query.ts"))).toBe(
+        false,
+      );
+      const invalid = readFileSync(
+        join(stage, "proto/entity-metadata/invalid-column.proto"),
+        "utf8",
+      ).replace("InvalidColumnState", "AnotherInvalidColumnState");
+      writeFileSync(join(stage, "proto/entity-metadata/another-invalid-column.proto"), invalid);
+      await expect(generateProtoFixtures(executable, stage, stage, "server")).rejects.toThrow(
+        /column "tags" must be singular/u,
+      );
+      expect(readFileSync(join(stage, "spine-proto-manifest.json"), "utf8")).toBe(manifest);
+      expect(readFileSync(query, "utf8")).toBe(priorQuery);
+    } finally {
+      releaseProtoToolsBootstrap(root);
+      rmSync(stage, { recursive: true, force: true });
+    }
+  }, 120_000);
+});
 
 describe("clean proto-tools bootstrap", () => {
   it("generates through the bootstrap when the compiled proto-tools output is absent", () => {
@@ -207,10 +309,6 @@ function todoTransactionFixture() {
   writeFileSync(join(todo, "package.json"), '{"name":"@example/todo","version":"1.0.0"}\n');
   writeFileSync(join(todo, "spine-proto.json"), "{}\n");
   writeFileSync(join(todo, "proto/todo.proto"), 'syntax = "proto3";\n');
-  writeFileSync(
-    join(todo, "buf.gen.custom.yaml"),
-    "version: v2\nplugins:\n  - local: test\n    out: examples/todo/generated\n",
-  );
   for (const path of ["packages/proto/generated", "examples/todo/generated"]) {
     mkdirSync(join(repoRoot, path), { recursive: true });
     writeFileSync(join(repoRoot, path, "previous.txt"), `${path}\n`);
@@ -326,13 +424,6 @@ function todoStageCommand(failure, writeManifest = true, configure) {
     }
     if (label === failure) return 1;
     if (label.endsWith("source-view publication revalidation")) return 0;
-    if (label === "Todo companion generation") {
-      const template = readFileSync(args.at(-1), "utf8");
-      const output = template.match(/^\s*out:\s*(.+)$/mu)?.[1];
-      mkdirSync(output, { recursive: true });
-      writeFileSync(join(output, "companion.txt"), "companion\n");
-      return 0;
-    }
     const output = args[args.indexOf("--out") + 1];
     mkdirSync(dirname(output), { recursive: true });
     writeFileSync(output, "handler\n");
@@ -1039,6 +1130,9 @@ describe("proto-workflow", () => {
       expect(existsSync(join(dirname(executable), "../generation/rejection-generator.js"))).toBe(
         true,
       );
+      expect(existsSync(join(dirname(executable), "../generation/entity-query-generator.js"))).toBe(
+        true,
+      );
       expect(existsSync(join(dirname(executable), "../generation/interface-generator.js"))).toBe(
         true,
       );
@@ -1117,6 +1211,15 @@ describe("proto-workflow", () => {
     expect(
       existsSync("packages/server/test-fixtures/generated/entity-metadata/project_commands_pb.ts"),
     ).toBe(true);
+    expect(
+      existsSync("packages/server/test-fixtures/generated/entity-metadata/invalid-column_pb.ts"),
+    ).toBe(true);
+    expect(
+      existsSync("packages/server/test-fixtures/generated/entity-metadata/invalid-column_query.ts"),
+    ).toBe(false);
+    expect(
+      existsSync("packages/server/test-fixtures/generated/entity-metadata/project_states_query.ts"),
+    ).toBe(true);
   });
 
   it("generates core and testing fixtures from package-local Proto sources", () => {
@@ -1135,6 +1238,8 @@ describe("proto-workflow", () => {
     expect(existsSync("packages/core/test-fixtures/proto/project_states.proto")).toBe(true);
     expect(existsSync("packages/testing/test-fixtures/proto/project_commands.proto")).toBe(true);
     expect(existsSync("packages/core/test-fixtures/generated/project_commands_pb.ts")).toBe(true);
+    expect(existsSync("packages/core/test-fixtures/generated/project_states_pb.ts")).toBe(true);
+    expect(existsSync("packages/core/test-fixtures/generated/project_states_query.ts")).toBe(false);
     expect(existsSync("packages/testing/test-fixtures/generated/project_states_pb.ts")).toBe(true);
   });
 
@@ -1339,60 +1444,53 @@ describe("proto-workflow", () => {
     }
   });
 
-  it.each([
-    "Todo companion generation",
-    "Todo handler registry post-step",
-    "Todo source-view publication revalidation",
-  ])("%s preserves live Todo and root artifacts when its staged post-step fails", (failure) => {
-    const repoRoot = todoTransactionFixture();
-    expect(
-      generateTargets({
-        repoRoot,
-        runCommand: rootStageCommand,
-        runModelCommand: todoStageCommand(failure),
-      }),
-    ).toBe(1);
-    expect(readFileSync(join(repoRoot, "examples/todo/generated/previous.txt"), "utf8")).toBe(
-      "examples/todo/generated\n",
-    );
-    expect(readFileSync(join(repoRoot, "examples/todo/spine-proto-manifest.json"), "utf8")).toBe(
-      todoManifest("todo-live"),
-    );
-    expect(readFileSync(join(repoRoot, "packages/proto/generated/previous.txt"), "utf8")).toBe(
-      "packages/proto/generated\n",
-    );
-    expect(readFileSync(join(repoRoot, "packages/proto/spine-proto-manifest.json"), "utf8")).toBe(
-      rootManifest("root-live"),
-    );
-    expect(
-      readdirSync(join(repoRoot, "examples/todo")).some((name) => name.startsWith(".generated-")),
-    ).toBe(false);
-    expect(readdirSync(repoRoot).some((name) => name.startsWith(".spine-proto-"))).toBe(false);
-  });
+  it.each(["Todo handler registry post-step", "Todo source-view publication revalidation"])(
+    "%s preserves live Todo and root artifacts when its staged post-step fails",
+    (failure) => {
+      const repoRoot = todoTransactionFixture();
+      expect(
+        generateTargets({
+          repoRoot,
+          runCommand: rootStageCommand,
+          runModelCommand: todoStageCommand(failure),
+        }),
+      ).toBe(1);
+      expect(readFileSync(join(repoRoot, "examples/todo/generated/previous.txt"), "utf8")).toBe(
+        "examples/todo/generated\n",
+      );
+      expect(readFileSync(join(repoRoot, "examples/todo/spine-proto-manifest.json"), "utf8")).toBe(
+        todoManifest("todo-live"),
+      );
+      expect(readFileSync(join(repoRoot, "packages/proto/generated/previous.txt"), "utf8")).toBe(
+        "packages/proto/generated\n",
+      );
+      expect(readFileSync(join(repoRoot, "packages/proto/spine-proto-manifest.json"), "utf8")).toBe(
+        rootManifest("root-live"),
+      );
+      expect(
+        readdirSync(join(repoRoot, "examples/todo")).some((name) => name.startsWith(".generated-")),
+      ).toBe(false);
+      expect(readdirSync(repoRoot).some((name) => name.startsWith(".spine-proto-"))).toBe(false);
+    },
+  );
 
-  it("uses the supplied root Buf executable for Todo companion generation", () => {
+  it("uses normal Todo model generation without an extra Buf companion step", () => {
     const repoRoot = todoTransactionFixture();
-    const localBuf = join(
-      repoRoot,
-      "node_modules/.bin",
-      process.platform === "win32" ? "buf.cmd" : "buf",
-    );
-    mkdirSync(dirname(localBuf), { recursive: true });
-    writeFileSync(localBuf, "fixture Buf\n");
-    let companionExecutable;
+    const labels = [];
 
     try {
       const staged = stageGeneratedTargets({
         repoRoot,
         runCommand: rootStageCommand,
         runModelCommand(label, executable, args, cwd) {
-          if (label === "Todo companion generation") companionExecutable = executable;
+          labels.push(label);
           return todoStageCommand(undefined)(label, executable, args, cwd);
         },
       });
 
       expect(staged.status).toBe(0);
-      expect(companionExecutable).toBe(localBuf);
+      expect(labels).toContain("Todo model generation");
+      expect(labels).not.toContain("Todo companion generation");
       cleanupStagedTargets(staged.stagedTargets);
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
@@ -1404,7 +1502,7 @@ describe("proto-workflow", () => {
     const todoRoot = join(repoRoot, "examples/todo");
     try {
       rmSync(join(todoRoot, "generated"), { recursive: true, force: true });
-      writeTodoGenerationState(todoRoot, "todo-live", { companion: true, handler: true });
+      writeTodoGenerationState(todoRoot, "todo-live", { handler: true });
 
       expect(
         generateTargets({
@@ -2332,9 +2430,6 @@ describe("proto-workflow", () => {
     );
     expect(readFileSync("examples/todo/spine-proto.json", "utf8")).toContain(
       '"moduleExport": "todoProtoModule"',
-    );
-    expect(readFileSync("examples/todo/buf.gen.custom.yaml", "utf8")).not.toContain(
-      "protoc-gen-es",
     );
   });
 

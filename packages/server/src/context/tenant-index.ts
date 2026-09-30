@@ -16,6 +16,7 @@ import type { TenantId } from "@spine-event-engine/proto";
 import { type StorageFactory } from "@spine-event-engine/storage";
 import type { TenantCatalog, TenantCatalogProvider } from "@spine-event-engine/storage/provider";
 import { TenantBoundary } from "@spine-event-engine/storage/provider";
+import { EffectiveTenants } from "./effective-tenant.js";
 
 type TenantMode = "single-tenant" | "multitenant";
 
@@ -76,17 +77,46 @@ export const TenantIndexes: Readonly<{
   },
 });
 
+/**
+ * Reports the effective identity of one single-tenant context.
+ */
 class SingleTenantIndex implements TenantIndex {
+  // prettier-ignore
+
+  /**
+   * Identifies the index mode.
+   */
   readonly tenantMode = "single-tenant";
+
+  /**
+   * Whether callers may still use this index.
+   */
   #open = true;
 
+  /**
+   * Captures the context name for closed-index diagnostics.
+   *
+   * @param contextName Name reported in diagnostics.
+   */
   constructor(private readonly contextName: string) {}
 
+  /**
+   * Lists the effective single-tenant identity while open.
+   *
+   * @returns The single effective tenant, or rejection after close.
+   */
   all(): Promise<readonly TenantId[]> {
     const closed = this.closedError();
-    return closed === undefined ? Promise.resolve(Object.freeze([])) : Promise.reject(closed);
+    return closed === undefined
+      ? Promise.resolve(Object.freeze([EffectiveTenants.current(false, undefined)]))
+      : Promise.reject(closed);
   }
 
+  /**
+   * Rejects tenant recording because a single-tenant context has a fixed identity.
+   *
+   * @returns A rejected promise explaining why recording is unavailable.
+   */
   keep(): Promise<void> {
     const closed = this.closedError();
     return Promise.reject(
@@ -95,24 +125,55 @@ class SingleTenantIndex implements TenantIndex {
     );
   }
 
+  /**
+   * Stops accepting index operations.
+   */
   close(): void {
     this.#open = false;
   }
 
+  /**
+   * Returns a closed-index error while preserving an open index.
+   *
+   * @returns An error only when the index is closed.
+   */
   private closedError(): Error | undefined {
     return this.#open ? undefined : new Error("TenantIndex is closed.");
   }
 }
 
+/**
+ * Reads named tenants from the storage provider's catalog.
+ */
 class StorageTenantIndex implements TenantIndex {
+  // prettier-ignore
+
+  /**
+   * Identifies the index mode.
+   */
   readonly tenantMode = "multitenant";
+
+  /**
+   * Whether callers may still use this index.
+   */
   #open = true;
 
+  /**
+   * Captures the provider catalog used for this context.
+   *
+   * @param contextName Name reported in diagnostics.
+   * @param catalog Provider catalog for named tenants.
+   */
   constructor(
     private readonly contextName: string,
     private readonly catalog: TenantCatalog,
   ) {}
 
+  /**
+   * Lists named tenants from the provider catalog.
+   *
+   * @returns Named tenant IDs, or rejection for an invalid/closed catalog.
+   */
   async all(): Promise<readonly TenantId[]> {
     this.requireOpen();
     return Object.freeze(
@@ -124,6 +185,12 @@ class StorageTenantIndex implements TenantIndex {
     );
   }
 
+  /**
+   * Records a named tenant in the provider catalog.
+   *
+   * @param tenantId Named tenant to record.
+   * @returns Completion after the catalog records the tenant.
+   */
   keep(tenantId: TenantId): Promise<void> {
     return Promise.resolve().then(() => {
       this.requireOpen();
@@ -131,10 +198,16 @@ class StorageTenantIndex implements TenantIndex {
     });
   }
 
+  /**
+   * Stops accepting index operations.
+   */
   close(): void {
     this.#open = false;
   }
 
+  /**
+   * Rejects use of a closed index.
+   */
   private requireOpen(): void {
     if (!this.#open) throw new Error(`TenantIndex for "${this.contextName}" is closed.`);
   }

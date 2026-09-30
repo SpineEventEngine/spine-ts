@@ -15,6 +15,11 @@
 import type { MessageShape } from "@bufbuild/protobuf";
 import { type MessageInterface, type MessageSchema } from "@spine-event-engine/core";
 import type { EventContext } from "@spine-event-engine/proto";
+import type {
+  RepositoryEntityType,
+  RepositoryReadQueries,
+  RepositoryEntityId,
+} from "./repository.js";
 import {
   RoutingDeclarations,
   type InterfaceRouteSchemas,
@@ -31,56 +36,112 @@ import {
  *
  * @typeParam Id Entity ID type used by the receiving repository.
  * @typeParam Schema Generated Event message schema.
+ * @typeParam EntityType Registered application Entity class for repository reads.
  * @param message Unpacked Event message.
  * @param context Normalized Event context. When the signal omits its context,
  *   the framework supplies the default generated `EventContext` value.
- * @returns Up to 1,000 target Entity IDs. The framework validates the complete
+ * @param repository Invocation-scoped read-only access to the receiving repository.
+ * @returns All target Entity IDs. The framework validates the complete
  *   result, copies and stable-deduplicates its IDs, and freezes the accepted
  *   plan. An empty array deliberately suppresses delivery to this repository.
  */
-export type EventRoute<Id, Schema extends MessageSchema = MessageSchema> = (
+export type EventRoute<
+  Id,
+  Schema extends MessageSchema = MessageSchema,
+  EntityType extends RepositoryEntityType = RepositoryEntityType,
+> = (
   message: MessageShape<Schema>,
   context: EventContext,
-) => readonly Id[];
+  repository: RepositoryReadQueries<EntityType>,
+) => readonly Id[] | Promise<readonly Id[]>;
 
+/**
+ * Stores mutable Event declarations before repository construction.
+ *
+ * @typeParam Id Target Entity ID type.
+ */
 type State<Id> = RoutingDeclarationState<EventRoute<Id>>;
 const states = new WeakMap<object, State<unknown>>();
+const routingEntityTypes = new WeakMap<object, RepositoryEntityType>();
 
 /**
  * Mutable Event route declarations snapshotted by repository construction.
+ *
+ * @typeParam Id Entity ID type used by the receiving repository.
+ * @typeParam EntityType Registered application Entity class for repository reads.
  */
-export class EventRouting<Id> {
+export class EventRouting<Id, EntityType extends RepositoryEntityType = RepositoryEntityType> {
+  /**
+   * Records the selected Entity class in emitted declarations so a different
+   * repository class fails type checking. This adds no runtime field.
+   *
+   * @param entity Entity class type checked at assignment.
+   * @returns The same Entity class type for the assignment check.
+   */
+  declare protected readonly entityClassType: (entity: EntityType) => EntityType;
   // prettier-ignore
 
   /**
    * Creates empty mutable Event route declarations.
+   *
+   * @param entityType Application Entity constructor, when class-aware.
    */
-  private constructor() {
+  private constructor(entityType?: EntityType) {
     states.set(this, RoutingDeclarations.create<EventRoute<Id>>());
+    if (entityType !== undefined) routingEntityTypes.set(this, entityType);
   }
 
   /**
    * Creates empty Event route declarations.
    *
-   * @typeParam Id Entity ID type used by the receiving repository.
+   * @typeParam EntityType Registered application Entity class inferred from the supplied constructor.
+   * @param entityType Application Entity constructor for typed repository reads.
    * @returns Mutable Event route declarations.
    */
-  static create<Id>(): EventRouting<Id> {
-    return new EventRouting<Id>();
+  static create<EntityType extends RepositoryEntityType>(
+    entityType: EntityType,
+  ): EventRouting<RepositoryEntityId<EntityType>, EntityType>;
+
+  /**
+   * Creates ID-only Event route declarations.
+   *
+   * @typeParam Id Target Entity ID type.
+   * @returns Mutable route declarations.
+   */
+  static create<Id>(): EventRouting<Id>;
+
+  /**
+   * Creates mutable Event route declarations for either factory overload.
+   *
+   * @typeParam Id Target Entity ID type.
+   * @typeParam EntityType Selected application Entity class.
+   * @param entityType Application Entity constructor, when class-aware.
+   * @returns Mutable route declarations.
+   */
+  static create<Id, EntityType extends RepositoryEntityType = RepositoryEntityType>(
+    entityType?: EntityType,
+  ): EventRouting<Id, EntityType> {
+    return new EventRouting<Id, EntityType>(entityType);
   }
 
   /**
    * Registers a route for one exact generated Event schema.
    *
+   * @typeParam Schema Generated Event schema.
    * @param schemaOrToken Generated Event schema.
    * @param via Route that calculates target Entity IDs.
    * @returns These mutable route declarations.
    */
-  route<Schema extends MessageSchema>(schemaOrToken: Schema, via: EventRoute<Id, Schema>): this;
+  route<Schema extends MessageSchema>(
+    schemaOrToken: Schema,
+    via: EventRoute<Id, Schema, EntityType>,
+  ): this;
 
   /**
    * Registers a route for a nominal Event message-interface token.
    *
+   * @typeParam TInterface Declared Event interface.
+   * @typeParam Schemas Schemas implementing the interface.
    * @param schemaOrToken Generated Event message-interface token.
    * @param via Route that calculates target Entity IDs.
    * @returns These mutable route declarations.
@@ -90,7 +151,8 @@ export class EventRouting<Id> {
     via: (
       message: InterfaceRouteMessage<TInterface, Schemas>,
       context: EventContext,
-    ) => readonly Id[],
+      repository: RepositoryReadQueries<EntityType>,
+    ) => readonly Id[] | Promise<readonly Id[]>,
   ): this;
 
   /**
@@ -136,7 +198,7 @@ export class EventRouting<Id> {
    * @param via Route that calculates target Entity IDs.
    * @returns These mutable route declarations.
    */
-  replaceDefault(via: EventRoute<Id>): this {
+  replaceDefault(via: EventRoute<Id, MessageSchema, EntityType>): this {
     if (typeof via !== "function") throw new TypeError("Event routing requires a route function.");
     RoutingDeclarations.default(EventRoutingInternals.state(this), via);
     return this;
@@ -149,16 +211,76 @@ export class EventRouting<Id> {
  * @internal
  */
 export const EventRoutingInternals: Readonly<{
-  state<Id>(routing: EventRouting<Id>): State<Id>;
-  snapshot<Id>(routing: EventRouting<Id> | undefined): RoutingDeclarationSnapshot<EventRoute<Id>>;
+  /**
+   * Returns the Entity constructor selected for class-aware declarations, if any.
+   *
+   * @param routing Route declarations, when configured.
+   * @returns Selected Entity constructor, if any.
+   */
+  entityType(routing: object | undefined): RepositoryEntityType | undefined;
+
+  /**
+   * Finds mutable Event declaration state.
+   *
+   * @typeParam Id Target Entity ID type.
+   * @typeParam EntityType Selected application Entity class.
+   * @param routing Route declarations.
+   * @returns Mutable declaration state.
+   */
+  state<Id, EntityType extends RepositoryEntityType>(
+    routing: EventRouting<Id, EntityType>,
+  ): State<Id>;
+
+  /**
+   * Copies declarations for repository construction.
+   *
+   * @typeParam Id Target Entity ID type.
+   * @typeParam EntityType Selected application Entity class.
+   * @param routing Route declarations, when configured.
+   * @returns Immutable declaration snapshot.
+   */
+  snapshot<Id, EntityType extends RepositoryEntityType>(
+    routing: EventRouting<Id, EntityType> | EventRouting<Id> | undefined,
+  ): RoutingDeclarationSnapshot<EventRoute<Id>>;
 }> = Object.freeze({
-  state<Id>(routing: EventRouting<Id>): State<Id> {
+  /**
+   * Returns the Entity constructor selected for class-aware declarations, if any.
+   *
+   * @param routing Route declarations, when configured.
+   * @returns Selected Entity constructor, if any.
+   */
+  entityType(routing: object | undefined): RepositoryEntityType | undefined {
+    return routing === undefined ? undefined : routingEntityTypes.get(routing);
+  },
+
+  /**
+   * Finds mutable Event declaration state.
+   *
+   * @typeParam Id Target Entity ID type.
+   * @typeParam EntityType Selected application Entity class.
+   * @param routing Route declarations.
+   * @returns Mutable declaration state.
+   */
+  state<Id, EntityType extends RepositoryEntityType>(
+    routing: EventRouting<Id, EntityType>,
+  ): State<Id> {
     return states.get(routing) as State<Id>;
   },
-  snapshot<Id>(routing: EventRouting<Id> | undefined): RoutingDeclarationSnapshot<EventRoute<Id>> {
+
+  /**
+   * Copies declarations for repository construction.
+   *
+   * @typeParam Id Target Entity ID type.
+   * @typeParam EntityType Selected application Entity class.
+   * @param routing Route declarations, when configured.
+   * @returns Immutable declaration snapshot.
+   */
+  snapshot<Id, EntityType extends RepositoryEntityType>(
+    routing: EventRouting<Id, EntityType> | EventRouting<Id> | undefined,
+  ): RoutingDeclarationSnapshot<EventRoute<Id>> {
     if (routing === undefined) {
       return RoutingDeclarations.snapshot(RoutingDeclarations.create<EventRoute<Id>>());
     }
-    return RoutingDeclarations.snapshot(EventRoutingInternals.state(routing));
+    return RoutingDeclarations.snapshot(states.get(routing) as State<Id>);
   },
 });

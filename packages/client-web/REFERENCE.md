@@ -11,6 +11,10 @@ Start with the [browser client overview](README.md) for a first connection.
 
 `post(schema, value, options)` returns `ClientOutcome`: `ok`, `error` with an application error message, or `rejection` with a rejection message. Command-envelope packing deliberately skips client-side Proto validation so the authoritative server can return its configured validation details. Commands are never retried. `send(query, options)` returns the raw validated `QueryResponse`. Caller cancellation and `client.close()` abort admitted work; transport, deadline, and wire-contract failures remain errors.
 
+`send()` accepts a generated `StateQuery.create()...build()` value. The value has no actor or
+tenant; each request scope applies its actor and the client's tenant to a fresh wire query, so
+one value can be reused across scopes and clients.
+
 ## Browser sessions
 
 `BrowserSession.cookie(options)` uses browser-managed cookies with Fetch credentials `include`; cookie values never enter JavaScript metadata. `BrowserSession.bearer({ token, ...options })` holds one bearer value only in memory with Fetch credentials `omit`. `replaceBearer` and `clearBearer` alter that memory value. Neither mode uses browser storage.
@@ -21,7 +25,11 @@ Start with the [browser client overview](README.md) for a first connection.
 
 `createSubscription(topic, options)` returns an inactive handle. `activate()` performs Subscribe; `cancel()` is terminal, ends local iteration, and performs at most one bounded remote Cancel per accepted wire. `updates` and `lifecycle` are independent single-consumer async streams with no cross-stream ordering guarantee. `client.close()` terminally closes every subscription it created.
 
-For Entity subscriptions, `authoritativeQuery` is evaluated only after reconnect. Its target must be byte-equivalent to the Topic target. The returned query response is delivered as `resynchronization` before held updates. For event subscriptions, reconnection reports `gapPossible`; events can be missing, duplicated, or differently ordered, and no replay, completeness, or cluster-complete guarantee is made.
+For Entity subscriptions, `authoritativeQuery` may return a generated query value and is evaluated
+during authoritative reads, including recovery after reconnect. Its target must be byte-equivalent
+to the Topic target. The returned query response is delivered as `resynchronization` before held
+updates. For event subscriptions, reconnection reports `gapPossible`; events can be missing,
+duplicated, or differently ordered, and no replay, completeness, or cluster-complete guarantee is made.
 
 The defaults are 64 queued updates, 1,048,576 queued update bytes, 32 lifecycle notices, five retry attempts, and 30,000 milliseconds of elapsed recovery. Every capacity, retry value, scheduler value, and custom delay is a positive safe integer. The default retry delay starts at 250 milliseconds with bounded jitter, caps at 5,000 milliseconds, and never falls below one millisecond. A stream connected for at least the configured elapsed-recovery window starts a fresh finite retry episode when it later fails; rapid failures remain in one episode and exhaust its limits. Overflow is terminal and never silently drops an update. `connecting`, `connected`, `resynchronizing`, `gapPossible`, `failed`, and `closed` lifecycle notices describe that local subscription state.
 

@@ -465,7 +465,7 @@ describe("SpineServices", () => {
       const response = await client.read(query);
       expect(response.response?.status?.status.case).toBe("ok");
       expect(response.message.map((item) => unpackProjectOverviewState(item.state))).toEqual([
-        create(ProjectOverviewStateSchema, { name: "Alpha" }),
+        createState("task-2", "Alpha", 2),
       ]);
       expect(response.message[0]?.version).toEqual(create(VersionSchema, { number: 2 }));
 
@@ -795,7 +795,7 @@ describe("SpineServices", () => {
     }
   });
 
-  it("applies field masks to ID-filter and include-all reads", async () => {
+  it("returns complete states for masked ID-filter and include-all wire reads", async () => {
     const repository = new Repository({
       entityType: TaskProjection,
       schema: ProjectOverviewStateSchema,
@@ -814,9 +814,17 @@ describe("SpineServices", () => {
     const idOnly = create(ResponseFormatSchema, {
       fieldMask: create(FieldMaskSchema, { paths: ["id"] }),
     });
+    const unknownField = create(ResponseFormatSchema, {
+      fieldMask: create(FieldMaskSchema, { paths: ["does_not_exist"] }),
+    });
+    const emptyMask = create(ResponseFormatSchema, {
+      fieldMask: create(FieldMaskSchema, { paths: [] }),
+    });
 
     const idResponse = await handlers.read(createFormattedQuery(nameOnly));
     const allResponse = await handlers.read(createFormattedIncludeAllQuery(idOnly));
+    const unknownResponse = await handlers.read(createFormattedQuery(unknownField));
+    const emptyResponse = await handlers.read(createFormattedQuery(emptyMask));
 
     const idState = AnyMessages.unpack(
       idResponse.message[0]?.state ?? packMissing(),
@@ -826,18 +834,17 @@ describe("SpineServices", () => {
       AnyMessages.unpack(message.state ?? packMissing(), ProjectOverviewStateSchema),
     );
     if (idState === undefined) {
-      throw new Error("Expected masked ID-filter state.");
+      throw new Error("Expected ID-filter state.");
     }
     expect(idResponse.response?.status?.status.case).toBe("ok");
     expect(idState).toMatchObject({ name: "First" });
-    expect(idState.id).toBe("");
-    expect(idState.priority).toBe(0);
+    expect(idState.id).toBe("task-1");
+    expect(idState.priority).toBe(1);
     expect(idResponse.message[0]?.version).toEqual(create(VersionSchema, { number: 7 }));
+    expect(unknownResponse).toEqual(idResponse);
+    expect(emptyResponse).toEqual(idResponse);
     expect(allResponse.response?.status?.status.case).toBe("ok");
-    expect(allStates).toEqual([
-      create(ProjectOverviewStateSchema, { id: "task-1" }),
-      create(ProjectOverviewStateSchema, { id: "task-2" }),
-    ]);
+    expect(allStates).toEqual([createState("task-1", "First"), createState("task-2", "Second")]);
     expect(allResponse.message[0]?.version).toEqual(create(VersionSchema, { number: 7 }));
   });
 
@@ -928,7 +935,7 @@ describe("SpineServices", () => {
     ]);
   });
 
-  it("applies tenant-scoped filters, ordering, and masks", async () => {
+  it("applies tenant-scoped filters and ordering while ignoring wire masks", async () => {
     const repository = new Repository({
       entityType: TaskProjection,
       schema: ProjectOverviewStateSchema,
@@ -966,8 +973,8 @@ describe("SpineServices", () => {
 
     expect(response.response?.status?.status.case).toBe("ok");
     expect(response.message.map((message) => unpackProjectOverviewState(message.state))).toEqual([
-      create(ProjectOverviewStateSchema, { name: "Alpha" }),
-      create(ProjectOverviewStateSchema, { name: "Bravo" }),
+      createState("task-3", "Alpha", 2),
+      createState("task-2", "Bravo", 2),
     ]);
     expect(response.message.map((message) => message.version)).toEqual([
       create(VersionSchema, { number: 3 }),
@@ -1265,20 +1272,6 @@ describe("SpineServices", () => {
         }),
       ),
     );
-    const tooManyMaskPaths = await handlers.read(
-      createFormattedQuery(
-        create(ResponseFormatSchema, {
-          fieldMask: create(FieldMaskSchema, { paths: new Array(33).fill("name") }),
-        }),
-      ),
-    );
-    const tooLongMaskPath = await handlers.read(
-      createFormattedQuery(
-        create(ResponseFormatSchema, {
-          fieldMask: create(FieldMaskSchema, { paths: ["n".repeat(129)] }),
-        }),
-      ),
-    );
     const tooLargeLimit = await handlers.read(
       createFormattedIncludeAllQuery(
         create(ResponseFormatSchema, {
@@ -1307,12 +1300,6 @@ describe("SpineServices", () => {
     );
     expect(responseErrorMessage(tooManyOrderings)).toBe(
       "QueryService.Read order_by may contain at most 8 entries.",
-    );
-    expect(responseErrorMessage(tooManyMaskPaths)).toBe(
-      "QueryService.Read field_mask may contain at most 32 paths.",
-    );
-    expect(responseErrorMessage(tooLongMaskPath)).toBe(
-      "QueryService.Read field_mask paths may contain at most 128 characters.",
     );
     expect(responseErrorMessage(tooLargeLimit)).toBe(
       "QueryService.Read limit may be at most 1000.",
@@ -2510,25 +2497,50 @@ describe("SpineServices", () => {
     );
   });
 
-  it("rejects field masks and false include-all values on event topics", () => {
+  it("ignores event topic masks and rejects false include-all values", () => {
     const context = BoundedContext.singleTenant("MalformedEventTopics")
       .addEventDispatcher(createDomainEventDispatcher(TaskCreatedSchema))
       .build();
     const handlers = registeredSubscriptionHandlers(context);
     const masked = createEventTopic();
-    masked.fieldMask = create(FieldMaskSchema, { paths: ["name"] });
+    masked.fieldMask = create(FieldMaskSchema, { paths: ["does_not_exist"] });
     const disabled = createEventTopic();
     if (disabled.target?.criterion.case !== "includeAll") {
       throw new Error("Expected an include-all event topic.");
     }
     disabled.target.criterion.value = false;
 
-    for (const [topic, message] of [
-      [masked, "SubscriptionService.Subscribe event topics do not support field_mask."],
-      [disabled, "SubscriptionService.Subscribe requires filters or include_all = true."],
-    ] as const) {
-      expect(() => handlers.subscribe(topic)).toThrow(message);
+    expect(() => handlers.subscribe(masked)).not.toThrow();
+    expect(() => handlers.subscribe(disabled)).toThrow(
+      "SubscriptionService.Subscribe requires filters or include_all = true.",
+    );
+  });
+
+  it("delivers complete events after activating a topic with an unknown mask path", async () => {
+    const context = BoundedContext.singleTenant("UnknownEventMaskDelivery")
+      .addEventDispatcher(createDomainEventDispatcher(TaskCreatedSchema))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context);
+    const topic = createEventTopic();
+    topic.fieldMask = create(FieldMaskSchema, { paths: ["does_not_exist"] });
+    const subscription = await handlers.subscribe(topic);
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const next = withTimeout(iterator.next(), "unknown-mask event subscription update");
+    const attachment = await awaitSubscriptionAttachment(context, subscription);
+    const source = createAggregateEvent("event-unknown-mask", "aggregate-1", "Full Event");
+
+    await context.eventBus().post(source);
+
+    const delivered = await next;
+    const update = delivered.value as SubscriptionUpdate | undefined;
+    expect(delivered.done).toBe(false);
+    if (update?.update.case !== "eventUpdates") {
+      throw new Error("Expected event subscription update.");
     }
+    expect(update.update.value.event).toEqual([source]);
+    expect(update.update.value.event[0]).not.toBe(source);
+    attachment.unsubscribe();
+    await iterator.return?.();
   });
 
   it("rejects internal event targets before listener attachment", () => {
@@ -2675,7 +2687,7 @@ describe("SpineServices", () => {
     await iterator.return?.();
   });
 
-  it("applies topic field masks only to delivered subscription states", async () => {
+  it("ignores topic masks and delivers complete matching states", async () => {
     let deliverUpdate:
       | ((update: {
           readonly typeUrl: string;
@@ -2707,7 +2719,7 @@ describe("SpineServices", () => {
       id: "task-1",
       state: createState("task-1", "Open", 7),
     });
-    const deliveredState = await withTimeout(first, "masked subscription state");
+    const deliveredState = await withTimeout(first, "complete subscription state");
     const second = iterator.next();
     deliverUpdate?.({
       typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
@@ -2715,10 +2727,10 @@ describe("SpineServices", () => {
       previousState: createState("task-1", "Open", 7),
       state: createState("task-1", "Closed", 7),
     });
-    const noLongerMatching = await withTimeout(second, "unmasked no-longer-matching update");
+    const noLongerMatching = await withTimeout(second, "no-longer-matching update");
 
     expect(unpackEntityState(deliveredState.value as SubscriptionUpdate | undefined)).toEqual(
-      create(ProjectOverviewStateSchema, { name: "Open" }),
+      createState("task-1", "Open", 7),
     );
     expect(entityUpdateKind(noLongerMatching.value as SubscriptionUpdate | undefined)?.case).toBe(
       "noLongerMatching",
@@ -2832,48 +2844,63 @@ describe("SpineServices", () => {
     expect(subscribeCalls).toBe(0);
   });
 
-  it("rejects invalid subscription field masks before activation attaches Stand delivery", () => {
+  it("ignores invalid wire field masks on state topics", () => {
     const handlers = registeredSubscriptionHandlers(
       createFakeContext({ stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)] }),
     );
     const cases = [
       {
         fieldMask: new Array(33).fill("name") as string[],
-        message: "SubscriptionService.Subscribe field_mask may contain at most 32 paths.",
       },
       {
         fieldMask: ["n".repeat(129)],
-        message:
-          "SubscriptionService.Subscribe field_mask paths may contain at most 128 characters.",
       },
       {
         fieldMask: [".name"],
-        message: "SubscriptionService.Subscribe field_mask path is required.",
       },
       {
         fieldMask: ["name."],
-        message: "SubscriptionService.Subscribe field_mask path is required.",
       },
       {
         fieldMask: ["name..value"],
-        message: "SubscriptionService.Subscribe field_mask path is required.",
       },
       {
         fieldMask: ["missing"],
-        message: 'SubscriptionService.Subscribe field_mask "missing" is not a state field.',
       },
       {
         fieldMask: ["name.value"],
-        message: 'SubscriptionService.Subscribe field_mask "name.value" is not a message path.',
       },
     ];
 
-    for (const { fieldMask, message } of cases) {
+    for (const { fieldMask } of cases) {
       const topic = createTopic();
       topic.fieldMask = create(FieldMaskSchema, { paths: fieldMask });
 
-      expect(() => handlers.subscribe(topic)).toThrow(message);
+      expect(() => handlers.subscribe(topic)).not.toThrow();
     }
+  });
+
+  it("delivers complete states after activating a topic with a malformed mask path", async () => {
+    const context = BoundedContext.singleTenant("MalformedStateMaskDelivery")
+      .add(createProjectionRepositoryWithHandlers())
+      .build();
+    const handlers = registeredSubscriptionHandlers(context);
+    const topic = createTopic();
+    topic.fieldMask = create(FieldMaskSchema, { paths: ["name..value"] });
+    const subscription = await handlers.subscribe(topic);
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const next = withTimeout(iterator.next(), "malformed-mask state subscription update");
+    const attachment = await awaitSubscriptionAttachment(context, subscription);
+
+    await context.eventBus().post(createProjectionEvent("event-malformed-mask", "task-mask"));
+
+    const delivered = await next;
+    expect(delivered.done).toBe(false);
+    expect(unpackEntityState(delivered.value as SubscriptionUpdate | undefined)).toEqual(
+      createState("task-mask", "Task (projected)", 2),
+    );
+    attachment.unsubscribe();
+    await iterator.return?.();
   });
 
   it("rejects invalid subscription field filters before activation attaches Stand delivery", () => {

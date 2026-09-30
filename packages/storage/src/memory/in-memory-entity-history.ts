@@ -49,6 +49,13 @@ import { StorageQueryEvaluator } from "../query/query-execution.js";
 import { StorageQueryPolicy, type NormalizedQueryPlan } from "../query/query-policy.js";
 
 const storageHost = globalThis as typeof globalThis & {
+  /**
+   * Copies a value through the platform structured-clone operation.
+   *
+   * @typeParam Value Type of the copied value.
+   * @param value Value to copy.
+   * @returns Independent copy of the value.
+   */
   structuredClone<Value>(value: Value): Value;
 };
 
@@ -70,6 +77,8 @@ export class MemoryEntityStorageFactory {
   /**
    * Creates one scoped entity-storage handle.
    *
+   * @typeParam I Entity identifier type used by this storage scope.
+   * @typeParam S Generated Entity state message type.
    * @param input Supplies the entity storage configuration.
    * @returns Returns the scoped in-memory entity storage.
    */
@@ -80,6 +89,8 @@ export class MemoryEntityStorageFactory {
   /**
    * Opens the provider-owned maps used by an atomic in-memory commit.
    *
+   * @typeParam I Entity identifier type used by this storage scope.
+   * @typeParam S Generated Entity state message type.
    * @param input Supplies the Entity storage configuration.
    * @returns The compatible backend maps for this Entity scope.
    */
@@ -101,6 +112,9 @@ export class MemoryEntityStorageFactory {
 
 /**
  * One scoped in-memory current/state/event storage handle.
+ *
+ * @typeParam I Entity identifier type used by this storage scope.
+ * @typeParam S Generated Entity state message type.
  */
 export class InMemoryEntityStorage<I, S extends Message> {
   // prettier-ignore
@@ -165,6 +179,9 @@ export class InMemoryEntityStorage<I, S extends Message> {
 
 /**
  * Configures one in-memory entity storage scope.
+ *
+ * @typeParam I Entity identifier type used by this storage scope.
+ * @typeParam S Generated Entity state message type.
  */
 export interface EntityStorageInput<I, S extends Message> {
   // prettier-ignore
@@ -222,6 +239,8 @@ export interface EntityStorageInput<I, S extends Message> {
 
 /**
  * Internal provider ID canonicalization and clone contract.
+ *
+ * @typeParam I Entity identifier type encoded by this codec.
  */
 export interface EntityIdCodec<I> {
   // prettier-ignore
@@ -288,7 +307,11 @@ const EntitySnapshots = {
   // prettier-ignore
 
   /**
-   * Clones one entity ID with the platform structured-clone operation.
+   * Copies one entity ID with the platform structured-clone operation.
+   *
+   * @typeParam I Entity identifier type to clone.
+   * @param id Entity identifier to copy.
+   * @returns Independent identifier copy.
    */
   cloneId<I>(id: I): I {
     return storageHost.structuredClone(id);
@@ -296,6 +319,9 @@ const EntitySnapshots = {
 
   /**
    * Copies an immutable latest-state record.
+   *
+   * @param record Generated current-state record to copy.
+   * @returns Independent generated record.
    */
   copyCurrent(record: EntityRecord): EntityRecord {
     return clone(EntityRecordSchema, record);
@@ -304,13 +330,20 @@ const EntitySnapshots = {
 
 /**
  * In-memory latest-state storage used by all entity families.
+ *
+ * @typeParam I Entity identifier type accepted by this adapter.
  */
 export class MemoryEntityRecordStorage<I> implements EntityRecordStorage<I> {
   readonly #idKey: (id: I) => string;
+
   readonly #idClone: (id: I) => I;
+
   readonly #records: Map<string, EntityRecord>;
+
   readonly #unpackId: (id: NonNullable<EntityRecord["entityId"]>) => I | undefined;
+
   readonly #columns: readonly RecordColumn<EntityRecord>[];
+
   readonly #queue: KeyedSerialQueue | undefined;
 
   /**
@@ -367,63 +400,57 @@ export class MemoryEntityRecordStorage<I> implements EntityRecordStorage<I> {
   }
 
   /**
-   * Returns non-deleted current records matching the normalized plan.
+   * Returns matching current records; exhaustive plans may select deleted records.
    *
    * @param plan Supplies the normalized record-query plan.
    * @returns Resolves to ordered matching current-record entries.
    */
-  query(
+  async query(
     plan: NormalizedQueryPlan<I>,
   ): Promise<
     readonly import("../query/query-execution.js").NormalizedQueryEntry<I, EntityRecord>[]
   > {
-    return Promise.resolve().then(() => {
-      StorageQueryPolicy.validate(plan, {
-        comparisons: ["equal", "greaterThan", "lessThan", "greaterOrEqual", "lessOrEqual"],
-        features: ["either", "nested", "order", "mask", "limit"],
-      });
-      const limit = plan.candidateLimit ?? 10_000;
-      const candidates: EntityRecord[] = [];
-      for (const record of this.#records.values()) {
-        if (record.lifecycleFlags?.deleted) continue;
-        candidates.push(record);
-        if (candidates.length > limit) break;
-      }
-      if (candidates.length > limit) {
-        throw new Error(`Storage query exceeded the candidate limit of ${String(limit)}.`);
-      }
-      const entries = candidates.flatMap((record) => {
-        const copied = EntitySnapshots.copyCurrent(record);
-        const id = copied.entityId === undefined ? undefined : this.#unpackId(copied.entityId);
-        if (id === undefined)
-          throw new Error("Entity current record ID does not match its Entity ID schema.");
-        return copied.lifecycleFlags?.deleted
-          ? []
-          : [
-              {
-                id: this.#idClone(id),
-                record: copied,
-                columns: new Map<string, unknown>([
-                  ...this.#columns.map((column): readonly [string, unknown] => [
-                    column.name,
-                    column.valueIn(copied),
-                  ]),
-                ]),
-              },
-            ];
-      });
-      return StorageQueryEvaluator.evaluate(entries, plan);
+    StorageQueryPolicy.validate(plan, {
+      comparisons: ["equal", "greaterThan", "lessThan", "greaterOrEqual", "lessOrEqual"],
+      features: ["either", "nested", "order", "limit"],
     });
+    const limit = plan.exhaustive ? Number.POSITIVE_INFINITY : (plan.candidateLimit ?? 10_000);
+    const candidates: EntityRecord[] = [];
+    for (const record of this.#records.values()) {
+      if (!plan.exhaustive && record.lifecycleFlags?.deleted) continue;
+      candidates.push(record);
+      if (candidates.length > limit) break;
+    }
+    if (candidates.length > limit) {
+      throw new Error(`Storage query exceeded the candidate limit of ${String(limit)}.`);
+    }
+    const entries = candidates.map((record) => {
+      const copied = EntitySnapshots.copyCurrent(record);
+      const id = copied.entityId === undefined ? undefined : this.#unpackId(copied.entityId);
+      if (id === undefined)
+        throw new Error("Entity current record ID does not match its Entity ID schema.");
+      return {
+        id: this.#idClone(id),
+        record: copied,
+        columns: new Map(this.#columns.map((column) => [column.name, column.valueIn(copied)])),
+      };
+    });
+    return await Promise.resolve(StorageQueryEvaluator.evaluate(entries, plan));
   }
 }
 
 /**
  * In-memory immutable diagnostic event-history adapter.
+ *
+ * @typeParam I Producer Entity identifier type used to select events.
  */
 export class MemoryEntityEventHistory<I> implements EntityEventHistoryPort<I> {
   readonly #id: EntityIdCodec<I>;
+
   readonly #maintenance: InMemoryMaintenance | undefined;
+
   readonly #records: RecordStorage<import("@spine-event-engine/proto").EventId, Event>;
+
   readonly #queue: KeyedSerialQueue;
 
   /**
@@ -575,6 +602,12 @@ export class MemoryEntityEventHistory<I> implements EntityEventHistoryPort<I> {
     return this.#records.isOpen();
   }
 
+  /**
+   * Returns a nonempty generated event ID or throws.
+   *
+   * @param event Event inspected for its ID.
+   * @returns Present generated event ID.
+   */
   private eventIdIn(event: Event): import("@spine-event-engine/proto").EventId {
     if (event.id === undefined || event.id.value.trim().length === 0) {
       throw new Error("Event history requires an event ID.");
@@ -582,6 +615,12 @@ export class MemoryEntityEventHistory<I> implements EntityEventHistoryPort<I> {
     return event.id;
   }
 
+  /**
+   * Decodes the producer Entity ID from an event context.
+   *
+   * @param event Event whose producer is inspected.
+   * @returns Entity ID matching the configured codec.
+   */
   private producerIdIn(event: Event): I {
     const producerId = event.context?.producerId;
     if (producerId === undefined)
@@ -593,6 +632,12 @@ export class MemoryEntityEventHistory<I> implements EntityEventHistoryPort<I> {
     return entityId;
   }
 
+  /**
+   * Validates required event history fields and removes transient enrichment.
+   *
+   * @param event Event proposed for durable history.
+   * @returns Cloned event without context enrichment.
+   */
   private validatedEvent(event: Event): Event {
     this.eventIdIn(event);
     this.producerIdIn(event);
@@ -608,23 +653,47 @@ export class MemoryEntityEventHistory<I> implements EntityEventHistoryPort<I> {
     return stored;
   }
 
+  /**
+   * Rejects an operation after this event-history handle closes.
+   */
   private requireOpen(): void {
     if (!this.isOpen()) throw new Error("Entity history storage is closed.");
   }
 
+  /**
+   * Invokes the maintenance selection hook and checks that the handle remains open.
+   *
+   * @returns Completes after the selection hook.
+   */
   private async afterSelection(): Promise<void> {
     await this.#maintenance?.afterSelection?.();
     this.requireOpen();
   }
 
+  /**
+   * Reads the configured maintenance deletion chunk size.
+   *
+   * @returns Configured or default chunk size.
+   */
   private batchSize(): number {
     return this.#maintenance?.batchSize ?? MAINTENANCE_BATCH_SIZE;
   }
 
+  /**
+   * Reads the configured history query page size.
+   *
+   * @returns Configured or default page size.
+   */
   private pageSize(): number {
     return this.#maintenance?.pageSize ?? HISTORY_PAGE_SIZE;
   }
 
+  /**
+   * Deletes selected event IDs in bounded maintenance chunks.
+   *
+   * @param entries Event IDs selected for deletion.
+   * @returns Completes after all chunks have been deleted.
+   */
   private async deleteEntries(
     entries: readonly { readonly id: import("@spine-event-engine/proto").EventId }[],
   ): Promise<void> {
@@ -639,12 +708,19 @@ export class MemoryEntityEventHistory<I> implements EntityEventHistoryPort<I> {
 
 /**
  * In-memory immutable, versioned state-history adapter.
+ *
+ * @typeParam I Entity identifier type used to select state records.
+ * @typeParam S Generated Entity state message type decoded from records.
  */
 export class InMemoryEntityHistory<I, S extends Message> implements EntityStateHistoryPort<I, S> {
   readonly #id: EntityIdCodec<I>;
+
   readonly #records: RecordStorage<EntityStateKey, EntityRecord>;
+
   readonly #stateSchema: GenMessage<S>;
+
   readonly #maintenance: InMemoryMaintenance | undefined;
+
   readonly #queue: KeyedSerialQueue;
 
   /**
@@ -852,6 +928,12 @@ export class InMemoryEntityHistory<I, S extends Message> implements EntityStateH
     return this.#records.isOpen();
   }
 
+  /**
+   * Deletes selected state-record keys in bounded maintenance chunks.
+   *
+   * @param entries State-record keys selected for deletion.
+   * @returns Completes after all chunks have been deleted.
+   */
   private async deleteEntries(entries: readonly { readonly id: EntityStateKey }[]): Promise<void> {
     for (let start = 0; start < entries.length; start += this.batchSize()) {
       for (const entry of entries.slice(start, start + this.batchSize())) {
@@ -861,6 +943,12 @@ export class InMemoryEntityHistory<I, S extends Message> implements EntityStateH
     }
   }
 
+  /**
+   * Builds a state-history key from an Entity ID and version.
+   *
+   * @param record Generated Entity record to identify.
+   * @returns Composite state-history key.
+   */
   private keyFor(record: EntityRecord): EntityStateKey {
     if (record.entityId === undefined || record.version === undefined) {
       throw new Error("State history requires EntityRecord.entityId and EntityRecord.version.");
@@ -871,6 +959,12 @@ export class InMemoryEntityHistory<I, S extends Message> implements EntityStateH
     });
   }
 
+  /**
+   * Decodes the Entity ID stored in a generated record.
+   *
+   * @param record Generated Entity record to inspect.
+   * @returns Entity ID matching the configured codec.
+   */
   private entityIdIn(record: EntityRecord): I {
     if (record.entityId === undefined) {
       throw new Error("State history requires EntityRecord.entityId.");
@@ -882,6 +976,11 @@ export class InMemoryEntityHistory<I, S extends Message> implements EntityStateH
     return entityId;
   }
 
+  /**
+   * Checks an Entity record's ID, timestamp, and state schema before storage.
+   *
+   * @param record Generated Entity record proposed for history.
+   */
   private validateRecord(record: EntityRecord): void {
     this.entityIdIn(record);
     if (record.version?.timestamp === undefined) {
@@ -892,6 +991,12 @@ export class InMemoryEntityHistory<I, S extends Message> implements EntityStateH
     this.unpackState(record);
   }
 
+  /**
+   * Decodes a state whose type URL matches the configured state schema.
+   *
+   * @param record Generated Entity record containing a packed state.
+   * @returns Frozen decoded Entity state.
+   */
   private unpackState(record: EntityRecord): S {
     const state = record.state;
     if (!state?.typeUrl.endsWith(`/${this.#stateSchema.typeName}`)) {
@@ -902,24 +1007,47 @@ export class InMemoryEntityHistory<I, S extends Message> implements EntityStateH
     return Object.freeze(fromBinary(this.#stateSchema, state.value));
   }
 
+  /**
+   * Rejects an operation after this state-history handle closes.
+   */
   private requireOpen(): void {
     if (!this.isOpen()) throw new Error("Entity history storage is closed.");
   }
 
+  /**
+   * Invokes the maintenance selection hook and checks that the handle remains open.
+   *
+   * @returns Completes after the selection hook.
+   */
   private async afterSelection(): Promise<void> {
     await this.#maintenance?.afterSelection?.();
     this.requireOpen();
   }
 
+  /**
+   * Invokes the maintenance chunk hook and checks that the handle remains open.
+   *
+   * @returns Completes after the chunk hook.
+   */
   private async afterMaintenanceChunk(): Promise<void> {
     await this.#maintenance?.onChunk?.();
     this.requireOpen();
   }
 
+  /**
+   * Reads the configured maintenance deletion chunk size.
+   *
+   * @returns Configured or default chunk size.
+   */
   private batchSize(): number {
     return this.#maintenance?.batchSize ?? MAINTENANCE_BATCH_SIZE;
   }
 
+  /**
+   * Reads the configured history query page size.
+   *
+   * @returns Configured or default page size.
+   */
   private pageSize(): number {
     return this.#maintenance?.pageSize ?? HISTORY_PAGE_SIZE;
   }
@@ -965,6 +1093,7 @@ export class KeyedSerialQueue {
   /**
    * Queues an operation after earlier operations with the same key finish.
    *
+   * @typeParam T Result type returned by the queued operation.
    * @param key Identifies the serialized operation sequence.
    * @param operation Supplies the operation to run.
    * @returns Resolves to the operation result.
@@ -994,6 +1123,10 @@ const HistoryOrdering = {
 
   /**
    * Compares timestamps by seconds and nanos.
+   *
+   * @param left First timestamp to compare.
+   * @param right Second timestamp to compare.
+   * @returns Signed chronological comparison.
    */
   compareTime(left: Timestamp, right: Timestamp): number {
     return Number(left.seconds - right.seconds) || left.nanos - right.nanos;
@@ -1004,6 +1137,19 @@ const HistoryOrdering = {
  * Traverses finite RecordStorage windows with an exact stable keyset continuation.
  */
 const HistoryPaging = {
+  /**
+   * Reads finite record pages and visits each page using stable keyset continuation.
+   *
+   * @typeParam I Record identifier type used by the storage query.
+   * @typeParam R Generated record message type in each page.
+   * @param records Storage queried in pages.
+   * @param query Filters applied to every page.
+   * @param sort Stable field order used by the continuation.
+   * @param pageSize Maximum records requested per page.
+   * @param valueIn Reads an ordered field from a record.
+   * @param visit Processes a page and returns whether scanning should continue.
+   * @returns Completes after all pages or an early visitor stop.
+   */
   async scan<I, R extends Message>(
     records: RecordStorage<I, R>,
     query: Omit<RecordQuery<I>, "after" | "limit" | "sort">,
@@ -1044,6 +1190,10 @@ const HistoryIdentity = {
 
   /**
    * Determines whether two generated Entity records have identical binary content.
+   *
+   * @param left First generated Entity record.
+   * @param right Second generated Entity record.
+   * @returns True when their serialized bytes match.
    */
   sameEntityRecord(left: EntityRecord, right: EntityRecord): boolean {
     return CanonicalBytes.equal(toBinary(EntityRecordSchema, left), toBinary(EntityRecordSchema, right));
@@ -1054,18 +1204,33 @@ const HistoryIdentity = {
  * Validates bounded history requests.
  */
 const HistoryLimits = {
+  /**
+   * Rejects a history depth that is not a positive safe integer.
+   *
+   * @param depth Requested number of history entries.
+   */
   requireDepth(depth: number): void {
     if (!Number.isSafeInteger(depth) || depth <= 0) {
       throw new Error("History depth must be a positive safe integer.");
     }
   },
 
+  /**
+   * Rejects an invalid optional maintenance deletion chunk size.
+   *
+   * @param batchSize Requested records per deletion chunk.
+   */
   requireBatchSize(batchSize: number | undefined): void {
     if (batchSize !== undefined && (!Number.isSafeInteger(batchSize) || batchSize <= 0)) {
       throw new Error("In-memory maintenance batch size must be a positive safe integer.");
     }
   },
 
+  /**
+   * Rejects an invalid optional history query page size.
+   *
+   * @param pageSize Requested records per query page.
+   */
   requirePageSize(pageSize: number | undefined): void {
     if (pageSize !== undefined && (!Number.isSafeInteger(pageSize) || pageSize <= 0)) {
       throw new Error("In-memory history page size must be a positive safe integer.");
@@ -1084,6 +1249,10 @@ const CanonicalBytes = {
 
   /**
    * Compares two durable byte sequences.
+   *
+   * @param left First byte sequence.
+   * @param right Second byte sequence.
+   * @returns True when lengths and bytes match.
    */
   equal(left: Uint8Array, right: Uint8Array): boolean {
     return left.length === right.length && left.every((value, index) => value === right[index]);

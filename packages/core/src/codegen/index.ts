@@ -16,6 +16,10 @@
  * Generated-code-only Entity column declaration helpers.
  */
 export { GeneratedEntityColumns } from "../entity/entity-column.js";
+export { GeneratedEntityQueries } from "../query/generated-entity-query.js";
+export { EntityQueryDescription } from "../query/entity-query.js";
+export type { EntityQueryDraft } from "../query/entity-query.js";
+export type { GeneratedQueryBuilder } from "../query/generated-entity-query.js";
 export type {
   EntityColumnDefinition,
   EntityColumnDefinitionEntry,

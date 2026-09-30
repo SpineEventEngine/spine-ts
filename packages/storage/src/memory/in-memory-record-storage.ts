@@ -26,6 +26,9 @@ import { TenantBoundary } from "../internal/tenancy.js";
 
 /**
  * In-memory record storage with per-tenant slices when the context is multitenant.
+ *
+ * @typeParam I The storage slot identifier type.
+ * @typeParam R The stored Protobuf record type.
  */
 export class InMemoryRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
   // prettier-ignore
@@ -34,6 +37,7 @@ export class InMemoryRecordStorage<I, R extends Message> extends RecordStorage<I
    * Declares atomic conditional mutations for compatible in-memory handles.
    */
   override readonly atomicCompareAndSet = true;
+
   readonly #records: () => TenantRecords<I, R>;
 
   /**
@@ -94,7 +98,7 @@ export class InMemoryRecordStorage<I, R extends Message> extends RecordStorage<I
   protected override queryCapabilities(): StorageQueryCapabilities {
     return {
       comparisons: ["equal", "greaterThan", "lessThan", "greaterOrEqual", "lessOrEqual"],
-      features: ["either", "nested", "order", "mask", "limit"],
+      features: ["either", "nested", "order", "limit"],
     };
   }
 
@@ -107,9 +111,14 @@ export class InMemoryRecordStorage<I, R extends Message> extends RecordStorage<I
     plan: NormalizedQueryPlan<I>,
   ): Promise<readonly RecordEntry<I, R>[]> {
     return Promise.resolve(
-      this.records().queryEntries(this.recordSpec, {
-        limit: (plan.candidateLimit ?? defaultQueryCandidateLimit) + 1,
-      }),
+      this.records().queryEntries(
+        this.recordSpec,
+        plan.exhaustive
+          ? {}
+          : {
+              limit: (plan.candidateLimit ?? defaultQueryCandidateLimit) + 1,
+            },
+      ),
     );
   }
 
@@ -144,10 +153,21 @@ export class InMemoryRecordStorage<I, R extends Message> extends RecordStorage<I
     return Promise.resolve();
   }
 
+  /**
+   * Returns the records selected by this handle's tenant context.
+   *
+   * @returns The tenant's mutable record collection.
+   */
   private records(): TenantRecords<I, R> {
     return this.#records();
   }
 
+  /**
+   * Finds or creates records for the current tenant in a local map.
+   *
+   * @param tenantRecords The map shared by this handle's local record supplier.
+   * @returns The selected tenant's mutable record collection.
+   */
   private localRecords(
     tenantRecords: Map<string | symbol, TenantRecords<I, R>>,
   ): TenantRecords<I, R> {
@@ -162,6 +182,11 @@ export class InMemoryRecordStorage<I, R extends Message> extends RecordStorage<I
     return records;
   }
 
+  /**
+   * Returns the key used to separate tenants in the local map.
+   *
+   * @returns The tenant key, or the single-tenant marker.
+   */
   private tenantKey(): string | symbol {
     return TenantBoundary.of(this.context).key;
   }

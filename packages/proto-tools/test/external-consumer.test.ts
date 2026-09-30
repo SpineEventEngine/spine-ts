@@ -445,6 +445,75 @@ describe("packed external model consumer", () => {
       const usersPacked = generateBuildAndPack(users, usersTarballs);
       assertPortableModel(users);
 
+      const queryOnly = join(root, "query-only-model");
+      mkdirSync(queryOnly);
+      const queryDependencies = {
+        "@bufbuild/protobuf": "2.12.1",
+        "@spine-event-engine/core": spineVersion,
+        "@spine-event-engine/proto": spineVersion,
+        "@spine-event-engine/proto-tools": spineVersion,
+      };
+      writeJson(queryOnly, "package.json", modelPackage("@external/query-only", queryDependencies));
+      installTarballs(queryOnly, spinePackages);
+      writeJson(
+        queryOnly,
+        "spine-proto.json",
+        modelConfig("@external/query-only", ["@spine-event-engine/proto"], "queryOnlyProtoModule"),
+      );
+      mkdirSync(join(queryOnly, "proto/external/query/v1"), { recursive: true });
+      writeFileSync(
+        join(queryOnly, "proto/external/query/v1/task.proto"),
+        [
+          'syntax = "proto3";',
+          "package external.query.v1;",
+          'import "spine/options.proto";',
+          "message TaskState {",
+          "  option (entity).kind = PROJECTION;",
+          "  string id = 1;",
+          "  string title = 2 [(column) = true];",
+          "}",
+          "",
+        ].join("\n"),
+      );
+      mkdirSync(join(queryOnly, "generated"));
+      writeFileSync(join(queryOnly, "generated/prior.ts"), "prior output\n");
+      writeFileSync(join(queryOnly, "spine-proto-manifest.json"), "prior manifest\n");
+      const withoutCore = Object.fromEntries(
+        Object.entries(queryDependencies).filter(([name]) => name !== "@spine-event-engine/core"),
+      );
+      writeJson(queryOnly, "package.json", modelPackage("@external/query-only", withoutCore));
+      expect(() => {
+        run(
+          process.execPath,
+          [
+            join(queryOnly, "node_modules/@spine-event-engine/proto-tools/bin/spine-proto.mjs"),
+            "generate",
+          ],
+          queryOnly,
+        );
+      }).toThrow(
+        "Entity query generation requires direct runtime dependency @spine-event-engine/core",
+      );
+      expect(readFileSync(join(queryOnly, "generated/prior.ts"), "utf8")).toBe("prior output\n");
+      expect(readFileSync(join(queryOnly, "spine-proto-manifest.json"), "utf8")).toBe(
+        "prior manifest\n",
+      );
+      expect(existsSync(join(queryOnly, "generated/external/query/v1/task_query.ts"))).toBe(false);
+      writeJson(queryOnly, "package.json", modelPackage("@external/query-only", queryDependencies));
+      run(
+        process.execPath,
+        [
+          join(queryOnly, "node_modules/@spine-event-engine/proto-tools/bin/spine-proto.mjs"),
+          "generate",
+        ],
+        queryOnly,
+      );
+      expect(existsSync(join(queryOnly, "generated/external/query/v1/task_query.ts"))).toBe(true);
+      expect(existsSync(join(queryOnly, "generated/external/query/v1/task_rejections.ts"))).toBe(
+        false,
+      );
+      expect(existsSync(join(queryOnly, "generated/prior.ts"))).toBe(false);
+
       const chat = join(root, "chat-model");
       mkdirSync(chat);
       writeJson(
@@ -481,6 +550,23 @@ describe("packed external model consumer", () => {
           "option (every_is).generate = true;",
           'option (every_is).ts_type = "ChatSignal";',
           "message Chat { external.users.v1.UserId author = 1; string text = 2; }",
+          "message ChatView {",
+          "  option (entity).kind = PROJECTION;",
+          "  string view_id = 1;",
+          "  string text = 2 [(column) = true];",
+          "  message Segment {",
+          "    option (entity).kind = PROJECTION;",
+          "    string segment_key = 1;",
+          "    string build = 2 [(column) = true];",
+          "    string either = 3 [(column) = true];",
+          "    string constructor = 4 [(column) = true];",
+          "  }",
+          "}",
+          "message ChatView_Segment {",
+          "  option (entity).kind = PROJECTION;",
+          "  string segment_id = 1;",
+          "  string text = 2 [(column) = true];",
+          "}",
           "",
         ].join("\n"),
       );
@@ -530,10 +616,24 @@ describe("packed external model consumer", () => {
         ),
       ).toBe(false);
       writeFileSync(messageBoardSource, validMessageBoard);
+      writeFileSync(
+        messageBoardSource,
+        validMessageBoard.replace(
+          "  string text = 2 [(column) = true];",
+          "  string text = 2 [(column) = true];\n  int32 priority = 3 [(column) = true];",
+        ),
+      );
       const chatTarballs = join(root, "chat-tarballs");
       mkdirSync(chatTarballs);
       const chatPacked = generateBuildAndPack(chat, chatTarballs);
       assertPortableModel(chat);
+      const queryCompanion = join(chat, "generated/external/chat/v1/message_board_query.ts");
+      expect(readFileSync(queryCompanion, "utf8")).toContain('"priority": "priority"');
+      expect(readFileSync(queryCompanion, "utf8")).toContain("export const ChatView_SegmentQuery");
+      expect(readFileSync(queryCompanion, "utf8")).toContain(
+        "export const ChatView_SegmentQuery_2",
+      );
+      expect(readFileSync(queryCompanion, "utf8")).toContain('"buildColumn": "build"');
       const rejectionCompanion = join(chat, "generated/external/chat/v1/task_rejections.ts");
       expect(readFileSync(rejectionCompanion, "utf8")).toContain(
         "Explains why the requested chat task cannot continue.",
@@ -622,6 +722,8 @@ describe("packed external model consumer", () => {
           'import { CommandIdSchema } from "@spine-event-engine/proto";',
           'import { UserIdSchema } from "@external/users-model/generated/external/users/v1/user_pb.js";',
           'import { ChatSchema } from "@external/chat-model/generated/external/chat/v1/message_board_pb.js";',
+          "import { ChatViewQuery, ChatView_SegmentQuery, ChatView_SegmentQuery_2 } " +
+            'from "@external/chat-model/generated/external/chat/v1/message_board_query.js";',
           'import { TaskRejected } from "@external/chat-model/generated/external/chat/v1/task_rejections.js";',
           'import { ChatSignal } from "@external/chat-model/generated/interfaces/chat-signal.js";',
           "import type { ChatSignal as ChatSignalType }",
@@ -630,6 +732,29 @@ describe("packed external model consumer", () => {
           "",
           'const user = create(UserIdSchema, { value: "author-1" });',
           'const chat = create(ChatSchema, { author: user, text: "Hello" });',
+          'const query = ChatViewQuery.create().text().is("Hello").priority().isAtLeast(1).build();',
+          'const nested = ChatView_SegmentQuery.create().byId("segment-1")',
+          '  .buildColumn().is("draft").eitherColumn().is("either")',
+          '  .constructorColumn().is("constructor").build();',
+          'const flattened = ChatView_SegmentQuery_2.create().byId("segment-2")',
+          '  .text().is("Hello").build();',
+          "if (false) {",
+          "  // @ts-expect-error The nested first field is a string ID.",
+          "  ChatView_SegmentQuery.create().byId(7);",
+          "}",
+          "let wrongIdRejected = false;",
+          "try { ChatView_SegmentQuery.create().byId(7 as never).build(); }",
+          "catch { wrongIdRejected = true; }",
+          'if (!wrongIdRejected) throw new Error("Generated query accepted a wrong ID value.");',
+          "if (query.build().context !== undefined || query.buildPlan().predicate === undefined) {",
+          '  throw new Error("Generated query did not remain context-free.");',
+          "}",
+          "if (nested.build().context !== undefined || nested.buildPlan().predicate === undefined) {",
+          '  throw new Error("Nested generated query did not compile.");',
+          "}",
+          "if (flattened.build().context !== undefined) {",
+          '  throw new Error("Colliding generated query did not compile.");',
+          "}",
           'const commandId = create(CommandIdSchema, { uuid: "spine-1" });',
           "TaskRejected.create({});",
           "const token: ChatSignalType = ChatSignal;",
@@ -664,6 +789,47 @@ describe("packed external model consumer", () => {
       }
       run(process.execPath, [join(app, "dist/index.js")], app);
       assertPortableModel(app);
+      const queryBeforeFailure = readFileSync(queryCompanion, "utf8");
+      const currentMessageBoard = readFileSync(messageBoardSource, "utf8");
+      writeFileSync(
+        messageBoardSource,
+        currentMessageBoard.replace(
+          "message ChatView {",
+          "message ReservedView { option (entity).kind = PROJECTION; " +
+            "string id = 1; bool archived = 2 [(column) = true]; }\nmessage ChatView {",
+        ),
+      );
+      expect(() => {
+        run(
+          process.execPath,
+          [
+            join(chat, "node_modules/@spine-event-engine/proto-tools/bin/spine-proto.mjs"),
+            "generate",
+          ],
+          chat,
+        );
+      }).toThrow('reserved system column "archived"');
+      expect(readFileSync(queryCompanion, "utf8")).toBe(queryBeforeFailure);
+      writeFileSync(
+        messageBoardSource,
+        [
+          'syntax = "proto3";',
+          "package external.chat.v1;",
+          'import "spine/options.proto";',
+          'import "external/users/v1/user.proto";',
+          "message Chat { external.users.v1.UserId author = 1; string text = 2; }",
+          "",
+        ].join("\n"),
+      );
+      run(
+        process.execPath,
+        [
+          join(chat, "node_modules/@spine-event-engine/proto-tools/bin/spine-proto.mjs"),
+          "generate",
+        ],
+        chat,
+      );
+      expect(existsSync(queryCompanion)).toBe(false);
     } finally {
       rmSync(root, { force: true, recursive: true });
     }

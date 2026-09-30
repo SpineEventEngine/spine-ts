@@ -173,7 +173,20 @@ To override the default channel factory, add
 Event, command, and state-update routing accepts exact schemas and generated
 message-interface tokens. It selects an exact schema first, then the first
 matching token, then the replacement or default route. The route runs when the message is accepted; its
-validated typed targets are stored and reused for retries. The legacy-named
+validated typed targets are stored and reused for retries. Route callbacks may
+return a value or a Promise. `CommandRouting.create(EntityClass)`,
+`EventRouting.create(EntityClass)`, and `StateUpdateRouting.create(ProjectionClass)`
+infer the receiving ID, state, and application Entity types. The selected class
+must be the same constructor registered by the repository;
+construction rejects a mismatch even when two classes share ID and state types.
+The callback's third argument exposes `findIds(query)`, `findStates(query)`, and `find(query)`
+for that repository in the signal's tenant. The read access rejects new calls
+after the route finishes. ID-only `create<Id>()` declarations remain valid.
+Direct `repository.routeCommand()` and `repository.routeEvent()` calls return
+Promises and must be awaited. Commands select exactly one ID; Events and state
+updates may select any number of distinct IDs. After validation and stable
+deduplication, routes above 1,000 recipients emit one warning and retain every
+recipient. Inbox replay uses stored target IDs without rerouting. The legacy-named
 local `catchUpReadSide()` helper is unrelated to retry: it resets and replays
 the whole local read side, and is not Projection catch-up.
 
@@ -228,17 +241,49 @@ Nested promises and structural or imported thenable lookalikes are rejected duri
 The entity transaction remains open until that promise settles; rejection rolls
 back framework state and suppresses produced output, but cannot undo external
 side effects. Process Managers may use their protected read-only query surface
-for eventually consistent projection state during a handler. Aggregates must
-not use projection reads for invariants.
+for eventually consistent Entity state during a handler. Aggregates must not
+use these reads for invariants.
 
-`select(schema, columns)` supports `byId`, typed `where`, `mask`, `orderBy`,
+`select(schema, columns)` supports `byId`, typed `where`, `orderBy`,
 `limit`, `read`, `findById`, and `all`. A Process Manager query returns at most
-1,000 states. `all()` is a convenience and can be costly on a large Projection;
+1,000 states and accepts at most 1,000 explicit IDs at execution. A generated
+`StateQuery.create()...build()` value also works with `this.select(query).read()`; its read
+binds the current handler actor and tenant. `all()` is a convenience and can be costly on a large read model;
 prefer an ID-targeted or ordered bounded query.
 
 Use `EntityQuery.all(...)` to require every predicate and `EntityQuery.either(...)`
 to accept any branch. Query execution inherits the active handler's actor and
-tenant; the protected read-only facade has no tenant override.
+effective tenant; the protected read-only facade has no tenant override.
+
+`RepositoryReadQueries<EntityType>` describes the receiving repository's typed
+`findIds`, `findStates`, and `find` reads. A read returns all matches unless the
+shared generated query sets a limit. States are detached messages; `find`
+restores application Entity instances with stored Version and lifecycle flags.
+The framework binds each read scope to the incoming signal tenant. Routing
+callbacks receive that scope as their third argument while they run.
+
+For contexts registered with one `Server`, the target Entity's type URL selects
+its context. No context name or network request is required. The Server rejects
+duplicate Entity type registrations before starting delivery recovery or
+listening, identifying the type and both contexts. Contexts used without a
+Server retain local querying; separate Servers do not share query routes.
+
+Cross-context targets must declare `query` or `full` visibility. This applies
+to any Entity family with queryable state. Unknown targets, foreign targets
+without query visibility, and tenant mismatches produce errors before storage
+reads. Existing local and public-query visibility behavior is unchanged.
+
+Single-tenant execution resolves to the built-in `SINGLE_TENANT` identity;
+omitting the wire tenant field does not create tenant-free execution. Named
+tenants can query their corresponding multitenant partition, not a single-tenant
+destination. `SINGLE_TENANT` can query a single-tenant destination or its same
+partition in a multitenant destination. The query never replaces the tenant to
+suit the target. A valid query with no matching record keeps its ordinary empty
+result (`undefined` from `findById()`). Reads remain eventually consistent.
+
+Routes are available before recovered handlers execute. Server shutdown drains
+accepted handlers across contexts before closing any target read-side; failed
+startup validation participates in context and resource cleanup.
 
 ```ts
 import type { Message } from "@bufbuild/protobuf";

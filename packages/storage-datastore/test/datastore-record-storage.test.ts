@@ -246,6 +246,164 @@ describe("DatastoreRecordStorage", () => {
     expect(client.lastQuery).toBeUndefined();
   });
 
+  it("pages exhaustive reads past the provider bound and applies a global order and limit", async () => {
+    const client = new PagingFlatDatastore();
+    const records = storage(client);
+    await records.writeAll(
+      Array.from({ length: 1_002 }, (_, index) =>
+        message(`item-${String(index).padStart(4, "0")}`),
+      ),
+    );
+
+    const late = await records.queryPlan({
+      exhaustive: true,
+      predicate: {
+        kind: "comparison",
+        column: "value",
+        operator: "greaterThan",
+        value: "item-0999",
+      },
+      order: [{ column: "value", direction: "desc" }],
+      limit: 1,
+    });
+    expect(late.map((row) => row.value)).toEqual(["item-1001"]);
+    expect(client.pages).toBeGreaterThan(1);
+
+    const ids = Array.from(
+      { length: 1_002 },
+      (_, index) => `item-${String(index).padStart(4, "0")}`,
+    );
+    expect(
+      await records.queryPlan({ exhaustive: true, predicate: { kind: "ids", ids } }),
+    ).toHaveLength(1_002);
+    expect(
+      await records.queryPlan({
+        exhaustive: true,
+        predicate: {
+          kind: "all",
+          predicates: [
+            { kind: "comparison", column: "value", operator: "greaterThan", value: "item-0999" },
+            { kind: "ids", ids },
+          ],
+        },
+        order: [{ column: "value", direction: "asc" }],
+      }),
+    ).toHaveLength(2);
+  });
+
+  it("narrows exhaustive large ID reads before globally filtering and ordering", async () => {
+    const client = new PagingFlatDatastore();
+    const records = storage(client);
+    const requested = Array.from(
+      { length: 1_002 },
+      (_, index) => `item-${String(index).padStart(4, "0")}`,
+    );
+    await records.writeAll([
+      ...requested.map(message),
+      ...Array.from({ length: 1_100 }, (_, index) =>
+        message(`other-${String(index).padStart(4, "0")}`),
+      ),
+    ]);
+    const ids = [...requested, "item-0000", "missing"];
+
+    const complete = await records.queryPlan({
+      exhaustive: true,
+      predicate: { kind: "ids", ids },
+    });
+    expect(complete.map((row) => row.value)).toEqual(requested);
+    expect(client.queries.length).toBeGreaterThan(1);
+    expect(
+      client.queries.every((query) =>
+        query.filters.some(
+          (filter) =>
+            filter.name === "__key__" &&
+            filter.op === "IN" &&
+            Array.isArray(filter.value) &&
+            filter.value.length <= 30,
+        ),
+      ),
+    ).toBe(true);
+
+    const selected = await records.queryPlan({
+      exhaustive: true,
+      predicate: {
+        kind: "all",
+        predicates: [
+          { kind: "ids", ids },
+          { kind: "comparison", column: "value", operator: "greaterThan", value: "item-0997" },
+        ],
+      },
+      order: [{ column: "value", direction: "desc" }],
+      limit: 2,
+    });
+    expect(selected.map((row) => row.value)).toEqual(["item-1001", "item-1000"]);
+    expect(
+      client.queries.every((query) => query.filters.some((filter) => filter.name === "__key__")),
+    ).toBe(true);
+  });
+
+  it("does not admit an exhaustive disjunction through a large ID clause", async () => {
+    const client = new PagingFlatDatastore();
+    const records = storage(client);
+    await expect(
+      records.queryPlan({
+        exhaustive: true,
+        predicate: {
+          kind: "either",
+          predicates: [
+            { kind: "ids", ids: Array.from({ length: 31 }, (_, index) => `id-${String(index)}`) },
+            { kind: "comparison", column: "value", operator: "equal", value: "other" },
+          ],
+        },
+      }),
+    ).rejects.toThrow("EITHER");
+    expect(client.queries).toEqual([]);
+  });
+
+  it("keeps unsupported nested predicates and inequality order illegal with large IDs", async () => {
+    const client = new PagingFlatDatastore();
+    const records = storage(client);
+    const ids = Array.from({ length: 31 }, (_, index) => `id-${String(index)}`);
+
+    await expect(
+      records.queryPlan({
+        exhaustive: true,
+        predicate: {
+          kind: "all",
+          predicates: [{ kind: "all", predicates: [{ kind: "ids", ids }] }],
+        },
+      }),
+    ).rejects.toThrow("nested predicates");
+    await expect(
+      records.queryPlan({
+        exhaustive: true,
+        predicate: {
+          kind: "all",
+          predicates: [
+            { kind: "ids", ids },
+            { kind: "comparison", column: "value", operator: "greaterThan", value: "a" },
+          ],
+        },
+      }),
+    ).rejects.toThrow("illegal predicate");
+    expect(client.queries).toEqual([]);
+  });
+
+  it("accepts buffer continuations and rejects repeated exhaustive page cursors", async () => {
+    const values = Array.from({ length: 130 }, (_, index) =>
+      message(`item-${String(index).padStart(4, "0")}`),
+    );
+    const buffered = storage(new PagingFlatDatastore("buffer"));
+    await buffered.writeAll(values);
+    await expect(buffered.queryPlan({ exhaustive: true })).resolves.toHaveLength(130);
+
+    const stalled = storage(new PagingFlatDatastore("repeat"));
+    await stalled.writeAll(
+      Array.from({ length: 260 }, (_, index) => message(`item-${String(index).padStart(4, "0")}`)),
+    );
+    await expect(stalled.queryPlan({ exhaustive: true })).rejects.toThrow("did not advance");
+  });
+
   it("rejects illegal inequalities and ordering before an unfiltered provider read", async () => {
     const client = new FlatDatastore();
     const records = storage(client);
@@ -492,6 +650,7 @@ class FlatDatastore {
   abortCommits = 0;
   commitError: Error | undefined;
   lastQuery: FlatQuery | undefined;
+  readonly queries: FlatQuery[] = [];
 
   key(value: Key): Key {
     return value;
@@ -526,10 +685,23 @@ class FlatDatastore {
   }
 
   runQuery(query: FlatQuery): Promise<readonly [readonly Entity[]]> {
-    void query;
+    this.queries.push(query);
     if (this.providerError !== undefined) return Promise.reject(this.providerError);
     if (this.queryResponse !== undefined) return Promise.resolve(this.queryResponse as never);
-    return Promise.resolve([[...this.#rows.values()].map((entity) => ({ ...entity }))]);
+    return Promise.resolve([
+      [...this.#rows.values()]
+        .filter((entity) =>
+          query.filters.every((filter) => {
+            if (filter.name !== "__key__" || !["=", "IN"].includes(filter.op)) return true;
+            const key = entity[this.KEY] as Key;
+            const selected = Array.isArray(filter.value)
+              ? (filter.value as Key[])
+              : [filter.value as Key];
+            return selected.some((candidate) => candidate.path.join("/") === key.path.join("/"));
+          }),
+        )
+        .map((entity) => ({ ...entity })),
+    ]);
   }
 
   transaction(): FlatTransaction {
@@ -559,6 +731,35 @@ class FlatDatastore {
 
   #name(key: { readonly path: readonly unknown[] }): string {
     return key.path.join("/");
+  }
+}
+
+class PagingFlatDatastore extends FlatDatastore {
+  pages = 0;
+
+  constructor(private readonly cursorMode: "string" | "buffer" | "repeat" = "string") {
+    super();
+  }
+
+  override async runQuery(query: FlatQuery): Promise<readonly [readonly Entity[]]> {
+    this.pages += 1;
+    const [rows] = await super.runQuery(query);
+    const offset =
+      this.cursorMode === "repeat" ? (this.pages - 1) * 128 : Number(query.startValue ?? "0");
+    const page = rows.slice(offset, offset + (query.limitValue ?? 128));
+    const next = offset + page.length;
+    return [
+      page,
+      {
+        endCursor:
+          this.cursorMode === "repeat"
+            ? "same"
+            : this.cursorMode === "buffer"
+              ? Buffer.from(String(next))
+              : String(next),
+        moreResults: next < rows.length ? "MORE_RESULTS_AFTER_LIMIT" : "NO_MORE_RESULTS",
+      },
+    ] as never;
   }
 }
 
@@ -601,6 +802,7 @@ class FlatQuery {
   readonly filters: { name: string; op: string; value: unknown }[] = [];
   readonly orders: { field: string; descending: boolean }[] = [];
   limitValue: number | undefined;
+  startValue: string | Buffer | undefined;
   filter(
     name: string | { name: string; op: string; val: unknown },
     op?: string,
@@ -620,6 +822,10 @@ class FlatQuery {
   }
   limit(value: number): this {
     this.limitValue = value;
+    return this;
+  }
+  start(value: string | Buffer): this {
+    this.startValue = value;
     return this;
   }
 }

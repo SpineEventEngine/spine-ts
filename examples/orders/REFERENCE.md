@@ -13,6 +13,19 @@ the Datastore-specific composition entry point: its caller supplies the `Datasto
 client and the function hands that same client to `DatastoreStorageFactory`.
 Domain handlers must not import provider types.
 
+`OrderReview` reads `SkuCatalogQuery` through its Process Manager `select(query)`
+method. The generated query import supplies its columns; the read resolves the
+handler tenant and can reach `Catalog` because both contexts join one Server.
+The separate `OrderCardContext` demonstrates receiving-repository routing.
+`SkuRegistered` searches saved `OrderCard` rows by the declared `skuId` column
+and uses `OrderCard.needsSkuName()` to select cards requiring an update. Its
+route reads only the receiving repository, with the Event's tenant. The focused
+test covers multiple matching cards, a nonmatching card, a repeated name with
+no handler update, and no matches. Cards created after a SKU registration start
+with an empty name until another matching registration; `OrderReview` separately
+reads the catalog when an order is reviewed. Neither example changes the fixed
+fourteen-repository load topology.
+
 `OrderSalesManager.onOrderCreated` is a state-only `@React` handler with an
 explicit `undefined` return. Generated metadata has no returned Event schemas
 for this method. The framework must still persist its counter and advance its

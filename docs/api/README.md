@@ -262,7 +262,7 @@ repositories with the built context after opening state record storage through
 the context `StorageFactory`; registered repositories also make their entity
 state schemas known to the context `Stand`. Built contexts also create the
 internal system-pairing metadata and a framework tenant index:
-single-tenant contexts use a constant index, and multitenant contexts use the
+single-tenant contexts list the built-in `SINGLE_TENANT` identity, and multitenant contexts use the
 configured provider's tenant catalog. MySQL enumerates configured
 tenant/database entries, Datastore enumerates native namespaces, and memory
 enumerates tenant slices; no generic `TenantId` record is persisted. These
@@ -356,7 +356,11 @@ Repositories and bounded contexts handle dispatch, persistence, and message
 publication; these classes do not expose public transaction controls.
 Aggregates and Process Managers provide the protected, repository-bound
 event-history methods documented below; Projections intentionally do not.
-Process Managers also provide protected `select()` reads of Projections.
+Process Managers also provide protected `select()` reads of Entity state.
+The target type identifies its context among those registered with the same
+`Server`, while the query preserves the handler's effective tenant. See the
+[query contract](../../packages/server/REFERENCE.md#handler-routing-and-operations)
+for visibility, tenant compatibility, result limits and eventual consistency.
 To pass an application service to an Entity constructor, supply `onCreate` in
 `RepositoryOptions`, or in the second argument of
 `BoundedContextBuilder.add(EntityClass, options)`. Spine supplies typed
@@ -373,8 +377,7 @@ for lifecycle and failure behavior.
 `RepositoryIdentitySnapshot`, `RepositoryIdentityError`,
 `RepositoryIdentityErrorCode`, `RepositoryCommandRoute`,
 `RepositoryEventRoute`, `RepositoryRouteInvocation`, and `RepositoryView` form
-the repository
-identity and context registration seam. A repository records one
+the repository identity and context registration seam. A repository records one
 entity constructor, the inferred aggregate/projection/process-manager family,
 the matching descriptor-backed state schema, descriptor metadata, state full
 type name, and ID-field metadata. Snapshots are frozen fresh-copy values for
@@ -388,7 +391,13 @@ prototype metadata, so alias imports, member expressions, intermediate domain
 base classes, and explicitly reparented ES classes with matching same-realm
 prototype chains are treated as metadata. It opens state record storage only
 through `BoundedContextBuilder.build()`; direct repository registration is not
-public API. When explicit handler metadata is supplied, repository routing
+public API. Command, event, and state-update routing callbacks receive
+`RepositoryReadQueries<EntityType>` as their third argument while the route runs.
+Its `findIds(query)`, `findStates(query)`, and `find(query)` methods read the
+receiving repository's current records in the incoming signal's tenant scope.
+They return typed IDs, detached complete states, and restored application
+Entity instances, respectively. The read scope closes when the route finishes.
+When explicit handler metadata is supplied, repository routing
 calculates command and event routes by generated message full type name,
 readiness metadata, producer ID, or first-field ID. Built bounded contexts
 register repository dispatcher adapters internally so aggregate commands can
@@ -440,16 +449,21 @@ Connect/Node `CommandService`, `QueryService`, and `SubscriptionService`
 routes. `QueryService.Read` supports ID-filter reads for any registered state
 route and projection-state `Target.include_all = true` reads, packing
 `EntityStateWithVersion` replies from
-`Stand.queryVersioned()`. Projection queries also support top-level `EQUAL`
-filters over declared projection `(column)` proto field names, field masks,
-repeated ordering directives over declared proto column names, and positive
-limits when ordering is present. Absent or zero wire limits use an implicit
-1,000-row cap without requiring ordering; only a positive limit without
-ordering returns `INVALID_QUERY`. Use proto column names such as
-`open_task_count`, not generated TS local names such as `openTaskCount`.
-Undeclared columns, unsupported operators, nested or `EITHER` composites, limits
-with a positive value but without ordering, missing criteria, and `include_all = false` return
-`INVALID_QUERY` before reading Stand storage.
+`Stand.queryVersioned()`. Column filters support `EQUAL`, `GREATER_THAN`,
+`LESS_THAN`, `GREATER_OR_EQUAL`, and `LESS_OR_EQUAL` inside nested `ALL`/`EITHER`
+composites. Each filter path names one declared `(column)` proto field or
+supported system column, and its value must match that column's type. Range
+comparisons and ordering require a string or numeric scalar column,
+`Timestamp`, or `version`; ordering accepts only `ASCENDING` or `DESCENDING`.
+Use proto field names such as `open_task_count`, not generated TS local names such as
+`openTaskCount`. At most 100 IDs, 16 simple filters, 8 composites, and 8
+ordering directives are accepted. Absent or zero wire limits use an implicit
+1,000-row cap without requiring ordering; a positive limit of at most 1,000
+requires ordering.
+The imported `ResponseFormat.field_mask` field is ignored; reads return complete states.
+Undeclared columns, wrong value types, unsupported operators, invalid ordering
+or limits, missing criteria, and `include_all = false` return `INVALID_QUERY`
+before reading Stand storage.
 `Subscribe` allocates an opaque ID, validates criteria, and creates one pending
 definition in the context's Stand registry. `Activate` changes that definition
 to active before attaching this process's delivery; missing or expired
@@ -466,7 +480,7 @@ distributed quota. `SpineServices.queueLimit` defaults to 100 queued updates
 per active local stream and closes slow delivery when exhausted.
 `Subscribe` accepts registered state targets and event targets exposed by
 built-context event dispatchers. It rejects unknown/private targets, invalid
-criteria, unsupported comparison operators, event filters, event field masks,
+criteria, unsupported comparison operators, event filters,
 and unknown subscription field paths with `INVALID_ARGUMENT` before creating an
 definition or attaching a listener. State `Target.include_all = true`
 delivers every activated update. State `Target.filters` supports an optional ID filter plus
@@ -474,7 +488,7 @@ delivers every activated update. State `Target.filters` supports an optional ID 
 fields, including nested message fields; missing ID filters match all IDs.
 Filtered topics deliver matching new states and emit `no_longer_matching` when
 the previous state matched but the new state does not. `Topic.field_mask` is
-applied to delivered states, not to `no_longer_matching` updates. Event topics
+ignored; delivered states contain every saved field. Event topics
 support `include_all = true` in this runtime implementation and stream wire-level
 `event_updates` with cloned framework `Event` envelopes. Application handlers
 continue to receive generated domain event messages; framework envelopes remain
@@ -1002,14 +1016,14 @@ Storage exports include `Storage`, `StorageContext`, `StorageFactory`,
 `StorageGroup`,
 `RecordStorage`, `RecordEntry`, `RecordSpec`, `RecordColumn`, `RecordQuery`,
 `RecordContinuation`, `RecordContinuationValue`, `RecordFilter`,
-`RecordOrder`, `RecordReadOptions`, `RecordMask`, `InMemoryStorageFactory`,
+`RecordOrder`, `InMemoryStorageFactory`,
 `InMemoryStorageBackend`, `InMemoryRecordStorage`, `EventStore`,
 `OnEventAccepted`, `EntityStateHistoryStorage`, and `EntityEventStorage`.
 `StorageFactory` defines one mandatory adapter seam,
 `createRecordStorage(context, spec, group?)`.
 `RecordStorage` persists identified Protobuf records with deterministic
 ID/column/path queries, stable continuations after sorted row keys,
-non-negative offsets, positive limits, and simple field masks over cloned
+non-negative offsets, positive limits, and complete cloned
 results. The in-memory adapter is process-local, tenant-aware through
 `StorageContext`, and non-durable. A factory without an
 `InMemoryStorageBackend` provides an isolated backend; independently constructed

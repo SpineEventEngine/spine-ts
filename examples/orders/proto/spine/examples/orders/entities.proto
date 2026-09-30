@@ -24,7 +24,10 @@ message Order {
   option (entity).kind = AGGREGATE;
 
   // Uniquely identifies a placed order.
-  string id = 1 [(required) = true, (set_once) = true];
+  string id = 1 [
+    (required) = true,
+    (set_once) = true
+  ];
 
   // The SKU in the order.
   string sku_id = 2 [(required) = true];
@@ -35,8 +38,29 @@ message Sku {
   option (entity).kind = AGGREGATE;
 
   // Uniquely identifies an available SKU.
-  string id = 1 [(required) = true, (set_once) = true];
+  string id = 1 [
+    (required) = true,
+    (set_once) = true
+  ];
 
   // A name shown for the SKU.
   string display_name = 2 [(required) = true];
+}
+
+// An order review enriched with the catalog name at processing time.
+message OrderReview {
+  option (entity).kind = PROCESS_MANAGER;
+  option (entity).visibility = QUERY;
+
+  // Identifies the order being reviewed.
+  string id = 1 [
+    (required) = true,
+    (set_once) = true
+  ];
+
+  // Identifies the ordered SKU.
+  string sku_id = 2 [(required) = true];
+
+  // Captures the catalog name found when the order event is handled.
+  string sku_name = 3;
 }

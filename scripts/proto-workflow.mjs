@@ -71,7 +71,6 @@ export const modelAtomicTargets = [
     displayPath: "examples/todo/generated",
     packagePath: "examples/todo",
     moduleName: "Todo",
-    templatePath: "examples/todo/buf.gen.custom.yaml",
     handlerProjectPath: "examples/todo/tsconfig.json",
   },
   {
@@ -1204,10 +1203,24 @@ function stageModel(target, root, options = {}, stagedTargets = []) {
       options.runModelCommand,
       options.runBootstrapCommand,
     );
+    const fixture =
+      target.packagePath === "packages/core/test-fixtures"
+        ? "core"
+        : target.packagePath === "packages/server/test-fixtures"
+          ? "server"
+          : undefined;
     const modelStatus = run(
       `${target.moduleName} model generation`,
       process.execPath,
-      [executable, "generate", "--live-package-root", livePackageRoot],
+      fixture === undefined
+        ? [executable, "generate", "--live-package-root", livePackageRoot]
+        : [
+            join(root, "scripts/generate-proto-fixtures.mjs"),
+            executable,
+            packageRoot,
+            livePackageRoot,
+            fixture,
+          ],
       packageRoot,
     );
     if (modelStatus !== 0) throw new Error(`${target.moduleName} model generation failed`);

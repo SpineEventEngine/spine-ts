@@ -786,7 +786,7 @@ describe("Stand", () => {
     ]);
   });
 
-  it("queries stored entity states with storage options and preserves masked versions", async () => {
+  it("queries complete entity states with storage options and preserves versions", async () => {
     const stand = new Stand({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -807,16 +807,15 @@ describe("Stand", () => {
       filters: [{ column: "priority", value: 1 }],
       sort: [{ field: "name", direction: "asc" }],
       limit: 2,
-      mask: ["name"],
     });
 
     expect(results).toEqual([
       {
-        state: create(ProjectOverviewStateSchema, { name: "Alpha" }),
+        state: createState("task-2", "Alpha"),
         version: create(VersionSchema, { number: 2 }),
       },
       {
-        state: create(ProjectOverviewStateSchema, { name: "Beta" }),
+        state: createState("task-1", "Beta"),
         version: create(VersionSchema, { number: 1 }),
       },
     ]);
@@ -867,6 +866,20 @@ describe("Stand", () => {
         version: create(VersionSchema, { number: 2 }),
       },
     ]);
+  });
+
+  it("returns complete state through a normalized plan", async () => {
+    const stand = new Stand({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    stand.register(ProjectOverviewStateSchema);
+    await stand.update(ProjectOverviewStateSchema, createState("task-1", "Visible"));
+
+    await expect(stand.queryPlanVersioned(ProjectOverviewStateSchema, {})).resolves.toEqual([
+      { state: createState("task-1", "Visible") },
+    ]);
+    await stand.close();
   });
 
   it("returns one authoritative current state and version when the query index is stale", async () => {

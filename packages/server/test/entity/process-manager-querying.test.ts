@@ -13,38 +13,71 @@
  */
 
 import { create, type MessageShape } from "@bufbuild/protobuf";
-import { AnyMessages, EntityColumn, EntityQuery } from "@spine-event-engine/core";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import {
+  AnyMessages,
+  EntityColumn,
+  EntityQuery,
+  Identifiers,
+  TypeUrls,
+} from "@spine-event-engine/core";
 import { GeneratedEntityColumns } from "@spine-event-engine/core/codegen";
 import {
   ActorContextSchema,
   CommandSchema,
   CommandContextSchema,
   CommandIdSchema,
+  EventContextSchema,
+  EventIdSchema,
+  EventSchema,
+  RejectionEventContextSchema,
   TenantIdSchema,
   UserIdSchema,
   VersionSchema,
   ZoneIdSchema,
 } from "@spine-event-engine/proto";
-import { describe, expect, expectTypeOf, it } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
+import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 
 import {
   Aggregate,
   BoundedContext,
   type DescriptorMessageSchema,
   EntityHandlers,
+  type EntityHandlersMetadata,
   type EntityOptions,
   ProcessManager,
   Projection,
   Repository,
+  EventRouting,
+  HandlerRegistryIngestor,
+  Server,
 } from "../../src/index.js";
 import { processManagerQueryAccess } from "../../src/entity/entity.js";
 import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
 import { QueryReader } from "../../src/services/query-reader.js";
+import { RegisteredTargets } from "../../src/services/registered-targets.js";
+import { Delivery } from "../../src/delivery/delivery.js";
+import { ShardIndex } from "../../src/delivery/shard-index.js";
 import {
+  type ProjectState,
+  ProjectStateSchema,
   type ProjectOverviewState,
   ProjectOverviewStateSchema,
+  ProjectOverviewIdSchema,
+  type ProjectProfileState,
+  ProjectProfileStateSchema,
 } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
+import {
+  ProjectOverviewStateQuery,
+  ProjectPortfolioStateQuery,
+} from "../../test-fixtures/generated/entity-metadata/project_states_query.js";
 import { ProcessManagerStateSchema } from "../../test-fixtures/generated/entity-metadata/visibility_pb.js";
+import {
+  type ProjectReviewState,
+  ProjectReviewStateSchema,
+  ProjectQueueStateSchema,
+} from "../../test-fixtures/generated/repository-routing/project_states_pb.js";
 import {
   type ProjectCreated as ProjectionEvent,
   ProjectCreatedSchema as ProjectionEventSchema,
@@ -53,6 +86,71 @@ import {
   type CreateReviewProject,
   CreateReviewProjectSchema,
 } from "../../test-fixtures/generated/validation-refusal/project_commands_pb.js";
+import {
+  type ReviewRejected,
+  ReviewRejectedSchema,
+} from "../../test-fixtures/generated/handler-registry/rejections_pb.js";
+
+const closePhase = vi.hoisted(() => ({
+  onBegin: undefined as ((context: unknown) => void) | undefined,
+  onDetach: undefined as (() => void) | undefined,
+  pauseAttach: undefined as (() => Promise<void>) | undefined,
+  failBuild: undefined as ((builder: unknown) => boolean) | undefined,
+  pauseBuild: undefined as ((builder: unknown) => Promise<void> | undefined) | undefined,
+  failAdapter: false,
+}));
+
+vi.mock("@connectrpc/connect-node", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@connectrpc/connect-node")>();
+  return {
+    ...actual,
+    connectNodeAdapter(...args: Parameters<typeof actual.connectNodeAdapter>) {
+      if (closePhase.failAdapter) throw new Error("HTTP adapter construction failed");
+      return actual.connectNodeAdapter(...args);
+    },
+  };
+});
+
+vi.mock("../../src/context/bounded-context.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/context/bounded-context.js")>();
+  return {
+    ...actual,
+    boundedContextAccess: {
+      ...actual.boundedContextAccess,
+      build(...args: Parameters<typeof actual.boundedContextAccess.build>) {
+        if (closePhase.failBuild?.(args[0])) throw new Error("context build failed");
+        const pause = closePhase.pauseBuild?.(args[0]);
+        return pause === undefined
+          ? actual.boundedContextAccess.build(...args)
+          : pause.then(() => actual.boundedContextAccess.build(...args));
+      },
+      beginClose(context: BoundedContext) {
+        actual.boundedContextAccess.beginClose(context);
+        closePhase.onBegin?.(context);
+      },
+    },
+  };
+});
+
+vi.mock("../../src/server/server-environment.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/server/server-environment.js")>();
+  return {
+    ...actual,
+    serverEnvironmentAccess: {
+      ...actual.serverEnvironmentAccess,
+      attach(...args: Parameters<typeof actual.serverEnvironmentAccess.attach>) {
+        const pause = closePhase.pauseAttach?.();
+        return pause === undefined
+          ? actual.serverEnvironmentAccess.attach(...args)
+          : pause.then(() => actual.serverEnvironmentAccess.attach(...args));
+      },
+      detach(...args: Parameters<typeof actual.serverEnvironmentAccess.detach>) {
+        closePhase.onDetach?.();
+        return actual.serverEnvironmentAccess.detach(...args);
+      },
+    },
+  };
+});
 
 const projectionColumns = EntityColumn.register(
   ProjectOverviewStateSchema,
@@ -61,7 +159,103 @@ const projectionColumns = EntityColumn.register(
     priority: { field: ProjectOverviewStateSchema.field.priority, comparison: "ordering" },
   }),
 );
+const equivalentProjectionSchema = { ...ProjectOverviewStateSchema };
 const selectedProjectionColumns: Pick<typeof projectionColumns, "priority"> = projectionColumns;
+const sharedQuery = ProjectOverviewStateQuery.create()
+  .name()
+  .is("ready")
+  .orderBy("priority", "desc")
+  .limit(1)
+  .build();
+const aggregateColumns = EntityColumn.register(
+  ProjectStateSchema,
+  GeneratedEntityColumns.define(ProjectStateSchema, {
+    name: { field: ProjectStateSchema.field.name, comparison: "ordering" },
+  }),
+);
+const queueColumns = EntityColumn.register(
+  ProjectQueueStateSchema,
+  GeneratedEntityColumns.define(ProjectQueueStateSchema, {
+    queue: { field: ProjectQueueStateSchema.field.queue, comparison: "ordering" },
+  }),
+);
+const reviewColumns = EntityColumn.register(
+  ProjectReviewStateSchema,
+  GeneratedEntityColumns.define(ProjectReviewStateSchema, {
+    queue: { field: ProjectReviewStateSchema.field.queue, comparison: "ordering" },
+  }),
+);
+
+class ProjectQueue extends ProcessManager<string, typeof ProjectQueueStateSchema> {}
+
+class ProjectReview extends ProcessManager<string, typeof ProjectReviewStateSchema> {}
+
+class ProjectProfile extends Projection<string, typeof ProjectProfileStateSchema> {}
+
+class MaskedProjectLookup extends ProcessManager<string, typeof ProcessManagerStateSchema> {
+  static results: readonly ProjectProfileState[] = [];
+  static failure: unknown;
+
+  async assign(command: CreateReviewProject): Promise<ProjectionEvent> {
+    try {
+      MaskedProjectLookup.results = await this.select(ProjectProfileStateSchema, {})
+        .byId(command.id)
+        .read();
+    } catch (error) {
+      MaskedProjectLookup.failure = error;
+      throw error;
+    }
+    return create(ProjectionEventSchema, { id: command.id, name: "masked" });
+  }
+}
+
+class PausedProjectLookup extends ProcessManager<string, typeof ProcessManagerStateSchema> {
+  static onEntered: (() => void) | undefined;
+  static wait: Promise<void> | undefined;
+  static results: readonly ProjectOverviewState[] = [];
+
+  async assign(command: CreateReviewProject): Promise<ProjectionEvent> {
+    PausedProjectLookup.onEntered?.();
+    await PausedProjectLookup.wait;
+    PausedProjectLookup.results = await this.select(ProjectOverviewStateSchema, projectionColumns)
+      .byId(command.id)
+      .read();
+    return create(ProjectionEventSchema, { id: command.id, name: "resumed" });
+  }
+}
+
+class RejectionProjectLookup extends ProcessManager<string, typeof ProcessManagerStateSchema> {
+  static results: readonly ProjectOverviewState[] = [];
+
+  async onRejected(rejection: ReviewRejected): Promise<CreateReviewProject | undefined> {
+    RejectionProjectLookup.results = await this.select(
+      ProjectOverviewStateSchema,
+      projectionColumns,
+    )
+      .byId(rejection.id)
+      .read();
+    this.update((draft) => {
+      draft.queue = `rejected ${String(RejectionProjectLookup.results.length)}`;
+    });
+    return undefined;
+  }
+}
+
+class HiddenLookup extends ProcessManager<string, typeof ProcessManagerStateSchema> {
+  static failure: unknown;
+  static completed = false;
+
+  async assign(command: CreateReviewProject): Promise<ProjectionEvent> {
+    try {
+      await this.select(ProjectQueueStateSchema, queueColumns).all();
+    } catch (error) {
+      HiddenLookup.failure = error;
+    } finally {
+      HiddenLookup.completed = true;
+    }
+    return create(ProjectionEventSchema, { id: command.id, name: command.name });
+  }
+}
 
 class QueryProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   subscribe(event: ProjectionEvent): void {
@@ -86,6 +280,8 @@ const identityNameFilter: ProjectionNameFilter = { match: (name) => name };
 
 class ProjectLookup extends ProcessManager<string, typeof ProcessManagerStateSchema> {
   static results: readonly ProjectOverviewState[] = [];
+  static aggregateResults: readonly ProjectState[] = [];
+  static reviewResults: readonly ProjectReviewState[] = [];
   static predicate: unknown;
   static failure: unknown;
 
@@ -98,6 +294,8 @@ class ProjectLookup extends ProcessManager<string, typeof ProcessManagerStateSch
 
   static reset(): void {
     this.results = [];
+    this.aggregateResults = [];
+    this.reviewResults = [];
     this.predicate = undefined;
     this.failure = undefined;
   }
@@ -106,19 +304,53 @@ class ProjectLookup extends ProcessManager<string, typeof ProcessManagerStateSch
     return this.select(ProjectOverviewStateSchema, projectionColumns);
   }
 
+  queryShared(query: typeof sharedQuery = sharedQuery) {
+    return this.select(query);
+  }
+
   async assign(command: CreateReviewProject): Promise<ProjectionEvent> {
-    const query = this.query();
     try {
-      if (ProjectLookup.predicate !== undefined) {
-        query.where(ProjectLookup.predicate as never);
+      if (command.name === "aggregate") {
+        ProjectLookup.aggregateResults = await this.select(ProjectStateSchema, aggregateColumns)
+          .byId(command.id)
+          .read();
+      } else if (command.name === "review") {
+        ProjectLookup.reviewResults = await this.select(ProjectReviewStateSchema, reviewColumns)
+          .byId(command.id)
+          .read();
+      } else if (command.name === "equivalent") {
+        ProjectLookup.results = await this.select(equivalentProjectionSchema, projectionColumns)
+          .byId(command.id)
+          .read();
+      } else if (command.name === "compound") {
+        ProjectLookup.results = await this.query()
+          .where(
+            EntityQuery.all(
+              EntityQuery.either(
+                EntityQuery.eq(projectionColumns.name, "ready"),
+                EntityQuery.eq(projectionColumns.name, "waiting"),
+              ),
+              EntityQuery.gt(projectionColumns.priority, 0),
+            ),
+          )
+          .orderBy(projectionColumns.priority, "desc")
+          .limit(1)
+          .all();
+      } else if (command.name === "shared") {
+        ProjectLookup.results = await this.select(sharedQuery).read();
+      } else {
+        const query = this.query();
+        if (ProjectLookup.predicate !== undefined) {
+          query.where(ProjectLookup.predicate as never);
+        }
+        ProjectLookup.results =
+          command.name === "all"
+            ? await query.all()
+            : await query
+                .byId(command.id)
+                .where(EntityQuery.eq(projectionColumns.name, this.nameFilter.match(command.name)))
+                .read();
       }
-      ProjectLookup.results =
-        command.name === "all"
-          ? await query.all()
-          : await query
-              .byId(command.id)
-              .where(EntityQuery.eq(projectionColumns.name, this.nameFilter.match(command.name)))
-              .read();
     } catch (error) {
       ProjectLookup.failure = error;
       throw error;
@@ -183,6 +415,109 @@ function processManagerRepository(
   });
 }
 
+function hiddenLookupRepository(): Repository<typeof HiddenLookup> {
+  return new Repository({
+    entityType: HiddenLookup,
+    schema: ProcessManagerStateSchema,
+    handlers: HandlerMetadataValues.defineArity(
+      HiddenLookup,
+      ProcessManagerStateSchema,
+      (builder) => [builder.assign(CreateReviewProjectSchema, "assign")],
+      [
+        {
+          kind: "command-assignment",
+          methodName: "assign",
+          parameterCount: 1,
+          origin: "domestic",
+          outcomes: { returned: [ProjectionEventSchema], thrown: [] },
+        },
+      ],
+    ),
+    events: [ProjectionEventSchema],
+  });
+}
+
+function maskedLookupRepository(): Repository<typeof MaskedProjectLookup> {
+  return new Repository({
+    entityType: MaskedProjectLookup,
+    schema: ProcessManagerStateSchema,
+    handlers: HandlerMetadataValues.defineArity(
+      MaskedProjectLookup,
+      ProcessManagerStateSchema,
+      (builder) => [builder.assign(CreateReviewProjectSchema, "assign")],
+      [
+        {
+          kind: "command-assignment",
+          methodName: "assign",
+          parameterCount: 1,
+          origin: "domestic",
+          outcomes: { returned: [ProjectionEventSchema], thrown: [] },
+        },
+      ],
+    ),
+    events: [ProjectionEventSchema],
+  });
+}
+
+function pausedLookupRepository(): Repository<typeof PausedProjectLookup> {
+  return new Repository({
+    entityType: PausedProjectLookup,
+    schema: ProcessManagerStateSchema,
+    handlers: HandlerMetadataValues.defineArity(
+      PausedProjectLookup,
+      ProcessManagerStateSchema,
+      (builder) => [builder.assign(CreateReviewProjectSchema, "assign")],
+      [
+        {
+          kind: "command-assignment",
+          methodName: "assign",
+          parameterCount: 1,
+          origin: "domestic",
+          outcomes: { returned: [ProjectionEventSchema], thrown: [] },
+        },
+      ],
+    ),
+    events: [ProjectionEventSchema],
+  });
+}
+
+function rejectionLookupRepository(): Repository<typeof RejectionProjectLookup> {
+  const handlers = new HandlerRegistryIngestor().ingest({
+    receivers: [
+      {
+        receiverKind: "entity",
+        receiverType: RejectionProjectLookup,
+        stateSchema: ProcessManagerStateSchema,
+        handlers: [
+          {
+            kind: "command-reaction",
+            methodName: "onRejected",
+            input: { schema: ReviewRejectedSchema, origin: "domestic" },
+            outcomes: { returned: [CreateReviewProjectSchema], thrown: [] },
+            parameterCount: 1,
+          },
+        ],
+      },
+    ],
+  })[0] as EntityHandlersMetadata<RejectionProjectLookup, typeof ProcessManagerStateSchema>;
+  return new Repository({
+    entityType: RejectionProjectLookup,
+    schema: ProcessManagerStateSchema,
+    handlers,
+    eventRouting: EventRouting.create<string>().route(ReviewRejectedSchema, (rejection) => [
+      rejection.id,
+    ]),
+  });
+}
+
+function profileRepository(): Repository<typeof ProjectProfile> {
+  return new Repository({
+    entityType: ProjectProfile,
+    schema: ProjectProfileStateSchema,
+    handlers: EntityHandlers.define(ProjectProfile, ProjectProfileStateSchema, () => []),
+  });
+}
+
 function queryCommand(id: string, name: string, tenant?: string, suffix?: string) {
   return create(CommandSchema, {
     id: create(CommandIdSchema, {
@@ -207,7 +542,1246 @@ function queryCommand(id: string, name: string, tenant?: string, suffix?: string
   });
 }
 
+async function startPausedQueryServer(order: "target-first" | "handler-first") {
+  const projects = BoundedContext.singleTenant("PausedProjects")
+    .add(projectionRepository())
+    .build();
+  const workflows = BoundedContext.singleTenant("PausedWorkflows")
+    .add(pausedLookupRepository())
+    .build();
+  await projects
+    .stand()
+    .update(
+      ProjectOverviewStateSchema,
+      create(ProjectOverviewStateSchema, { id: "project-1", name: "ready", priority: 1 }),
+    );
+  const contexts = order === "target-first" ? [projects, workflows] : [workflows, projects];
+  const server = Server.atPort(0);
+  for (const context of contexts) server.add(context);
+  return { projects, workflows, running: await server.start() };
+}
+
+function reviewRejectionEvent(id: string) {
+  return create(EventSchema, {
+    id: create(EventIdSchema, { value: `rejected-${id}` }),
+    context: create(EventContextSchema, {
+      producerId: Identifiers.pack("string", id),
+      timestamp: create(TimestampSchema, { seconds: 1n }),
+      version: create(VersionSchema, { number: 1 }),
+      rejection: create(RejectionEventContextSchema, {
+        command: queryCommand(id, "review"),
+      }),
+    }),
+    message: AnyMessages.pack(ReviewRejectedSchema, create(ReviewRejectedSchema, { id })),
+  });
+}
+
 describe("Process Manager querying", () => {
+  it("copies a generated message ID from the canonical first field", () => {
+    const id = create(ProjectOverviewIdSchema, { value: "portfolio-1" });
+    const query = ProjectPortfolioStateQuery.create().byId(id).build();
+    id.value = "changed";
+    expect(query.buildPlan().predicate).toMatchObject({
+      kind: "ids",
+      ids: [{ value: "portfolio-1" }],
+    });
+    expect(query.build().context).toBeUndefined();
+    expect(() =>
+      ProjectPortfolioStateQuery.create()
+        .byId("wrong" as never)
+        .build(),
+    ).toThrow(/wrong type/u);
+    type Id = Parameters<ReturnType<typeof ProjectPortfolioStateQuery.create>["byId"]>[0];
+    type RejectsStringId = string extends Id ? false : true;
+    const rejectsStringId: RejectsStringId = true;
+    expect(rejectsStringId).toBe(true);
+  });
+  it.each(["local", "foreign"])(
+    "retains complete camelCase state on the %s registered route",
+    async (route) => {
+      MaskedProjectLookup.results = [];
+      MaskedProjectLookup.failure = undefined;
+      const workflowBuilder = BoundedContext.singleTenant(`MaskedWorkflows-${route}`).add(
+        maskedLookupRepository(),
+      );
+      if (route === "local") workflowBuilder.add(profileRepository());
+      const workflows = workflowBuilder.build();
+      const projects = BoundedContext.singleTenant(`MaskedProjects-${route}`)
+        .add(profileRepository())
+        .build();
+      const target = route === "local" ? workflows : projects;
+      await target
+        .stand()
+        .update(
+          ProjectProfileStateSchema,
+          create(ProjectProfileStateSchema, { id: "project-1", mutableNote: "visible" }),
+        );
+      const server = Server.atPort(0).add(workflows);
+      if (route === "foreign") server.add(projects);
+      const running = await server.start();
+
+      try {
+        await workflows.commandBus().post(queryCommand("project-1", "masked"));
+        await vi.waitFor(() => {
+          expect(MaskedProjectLookup.failure).toBeUndefined();
+          expect(MaskedProjectLookup.results).toHaveLength(1);
+        });
+        expect(MaskedProjectLookup.results[0]?.mutableNote).toBe("visible");
+      } finally {
+        await running.close();
+      }
+    },
+  );
+
+  it("finds a registered Entity in another context of the same server", async () => {
+    ProjectLookup.reset();
+    const projects = BoundedContext.singleTenant("Projects").add(projectionRepository()).build();
+    const workflows = BoundedContext.singleTenant("Workflows")
+      .add(processManagerRepository())
+      .build();
+    await projects
+      .stand()
+      .update(
+        ProjectOverviewStateSchema,
+        create(ProjectOverviewStateSchema, { id: "project-1", name: "ready", priority: 1 }),
+      );
+    const running = await Server.atPort(0).add(workflows).add(projects).start();
+
+    try {
+      await workflows.commandBus().post(queryCommand("project-1", "ready"));
+      await vi.waitFor(() => {
+        expect(ProjectLookup.failure).toBeUndefined();
+        expect(ProjectLookup.results).toEqual([
+          create(ProjectOverviewStateSchema, { id: "project-1", name: "ready", priority: 1 }),
+        ]);
+      });
+      await workflows.commandBus().post(queryCommand("missing", "ready"));
+      await vi.waitFor(() => {
+        expect(ProjectLookup.results).toEqual([]);
+      });
+      expect(ProjectLookup.failure).toBeUndefined();
+    } finally {
+      await running.close();
+    }
+  });
+
+  it.each(["reused-first", "fresh-first"] as const)(
+    "keeps a live Server's PM route isolated when the rejected Server lists %s",
+    async (order) => {
+      let enter!: () => void;
+      let release!: () => void;
+      let attach!: () => void;
+      let resumeAttach!: () => void;
+      const entered = new Promise<void>((resolve) => {
+        enter = resolve;
+      });
+      const resumed = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const attaching = new Promise<void>((resolve) => {
+        attach = resolve;
+      });
+      const attachReleased = new Promise<void>((resolve) => {
+        resumeAttach = resolve;
+      });
+      PausedProjectLookup.onEntered = enter;
+      PausedProjectLookup.wait = resumed;
+      PausedProjectLookup.results = [];
+      const workflows = BoundedContext.singleTenant("IsolatedWorkflows")
+        .add(pausedLookupRepository())
+        .build();
+      const original = BoundedContext.singleTenant("OriginalProjects")
+        .add(projectionRepository())
+        .build();
+      const intruder = BoundedContext.singleTenant("IntruderProjects")
+        .add(projectionRepository())
+        .build();
+      await original
+        .stand()
+        .update(
+          ProjectOverviewStateSchema,
+          create(ProjectOverviewStateSchema, { id: "shared", name: "original", priority: 1 }),
+        );
+      await intruder
+        .stand()
+        .update(
+          ProjectOverviewStateSchema,
+          create(ProjectOverviewStateSchema, { id: "shared", name: "intruder", priority: 2 }),
+        );
+      const first = await Server.atPort(0).add(workflows).add(original).start();
+      let secondStart: Promise<unknown> | undefined;
+
+      try {
+        await workflows.commandBus().post(queryCommand("shared", "paused"));
+        await entered;
+        closePhase.pauseAttach = () => {
+          attach();
+          return attachReleased;
+        };
+        const second = Server.atPort(0);
+        if (order === "reused-first") second.add(workflows).add(intruder);
+        else second.add(intruder).add(workflows);
+        secondStart = second.start();
+        await Promise.race([
+          attaching,
+          secondStart.then(
+            () => {
+              return undefined;
+            },
+            () => {
+              return undefined;
+            },
+          ),
+        ]);
+        release();
+        await vi.waitFor(() => {
+          expect(PausedProjectLookup.results[0]?.name).toBe("original");
+        });
+        resumeAttach();
+        await expect(secondStart).rejects.toThrow();
+        await workflows.commandBus().post(queryCommand("shared", "paused", undefined, "again"));
+        await vi.waitFor(() => {
+          expect(PausedProjectLookup.results[0]?.name).toBe("original");
+        });
+        expect(() => original.stand().stateTypes()).not.toThrow();
+        await expect(intruder.stand().readAllVersioned(ProjectOverviewStateSchema)).rejects.toThrow(
+          "Stand is closed.",
+        );
+        expect(RegisteredTargets.forStand(intruder.stand())).toBeUndefined();
+      } finally {
+        closePhase.pauseAttach = undefined;
+        release();
+        resumeAttach();
+        PausedProjectLookup.onEntered = undefined;
+        PausedProjectLookup.wait = undefined;
+        await secondStart?.catch(() => undefined);
+        await first.close();
+      }
+    },
+  );
+
+  it("admits only one concurrent Server assembly for a shared context", async () => {
+    ProjectLookup.reset();
+    const workflows = BoundedContext.singleTenant("ConcurrentWorkflows")
+      .add(processManagerRepository())
+      .build();
+    const firstProjects = BoundedContext.singleTenant("ConcurrentFirstProjects")
+      .add(projectionRepository())
+      .build();
+    const secondProjects = BoundedContext.singleTenant("ConcurrentSecondProjects")
+      .add(projectionRepository())
+      .build();
+    await firstProjects
+      .stand()
+      .update(
+        ProjectOverviewStateSchema,
+        create(ProjectOverviewStateSchema, { id: "shared", name: "first", priority: 1 }),
+      );
+    await secondProjects
+      .stand()
+      .update(
+        ProjectOverviewStateSchema,
+        create(ProjectOverviewStateSchema, { id: "shared", name: "second", priority: 2 }),
+      );
+    const outcomes = await Promise.allSettled([
+      Server.atPort(0).add(workflows).add(firstProjects).start(),
+      Server.atPort(0).add(workflows).add(secondProjects).start(),
+    ]);
+    const accepted = outcomes.filter((result) => result.status === "fulfilled");
+    const rejected = outcomes.filter((result) => result.status === "rejected");
+    expect(accepted).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    const running = accepted[0]?.value;
+    if (running === undefined) throw new Error("A Server was not started.");
+    const target = outcomes[0].status === "fulfilled" ? firstProjects : secondProjects;
+    const unused = target === firstProjects ? secondProjects : firstProjects;
+
+    try {
+      await workflows
+        .commandBus()
+        .post(queryCommand("shared", target === firstProjects ? "first" : "second"));
+      await vi.waitFor(() => {
+        expect(ProjectLookup.results[0]?.name).toBe(target === firstProjects ? "first" : "second");
+      });
+      expect(RegisteredTargets.forStand(unused.stand())).toBeUndefined();
+      await expect(unused.stand().readAllVersioned(ProjectOverviewStateSchema)).rejects.toThrow(
+        "Stand is closed.",
+      );
+    } finally {
+      await running.close();
+    }
+  });
+
+  it.each(["before-builder", "after-builder"])(
+    "reserves all prebuilt contexts %s before awaiting a builder",
+    async (position) => {
+      ProjectLookup.reset();
+      const workflows = BoundedContext.singleTenant(`PendingWorkflows-${position}`)
+        .add(processManagerRepository())
+        .build();
+      const original = BoundedContext.singleTenant(`PendingProjects-${position}`)
+        .add(projectionRepository())
+        .build();
+      const intruder = BoundedContext.singleTenant(`PendingIntruder-${position}`)
+        .add(projectionRepository())
+        .build();
+      const delayed = BoundedContext.singleTenant(`DelayedBuilder-${position}`);
+      await original
+        .stand()
+        .update(
+          ProjectOverviewStateSchema,
+          create(ProjectOverviewStateSchema, { id: "shared", name: "original", priority: 1 }),
+        );
+      let entered!: () => void;
+      let resume!: () => void;
+      const building = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      const released = new Promise<void>((resolve) => {
+        resume = resolve;
+      });
+      closePhase.pauseBuild = (builder) => {
+        if (builder !== delayed) return undefined;
+        entered();
+        return released;
+      };
+      const first = Server.atPort(0);
+      if (position === "before-builder") first.add(workflows).add(delayed).add(original);
+      else first.add(delayed).add(workflows).add(original);
+      const firstStart = first.start();
+      await building;
+      const secondStart = Server.atPort(0).add(workflows).add(intruder).start();
+
+      try {
+        await expect(secondStart).rejects.toThrow(/already associated|assembly/);
+        resume();
+        const running = await firstStart;
+        await workflows.commandBus().post(queryCommand("shared", "original"));
+        await vi.waitFor(() => {
+          expect(ProjectLookup.results[0]?.name).toBe("original");
+        });
+        expect(RegisteredTargets.forStand(intruder.stand())).toBeUndefined();
+        await running.close();
+      } finally {
+        closePhase.pauseBuild = undefined;
+        resume();
+        await secondStart.then(
+          (running) => running.close(),
+          () => undefined,
+        );
+        await firstStart.then(
+          (running) => running.close(),
+          () => undefined,
+        );
+      }
+    },
+  );
+
+  it("retries failed second-Server cleanup without closing the live context", async () => {
+    ProjectLookup.reset();
+    const workflows = BoundedContext.singleTenant("RetainedWorkflows")
+      .add(processManagerRepository())
+      .build();
+    const original = BoundedContext.singleTenant("RetainedProjects")
+      .add(projectionRepository())
+      .build();
+    const unused = BoundedContext.singleTenant("UnusedProjects")
+      .add(projectionRepository())
+      .build();
+    await original
+      .stand()
+      .update(
+        ProjectOverviewStateSchema,
+        create(ProjectOverviewStateSchema, { id: "shared", name: "original", priority: 1 }),
+      );
+    const first = await Server.atPort(0).add(workflows).add(original).start();
+    let closes = 0;
+    const second = Server.atPort(0)
+      .add(unused)
+      .add(workflows)
+      .addResource({
+        close() {
+          closes += 1;
+          if (closes === 1) throw new Error("resource close failed");
+        },
+      });
+
+    try {
+      await expect(second.start()).rejects.toThrow(/cleanup/);
+      expect(closes).toBe(1);
+      await expect(second.start()).rejects.toThrow(/deferred cleanup completed/);
+      expect(closes).toBe(2);
+      await workflows.commandBus().post(queryCommand("shared", "original"));
+      await vi.waitFor(() => {
+        expect(ProjectLookup.results[0]?.name).toBe("original");
+      });
+      expect(
+        RegisteredTargets.forStand(workflows.stand())?.find(
+          TypeUrls.derive(ProjectOverviewStateSchema),
+        )?.context,
+      ).toBe(original);
+    } finally {
+      await first.close();
+    }
+  });
+
+  it("rejects a live context before invoking a later failing builder", async () => {
+    ProjectLookup.reset();
+    const workflows = BoundedContext.singleTenant("BuildGuardWorkflows")
+      .add(processManagerRepository())
+      .build();
+    const projects = BoundedContext.singleTenant("BuildGuardProjects")
+      .add(projectionRepository())
+      .build();
+    await projects
+      .stand()
+      .update(
+        ProjectOverviewStateSchema,
+        create(ProjectOverviewStateSchema, { id: "shared", name: "ready", priority: 1 }),
+      );
+    const running = await Server.atPort(0).add(workflows).add(projects).start();
+    const failing = BoundedContext.singleTenant("BuildGuardFailure");
+    let buildAttempts = 0;
+    closePhase.failBuild = (builder) => {
+      if (builder !== failing) return false;
+      buildAttempts += 1;
+      return true;
+    };
+
+    try {
+      await expect(Server.atPort(0).add(workflows).add(failing).start()).rejects.toThrow(
+        /assembly/,
+      );
+      expect(buildAttempts).toBe(0);
+      await workflows.commandBus().post(queryCommand("shared", "ready"));
+      await vi.waitFor(() => {
+        expect(ProjectLookup.results[0]?.name).toBe("ready");
+      });
+    } finally {
+      closePhase.failBuild = undefined;
+      await running.close();
+    }
+  });
+
+  it("retains partial-build admissions until failed cleanup retries complete", async () => {
+    const projects = BoundedContext.singleTenant("PartialBuildProjects")
+      .add(projectionRepository())
+      .build();
+    const broken = BoundedContext.singleTenant("PartialBuildBroken");
+    closePhase.failBuild = (builder) => builder === broken;
+    let closes = 0;
+    const server = Server.atPort(0)
+      .add(projects)
+      .add(broken)
+      .addResource({
+        close() {
+          closes += 1;
+          if (closes === 1) throw new Error("resource cleanup failed");
+        },
+      });
+
+    try {
+      await expect(server.start()).rejects.toThrow(/cleanup/);
+      expect(closes).toBe(1);
+      expect(RegisteredTargets.forStand(projects.stand())).toBeUndefined();
+      await expect(Server.atPort(0).add(projects).start()).rejects.toThrow(/assembly/);
+      await expect(server.start()).rejects.toThrow(/deferred cleanup completed/);
+      expect(closes).toBe(2);
+      await expect(projects.stand().readAllVersioned(ProjectOverviewStateSchema)).rejects.toThrow(
+        "Stand is closed.",
+      );
+    } finally {
+      closePhase.failBuild = undefined;
+    }
+  });
+
+  it("detaches delivery and closes contexts after service option validation fails", async () => {
+    const projects = BoundedContext.singleTenant("InvalidServiceProjects")
+      .add(projectionRepository())
+      .build();
+    let detaches = 0;
+    let closes = 0;
+    closePhase.onDetach = () => {
+      detaches += 1;
+    };
+    const server = Server.atPort(0, { services: { subscriptionLimit: 0 } })
+      .add(projects)
+      .addResource({
+        close() {
+          closes += 1;
+        },
+      });
+
+    try {
+      await expect(server.start()).rejects.toThrow(/subscriptionLimit/);
+      expect(detaches).toBe(1);
+      expect(closes).toBe(1);
+      expect(RegisteredTargets.forStand(projects.stand())).toBeUndefined();
+      await expect(projects.stand().readAllVersioned(ProjectOverviewStateSchema)).rejects.toThrow(
+        "Stand is closed.",
+      );
+    } finally {
+      closePhase.onDetach = undefined;
+    }
+  });
+
+  it("retries adapter-construction cleanup without repeating completed phases", async () => {
+    const projects = BoundedContext.singleTenant("AdapterFailureProjects")
+      .add(projectionRepository())
+      .build();
+    let detaches = 0;
+    let closes = 0;
+    closePhase.onDetach = () => {
+      detaches += 1;
+    };
+    closePhase.failAdapter = true;
+    const server = Server.atPort(0)
+      .add(projects)
+      .addResource({
+        close() {
+          closes += 1;
+          if (closes === 1) throw new Error("resource cleanup failed");
+        },
+      });
+
+    try {
+      await expect(server.start()).rejects.toThrow(/cleanup/);
+      expect(detaches).toBe(1);
+      expect(closes).toBe(1);
+      expect(RegisteredTargets.forStand(projects.stand())).toBeDefined();
+      await expect(server.start()).rejects.toThrow(/deferred cleanup completed/);
+      expect(detaches).toBe(1);
+      expect(closes).toBe(2);
+      expect(RegisteredTargets.forStand(projects.stand())).toBeUndefined();
+    } finally {
+      closePhase.failAdapter = false;
+      closePhase.onDetach = undefined;
+    }
+  });
+
+  it("releases routes after a completed Server close", async () => {
+    const context = BoundedContext.singleTenant("ReleasedProjects")
+      .add(projectionRepository())
+      .build();
+    const running = await Server.atPort(0).add(context).start();
+    expect(RegisteredTargets.forStand(context.stand())).toBeDefined();
+
+    await running.close();
+
+    expect(RegisteredTargets.forStand(context.stand())).toBeUndefined();
+  });
+
+  it("releases installed routes after attachment startup fails", async () => {
+    const projects = BoundedContext.singleTenant("FailedAttachProjects")
+      .add(projectionRepository())
+      .build();
+    const workflows = BoundedContext.singleTenant("FailedAttachWorkflows")
+      .add(processManagerRepository())
+      .build();
+    let closes = 0;
+    const server = Server.atPort(0)
+      .add(projects)
+      .add(workflows)
+      .addResource({
+        close() {
+          closes += 1;
+          if (closes === 1) throw new Error("cleanup retry required");
+        },
+      });
+    closePhase.pauseAttach = () => Promise.reject(new Error("attachment blocked"));
+
+    try {
+      await expect(server.start()).rejects.toThrow(/cleanup/);
+    } finally {
+      closePhase.pauseAttach = undefined;
+    }
+    expect(closes).toBe(1);
+    expect(RegisteredTargets.forStand(projects.stand())).toBeDefined();
+    await expect(server.start()).rejects.toThrow(/deferred cleanup completed/);
+    expect(closes).toBe(2);
+    expect(RegisteredTargets.forStand(projects.stand())).toBeUndefined();
+    expect(RegisteredTargets.forStand(workflows.stand())).toBeUndefined();
+    await expect(projects.stand().readAllVersioned(ProjectOverviewStateSchema)).rejects.toThrow(
+      "Stand is closed.",
+    );
+  });
+
+  it("installs complete routes before recovery enumerates tenant work", async () => {
+    const factory = new InMemoryStorageFactory();
+    const projects = BoundedContext.multitenant("RecoverProjects")
+      .withStorageFactory(factory)
+      .add(projectionRepository())
+      .build();
+    const workflows = BoundedContext.multitenant("RecoverWorkflows")
+      .withStorageFactory(factory)
+      .add(processManagerRepository())
+      .build();
+    const catalog = factory.tenantCatalog();
+    const originalAll = catalog.all.bind(catalog);
+    let recoveryScopes = 0;
+    const all = vi.spyOn(catalog, "all").mockImplementation(() => {
+      recoveryScopes += 1;
+      expect(
+        RegisteredTargets.forStand(workflows.stand())?.find(
+          TypeUrls.derive(ProjectOverviewStateSchema),
+        )?.context,
+      ).toBe(projects);
+      return originalAll();
+    });
+
+    try {
+      const running = await Server.atPort(0).add(workflows).add(projects).start();
+      expect(recoveryScopes).toBeGreaterThan(0);
+      await running.close();
+    } finally {
+      all.mockRestore();
+    }
+  });
+
+  it("replays persisted Process Manager work with a foreign state read after restart", async () => {
+    ProjectLookup.reset();
+    const factory = new InMemoryStorageFactory();
+    const createdVersions: number[] = [];
+    const buildContexts = () => {
+      const projects = BoundedContext.singleTenant("ReplayProjects")
+        .withStorageFactory(factory)
+        .add(projectionRepository())
+        .build();
+      const workflows = BoundedContext.singleTenant("ReplayWorkflows")
+        .withStorageFactory(factory)
+        .add(processManagerRepository(identityNameFilter, createdVersions))
+        .build();
+      return { projects, workflows };
+    };
+    const first = buildContexts();
+    await first.projects
+      .stand()
+      .update(
+        ProjectOverviewStateSchema,
+        create(ProjectOverviewStateSchema, { id: "project-1", name: "ready", priority: 1 }),
+      );
+    const initial = await Server.atPort(0).add(first.workflows).add(first.projects).start();
+    await first.workflows.commandBus().post(queryCommand("project-1", "ready"));
+    await vi.waitFor(async () => {
+      const current = await first.workflows.stand().read(ProcessManagerStateSchema, "project-1");
+      expect(current?.queue).toBe("read 1");
+    });
+    await initial.close();
+    ProjectLookup.reset();
+
+    const pending = queryCommand("project-1", "ready", undefined, "replay");
+    const delivery = new Delivery({
+      context: { name: "ReplayWorkflows", multitenant: false },
+      storageFactory: factory,
+    });
+    await delivery.inbox.receive({
+      inboxId: {
+        targetId: Identifiers.pack("string", "project-1"),
+        targetTypeUrl: TypeUrls.derive(ProcessManagerStateSchema),
+      },
+      signalId: pending.id?.uuid ?? "missing-command-id",
+      signal: AnyMessages.pack(CommandSchema, pending, { validate: false }),
+      label: "HANDLE_COMMAND",
+      status: "TO_DELIVER",
+      shard: ShardIndex.single(),
+      whenReceived: new Date(),
+      version: 1n,
+    });
+    const restarted = buildContexts();
+    const running = await Server.atPort(0).add(restarted.workflows).add(restarted.projects).start();
+
+    try {
+      await vi.waitFor(() => {
+        expect(ProjectLookup.results).toEqual([
+          create(ProjectOverviewStateSchema, { id: "project-1", name: "ready", priority: 1 }),
+        ]);
+      });
+      expect(ProjectLookup.failure).toBeUndefined();
+      expect(createdVersions).toEqual([0, 1]);
+    } finally {
+      await running.close();
+    }
+  });
+
+  it("reads a foreign state while reacting to a rejected review command", async () => {
+    RejectionProjectLookup.results = [];
+    const projects = BoundedContext.singleTenant("RejectedProjects")
+      .add(projectionRepository())
+      .build();
+    const workflows = BoundedContext.singleTenant("RejectedWorkflows")
+      .add(rejectionLookupRepository())
+      .build();
+    await projects
+      .stand()
+      .update(
+        ProjectOverviewStateSchema,
+        create(ProjectOverviewStateSchema, { id: "project-1", name: "ready", priority: 1 }),
+      );
+    const running = await Server.atPort(0).add(workflows).add(projects).start();
+
+    try {
+      await workflows.eventBus().post(reviewRejectionEvent("project-1"));
+      await vi.waitFor(() => {
+        expect(RejectionProjectLookup.results[0]?.name).toBe("ready");
+      });
+      await expect(
+        workflows.stand().read(ProcessManagerStateSchema, "project-1"),
+      ).resolves.toMatchObject({ queue: "rejected 1" });
+    } finally {
+      await running.close();
+    }
+  });
+
+  it.each(["target-first", "handler-first"])(
+    "drains accepted cross-context handler reads during %s shutdown",
+    async (order) => {
+      let enter!: () => void;
+      let release!: () => void;
+      const entered = new Promise<void>((resolve) => {
+        enter = resolve;
+      });
+      const released = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const projects = BoundedContext.singleTenant("ClosingProjects")
+        .add(projectionRepository())
+        .build();
+      const results: ProjectOverviewState[][] = [];
+      const workflows = BoundedContext.singleTenant("ClosingWorkflows")
+        .addCommandDispatcher({
+          messageSchemas: () => [CreateReviewProjectSchema],
+          async dispatch() {
+            enter();
+            await released;
+            const states = await projects.stand().readAllVersioned(ProjectOverviewStateSchema);
+            results.push(states.map((result) => result.state));
+          },
+        })
+        .build();
+      await projects
+        .stand()
+        .update(
+          ProjectOverviewStateSchema,
+          create(ProjectOverviewStateSchema, { id: "project-1", name: "ready", priority: 1 }),
+        );
+      const contexts = order === "target-first" ? [projects, workflows] : [workflows, projects];
+      const server = Server.atPort(0);
+      for (const context of contexts) server.add(context);
+      const running = await server.start();
+      let began!: () => void;
+      const sourceClosing = new Promise<void>((resolve) => {
+        began = resolve;
+      });
+      closePhase.onBegin = (context) => {
+        if (context === workflows) began();
+      };
+
+      try {
+        const posting = workflows
+          .commandBus()
+          .post(queryCommand("project-1", "ready"))
+          .then(
+            () => undefined,
+            (error: unknown) => error,
+          );
+        await entered;
+        const closing = running.close();
+        await sourceClosing;
+        expect(() => projects.stand().stateTypes()).not.toThrow();
+        release();
+        expect(await posting).toBeUndefined();
+        await closing;
+        expect(results).toEqual([
+          [create(ProjectOverviewStateSchema, { id: "project-1", name: "ready", priority: 1 })],
+        ]);
+      } finally {
+        closePhase.onBegin = undefined;
+        release();
+        await running.close();
+      }
+    },
+  );
+
+  it.each(["target-first", "handler-first"] as const)(
+    "completes a paused Process Manager select during %s shutdown",
+    async (order) => {
+      let enter!: () => void;
+      let release!: () => void;
+      let detach!: () => void;
+      const entered = new Promise<void>((resolve) => {
+        enter = resolve;
+      });
+      const resumed = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const detaching = new Promise<void>((resolve) => {
+        detach = resolve;
+      });
+      PausedProjectLookup.onEntered = enter;
+      PausedProjectLookup.wait = resumed;
+      PausedProjectLookup.results = [];
+      const { projects, workflows, running } = await startPausedQueryServer(order);
+      closePhase.onDetach = detach;
+
+      try {
+        await workflows.commandBus().post(queryCommand("project-1", "paused"));
+        await entered;
+        const closing = running.close();
+        await detaching;
+        expect(() => projects.stand().stateTypes()).not.toThrow();
+        release();
+        await vi.waitFor(() => {
+          expect(PausedProjectLookup.results[0]?.name).toBe("ready");
+        });
+        await closing;
+      } finally {
+        closePhase.onDetach = undefined;
+        PausedProjectLookup.onEntered = undefined;
+        PausedProjectLookup.wait = undefined;
+        release();
+        await running.close();
+      }
+    },
+  );
+
+  it("reads the same named tenant in a multitenant destination", async () => {
+    ProjectLookup.reset();
+    const projects = BoundedContext.multitenant("TenantProjects")
+      .add(projectionRepository())
+      .build();
+    const workflows = BoundedContext.multitenant("TenantWorkflows")
+      .add(processManagerRepository())
+      .build();
+    await projects
+      .stand()
+      .update(
+        ProjectOverviewStateSchema,
+        create(ProjectOverviewStateSchema, { id: "shared", name: "A", priority: 1 }),
+        { tenantId: create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } }) },
+      );
+    await projects
+      .stand()
+      .update(
+        ProjectOverviewStateSchema,
+        create(ProjectOverviewStateSchema, { id: "shared", name: "B", priority: 2 }),
+        { tenantId: create(TenantIdSchema, { kind: { case: "value", value: "tenant-b" } }) },
+      );
+    const running = await Server.atPort(0).add(projects).add(workflows).start();
+
+    try {
+      await workflows.commandBus().post(queryCommand("shared", "B", "tenant-b"));
+      await vi.waitFor(() => {
+        expect(ProjectLookup.results).toEqual([
+          create(ProjectOverviewStateSchema, { id: "shared", name: "B", priority: 2 }),
+        ]);
+      });
+      expect(ProjectLookup.failure).toBeUndefined();
+    } finally {
+      await running.close();
+    }
+  });
+
+  it("reads a query-visible Aggregate registered in another context", async () => {
+    ProjectLookup.reset();
+    class ProjectAggregate extends Aggregate<string, typeof ProjectStateSchema> {}
+    const projects = BoundedContext.singleTenant("AggregateProjects")
+      .add(
+        new Repository({
+          entityType: ProjectAggregate,
+          schema: ProjectStateSchema,
+          handlers: EntityHandlers.define(ProjectAggregate, ProjectStateSchema, () => []),
+        }),
+      )
+      .build();
+    const workflows = BoundedContext.singleTenant("AggregateWorkflows")
+      .add(processManagerRepository())
+      .build();
+    await projects
+      .stand()
+      .update(ProjectStateSchema, create(ProjectStateSchema, { id: "project-1", name: "ready" }));
+    const running = await Server.atPort(0).add(workflows).add(projects).start();
+
+    try {
+      await workflows.commandBus().post(queryCommand("project-1", "aggregate"));
+      await vi.waitFor(() => {
+        expect(ProjectLookup.aggregateResults).toHaveLength(1);
+      });
+      expect(ProjectLookup.aggregateResults[0]).toEqual(
+        create(ProjectStateSchema, { id: "project-1", name: "ready" }),
+      );
+      expect(ProjectLookup.failure).toBeUndefined();
+    } finally {
+      await running.close();
+    }
+  });
+
+  it("reads a query-visible Process Manager registered in another context", async () => {
+    ProjectLookup.reset();
+    const reviews = BoundedContext.singleTenant("ReviewProjects")
+      .add(
+        new Repository({
+          entityType: ProjectReview,
+          schema: ProjectReviewStateSchema,
+          handlers: EntityHandlers.define(ProjectReview, ProjectReviewStateSchema, () => []),
+        }),
+      )
+      .build();
+    const workflows = BoundedContext.singleTenant("ReviewWorkflows")
+      .add(processManagerRepository())
+      .build();
+    await reviews
+      .stand()
+      .update(
+        ProjectReviewStateSchema,
+        create(ProjectReviewStateSchema, { id: "project-1", queue: "ready" }),
+      );
+    const running = await Server.atPort(0).add(workflows).add(reviews).start();
+
+    try {
+      await workflows.commandBus().post(queryCommand("project-1", "review"));
+      await vi.waitFor(() => {
+        expect(ProjectLookup.reviewResults).toHaveLength(1);
+      });
+      expect(ProjectLookup.reviewResults[0]).toEqual(
+        create(ProjectReviewStateSchema, { id: "project-1", queue: "ready" }),
+      );
+      expect(ProjectLookup.failure).toBeUndefined();
+    } finally {
+      await running.close();
+    }
+  });
+
+  it("accepts an equivalent descriptor instance for a registered state type", async () => {
+    ProjectLookup.reset();
+    expect(equivalentProjectionSchema).not.toBe(ProjectOverviewStateSchema);
+    const projects = BoundedContext.singleTenant("EquivalentProjects")
+      .add(projectionRepository())
+      .build();
+    const workflows = BoundedContext.singleTenant("EquivalentWorkflows")
+      .add(processManagerRepository())
+      .build();
+    await projects
+      .stand()
+      .update(
+        ProjectOverviewStateSchema,
+        create(ProjectOverviewStateSchema, { id: "project-1", name: "ready", priority: 1 }),
+      );
+    const running = await Server.atPort(0).add(workflows).add(projects).start();
+
+    try {
+      await workflows.commandBus().post(queryCommand("project-1", "equivalent"));
+      await vi.waitFor(() => {
+        expect(ProjectLookup.results).toHaveLength(1);
+      });
+      expect(ProjectLookup.results[0]?.name).toBe("ready");
+      expect(ProjectLookup.failure).toBeUndefined();
+    } finally {
+      await running.close();
+    }
+  });
+
+  it("validates foreign query fields against the registered target", () => {
+    const projects = BoundedContext.singleTenant("ValidatedProjects")
+      .add(projectionRepository())
+      .build();
+    const targets = new RegisteredTargets([projects]);
+    const target = targets.find(TypeUrls.derive(ProjectOverviewStateSchema));
+    if (target === undefined) throw new Error("Projection registration was not found.");
+    const comparison = (column: string) => ({
+      kind: "comparison" as const,
+      column,
+      operator: "equal" as const,
+      value: "ready",
+    });
+
+    expect(() => {
+      targets.validate(target, {
+        predicate: {
+          kind: "all",
+          predicates: [
+            comparison("name"),
+            { kind: "either", predicates: [comparison("priority"), comparison("name")] },
+          ],
+        },
+        order: [{ column: "priority", direction: "desc" }],
+      });
+    }).not.toThrow();
+    expect(() => {
+      targets.validate(target, { predicate: comparison("other") });
+    }).toThrow('Query column "other" is not registered');
+    expect(() => {
+      targets.validate(target, { order: [{ column: "other", direction: "asc" }] });
+    }).toThrow('Query column "other" is not registered');
+  });
+
+  it("preserves compound filters, ordering, limit, and detached results across contexts", async () => {
+    ProjectLookup.reset();
+    const projects = BoundedContext.singleTenant("QueryOptionsProjects")
+      .add(projectionRepository())
+      .build();
+    const workflows = BoundedContext.singleTenant("QueryOptionsWorkflows")
+      .add(processManagerRepository())
+      .build();
+    for (const [id, name, priority] of [
+      ["one", "waiting", 1],
+      ["two", "ready", 2],
+      ["three", "excluded", 3],
+    ] as const) {
+      await projects
+        .stand()
+        .update(
+          ProjectOverviewStateSchema,
+          create(ProjectOverviewStateSchema, { id, name, priority }),
+        );
+    }
+    const running = await Server.atPort(0).add(workflows).add(projects).start();
+
+    try {
+      await workflows.commandBus().post(queryCommand("two", "compound"));
+      await vi.waitFor(() => {
+        expect(ProjectLookup.results).toHaveLength(1);
+      });
+      expect(ProjectLookup.results[0]?.name).toBe("ready");
+      expect(ProjectLookup.results[0]?.priority).toBe(2);
+      const first = ProjectLookup.results[0];
+      if (first === undefined) throw new Error("The selected result was not returned.");
+      first.name = "changed";
+      await workflows.commandBus().post(queryCommand("two", "compound", undefined, "again"));
+      await vi.waitFor(() => {
+        expect(ProjectLookup.results[0]?.name).toBe("ready");
+      });
+      expect(ProjectLookup.failure).toBeUndefined();
+    } finally {
+      await running.close();
+    }
+  });
+
+  it("executes a context-free generated query in a foreign Process Manager read", async () => {
+    ProjectLookup.reset();
+    const projects = BoundedContext.singleTenant("SharedQueryProjects")
+      .add(projectionRepository())
+      .build();
+    const workflows = BoundedContext.singleTenant("SharedQueryWorkflows")
+      .add(processManagerRepository())
+      .build();
+    await projects
+      .stand()
+      .update(
+        ProjectOverviewStateSchema,
+        create(ProjectOverviewStateSchema, { id: "shared", name: "ready", priority: 2 }),
+      );
+    const running = await Server.atPort(0).add(workflows).add(projects).start();
+    try {
+      await workflows.commandBus().post(queryCommand("shared", "shared"));
+      await vi.waitFor(() => {
+        expect(ProjectLookup.results).toHaveLength(1);
+      });
+      expect(ProjectLookup.results[0]?.id).toBe("shared");
+      expect(sharedQuery.build().context).toBeUndefined();
+    } finally {
+      await running.close();
+    }
+  });
+
+  it("uses SINGLE_TENANT in a multitenant destination", async () => {
+    ProjectLookup.reset();
+    const projects = BoundedContext.multitenant("TenantProjects")
+      .add(projectionRepository())
+      .build();
+    const workflows = BoundedContext.singleTenant("SingleWorkflows")
+      .add(processManagerRepository())
+      .build();
+    const singleTenant = create(TenantIdSchema, {
+      kind: { case: "value", value: "SINGLE_TENANT" },
+    });
+    await projects
+      .stand()
+      .update(
+        ProjectOverviewStateSchema,
+        create(ProjectOverviewStateSchema, { id: "shared", name: "single", priority: 1 }),
+        { tenantId: singleTenant },
+      );
+    const observed: unknown[] = [];
+    const observation = QueryReader.observe((query) => observed.push(query));
+    const running = await Server.atPort(0).add(workflows).add(projects).start();
+
+    try {
+      await workflows.commandBus().post(queryCommand("shared", "single"));
+      await vi.waitFor(() => {
+        expect(ProjectLookup.results).toHaveLength(1);
+      });
+      expect(ProjectLookup.results[0]?.name).toBe("single");
+      expect(observed[0]).toMatchObject({ context: { tenantId: singleTenant } });
+    } finally {
+      observation.close();
+      await running.close();
+    }
+  });
+
+  it.each([
+    ["FirstProjects", "SecondProjects"],
+    ["SecondProjects", "FirstProjects"],
+  ])("rejects duplicate state registration in %s then %s", async (first, second) => {
+    const firstContext = BoundedContext.singleTenant(first).add(projectionRepository()).build();
+    const secondContext = BoundedContext.singleTenant(second).add(projectionRepository()).build();
+    let closedResources = 0;
+    let startedLifecycles = 0;
+    const server = Server.atPort(0)
+      .add(firstContext)
+      .add(secondContext)
+      .addResource({
+        close: () => {
+          closedResources += 1;
+        },
+      })
+      .addListenerLifecycle({
+        start: () => {
+          startedLifecycles += 1;
+        },
+        close: () => undefined,
+      });
+
+    await expect(server.start()).rejects.toThrow(
+      new RegExp(`ProjectOverviewState.*${first}.*${second}`),
+    );
+    expect(closedResources).toBe(1);
+    expect(startedLifecycles).toBe(0);
+    await expect(firstContext.stand().readAllVersioned(ProjectOverviewStateSchema)).rejects.toThrow(
+      "Stand is closed.",
+    );
+    await expect(
+      secondContext.stand().readAllVersioned(ProjectOverviewStateSchema),
+    ).rejects.toThrow("Stand is closed.");
+  });
+
+  it("retries failed cleanup after duplicate registration without starting delivery", async () => {
+    const first = BoundedContext.singleTenant("RetryProjectsOne")
+      .add(projectionRepository())
+      .build();
+    const second = BoundedContext.singleTenant("RetryProjectsTwo")
+      .add(projectionRepository())
+      .build();
+    let closes = 0;
+    const server = Server.atPort(0)
+      .add(first)
+      .add(second)
+      .addResource({
+        close() {
+          closes += 1;
+          if (closes === 1) throw new Error("resource close failed");
+        },
+      });
+
+    let rejected: unknown;
+    try {
+      await server.start();
+    } catch (error) {
+      rejected = error;
+    }
+    expect(rejected).toBeInstanceOf(AggregateError);
+    if (!(rejected instanceof AggregateError)) throw new Error("Expected failed cleanup causes.");
+    const messages = rejected.errors.map((error: unknown) =>
+      error instanceof Error ? error.message : String(error),
+    );
+    expect(messages[0]).toContain("ProjectOverviewState");
+    expect(messages[1]).toBe("resource close failed");
+    expect(closes).toBe(1);
+    await expect(server.start()).rejects.toThrow(/deferred cleanup completed/);
+    expect(closes).toBe(2);
+  });
+
+  it("does not discover targets attached to another Server", async () => {
+    ProjectLookup.reset();
+    const projects = BoundedContext.singleTenant("OtherProjects")
+      .add(projectionRepository())
+      .build();
+    const workflows = BoundedContext.singleTenant("LocalWorkflows")
+      .add(processManagerRepository())
+      .build();
+    const projectsServer = await Server.atPort(0).add(projects).start();
+    const workflowsServer = await Server.atPort(0).add(workflows).start();
+    let reads = 0;
+    const observation = QueryReader.observe(() => {
+      reads += 1;
+    });
+
+    try {
+      await workflows.commandBus().post(queryCommand("project-1", "ready"));
+      await vi.waitFor(() => {
+        expect(ProjectLookup.failure).toBeInstanceOf(Error);
+      });
+      expect((ProjectLookup.failure as Error).message).toContain("No bounded context registered");
+      expect(reads).toBe(0);
+    } finally {
+      observation.close();
+      await workflowsServer.close();
+      await projectsServer.close();
+    }
+  });
+
+  it("rejects a foreign Entity without query visibility before reading", async () => {
+    HiddenLookup.failure = undefined;
+    HiddenLookup.completed = false;
+    const hidden = BoundedContext.singleTenant("HiddenProjects")
+      .add(
+        new Repository({
+          entityType: ProjectQueue,
+          schema: ProjectQueueStateSchema,
+          handlers: EntityHandlers.define(ProjectQueue, ProjectQueueStateSchema, () => []),
+        }),
+      )
+      .build();
+    const workflows = BoundedContext.singleTenant("VisibleWorkflows")
+      .add(hiddenLookupRepository())
+      .build();
+    const running = await Server.atPort(0).add(hidden).add(workflows).start();
+    let reads = 0;
+    const observation = QueryReader.observe(() => {
+      reads += 1;
+    });
+
+    try {
+      await workflows.commandBus().post(queryCommand("project-1", "ready"));
+      await vi.waitFor(() => {
+        expect(HiddenLookup.completed).toBe(true);
+      });
+      expect(HiddenLookup.failure).toBeInstanceOf(Error);
+      expect((HiddenLookup.failure as Error).message).toMatch(/visibility|query/i);
+      expect(reads).toBe(0);
+    } finally {
+      observation.close();
+      await running.close();
+    }
+  });
+
+  it("rejects a named tenant before reading a single-tenant target", async () => {
+    ProjectLookup.reset();
+    const projects = BoundedContext.singleTenant("SingleProjects")
+      .add(projectionRepository())
+      .build();
+    const workflows = BoundedContext.multitenant("TenantWorkflows")
+      .add(processManagerRepository())
+      .build();
+    let reads = 0;
+    const observation = QueryReader.observe(() => {
+      reads += 1;
+    });
+    const running = await Server.atPort(0).add(projects).add(workflows).start();
+
+    try {
+      await workflows.commandBus().post(queryCommand("project-1", "ready", "tenant-a"));
+      await vi.waitFor(() => {
+        expect(ProjectLookup.failure).toBeInstanceOf(Error);
+      });
+      expect((ProjectLookup.failure as Error).message).toMatch(/tenant/i);
+      expect(ProjectLookup.results).toEqual([]);
+      expect(reads).toBe(0);
+    } finally {
+      observation.close();
+      await running.close();
+    }
+  });
+
   it("offers a typed, read-only query only during handler execution", async () => {
     const lookup = new ProjectLookup(
       {
@@ -251,6 +1825,19 @@ describe("Process Manager querying", () => {
       "select",
     );
     expect(() => query.limit(1_001)).toThrow("Process Manager query limit may be at most 1000.");
+    const manyIds = Array.from({ length: 1_001 }, (_, index) => `item-${String(index)}`);
+    await expect(
+      lookup
+        .query()
+        .byId(...manyIds)
+        .read(),
+    ).rejects.toThrow("Process Manager query ID filter may contain at most 1000 IDs.");
+    const detached = ProjectOverviewStateQuery.create()
+      .byId(...manyIds)
+      .build();
+    await expect(lookup.queryShared(detached).read()).rejects.toThrow(
+      "Process Manager query ID filter may contain at most 1000 IDs.",
+    );
 
     release();
     await expect(query.read()).rejects.toThrow(
@@ -345,6 +1932,26 @@ describe("Process Manager querying", () => {
       ]);
       expect(createdVersions).toEqual([0, 0, 1]);
       expect(matchedNames).toEqual(["A", "B", "A"]);
+
+      await context
+        .stand()
+        .update(
+          ProjectOverviewStateSchema,
+          create(ProjectOverviewStateSchema, { id: "shared-query", name: "ready", priority: 4 }),
+          { tenantId: tenantA },
+        );
+      await context
+        .stand()
+        .update(
+          ProjectOverviewStateSchema,
+          create(ProjectOverviewStateSchema, { id: "shared-query", name: "ready", priority: 7 }),
+          { tenantId: tenantB },
+        );
+      await context.commandBus().post(queryCommand("shared-query", "shared", "tenant-a"));
+      expect(ProjectLookup.results[0]?.priority).toBe(4);
+      await context.commandBus().post(queryCommand("shared-query", "shared", "tenant-b"));
+      expect(ProjectLookup.results[0]?.priority).toBe(7);
+      expect(sharedQuery.build().context).toBeUndefined();
     } finally {
       await context.close();
     }

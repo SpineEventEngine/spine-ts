@@ -140,18 +140,32 @@ also call `setTypeRegistry()` with the application's generated `TypeRegistry`.
 
 ## Query Projection state
 
-`EntityQuery` is the canonical typed query builder for descriptor-backed Entity state. Register
-only the generated columns a caller may use, then build predicates, masks, ordering, and an
-optional limit from that collection. The generated-column helper is intentionally generator-only:
+Normal `spine-proto generate` emits a `_query.ts` companion for eligible Aggregate, Projection,
+and Process Manager states. For example, Todo can import its generated `TaskListQuery` and build
+a context-free query:
+
+<!-- docs-snippet-path: examples/todo/src/index.ts -->
 
 ```ts
-import { EntityQuery } from "@spine-event-engine/core";
-import { GeneratedEntityColumns } from "@spine-event-engine/core/codegen";
+import { TaskListQuery } from "../generated/spine/examples/todo/task_list_query.js";
+
+// Find nonempty lists, starting with the most open tasks.
+const query = TaskListQuery.create()
+  .openTaskCount()
+  .isAtLeast(1)
+  .orderBy("openTaskCount", "desc")
+  .limit(10)
+  .build();
 ```
 
-Do not import `GeneratedEntityColumns` from the core root entry point. Application generator output
-uses the `/codegen` subpath to define columns; application code uses `EntityQuery` and those
-registered columns to build the query.
+The companion registers its descriptor-backed columns when imported. Successive comparisons use
+AND; `either(...)` accepts synchronous condition-only callbacks for OR branches. Apply IDs,
+ordering, limits, and `build()` to the outer query. `byId(...)` uses the first state field.
+`limit()` requires `orderBy()` and accepts a positive integer.
+Ordered columns also expose `isGreaterThan`, `isAtLeast`, `isLessThan`, and `isAtMost`.
+Every build captures a detached value;
+the client or Process Manager supplies actor and tenant context when it executes the query.
+`EntityQuery` remains available for callers using the existing schema-and-columns builder.
 
 ## 🚫 Throw a generated domain rejection
 

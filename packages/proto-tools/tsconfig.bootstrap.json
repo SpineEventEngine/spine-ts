@@ -9,5 +9,9 @@
     "sourceMap": false,
     "types": ["node"]
   },
-  "files": ["src/cli/spine-proto-bootstrap.ts", "src/generation/authored-interface-provider.ts"]
+  "files": [
+    "src/cli/spine-proto-bootstrap.ts",
+    "src/generation/authored-interface-provider.ts",
+    "src/generation/entity-query-generator.ts"
+  ]
 }

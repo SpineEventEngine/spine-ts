@@ -297,7 +297,11 @@ const expectedCoreExports = [
 const expectedCoreCodegenExports = [
   "EntityColumnDefinition",
   "EntityColumnDefinitionEntry",
+  "EntityQueryDescription",
+  "EntityQueryDraft",
   "GeneratedEntityColumns",
+  "GeneratedEntityQueries",
+  "GeneratedQueryBuilder",
 ];
 const expectedClientExports = [
   "Client",
@@ -454,7 +458,6 @@ const expectedStorageExports = [
   "OnEventAccepted",
   "NormalizedComparisonOperator",
   "NormalizedQueryEntry",
-  "NormalizedQueryMask",
   "NormalizedQueryOrder",
   "NormalizedQueryPlan",
   "NormalizedQueryPredicate",
@@ -464,10 +467,8 @@ const expectedStorageExports = [
   "RecordContinuationValue",
   "RecordEntry",
   "RecordFilter",
-  "RecordMask",
   "RecordOrder",
   "RecordQuery",
-  "RecordReadOptions",
   "RecordSpec",
   "RecordSpecOptions",
   "RecordStorage",
@@ -689,6 +690,7 @@ const expectedServerExports = [
   "RepositoryIdentityErrorCode",
   "RepositoryIdentitySnapshot",
   "RepositoryOptions",
+  "RepositoryReadQueries",
   "RepositoryCommandRoute",
   "RepositoryEventRoute",
   "RepositoryRouteInvocation",

@@ -14,9 +14,7 @@
 
 import type { Message } from "@bufbuild/protobuf";
 
-import { RecordMask } from "./record-mask.js";
 import { RecordQuery } from "./record-query.js";
-import type { RecordReadOptions } from "./record-query.js";
 import type { RecordSpec } from "./record-spec.js";
 import type { Storage, StorageContext } from "../storage/storage.js";
 import {
@@ -29,6 +27,9 @@ import type { NormalizedQueryPlan, StorageQueryCapabilities } from "../query/que
 
 /**
  * Common record-oriented storage contract for identified Protobuf messages.
+ *
+ * @typeParam I The storage slot identifier type.
+ * @typeParam R The stored Protobuf record type.
  */
 export abstract class RecordStorage<I, R extends Message> implements Storage {
   // prettier-ignore
@@ -43,8 +44,11 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
    * collision.
    */
   readonly atomicCompareAndSet: boolean = false;
+
   readonly #context: StorageContext;
+
   #open = true;
+
   readonly #recordSpec: RecordSpec<I, R>;
 
   /**
@@ -99,18 +103,15 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
   }
 
   /**
-   * Reads one record by actual storage slot ID, optionally applying a mask.
+   * Reads one complete record by actual storage slot ID.
    * @param id The storage slot identifier.
-   * @param options The read options.
    * @returns The matching record, if present.
    */
-  async read(id: I, options: RecordReadOptions = {}): Promise<R | undefined> {
+  async read(id: I): Promise<R | undefined> {
     this.requireOpen();
     const record = await this.readRecord(this.#recordSpec.cloneId(id));
 
-    return record === undefined
-      ? undefined
-      : RecordMask.apply(this.#recordSpec.cloneRecord(record), options.mask);
+    return record === undefined ? undefined : this.#recordSpec.cloneRecord(record);
   }
 
   /**
@@ -131,7 +132,7 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
 
   /**
    * Processes records by actual storage slot IDs, columns, sorting,
-   * continuations, limits, and optional masks.
+   * continuations, and limits.
    *
    * `RecordQuery.ids`, when present, filters storage slot IDs rather than
    * logical IDs derived from record bodies.
@@ -143,9 +144,7 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
     RecordQuery.validate(query);
     const entries = await this.queryRecordEntries(query);
 
-    return entries.map((entry) =>
-      RecordMask.apply(this.#recordSpec.cloneRecord(entry.record), query.mask),
-    );
+    return entries.map((entry) => this.#recordSpec.cloneRecord(entry.record));
   }
 
   /**
@@ -165,7 +164,7 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
     return entries.map((entry) =>
       Object.freeze({
         id: this.#recordSpec.cloneId(entry.id),
-        record: RecordMask.apply(this.#recordSpec.cloneRecord(entry.record), query.mask),
+        record: this.#recordSpec.cloneRecord(entry.record),
       }),
     );
   }
@@ -190,7 +189,7 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
     StorageQueryPolicy.validate(plan, this.queryCapabilities());
     const candidates = await this.queryPlanRecordEntries(plan);
     const candidateLimit = plan.candidateLimit ?? defaultQueryCandidateLimit;
-    if (candidates.length > candidateLimit) {
+    if (!plan.exhaustive && candidates.length > candidateLimit) {
       throw new QueryCandidateLimitError(candidateLimit);
     }
     const materialized = candidates.map((entry) => {
@@ -200,7 +199,7 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
     return StorageQueryEvaluator.evaluate(materialized, plan).map((entry) =>
       Object.freeze({
         id: this.#recordSpec.cloneId(entry.id),
-        record: RecordMask.apply(this.#recordSpec.cloneRecord(entry.record), plan.mask?.paths),
+        record: this.#recordSpec.cloneRecord(entry.record),
       }),
     );
   }
@@ -336,6 +335,9 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
     record: ReturnType<RecordSpec<I, R>["materialize"]>,
   ): Promise<void>;
 
+  /**
+   * Rejects an operation after this storage handle closes.
+   */
   private requireOpen(): void {
     if (!this.#open) {
       throw new Error("RecordStorage is closed.");
@@ -349,6 +351,9 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
  * `id` is the actual storage slot identifier. `record` is the stored record
  * value whose logical identifier may differ and is derived through
  * `RecordSpec.idValueIn(...)`.
+ *
+ * @typeParam I The storage slot identifier type.
+ * @typeParam R The stored Protobuf record type.
  */
 export interface RecordEntry<I, R extends Message> {
   // prettier-ignore

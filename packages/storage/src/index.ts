@@ -34,7 +34,6 @@ export {
 export type { NormalizedQueryEntry } from "./query/query-execution.js";
 export type {
   NormalizedComparisonOperator,
-  NormalizedQueryMask,
   NormalizedQueryOrder,
   NormalizedQueryPlan,
   NormalizedQueryPredicate,
@@ -48,13 +47,11 @@ export {
   type ColumnMapping,
   type ColumnTypeMapping,
 } from "./record/column-mapping.js";
-export { RecordMask } from "./record/record-mask.js";
 export type {
   RecordContinuation,
   RecordContinuationValue,
   RecordFilter,
   RecordOrder,
-  RecordReadOptions,
 } from "./record/record-query.js";
 export { RecordQuery } from "./record/record-query.js";
 export { RecordSpec, type RecordSpecOptions } from "./record/record-spec.js";

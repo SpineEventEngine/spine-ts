@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import { fromBinary, ScalarType, toBinary, type Message } from "@bufbuild/protobuf";
 import { createHash } from "node:crypto";
 import { StringifierRegistry } from "@spine-event-engine/core";
 import {
@@ -355,7 +355,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
   protected override queryCapabilities(): StorageQueryCapabilities {
     return {
       comparisons: ["equal", "greaterThan", "lessThan", "greaterOrEqual", "lessOrEqual"],
-      features: ["either", "nested", "order", "mask", "limit"],
+      features: ["either", "nested", "order", "limit"],
     };
   }
 
@@ -747,8 +747,13 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    */
   private planQuery(plan: NormalizedQueryPlan<I>): Compiled {
     const bind = new Binds();
+    const safePredicate = plan.exhaustive
+      ? this.exhaustivePredicate(plan.predicate)
+      : plan.predicate;
+    const scanAll =
+      plan.exhaustive && this.predicateBindCount(safePredicate) >= maximumNormalizedPlanBinds;
     const predicate =
-      plan.predicate === undefined ? "" : ` WHERE ${this.predicate(plan.predicate, bind)}`;
+      safePredicate === undefined || scanAll ? "" : ` WHERE ${this.predicate(safePredicate, bind)}`;
     if (bind.values.length >= maximumNormalizedPlanBinds)
       throw new PostgresStorageOperationError(
         "PostgreSQL normalized query exceeds the 1000-parameter bind budget.",
@@ -760,13 +765,136 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
       ),
       '"ID" ASC',
     ].join(", ");
-    const limit = Math.min(
-      plan.limit ?? Number.MAX_SAFE_INTEGER,
-      (plan.candidateLimit ?? defaultQueryCandidateLimit) + 1,
-    );
+    const limit = plan.exhaustive
+      ? plan.limit
+      : Math.min(
+          plan.limit ?? Number.MAX_SAFE_INTEGER,
+          (plan.candidateLimit ?? defaultQueryCandidateLimit) + 1,
+        );
+    const exactLimit =
+      !plan.exhaustive ||
+      (!scanAll && safePredicate === plan.predicate && this.exhaustiveOrderMatches(plan));
+    const limitClause = limit !== undefined && exactLimit ? ` LIMIT ${bind.add(limit)}` : "";
     return bind.done(
-      `SELECT "ID", "bytes" FROM ${this.qualified()}${predicate} ORDER BY ${order} LIMIT ${bind.add(limit)}`,
+      `SELECT "ID", "bytes" FROM ${this.qualified()}${predicate} ORDER BY ${order}` + limitClause,
     );
+  }
+
+  /**
+   * Returns only exhaustive predicates whose PostgreSQL result cannot differ from
+   * the shared evaluator through text collation or NULL comparison semantics.
+   *
+   * @param predicate Predicate to inspect for safe narrowing.
+   * @returns A safe necessary condition, or undefined for a complete scan.
+   */
+  private exhaustivePredicate(
+    predicate: NormalizedQueryPredicate<I> | undefined,
+  ): NormalizedQueryPredicate<I> | undefined {
+    if (predicate === undefined) return undefined;
+    if (predicate.kind === "ids") {
+      const sqlType = this.table.columns.find((column) => column.name === "ID")?.postgresType;
+      return (sqlType === "INT" && this.recordSpec.idType === "int32") ||
+        (sqlType === "BIGINT" && this.recordSpec.idType === "int64")
+        ? predicate
+        : undefined;
+    }
+    if (predicate.kind === "comparison") {
+      return this.exhaustiveComparisonSafe(predicate) ? predicate : undefined;
+    }
+    const children = predicate.predicates.map((child) => this.exhaustivePredicate(child));
+    if (predicate.kind === "either")
+      return children.every((child, index) => child === predicate.predicates[index])
+        ? predicate
+        : undefined;
+    const retained = children.filter(
+      (child): child is NormalizedQueryPredicate<I> => child !== undefined,
+    );
+    if (retained.length === 0) return undefined;
+    return children.every((child, index) => child === predicate.predicates[index])
+      ? predicate
+      : { kind: "all", predicates: retained };
+  }
+
+  /**
+   * Checks one comparison against both physical and logical column types.
+   *
+   * @param predicate Comparison to consider for SQL narrowing.
+   * @returns Whether PostgreSQL and the evaluator compare its values alike.
+   */
+  private exhaustiveComparisonSafe(
+    predicate: Extract<NormalizedQueryPredicate<I>, { kind: "comparison" }>,
+  ): boolean {
+    this.column(predicate.column);
+    const sqlType = this.table.columns.find(
+      (column) => column.name === predicate.column,
+    )?.postgresType;
+    const value = predicate.value;
+    return (
+      this.columnSemanticsMatch(predicate.column, sqlType) &&
+      (sqlType === "BOOLEAN"
+        ? predicate.operator === "equal" && typeof value === "boolean"
+        : sqlType === "BIGINT"
+          ? typeof value === "bigint"
+          : typeof value === "number" && Number.isSafeInteger(value))
+    );
+  }
+
+  /**
+   * Checks whether numeric SQL ordering and the ID tie-break match the evaluator.
+   *
+   * @param plan Exhaustive plan with an application limit.
+   * @returns Whether SQL may select the final limited prefix.
+   */
+  private exhaustiveOrderMatches(plan: NormalizedQueryPlan<I>): boolean {
+    const idType = this.table.columns.find((column) => column.name === "ID")?.postgresType;
+    if (!(
+      (idType === "INT" && this.recordSpec.idType === "int32") ||
+      (idType === "BIGINT" && this.recordSpec.idType === "int64")
+    ))
+      return false;
+    return (plan.order ?? []).every((item) => {
+      const sqlType = this.table.columns.find(
+        (column) => column.name === item.column,
+      )?.postgresType;
+      return (
+        (sqlType === "INT" || sqlType === "BIGINT") &&
+        this.columnSemanticsMatch(item.column, sqlType)
+      );
+    });
+  }
+
+  /**
+   * Checks that a physical numeric or Boolean column preserves its logical value type.
+   *
+   * @param column Declared query column.
+   * @param sqlType Physical PostgreSQL column type.
+   * @returns Whether SQL comparison can agree with the shared evaluator.
+   */
+  private columnSemanticsMatch(column: string, sqlType: string | undefined): boolean {
+    const type = this.recordSpec.columns.find((candidate) => candidate.name === column)?.type;
+    if (sqlType === "INT" && type?.kind === "enum") return true;
+    if (type?.kind !== "scalar") return false;
+    if (sqlType === "BOOLEAN") return type.scalar === ScalarType.BOOL;
+    if (sqlType === "INT")
+      return [ScalarType.INT32, ScalarType.SINT32, ScalarType.SFIXED32].includes(type.scalar);
+    return (
+      sqlType === "BIGINT" &&
+      !type.longAsString &&
+      [ScalarType.INT64, ScalarType.SINT64, ScalarType.SFIXED64].includes(type.scalar)
+    );
+  }
+
+  /**
+   * Calculates predicate parameters before selecting a complete scan.
+   *
+   * @param predicate Predicate tree whose leaves contribute bound values.
+   * @returns Number of SQL parameters required by the predicate.
+   */
+  private predicateBindCount(predicate: NormalizedQueryPredicate<I> | undefined): number {
+    if (predicate === undefined) return 0;
+    if (predicate.kind === "ids") return predicate.ids.length;
+    if (predicate.kind === "comparison") return 1;
+    return predicate.predicates.reduce((count, child) => count + this.predicateBindCount(child), 0);
   }
 
   /**

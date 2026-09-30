@@ -268,12 +268,16 @@ function generatedRejectionOutput(_: string, output: string): void {
   writeFileSync(join(output, "model_rejections.ts"), "export {};\n");
 }
 
-it("configures every model generation with the packaged rejection companion plugin", () => {
-  const model = packageDirectory("@example/rejections");
+it.each([
+  "@example/rejections",
+  "@spine-event-engine/core-test-fixtures",
+  "@spine-event-engine/server-test-fixtures",
+])("configures strict query generation for %s", (packageName) => {
+  const model = packageDirectory(packageName);
   const commands: string[][] = [];
   let template = "";
   try {
-    writeJson(model, "spine-proto.json", modelConfig("@example/rejections"));
+    writeJson(model, "spine-proto.json", modelConfig(packageName));
     mkdirSync(join(model, "proto"));
     writeFileSync(join(model, "proto", "task.proto"), 'syntax = "proto3"; message Task {}\n');
     const runProcess: NonNullable<GenerationOperations["runProcess"]> = (
@@ -293,6 +297,8 @@ it("configures every model generation with the packaged rejection companion plug
     generateModel(model, { runProcess });
 
     expect(template).toMatch(/rejection-generator\.(?:ts|js)/u);
+    expect(template).toMatch(/entity-query-generator\.(?:ts|js)/u);
+    expect(template).not.toContain("fixture_invalid_columns");
     expect(template).toContain("@bufbuild/protoc-gen-es");
     expect(commands).toHaveLength(3);
   } finally {

@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { clone, create, type Message, type MessageShape } from "@bufbuild/protobuf";
+import { clone, type Message, type MessageShape } from "@bufbuild/protobuf";
 import { type MessageSchema, TypeUrls } from "@spine-event-engine/core";
 import {
   TenantIdSchema,
@@ -23,7 +23,6 @@ import {
 import {
   ColumnTypes,
   RecordColumn,
-  RecordMask,
   RecordQuery,
   type NormalizedQueryPlan,
   type StorageContext,
@@ -108,6 +107,8 @@ export interface StandReadOptions {
 
 /**
  * Stored state plus metadata returned by versioned Stand reads.
+ *
+ * @typeParam Schema The decoded state message schema.
  */
 export interface StandReadResult<Schema extends MessageSchema = MessageSchema> {
   // prettier-ignore
@@ -137,6 +138,8 @@ export interface StandSubscribeOptions {
 
 /**
  * Direct in-process entity state update delivered by the Stand.
+ *
+ * @typeParam Schema The updated state message schema.
  */
 export interface StandUpdate<Schema extends MessageSchema = MessageSchema> {
   // prettier-ignore
@@ -223,11 +226,21 @@ export class StandStateTypeError extends Error {
   }
 }
 
+/**
+ * A callback registered for one state schema and tenant.
+ *
+ * @typeParam Schema State schema.
+ */
 interface Subscriber<Schema extends MessageSchema = MessageSchema> {
   readonly tenantKey: string;
   readonly callback: (update: StandUpdate<Schema>) => void;
 }
 
+/**
+ * One state type registered with the Stand.
+ *
+ * @typeParam Schema State schema.
+ */
 interface Registration<Schema extends MessageSchema = MessageSchema> {
   readonly schema: Schema;
   readonly typeUrl: string;
@@ -243,17 +256,26 @@ interface Registration<Schema extends MessageSchema = MessageSchema> {
  */
 export class Stand {
   readonly #context: StorageMode;
+
   readonly #storageFactory: StorageFactory;
+
   readonly #registrations = new Map<string, Registration>();
+
   readonly #entityHandles = new Map<
     string,
     { readonly current: EntityRecordStorage<unknown>; close(): void }
   >();
+
   readonly #handleCloseErrors: unknown[] = [];
+
   #omittedHandleCloseErrors = 0;
+
   readonly #inFlight = new Set<Promise<void>>();
+
   #closing = false;
+
   #closed = false;
+
   #closedPromise: Promise<void> | undefined;
 
   /**
@@ -336,6 +358,7 @@ export class Stand {
   /**
    * Reads the latest state for one entity ID.
    *
+   * @typeParam Schema The registered state schema.
    * @param schema The registered entity state schema.
    * @param id The entity ID to read.
    * @param options The tenant slice to read.
@@ -354,6 +377,7 @@ export class Stand {
   /**
    * Reads the latest state and its supplied version metadata for one entity ID.
    *
+   * @typeParam Schema The registered state schema.
    * @param schema The registered entity state schema.
    * @param id The entity ID to read.
    * @param options The tenant slice to read.
@@ -387,6 +411,7 @@ export class Stand {
   /**
    * Reads all latest states and version metadata in storage query order.
    *
+   * @typeParam Schema The registered state schema.
    * @param schema The registered entity state schema.
    * @param options The tenant slice to read.
    * @returns The current states and versions in query order.
@@ -401,6 +426,7 @@ export class Stand {
   /**
    * Finds latest states and version metadata in storage query order.
    *
+   * @typeParam Schema The registered state schema.
    * @param schema The registered entity state schema.
    * @param query The legacy record query to apply.
    * @param options The tenant slice to read.
@@ -419,9 +445,7 @@ export class Stand {
       const storage = this.#leaseCurrent(registration, tenantId);
       try {
         const stored = await storage.current.query(Stand.#legacyPlan(query));
-        const results = stored.map((entry) =>
-          this.#entryResult(registration, entry.record, query.mask),
-        );
+        const results = stored.map((entry) => this.#entryResult(registration, entry.record));
         return results.filter((result): result is StandReadResult<Schema> => result !== undefined);
       } finally {
         storage.release();
@@ -434,6 +458,7 @@ export class Stand {
   /**
    * Finds latest states through a normalized plan and retains versions.
    *
+   * @typeParam Schema The registered state schema.
    * @param schema The registered entity state schema.
    * @param plan The normalized storage query plan to apply.
    * @param options The tenant slice to read.
@@ -451,9 +476,7 @@ export class Stand {
       const storage = this.#leaseCurrent(registration, tenantId);
       try {
         const stored = await storage.current.query(plan);
-        const results = stored.map((entry) =>
-          this.#entryResult(registration, entry.record, plan.mask?.paths),
-        );
+        const results = stored.map((entry) => this.#entryResult(registration, entry.record));
         return results.filter((result): result is StandReadResult<Schema> => result !== undefined);
       } finally {
         storage.release();
@@ -510,6 +533,7 @@ export class Stand {
   /**
    * Records one latest entity state and delivers an update to matching subscribers.
    *
+   * @typeParam Schema The registered state schema.
    * @param schema The registered entity state schema.
    * @param state The latest entity state to store.
    * @param options The tenant, version, and lifecycle metadata to store.
@@ -530,6 +554,15 @@ export class Stand {
     }
   }
 
+  /**
+   * Prepares a repository update without notifying subscribers yet.
+   *
+   * @typeParam Schema The state message schema.
+   * @param schema Registered state schema.
+   * @param state State to persist.
+   * @param options Tenant and version metadata.
+   * @returns Deferred write and notification actions.
+   */
   async #deferUpdate<Schema extends MessageSchema>(
     schema: Schema,
     state: MessageShape<Schema>,
@@ -538,6 +571,15 @@ export class Stand {
     return await this.#prepareUpdate(schema, state, options);
   }
 
+  /**
+   * Reserves storage and captures subscribers for one state update.
+   *
+   * @typeParam Schema The state message schema.
+   * @param schema Registered state schema.
+   * @param state State to persist.
+   * @param options Tenant and version metadata.
+   * @returns Prepared write with cleanup actions.
+   */
   async #prepareUpdate<Schema extends MessageSchema>(
     schema: Schema,
     state: MessageShape<Schema>,
@@ -605,6 +647,12 @@ export class Stand {
 
   /**
    * Repository-only full current-record read, including lifecycle metadata.
+   *
+   * @typeParam Schema The registered state schema.
+   * @param schema Registered state schema.
+   * @param id Entity ID to read.
+   * @param options Tenant selection.
+   * @returns Current stored state and lifecycle, if present.
    */
   async #readCurrent<Schema extends MessageSchema>(
     schema: Schema,
@@ -638,6 +686,7 @@ export class Stand {
   /**
    * Subscribes to in-process updates for one registered state schema.
    *
+   * @typeParam Schema The registered state schema.
    * @param schema The registered entity state schema.
    * @param callback The function receiving matching state updates.
    * @param options The tenant slice to subscribe to.
@@ -708,6 +757,14 @@ export class Stand {
     if (errors.length > 0) throw new AggregateError(errors, "Stand close failed.");
   }
 
+  /**
+   * Resolves a registered state type for a Stand operation.
+   *
+   * @typeParam Schema The requested state schema.
+   * @param schema State schema to resolve.
+   * @param operation Operation named in an unknown-type error.
+   * @returns The matching registration.
+   */
   #registration<Schema extends MessageSchema>(
     schema: Schema,
     operation: string,
@@ -776,10 +833,17 @@ export class Stand {
     };
   }
 
+  /**
+   * Decodes a complete current state and its version.
+   *
+   * @typeParam Schema The decoded state schema.
+   * @param registration State registration.
+   * @param current Stored Entity record.
+   * @returns Current state and version unless deleted.
+   */
   #entryResult<Schema extends MessageSchema>(
     registration: Registration<Schema>,
     current: EntityRecord,
-    maskPaths?: readonly string[],
   ): StandReadResult<Schema> | undefined {
     const value = EntityRecords.unpack(registration.schema, current);
     if (value.deleted) return undefined;
@@ -789,17 +853,19 @@ export class Stand {
         : value.versionMessage;
 
     return Object.freeze({
-      state: Object.assign(
-        create(registration.schema),
-        RecordMask.apply(
-          clone(registration.schema, value.state as MessageShape<Schema>),
-          maskPaths,
-        ),
-      ),
+      state: clone(registration.schema, value.state as MessageShape<Schema>),
       ...(version === undefined ? {} : { version: clone(VersionSchema, version) }),
     });
   }
 
+  /**
+   * Decodes a complete current record.
+   *
+   * @typeParam Schema The decoded state schema.
+   * @param registration State registration.
+   * @param current Stored Entity record.
+   * @returns Current state and version unless deleted.
+   */
   #currentResult<Schema extends MessageSchema>(
     registration: Registration<Schema>,
     current: EntityRecord,
@@ -807,6 +873,14 @@ export class Stand {
     return this.#entryResult(registration, current);
   }
 
+  /**
+   * Delivers one state update to the captured tenant subscribers.
+   *
+   * @typeParam Schema The updated state schema.
+   * @param registration State registration.
+   * @param input State and lifecycle details for the notification.
+   * @param captured Subscribers captured before persistence, if available.
+   */
   #notify<Schema extends MessageSchema>(
     registration: Registration<Schema>,
     input: {
@@ -855,6 +929,14 @@ export class Stand {
     return false;
   }
 
+  /**
+   * Lists subscribers for the selected state type and tenant.
+   *
+   * @typeParam Schema The state schema.
+   * @param registration State registration.
+   * @param tenantKey Tenant key to match.
+   * @returns Matching subscribers.
+   */
   #tenantSubscribers<Schema extends MessageSchema>(
     registration: Registration<Schema>,
     tenantKey: string,
@@ -912,6 +994,14 @@ export class Stand {
     };
   }
 
+  /**
+   * Clones a state update before delivering it to subscribers.
+   *
+   * @typeParam Schema The updated state schema.
+   * @param registration State registration.
+   * @param input State and version values to clone.
+   * @returns Immutable update snapshot.
+   */
   static #createUpdate<Schema extends MessageSchema>(
     registration: Registration<Schema>,
     input: {
@@ -978,12 +1068,20 @@ export class Stand {
               .map((sort) => ({ field: sort.field, direction: sort.direction ?? "asc" }))
               .map(({ field, direction }) => ({ column: field, direction })),
           }),
-      ...(query.mask === undefined ? {} : { mask: { paths: query.mask } }),
       ...(query.limit === undefined ? {} : { limit: query.limit }),
       candidateLimit: 10_000,
     };
   }
 
+  /**
+   * Opens the storage provider's Entity-record seam.
+   *
+   * @typeParam I Entity identifier type.
+   * @typeParam S Entity state message type.
+   * @param factory Provider factory.
+   * @param input Entity storage descriptor.
+   * @returns Current-record storage and close handle.
+   */
   static #openStorage<I, S extends Message>(
     factory: StorageFactory,
     input: EntityStorageInput<I, S>,
@@ -1000,29 +1098,74 @@ export class Stand {
   }
 }
 
+/**
+ * Provider seam for Entity record storage.
+ */
 interface EntityStorageFactory {
+  /**
+   * Opens current-record storage for one Entity state type.
+   *
+   * @typeParam I Entity identifier type.
+   * @typeParam S Entity state message type.
+   * @param input Entity storage descriptor.
+   * @returns Storage and a close handle.
+   */
   createEntityStorage<I, S extends Message>(
     input: EntityStorageInput<I, S>,
   ): {
     readonly current: EntityRecordStorage<I>;
+
+    /**
+     * Closes the opened Entity storage handle.
+     */
     close(): void;
   };
 }
 
+/**
+ * Current-record storage with one idempotent release action.
+ */
 interface CurrentStorageLease {
   readonly current: EntityRecordStorage<unknown>;
+
+  /**
+   * Closes the storage handle after the operation.
+   */
   release(): void;
 }
 
+/**
+ * Deferred state update actions used by repository transactions.
+ */
 interface DeferredStandUpdate {
+  /**
+   * Delivers the persisted update to subscribers.
+   */
   notify(): void;
+
+  /**
+   * Cancels the update without subscriber delivery.
+   */
   cancel(): void;
 }
 
+/**
+ * Deferred update that can first persist the current record.
+ */
 interface PreparedStandUpdate extends DeferredStandUpdate {
+  /**
+   * Persists the prepared state record.
+   *
+   * @returns Completion of persistence.
+   */
   write(): Promise<void>;
 }
 
+/**
+ * Repository-facing stored state and lifecycle.
+ *
+ * @typeParam Schema State schema.
+ */
 interface StandCurrentRecord<Schema extends MessageSchema> {
   readonly state: MessageShape<Schema>;
 
@@ -1035,8 +1178,29 @@ interface StandCurrentRecord<Schema extends MessageSchema> {
   readonly deleted: boolean;
 }
 
+/**
+ * Repository-only bridge to Stand operations.
+ */
 interface StandAccess {
+  /**
+   * Finds observer metadata for a registered type URL.
+   *
+   * @param stand Stand to inspect.
+   * @param typeUrl State type URL, when present.
+   * @returns Observer metadata, if registered.
+   */
   observedState(stand: Stand, typeUrl: string | undefined): StandObservedState | undefined;
+
+  /**
+   * Registers an in-process state observer for a subscription.
+   *
+   * @param stand Stand supplying the state type.
+   * @param subscription Subscription definition.
+   * @param state Registered state metadata.
+   * @param systemEventBus Bus receiving observer output.
+   * @param onUpdate Callback for subscription updates.
+   * @returns The subscription handle, if installed.
+   */
   observeState(
     stand: Stand,
     subscription: Subscription,
@@ -1044,12 +1208,34 @@ interface StandAccess {
     systemEventBus: EventBus,
     onUpdate: (update: SubscriptionUpdate) => void,
   ): EventSubscription | undefined;
+
+  /**
+   * Reads a complete current state record for repository restoration.
+   *
+   * @typeParam Schema The registered state schema.
+   * @param stand Stand to read.
+   * @param schema Registered state schema.
+   * @param id Entity ID to read.
+   * @param options Tenant selection.
+   * @returns Stored state and lifecycle, if present.
+   */
   readCurrent<Schema extends MessageSchema>(
     stand: Stand,
     schema: Schema,
     id: unknown,
     options: StandReadOptions,
   ): Promise<StandCurrentRecord<Schema> | undefined>;
+
+  /**
+   * Prepares a repository update for deferred notification.
+   *
+   * @typeParam Schema The registered state schema.
+   * @param stand Stand to update.
+   * @param schema Registered state schema.
+   * @param state New state value.
+   * @param options Tenant and version metadata.
+   * @returns Deferred update actions.
+   */
   deferUpdate<Schema extends MessageSchema>(
     stand: Stand,
     schema: Schema,
@@ -1064,12 +1250,30 @@ interface StandAccess {
  * @internal
  */
 export const standAccess: StandAccess = Object.freeze({
+  /**
+   * Finds observer metadata on the supplied Stand.
+   *
+   * @param stand Stand to inspect.
+   * @param typeUrl Candidate state type URL.
+   * @returns Observer metadata, if registered.
+   */
   observedState(stand: Stand, typeUrl: string | undefined): StandObservedState | undefined {
     if (!(stand instanceof Stand))
       throw new TypeError("State observation requires a Stand instance.");
     if (typeUrl === undefined) return undefined;
     return stand.observedState(typeUrl);
   },
+
+  /**
+   * Attaches a subscription observer to a registered state type.
+   *
+   * @param stand Stand supplying state metadata.
+   * @param subscription Subscription definition.
+   * @param state Registered state metadata.
+   * @param systemEventBus Event bus for notifications.
+   * @param onUpdate Callback for delivered updates.
+   * @returns Subscription handle, if installed.
+   */
   observeState(
     stand: Stand,
     subscription: Subscription,
@@ -1081,6 +1285,17 @@ export const standAccess: StandAccess = Object.freeze({
       throw new TypeError("State observation requires a Stand instance.");
     return SubscriptionObservers.observeState(subscription, state, systemEventBus, onUpdate);
   },
+
+  /**
+   * Reads complete current state for repository restoration.
+   *
+   * @typeParam Schema The registered state schema.
+   * @param stand Stand to read.
+   * @param schema Registered state schema.
+   * @param id Entity ID to read.
+   * @param options Tenant selection.
+   * @returns Current state and lifecycle, if present.
+   */
   readCurrent<Schema extends MessageSchema>(
     stand: Stand,
     schema: Schema,
@@ -1091,6 +1306,17 @@ export const standAccess: StandAccess = Object.freeze({
     if (read === undefined) throw new TypeError("Stand current read requires a Stand instance.");
     return read(schema, id, options);
   },
+
+  /**
+   * Prepares a state update that notifies subscribers after persistence.
+   *
+   * @typeParam Schema The registered state schema.
+   * @param stand Stand to update.
+   * @param schema Registered state schema.
+   * @param state New state value.
+   * @param options Tenant and version metadata.
+   * @returns Deferred update actions.
+   */
   deferUpdate<Schema extends MessageSchema>(
     stand: Stand,
     schema: Schema,
@@ -1104,20 +1330,36 @@ export const standAccess: StandAccess = Object.freeze({
   },
 });
 
-const deferredUpdates = new WeakMap<
-  Stand,
-  <Schema extends MessageSchema>(
-    schema: Schema,
-    state: MessageShape<Schema>,
-    options: StandUpdateOptions,
-  ) => Promise<DeferredStandUpdate>
->();
+/**
+ * Defers a state update for repository persistence.
+ *
+ * @typeParam Schema The state schema.
+ * @param schema Registered state schema.
+ * @param state New state value.
+ * @param options Tenant and version metadata.
+ * @returns Prepared persistence actions.
+ */
+type DeferredUpdateCall = <Schema extends MessageSchema>(
+  schema: Schema,
+  state: MessageShape<Schema>,
+  options: StandUpdateOptions,
+) => Promise<DeferredStandUpdate>;
 
-const currentReads = new WeakMap<
-  Stand,
-  <Schema extends MessageSchema>(
-    schema: Schema,
-    id: unknown,
-    options: StandReadOptions,
-  ) => Promise<StandCurrentRecord<Schema> | undefined>
->();
+/**
+ * Reads a current Entity record for repository restoration.
+ *
+ * @typeParam Schema The state schema.
+ * @param schema Registered state schema.
+ * @param id Entity ID to read.
+ * @param options Tenant selection.
+ * @returns Stored state and lifecycle, if present.
+ */
+type CurrentReadCall = <Schema extends MessageSchema>(
+  schema: Schema,
+  id: unknown,
+  options: StandReadOptions,
+) => Promise<StandCurrentRecord<Schema> | undefined>;
+
+const deferredUpdates = new WeakMap<Stand, DeferredUpdateCall>();
+
+const currentReads = new WeakMap<Stand, CurrentReadCall>();

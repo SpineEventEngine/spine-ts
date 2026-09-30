@@ -84,6 +84,104 @@ sometimes produces a signal can declare its concrete type alongside
 `undefined`, for example `OrderCreated | undefined`. An asynchronous reaction
 wraps the same result in one `Promise`.
 
+## Cross-context order review
+
+The separate [two-context composition](src/cross-context.ts) keeps the load
+demo's fixed topology unchanged. `Catalog` registers `SkuAggregate` and
+`SkuCatalogProjection`; `Ordering` registers `OrderAggregate` and the
+`OrderReview` Process Manager. Both contexts join one `Server`. When an order
+is created, `OrderReview` builds `SkuCatalogQuery.create().byId(event.skuId).build()`
+and reads it with `this.select(query).read()`. The generated import supplies the
+catalog query and its columns automatically. The Process Manager copies the
+current name into its state, and emits `OrderReviewed`.
+
+The catalog projection is eventually consistent. The
+[integration test](test/cross-context.test.ts) waits until `SkuRegistered` is
+visible there before posting `CreateOrder`; if the record is missing when the
+reaction runs, the review captures an empty name. An application needing a
+guaranteed name should establish that prerequisite in its workflow.
+
+Run this real command-to-event path from the repository root:
+
+```bash
+pnpm proto:generate
+pnpm exec tsc -b examples/orders --pretty false
+pnpm exec vitest run examples/orders/test/cross-context.test.ts --maxWorkers=1
+```
+
+The exported `OrderReviewContexts.create(storageFactory)` returns the
+two contexts for adding to a single `Server`; it does not start another load
+scenario or change `createDatastoreOrdersContext()`.
+
+## Route a catalog Event by saved order cards
+
+The separate [order-card context](src/query-routing.ts) adds a compact Projection
+without changing the load topology. `OrderCreated` establishes each card at its
+order ID. A later `SkuRegistered` Event names a SKU, but not the orders that use
+it. Its route queries the receiving `OrderCard` repository by `skuId`, then calls
+an application method on each restored card to skip names already up to date.
+A card created after its SKU was registered starts with an empty name until a
+later registration arrives. The separate cross-context Process Manager example
+reads the catalog when it first reviews an order.
+
+<!-- docs-snippet-path: examples/orders/src/cross-context.ts -->
+
+```ts
+import { EventRouting } from "@spine-event-engine/server";
+import {
+  OrderCreatedSchema,
+  SkuRegisteredSchema,
+} from "../generated/spine/examples/orders/events_pb.js";
+import { OrderCardQuery } from "../generated/spine/examples/orders/order_cards_query.js";
+import { OrderCard } from "./query-routing.js";
+
+const routes = EventRouting.create(OrderCard)
+  .route(OrderCreatedSchema, (event) => [event.id])
+  .route(SkuRegisteredSchema, async (event, _context, repository) => {
+    // The generated import supplies columns; the route supplies no tenant manually.
+    const query = OrderCardQuery.create().skuId().is(event.id).build();
+    const cards = await repository.find(query);
+    // find() restores application Entities, including needsSkuName().
+    return cards.filter((card) => card.needsSkuName(event.displayName)).map((card) => card.id);
+  });
+void routes;
+```
+
+`repository.findIds(query)` returns IDs, `findStates(query)` returns complete
+generated state messages, and `find(query)` returns normal application Entities
+with their configured dependencies and methods. Filters select records, not
+fields; incoming wire field masks are ignored. The route searches only its
+receiving repository under the Event's tenant. By contrast, `OrderReview` can
+read the catalog in another context registered with the same `Server`, retaining
+the Event tenant and checking target visibility. These are different scopes.
+
+The route reads saved state when it executes. Finding cards neither runs their
+handlers nor saves changes, and delivery after the read is not atomic with it.
+Inbox replay uses recorded recipients instead of querying again. Command routes
+must select exactly one recipient; Event and state routes may select several.
+More than 1,000 final distinct recipients cause a warning without losing any.
+The [focused test](test/query-routing.test.ts) covers two matching cards, an
+unrelated card, a repeated name that needs no update, and a SKU with no matching
+card.
+
+`Server.atPort()` returns a builder. Start it after adding both contexts, then
+close the running server when the application stops:
+
+<!-- docs-snippet-path: examples/orders/test/cross-context.test.ts -->
+
+```ts
+import { InMemoryStorageFactory } from "@spine-event-engine/storage";
+import { Server } from "@spine-event-engine/server";
+import { OrderReviewContexts } from "../src/cross-context.js";
+
+// Use in-memory storage for this local example.
+const { catalog, orders } = await OrderReviewContexts.create(new InMemoryStorageFactory());
+// Register both contexts with the same server builder to enable the catalog read.
+const running = await Server.atPort(0).add(catalog).add(orders).start();
+// Close the running server during application shutdown.
+await running.close();
+```
+
 ## 🗄️ Try the same model with durable storage
 
 The local scenario deliberately uses memory. Its application assembly accepts

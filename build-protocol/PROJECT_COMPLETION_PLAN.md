@@ -14,6 +14,34 @@ evidence of completed work and are not current operating instructions. Every
 future `master` merge triggers NPM publication and therefore carries a new
 common workspace version under D-0115.
 
+Current approved work: [Process Manager queries across contexts](planning/cross-context-queries.md)
+on `cross-context-queries`, based on official master `2324311be8`. Preserve the
+current effective tenant, reject duplicate Entity registrations and incompatible
+query destinations, and drain handlers before closing queried contexts. The
+implementation, independent reviews, full release suite and package-consumer
+checks are complete. All 5,061 tests pass at code checkpoint `506b73018`; all
+coverage thresholds pass. GitHub CI awaits a human-created PR for the branch.
+The work and review logs record the evidence and this remaining check. On
+29 September the human extended this same task with receiving-repository
+queries during routing, warning-only handling above 1,000 recipients, and a
+generated JVM-like query DSL with automatic column registration. That extension
+has received standalone plan review. Accepted findings are included in the plan.
+The human resolved its last question: no masking in any API, including
+subscriptions, and ignore mask fields in incoming Protobufs. The revised plan
+has no remaining product questions.
+The extension, examples and documentation are implemented. Final release checks
+pass on ed2374619: 5,127 tests across 306 files, all coverage thresholds, and the
+separate consumer proof for all 19 package tarballs. Live query checks pass on
+MySQL, MariaDB, PostgreSQL 16/18 and the Datastore emulator; Todo checks pass on
+memory and all four SQL engines. A separate unchanged Datastore history-trimming
+test times out; its diagnostic evidence and pending scope question remain in the
+work log. On 30 September the human requested three additional sequential,
+independent whole-branch review-and-fix rounds with no memory. Those rounds are
+complete, with confirmed fixes verified before each following round. Final code
+e179291dc passes 5,135 tests in 307 files, all coverage thresholds, both selected
+live Datastore query tests and all 19 package consumer checks. The disposable
+review-test emulator was removed. GitHub CI still requires a human-created PR.
+
 Status: Waves 9 through 13 are complete, release-verified, integrated, and
 remotely closed. The complete-replica deployment correction is closed through
 T-0213. The subsequent beginner-example and public-subscription corrections are

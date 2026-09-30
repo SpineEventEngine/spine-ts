@@ -110,7 +110,7 @@ describe("InMemoryRecordStorage", () => {
       providerCalls: () => storage.queryPlanCalls,
     });
   });
-  it("reads back cloned protobuf records and applies simple masks", async () => {
+  it("reads back complete cloned protobuf records", async () => {
     const storage = createStorage();
     const event = createEvent("event-1", "type.spine.io/tasks.TaskCreated", 3n);
 
@@ -120,32 +120,26 @@ describe("InMemoryRecordStorage", () => {
     }
     event.message.typeUrl = "type.spine.io/tasks.MutatedOutside";
 
-    const masked = await storage.read(create(EventIdSchema, { value: "event-1" }), {
-      mask: ["id", "context.timestamp"],
-    });
+    const detached = await storage.read(create(EventIdSchema, { value: "event-1" }));
     const stored = await storage.read(create(EventIdSchema, { value: "event-1" }));
 
-    expect(masked).toMatchObject({
+    expect(detached).toMatchObject({
       id: { value: "event-1" },
       context: { timestamp: { seconds: 3n } },
     });
-    expect(masked?.$typeName).toBe(EventSchema.typeName);
-    expect(masked?.message).toBeUndefined();
+    expect(detached?.$typeName).toBe(EventSchema.typeName);
+    expect(detached?.message?.typeUrl).toBe("type.spine.io/tasks.TaskCreated");
     expect(stored?.message?.typeUrl).toBe("type.spine.io/tasks.TaskCreated");
   });
 
-  it("ignores blank mask paths while applying requested fields", async () => {
+  it("returns every saved field on a direct read", async () => {
     const storage = createStorage();
 
     await storage.write(createEvent("event-1", "type.spine.io/tasks.TaskCreated", 3n));
 
-    const masked = await storage.read(create(EventIdSchema, { value: "event-1" }), {
-      mask: [" ", "id", "\t"],
-    });
+    const stored = await storage.read(create(EventIdSchema, { value: "event-1" }));
 
-    expect(masked).toEqual(
-      create(EventSchema, { id: create(EventIdSchema, { value: "event-1" }) }),
-    );
+    expect(stored).toEqual(createEvent("event-1", "type.spine.io/tasks.TaskCreated", 3n));
   });
 
   it("filters, sorts, and limits by record ids and columns deterministically", async () => {
@@ -174,7 +168,7 @@ describe("InMemoryRecordStorage", () => {
     expect(records.map((record) => record.id?.value)).toEqual(["event-1", "event-2"]);
   });
 
-  it("executes the complete normalized query plan before applying masks", async () => {
+  it("executes the complete normalized query plan with complete results", async () => {
     const storage = createStorage();
     await storage.writeAll([
       createEvent("event-3", "type.spine.io/tasks.TaskClosed", 3n),
@@ -192,11 +186,10 @@ describe("InMemoryRecordStorage", () => {
       },
       order: [{ column: "timestamp", direction: "desc" }],
       limit: 2,
-      mask: { paths: ["id"] },
     });
 
     expect(records.map((record) => record.id?.value)).toEqual(["event-3", "event-1"]);
-    expect(records.every((record) => record.message === undefined)).toBe(true);
+    expect(records.every((record) => record.message !== undefined)).toBe(true);
   });
 
   it("rejects normalized plans before materializing beyond their candidate budget", async () => {
@@ -294,7 +287,7 @@ describe("InMemoryRecordStorage", () => {
     }
   });
 
-  it("continues after an ordered row key before offsets, limits, and masks", async () => {
+  it("continues after an ordered row key before offsets and limits", async () => {
     const storage = createStorage();
 
     await storage.writeAll([
@@ -314,12 +307,11 @@ describe("InMemoryRecordStorage", () => {
       },
       offset: 1,
       limit: 1,
-      mask: ["id"],
     });
 
     expect(page).toHaveLength(1);
     expect(page[0]?.id?.value).toBe("event-5");
-    expect(page[0]?.message).toBeUndefined();
+    expect(page[0]?.message?.typeUrl).toBe("type.spine.io/tasks.TaskClosed");
   });
 
   it("uses canonical UTF-8 record IDs for tied ordering and continuation windows", async () => {
@@ -1020,6 +1012,39 @@ describe("InMemoryRecordStorage", () => {
     await storage.queryPlan({});
 
     expect(records.queries).toEqual([{ limit: 10_001 }]);
+  });
+
+  it("scans beyond the bounded candidate sentinel for an exhaustive read", async () => {
+    const records = new ObservingTenantRecords<EventId, Event>();
+    const storage = new InMemoryRecordStorage(
+      { name: "Tasks", multitenant: false },
+      createSpec(),
+      () => records,
+    );
+    await storage.writeAll(
+      Array.from({ length: 10_002 }, (_, index) =>
+        createEvent(
+          `event-${String(index).padStart(5, "0")}`,
+          "type.spine.io/tasks.TaskCreated",
+          BigInt(index),
+        ),
+      ),
+    );
+
+    const result = await storage.queryPlan({
+      exhaustive: true,
+      predicate: {
+        kind: "comparison",
+        column: "timestamp",
+        operator: "greaterThan",
+        value: 10_000n,
+      },
+      order: [{ column: "timestamp", direction: "asc" }],
+      limit: 1,
+    });
+
+    expect(result.map((event) => event.id?.value)).toEqual(["event-10001"]);
+    expect(records.queries).toEqual([{}]);
   });
 });
 

@@ -92,6 +92,52 @@ describe("PostgreSQL live storage acceptance", () => {
     }
   });
 
+  it("reads an exhaustive late match and a large explicit ID set through live SQL", async () => {
+    const storage = factory.createRecordStorage(
+      context("repository_reads"),
+      stringSpec(),
+      group("repository_reads"),
+    );
+    const values = Array.from(
+      { length: 10_002 },
+      (_, index) => `item-${String(index).padStart(5, "0")}`,
+    );
+    try {
+      for (let offset = 0; offset < values.length; offset += 500) {
+        await storage.writeAll(values.slice(offset, offset + 500).map(value));
+      }
+      expect(
+        (
+          await storage.queryPlan({
+            exhaustive: true,
+            order: [{ column: "value", direction: "asc" }],
+          })
+        ).map((record) => record.value),
+      ).toEqual(values);
+      await expect(
+        storage.queryPlan({
+          exhaustive: true,
+          predicate: {
+            kind: "comparison",
+            column: "value",
+            operator: "greaterThan",
+            value: "item-10000",
+          },
+          order: [{ column: "value", direction: "asc" }],
+          limit: 1,
+        }),
+      ).resolves.toEqual([value("item-10001")]);
+      await expect(
+        storage.queryPlan({
+          exhaustive: true,
+          predicate: { kind: "ids", ids: values.slice(0, 1_001) },
+        }),
+      ).resolves.toHaveLength(1_001);
+    } finally {
+      storage.close();
+    }
+  }, 120_000);
+
   it("creates custom DDL in an explicit non-public schema", async () => {
     const schema = `t0230_pg_${run}_custom`;
     const catalog = new Pool({ connectionString: url });

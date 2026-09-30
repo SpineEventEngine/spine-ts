@@ -89,7 +89,7 @@ histories allocate no record handle or Datastore row.
 
 Queries run inside the selected native namespace. Normalized plans admit only
 IDs (up to Datastore's legal key filter bound), equality, one inequality column,
-flat conjunction, inequality-compatible ordering, limit, and mask. Nested or
+flat conjunction, inequality-compatible ordering, and limit. Nested or
 disjunctive predicates, oversized key sets, and illegal inequality/order shapes
 reject before provider access; they never trigger an unfiltered reconciliation
 read.

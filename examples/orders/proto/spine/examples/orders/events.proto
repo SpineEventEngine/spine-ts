@@ -36,3 +36,15 @@ message SkuRegistered {
   // A name shown for the SKU.
   string display_name = 2 [(required) = true];
 }
+
+// Records the catalog name captured for a newly placed order.
+message OrderReviewed {
+  // Uniquely identifies the reviewed order.
+  string id = 1 [(required) = true];
+
+  // The ordered SKU identifier.
+  string sku_id = 2 [(required) = true];
+
+  // The catalog name captured by the review.
+  string sku_name = 3;
+}

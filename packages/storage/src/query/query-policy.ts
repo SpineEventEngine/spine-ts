@@ -20,6 +20,8 @@ export type NormalizedComparisonOperator =
 
 /**
  * Provider-independent normalized query predicate.
+ *
+ * @typeParam Id The storage slot identifier type used by ID predicates.
  */
 export type NormalizedQueryPredicate<Id> =
   | Readonly<{
@@ -90,19 +92,9 @@ export interface NormalizedQueryOrder {
 }
 
 /**
- * Provider-independent normalized field mask.
- */
-export interface NormalizedQueryMask {
-  // prettier-ignore
-
-  /**
-   * Lists the record paths retained by the mask.
-   */
-  readonly paths: readonly string[];
-}
-
-/**
  * Canonical query plan accepted at the storage-provider boundary.
+ *
+ * @typeParam Id The storage slot identifier type used by the plan.
  */
 export interface NormalizedQueryPlan<Id> {
   // prettier-ignore
@@ -118,11 +110,6 @@ export interface NormalizedQueryPlan<Id> {
   readonly order?: readonly NormalizedQueryOrder[];
 
   /**
-   * Defines the optional field mask.
-   */
-  readonly mask?: NormalizedQueryMask;
-
-  /**
    * Limits matching rows after ordering.
    */
   readonly limit?: number;
@@ -132,12 +119,19 @@ export interface NormalizedQueryPlan<Id> {
    * be positive safe integers; the default and inclusive maximum are 10,000.
    */
   readonly candidateLimit?: number;
+
+  /**
+   * Evaluates the complete result without a candidate cap. Providers may push
+   * down predicates, ordering, and limits when they preserve evaluator semantics.
+   * Reserved for repository reads; bounded service queries omit this flag.
+   */
+  readonly exhaustive?: true;
 }
 
 /**
  * Optional normalized query features a storage provider can execute.
  */
-export type StorageQueryFeature = "either" | "nested" | "order" | "mask" | "limit";
+export type StorageQueryFeature = "either" | "nested" | "order" | "limit";
 
 /**
  * Explicit query capabilities advertised by a storage provider.
@@ -165,15 +159,35 @@ const knownComparisons = new Set<NormalizedComparisonOperator>([
   "greaterOrEqual",
   "lessOrEqual",
 ]);
-const knownFeatures = new Set<StorageQueryFeature>(["either", "nested", "order", "mask", "limit"]);
-const knownPlanProperties = new Set(["predicate", "order", "mask", "limit", "candidateLimit"]);
+const knownFeatures = new Set<StorageQueryFeature>(["either", "nested", "order", "limit"]);
+const knownPlanProperties = new Set([
+  "predicate",
+  "order",
+  "limit",
+  "candidateLimit",
+  "exhaustive",
+]);
 
 /**
  * Shared fail-fast validation for normalized plans before provider execution.
  */
 export const StorageQueryPolicy: Readonly<{
+  /**
+   * Rejects malformed plans and requirements unsupported by the provider.
+   *
+   * @typeParam Id The storage slot identifier type used by the plan.
+   * @param plan The normalized predicate, ordering, and bounds to check.
+   * @param capabilities The comparisons and features advertised by the provider.
+   */
   validate<Id>(plan: NormalizedQueryPlan<Id>, capabilities: StorageQueryCapabilities): void;
 }> = Object.freeze({
+  /**
+   * Rejects malformed plans and requirements unsupported by the provider.
+   *
+   * @typeParam Id The storage slot identifier type used by the plan.
+   * @param plan The normalized predicate, ordering, and bounds to check.
+   * @param capabilities The comparisons and features advertised by the provider.
+   */
   validate<Id>(plan: NormalizedQueryPlan<Id>, capabilities: StorageQueryCapabilities): void {
     const normalizedPlan = QueryPlanValidator.requireRecord(plan, "query plan must be an object.");
     const normalizedCapabilities = QueryPlanValidator.requireRecord(
@@ -192,9 +206,12 @@ export const StorageQueryPolicy: Readonly<{
       QueryPlanValidator.validatePredicate(normalizedPlan.predicate, requirements);
     }
     QueryPlanValidator.validateOrder(normalizedPlan.order, requirements);
-    QueryPlanValidator.validateMask(normalizedPlan.mask, requirements);
     QueryPlanValidator.validateLimit(normalizedPlan.limit, normalizedPlan.order, requirements);
     QueryPlanValidator.validateCandidateLimit(normalizedPlan.candidateLimit);
+    if (normalizedPlan.exhaustive !== undefined && normalizedPlan.exhaustive !== true)
+      throw new TypeError("query exhaustive policy must be true when supplied.");
+    if (normalizedPlan.exhaustive && normalizedPlan.candidateLimit !== undefined)
+      throw new TypeError("exhaustive queries cannot set a candidate limit.");
     QueryCapabilities.admit(requirements, comparisons, features);
   },
 });
@@ -215,6 +232,8 @@ const QueryPlanValidator = {
 
   /**
    * Rejects unsupported or misspelled normalized-plan properties.
+   *
+   * @param plan The top-level plan properties to check.
    */
   validatePlanProperties(plan: Record<string, unknown>): void {
     if (Object.hasOwn(plan, "offset")) {
@@ -229,6 +248,8 @@ const QueryPlanValidator = {
 
   /**
    * Validates the maximum materialized candidate count.
+   *
+   * @param value The requested candidate bound, when supplied.
    */
   validateCandidateLimit(value: unknown): void {
     if (value === undefined) return;
@@ -240,6 +261,9 @@ const QueryPlanValidator = {
 
   /**
    * Validates a normalized predicate tree and records its required capabilities.
+   *
+   * @param root The root predicate to traverse.
+   * @param requirements Comparison and feature sets populated during traversal.
    */
   validatePredicate(root: unknown, requirements: QueryRequirements): void {
     const pending: { readonly predicate: unknown; readonly depth: number }[] = [
@@ -327,6 +351,9 @@ const QueryPlanValidator = {
 
   /**
    * Validates normalized ordering and records the ordering capability.
+   *
+   * @param value The requested ordering clauses, when supplied.
+   * @param requirements Feature set updated when ordering is present.
    */
   validateOrder(value: unknown, requirements: QueryRequirements): void {
     if (value === undefined) return;
@@ -349,26 +376,11 @@ const QueryPlanValidator = {
   },
 
   /**
-   * Validates a normalized field mask and records the mask capability.
-   */
-  validateMask(value: unknown, requirements: QueryRequirements): void {
-    if (value === undefined) return;
-    const mask = QueryPlanValidator.requireRecord(value, "field mask must be an object.");
-    if (!Array.isArray(mask.paths)) throw new TypeError("field-mask paths must be an array.");
-    if (mask.paths.length === 0) throw new TypeError("field mask must not be empty.");
-    const paths = mask.paths as unknown[];
-    for (let index = 0; index < paths.length; index += 1) {
-      const path: unknown = paths[index];
-      if (!Object.hasOwn(paths, index) || typeof path !== "string") {
-        throw new TypeError("field-mask paths must be strings.");
-      }
-      if (path.trim().length === 0) throw new TypeError("field-mask paths must not be blank.");
-    }
-    requirements.features.add("mask");
-  },
-
-  /**
    * Validates a result limit and records the limit capability.
+   *
+   * @param value The requested positive result limit, when supplied.
+   * @param order The ordering required when a positive limit is set.
+   * @param requirements Feature set updated when a limit is present.
    */
   validateLimit(value: unknown, order: unknown, requirements: QueryRequirements): void {
     if (value === undefined) return;
@@ -382,7 +394,11 @@ const QueryPlanValidator = {
   },
 
   /**
-   * Requires a non-array object value and returns its properties.
+   * Checks that a plan component is a non-array object.
+   *
+   * @param value The candidate plan component.
+   * @param message The error text used when the value is not an object.
+   * @returns The component as a record of named properties.
    */
   requireRecord(value: unknown, message: string): Record<string, unknown> {
     if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -400,6 +416,9 @@ const QueryCapabilities = {
 
   /**
    * Validates advertised comparison operators.
+   *
+   * @param value The provider's advertised comparison operators.
+   * @returns The recognized comparison operators without duplicates.
    */
   validateComparisons(value: unknown): ReadonlySet<NormalizedComparisonOperator> {
     if (!Array.isArray(value)) throw new TypeError("comparison capabilities must be an array.");
@@ -415,6 +434,9 @@ const QueryCapabilities = {
 
   /**
    * Validates advertised normalized query features.
+   *
+   * @param value The provider's advertised query features.
+   * @returns The recognized query features without duplicates.
    */
   validateFeatures(value: unknown): ReadonlySet<StorageQueryFeature> {
     if (!Array.isArray(value)) throw new TypeError("query features must be an array.");
@@ -430,6 +452,10 @@ const QueryCapabilities = {
 
   /**
    * Rejects requirements that an advertised provider capability set does not satisfy.
+   *
+   * @param requirements The comparisons and features required by the plan.
+   * @param comparisons The comparisons advertised by the provider.
+   * @param features The query features advertised by the provider.
    */
   admit(
     requirements: QueryRequirements,
@@ -454,17 +480,23 @@ const QueryCapabilities = {
 
   /**
    * Describes a capability in a provider-rejection message.
+   *
+   * @param feature The unsupported query feature.
+   * @returns The feature name used in a provider rejection error.
    */
   featureDescription(feature: StorageQueryFeature): string {
     if (feature === "either") return "EITHER predicates";
     if (feature === "nested") return "nested predicates";
     if (feature === "order") return "ordering";
-    if (feature === "mask") return "field masks";
     return "limits";
   },
 
   /**
    * Rejects a missing required feature with its provider-facing description.
+   *
+   * @param features The query features advertised by the provider.
+   * @param feature The feature required by the plan.
+   * @param description The feature wording used in an error message.
    */
   requireFeature(
     features: ReadonlySet<StorageQueryFeature>,

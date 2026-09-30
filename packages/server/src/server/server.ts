@@ -16,7 +16,6 @@ import * as http2 from "node:http2";
 import type { AddressInfo } from "node:net";
 
 import { connectNodeAdapter } from "@connectrpc/connect-node";
-import type { StorageFactory } from "@spine-event-engine/storage";
 
 import {
   BoundedContext,
@@ -24,11 +23,13 @@ import {
   boundedContextAccess,
 } from "../context/bounded-context.js";
 import type { StandSubscriptionRegistry } from "../stand/subscription-registry.js";
+import type { Stand } from "../stand/stand.js";
 import {
   SpineServices,
   spineServicesAccess,
   type SpineServicesOptions,
 } from "../services/spine-services.js";
+import { RegisteredTargets } from "../services/registered-targets.js";
 import type {
   EnvironmentAttachmentHandle,
   EnvironmentOwnership,
@@ -45,6 +46,7 @@ const gracefulSessionDrainMs = 100;
 type ServerContext = BoundedContext | BoundedContextBuilder;
 const runningContexts = new WeakMap<RunningServer, readonly BoundedContext[]>();
 const serverHosts = new WeakMap<Server, string>();
+const assemblingStands = new WeakMap<Stand, object>();
 
 /**
  * Performs work coupled to listener readiness and network shutdown.
@@ -77,19 +79,33 @@ export interface ListenerLifecycle {
  */
 export class Server {
   readonly #host: string;
+
   readonly #port: number;
+
   readonly #readMaxBytes: number;
+
   readonly #writeMaxBytes: number;
+
   readonly #contexts: ServerContext[] = [];
+
   readonly #resources: { close(): unknown }[] = [];
+
   readonly #listenerLifecycles: ListenerLifecycle[] = [];
+
   readonly #services: Omit<SpineServicesOptions, "contexts">;
+
   readonly #environment: ServerEnvironment;
+
   #starting: Promise<RunningServer> | undefined;
+
   #startingOwnership: EnvironmentOwnership | undefined;
+
   #run: Promise<RunningServer> | undefined;
+
   #failedStartCleanup: FailedStartCleanup | undefined;
+
   #failedListenerLifecycle: RunningHttp2Server | undefined;
+
   #failedStartConsumed = false;
 
   /**
@@ -262,52 +278,103 @@ export class Server {
     return running;
   }
 
+  /**
+   * Builds contexts, attaches delivery, and opens the listener for one start attempt.
+   *
+   * @param ownership Whether the environment is managed by this Server.
+   * @returns The running listener after lifecycle startup.
+   */
   async #startOnce(ownership: EnvironmentOwnership): Promise<RunningServer> {
-    const contexts = await ServerValues.buildContexts(
-      this.#contexts,
-      this.#environment.storageFactory,
-    );
-    const logger = serverEnvironmentAccess.loggerFor(this.#environment);
-    for (const context of contexts) {
-      boundedContextAccess.installLogger(context, logger);
-      serverEnvironmentAccess.warnVolatileRegistry(this.#environment, context);
-    }
-    let attachment: EnvironmentAttachmentHandle;
-    try {
-      attachment = await serverEnvironmentAccess.attach(this.#environment, {
-        ownership,
-        descriptors: contexts.map((context) => boundedContextAccess.delivery(context)),
-      });
-    } catch (error) {
-      const closeGroup = new RetryableCloseGroup(
-        [...contexts, ...this.#resources],
-        "Server start cleanup failed while closing owned contexts/resources.",
-      );
-      if (serverEnvironmentAccess.failedStartRetryPending(this.#environment, error)) {
-        this.#failedStartCleanup = {
-          closeGroup,
-          failedStartRollback: { rejection: error },
-        };
-      } else {
-        try {
-          await closeGroup.close();
-        } catch (cleanupError) {
-          this.#failedStartCleanup = {
-            closeGroup,
-            failedStartRollback: undefined,
-          };
-          throw ServerValues.attachmentCleanupError(error, cleanupError);
-        }
-        this.#failedStartConsumed = true;
-      }
-      throw error;
-    }
+    const admission: ContextAdmission = { token: {}, contexts: [] };
+    const contexts = await this.#prepareContexts(admission);
+    const { attachment, routes } = await this.#attachContexts(contexts, ownership, admission);
+    const running = await this.#openListener(contexts, attachment, routes);
+    await this.#startLifecycles(running);
+    return running;
+  }
+
+  /**
+   * Opens the service listener with retryable cleanup for every preparation phase.
+   *
+   * @param contexts Contexts exposed by the listener.
+   * @param attachment Active environment delivery attachment.
+   * @param routes Routes installed for these contexts.
+   * @returns The prepared running listener.
+   */
+  async #openListener(
+    contexts: readonly BoundedContext[],
+    attachment: EnvironmentAttachmentHandle,
+    routes: RegisteredTargets,
+  ): Promise<RunningHttp2Server> {
     const closeables = [...contexts, ...this.#resources];
-    const services = new SpineServices({
+    const cleanup: FailedStartCleanup = {
+      closeGroup: new RetryableCloseGroup(
+        closeables,
+        "Server start cleanup failed while closing owned contexts/resources.",
+      ),
+      attachment,
+      routes,
+      failedStartRollback: undefined,
+    };
+    try {
+      return await this.#prepareListener(contexts, attachment, routes, closeables, cleanup);
+    } catch (error) {
+      this.#failedStartCleanup = cleanup;
+      return this.#cleanupFailedListenerStart(cleanup, error);
+    }
+  }
+
+  /**
+   * Constructs services and the HTTP adapter, then binds the listener.
+   *
+   * @param contexts Contexts exposed by this Server.
+   * @param attachment Active delivery attachment.
+   * @param routes Installed state routes.
+   * @param closeables Contexts and resources for eventual shutdown.
+   * @param cleanup Retained cleanup state if preparation fails.
+   * @returns The prepared running listener.
+   */
+  async #prepareListener(
+    contexts: readonly BoundedContext[],
+    attachment: EnvironmentAttachmentHandle,
+    routes: RegisteredTargets,
+    closeables: readonly unknown[],
+    cleanup: FailedStartCleanup,
+  ): Promise<RunningHttp2Server> {
+    const services = new SpineServices({ contexts, ...this.#services });
+    cleanup.services = services;
+    spineServicesAccess.installLogger(
+      services,
+      serverEnvironmentAccess.loggerFor(this.#environment),
+    );
+    const { httpServer, sessions } = this.#createHttpListener(services);
+    cleanup.network = { server: httpServer, sessions };
+    const address = await ServerValues.listen(httpServer, this.#host, this.#port);
+    const host = typeof address.address === "string" ? address.address : this.#host;
+    return this.#createRunningServer({
+      server: httpServer,
+      sessions,
+      environment: this.#environment,
+      attachment,
+      routes,
+      services,
+      host,
+      port: address.port,
       contexts,
-      ...this.#services,
+      closeables,
     });
-    spineServicesAccess.installLogger(services, logger);
+  }
+
+  /**
+   * Prepares an HTTP listener and its tracked sessions for startup.
+   *
+   * @param services Service routes exposed by the listener.
+   * @returns The unbound listener and its session set.
+   */
+  #createHttpListener(services: SpineServices): {
+    httpServer: http2.Http2Server;
+    sessions: Set<http2.ServerHttp2Session>;
+  } {
     const sessions = new Set<http2.ServerHttp2Session>();
     const httpServer = ServerValues.createHttpServer(
       services,
@@ -315,36 +382,171 @@ export class Server {
       this.#readMaxBytes,
       this.#writeMaxBytes,
     );
-    const listener = { host: this.#host, port: this.#port };
-    const address = await ServerValues.listen(httpServer, listener.host, listener.port).catch(
-      async (error: unknown) => {
-        const cleanup: FailedStartCleanup = {
-          closeGroup: new RetryableCloseGroup(
-            closeables,
-            "Server start cleanup failed while closing owned contexts/resources.",
-          ),
-          network: { server: httpServer, sessions },
-          attachment,
-          failedStartRollback: undefined,
-        };
-        this.#failedStartCleanup = cleanup;
-        return this.#cleanupFailedListenerStart(cleanup, error);
-      },
-    );
-    const host = typeof address.address === "string" ? address.address : this.#host;
+    return { httpServer, sessions };
+  }
 
+  /**
+   * Creates the listener handle and associates its context set.
+   *
+   * @param options Listener resources prepared during startup.
+   * @returns The not-yet-started listener handle.
+   */
+  #createRunningServer(
+    options: Omit<RunningHttp2ServerOptions, "listenerLifecycles">,
+  ): RunningHttp2Server {
     const running = new RunningHttp2Server({
-      server: httpServer,
-      sessions,
-      environment: this.#environment,
-      attachment,
-      services,
-      host,
-      port: address.port,
-      closeables,
+      ...options,
       listenerLifecycles: this.#listenerLifecycles,
     });
-    runningContexts.set(running, contexts);
+    runningContexts.set(running, options.contexts);
+    return running;
+  }
+
+  /**
+   * Reserves prebuilt contexts before awaiting builders, then assembles each builder.
+   *
+   * @param admission Attempt-local reservations retained through cleanup.
+   * @returns Prepared contexts for this Server.
+   */
+  async #prepareContexts(admission: ContextAdmission): Promise<readonly BoundedContext[]> {
+    const contexts: BoundedContext[] = [];
+    let conflict: unknown;
+    let conflicted = false;
+    for (const entry of this.#contexts) {
+      if (boundedContextAccess.isBuilder(entry)) continue;
+      try {
+        this.#admitContext(entry, admission);
+      } catch (error) {
+        if (!conflicted) conflict = error;
+        conflicted = true;
+      }
+    }
+    try {
+      if (conflicted) throw conflict;
+      for (const entry of this.#contexts) {
+        const context = boundedContextAccess.isBuilder(entry)
+          ? await boundedContextAccess.build(entry, this.#environment.storageFactory)
+          : entry;
+        if (boundedContextAccess.isBuilder(entry)) this.#admitContext(context, admission);
+        contexts.push(context);
+      }
+      return contexts;
+    } catch (error) {
+      await this.#cleanupFailedAttachment(admission.contexts, undefined, error, admission);
+      throw error;
+    }
+  }
+
+  /**
+   * Reserves one context Stand while this Server assembles its routes.
+   *
+   * @param context Context to reserve.
+   * @param admission Attempt-local reservations and token.
+   */
+  #admitContext(context: BoundedContext, admission: ContextAdmission): void {
+    const stand = context.stand();
+    const token = assemblingStands.get(stand);
+    if (token !== undefined || RegisteredTargets.forStand(stand) !== undefined) {
+      throw new Error("Stand is already associated with another Server or assembly.");
+    }
+    assemblingStands.set(stand, admission.token);
+    admission.contexts.push(context);
+  }
+
+  /**
+   * Clears only reservations made by the given assembly attempt.
+   *
+   * @param admission Attempt whose reserved Stands may be released.
+   */
+  #releaseAdmission(admission: ContextAdmission): void {
+    for (const context of admission.contexts) {
+      const stand = context.stand();
+      if (assemblingStands.get(stand) === admission.token) assemblingStands.delete(stand);
+    }
+    admission.contexts.length = 0;
+  }
+
+  /**
+   * Validates state routes before delivery recovery can invoke handlers.
+   *
+   * @param contexts Built contexts for this Server.
+   * @param ownership Environment attachment mode.
+   * @param admission Reservations transferred to installed routes before attachment.
+   * @returns The environment attachment and its installed routes.
+   */
+  async #attachContexts(
+    contexts: readonly BoundedContext[],
+    ownership: EnvironmentOwnership,
+    admission: ContextAdmission,
+  ): Promise<{ attachment: EnvironmentAttachmentHandle; routes: RegisteredTargets }> {
+    const freshContexts = contexts.filter(
+      (context) => RegisteredTargets.forStand(context.stand()) === undefined,
+    );
+    let routes: RegisteredTargets | undefined;
+    try {
+      routes = new RegisteredTargets(contexts);
+      routes.install(contexts);
+      this.#releaseAdmission(admission);
+      const logger = serverEnvironmentAccess.loggerFor(this.#environment);
+      for (const context of contexts) {
+        boundedContextAccess.installLogger(context, logger);
+        serverEnvironmentAccess.warnVolatileRegistry(this.#environment, context);
+      }
+      const attachment = await serverEnvironmentAccess.attach(this.#environment, {
+        ownership,
+        descriptors: contexts.map((context) => boundedContextAccess.delivery(context)),
+      });
+      return { attachment, routes };
+    } catch (error) {
+      await this.#cleanupFailedAttachment(freshContexts, routes, error, admission);
+      throw error;
+    }
+  }
+
+  /**
+   * Retains retryable cleanup when route validation or attachment fails.
+   *
+   * @param contexts Fresh contexts to close after failure.
+   * @param routes Routes installed by this attempt, if any.
+   * @param error Original route or attachment failure.
+   * @param admission Reservations retained until context cleanup succeeds.
+   */
+  async #cleanupFailedAttachment(
+    contexts: readonly BoundedContext[],
+    routes: RegisteredTargets | undefined,
+    error: unknown,
+    admission?: ContextAdmission,
+  ): Promise<void> {
+    const closeGroup = new RetryableCloseGroup(
+      [...contexts, ...this.#resources],
+      "Server start cleanup failed while closing owned contexts/resources.",
+    );
+    if (serverEnvironmentAccess.failedStartRetryPending(this.#environment, error)) {
+      this.#failedStartCleanup = {
+        closeGroup,
+        failedStartRollback: { rejection: error },
+        routes,
+        admission,
+      };
+      return;
+    }
+    try {
+      await closeGroup.close();
+    } catch (cleanupError) {
+      this.#failedStartCleanup = { closeGroup, failedStartRollback: undefined, routes, admission };
+      throw ServerValues.attachmentCleanupError(error, cleanupError);
+    }
+    routes?.release();
+    if (admission !== undefined) this.#releaseAdmission(admission);
+    this.#failedStartConsumed = true;
+  }
+
+  /**
+   * Starts listener lifecycles and preserves failed close retries.
+   *
+   * @param running Listener whose lifecycles begin.
+   */
+  async #startLifecycles(running: RunningHttp2Server): Promise<void> {
     try {
       await running.startLifecycles();
     } catch (error) {
@@ -352,7 +554,6 @@ export class Server {
       else this.#failedStartConsumed = true;
       throw error;
     }
-    return running;
   }
 
   async #retryFailedStartCleanup(cleanup: FailedStartCleanup): Promise<never> {
@@ -392,7 +593,30 @@ export class Server {
     if (!(await this.#advanceFailedStartAttachment(cleanup, errors))) {
       return;
     }
+    await this.#retryFailedStartRollback(cleanup, errors);
+    let closeFailed = false;
+    try {
+      await cleanup.closeGroup.close();
+    } catch (error) {
+      closeFailed = true;
+      CloseErrors.collect(error, errors);
+    }
+    if (!closeFailed && cleanup.attachment === undefined && this.#failedStartCleanup === cleanup) {
+      cleanup.routes?.release();
+      if (cleanup.admission !== undefined) this.#releaseAdmission(cleanup.admission);
+      if (cleanup.services !== undefined) spineServicesAccess.clearLogger(cleanup.services);
+      this.#failedStartCleanup = undefined;
+      this.#failedStartConsumed = true;
+    }
+  }
 
+  /**
+   * Retries environment rollback before closing contexts from a failed start.
+   *
+   * @param cleanup Retained failed-start state.
+   * @param errors Errors collected across cleanup phases.
+   */
+  async #retryFailedStartRollback(cleanup: FailedStartCleanup, errors: unknown[]): Promise<void> {
     const failedStartRollback = cleanup.failedStartRollback;
     if (
       failedStartRollback !== undefined &&
@@ -414,18 +638,6 @@ export class Server {
         }
         CloseErrors.collect(error, errors);
       }
-    }
-
-    let closeFailed = false;
-    try {
-      await cleanup.closeGroup.close();
-    } catch (error) {
-      closeFailed = true;
-      CloseErrors.collect(error, errors);
-    }
-    if (!closeFailed && cleanup.attachment === undefined && this.#failedStartCleanup === cleanup) {
-      this.#failedStartCleanup = undefined;
-      this.#failedStartConsumed = true;
     }
   }
 
@@ -484,8 +696,16 @@ export class Server {
 interface FailedStartCleanup {
   readonly closeGroup: RetryableCloseGroup;
   readonly failedStartRollback: FailedStartRollbackCapability | undefined;
+  readonly routes?: RegisteredTargets | undefined;
+  readonly admission?: ContextAdmission | undefined;
+  services?: SpineServices;
   network?: FailedStartNetwork;
   attachment?: EnvironmentAttachmentHandle;
+}
+
+interface ContextAdmission {
+  readonly token: object;
+  readonly contexts: BoundedContext[];
 }
 
 interface FailedStartRollbackCapability {
@@ -650,30 +870,58 @@ export const runningServerAccess: RunningServerAccess = Object.freeze({
   },
 });
 
+/**
+ * Holds listener resources and closes them in recovery-safe phases.
+ */
 class RunningHttp2Server implements RunningServer {
   readonly #server: http2.Http2Server;
+
   readonly #sessions: Set<http2.ServerHttp2Session>;
+
   readonly #closeables: readonly unknown[];
-  readonly #listenerLifecycles: readonly { close(): unknown }[];
-  readonly #startedLifecycles: { close(): unknown }[] = [];
+
+  readonly #contexts: readonly BoundedContext[];
+
+  readonly #listenerLifecycles: readonly ListenerLifecycle[];
+
+  readonly #startedLifecycles: ListenerLifecycle[] = [];
+
   readonly #environment: ServerEnvironment;
+
   readonly #attachment: EnvironmentAttachmentHandle;
+
+  readonly #routes: RegisteredTargets;
+
   readonly #services: SpineServices;
+
   readonly host: string;
+
   readonly port: number;
+
   readonly baseUrl: string;
+
   #closed: Promise<void> | undefined;
+
   #networkClosed = false;
+
   #attachmentDetached = false;
+
   readonly #closeGroup: RetryableCloseGroup;
 
+  /**
+   * Captures the running listener's network, environment, and cleanup resources.
+   *
+   * @param options Resources prepared by Server startup.
+   */
   constructor(options: RunningHttp2ServerOptions) {
     this.#server = options.server;
     this.#sessions = options.sessions;
     this.#closeables = options.closeables;
+    this.#contexts = options.contexts;
     this.#listenerLifecycles = options.listenerLifecycles;
     this.#environment = options.environment;
     this.#attachment = options.attachment;
+    this.#routes = options.routes;
     this.#services = options.services;
     this.host = options.host;
     this.port = options.port;
@@ -684,6 +932,11 @@ class RunningHttp2Server implements RunningServer {
     );
   }
 
+  /**
+   * Closes this listener once, preserving a failed close for retry.
+   *
+   * @returns Completion after resources close.
+   */
   close(): Promise<void> {
     this.#closed ??= this.#closeOnce().catch((error: unknown) => {
       this.#closed = undefined;
@@ -699,10 +952,7 @@ class RunningHttp2Server implements RunningServer {
    */
   async startLifecycles(): Promise<void> {
     try {
-      for (const lifecycle of this.#listenerLifecycles as readonly {
-        start(): unknown;
-        close(): unknown;
-      }[]) {
+      for (const lifecycle of this.#listenerLifecycles) {
         await lifecycle.start();
         this.#startedLifecycles.push(lifecycle);
       }
@@ -719,12 +969,17 @@ class RunningHttp2Server implements RunningServer {
     }
   }
 
+  /**
+   * Checks whether a failed lifecycle start still needs close retry.
+   *
+   * @returns `true` when no close completion is retained.
+   */
   hasPendingClose(): boolean {
     return this.#closed === undefined;
   }
 
   /**
-   * Drains the server-owned Delivery attachment while network sessions remain available.
+   * Completes the server's Delivery detachment while network sessions remain available.
    *
    * @returns Completion after the attachment drains.
    */
@@ -738,7 +993,36 @@ class RunningHttp2Server implements RunningServer {
     this.#attachmentDetached = true;
   }
 
+  /**
+   * Closes network, delivery, accepted context work, and registered resources.
+   *
+   * @returns Completion after all resources close.
+   */
   async #closeOnce(): Promise<void> {
+    await this.#closeListenerAndNetwork();
+    const { detachErrors, detachRejected } = await this.#detachDelivery();
+    await this.#drainContexts();
+    try {
+      await this.#closeGroup.close();
+      this.#routes.release();
+    } catch (error) {
+      if (!detachRejected) throw error;
+      CloseErrors.collect(error, detachErrors);
+      throw new AggregateError(
+        detachErrors,
+        "Server close failed while detaching delivery and closing owned contexts/resources.",
+      );
+    }
+    if (detachRejected) ServerValues.throwRunningDetachErrors(detachErrors);
+    spineServicesAccess.clearLogger(this.#services);
+  }
+
+  /**
+   * Closes lifecycle attachments and network intake before delivery detachment.
+   *
+   * @returns Completion after the listener and sessions close.
+   */
+  async #closeListenerAndNetwork(): Promise<void> {
     while (this.#startedLifecycles.length > 0) {
       const lifecycle = this.#startedLifecycles.at(-1);
       if (lifecycle === undefined) break;
@@ -749,6 +1033,14 @@ class RunningHttp2Server implements RunningServer {
       await ServerValues.closeNetwork(this.#server, this.#sessions);
       this.#networkClosed = true;
     }
+  }
+
+  /**
+   * Completes Delivery detachment while retaining errors for safe endpoint cleanup.
+   *
+   * @returns Detachment errors and whether detachment itself was rejected.
+   */
+  async #detachDelivery(): Promise<{ detachErrors: unknown[]; detachRejected: boolean }> {
     const detachErrors: unknown[] = [];
     let detachRejected = false;
     if (!this.#attachmentDetached) {
@@ -775,22 +1067,25 @@ class RunningHttp2Server implements RunningServer {
         }
       }
     }
-    try {
-      await this.#closeGroup.close();
-    } catch (error) {
-      if (!detachRejected) {
-        throw error;
-      }
-      CloseErrors.collect(error, detachErrors);
-      throw new AggregateError(
-        detachErrors,
-        "Server close failed while detaching delivery and closing owned contexts/resources.",
-      );
+    return { detachErrors, detachRejected };
+  }
+
+  /**
+   * Waits for every context's accepted work before any Stand closes.
+   *
+   * @returns Completion after all context work drains.
+   */
+  async #drainContexts(): Promise<void> {
+    for (const context of this.#contexts) boundedContextAccess.beginClose(context);
+    const drained = await Promise.allSettled(
+      this.#contexts.map((context) => boundedContextAccess.drainWork(context)),
+    );
+    const drainErrors = drained.flatMap((result) =>
+      result.status === "rejected" ? [result.reason as unknown] : [],
+    );
+    if (drainErrors.length > 0) {
+      throw new AggregateError(drainErrors, "Server close failed while draining contexts.");
     }
-    if (detachRejected) {
-      ServerValues.throwRunningDetachErrors(detachErrors);
-    }
-    spineServicesAccess.clearLogger(this.#services);
   }
 }
 
@@ -798,40 +1093,31 @@ interface RunningHttp2ServerOptions {
   readonly server: http2.Http2Server;
   readonly sessions: Set<http2.ServerHttp2Session>;
   readonly closeables: readonly unknown[];
-  readonly listenerLifecycles: readonly { start(): unknown; close(): unknown }[];
+  readonly contexts: readonly BoundedContext[];
+  readonly listenerLifecycles: readonly ListenerLifecycle[];
   readonly environment: ServerEnvironment;
   readonly attachment: EnvironmentAttachmentHandle;
+  readonly routes: RegisteredTargets;
   readonly services: SpineServices;
   readonly host: string;
   readonly port: number;
 }
 
 /**
+ * Groups private server assembly, network, and shutdown operations.
  *
- * @internal Groups private server assembly, network, and shutdown operations.
+ * @internal
  */
 const ServerValues = Object.freeze({
-  async buildContexts(
-    entries: readonly ServerContext[],
-    defaultStorageFactory: StorageFactory,
-  ): Promise<readonly BoundedContext[]> {
-    const contexts: BoundedContext[] = [];
-
-    try {
-      for (const entry of entries) {
-        contexts.push(
-          boundedContextAccess.isBuilder(entry)
-            ? await boundedContextAccess.build(entry, defaultStorageFactory)
-            : entry,
-        );
-      }
-      return contexts;
-    } catch (error) {
-      await ServerValues.cleanupBuiltContexts(contexts, error);
-      throw error;
-    }
-  },
-
+  /**
+   * Creates the HTTP/2 listener with Connect routes and session tracking.
+   *
+   * @param services Public service adapters.
+   * @param sessions Set collecting active HTTP/2 sessions.
+   * @param readMaxBytes Maximum request size.
+   * @param writeMaxBytes Maximum response size.
+   * @returns An unbound HTTP/2 server.
+   */
   createHttpServer(
     services: SpineServices,
     sessions: Set<http2.ServerHttp2Session>,
@@ -854,6 +1140,14 @@ const ServerValues = Object.freeze({
     return server;
   },
 
+  /**
+   * Binds a listener and resolves its actual address.
+   *
+   * @param server HTTP/2 server to bind.
+   * @param host Network host.
+   * @param port Requested port, including zero for an ephemeral port.
+   * @returns Bound listener address.
+   */
   listen(server: http2.Http2Server, host: string, port: number): Promise<AddressInfo> {
     return new Promise((resolve, reject) => {
       const cleanup = () => {
@@ -875,30 +1169,13 @@ const ServerValues = Object.freeze({
     });
   },
 
-  async cleanupBuiltContexts(
-    contexts: readonly BoundedContext[],
-    startError: unknown,
-  ): Promise<void> {
-    try {
-      await new RetryableCloseGroup(
-        contexts,
-        "Server start cleanup failed while closing owned contexts/resources.",
-      ).close();
-    } catch (error) {
-      throw new AggregateError(
-        [startError, ...ServerValues.toCleanupErrors(error)],
-        "Server start failed while building bounded contexts.",
-      );
-    }
-  },
-
-  toCleanupErrors(error: unknown): readonly unknown[] {
-    if (error instanceof AggregateError) {
-      return error.errors;
-    }
-    return [error];
-  },
-
+  /**
+   * Collects attachment and immediate cleanup failures for startup reporting.
+   *
+   * @param startError Attachment or duplicate registration failure.
+   * @param cleanupError Failure while closing prepared resources.
+   * @returns Both failures in one AggregateError.
+   */
   attachmentCleanupError(startError: unknown, cleanupError: unknown): AggregateError {
     const errors: unknown[] = [];
     CloseErrors.collect(startError, errors);
@@ -909,6 +1186,12 @@ const ServerValues = Object.freeze({
     );
   },
 
+  /**
+   * Throws one deferred cleanup failure or groups several.
+   *
+   * @param errors Deferred cleanup failures.
+   * @returns Never; this method throws.
+   */
   throwCleanupErrors(errors: readonly unknown[]): never {
     if (errors.length === 1) {
       throw errors[0];
@@ -916,6 +1199,13 @@ const ServerValues = Object.freeze({
     throw new AggregateError(errors, "Server deferred failed-start cleanup failed.");
   },
 
+  /**
+   * Throws a listener-start failure with any rollback failures.
+   *
+   * @param startError Original listener failure.
+   * @param cleanupErrors Failures while closing startup resources.
+   * @returns Never; this method throws.
+   */
   throwListenerStartError(startError: unknown, cleanupErrors: readonly unknown[]): never {
     if (cleanupErrors.length === 0) {
       throw startError;
@@ -931,6 +1221,12 @@ const ServerValues = Object.freeze({
     );
   },
 
+  /**
+   * Throws one delivery-detachment error or groups several.
+   *
+   * @param errors Delivery-detachment failures.
+   * @returns Never; this method throws.
+   */
   throwRunningDetachErrors(errors: readonly unknown[]): never {
     if (errors.length === 1) {
       throw errors[0];
@@ -938,6 +1234,13 @@ const ServerValues = Object.freeze({
     throw new AggregateError(errors, "Server close failed while detaching delivery.");
   },
 
+  /**
+   * Closes the HTTP/2 server and all tracked sessions.
+   *
+   * @param server Listener being closed.
+   * @param sessions Sessions admitted by the listener.
+   * @returns Completion after the network releases its resources.
+   */
   async closeNetwork(
     server: http2.Http2Server,
     sessions: Set<http2.ServerHttp2Session>,
@@ -948,6 +1251,12 @@ const ServerValues = Object.freeze({
     await ServerValues.nextTurn();
   },
 
+  /**
+   * Closes the listener, including a listener that never started.
+   *
+   * @param server Listener being closed.
+   * @returns Completion after the listener closes.
+   */
   closeHttpServer(server: http2.Http2Server): Promise<void> {
     return new Promise((resolve, reject) => {
       if (!server.listening) {
@@ -964,10 +1273,22 @@ const ServerValues = Object.freeze({
     });
   },
 
+  /**
+   * Closes all active HTTP/2 sessions.
+   *
+   * @param sessions Active sessions to close.
+   * @returns Completion after every session closes.
+   */
   async closeSessions(sessions: Set<http2.ServerHttp2Session>): Promise<void> {
     await Promise.all([...sessions].map((session) => ServerValues.closeSession(session)));
   },
 
+  /**
+   * Closes one session gracefully or destroys it after a bounded wait.
+   *
+   * @param session Active HTTP/2 session.
+   * @returns Completion after close or forced destruction.
+   */
   closeSession(session: http2.ServerHttp2Session): Promise<void> {
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
@@ -984,16 +1305,33 @@ const ServerValues = Object.freeze({
     });
   },
 
+  /**
+   * Waits one event-loop turn for pending close callbacks.
+   *
+   * @returns Completion on the next turn.
+   */
   nextTurn(): Promise<void> {
     return new Promise((resolve) => {
       setImmediate(resolve);
     });
   },
 
+  /**
+   * Wraps an IPv6 host for URL authority syntax.
+   *
+   * @param host Bound network host.
+   * @returns Host formatted for the base URL.
+   */
   formatHostForUrl(host: string): string {
     return host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
   },
 
+  /**
+   * Normalizes a non-blank host for listener binding.
+   *
+   * @param host Configured host, if supplied.
+   * @returns Normalized host or the loopback default.
+   */
   normalizeHost(host: string | undefined): string {
     const normalized = host?.trim() ?? defaultHost;
     if (normalized.length === 0) {
@@ -1002,6 +1340,13 @@ const ServerValues = Object.freeze({
     return normalized;
   },
 
+  /**
+   * Validates a configured HTTP message-size limit.
+   *
+   * @param value Requested byte limit.
+   * @param name Option name used in diagnostics.
+   * @returns Accepted byte limit.
+   */
   normalizeMessageMaxBytes(value: number, name: "readMaxBytes" | "writeMaxBytes"): number {
     if (!Number.isInteger(value) || value < 1 || value > maximumMessageMaxBytes) {
       throw new Error(`Server ${name} must be an integer from 1 through 4294967295.`);

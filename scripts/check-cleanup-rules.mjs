@@ -340,32 +340,101 @@ function isGeneratedFileDescriptor(
 }
 
 function checkCallableLength(repoRoot, files, runGitCommand) {
-  const changed = changedLines(repoRoot, runGitCommand);
+  const { changed, baseline } = changedLines(repoRoot, runGitCommand);
   const details = [];
   for (const file of files) {
     const lines = changed.get(file);
     if (lines === undefined) continue;
+    const text = readFileSync(join(repoRoot, file), "utf8");
     const source = ts.createSourceFile(
       file,
-      readFileSync(join(repoRoot, file), "utf8"),
+      text,
       ts.ScriptTarget.Latest,
       true,
       scriptKindForFile(file),
     );
+    const prior = runGitCommand(repoRoot, ["show", `${baseline}:${file}`]);
+    const priorLong =
+      prior.status === 0
+        ? longCallableSignatures(
+            ts.createSourceFile(
+              file,
+              prior.stdout,
+              ts.ScriptTarget.Latest,
+              true,
+              scriptKindForFile(file),
+            ),
+          )
+        : new Map();
+    const candidates = [];
     const visit = (node) => {
       if (isCallable(node)) {
         const start = source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
         const end = source.getLineAndCharacterOfPosition(node.getEnd()).line + 1;
-        if (end - start + 1 > 35 && [...lines].some((line) => line >= start && line <= end))
-          details.push(`${file}:${start}-${end} ${callableName(node)}`);
+        if (end - start + 1 > 35) {
+          const code = callableCode(source, node, lines);
+          candidates.push({ start, end, name: callableName(node), ...code });
+        }
       }
       ts.forEachChild(node, visit);
     };
     visit(source);
+    for (const candidate of candidates.filter((item) => !item.changedCode))
+      consumeSignature(priorLong, candidate.signature);
+    for (const candidate of candidates.filter((item) => item.changedCode)) {
+      if (consumeSignature(priorLong, candidate.signature)) continue;
+      details.push(`${file}:${candidate.start}-${candidate.end} ${candidate.name}`);
+    }
   }
   return details.length === 0
     ? []
     : [{ title: "modified production/example callables exceed 35 physical lines", details }];
+}
+
+function longCallableSignatures(source) {
+  const signatures = new Map();
+  const visit = (node) => {
+    if (isCallable(node)) {
+      const start = source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
+      const end = source.getLineAndCharacterOfPosition(node.getEnd()).line + 1;
+      if (end - start + 1 > 35) {
+        const signature = callableCode(source, node).signature;
+        signatures.set(signature, (signatures.get(signature) ?? 0) + 1);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return signatures;
+}
+
+function consumeSignature(signatures, signature) {
+  const available = signatures.get(signature) ?? 0;
+  if (available === 0) return false;
+  signatures.set(signature, available - 1);
+  return true;
+}
+
+function callableCode(source, node, changedLines) {
+  const tokens = [];
+  let changedCode = false;
+  const visit = (child) => {
+    if (ts.isJSDoc(child)) return;
+    const descendants = child.getChildren(source);
+    if (descendants.length > 0) {
+      for (const descendant of descendants) visit(descendant);
+      return;
+    }
+    if (child.kind === ts.SyntaxKind.SyntaxList || child.kind === ts.SyntaxKind.EndOfFileToken)
+      return;
+    tokens.push(`${child.kind}:${child.getText(source)}`);
+    if (changedLines === undefined) return;
+    const first = source.getLineAndCharacterOfPosition(child.getStart(source)).line + 1;
+    const last = source.getLineAndCharacterOfPosition(child.getEnd() - 1).line + 1;
+    for (let line = first; line <= last; line += 1) if (changedLines.has(line)) changedCode = true;
+  };
+  visit(node);
+  return { signature: tokens.join("\u0000"), changedCode };
 }
 
 function isCallable(node) {
@@ -395,6 +464,7 @@ function callableName(node) {
 function changedLines(repoRoot, runGitCommand) {
   const changed = new Map();
   const mergeBase = runGitCommand(repoRoot, ["merge-base", "origin/master", "HEAD"]);
+  const baseline = mergeBase.status === 0 ? mergeBase.stdout.trim() : "HEAD";
   const ranges =
     mergeBase.status === 0
       ? [`${mergeBase.stdout.trim()}...HEAD`, undefined, "--cached"]
@@ -438,7 +508,7 @@ function changedLines(repoRoot, runGitCommand) {
         ),
       );
   }
-  return changed;
+  return { changed, baseline };
 }
 
 function changedDestinationPaths(statuses) {

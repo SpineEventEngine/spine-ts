@@ -472,7 +472,7 @@ describe("@spine-event-engine/server", () => {
     expect(metadata.declaredVisibility).toBe("query");
     expect(metadata.visibility).toBe("query");
     expect(metadata.visibilitySource).toBe("explicit");
-    expect(metadata.columns).toEqual([]);
+    expect(metadata.columns.map((field) => field.name)).toEqual(["name"]);
     expect(metadata.setOnceFields.map((field) => field.name)).toEqual(["id"]);
   });
 
@@ -486,8 +486,10 @@ describe("@spine-event-engine/server", () => {
     expect(describeEntityMetadata(HiddenStateSchema).visibility).toBe("none");
   });
 
-  it("ignores column declarations on entity kinds that are not column-eligible", () => {
-    expect(describeEntityMetadata(ProjectStateSchema).columns).toEqual([]);
+  it("includes Aggregate columns and ignores generic Entity column declarations", () => {
+    expect(describeEntityMetadata(ProjectStateSchema).columns.map((field) => field.name)).toEqual([
+      "name",
+    ]);
     expect(describeEntityMetadata(ProjectSearchStateSchema).columns).toEqual([]);
   });
 

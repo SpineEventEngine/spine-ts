@@ -164,9 +164,23 @@ abstract class RequestCoordinator extends ProcessManager<string, typeof RequestV
 ```
 
 These reads are eventually consistent. `limit()` may not exceed 1,000, and
-`all()` can be expensive for a large Projection; prefer a targeted, ordered,
-bounded query. Queries inherit the active handler's actor and tenant; there is
-no tenant override.
+`all()` can be expensive for a large read model; prefer a targeted, ordered,
+bounded query.
+
+The Entity type identifies its context among those registered with the same
+`Server`. For example, an order process can query a product in a catalogue
+context without naming that context. An Entity in another context must allow
+queries (`query` or `full` visibility). Registering the same Entity type in two
+contexts causes a startup error.
+
+The [Orders example](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/orders/README.md#cross-context-order-review)
+shows this in an Event handler and includes a runnable integration test.
+
+Queries preserve the handler's actor and effective tenant; there is no tenant
+override. Single-tenant execution uses `SINGLE_TENANT`, even when the request
+omits a tenant field. A named tenant cannot query a single-tenant context: that
+fails before reading. See the [query contract](REFERENCE.md#handler-routing-and-operations)
+for the complete tenant rules and empty-result behavior.
 
 Use `EntityQuery.all(...)` when every predicate must match and
 `EntityQuery.either(...)` when any branch may match.

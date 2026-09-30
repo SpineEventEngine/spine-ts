@@ -2,6 +2,33 @@
 
 Navigation: [README](README.md)
 
+## D-0128: Query registered contexts without changing tenants
+
+Status: Accepted; implementation in progress, 28 September 2026.
+
+This extends the Process Manager query scope recorded in D-0120.
+Process Manager queries resolve Entity types across the contexts of one Server,
+without context names or remote discovery. The Server rejects duplicate Entity
+type registrations before starting processing, naming both contexts.
+
+Execution always has an effective tenant. Single-tenant operations use
+`SINGLE_TENANT`, following the current JVM implementation; absent wire fields
+are not evidence of tenant-free execution. Queries preserve that identity and
+reject incompatible destinations before storage access. A named tenant cannot
+query a single-tenant destination. A single-tenant source querying a multitenant
+destination reads only the `SINGLE_TENANT` partition. No tenant switching is
+added. Missing records within a compatible tenant remain ordinary empty results.
+
+Foreign Entity targets require query visibility. Existing local/public query
+visibility behavior is not broadened by this task. Routes are available before
+delivery recovery; all accepted handlers drain before any target read-side
+closes. Startup validation failures participate in retryable cleanup.
+
+The approved plan and acceptance cases are in
+[cross-context queries](planning/cross-context-queries.md). This extends JVM's
+local Process Manager query behavior while following its effective-tenant
+representation. No storage-key rewrite, new wire format or dependency is needed.
+
 Future implementation must append every decision here or to a task-specific decision file linked from here.
 
 The approved [handler-result corrections](planning/handler-result-corrections.md)

@@ -9,6 +9,10 @@ The package contains the To-Do Proto model, generated model module, Aggregate an
 Projection handlers, generated handler registry, local server entry point, and
 smoke client. Generated Proto and registry output is ignored build output;
 regenerate it through package/workspace scripts rather than editing it.
+The same normal generation run emits `TaskListQuery` with automatic column
+registration. The smoke client uses that query for its typed TaskList ID read;
+the black-box suite covers an `openTaskCount` filter. Existing Task Events carry
+their intended list IDs, so Todo routing uses those IDs without a query read.
 
 The example covers `CreateTask`, `AssignTask`, `ReassignTask`, `UnassignTask`,
 `RenameTask`, `CompleteTask`, and `ReopenTask`.

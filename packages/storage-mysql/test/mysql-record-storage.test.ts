@@ -29,6 +29,7 @@ import { describe, expect, it } from "vitest";
 
 import { MysqlRecordStorage } from "../src/mysql/record-storage.js";
 import { MysqlTableResolver } from "../src/mysql/table-resolver.js";
+import { resolvedMysqlTableSpec } from "../src/mysql/table-spec.js";
 import { MysqlStorageSchemaError } from "../src/mysql/errors.js";
 
 describe("MysqlRecordStorage", () => {
@@ -121,7 +122,7 @@ describe("MysqlRecordStorage", () => {
     }
   });
 
-  it("pushes flat and nested ALL/EITHER plans with masks into parenthesized SQL", async () => {
+  it("pushes flat and nested ALL/EITHER plans into parenthesized SQL", async () => {
     const calls: { sql: string; values?: readonly unknown[] }[] = [];
     const storage = schemaStorage(
       readyConnection(calls, { columns: ["ID", "bytes", "value"] }) as never,
@@ -146,7 +147,6 @@ describe("MysqlRecordStorage", () => {
           },
         ],
       },
-      mask: { paths: ["value"] },
       order: [{ column: "value", direction: "desc" }],
       limit: 8,
       candidateLimit: 2,
@@ -156,6 +156,226 @@ describe("MysqlRecordStorage", () => {
     expect(query?.sql).toContain("WHERE (`value` >= ? AND (ID IN (?) OR (`value` <= ?)))");
     expect(query?.sql).toContain("ORDER BY `value` DESC, ID ASC LIMIT ?");
     expect(query?.values).toEqual(["b", "two", "z", 3]);
+  });
+
+  it("runs exhaustive plans without a provider limit and scans for oversized ID sets", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const storage = schemaStorage(
+      readyConnection(calls, { columns: ["ID", "bytes", "value"] }) as never,
+    );
+    await storage.queryPlan({
+      exhaustive: true,
+      predicate: { kind: "comparison", column: "value", operator: "greaterThan", value: "a" },
+      order: [{ column: "value", direction: "asc" }],
+      limit: 1,
+    });
+    let query = calls.find((call) => call.sql.startsWith("SELECT ID, bytes"));
+    expect(query?.sql).not.toContain("WHERE");
+    expect(query?.sql).toContain("ORDER BY `value` ASC, ID ASC");
+    expect(query?.sql).not.toContain("LIMIT");
+    expect(query?.values).toEqual([]);
+
+    calls.length = 0;
+    await storage.queryPlan({
+      exhaustive: true,
+      predicate: {
+        kind: "ids",
+        ids: Array.from({ length: 1_001 }, (_, index) => String(index)),
+      },
+    });
+    query = calls.find((call) => call.sql.startsWith("SELECT ID, bytes"));
+    expect(query?.sql).not.toContain("WHERE");
+    expect(query?.sql).not.toContain("LIMIT");
+
+    calls.length = 0;
+    await storage.queryPlan({
+      exhaustive: true,
+      predicate: {
+        kind: "all",
+        predicates: [
+          { kind: "comparison", column: "value", operator: "equal", value: "one" },
+          { kind: "ids", ids: Array.from({ length: 1_001 }, (_, index) => String(index)) },
+        ],
+      },
+    });
+    query = calls.find((call) => call.sql.startsWith("SELECT ID, bytes"));
+    expect(query?.sql).not.toContain("WHERE");
+
+    calls.length = 0;
+    await storage.queryPlan({ exhaustive: true });
+    query = calls.find((call) => call.sql.startsWith("SELECT ID, bytes"));
+    expect(query?.sql).not.toContain("LIMIT");
+  });
+
+  it("evaluates exhaustive text and ID order after fetching all collation-sensitive rows", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const values = ["A", "a", "á", "a ", "\uE000", "😀"];
+    const storage = schemaStorage(
+      readyConnection(calls, {
+        columns: ["ID", "bytes", "value"],
+        planRows: values.map((value) => ({
+          ID: value,
+          bytes: toBinary(
+            StringValueSchema,
+            create(StringValueSchema, {
+              value: value === "\uE000" || value === "😀" ? "tie" : value,
+            }),
+          ),
+        })),
+      }) as never,
+    );
+    for (const value of ["a", "á", "a "]) {
+      expect(
+        await storage.queryPlan({
+          exhaustive: true,
+          predicate: { kind: "comparison", column: "value", operator: "equal", value },
+          order: [{ column: "value", direction: "asc" }],
+          limit: 1,
+        }),
+      ).toEqual([create(StringValueSchema, { value })]);
+    }
+    expect(
+      await storage.queryPlanEntries({
+        exhaustive: true,
+        predicate: { kind: "ids", ids: ["\uE000", "😀"] },
+        order: [{ column: "value", direction: "asc" }],
+        limit: 1,
+      }),
+    ).toMatchObject([{ id: "😀" }]);
+    const queries = calls.filter((call) => call.sql.startsWith("SELECT ID, bytes"));
+    expect(queries).toHaveLength(4);
+    for (const query of queries) {
+      expect(query.sql).not.toContain("WHERE");
+      expect(query.sql).not.toContain("LIMIT");
+    }
+  });
+
+  it("retains exact numeric SQL criteria, order, and application limit", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const spec = new RecordSpec<number, StringValue>({
+      recordType: StringValueSchema,
+      idKind: "int32",
+      extractId: (record) => Number(record.value),
+      columns: [
+        new RecordColumn("number", ColumnTypes.scalar(ScalarType.INT32), (record) =>
+          Number(record.value),
+        ),
+      ],
+    });
+    const storage = new MysqlRecordStorage(
+      { name: "numeric-records", multitenant: false },
+      spec,
+      new MysqlTableResolver().resolve(StringValueSchema.typeName, undefined),
+      lifecycle(readyConnection(calls, { columns: ["ID", "bytes", "number"] })),
+      () => undefined,
+    );
+    await storage.queryPlan({
+      exhaustive: true,
+      predicate: { kind: "comparison", column: "number", operator: "greaterThan", value: 2 },
+      order: [{ column: "number", direction: "asc" }],
+      limit: 1,
+    });
+    const query = calls.find((call) => call.sql.startsWith("SELECT ID, bytes"));
+    expect(query?.sql).toContain("WHERE `number` > ? ORDER BY `number` ASC, ID ASC LIMIT ?");
+    expect(query?.values).toEqual([2, 1]);
+  });
+
+  it("keeps rewritten nested conjunctions and disjunctions safe under text collation", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const spec = new RecordSpec<number, StringValue>({
+      recordType: StringValueSchema,
+      idKind: "int32",
+      extractId: (record) => Number(record.value),
+      columns: [
+        new RecordColumn("number", ColumnTypes.scalar(ScalarType.INT32), (record) =>
+          Number(record.value),
+        ),
+        new RecordColumn("value", ColumnTypes.scalar(ScalarType.STRING), (record) => record.value),
+      ],
+    });
+    const storage = new MysqlRecordStorage(
+      { name: "nested-records", multitenant: false },
+      spec,
+      new MysqlTableResolver().resolve(StringValueSchema.typeName, undefined),
+      lifecycle(readyConnection(calls, { columns: ["ID", "bytes", "number", "value"] })),
+      () => undefined,
+    );
+    const number = { kind: "comparison", column: "number", operator: "equal", value: 2 } as const;
+    const text = { kind: "comparison", column: "value", operator: "equal", value: "a" } as const;
+    await storage.queryPlan({
+      exhaustive: true,
+      predicate: {
+        kind: "all",
+        predicates: [{ kind: "all", predicates: [number, text] }, { ...number }],
+      },
+    });
+    let query = calls.find((call) => call.sql.startsWith("SELECT ID, bytes"));
+    expect(query?.sql).toContain("WHERE");
+    expect(query?.sql).not.toContain("`value` =");
+    expect(query?.values).toEqual([2, 2]);
+
+    calls.length = 0;
+    await storage.queryPlan({
+      exhaustive: true,
+      predicate: {
+        kind: "all",
+        predicates: [number, { kind: "either", predicates: [{ ...number }, text] }],
+      },
+    });
+    query = calls.find((call) => call.sql.startsWith("SELECT ID, bytes"));
+    expect(query?.sql).toContain("WHERE (`number` = ?)");
+    expect(query?.sql).not.toContain(" OR ");
+    expect(query?.values).toEqual([2]);
+  });
+
+  it("does not narrow or limit logically textual values through custom numeric SQL columns", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const spec = new RecordSpec<string, StringValue>({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record) => record.value,
+      columns: [
+        new RecordColumn("value", ColumnTypes.scalar(ScalarType.STRING), (record) => record.value),
+      ],
+    });
+    const table = new MysqlTableResolver().resolve(StringValueSchema.typeName, undefined);
+    const canonical = resolvedMysqlTableSpec({
+      tableName: table.tableName,
+      sourceType: spec.sourceType,
+      recordType: spec.recordType,
+      idType: spec.idType,
+      declaredColumns: spec.columns,
+    });
+    const storage = new MysqlRecordStorage(
+      { name: "custom-numeric", multitenant: false },
+      spec,
+      table,
+      lifecycle(readyConnection(calls, { columns: ["ID", "bytes", "value"] })),
+      () => undefined,
+      undefined,
+      {
+        ...canonical,
+        columns: canonical.columns.map((column) =>
+          column.name === "ID" || column.name === "value"
+            ? { ...column, mysqlType: "INT" }
+            : column,
+        ),
+      },
+    );
+    await storage.queryPlan({
+      exhaustive: true,
+      predicate: { kind: "comparison", column: "value", operator: "equal", value: "2" },
+      order: [{ column: "value", direction: "asc" }],
+      limit: 1,
+    });
+    const query = calls.find((call) => call.sql.startsWith("SELECT ID, bytes"));
+    expect(query?.sql).not.toContain("WHERE");
+    expect(query?.sql).not.toContain("LIMIT");
+    calls.length = 0;
+    await storage.queryPlan({ exhaustive: true, predicate: { kind: "ids", ids: ["2"] } });
+    expect(calls.find((call) => call.sql.startsWith("SELECT ID, bytes"))?.sql).not.toContain(
+      "WHERE",
+    );
   });
 
   it.each([
@@ -996,7 +1216,7 @@ function stringStorage(
 
 function readyConnection(
   calls: { sql: string; values?: readonly unknown[] }[],
-  options: { select?: () => unknown[]; columns?: readonly string[] } = {},
+  options: { select?: () => unknown[]; columns?: readonly string[]; planRows?: unknown[] } = {},
 ) {
   const record = (sql: string, values?: readonly unknown[]) => {
     calls.push(values === undefined ? { sql } : { sql, values });
@@ -1004,7 +1224,8 @@ function readyConnection(
   return {
     query: (sql: string, values?: readonly unknown[]) => {
       record(sql, values);
-      if (sql.startsWith("SELECT ID, bytes")) return Promise.resolve([[], []] as never);
+      if (sql.startsWith("SELECT ID, bytes"))
+        return Promise.resolve([options.planRows ?? [], []] as never);
       if (sql.includes("information_schema.columns"))
         return Promise.resolve([
           (options.columns ?? ["ID", "bytes"]).map((column_name) => ({ column_name })),

@@ -291,6 +291,15 @@ Use an exact route when the first field is not the correct target. `CommandRouti
 `.route(Token, via)`. Selection is exact schema, then the first registered
 matching token, then the replacement/default route. Route functions run once at
 accepted admission and stored typed targets are replayed on retry. The
+callback may be asynchronous. Pass the receiving Entity class to `create()` to
+receive typed `findIds`, `findStates`, and `find` reads as the callback's third
+argument. Use the same Entity constructor when registering the repository;
+a different class is rejected even if its ID and state types match. A query reads
+the receiving repository in the incoming signal's tenant;
+the read access expires after the route completes. Await direct
+`repository.routeCommand()` and `repository.routeEvent()` calls. Commands must
+select one ID. Event and state-update routes may select any number of distinct
+IDs; more than 1,000 emits a warning without dropping recipients. The
 legacy-named local `catchUpReadSide()` helper resets and replays the entire
 process-local read side; it is not Projection catch-up.
 
@@ -422,10 +431,30 @@ The Entity transaction stays open until the promise settles. A rejected promise
 rolls back framework state and produced output, but it cannot undo an HTTP call
 or another external side effect already started by the handler.
 
-Only a Process Manager may use its protected `select()` read API. It reads an
-eventually consistent Projection, so an Aggregate must never use that data for
-an invariant. Order a bounded query before applying `limit()`; Process Manager
-reads have a maximum of 1,000 results.
+Only a Process Manager may use its protected `select()` read API. It reads
+eventually consistent Entity state, so an Aggregate must never use that data
+for an invariant. Order a bounded query before applying `limit()`; Process
+Manager reads have a maximum of 1,000 results.
+
+For example, an order process can read a product registered in a catalogue
+context. Register both contexts with the same `Server`; the queried Entity type
+identifies the destination, without adding a context name to `select()`. The
+destination Entity must have `query` or `full` visibility for a cross-context
+read. Registering the same Entity type in two contexts is an error, rather than
+a choice determined by registration order. Separately running servers are not
+searched. A context used without a Server continues to query its local state.
+
+See the [Orders example](../examples/orders/README.md#cross-context-order-review)
+for the two context builders, the handler, and a test of the complete workflow.
+
+The query keeps the triggering signal's actor and effective tenant. An Acme
+process reads only Acme's data in a multitenant destination; querying a
+single-tenant destination instead is a tenant mismatch and fails before a read.
+Single-tenant execution uses the built-in `SINGLE_TENANT` identity even when
+the request omits a tenant field. It can read another single-tenant context or
+the `SINGLE_TENANT` partition of a multitenant context. There is no tenant override.
+No matching records means an empty result, not a tenant mismatch. Finding the
+right context does not wait for its read-side to catch up with recent Events.
 
 ## 7a. Connect bounded contexts with external events
 

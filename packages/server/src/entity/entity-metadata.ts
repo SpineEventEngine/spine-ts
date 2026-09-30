@@ -226,8 +226,8 @@ export interface EntityMetadata<Schema extends DescriptorMessageSchema = Descrip
 
   /**
    * Fields marked `(column) = true`, in descriptor declaration order, for
-   * column-eligible entity kinds only. Aggregate and generic entity column
-   * declarations are ignored in this slice.
+   * Aggregate, Projection, and Process Manager states. Generic Entity column
+   * declarations are ignored.
    */
   readonly columns: readonly DescriptorFieldMetadata[];
 
@@ -421,14 +421,15 @@ const EntityDescriptors = Object.freeze({
   },
 
   /**
-   * Lists singular indexed columns for a Projection or Process Manager.
+   * Lists singular indexed columns for an Aggregate, Projection, or Process Manager.
    *
    * @param schema Entity schema containing the column declarations.
    * @param kind Entity family that determines column support.
    * @returns Frozen metadata for supported column fields.
    */
   columns(schema: DescriptorMessageSchema, kind: EntityKind): readonly DescriptorFieldMetadata[] {
-    if (kind !== "projection" && kind !== "process-manager") return Object.freeze([]);
+    if (kind !== "aggregate" && kind !== "projection" && kind !== "process-manager")
+      return Object.freeze([]);
     return Object.freeze(
       schema.fields
         .filter((field) => hasOption(field, column) && getOption(field, column))

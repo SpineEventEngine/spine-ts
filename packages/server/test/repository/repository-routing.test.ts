@@ -79,10 +79,14 @@ import {
   ColumnTypes,
   RecordColumn,
   RecordStorage,
+  type NormalizedQueryPlan,
   type RecordSpec,
   type StorageContext,
 } from "@spine-event-engine/storage";
-import type { EntityStorageInput } from "@spine-event-engine/storage/provider";
+import type {
+  EntityStorageConformance,
+  EntityStorageInput,
+} from "@spine-event-engine/storage/provider";
 import type { EntityRecord } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import type {
   EntityCommitInput,
@@ -124,6 +128,7 @@ import {
   StateUpdateRouting,
 } from "../../src/index.js";
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
+import { LocalEntityInbox } from "../../src/context/entity-inbox.js";
 import { CommandValidationError } from "../../src/bus/command-errors.js";
 import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
 import { Delivery } from "../../src/delivery/delivery.js";
@@ -136,7 +141,18 @@ import {
 } from "../../src/entity/entity-storage-descriptor.js";
 import { standAccess } from "../../src/stand/stand.js";
 import { SystemClock } from "../../src/runtime/signal-metadata.js";
-import { repositoryAccess, type RepositoryView } from "../../src/repository/repository.js";
+import {
+  repositoryAccess,
+  repositoryReadAccess,
+  type RepositoryView,
+} from "../../src/repository/repository.js";
+import { EntityQueryDescription } from "@spine-event-engine/core/codegen";
+import {
+  ProjectOverviewStateQuery,
+  ProjectQueueStateQuery,
+  ProjectStateQuery,
+  RegisteredProjectStateQuery,
+} from "../../test-fixtures/generated/repository-routing/project_states_query.js";
 import {
   type AddProjectMilestone,
   AddProjectMilestoneSchema,
@@ -286,6 +302,10 @@ class InjectedProjectAggregate extends Aggregate<string, typeof ProjectStateSche
       draft.name = this.service.label(command.name);
     });
     return create(ProjectCreatedSchema, { id: command.id, name: command.name, priority: 1 });
+  }
+
+  labelForRead(name: string): string {
+    return this.service.label(name);
   }
 
   async createProjectWithHistory(command: CreateProject): Promise<ProjectCreated> {
@@ -1901,6 +1921,722 @@ class SplitRouteProcessManager extends ProcessManager<string, typeof ProjectQueu
 }
 
 describe("repository signal routing", () => {
+  it("rejects class-aware routes attached to a different Entity constructor", () => {
+    const wrongCommand = CommandRouting.create(InjectedProjectAggregate).route(
+      CreateProjectSchema,
+      () => "target",
+    );
+    const wrongEvent = EventRouting.create(InjectedProjectAggregate).route(
+      ProjectCreatedSchema,
+      () => ["target"],
+    );
+    expectTypeOf(wrongCommand).not.toExtend<
+      RepositoryOptions<typeof ProjectAggregate>["commandRouting"]
+    >();
+    expectTypeOf(wrongEvent).not.toExtend<
+      RepositoryOptions<typeof ProjectAggregate>["eventRouting"]
+    >();
+    expect(() => createRoutingRepository(wrongCommand as never)).toThrow(
+      /Command routing.*Entity class/,
+    );
+    expect(() => createRoutingRepository(undefined, wrongEvent as never)).toThrow(
+      /Event routing.*Entity class/,
+    );
+
+    const handlers = EntityHandlers.define(
+      StateObservingProjection,
+      ProjectOverviewStateSchema,
+      (builder) => [builder.subscribe(ProjectStateSchema, "subscribeState")],
+    );
+    const wrongState = StateUpdateRouting.create(ExecutingTaskProjection).route(
+      ProjectStateSchema,
+      () => ["target"],
+    );
+    expectTypeOf(wrongState).not.toExtend<
+      RepositoryOptions<typeof StateObservingProjection>["stateUpdateRouting"]
+    >();
+    expect(
+      () =>
+        new Repository({
+          entityType: StateObservingProjection,
+          schema: ProjectOverviewStateSchema,
+          handlers,
+          stateUpdateRouting: wrongState as never,
+        }),
+    ).toThrow(/State-update routing.*Entity class/);
+  });
+
+  it("rejects distinct Entity constructors with identical TypeScript shapes", () => {
+    class EquivalentProjectAggregate extends ProjectAggregate {}
+    class EquivalentStateProjection extends StateObservingProjection {}
+
+    const command = CommandRouting.create(EquivalentProjectAggregate).route(
+      CreateProjectSchema,
+      () => "target",
+    );
+    const event = EventRouting.create(EquivalentProjectAggregate).route(
+      ProjectCreatedSchema,
+      () => ["target"],
+    );
+    const state = StateUpdateRouting.create(EquivalentStateProjection).route(
+      ProjectStateSchema,
+      () => ["target"],
+    );
+    expectTypeOf(command).toExtend<RepositoryOptions<typeof ProjectAggregate>["commandRouting"]>();
+    expectTypeOf(event).toExtend<RepositoryOptions<typeof ProjectAggregate>["eventRouting"]>();
+    expectTypeOf(state).toExtend<
+      RepositoryOptions<typeof StateObservingProjection>["stateUpdateRouting"]
+    >();
+
+    expect(() => createRoutingRepository(command)).toThrow(/Command routing.*Entity class/);
+    expect(() => createRoutingRepository(undefined, event)).toThrow(/Event routing.*Entity class/);
+    const handlers = EntityHandlers.define(
+      StateObservingProjection,
+      ProjectOverviewStateSchema,
+      (builder) => [builder.subscribe(ProjectStateSchema, "subscribeState")],
+    );
+    expect(
+      () =>
+        new Repository({
+          entityType: StateObservingProjection,
+          schema: ProjectOverviewStateSchema,
+          handlers,
+          stateUpdateRouting: state,
+        }),
+    ).toThrow(/State-update routing.*Entity class/);
+  });
+
+  it("binds class-aware Command query reads to one route and closes escaped access", async () => {
+    const query = ProjectStateQuery.create().name().is("chosen").build();
+    let retainedRead: (() => Promise<readonly string[]>) | undefined;
+    const routing = CommandRouting.create(ProjectAggregate).route(
+      CreateProjectSchema,
+      async (_message, _context, reads) => {
+        retainedRead = () => reads.findIds(query);
+        const entities = await reads.find(query);
+        expectTypeOf(entities).toEqualTypeOf<readonly ProjectAggregate[]>();
+        expectTypeOf(entities).not.toEqualTypeOf<readonly ProjectState[]>();
+        const states = await reads.findStates(query);
+        expectTypeOf(states).toEqualTypeOf<readonly ProjectState[]>();
+        expectTypeOf(states).not.toEqualTypeOf<readonly ProjectAggregate[]>();
+        expect(states[0]?.name).toBe("chosen");
+        const ids = await reads.findIds(query);
+        expectTypeOf(ids).toEqualTypeOf<readonly string[]>();
+        expectTypeOf(ids).not.toEqualTypeOf<readonly number[]>();
+        return ids[0] ?? "missing";
+      },
+    );
+    const repository = createRoutingRepository(routing);
+    const context = BoundedContext.singleTenant("RouteReads").add(repository).build();
+    try {
+      await context
+        .stand()
+        .update(ProjectStateSchema, create(ProjectStateSchema, { id: "selected", name: "chosen" }));
+      expect(
+        (await repository.routeCommand(createAggregateCommand("query-command", "ignored")))
+          .entityId,
+      ).toBe("selected");
+      if (retainedRead === undefined) throw new Error("Expected retained read callback.");
+      await expect(retainedRead()).rejects.toThrow("finished");
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("rejects every class-aware read before runtime binding", async () => {
+    const query = ProjectStateQuery.create().build();
+    for (const read of ["findIds", "findStates", "find"] as const) {
+      const repository = createRoutingRepository(
+        CommandRouting.create(ProjectAggregate).route(
+          CreateProjectSchema,
+          async (_message, _context, reads) => {
+            if (read === "findIds") await reads.findIds(query);
+            else if (read === "findStates") await reads.findStates(query);
+            else await reads.find(query);
+            return "unreachable";
+          },
+        ),
+      );
+      await expect(
+        repository.routeCommand(createAggregateCommand(`unbound-${read}`, "ignored")),
+      ).rejects.toThrow("Repository reads require an active runtime binding.");
+    }
+  });
+
+  it("waits for direct Projection routing without a runtime and propagates failure", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let finished = false;
+    let fail = false;
+    const repository = createExecutingProjectionRepository(
+      EventRouting.create<string>().route(ProjectCreatedSchema, async () => {
+        await gate;
+        if (fail) throw new Error("direct route failed");
+        return ["recipient"];
+      }),
+    );
+    const event = createProjectCreated("unbound-direct", "ignored");
+    const pending = repositoryAccess.dispatchProjectionDirect(repository, event).then(() => {
+      finished = true;
+    });
+    await Promise.resolve();
+    expect(finished).toBe(false);
+    release();
+    await expect(pending).resolves.toBeUndefined();
+    expect(finished).toBe(true);
+    fail = true;
+    await expect(repositoryAccess.dispatchProjectionDirect(repository, event)).rejects.toThrow(
+      "direct route failed",
+    );
+  });
+
+  it("uses an accepted Event route once when dispatch has no runtime", async () => {
+    let calls = 0;
+    const repository = createRoutingRepository(
+      undefined,
+      EventRouting.create<string>().route(ProjectCreatedSchema, () => {
+        calls++;
+        return Promise.resolve(["recipient"]);
+      }),
+    );
+    const dispatcher = repositoryAccess.eventDispatcher(repository);
+    if (dispatcher === undefined) throw new Error("Expected Event dispatcher.");
+    if (dispatcher.accept === undefined) throw new Error("Expected Event acceptance.");
+    const event = createProjectCreated("unbound-accepted", "ignored");
+    await dispatcher.accept(event);
+    await dispatcher.dispatch(event);
+    expect(calls).toBe(1);
+  });
+
+  it("keeps concurrent Command route reads in their signal tenants", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let entered = 0;
+    let bothEntered!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      bothEntered = resolve;
+    });
+    const routing = CommandRouting.create(ProjectAggregate).route(
+      CreateProjectSchema,
+      async (_message, _context, reads) => {
+        if (++entered === 2) bothEntered();
+        await gate;
+        return (await reads.findIds(ProjectStateQuery.create().build()))[0] ?? "missing";
+      },
+    );
+    const repository = createRoutingRepository(routing);
+    const context = BoundedContext.multitenant("ConcurrentRoutes").add(repository).build();
+    try {
+      for (const [tenant, id] of [
+        ["first", "first-target"],
+        ["second", "second-target"],
+      ] as const) {
+        await context
+          .stand()
+          .update(ProjectStateSchema, create(ProjectStateSchema, { id, name: id }), {
+            tenantId: createTenantId(tenant),
+          });
+      }
+      const first = repository.routeCommand(
+        createAggregateCommand("first-route", "ignored", "Task", "first"),
+      );
+      const second = repository.routeCommand(
+        createAggregateCommand("second-route", "ignored", "Task", "second"),
+      );
+      await ready;
+      release();
+      const [a, b] = await Promise.all([first, second]);
+      expect([a.entityId, b.entityId]).toEqual(["first-target", "second-target"]);
+    } finally {
+      release();
+      await context.close();
+    }
+  });
+
+  it("drains a slow accepted Command route before closing its repository", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let entered!: () => void;
+    const routing = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const declarations = CommandRouting.create(ProjectAggregate).route(
+      CreateProjectSchema,
+      async (_message, _context, reads) => {
+        entered();
+        await gate;
+        return (
+          (await reads.findIds(ProjectStateQuery.create().byId("selected").build()))[0] ?? "missing"
+        );
+      },
+    );
+    const repository = createRoutingRepository(declarations);
+    const context = BoundedContext.singleTenant("SlowRoute").add(repository).build();
+    await context
+      .stand()
+      .update(ProjectStateSchema, create(ProjectStateSchema, { id: "selected", name: "Stored" }));
+    const posted = context.commandBus().post(createAggregateCommand("slow-route", "ignored"));
+    try {
+      await routing;
+      const closing = context.close();
+      await expect(Promise.race([closing.then(() => "closed"), delay(30)])).resolves.toBe(
+        "pending",
+      );
+      release();
+      await expect(Promise.all([posted, closing])).resolves.toEqual([undefined, undefined]);
+    } finally {
+      release();
+      await context.close();
+    }
+  });
+
+  it("drains a slow EventBus route before closing its repository", async () => {
+    ExecutingTaskProjection.reset();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let entered!: () => void;
+    const routing = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const repository = createExecutingProjectionRepository(
+      EventRouting.create(ExecutingTaskProjection).route(ProjectCreatedSchema, async () => {
+        entered();
+        await gate;
+        return ["event-target"];
+      }),
+    );
+    const context = BoundedContext.singleTenant("SlowEventRoute").add(repository).build();
+    const posted = context
+      .eventBus()
+      .post(createProjectCreated("slow-event-route", "event-target"));
+    try {
+      await routing;
+      const closing = context.close();
+      await expect(Promise.race([closing.then(() => "closed"), delay(30)])).resolves.toBe(
+        "pending",
+      );
+      release();
+      await expect(Promise.all([posted, closing])).resolves.toEqual([undefined, undefined]);
+      expect(ExecutingTaskProjection.subscriberCalls).toBe(1);
+    } finally {
+      release();
+      await context.close();
+    }
+  });
+
+  it("fails an asynchronous Command route before Inbox handoff and accepts the next route", async () => {
+    let fail = true;
+    const routing = CommandRouting.create<string>().route(CreateProjectSchema, (message) => {
+      if (fail) throw new Error("query route failed");
+      return Promise.resolve(message.id);
+    });
+    const repository = createRoutingRepository(routing);
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("RouteFailure")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const dispatcher = repositoryAccess.commandDispatcher(repository);
+    if (dispatcher === undefined) throw new Error("Expected Command dispatcher.");
+    const delivery = new Delivery({
+      context: { name: "RouteFailure", multitenant: false },
+      storageFactory: factory,
+    });
+    try {
+      await expect(
+        dispatcher.dispatch(createAggregateCommand("failed-route", "target")),
+      ).rejects.toThrow("query route failed");
+      expect(
+        await delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER", "DELIVERED"] }),
+      ).toEqual([]);
+      fail = false;
+      await expect(
+        dispatcher.dispatch(createAggregateCommand("recovered-route", "target")),
+      ).resolves.toBeUndefined();
+      expect(
+        await delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER", "DELIVERED"] }),
+      ).toHaveLength(1);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("reads complete repository states and application instances without routing handlers", async () => {
+    const callsBefore = InjectedProjectAggregate.calls;
+    const service: ProjectLabelService = { label: (name) => `${name} injected` };
+    const repository = new Repository({
+      entityType: InjectedProjectAggregate,
+      schema: ProjectStateSchema,
+      onCreate: (options) => new InjectedProjectAggregate(options, service),
+    });
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("RepositoryReads")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    try {
+      await context
+        .stand()
+        .update(ProjectStateSchema, create(ProjectStateSchema, { id: "active", name: "Ready" }), {
+          version: create(VersionSchema, { number: 7 }),
+        });
+      await context
+        .stand()
+        .update(ProjectStateSchema, create(ProjectStateSchema, { id: "deleted", name: "Gone" }), {
+          version: create(VersionSchema, { number: 8 }),
+          lifecycle: { archived: true, deleted: true },
+        });
+      const reads = repositoryReadAccess.bind(repository);
+      const all = ProjectStateQuery.create().build();
+      expectTypeOf(reads.findIds(all)).toEqualTypeOf<Promise<readonly string[]>>();
+      expectTypeOf(reads.find(all)).toEqualTypeOf<Promise<readonly InjectedProjectAggregate[]>>();
+      expect(await reads.findIds(all)).toEqual(["active"]);
+      const compound = new EntityQueryDescription(ProjectStateSchema, all.build(), {
+        predicate: {
+          kind: "all",
+          predicates: [
+            { kind: "comparison", column: "name", operator: "equal", value: "Ready" },
+            { kind: "comparison", column: "name", operator: "equal", value: "Ready" },
+          ],
+        },
+      });
+      expect(await reads.findIds(compound)).toEqual(["active"]);
+      expect(
+        await reads.findIds(ProjectStateQuery.create().orderBy("name", "asc").limit(1).build()),
+      ).toEqual(["active"]);
+      const states = await reads.findStates(all);
+      expect(states).toMatchObject([{ id: "active", name: "Ready" }]);
+      const firstState = states[0];
+      if (firstState === undefined) throw new Error("Expected one current state.");
+      firstState.name = "mutated";
+      expect((await reads.findStates(all))[0]?.name).toBe("Ready");
+      const included = ProjectStateQuery.create().byId("deleted").build();
+      const entities = await reads.find(included);
+      expect(entities).toHaveLength(1);
+      expect(entities[0]).toBeInstanceOf(InjectedProjectAggregate);
+      expect(entities[0]?.labelForRead("Dependency")).toBe("Dependency injected");
+      expect(entities[0]?.version.number).toBe(8);
+      expect(entities[0]?.lifecycle).toEqual({ archived: true, deleted: true });
+      expect(InjectedProjectAggregate.calls).toBe(callsBefore);
+      await expect(
+        context.stand().readVersioned(ProjectStateSchema, "active"),
+      ).resolves.toMatchObject({
+        version: { number: 7 },
+        state: { name: "Ready" },
+      });
+      expect(await reads.findIds(ProjectStateQuery.create().archived().is(true).build())).toEqual([
+        "deleted",
+      ]);
+      const nested = new EntityQueryDescription(ProjectStateSchema, all.build(), {
+        predicate: {
+          kind: "either",
+          predicates: [
+            {
+              kind: "all",
+              predicates: [
+                { kind: "comparison", column: "deleted", operator: "equal", value: true },
+              ],
+            },
+            { kind: "comparison", column: "name", operator: "equal", value: "absent" },
+          ],
+        },
+      });
+      expect(await reads.findIds(nested)).toEqual(["deleted"]);
+      await expect(
+        reads.findIds(RegisteredProjectStateQuery.create().build() as never),
+      ).rejects.toThrow("receiving Entity");
+      expect((await reads.findStates(included))[0]?.name).toBe("Gone");
+      expect(() => repositoryReadAccess.bind(repository, createTenantId("unexpected"))).toThrow(
+        "does not accept tenantId",
+      );
+      reads.close();
+      await expect(reads.findIds(all)).rejects.toThrow("finished");
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("reads every match beyond 10,000 records and finds a late sparse match", async () => {
+    const repository = new Repository({ entityType: ProjectAggregate, schema: ProjectStateSchema });
+    const factory = new ObservedReadStorageFactory();
+    const spec = SpecScanner.scan(ProjectAggregate);
+    expect(spec.columns.map((column) => column.name)).toContain("name");
+    expect(
+      spec
+        .materialize(
+          EntityRecords.pack(
+            ProjectStateSchema,
+            "materialized",
+            create(ProjectStateSchema, { id: "materialized", name: "Indexed" }),
+            1n,
+            { archived: false, deleted: false },
+          ),
+        )
+        .columns.get("name"),
+    ).toBe("Indexed");
+    const context = BoundedContext.singleTenant("LargeRepositoryReads")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const storage = factory.createEntityStorage(
+      entityStorageDescriptor(
+        { name: "LargeRepositoryReads", multitenant: false },
+        SpecScanner.scan(ProjectAggregate),
+      ),
+    ) as { current: { write(record: EntityRecord): Promise<void> }; close(): void };
+    try {
+      await Promise.all(
+        Array.from({ length: 10_002 }, (_, index) => {
+          const id = `item-${String(index).padStart(5, "0")}`;
+          return storage.current.write(
+            EntityRecords.pack(
+              ProjectStateSchema,
+              id,
+              create(ProjectStateSchema, { id, name: index === 10_001 ? "late" : "ordinary" }),
+              1n,
+              { archived: false, deleted: false },
+            ),
+          );
+        }),
+      );
+      const reads = repositoryReadAccess.bind(repository);
+      expect(await reads.findIds(ProjectStateQuery.create().build())).toHaveLength(10_002);
+      const late = ProjectStateQuery.create()
+        .name()
+        .is("late")
+        .orderBy("name", "asc")
+        .limit(1)
+        .build();
+      expect(late.buildPlan()).toMatchObject({
+        predicate: { kind: "comparison", column: "name", value: "late" },
+      });
+      expect(await reads.findIds(late)).toEqual(["item-10001"]);
+      const beforeRead = {
+        commits: factory.commitCreations,
+        writes: factory.writeCalls,
+        closes: factory.readCloses,
+      };
+      const compound = new EntityQueryDescription(ProjectStateSchema, late.build(), {
+        predicate: {
+          kind: "all",
+          predicates: [
+            { kind: "comparison", column: "name", operator: "equal", value: "late" },
+            { kind: "comparison", column: "name", operator: "equal", value: "late" },
+          ],
+        },
+      });
+      expect(await reads.findIds(compound)).toEqual(["item-10001"]);
+      expect(factory.commitCreations).toBe(0);
+      expect(factory.commitCreations).toBe(beforeRead.commits);
+      expect(factory.writeCalls).toBe(beforeRead.writes);
+      expect(factory.readCloses).toBe(beforeRead.closes + 1);
+      expect(factory.plans.at(-1)?.predicate).toMatchObject({
+        kind: "all",
+        predicates: [
+          { column: "name", value: "late" },
+          { column: "name", value: "late" },
+          { column: "archived", value: false },
+          { column: "deleted", value: false },
+        ],
+      });
+      expect(factory.plans.at(-2)).toMatchObject({
+        exhaustive: true,
+        order: [{ column: "name", direction: "asc" }],
+        limit: 1,
+        predicate: {
+          kind: "all",
+          predicates: [
+            { kind: "comparison", column: "name", operator: "equal", value: "late" },
+            { kind: "comparison", column: "archived", operator: "equal", value: false },
+            { kind: "comparison", column: "deleted", operator: "equal", value: false },
+          ],
+        },
+      });
+      reads.close();
+    } finally {
+      storage.close();
+      await context.close();
+    }
+  });
+
+  it("accepts more than 1,000 explicit IDs in every repository read method", async () => {
+    const repository = new Repository({ entityType: ProjectAggregate, schema: ProjectStateSchema });
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("ManyRepositoryIds")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const storage = factory.createEntityStorage(
+      entityStorageDescriptor(
+        { name: "ManyRepositoryIds", multitenant: false },
+        SpecScanner.scan(ProjectAggregate),
+      ),
+    ) as { current: { write(record: EntityRecord): Promise<void> }; close(): void };
+    const ids = Array.from(
+      { length: 1_001 },
+      (_, index) => `item-${String(index).padStart(5, "0")}`,
+    );
+    try {
+      await Promise.all(
+        ids.map((id) =>
+          storage.current.write(
+            EntityRecords.pack(
+              ProjectStateSchema,
+              id,
+              create(ProjectStateSchema, { id, name: "selected" }),
+              1n,
+              { archived: false, deleted: false },
+            ),
+          ),
+        ),
+      );
+      const reads = repositoryReadAccess.bind(repository);
+      const selected = ProjectStateQuery.create()
+        .byId(...ids)
+        .build();
+      expect(await reads.findIds(selected)).toHaveLength(1_001);
+      expect(await reads.findStates(selected)).toHaveLength(1_001);
+      expect(await reads.find(selected)).toHaveLength(1_001);
+      expect(await reads.findIds(ProjectStateQuery.create().name().is("absent").build())).toEqual(
+        [],
+      );
+      reads.close();
+    } finally {
+      storage.close();
+      await context.close();
+    }
+  });
+
+  it("reads a repository without public query visibility", async () => {
+    const repository = createRegisteredProjectAggregateRepository();
+    expect(repository.metadata.visibility).toBe("none");
+    const factory = new ObservedReadStorageFactory();
+    const context = BoundedContext.singleTenant("PrivateRepositoryReads")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const id = create(ProjectIdSchema, { value: "private" });
+    const handle = factory.createEntityStorage(
+      entityStorageDescriptor(
+        { name: "PrivateRepositoryReads", multitenant: false },
+        SpecScanner.scan(RegisteredProjectAggregate),
+      ),
+    ) as { current: { write(record: EntityRecord): Promise<void> }; close(): void };
+    try {
+      await handle.current.write(
+        EntityRecords.pack(
+          RegisteredProjectStateSchema,
+          id,
+          create(RegisteredProjectStateSchema, { id, name: "Private", priority: 4 }),
+          3n,
+          { archived: false, deleted: false },
+        ),
+      );
+      const reads = repositoryReadAccess.bind(repository);
+      const query = RegisteredProjectStateQuery.create().byId(id).build();
+      expect(await reads.findIds(query)).toEqual([id]);
+      expect((await reads.findStates(query))[0]?.priority).toBe(4);
+      expect((await reads.find(query))[0]).toBeInstanceOf(RegisteredProjectAggregate);
+      const compound = RegisteredProjectStateQuery.create()
+        .name()
+        .is("Private")
+        .priority()
+        .is(4)
+        .build();
+      expect(await reads.findIds(compound)).toEqual([id]);
+      expect(factory.plans.at(-1)?.predicate).toMatchObject({
+        kind: "all",
+        predicates: [
+          { column: "name", value: "Private" },
+          { column: "priority", value: 4 },
+          { column: "archived", value: false },
+          { column: "deleted", value: false },
+        ],
+      });
+      reads.close();
+    } finally {
+      handle.close();
+      await context.close();
+    }
+  });
+
+  it("binds independent tenant reads and rejects missing runtime or tenant identity", async () => {
+    const unbound = new Repository({ entityType: ProjectAggregate, schema: ProjectStateSchema });
+    expect(() => repositoryReadAccess.bind(unbound)).toThrow("runtime binding");
+    const repository = new Repository({ entityType: ProjectAggregate, schema: ProjectStateSchema });
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.multitenant("TenantRepositoryReads")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    try {
+      expect(() => repositoryReadAccess.bind(repository)).toThrow("requires tenantId");
+      const firstTenant = createTenantId("first");
+      const secondTenant = createTenantId("second");
+      for (const [tenantId, name] of [
+        [firstTenant, "First"],
+        [secondTenant, "Second"],
+      ] as const) {
+        const handle = factory.createEntityStorage(
+          entityStorageDescriptor(
+            { name: "TenantRepositoryReads", multitenant: true, tenantId },
+            SpecScanner.scan(ProjectAggregate),
+          ),
+        ) as { current: { write(record: EntityRecord): Promise<void> }; close(): void };
+        await handle.current.write(
+          EntityRecords.pack(
+            ProjectStateSchema,
+            "same",
+            create(ProjectStateSchema, { id: "same", name }),
+            1n,
+            { archived: false, deleted: false },
+          ),
+        );
+        handle.close();
+      }
+      const first = repositoryReadAccess.bind(repository, firstTenant);
+      const second = repositoryReadAccess.bind(repository, secondTenant);
+      const query = ProjectStateQuery.create().build();
+      const [firstStates, secondStates] = await Promise.all([
+        first.findStates(query),
+        second.findStates(query),
+      ]);
+      expect(firstStates[0]?.name).toBe("First");
+      expect(secondStates[0]?.name).toBe("Second");
+      first.close();
+      second.close();
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("propagates current-record provider failures from repository reads", async () => {
+    const repository = new Repository({ entityType: ProjectAggregate, schema: ProjectStateSchema });
+    const factory = new FailingReadStorageFactory();
+    const context = BoundedContext.singleTenant("FailingRepositoryReads")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    try {
+      const reads = repositoryReadAccess.bind(repository);
+      await expect(reads.findIds(ProjectStateQuery.create().build())).rejects.toThrow(
+        "current-record provider failed",
+      );
+      expect(factory.commitCreations).toBe(0);
+      expect(factory.readCloses).toBe(1);
+      reads.close();
+    } finally {
+      await context.close();
+    }
+  });
   it("keeps constructor services separate for the same Entity class in two contexts", async () => {
     const handlers = HandlerMetadataValues.defineArity(
       InjectedProjectAggregate,
@@ -4383,10 +5119,10 @@ describe("repository signal routing", () => {
     }
   });
 
-  it("routes commands to one aggregate ID by the first command field", () => {
+  it("routes commands to one aggregate ID by the first command field", async () => {
     const repository = createRoutingRepository();
     const command = createAggregateCommand("command-1", "task-1");
-    const route = repository.routeCommand(command);
+    const route = await repository.routeCommand(command);
 
     expect(route).toMatchObject({
       entityId: "task-1",
@@ -4398,7 +5134,7 @@ describe("repository signal routing", () => {
     expect(() => BoundedContext.singleTenant("Tasks").add(repository).build()).not.toThrow();
   });
 
-  it("routes a generated UUID message ID", () => {
+  it("routes a generated UUID message ID", async () => {
     const id = create(ProjectIdSchema, { value: "uuid-message-id" });
     const publicProjectId: RepositoryProjectId = id;
     const repository = createRegisteredProjectAggregateRepository();
@@ -4409,20 +5145,22 @@ describe("repository signal routing", () => {
       value: "uuid-message-id",
     });
     expect(
-      repository.routeCommand(
-        create(CommandSchema, {
-          id: create(CommandIdSchema, { uuid: "command-uuid-message-id" }),
-          context: create(CommandContextSchema),
-          message: AnyMessages.pack(
-            RegisterProjectSchema,
-            create(RegisterProjectSchema, { id, name: "UUID", priority: 1 }),
-          ),
-        }),
+      (
+        await repository.routeCommand(
+          create(CommandSchema, {
+            id: create(CommandIdSchema, { uuid: "command-uuid-message-id" }),
+            context: create(CommandContextSchema),
+            message: AnyMessages.pack(
+              RegisterProjectSchema,
+              create(RegisterProjectSchema, { id, name: "UUID", priority: 1 }),
+            ),
+          }),
+        )
       ).entityId,
     ).toEqual(id);
   });
 
-  it("routes generated nested composite IDs through command, event, and state sources", () => {
+  it("routes generated nested composite IDs through command, event, and state sources", async () => {
     const idA = create(ProjectMilestoneIdSchema, {
       reader: create(UserIdSchema, { value: "reader" }),
       number: 1,
@@ -4436,54 +5174,62 @@ describe("repository signal routing", () => {
     const message = create(AddProjectMilestoneSchema, { id: idA, name: "Composite" });
 
     expect(
-      commandRepository.routeCommand(
-        create(CommandSchema, {
-          id: create(CommandIdSchema, { uuid: "composite-command" }),
-          context: create(CommandContextSchema),
-          message: AnyMessages.pack(AddProjectMilestoneSchema, message),
-        }),
+      (
+        await commandRepository.routeCommand(
+          create(CommandSchema, {
+            id: create(CommandIdSchema, { uuid: "composite-command" }),
+            context: create(CommandContextSchema),
+            message: AnyMessages.pack(AddProjectMilestoneSchema, message),
+          }),
+        )
       ).entityId,
     ).toEqual(idA);
     expect(
-      projectionRepository.routeEvent(
-        create(EventSchema, {
-          id: create(EventIdSchema, { value: "composite-producer" }),
-          context: create(EventContextSchema, {
-            producerId: Identifiers.pack(ProjectMilestoneIdSchema, idA),
+      (
+        await projectionRepository.routeEvent(
+          create(EventSchema, {
+            id: create(EventIdSchema, { value: "composite-producer" }),
+            context: create(EventContextSchema, {
+              producerId: Identifiers.pack(ProjectMilestoneIdSchema, idA),
+            }),
+            message: AnyMessages.pack(
+              ProjectMilestoneAddedSchema,
+              create(ProjectMilestoneAddedSchema, { id: idB, name: "Producer" }),
+            ),
           }),
-          message: AnyMessages.pack(
-            ProjectMilestoneAddedSchema,
-            create(ProjectMilestoneAddedSchema, { id: idB, name: "Producer" }),
-          ),
-        }),
+        )
       ).entityIds,
     ).toEqual([idA]);
     expect(
-      projectionRepository.routeEvent(
-        create(EventSchema, {
-          id: create(EventIdSchema, { value: "composite-fallback" }),
-          context: create(EventContextSchema, {
-            producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "other" })),
+      (
+        await projectionRepository.routeEvent(
+          create(EventSchema, {
+            id: create(EventIdSchema, { value: "composite-fallback" }),
+            context: create(EventContextSchema, {
+              producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "other" })),
+            }),
+            message: AnyMessages.pack(
+              ProjectMilestoneAddedSchema,
+              create(ProjectMilestoneAddedSchema, { id: idB, name: "Fallback" }),
+            ),
           }),
-          message: AnyMessages.pack(
-            ProjectMilestoneAddedSchema,
-            create(ProjectMilestoneAddedSchema, { id: idB, name: "Fallback" }),
-          ),
-        }),
+        )
       ).entityIds,
     ).toEqual([idB]);
     expect(
-      repositoryAccess.routeStateUpdate(
-        projectionRepository,
-        createStateChangedEvent(
-          "composite-state",
-          create(ProjectMilestoneSourceStateSchema, { id: idA, name: "State" }),
-        ),
+      (
+        await repositoryAccess.routeStateUpdate(
+          projectionRepository,
+          createStateChangedEvent(
+            "composite-state",
+            create(ProjectMilestoneSourceStateSchema, { id: idA, name: "State" }),
+          ),
+        )
       )?.entityIds,
     ).toEqual([idA]);
   });
 
-  it("uses the complete composite ID returned by a custom Command route", () => {
+  it("uses the complete composite ID returned by a custom Command route", async () => {
     const declarationId = create(ProjectMilestoneIdSchema, {
       reader: create(UserIdSchema, { value: "declaration" }),
       number: 1,
@@ -4501,24 +5247,26 @@ describe("repository signal routing", () => {
     );
 
     expect(
-      repository.routeCommand(
-        create(CommandSchema, {
-          id: create(CommandIdSchema, { uuid: "command-composite-custom" }),
-          context: create(CommandContextSchema),
-          message: AnyMessages.pack(
-            AddProjectMilestoneSchema,
-            create(AddProjectMilestoneSchema, {
-              id: declarationId,
-              name: "Custom",
-            }),
-          ),
-        }),
+      (
+        await repository.routeCommand(
+          create(CommandSchema, {
+            id: create(CommandIdSchema, { uuid: "command-composite-custom" }),
+            context: create(CommandContextSchema),
+            message: AnyMessages.pack(
+              AddProjectMilestoneSchema,
+              create(AddProjectMilestoneSchema, {
+                id: declarationId,
+                name: "Custom",
+              }),
+            ),
+          }),
+        )
       ).entityId,
     ).toEqual(routedId);
     expect(routeCalls).toBe(1);
   });
 
-  it("deduplicates generated composite route clones without merging their scalar discriminator", () => {
+  it("deduplicates generated composite route clones without merging their scalar discriminator", async () => {
     const idA = create(ProjectMilestoneIdSchema, {
       reader: create(UserIdSchema, { value: "reader" }),
       number: 1,
@@ -4538,26 +5286,30 @@ describe("repository signal routing", () => {
     const repository = createProjectMilestoneProjectionRepository(eventRouting, stateUpdateRouting);
 
     expect(
-      repository.routeEvent(
-        create(EventSchema, {
-          id: create(EventIdSchema, { value: "composite-custom" }),
-          context: create(EventContextSchema, {
-            producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "other" })),
+      (
+        await repository.routeEvent(
+          create(EventSchema, {
+            id: create(EventIdSchema, { value: "composite-custom" }),
+            context: create(EventContextSchema, {
+              producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "other" })),
+            }),
+            message: AnyMessages.pack(
+              ProjectMilestoneAddedSchema,
+              create(ProjectMilestoneAddedSchema, { id: idA, name: "Custom" }),
+            ),
           }),
-          message: AnyMessages.pack(
-            ProjectMilestoneAddedSchema,
-            create(ProjectMilestoneAddedSchema, { id: idA, name: "Custom" }),
-          ),
-        }),
+        )
       ).entityIds,
     ).toEqual([idA, idB]);
     expect(
-      repositoryAccess.routeStateUpdate(
-        repository,
-        createStateChangedEvent(
-          "composite-custom-state",
-          create(ProjectMilestoneSourceStateSchema, { id: idA, name: "State" }),
-        ),
+      (
+        await repositoryAccess.routeStateUpdate(
+          repository,
+          createStateChangedEvent(
+            "composite-custom-state",
+            create(ProjectMilestoneSourceStateSchema, { id: idA, name: "State" }),
+          ),
+        )
       )?.entityIds,
     ).toEqual([idA, idB]);
   });
@@ -4582,19 +5334,19 @@ describe("repository signal routing", () => {
     expect(descriptor.id.key(idA)).not.toBe(descriptor.id.key(idB));
   });
 
-  it("uses an exact Command route instead of the declaration-first field", () => {
+  it("uses an exact Command route instead of the declaration-first field", async () => {
     const repository = createRoutingRepository(
       CommandRouting.create<string>().route(CreateProjectSchema, () => "custom-task"),
     );
 
     expect(
-      repository.routeCommand(createAggregateCommand("command-custom", "first-task")),
+      await repository.routeCommand(createAggregateCommand("command-custom", "first-task")),
     ).toMatchObject({
       entityId: "custom-task",
     });
   });
 
-  it("applies exact routes before replacement defaults", () => {
+  it("applies exact routes before replacement defaults", async () => {
     const exact = createRoutingRepository(
       CommandRouting.create<string>()
         .route(CreateProjectSchema, () => "exact")
@@ -4605,11 +5357,11 @@ describe("repository signal routing", () => {
     );
     const command = createAggregateCommand("command-precedence", "declaration");
 
-    expect(exact.routeCommand(command).entityId).toBe("exact");
-    expect(replacement.routeCommand(command).entityId).toBe("replacement");
+    expect((await exact.routeCommand(command)).entityId).toBe("exact");
+    expect((await replacement.routeCommand(command)).entityId).toBe("replacement");
   });
 
-  it("selects a Command interface route after exact routes and before the default", () => {
+  it("selects a Command interface route after exact routes and before the default", async () => {
     const token = MessageInterfaces.define<object, readonly [typeof CreateProjectSchema]>([
       CreateProjectSchema,
     ]);
@@ -4620,15 +5372,45 @@ describe("repository signal routing", () => {
     );
 
     expect(
-      repository.routeCommand(createAggregateCommand("command-interface", "field")).entityId,
+      (await repository.routeCommand(createAggregateCommand("command-interface", "field")))
+        .entityId,
     ).toBe("interface");
     expect(
-      createRoutingRepository(
-        CommandRouting.create<string>()
-          .route(token, () => "interface")
-          .route(CreateProjectSchema, () => "exact"),
-      ).routeCommand(createAggregateCommand("command-interface-exact", "field")).entityId,
+      (
+        await createRoutingRepository(
+          CommandRouting.create<string>()
+            .route(token, () => "interface")
+            .route(CreateProjectSchema, () => "exact"),
+        ).routeCommand(createAggregateCommand("command-interface-exact", "field"))
+      ).entityId,
     ).toBe("exact");
+  });
+
+  it("awaits async Command exact, interface, and replacement default routes in precedence order", async () => {
+    const token = MessageInterfaces.define<object, readonly [typeof CreateProjectSchema]>([
+      CreateProjectSchema,
+    ]);
+    const cases = [
+      CommandRouting.create<string>()
+        .route(CreateProjectSchema, () => Promise.resolve("exact"))
+        .route(token, () => Promise.resolve("interface"))
+        .replaceDefault(() => Promise.resolve("default")),
+      CommandRouting.create<string>()
+        .route(token, () => Promise.resolve("interface"))
+        .replaceDefault(() => Promise.resolve("default")),
+      CommandRouting.create<string>().replaceDefault(() => Promise.resolve("default")),
+    ];
+    const results = await Promise.all(
+      cases.map(
+        async (routing) =>
+          (
+            await createRoutingRepository(routing).routeCommand(
+              createAggregateCommand("async-command-precedence", "ignored"),
+            )
+          ).entityId,
+      ),
+    );
+    expect(results).toEqual(["exact", "interface", "default"]);
   });
 
   it("rejects a Command interface token with an unregistered member at construction", () => {
@@ -4642,13 +5424,14 @@ describe("repository signal routing", () => {
     ).toThrow(/unregistered interface member/);
   });
 
-  it("keeps the Command routing snapshot captured by repository construction", () => {
+  it("keeps the Command routing snapshot captured by repository construction", async () => {
     const routing = CommandRouting.create<string>().replaceDefault(() => "first");
     const repository = createRoutingRepository(routing);
     routing.replaceDefault(() => "second");
 
     expect(
-      repository.routeCommand(createAggregateCommand("command-snapshot", "declaration")).entityId,
+      (await repository.routeCommand(createAggregateCommand("command-snapshot", "declaration")))
+        .entityId,
     ).toBe("first");
   });
 
@@ -4660,18 +5443,18 @@ describe("repository signal routing", () => {
     ).toThrow(/unregistered exact route/);
   });
 
-  it("rejects missing and incompatible custom Command route results", () => {
-    expect(() =>
+  it("rejects missing and incompatible custom Command route results", async () => {
+    await expect(
       createRoutingRepository(
         CommandRouting.create<string>().route(CreateProjectSchema, () => "   "),
       ).routeCommand(createAggregateCommand("command-blank-custom", "first")),
-    ).toThrow(/ID compatible with the Entity state/);
-    expect(() =>
+    ).rejects.toThrow(/ID compatible with the Entity state/);
+    await expect(
       createRoutingRepository(
         CommandRouting.create<string>().route(CreateProjectSchema, () => 42 as never),
       ).routeCommand(createAggregateCommand("command-number-custom", "first")),
-    ).toThrow(/ID compatible with the Entity state/);
-    expect(() =>
+    ).rejects.toThrow(/ID compatible with the Entity state/);
+    await expect(
       createInt32RoutingRepository(
         CommandRouting.create<number>().route(CreateNumberedProjectSchema, () => 2 ** 31),
       ).routeCommand(
@@ -4684,17 +5467,17 @@ describe("repository signal routing", () => {
           ),
         }),
       ),
-    ).toThrow(/ID compatible with the Entity state/);
+    ).rejects.toThrow(/ID compatible with the Entity state/);
   });
 
-  it("rejects a non-message custom Command ID before dispatch", () => {
+  it("rejects a non-message custom Command ID before dispatch", async () => {
     const repository = createProjectIdProducingRepository(
       CommandRouting.create<TaskId>().route(CreateTaskSchema, () => undefined as never),
     );
 
-    expect(() =>
+    await expect(
       repository.routeCommand(createCreateProject("command-missing-message-id", "task")),
-    ).toThrow(`Repository command routing requires a "${TaskIdSchema.typeName}" ID.`);
+    ).rejects.toThrow(`Repository command routing requires a "${TaskIdSchema.typeName}" ID.`);
   });
 
   it("rejects a validation-invalid custom message Command ID before durable dispatch", async () => {
@@ -4728,7 +5511,7 @@ describe("repository signal routing", () => {
     }
   });
 
-  it("supplies a default Command context to custom routing", () => {
+  it("supplies a default Command context to custom routing", async () => {
     let observed: CommandContext | undefined;
     const repository = createCreateProjectRoutingRepository(
       CommandRouting.create<string>().route(CreateProjectSchema, (message, context) => {
@@ -4737,22 +5520,22 @@ describe("repository signal routing", () => {
       }),
     );
 
-    repository.routeCommand(
+    await repository.routeCommand(
       createContextlessGeneratedCreateProject("command-context-route", "task"),
     );
 
     expect(observed).toEqual(create(CommandContextSchema));
   });
 
-  it("rejects blank first-field command IDs before handler invocation", () => {
+  it("rejects blank first-field command IDs before handler invocation", async () => {
     const repository = createRoutingRepository();
 
-    expect(() => repository.routeCommand(createAggregateCommand("command-blank", ""))).toThrow(
-      "Repository command routing requires a non-empty first field.",
-    );
+    await expect(
+      repository.routeCommand(createAggregateCommand("command-blank", "")),
+    ).rejects.toThrow("Repository command routing requires a non-empty first field.");
   });
 
-  it("rejects repeated and map declaration-first Command IDs", () => {
+  it("rejects repeated and map declaration-first Command IDs", async () => {
     const repository = createMalformedFirstFieldRepository();
     const repeated = create(CommandSchema, {
       id: create(CommandIdSchema, { uuid: "command-repeated-id" }),
@@ -4771,11 +5554,11 @@ describe("repository signal routing", () => {
       ),
     });
 
-    expect(() => repository.routeCommand(repeated)).toThrow(/singular non-map first field/);
-    expect(() => repository.routeCommand(mapped)).toThrow(/singular non-map first field/);
+    await expect(repository.routeCommand(repeated)).rejects.toThrow(/singular non-map first field/);
+    await expect(repository.routeCommand(mapped)).rejects.toThrow(/singular non-map first field/);
   });
 
-  it("rejects a default-valued declaration-first numeric Command ID", () => {
+  it("rejects a default-valued declaration-first numeric Command ID", async () => {
     const repository = createInt32RoutingRepository();
     const command = create(CommandSchema, {
       id: create(CommandIdSchema, { uuid: "command-default-int32" }),
@@ -4786,13 +5569,13 @@ describe("repository signal routing", () => {
       ),
     });
 
-    expect(() => repository.routeCommand(command)).toThrow(/non-default first field/);
+    await expect(repository.routeCommand(command)).rejects.toThrow(/non-default first field/);
   });
 
   it("prefers a compatible producer ID and falls back for an incompatible producer type", async () => {
     const repository = createRoutingRepository();
 
-    const producerRoute = repository.routeEvent(
+    const producerRoute = await repository.routeEvent(
       create(EventSchema, {
         id: create(EventIdSchema, { value: "event-1" }),
         context: create(EventContextSchema, {
@@ -4809,7 +5592,7 @@ describe("repository signal routing", () => {
         ),
       }),
     );
-    const firstFieldRoute = repository.routeEvent(
+    const firstFieldRoute = await repository.routeEvent(
       createProjectCreated("event-2", "field-task", { producerId: "other-kind" }),
     );
 
@@ -4828,16 +5611,217 @@ describe("repository signal routing", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("uses one immutable stable-deduplicated custom Event target plan", () => {
+  it("uses one immutable stable-deduplicated custom Event target plan", async () => {
     const returned = ["target-b", "target-a", "target-b"];
     const routing = EventRouting.create<string>().route(ProjectCreatedSchema, () => returned);
     const repository = createRoutingRepository(undefined, routing);
 
-    const route = repository.routeEvent(createProjectCreated("event-custom-targets", "ignored"));
+    const route = await repository.routeEvent(
+      createProjectCreated("event-custom-targets", "ignored"),
+    );
     returned[0] = "mutated";
 
     expect(route.entityIds).toEqual(["target-b", "target-a"]);
     expect(Object.isFrozen(route.entityIds)).toBe(true);
+  });
+
+  it("awaits an asynchronous Event route before accepting its recipients", async () => {
+    const routing = EventRouting.create<string>().route(ProjectCreatedSchema, () =>
+      Promise.resolve(["later"]),
+    );
+    const repository = createRoutingRepository(undefined, routing);
+
+    await expect(
+      repository.routeEvent(createProjectCreated("event-async", "ignored")),
+    ).resolves.toMatchObject({
+      entityIds: ["later"],
+    });
+  });
+
+  it("awaits asynchronous Projection Event and Process Manager Command/Event routes", async () => {
+    const projection = createExecutingProjectionRepository(
+      EventRouting.create(ExecutingTaskProjection).route(ProjectCreatedSchema, (message) =>
+        Promise.resolve([message.id]),
+      ),
+    );
+    expect(
+      (await projection.routeEvent(createProjectCreated("async-projection", "view"))).entityIds,
+    ).toEqual(["view"]);
+
+    const id = create(ProjectMilestoneIdSchema, {
+      reader: create(UserIdSchema, { value: "reader" }),
+      number: 7,
+    });
+    const commands = CommandRouting.create(ProjectMilestoneProcessManager).route(
+      AddProjectMilestoneSchema,
+      (message) => Promise.resolve(message.id ?? id),
+    );
+    const events = EventRouting.create(ProjectMilestoneProcessManager).route(
+      ProjectMilestoneAddedSchema,
+      (message) => Promise.resolve(message.id === undefined ? [] : [message.id]),
+    );
+    const manager = createProjectMilestoneProcessManagerRepository(
+      events,
+      { produces: true },
+      commands,
+    );
+    const command = create(CommandSchema, {
+      id: create(CommandIdSchema, { uuid: "pm-async-command" }),
+      context: create(CommandContextSchema),
+      message: AnyMessages.pack(
+        AddProjectMilestoneSchema,
+        create(AddProjectMilestoneSchema, { id, name: "Async" }),
+      ),
+    });
+    const event = create(EventSchema, {
+      id: create(EventIdSchema, { value: "pm-async-event" }),
+      context: create(EventContextSchema),
+      message: AnyMessages.pack(
+        ProjectMilestoneAddedSchema,
+        create(ProjectMilestoneAddedSchema, { id, name: "Async" }),
+      ),
+    });
+    expect((await manager.routeCommand(command)).entityId).toEqual(id);
+    expect((await manager.routeEvent(event)).entityIds).toEqual([id]);
+  });
+
+  it("awaits an asynchronous rejection Event route to a Process Manager", async () => {
+    const routing = EventRouting.create(SilentCommandProcessManager).route(
+      TaskAlreadyDoneSchema,
+      (rejection) => Promise.resolve(rejection.id === undefined ? [] : [rejection.id.value]),
+    );
+    const repository = createSilentCommandProcessManagerRepository(routing);
+    const event = createProjectCreated("async-rejection", "ignored");
+    event.message = AnyMessages.pack(
+      TaskAlreadyDoneSchema,
+      create(TaskAlreadyDoneSchema, {
+        id: create(GeneratedTaskIdSchema, { value: "rejected-target" }),
+      }),
+    );
+    expect((await repository.routeEvent(event)).entityIds).toEqual(["rejected-target"]);
+  });
+
+  it("replays recorded query recipients after receiving repository data changes", async () => {
+    SplitRouteProcessManager.reset();
+    let routeCalls = 0;
+    const routing = EventRouting.create(SplitRouteProcessManager).route(
+      ProjectCreatedSchema,
+      async (_event, _context, reads) => {
+        routeCalls += 1;
+        return reads.findIds(ProjectQueueStateQuery.create().build());
+      },
+    );
+    const repository = createSplitPmRepo(routing);
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("RecordedQueryTargets")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    try {
+      await context
+        .stand()
+        .update(
+          ProjectQueueStateSchema,
+          create(ProjectQueueStateSchema, { id: "original", queue: "Before" }),
+        );
+      await context.eventBus().post(createProjectCreated("recorded-query", "source"));
+      expect(routeCalls).toBe(1);
+      await context
+        .stand()
+        .update(
+          ProjectQueueStateSchema,
+          create(ProjectQueueStateSchema, { id: "later", queue: "After" }),
+        );
+      const delivery = new Delivery({
+        context: { name: "RecordedQueryTargets", multitenant: false },
+        storageFactory: factory,
+      });
+      const rows = await delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] });
+      const recorded = rows.find((row) => row.signalId === "recorded-query");
+      if (recorded === undefined) throw new Error("Expected recorded Process Manager row.");
+      expect(Identifiers.unpack("string", recorded.inboxId.targetId)).toBe("original");
+      await expect(requireEntityInboxTarget(repository).replay(recorded)).resolves.toBeUndefined();
+      expect(routeCalls).toBe(1);
+      expect(await context.stand().read(ProjectQueueStateSchema, "later")).toMatchObject({
+        queue: "After",
+      });
+    } finally {
+      await context.close();
+    }
+  });
+
+  it.each([0, 1, 1_000, 1_001, 10_001])(
+    "keeps %i distinct Event recipients and warns only above 1,000",
+    async (count) => {
+      const recipients = Array.from({ length: count }, (_, index) => `target-${String(index)}`);
+      const route = EventRouting.create<string>().route(ProjectCreatedSchema, () =>
+        Promise.resolve([...recipients, ...recipients.slice(0, 1)]),
+      );
+      const repository = createRoutingRepository(undefined, route);
+      const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+      try {
+        const result = await repository.routeEvent(
+          createProjectCreated(`event-${String(count)}`, "ignored"),
+        );
+        expect(result.entityIds).toEqual(recipients);
+        expect(warning).toHaveBeenCalledTimes(count > 1_000 ? 1 : 0);
+        if (count > 1_000) {
+          expect(String(warning.mock.calls[0]?.[0])).toContain(String(count));
+          expect(String(warning.mock.calls[0]?.[0])).toContain(ProjectStateSchema.typeName);
+        }
+      } finally {
+        warning.mockRestore();
+      }
+    },
+  );
+
+  it("does not warn when application filtering leaves two of 1,001 query matches", async () => {
+    let queried = 0;
+    const routing = EventRouting.create(ProjectAggregate).route(
+      ProjectCreatedSchema,
+      async (_event, _context, reads) => {
+        const states = await reads.findStates(ProjectStateQuery.create().build());
+        queried = states.length;
+        return states.filter((state) => state.name === "selected").map((state) => state.id);
+      },
+    );
+    const repository = createRoutingRepository(undefined, routing);
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("FilteredRouteWarning")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const storage = factory.createEntityStorage(
+      entityStorageDescriptor(
+        { name: "FilteredRouteWarning", multitenant: false },
+        SpecScanner.scan(ProjectAggregate),
+      ),
+    ) as { current: { write(record: EntityRecord): Promise<void> }; close(): void };
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      await Promise.all(
+        Array.from({ length: 1_001 }, (_, index) => {
+          const id = `filtered-${String(index)}`;
+          return storage.current.write(
+            EntityRecords.pack(
+              ProjectStateSchema,
+              id,
+              create(ProjectStateSchema, { id, name: index < 2 ? "selected" : "other" }),
+              1n,
+              { archived: false, deleted: false },
+            ),
+          );
+        }),
+      );
+      const result = await repository.routeEvent(createProjectCreated("filtered-route", "ignored"));
+      expect(queried).toBe(1_001);
+      expect(result.entityIds).toEqual(["filtered-0", "filtered-1"]);
+      expect(warning).not.toHaveBeenCalled();
+    } finally {
+      warning.mockRestore();
+      storage.close();
+      await context.close();
+    }
   });
 
   it("deduplicates and replays a message target containing an int64 value", async () => {
@@ -4868,7 +5852,7 @@ describe("repository signal routing", () => {
     });
 
     try {
-      expect(repository.routeEvent(event).entityIds).toEqual([id]);
+      expect((await repository.routeEvent(event)).entityIds).toEqual([id]);
       expect(routeCalls).toBe(1);
 
       await context.eventBus().post(event);
@@ -5142,7 +6126,7 @@ describe("repository signal routing", () => {
     }
   });
 
-  it("applies exact Event routes before replacement defaults", () => {
+  it("applies exact Event routes before replacement defaults", async () => {
     const exact = createRoutingRepository(
       undefined,
       EventRouting.create<string>()
@@ -5155,11 +6139,11 @@ describe("repository signal routing", () => {
     );
     const event = createProjectCreated("event-precedence", "declaration");
 
-    expect(exact.routeEvent(event).entityIds).toEqual(["exact"]);
-    expect(replacement.routeEvent(event).entityIds).toEqual(["replacement"]);
+    expect((await exact.routeEvent(event)).entityIds).toEqual(["exact"]);
+    expect((await replacement.routeEvent(event)).entityIds).toEqual(["replacement"]);
   });
 
-  it("selects an Event interface route after exact routes and before the default", () => {
+  it("selects an Event interface route after exact routes and before the default", async () => {
     const token = MessageInterfaces.define<object, readonly [typeof ProjectCreatedSchema]>([
       ProjectCreatedSchema,
     ]);
@@ -5171,36 +6155,65 @@ describe("repository signal routing", () => {
     );
 
     expect(
-      repository.routeEvent(createProjectCreated("event-interface", "field")).entityIds,
+      (await repository.routeEvent(createProjectCreated("event-interface", "field"))).entityIds,
     ).toEqual(["interface"]);
     expect(
-      createRoutingRepository(
-        undefined,
-        EventRouting.create<string>()
-          .route(token, () => ["interface"])
-          .route(ProjectCreatedSchema, () => ["exact"]),
-      ).routeEvent(createProjectCreated("event-interface-exact", "field")).entityIds,
+      (
+        await createRoutingRepository(
+          undefined,
+          EventRouting.create<string>()
+            .route(token, () => ["interface"])
+            .route(ProjectCreatedSchema, () => ["exact"]),
+        ).routeEvent(createProjectCreated("event-interface-exact", "field"))
+      ).entityIds,
     ).toEqual(["exact"]);
   });
 
-  it("keeps the Event routing snapshot captured by repository construction", () => {
+  it("awaits async Event exact, interface, and replacement default routes in precedence order", async () => {
+    const token = MessageInterfaces.define<object, readonly [typeof ProjectCreatedSchema]>([
+      ProjectCreatedSchema,
+    ]);
+    const cases = [
+      EventRouting.create<string>()
+        .route(ProjectCreatedSchema, () => Promise.resolve(["exact"]))
+        .route(token, () => Promise.resolve(["interface"]))
+        .replaceDefault(() => Promise.resolve(["default"])),
+      EventRouting.create<string>()
+        .route(token, () => Promise.resolve(["interface"]))
+        .replaceDefault(() => Promise.resolve(["default"])),
+      EventRouting.create<string>().replaceDefault(() => Promise.resolve(["default"])),
+    ];
+    const results = await Promise.all(
+      cases.map(
+        async (routing) =>
+          (
+            await createRoutingRepository(undefined, routing).routeEvent(
+              createProjectCreated("async-event-precedence", "ignored"),
+            )
+          ).entityIds,
+      ),
+    );
+    expect(results).toEqual([["exact"], ["interface"], ["default"]]);
+  });
+
+  it("keeps the Event routing snapshot captured by repository construction", async () => {
     const routing = EventRouting.create<string>().replaceDefault(() => ["first"]);
     const repository = createRoutingRepository(undefined, routing);
     routing.replaceDefault(() => ["second"]);
 
     expect(
-      repository.routeEvent(createProjectCreated("event-snapshot", "field")).entityIds,
+      (await repository.routeEvent(createProjectCreated("event-snapshot", "field"))).entityIds,
     ).toEqual(["first"]);
   });
 
-  it("accepts an empty custom Event target plan", () => {
+  it("accepts an empty custom Event target plan", async () => {
     const repository = createRoutingRepository(
       undefined,
       EventRouting.create<string>().route(ProjectCreatedSchema, () => []),
     );
 
     expect(
-      repository.routeEvent(createProjectCreated("event-no-targets", "ignored")).entityIds,
+      (await repository.routeEvent(createProjectCreated("event-no-targets", "ignored"))).entityIds,
     ).toEqual([]);
   });
 
@@ -5264,7 +6277,7 @@ describe("repository signal routing", () => {
     ).toThrow(/unregistered exact route/);
   });
 
-  it("validates the complete custom Event target plan before returning it", () => {
+  it("validates and preserves the complete custom Event target plan", async () => {
     const invalid = createRoutingRepository(
       undefined,
       EventRouting.create<string>().route(ProjectCreatedSchema, () => ["valid", "  "]),
@@ -5280,18 +6293,19 @@ describe("repository signal routing", () => {
       EventRouting.create<string>().route(ProjectCreatedSchema, () => "target" as never),
     );
 
-    expect(() =>
+    await expect(
       invalid.routeEvent(createProjectCreated("event-invalid-targets", "ignored")),
-    ).toThrow(/compatible with the Entity state/);
-    expect(() =>
-      overflow.routeEvent(createProjectCreated("event-overflow-targets", "ignored")),
-    ).toThrow(/at most 1,000/);
-    expect(() =>
+    ).rejects.toThrow(/compatible with the Entity state/);
+    expect(
+      (await overflow.routeEvent(createProjectCreated("event-overflow-targets", "ignored")))
+        .entityIds,
+    ).toHaveLength(1_001);
+    await expect(
       notAnArray.routeEvent(createProjectCreated("event-non-array-targets", "ignored")),
-    ).toThrow(/array of Entity IDs/);
+    ).rejects.toThrow(/array of Entity IDs/);
   });
 
-  it("uses a compatible producer without requiring first-field equality", () => {
+  it("uses a compatible producer without requiring first-field equality", async () => {
     const repository = createRoutingRepository();
     const event = create(EventSchema, {
       id: create(EventIdSchema, { value: "event-primitive-unknown" }),
@@ -5310,42 +6324,46 @@ describe("repository signal routing", () => {
       ),
     });
 
-    expect(repository.routeEvent(event).entityIds).toEqual(["Unknown"]);
+    expect((await repository.routeEvent(event)).entityIds).toEqual(["Unknown"]);
   });
 
-  it("routes canonical zero-valued int32 and int64 producer IDs", () => {
+  it("routes canonical zero-valued int32 and int64 producer IDs", async () => {
     const int32 = createInt32RoutingRepository();
     const int64 = createInt64RoutingRepository();
 
     expect(
-      int32.routeEvent(
-        create(EventSchema, {
-          id: create(EventIdSchema, { value: "event-int32-producer" }),
-          context: create(EventContextSchema, { producerId: Identifiers.pack("int32", 0) }),
-          message: AnyMessages.pack(
-            NumberedProjectCreatedSchema,
-            create(NumberedProjectCreatedSchema, { id: 42, name: "Int32" }),
-          ),
-        }),
+      (
+        await int32.routeEvent(
+          create(EventSchema, {
+            id: create(EventIdSchema, { value: "event-int32-producer" }),
+            context: create(EventContextSchema, { producerId: Identifiers.pack("int32", 0) }),
+            message: AnyMessages.pack(
+              NumberedProjectCreatedSchema,
+              create(NumberedProjectCreatedSchema, { id: 42, name: "Int32" }),
+            ),
+          }),
+        )
       ).entityIds,
     ).toEqual([0]);
     expect(
-      int64.routeEvent(
-        create(EventSchema, {
-          id: create(EventIdSchema, { value: "event-int64-producer" }),
-          context: create(EventContextSchema, { producerId: Identifiers.pack("int64", 0n) }),
-          message: AnyMessages.pack(
-            ProjectWorkflowScheduledSchema,
-            create(ProjectWorkflowScheduledSchema, { id: 42n, queue: "Int64" }),
-          ),
-        }),
+      (
+        await int64.routeEvent(
+          create(EventSchema, {
+            id: create(EventIdSchema, { value: "event-int64-producer" }),
+            context: create(EventContextSchema, { producerId: Identifiers.pack("int64", 0n) }),
+            message: AnyMessages.pack(
+              ProjectWorkflowScheduledSchema,
+              create(ProjectWorkflowScheduledSchema, { id: 42n, queue: "Int64" }),
+            ),
+          }),
+        )
       ).entityIds,
     ).toEqual([0n]);
   });
 
-  it("routes a primitive first field from a message signal to a primitive Entity target", () => {
+  it("routes a primitive first field from a message signal to a primitive Entity target", async () => {
     const repository = createUserIdProjectionRepository();
-    const route = repository.routeEvent(
+    const route = await repository.routeEvent(
       create(EventSchema, {
         id: create(EventIdSchema, { value: "event-user-id" }),
         context: create(EventContextSchema, {
@@ -5366,11 +6384,11 @@ describe("repository signal routing", () => {
     });
   });
 
-  it("rejects a generated TaskId for a primitive Entity target without a custom route", () => {
+  it("rejects a generated TaskId for a primitive Entity target without a custom route", async () => {
     const repository = createTaskCreatedScalarProjectionRepository();
     const id = create(TaskIdSchema, { value: "implicit-scalar-task" });
 
-    expect(() =>
+    await expect(
       repository.routeEvent(
         create(EventSchema, {
           id: create(EventIdSchema, { value: "event-implicit-scalar-task" }),
@@ -5388,10 +6406,10 @@ describe("repository signal routing", () => {
           ),
         }),
       ),
-    ).toThrow(/compatible with the Entity state/);
+    ).rejects.toThrow(/compatible with the Entity state/);
   });
 
-  it("routes a generated TaskId to a primitive Entity target through an explicit custom route", () => {
+  it("routes a generated TaskId to a primitive Entity target through an explicit custom route", async () => {
     const repository = createCreateTaskScalarAggregateRepository(
       CommandRouting.create<string>().route(CreateTaskSchema, (message) => {
         if (message.id === undefined) throw new Error("Expected a Task ID.");
@@ -5401,27 +6419,29 @@ describe("repository signal routing", () => {
     const id = create(TaskIdSchema, { value: "explicit-scalar-task" });
 
     expect(
-      repository.routeCommand(
-        create(CommandSchema, {
-          id: create(CommandIdSchema, { uuid: "command-explicit-scalar-task" }),
-          context: create(CommandContextSchema),
-          message: AnyMessages.pack(
-            CreateTaskSchema,
-            create(CreateTaskSchema, {
-              id,
-              taskListId: create(TodoTaskListIdSchema, { value: "task-list" }),
-              title: "Explicit scalar task",
-            }),
-          ),
-        }),
+      (
+        await repository.routeCommand(
+          create(CommandSchema, {
+            id: create(CommandIdSchema, { uuid: "command-explicit-scalar-task" }),
+            context: create(CommandContextSchema),
+            message: AnyMessages.pack(
+              CreateTaskSchema,
+              create(CreateTaskSchema, {
+                id,
+                taskListId: create(TodoTaskListIdSchema, { value: "task-list" }),
+                title: "Explicit scalar task",
+              }),
+            ),
+          }),
+        )
       ).entityId,
     ).toBe(id.value);
   });
 
-  it("routes message-valued event IDs as messages when the entity ID field is a message", () => {
+  it("routes message-valued event IDs as messages when the entity ID field is a message", async () => {
     const repository = createProjectIdTaskRepository();
     const taskId = create(TaskIdSchema, { value: "message-id-task" });
-    const route = repository.routeEvent(
+    const route = await repository.routeEvent(
       create(EventSchema, {
         id: create(EventIdSchema, { value: "event-message-id-task" }),
         context: create(EventContextSchema, {
@@ -5447,10 +6467,10 @@ describe("repository signal routing", () => {
     expectTypeOf(route.entityIds).toEqualTypeOf<readonly TaskId[]>();
   });
 
-  it("routes a message-valued producer ID when it matches the event target ID", () => {
+  it("routes a message-valued producer ID when it matches the event target ID", async () => {
     const repository = createProjectIdTaskRepository();
     const taskId = create(TaskIdSchema, { value: "message-producer-task" });
-    const route = repository.routeEvent(
+    const route = await repository.routeEvent(
       create(EventSchema, {
         id: create(EventIdSchema, { value: "event-message-producer-task" }),
         context: create(EventContextSchema, {
@@ -5471,36 +6491,38 @@ describe("repository signal routing", () => {
     expect(route.entityIds).toEqual([taskId]);
   });
 
-  it("uses a compatible message-valued producer even when the first field differs", () => {
+  it("uses a compatible message-valued producer even when the first field differs", async () => {
     const repository = createProjectIdTaskRepository();
     const targetId = create(TaskIdSchema, { value: "message-target-task" });
     const producerId = create(TaskIdSchema, { value: "different-message-producer" });
 
     expect(
-      repository.routeEvent(
-        create(EventSchema, {
-          id: create(EventIdSchema, { value: "event-message-producer-mismatch" }),
-          context: create(EventContextSchema, {
-            producerId: AnyMessages.pack(TaskIdSchema, producerId),
-            version: create(VersionSchema, { number: 1 }),
-          }),
-          message: AnyMessages.pack(
-            TaskCreatedSchema,
-            create(TaskCreatedSchema, {
-              id: targetId,
-              taskListId: create(TodoTaskListIdSchema, { value: "task-list" }),
-              title: "Mismatched message producer task",
+      (
+        await repository.routeEvent(
+          create(EventSchema, {
+            id: create(EventIdSchema, { value: "event-message-producer-mismatch" }),
+            context: create(EventContextSchema, {
+              producerId: AnyMessages.pack(TaskIdSchema, producerId),
+              version: create(VersionSchema, { number: 1 }),
             }),
-          ),
-        }),
+            message: AnyMessages.pack(
+              TaskCreatedSchema,
+              create(TaskCreatedSchema, {
+                id: targetId,
+                taskListId: create(TodoTaskListIdSchema, { value: "task-list" }),
+                title: "Mismatched message producer task",
+              }),
+            ),
+          }),
+        )
       ).entityIds,
     ).toEqual([producerId]);
   });
 
-  it("rejects a malformed producer that claims a compatible message ID type", () => {
+  it("rejects a malformed producer that claims a compatible message ID type", async () => {
     const repository = createProjectIdTaskRepository();
 
-    expect(() =>
+    await expect(
       repository.routeEvent(
         create(EventSchema, {
           id: create(EventIdSchema, { value: "event-malformed-message-producer" }),
@@ -5520,14 +6542,14 @@ describe("repository signal routing", () => {
           ),
         }),
       ),
-    ).toThrow(/readable compatible producer ID/);
+    ).rejects.toThrow(/readable compatible producer ID/);
   });
 
-  it("rejects an incompatible message producer for a scalar Entity target", () => {
+  it("rejects an incompatible message producer for a scalar Entity target", async () => {
     const repository = createTaskCreatedScalarProjectionRepository();
     const targetId = create(TaskIdSchema, { value: "scalar-target" });
 
-    expect(() =>
+    await expect(
       repository.routeEvent(
         create(EventSchema, {
           id: create(EventIdSchema, { value: "event-scalar-producer-mismatch" }),
@@ -5548,14 +6570,14 @@ describe("repository signal routing", () => {
           ),
         }),
       ),
-    ).toThrow(/compatible with the Entity state/);
+    ).rejects.toThrow(/compatible with the Entity state/);
   });
 
-  it("rejects a matching message producer for a scalar Entity target", () => {
+  it("rejects a matching message producer for a scalar Entity target", async () => {
     const repository = createTaskCreatedScalarProjectionRepository();
     const id = create(TaskIdSchema, { value: "matching-scalar-target" });
 
-    expect(() =>
+    await expect(
       repository.routeEvent(
         create(EventSchema, {
           id: create(EventIdSchema, { value: "event-scalar-producer-match" }),
@@ -5573,13 +6595,13 @@ describe("repository signal routing", () => {
           ),
         }),
       ),
-    ).toThrow(/compatible with the Entity state/);
+    ).rejects.toThrow(/compatible with the Entity state/);
   });
 
-  it("rejects message-valued event IDs with the wrong message type", () => {
+  it("rejects message-valued event IDs with the wrong message type", async () => {
     const repository = createProjectIdTaskRepository();
 
-    expect(() =>
+    await expect(
       repository.routeEvent(
         create(EventSchema, {
           id: create(EventIdSchema, { value: "event-wrong-message-id-type" }),
@@ -5595,7 +6617,7 @@ describe("repository signal routing", () => {
           ),
         }),
       ),
-    ).toThrow(/TaskId/);
+    ).rejects.toThrow(/TaskId/);
   });
 
   it("routes direct repository dispatchers without a bound runtime", async () => {
@@ -6449,7 +7471,7 @@ describe("repository signal routing", () => {
       },
     );
 
-    expect(int32Repository.routeCommand(int32Command).entityId).toBe(42);
+    expect((await int32Repository.routeCommand(int32Command)).entityId).toBe(42);
     await expect(
       requireEntityInboxTarget(int32Repository).replay(int32Message),
     ).resolves.toBeTypeOf("function");
@@ -6482,7 +7504,7 @@ describe("repository signal routing", () => {
       },
     );
 
-    expect(int64Repository.routeCommand(int64Command).entityId).toBe(42n);
+    expect((await int64Repository.routeCommand(int64Command)).entityId).toBe(42n);
     await expect(
       requireEntityInboxTarget(int64Repository).replay(int64Message),
     ).resolves.toBeUndefined();
@@ -7088,8 +8110,8 @@ describe("repository signal routing", () => {
     });
 
     Object.assign(repository, {
-      routeEvent(event: SpineEvent) {
-        const route = routeEvent(event);
+      async routeEvent(event: SpineEvent) {
+        const route = await routeEvent(event);
         return {
           ...route,
           entityIds: Object.freeze(["pm-fail", "pm-later"]),
@@ -7135,6 +8157,131 @@ describe("repository signal routing", () => {
     expect(later?.inboxId.targetTypeUrl).toBe(TypeUrls.derive(ProjectQueueStateSchema));
   });
 
+  it("records the first Process Manager recipient batch before a later handoff fails", async () => {
+    SplitRouteProcessManager.reset();
+    const ids = Array.from({ length: 1_001 }, (_, index) => `batch-${String(index)}`);
+    const routing = EventRouting.create<string>().route(ProjectCreatedSchema, () => ids);
+    const repository = createSplitPmRepo(routing);
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("BatchFailure")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const dispatcher = repositoryAccess.eventDispatcher(repository);
+    if (dispatcher === undefined) throw new Error("Expected Process Manager dispatcher.");
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- The spy calls it with the original Inbox instance.
+    const receiveAll = LocalEntityInbox.prototype.receiveAll;
+    const sizes: number[] = [];
+    const eventIdReadsAtHandoff: number[] = [];
+    let releaseFirst!: () => void;
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let enteredFirst!: () => void;
+    const firstEntered = new Promise<void>((resolve) => {
+      enteredFirst = resolve;
+    });
+    let eventIdReads = 0;
+    const event = createProjectCreated("batch-event", "source");
+    const eventId = event.id;
+    Object.defineProperty(event, "id", {
+      enumerable: true,
+      get() {
+        eventIdReads++;
+        return eventId;
+      },
+    });
+    const handoff = vi
+      .spyOn(LocalEntityInbox.prototype, "receiveAll")
+      .mockImplementation(async function (this: LocalEntityInbox, delivery, inputs, tenantId) {
+        sizes.push(inputs.length);
+        eventIdReadsAtHandoff.push(eventIdReads);
+        if (sizes.length === 2) throw new Error("later recipient batch failed");
+        enteredFirst();
+        await firstGate;
+        return receiveAll.call(this, delivery, inputs, tenantId);
+      });
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const dispatched = dispatcher.dispatch(event);
+      await firstEntered;
+      const readsWhileFirstPending = eventIdReads;
+      await Promise.resolve();
+      expect(eventIdReads).toBe(readsWhileFirstPending);
+      releaseFirst();
+      await expect(dispatched).rejects.toThrow("later recipient batch failed");
+      expect(sizes).toEqual([1_000, 1]);
+      expect(eventIdReadsAtHandoff[1]).toBeGreaterThan(eventIdReadsAtHandoff[0] ?? 0);
+      expect(warning).toHaveBeenCalledTimes(1);
+      const delivery = new Delivery({
+        context: { name: "BatchFailure", multitenant: false },
+        storageFactory: factory,
+      });
+      const stored = await delivery.inbox.read(ShardIndex.single(), {
+        statuses: ["DELIVERED"],
+        limit: 1_000,
+      });
+      expect(stored).toHaveLength(1_000);
+      expect(stored.every((row) => row.signalId === "batch-event")).toBe(true);
+    } finally {
+      releaseFirst();
+      handoff.mockRestore();
+      warning.mockRestore();
+      await context.close();
+    }
+  });
+
+  it("sends every remote Process Manager batch and preserves earlier rows on failure", async () => {
+    const ids = Array.from({ length: 1_001 }, (_, index) => `remote-${String(index)}`);
+    const routing = EventRouting.create<string>().route(ProjectCreatedSchema, () => ids);
+    const repository = createSplitPmRepo(routing);
+    const localFactory = new InMemoryStorageFactory();
+    const remoteFactory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("RemoteBatch")
+      .add(repository)
+      .withStorageFactory(localFactory)
+      .build();
+    const remote = new Delivery({
+      context: { name: "TransferredBatch", multitenant: false },
+      storageFactory: remoteFactory,
+    });
+    let writes = 0;
+    const remotePort = {
+      ...remote.inbox,
+      async receive(...args: Parameters<typeof remote.inbox.receive>) {
+        if (++writes === 1_001) throw new Error("remote batch failed");
+        return remote.inbox.receive(...args);
+      },
+    };
+    const descriptor = boundedContextAccess.delivery(context);
+    await descriptor.transition(descriptor.endpoints(), () => undefined, {
+      ports: { inbox: remotePort, workRegistry: remote.shards },
+    });
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const dispatcher = repositoryAccess.eventDispatcher(repository);
+    if (dispatcher === undefined) throw new Error("Expected Process Manager dispatcher.");
+    try {
+      await expect(
+        dispatcher.dispatch(createProjectCreated("remote-batch-event", "source")),
+      ).rejects.toThrow("remote batch failed");
+      expect(writes).toBe(1_001);
+      expect(warning).toHaveBeenCalledTimes(1);
+      const remoteRows = await remote.inbox.read(ShardIndex.single(), {
+        statuses: ["TO_DELIVER"],
+        limit: 1_000,
+      });
+      expect(remoteRows).toHaveLength(1_000);
+      const local = new Delivery({
+        context: { name: "RemoteBatch", multitenant: false },
+        storageFactory: localFactory,
+      });
+      expect(await local.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] })).toEqual([]);
+    } finally {
+      warning.mockRestore();
+      await context.close();
+    }
+  });
+
   it("guards each target of a multi-target Process Manager route independently", async () => {
     SplitRouteProcessManager.reset();
     const factory = new InMemoryStorageFactory();
@@ -7159,12 +8306,12 @@ describe("repository signal routing", () => {
     const repository = createGuardedAggregateRepository();
     const routeEvent = repository.routeEvent.bind(repository);
     Object.assign(repository, {
-      routeEvent(event: SpineEvent) {
+      async routeEvent(event: SpineEvent) {
         const entityIds =
           event.id?.value === "event-aggregate-guarded-other"
             ? ["aggregate-other"]
             : ["aggregate-one", "aggregate-two"];
-        return { ...routeEvent(event), entityIds: Object.freeze(entityIds) };
+        return { ...(await routeEvent(event)), entityIds: Object.freeze(entityIds) };
       },
     });
     const context = BoundedContext.singleTenant("Tasks")
@@ -10968,15 +12115,15 @@ describe("repository signal routing", () => {
     ).resolves.toMatchObject({ version: { number: 1 } });
   });
 
-  it("rejects a default-routed Event without a producer ID", () => {
+  it("rejects a default-routed Event without a producer ID", async () => {
     const repository = createRoutingRepository();
 
-    expect(() =>
+    await expect(
       repository.routeEvent(createContextlessProjectCreated("event-no-producer", "field-task")),
-    ).toThrow(/producer ID/);
+    ).rejects.toThrow(/producer ID/);
   });
 
-  it("rejects a malformed producer that claims the compatible target type", () => {
+  it("rejects a malformed producer that claims the compatible target type", async () => {
     const repository = createRoutingRepository();
     const event = createProjectCreated("event-unreadable-producer", "first-field-task");
     if (event.context === undefined) throw new Error("Expected Event context.");
@@ -10985,25 +12132,27 @@ describe("repository signal routing", () => {
       value: new Uint8Array([255]),
     });
 
-    expect(() => repository.routeEvent(event)).toThrow(/readable compatible producer ID/);
+    await expect(repository.routeEvent(event)).rejects.toThrow(/readable compatible producer ID/);
   });
 
-  it("falls back from an incompatible non-finite numeric producer", () => {
+  it("falls back from an incompatible non-finite numeric producer", async () => {
     const repository = createRoutingRepository();
 
     expect(
-      repository.routeEvent(
-        createProjectCreated("event-non-finite-producer", "first-field-task", {
-          producerNumber: Number.NaN,
-        }),
+      (
+        await repository.routeEvent(
+          createProjectCreated("event-non-finite-producer", "first-field-task", {
+            producerNumber: Number.NaN,
+          }),
+        )
       ).entityIds,
     ).toEqual(["first-field-task"]);
   });
 
-  it("rejects non-finite first-field event IDs", () => {
+  it("rejects non-finite first-field event IDs", async () => {
     const repository = createNonFiniteRouteRepository();
 
-    expect(() =>
+    await expect(
       repository.routeEvent(
         create(EventSchema, {
           id: create(EventIdSchema, { value: "event-non-finite-field" }),
@@ -11017,7 +12166,7 @@ describe("repository signal routing", () => {
           ),
         }),
       ),
-    ).toThrow(/ID compatible with the Entity state/);
+    ).rejects.toThrow(/ID compatible with the Entity state/);
   });
 
   it("rejects invalid repository events before context event storage", async () => {
@@ -11109,8 +12258,8 @@ describe("repository signal routing", () => {
 });
 
 function createRoutingRepository(
-  commandRouting?: CommandRouting<string>,
-  eventRouting?: EventRouting<string>,
+  commandRouting?: CommandRouting<string> | CommandRouting<string, typeof ProjectAggregate>,
+  eventRouting?: EventRouting<string> | EventRouting<string, typeof ProjectAggregate>,
 ): Repository<typeof ProjectAggregate> {
   const handlers = EntityHandlers.define(ProjectAggregate, ProjectStateSchema, (builder) => [
     builder.assign(CreateProjectSchema, "createProject"),
@@ -11189,7 +12338,7 @@ function createBlankStateIdProjectionRepository(): Repository<typeof BlankStateI
 }
 
 function createExecutingProjectionRepository(
-  eventRouting?: EventRouting<string>,
+  eventRouting?: EventRouting<string> | EventRouting<string, typeof ExecutingTaskProjection>,
 ): Repository<typeof ExecutingTaskProjection> {
   const handlers = EntityHandlers.define(
     ExecutingTaskProjection,
@@ -11418,9 +12567,9 @@ function createOptionalCommandProcessManagerRepository(): Repository<
   });
 }
 
-function createSilentCommandProcessManagerRepository(): Repository<
-  typeof SilentCommandProcessManager
-> {
+function createSilentCommandProcessManagerRepository(
+  eventRouting?: EventRouting<string> | EventRouting<string, typeof SilentCommandProcessManager>,
+): Repository<typeof SilentCommandProcessManager> {
   const handlers = new HandlerRegistryIngestor().ingest({
     receivers: [
       {
@@ -11450,9 +12599,9 @@ function createSilentCommandProcessManagerRepository(): Repository<
     entityType: SilentCommandProcessManager,
     schema: ProjectQueueStateSchema,
     handlers,
-    eventRouting: EventRouting.create<string>().route(TaskAlreadyDoneSchema, (r) => [
-      r.id?.value ?? "",
-    ]),
+    eventRouting:
+      eventRouting ??
+      EventRouting.create<string>().route(TaskAlreadyDoneSchema, (r) => [r.id?.value ?? ""]),
   });
 }
 
@@ -11528,9 +12677,13 @@ function createRegisteredProjectAggregateRepository(): Repository<
 }
 
 function createProjectMilestoneProcessManagerRepository(
-  eventRouting?: EventRouting<ProjectMilestoneId>,
+  eventRouting?:
+    | EventRouting<ProjectMilestoneId>
+    | EventRouting<ProjectMilestoneId, typeof ProjectMilestoneProcessManager>,
   options: { readonly doubleDispatchGuard?: boolean; readonly produces?: boolean } = {},
-  commandRouting?: CommandRouting<ProjectMilestoneId>,
+  commandRouting?:
+    | CommandRouting<ProjectMilestoneId>
+    | CommandRouting<ProjectMilestoneId, typeof ProjectMilestoneProcessManager>,
 ): Repository<typeof ProjectMilestoneProcessManager> {
   const handlers = HandlerMetadataValues.defineArity(
     ProjectMilestoneProcessManager,
@@ -12159,8 +13312,8 @@ function routeAggregateTargets(
 ): void {
   const routeEvent = repository.routeEvent.bind(repository);
   Object.assign(repository, {
-    routeEvent(event: SpineEvent) {
-      return { ...routeEvent(event), entityIds: Object.freeze([...entityIds]) };
+    async routeEvent(event: SpineEvent) {
+      return { ...(await routeEvent(event)), entityIds: Object.freeze([...entityIds]) };
     },
   });
 }
@@ -12669,7 +13822,9 @@ function createGuardedBlockingPmRepo(depth = 100): Repository<typeof BlockingPro
   });
 }
 
-function createSplitPmRepo(): Repository<typeof SplitRouteProcessManager> {
+function createSplitPmRepo(
+  eventRouting?: EventRouting<string> | EventRouting<string, typeof SplitRouteProcessManager>,
+): Repository<typeof SplitRouteProcessManager> {
   const handlers = EntityHandlers.define(
     SplitRouteProcessManager,
     ProjectQueueStateSchema,
@@ -12680,6 +13835,7 @@ function createSplitPmRepo(): Repository<typeof SplitRouteProcessManager> {
     entityType: SplitRouteProcessManager,
     schema: ProjectQueueStateSchema,
     handlers,
+    ...(eventRouting === undefined ? {} : { eventRouting }),
   });
 }
 
@@ -13667,6 +14823,74 @@ class CurrentRecordTestStorage<S extends Message = Message> {
   }
 }
 
+type ReadEntityStorage = EntityStorageConformance<unknown, Message> & { close(): void };
+
+class ObservedReadStorageFactory extends InMemoryStorageFactory {
+  readonly plans: NormalizedQueryPlan<unknown>[] = [];
+  commitCreations = 0;
+  writeCalls = 0;
+  readCloses = 0;
+
+  protected override createEntityCommitStorage<I, S extends Message>(
+    input: EntityStorageInput<I, S>,
+  ): EntityCommitStorage {
+    this.commitCreations += 1;
+    return super.createEntityCommitStorage(input);
+  }
+
+  override createEntityStorage(input: unknown): unknown {
+    const storage = super.createEntityStorage(input) as ReadEntityStorage;
+    return {
+      current: {
+        read: (id: unknown) => storage.current.read(id),
+        write: (record: EntityRecord) => {
+          this.writeCalls += 1;
+          return storage.current.write(record);
+        },
+        query: (plan: NormalizedQueryPlan<unknown>) => {
+          this.plans.push(plan);
+          return storage.current.query(plan);
+        },
+      },
+      events: storage.events,
+      states: storage.states,
+      close: () => {
+        this.readCloses += 1;
+        storage.close();
+      },
+    };
+  }
+}
+
+class FailingReadStorageFactory extends InMemoryStorageFactory {
+  commitCreations = 0;
+  readCloses = 0;
+
+  protected override createEntityCommitStorage<I, S extends Message>(
+    input: EntityStorageInput<I, S>,
+  ): EntityCommitStorage {
+    this.commitCreations += 1;
+    return super.createEntityCommitStorage(input);
+  }
+
+  override createEntityStorage(input: unknown): unknown {
+    const storage = super.createEntityStorage(input) as ReadEntityStorage;
+    return {
+      current: {
+        read: (id: unknown) => storage.current.read(id),
+        write: (record: EntityRecord) => storage.current.write(record),
+        query: () => Promise.reject(new Error("current-record provider failed")),
+      },
+      events: storage.events,
+      states: storage.states,
+      close: () => {
+        this.readCloses += 1;
+        storage.close();
+      },
+    };
+  }
+}
+
 class ReentrantRegistrationStorageFactory extends InMemoryStorageFactory {
   constructor(private readonly onCreate: () => void) {
     super();
@@ -14118,7 +15342,7 @@ describe("Projection state-update routing", () => {
     await context.close();
   });
 
-  it("uses the first compatible state field and ignores unrelated state types", () => {
+  it("uses the first compatible state field and ignores unrelated state types", async () => {
     const handlers = EntityHandlers.define(
       ExecutingTaskProjection,
       ProjectOverviewStateSchema,
@@ -14131,20 +15355,102 @@ describe("Projection state-update routing", () => {
     });
 
     expect(
-      repositoryAccess.routeStateUpdate(repository, createStateChangedEvent("state-1")),
+      await repositoryAccess.routeStateUpdate(repository, createStateChangedEvent("state-1")),
     ).toMatchObject({
       entityIds: ["state-1"],
       messageFullTypeName: ProjectStateSchema.typeName,
     });
     expect(
-      repositoryAccess.routeStateUpdate(
+      await repositoryAccess.routeStateUpdate(
         repository,
         createStateChangedEvent("other", create(ProjectOverviewStateSchema, { id: "other" })),
       ),
     ).toBeUndefined();
   });
 
-  it("rejects an empty first compatible field instead of routing by a later field", () => {
+  it("awaits a state-update query route for a receiving Projection", async () => {
+    const handlers = EntityHandlers.define(
+      StateObservingProjection,
+      ProjectOverviewStateSchema,
+      (builder) => [builder.subscribe(ProjectStateSchema, "subscribeState")],
+    );
+    const routing = StateUpdateRouting.create(StateObservingProjection).route(
+      ProjectStateSchema,
+      async (_state, _context, reads) => reads.findIds(ProjectOverviewStateQuery.create().build()),
+    );
+    const repository = new Repository({
+      entityType: StateObservingProjection,
+      schema: ProjectOverviewStateSchema,
+      handlers,
+      stateUpdateRouting: routing,
+    });
+    const context = BoundedContext.singleTenant("AsyncStateRoute").add(repository).build();
+    try {
+      await context
+        .stand()
+        .update(
+          ProjectOverviewStateSchema,
+          create(ProjectOverviewStateSchema, { id: "existing", name: "View" }),
+        );
+      const result = await repositoryAccess.routeStateUpdate(
+        repository,
+        createStateChangedEvent("source"),
+      );
+      expect(result?.entityIds).toEqual(["existing"]);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("drains slow state-update acceptance before closing its repository", async () => {
+    StateObservingProjection.reset();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let entered!: () => void;
+    const routing = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const handlers = EntityHandlers.define(
+      StateObservingProjection,
+      ProjectOverviewStateSchema,
+      (builder) => [builder.subscribe(ProjectStateSchema, "subscribeState")],
+    );
+    const repository = new Repository({
+      entityType: StateObservingProjection,
+      schema: ProjectOverviewStateSchema,
+      handlers,
+      stateUpdateRouting: StateUpdateRouting.create(StateObservingProjection).route(
+        ProjectStateSchema,
+        async () => {
+          entered();
+          await gate;
+          return ["state-target"];
+        },
+      ),
+    });
+    const context = BoundedContext.singleTenant("SlowStateRoute").add(repository).build();
+    const posted = boundedContextAccess.postSystemEvent(
+      context,
+      createStateChangedEvent("state-target"),
+    );
+    try {
+      await routing;
+      const closing = context.close();
+      await expect(Promise.race([closing.then(() => "closed"), delay(30)])).resolves.toBe(
+        "pending",
+      );
+      release();
+      await expect(Promise.all([posted, closing])).resolves.toEqual([undefined, undefined]);
+      expect(StateObservingProjection.subscriberCalls).toBe(1);
+    } finally {
+      release();
+      await context.close();
+    }
+  });
+
+  it("rejects an empty first compatible field instead of routing by a later field", async () => {
     const handlers = EntityHandlers.define(
       ExecutingTaskProjection,
       ProjectOverviewStateSchema,
@@ -14156,7 +15462,7 @@ describe("Projection state-update routing", () => {
       handlers,
     });
 
-    expect(() =>
+    await expect(
       repositoryAccess.routeStateUpdate(
         repository,
         createStateChangedEvent(
@@ -14164,7 +15470,7 @@ describe("Projection state-update routing", () => {
           create(ProjectStateSchema, { id: "", name: "not-an-id" }),
         ),
       ),
-    ).toThrow(/state update routing requires an ID compatible with the Entity state/);
+    ).rejects.toThrow(/state update routing requires an ID compatible with the Entity state/);
   });
 
   it("rejects construction when the built-in route has no compatible state field", () => {
@@ -14184,7 +15490,7 @@ describe("Projection state-update routing", () => {
     ).toThrow(/no compatible field.*NumberedProjectState/i);
   });
 
-  it("uses a declaration-first message ID compatible with the Projection ID", () => {
+  it("uses a declaration-first message ID compatible with the Projection ID", async () => {
     const handlers = EntityHandlers.define(
       SequencedProjectOverview,
       SequencedProjectOverviewStateSchema,
@@ -14198,17 +15504,19 @@ describe("Projection state-update routing", () => {
     const id = create(ProjectSequenceIdSchema, { value: 42n });
 
     expect(
-      repositoryAccess.routeStateUpdate(
-        repository,
-        createStateChangedEvent(
-          "int64-message",
-          create(SequencedProjectSourceStateSchema, { id, name: "Message ID" }),
-        ),
+      (
+        await repositoryAccess.routeStateUpdate(
+          repository,
+          createStateChangedEvent(
+            "int64-message",
+            create(SequencedProjectSourceStateSchema, { id, name: "Message ID" }),
+          ),
+        )
       )?.entityIds,
     ).toEqual([id]);
   });
 
-  it("evaluates an exact multicast route once and stably deduplicates targets", () => {
+  it("evaluates an exact multicast route once and stably deduplicates targets", async () => {
     const route = vi.fn(() => ["second", "first", "second"]);
     const handlers = EntityHandlers.define(
       ExecutingTaskProjection,
@@ -14222,14 +15530,17 @@ describe("Projection state-update routing", () => {
       stateUpdateRouting: StateUpdateRouting.create<string>().route(ProjectStateSchema, route),
     });
 
-    const result = repositoryAccess.routeStateUpdate(repository, createStateChangedEvent("source"));
+    const result = await repositoryAccess.routeStateUpdate(
+      repository,
+      createStateChangedEvent("source"),
+    );
 
     expect(route).toHaveBeenCalledOnce();
     expect(result?.entityIds).toEqual(["second", "first"]);
     expect(Object.isFrozen(result?.entityIds)).toBe(true);
   });
 
-  it("selects exact state routes before replacement defaults", () => {
+  it("selects exact state routes before replacement defaults", async () => {
     const handlers = EntityHandlers.define(
       StateObservingProjection,
       ProjectOverviewStateSchema,
@@ -14244,22 +15555,26 @@ describe("Projection state-update routing", () => {
     ];
 
     expect(
-      cases.map(
-        (stateUpdateRouting) =>
-          repositoryAccess.routeStateUpdate(
-            new Repository({
-              entityType: StateObservingProjection,
-              schema: ProjectOverviewStateSchema,
-              handlers,
-              stateUpdateRouting,
-            }),
-            event,
-          )?.entityIds,
+      await Promise.all(
+        cases.map(
+          async (stateUpdateRouting) =>
+            (
+              await repositoryAccess.routeStateUpdate(
+                new Repository({
+                  entityType: StateObservingProjection,
+                  schema: ProjectOverviewStateSchema,
+                  handlers,
+                  stateUpdateRouting,
+                }),
+                event,
+              )
+            )?.entityIds,
+        ),
       ),
     ).toEqual([["exact"], ["replacement"]]);
   });
 
-  it("selects a state interface route after exact routes and before the default", () => {
+  it("selects a state interface route after exact routes and before the default", async () => {
     const token = MessageInterfaces.define<object, readonly [typeof ProjectStateSchema]>([
       ProjectStateSchema,
     ]);
@@ -14278,12 +15593,50 @@ describe("Projection state-update routing", () => {
     });
 
     expect(
-      repositoryAccess.routeStateUpdate(repository, createStateChangedEvent("interface"))
+      (await repositoryAccess.routeStateUpdate(repository, createStateChangedEvent("interface")))
         ?.entityIds,
     ).toEqual(["interface"]);
   });
 
-  it("fails closed for malformed System events", () => {
+  it("awaits async state exact, interface, and replacement default routes in precedence order", async () => {
+    const token = MessageInterfaces.define<object, readonly [typeof ProjectStateSchema]>([
+      ProjectStateSchema,
+    ]);
+    const handlers = EntityHandlers.define(
+      StateObservingProjection,
+      ProjectOverviewStateSchema,
+      (builder) => [builder.subscribe(ProjectStateSchema, "subscribeState")],
+    );
+    const cases = [
+      StateUpdateRouting.create<string>()
+        .route(ProjectStateSchema, () => Promise.resolve(["exact"]))
+        .route(token, () => Promise.resolve(["interface"]))
+        .replaceDefault(() => Promise.resolve(["default"])),
+      StateUpdateRouting.create<string>()
+        .route(token, () => Promise.resolve(["interface"]))
+        .replaceDefault(() => Promise.resolve(["default"])),
+      StateUpdateRouting.create<string>().replaceDefault(() => Promise.resolve(["default"])),
+    ];
+    const results = await Promise.all(
+      cases.map(
+        async (stateUpdateRouting) =>
+          (
+            await repositoryAccess.routeStateUpdate(
+              new Repository({
+                entityType: StateObservingProjection,
+                schema: ProjectOverviewStateSchema,
+                handlers,
+                stateUpdateRouting,
+              }),
+              createStateChangedEvent("async-state-precedence"),
+            )
+          )?.entityIds,
+      ),
+    );
+    expect(results).toEqual([["exact"], ["interface"], ["default"]]);
+  });
+
+  it("fails closed for malformed System events", async () => {
     const handlers = EntityHandlers.define(
       StateObservingProjection,
       ProjectOverviewStateSchema,
@@ -14294,16 +15647,16 @@ describe("Projection state-update routing", () => {
       schema: ProjectOverviewStateSchema,
       handlers,
     });
-    expect(() =>
+    await expect(
       repositoryAccess.routeStateUpdate(repository, createProjectCreated("domain", "target")),
-    ).toThrow(/requires an EntityStateChanged System event/);
+    ).rejects.toThrow(/requires an EntityStateChanged System event/);
     const missingState = create(EventSchema, {
       id: create(EventIdSchema, { value: "missing-state" }),
       message: AnyMessages.pack(EntityStateChangedSchema, create(EntityStateChangedSchema), {
         validate: false,
       }),
     });
-    expect(() => repositoryAccess.routeStateUpdate(repository, missingState)).toThrow(
+    await expect(repositoryAccess.routeStateUpdate(repository, missingState)).rejects.toThrow(
       /requires.*newState/,
     );
     const unreadableState = create(EventSchema, {
@@ -14319,10 +15672,10 @@ describe("Projection state-update routing", () => {
         { validate: false },
       ),
     });
-    expect(() => repositoryAccess.routeStateUpdate(repository, unreadableState)).toThrow();
+    await expect(repositoryAccess.routeStateUpdate(repository, unreadableState)).rejects.toThrow();
   });
 
-  it("normalizes a missing EventContext before invoking a custom route", () => {
+  it("normalizes a missing EventContext before invoking a custom route", async () => {
     const route = vi.fn(() => ["target"]);
     const handlers = EntityHandlers.define(
       StateObservingProjection,
@@ -14338,12 +15691,13 @@ describe("Projection state-update routing", () => {
     const event = createStateChangedEvent("source");
     event.context = undefined;
 
-    repositoryAccess.routeStateUpdate(repository, event);
+    await repositoryAccess.routeStateUpdate(repository, event);
 
-    expect(route).toHaveBeenCalledWith(
+    expect(route.mock.calls[0]).toHaveLength(3);
+    expect(route.mock.calls[0]?.slice(0, 2)).toEqual([
       expect.objectContaining({ id: "source" }),
       create(EventContextSchema),
-    );
+    ]);
   });
 
   it("admits one durable state-interface row per selected target", async () => {
@@ -14646,11 +16000,7 @@ describe("Projection state-update routing", () => {
     );
     const event = createStateChangedEvent("source");
 
-    for (const route of [
-      (() => new Set(["target"])) as never,
-      () => Array.from({ length: 1_001 }, (_, index) => `target-${String(index)}`),
-      () => ["valid", "   "],
-    ]) {
+    for (const route of [(() => new Set(["target"])) as never, () => ["valid", "   "]]) {
       StateObservingProjection.reset();
       const repository = new Repository({
         entityType: StateObservingProjection,
