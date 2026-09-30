@@ -747,3 +747,56 @@ Remaining limitations are explicit: GitHub has no PR/check run for this branch,
 so CI is not claimed green; the separate live Datastore history-trim failure is
 unchanged and awaits the human's scope decision. All approved query behavior and
 example/database evidence is recorded in the work log.
+
+## Three additional rounds requested on 30 September
+
+The human explicitly requests three sequential independent whole-branch reviews,
+with all confirmed findings fixed before the following round. This is an explicit
+exception to the protocol's usual two-wave limit. Compare each frozen head to
+original base 2324311be8c23024f66cb2ba702fbe99a99e7dfb, not just the last fixes.
+Each fresh reviewer has memory disabled, no inherited conversation or previous
+review reports, reads the complete requirements ledger and inspects both behavior
+and standards. All four canonical concerns receive a disposition. Use existing
+reviewer functions with explicit Sol/medium; source changes are prohibited during
+each review. Main validates findings before correction.
+
+Round 1: head 76b0839c4a386accc3180dbdd1bb084a4861d6c1; fresh ephemeral session
+01a0f1a4-5da2-7a12-8b5d-fa1297a51e98. Configured header confirms explicit Sol/medium,
+read-only sandbox and memory disabled in dispatch. No fallback is visible;
+separate runtime identity is unavailable. Review is in progress. Main's initial
+mechanical status correction updates the completion plan only; reviewed source
+is unchanged. The reviewer is not given previous findings or pass/fail conclusions.
+
+Round 1 completed with two accepted P2 findings: docs/api/README.md still calls
+the receiving-repository callback future work; docs/architecture/README.md still
+describes applied masks in active query/subscription/storage guidance. Both
+contradict implemented, approved behavior. Correct current wording and scan
+affected live guides; do not add tests that merely pin prose strings.
+
+Reject P3 about the Orders hidden docs-snippet-path. Main inspected the current
+checker: documentationSnippetFile resolves a source context, and compileSnippet
+replaces that virtual module with the snippet (docs/check-typescript-snippets.mjs,
+around lines 99 and 169). The snippet imports query-routing.js; using that module
+as context would replace its exports with the importing snippet. The visible
+source link already names src/query-routing.ts. There is no wrong user-facing
+link and the marker is not source attribution. Preserve it and the checker.
+
+API/TSDoc and documentation have the two corrections above. Reliability and
+maintainability report no confirmed defects across the inspected whole-branch
+paths. Return the accepted documentation batch to the existing example/docs
+implementer 01a0ee86-8137-7912-8717-84089f8a3f13, explicit Sol/medium. Sole writer
+for docs/api/README.md and docs/architecture/README.md; main changes task records.
+Run focused docs checks and formatting before a correction commit/push and round 2. Estimate 0.1–0.2 hours. The next reviewer receives neither this result nor
+prior reports. No runtime or security contract changes are expected.
+
+Round 1 fixes are verified. API reference describes the current third argument,
+typed IDs, complete detached states, restored application Entities and route-bound
+reads. Architecture query/subscription/storage prose removes applied-mask claims
+and states that wire masks are ignored. Existing API, audience and snippet checks,
+bounded wording scans, formatting and whitespace all pass. No runtime/test files,
+snippet marker or compiler changes. The retained implementer confirms explicit
+Sol/medium in its resumed configured profile. Commit/push this correction before
+round 2. Round 2 assignment: a new ephemeral existing reviewer session, explicit
+Sol/medium, same original base and complete current branch, memory/history and
+prior findings excluded. Keep the same requirements brief and no edits during
+review; record its head/session after dispatch.

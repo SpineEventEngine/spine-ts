@@ -29,18 +29,16 @@ has received standalone plan review. Accepted findings are included in the plan.
 The human resolved its last question: no masking in any API, including
 subscriptions, and ignore mask fields in incoming Protobufs. The revised plan
 has no remaining product questions.
-Implementation is underway. Masking removal is independently reviewed with its
-accepted findings fixed and focused checks passing. Shared typed queries and
-normal DSL generation are also reviewed and verified, with corrections resolved.
-Exhaustive repository reads are implemented and reviewed; query checks pass on
-memory, MySQL, MariaDB, PostgreSQL 16/18 and the Datastore emulator. A separate
-Datastore history-trimming test times out; its scope decision and diagnostic
-evidence are recorded in the work log. Asynchronous routing is implemented and
-independently reviewed. All accepted findings are fixed, including published
-declaration safety and runtime checks for different Entity constructors. Focused
-tests and cheap checks pass; the focused coverage subset does not replace the
-still-required full-project coverage gate. Examples and final documentation are
-next, followed by the full extension release gate.
+The extension, examples and documentation are implemented. Final release checks
+pass on ed2374619: 5,127 tests across 306 files, all coverage thresholds, and the
+separate consumer proof for all 19 package tarballs. Live query checks pass on
+MySQL, MariaDB, PostgreSQL 16/18 and the Datastore emulator; Todo checks pass on
+memory and all four SQL engines. A separate unchanged Datastore history-trimming
+test times out; its diagnostic evidence and pending scope question remain in the
+work log. On 30 September the human requested three additional sequential,
+independent whole-branch review-and-fix rounds with no memory. Those rounds are
+now in progress; their fixes must precede the following round. GitHub CI still
+requires a human-created PR.
 
 Status: Waves 9 through 13 are complete, release-verified, integrated, and
 remotely closed. The complete-replica deployment correction is closed through

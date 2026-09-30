@@ -527,7 +527,7 @@ the context command bus to the Connect/Node `CommandService`,
 `Stand.queryVersioned()` over the stand's `RecordStorage.queryEntries()` path.
 ID-filter reads for any registered state route use the same path with a storage
 ID filter. Projection queries also support top-level `EQUAL` filters over
-declared projection `(column)` proto field names, field masks, repeated ordering
+declared projection `(column)` proto field names, repeated ordering
 directives over declared proto column names, and positive limits when ordering
 is present. Absent or zero wire limits use an implicit 1,000-row cap without
 requiring ordering; only a positive limit without ordering returns
@@ -535,7 +535,8 @@ requiring ordering; only a positive limit without ordering returns
 limits. Use proto column names such as `open_task_count`, not generated TS
 local names such as `openTaskCount`. Undeclared columns, unsupported operators,
 nested or `EITHER` composites, positive limits without ordering, missing criteria, and
-`include_all = false` return `INVALID_QUERY` before Stand storage reads.
+`include_all = false` return `INVALID_QUERY` before Stand storage reads. The
+imported `ResponseFormat.field_mask` is ignored, so reads return complete states.
 Direct list reads and `QueryService.Read` include-all calls follow the same
 tenant rules as point reads: single-tenant contexts reject tenant options, and
 multitenant contexts require `tenantId`.
@@ -553,7 +554,8 @@ support optional ID filters plus
 fields, including nested message fields. Missing ID filters match all IDs.
 Filtered delivery compares previous and new Stand state: matching new states
 are delivered, and matched-to-unmatched transitions emit `no_longer_matching`.
-Topic masks are applied only to delivered states. Event topics support
+Incoming `Topic.field_mask` is ignored; delivered states contain every saved
+field. Event topics support
 `include_all = true` in this runtime implementation and stream wire-level
 `event_updates` with cloned framework `Event` envelopes for matching event
 message type URLs. Application handlers remain on generated domain event
@@ -713,7 +715,7 @@ command and event work stays in the existing buses and generated services.
 `@spine-event-engine/storage` defines a record-storage seam. The package exports
 `StorageFactory` with one mandatory adapter method,
 `createRecordStorage(context, spec, group?)`, plus `RecordStorage`, `RecordSpec`,
-`RecordColumn`, query/mask contracts, and an in-memory implementation. It does
+`RecordColumn`, query contracts, and an in-memory implementation. It does
 not implement repositories, transactions, buses, delivery workers, service
 APIs or delivery workers. The Datastore adapter and the MySQL and PostgreSQL
 RDBMS adapters implement this contract in their packages. Choosing and operating
@@ -726,8 +728,8 @@ type (defaulting to the record type). `RecordStorage` stores
 identified Protobuf records, clones them on write/read, deletes by ID, and
 queries by exact IDs, exact column filters, deterministic sort order on `id`,
 stored columns, or dotted record paths, stable continuations after sorted row
-keys, non-negative offsets applied after sorting and before positive limits,
-and simple masks on cloned results.
+keys, and non-negative offsets applied after sorting and before positive limits.
+Query results contain complete cloned records.
 `StorageContext` carries a diagnostic Bounded Context name plus the optional
 complete tenant selection for multitenant storage. Providers resolve direct record
 families from source type, record type, and optional external `StorageGroup`;

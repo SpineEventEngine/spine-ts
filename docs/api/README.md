@@ -391,8 +391,12 @@ prototype metadata, so alias imports, member expressions, intermediate domain
 base classes, and explicitly reparented ES classes with matching same-realm
 prototype chains are treated as metadata. It opens state record storage only
 through `BoundedContextBuilder.build()`; direct repository registration is not
-public API. `RepositoryReadQueries<EntityType>` declares typed read results for
-the receiving repository; routing callback injection follows in a later slice.
+public API. Command, event, and state-update routing callbacks receive
+`RepositoryReadQueries<EntityType>` as their third argument while the route runs.
+Its `findIds(query)`, `findStates(query)`, and `find(query)` methods read the
+receiving repository's current records in the incoming signal's tenant scope.
+They return typed IDs, detached complete states, and restored application
+Entity instances, respectively. The read scope closes when the route finishes.
 When explicit handler metadata is supplied, repository routing
 calculates command and event routes by generated message full type name,
 readiness metadata, producer ID, or first-field ID. Built bounded contexts

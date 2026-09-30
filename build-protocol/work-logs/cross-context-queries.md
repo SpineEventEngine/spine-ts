@@ -1296,3 +1296,42 @@ snapshot.17 is unused for all 19 public packages. Final record formatting,
 documentation-audience and whitespace checks pass. The branch/worktree remains
 available for the human's PR; no PR, merge, package publication or npm tag change
 was performed.
+
+## Human-requested three-round review — 30 September
+
+The human requests three sequential independent whole-branch reviews, fixing
+each round before the next. This explicitly overrides the normal two-wave limit
+and concern-only scope for this review task. Keep the existing branch/worktree;
+initial code HEAD is 76b0839c4a386accc3180dbdd1bb084a4861d6c1 and the fixed review
+base is 2324311be8c23024f66cb2ba702fbe99a99e7dfb. The checkout starts clean.
+High-risk classification remains: public types/generation, storage, tenancy and
+asynchronous delivery. Estimate 1–2 hours: three fresh reviews, confirmed fixes,
+focused preflight, one converged release/package verification if code changes,
+immediate pushes and final status. No PR, merge, publication or new version bump.
+
+Main reread BUILD_PROTOCOL, current completion-plan workflow/blockers, AGENTS
+and the expected-skills manifest. Session skill catalog plus bounded rg of the
+four review/verification entrypoints and installed skill-lock confirms available
+review (mattpocock) and requesting/receiving review plus verification (superpowers).
+Selected instructions and the reviewer template are read fully. Apply review's
+Standards/Spec axes, but the explicit single independent reviewer per sequential
+round and project roles override its generic parallel-agent/issue-tracker setup.
+The existing written plan supplies the base and specification; no clarification,
+tracker setup or new planning files are needed. Requesting/receiving-review skills
+require evidence-based findings and technical validation before fixes. No new
+architecture pass is justified by review alone. Correction-specific skills will
+be read if their work becomes necessary.
+
+The bundled capable CLI is 0.158.0-alpha.2.1 and supports explicit profiles.
+Each reviewer uses the existing performance/reliability reviewer function,
+explicit Sol/medium, with the human-requested complete changed-branch remit,
+including API, documentation and standards dispositions. Each is a new ephemeral
+session, memory disabled, no inherited conversation, no prior review/work-log
+reports or agent-state access, no subagents and no edits. Main records configured
+header/session metadata before accepting each result; separate runtime identity
+may be unavailable. Read only the requirements/design portions of the plan,
+not its status/review conclusions. Prior whole-branch mechanical verification is
+current for unchanged code; initial diff whitespace passes. Main corrects the
+completion plan's stale extension status before review. Fixes use one retained
+Sol/medium implementation context where applicable; test runs remain serial and
+single-worker. Collect a full round before assigning its correction batch.
