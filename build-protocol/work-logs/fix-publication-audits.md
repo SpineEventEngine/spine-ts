@@ -55,6 +55,31 @@ only top-level version fields in exactly 31 manifests.
 
 Detailed command evidence: `/tmp/spine-publication-audit-implementation.md` and
 the CLI event stream `/tmp/spine-publication-audit-implementation.jsonl`.
-Fresh documentation review completed with no findings. Technical review and
-full release/package verification are in progress; remote PR CI not run because
-no PR has been requested or created.
+Fresh documentation and technical reviews completed with no findings.
+
+## Final verification and handoff
+
+The orchestrator-dispatched mechanical function used explicit `gpt-6-luna` /
+`medium`, Standard speed, memories disabled. It ran the complete
+`pnpm verify:publish` once at `14ba08d186d30536bf07d80d69ce7f4343955fee`:
+exit 0; all 5,135 tests in 307 files passed; both full and production audits
+reported no known vulnerabilities. Coverage: 93.26% statements, 90.03% branches,
+93.04% functions, 94.45% lines. All generated, type, documentation, formatting,
+dependency, and release-readiness checks passed in the same profile.
+
+`node scripts/release-cli.mjs prepare --check` then exited 0, proving all 19
+package archives at snapshot.18 in an external consumer. Generated verification
+left the worktree clean. The final subsequent change contains only task records,
+checked with formatting and `git diff --check`; no build inputs changed.
+
+Evidence: `/tmp/spine-publication-final-verify.log`,
+`/tmp/spine-publication-final-prepare.log`, and
+`/tmp/spine-publication-final-verification.md`. The verification process exited;
+no task test process is intentionally left running. No npm publishing or remote
+workflow rerun occurred. Pushes use official `origin/fix-publication-audits`.
+
+Local acceptance is complete. GitHub PR CI is not claimed: it requires a
+human-created PR, which this task does not authorize creating. Next step is the
+human PR review; its updated Build workflow will run both audits before release
+verification and package preparation. Historical snapshot.17 task evidence is
+retained; current manifests, pins, Proto metadata, and release fixtures use .18.

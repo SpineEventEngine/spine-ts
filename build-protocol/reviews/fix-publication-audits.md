@@ -33,6 +33,8 @@ remits; explicitly set performance/reliability to `gpt-6-sol` / `medium` and
 documentation to `gpt-6-luna` / `medium`, Standard speed. Review the complete
 branch from `3682e9abc`, with technical and documentation scopes kept separate.
 Both reports completed with no findings; no correction batch was necessary.
+Technical context: `01a0f286-0cd7-7951-a4ab-ec0d8b289a8f`.
+Documentation context: `01a0f286-0f59-7540-96e1-cc231915bf45`.
 The technical review confirmed dependency ranges, workflow failure propagation,
 unchanged publication policy, and the isolated version commit. Documentation
 review confirmed current guidance describes the new PR audit and snapshot.18.
@@ -47,4 +49,8 @@ metadata was exposed and no fallback was reported.
 After both review results, dispatch mechanical verification as a function of the
 orchestrator, not a new role: explicit `gpt-6-luna` / `medium`, Standard speed,
 no memories/history or children. Run one release profile and exact package
-preparation after the passing cheap preflight. Full verification is pending.
+preparation after the passing cheap preflight. Full verification passed:
+`verify:publish` exit 0, 5,135 tests, 307 files, 90.03% branch coverage, both audits
+clean; `prepare --check` exit 0, all 19 archives proven. The child exited normally
+with no reported model fallback. A final record-only update does not change the
+reviewed implementation or verified build inputs and does not reopen reviewers.
