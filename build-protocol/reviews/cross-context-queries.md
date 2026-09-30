@@ -918,3 +918,28 @@ the remaining shape is rejected before the provider. Unsupported query shapes,
 tenant namespaces and global result selection remain unchanged. No raw input is
 inserted into queries. All three independent whole-branch rounds and their fix
 batches are complete; live query and final release acceptance remain pending.
+
+Correction commit e179291dcfabafad77f08f15f965e6776f5c63c4 is pushed; exact
+remote SHA and clean source checkout confirmed. Final verification session
+01a0f1e9-cdee-73f3-851e-b0ece072ccdf confirms explicit Luna/low, no visible
+fallback; separate runtime identity is not exposed. Source is frozen for live
+query checks, complete release verification and package-consumer proof. Main
+may update records only until the result is known.
+
+Final acceptance: cheap preflight passes, both live Datastore query cases pass
+(three other cases excluded by name), and verify:release exits 0 on e179291dc.
+All 5,135 tests in 307 files pass in 616.70 seconds. Coverage passes unchanged
+thresholds: 93.26% statements, 90.03% branches, 93.04% functions, 94.45% lines.
+The separate prepare --check exits 0 and verifies all 19 exact package tarballs
+in a consumer project. No source/test/config changes arose during verification.
+The three rounds are complete and every confirmed finding is fixed. False
+snippet-marker findings retain the evidence-backed rejection above.
+
+The dedicated emulator was inspected by exact container ID, confirmed to have
+no mounted storage, then removed with its disposable test data. No other Docker
+resource changed. No test/build/release process remains. The unchanged separate
+Datastore history-trim failure remains outside the approved correction scope.
+GitHub CLI credentials returned 401; the public official API succeeded and found
+no open PR. Do not claim CI green or create a PR. Final records receive focused
+formatting/whitespace checks and immediate push; final remote SHA is checked
+separately without another runtime test run for record-only edits.

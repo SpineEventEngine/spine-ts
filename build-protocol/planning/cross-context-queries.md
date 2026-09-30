@@ -14,10 +14,14 @@ findings are fixed. Final security review reports no actionable findings. Real
 query checks pass on MySQL, MariaDB, PostgreSQL 16/18 and Datastore. Todo smoke
 passes on memory and all four SQL engines. A separate unchanged Datastore history
 trim test hangs; further work on it awaits scope approval. Final release checks
-pass on ed2374619: 5,127 tests in 306 files and all four coverage thresholds.
+pass on e179291dc after three additional sequential, independent whole-branch
+review-and-fix rounds without memory: 5,135 tests in 307 files and all four
+coverage thresholds. The additional fixes narrow large Datastore ID queries,
+report failed example queries, and correct current documentation. Fresh live
+Datastore query checks pass; the separate history-trim limitation is unchanged.
 All 19 package tarballs pass the separate consumer proof. GitHub CI remains
 unverified because this branch has no PR; creating one remains the human's step.
-Updated: 29 September 2026.
+Updated: 30 September 2026.
 Branch: `cross-context-queries`.
 Base: official `origin/master`, `2324311be8c23024f66cb2ba702fbe99a99e7dfb`.
 
