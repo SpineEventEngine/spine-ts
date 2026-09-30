@@ -57,8 +57,17 @@ export const TaskListReader: Readonly<{
    *
    * @param response The query response to inspect.
    * @returns Recognized TaskList states, omitting absent or foreign states.
+   * @throws If the query response does not report success.
    */
   states(response) {
+    const status = response.response?.status?.status;
+    if (status?.case !== "ok") {
+      const explanation =
+        status?.case === "error" ? status.value.message || status.value.type : undefined;
+      throw new Error(
+        explanation ? `TaskList query failed: ${explanation}` : "TaskList query failed.",
+      );
+    }
     return response.message.flatMap((row) => {
       const state =
         row.state === undefined ? undefined : AnyMessages.unpack(row.state, TaskListSchema);

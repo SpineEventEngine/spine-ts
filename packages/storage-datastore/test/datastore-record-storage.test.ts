@@ -291,6 +291,104 @@ describe("DatastoreRecordStorage", () => {
     ).toHaveLength(2);
   });
 
+  it("narrows exhaustive large ID reads before globally filtering and ordering", async () => {
+    const client = new PagingFlatDatastore();
+    const records = storage(client);
+    const requested = Array.from(
+      { length: 1_002 },
+      (_, index) => `item-${String(index).padStart(4, "0")}`,
+    );
+    await records.writeAll([
+      ...requested.map(message),
+      ...Array.from({ length: 1_100 }, (_, index) =>
+        message(`other-${String(index).padStart(4, "0")}`),
+      ),
+    ]);
+    const ids = [...requested, "item-0000", "missing"];
+
+    const complete = await records.queryPlan({
+      exhaustive: true,
+      predicate: { kind: "ids", ids },
+    });
+    expect(complete.map((row) => row.value)).toEqual(requested);
+    expect(client.queries.length).toBeGreaterThan(1);
+    expect(
+      client.queries.every((query) =>
+        query.filters.some(
+          (filter) =>
+            filter.name === "__key__" &&
+            filter.op === "IN" &&
+            Array.isArray(filter.value) &&
+            filter.value.length <= 30,
+        ),
+      ),
+    ).toBe(true);
+
+    const selected = await records.queryPlan({
+      exhaustive: true,
+      predicate: {
+        kind: "all",
+        predicates: [
+          { kind: "ids", ids },
+          { kind: "comparison", column: "value", operator: "greaterThan", value: "item-0997" },
+        ],
+      },
+      order: [{ column: "value", direction: "desc" }],
+      limit: 2,
+    });
+    expect(selected.map((row) => row.value)).toEqual(["item-1001", "item-1000"]);
+    expect(
+      client.queries.every((query) => query.filters.some((filter) => filter.name === "__key__")),
+    ).toBe(true);
+  });
+
+  it("does not admit an exhaustive disjunction through a large ID clause", async () => {
+    const client = new PagingFlatDatastore();
+    const records = storage(client);
+    await expect(
+      records.queryPlan({
+        exhaustive: true,
+        predicate: {
+          kind: "either",
+          predicates: [
+            { kind: "ids", ids: Array.from({ length: 31 }, (_, index) => `id-${String(index)}`) },
+            { kind: "comparison", column: "value", operator: "equal", value: "other" },
+          ],
+        },
+      }),
+    ).rejects.toThrow("EITHER");
+    expect(client.queries).toEqual([]);
+  });
+
+  it("keeps unsupported nested predicates and inequality order illegal with large IDs", async () => {
+    const client = new PagingFlatDatastore();
+    const records = storage(client);
+    const ids = Array.from({ length: 31 }, (_, index) => `id-${String(index)}`);
+
+    await expect(
+      records.queryPlan({
+        exhaustive: true,
+        predicate: {
+          kind: "all",
+          predicates: [{ kind: "all", predicates: [{ kind: "ids", ids }] }],
+        },
+      }),
+    ).rejects.toThrow("nested predicates");
+    await expect(
+      records.queryPlan({
+        exhaustive: true,
+        predicate: {
+          kind: "all",
+          predicates: [
+            { kind: "ids", ids },
+            { kind: "comparison", column: "value", operator: "greaterThan", value: "a" },
+          ],
+        },
+      }),
+    ).rejects.toThrow("illegal predicate");
+    expect(client.queries).toEqual([]);
+  });
+
   it("accepts buffer continuations and rejects repeated exhaustive page cursors", async () => {
     const values = Array.from({ length: 130 }, (_, index) =>
       message(`item-${String(index).padStart(4, "0")}`),
@@ -552,6 +650,7 @@ class FlatDatastore {
   abortCommits = 0;
   commitError: Error | undefined;
   lastQuery: FlatQuery | undefined;
+  readonly queries: FlatQuery[] = [];
 
   key(value: Key): Key {
     return value;
@@ -586,10 +685,23 @@ class FlatDatastore {
   }
 
   runQuery(query: FlatQuery): Promise<readonly [readonly Entity[]]> {
-    void query;
+    this.queries.push(query);
     if (this.providerError !== undefined) return Promise.reject(this.providerError);
     if (this.queryResponse !== undefined) return Promise.resolve(this.queryResponse as never);
-    return Promise.resolve([[...this.#rows.values()].map((entity) => ({ ...entity }))]);
+    return Promise.resolve([
+      [...this.#rows.values()]
+        .filter((entity) =>
+          query.filters.every((filter) => {
+            if (filter.name !== "__key__" || !["=", "IN"].includes(filter.op)) return true;
+            const key = entity[this.KEY] as Key;
+            const selected = Array.isArray(filter.value)
+              ? (filter.value as Key[])
+              : [filter.value as Key];
+            return selected.some((candidate) => candidate.path.join("/") === key.path.join("/"));
+          }),
+        )
+        .map((entity) => ({ ...entity })),
+    ]);
   }
 
   transaction(): FlatTransaction {

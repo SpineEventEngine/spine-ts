@@ -14,6 +14,7 @@
 
 import { create, type MessageShape } from "@bufbuild/protobuf";
 import { type Any } from "@bufbuild/protobuf/wkt";
+import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import { createClient, type Client } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
 import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
@@ -23,6 +24,8 @@ import {
   EventContextSchema,
   EventIdSchema,
   EventSchema,
+  ResponseSchema,
+  StatusSchema,
   UserIdSchema,
   ValidationErrorSchema,
 } from "@spine-event-engine/proto";
@@ -1043,6 +1046,11 @@ describe("@spine-event-engine/example-todo", () => {
     const { TaskListReader } = await import("../dist/src/docs/query-client.js");
     const list = create(TaskListSchema, { id: create(TaskListIdSchema, { value: "list" }) });
     const response = create(QueryResponseSchema, {
+      response: create(ResponseSchema, {
+        status: create(StatusSchema, {
+          status: { case: "ok", value: create(EmptySchema) },
+        }),
+      }),
       message: [
         create(EntityStateWithVersionSchema),
         create(EntityStateWithVersionSchema, {
@@ -1053,6 +1061,36 @@ describe("@spine-event-engine/example-todo", () => {
     });
 
     expect(TaskListReader.states(response)).toEqual([list]);
+  });
+
+  it("rejects a failed generated-query response and accepts an empty successful one", async () => {
+    const { TaskListReader } = await import("../dist/src/docs/query-client.js");
+    const failure = create(QueryResponseSchema, {
+      response: create(ResponseSchema, {
+        status: create(StatusSchema, {
+          status: {
+            case: "error",
+            value: create(ErrorSchema, {
+              type: "INVALID_QUERY",
+              message: "TaskList query rejected its filter.",
+            }),
+          },
+        }),
+      }),
+    });
+    const empty = create(QueryResponseSchema, {
+      response: create(ResponseSchema, {
+        status: create(StatusSchema, {
+          status: { case: "ok", value: create(EmptySchema) },
+        }),
+      }),
+    });
+
+    expect(() => TaskListReader.states(failure)).toThrow("TaskList query rejected its filter.");
+    expect(TaskListReader.states(empty)).toEqual([]);
+    expect(() => TaskListReader.states(create(QueryResponseSchema))).toThrow(
+      "TaskList query failed.",
+    );
   });
 
   it("subscribes to task-list updates and receives projection-driven changes", async () => {

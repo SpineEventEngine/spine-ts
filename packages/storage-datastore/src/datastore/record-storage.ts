@@ -200,9 +200,18 @@ class FlatEntityCodec<I, R extends Message> {
    */
   key(client: Datastore, id: I): ReturnType<Datastore["key"]> {
     return client.key({
-      path: [this.#kind, this.#idColumn.value(id)],
+      path: [this.#kind, this.idName(id)],
       ...(this.#namespace === undefined ? {} : { namespace: this.#namespace }),
     });
+  }
+
+  /**
+   * Returns the canonical Datastore key name for a logical record ID.
+   * @param id Typed record identifier.
+   * @returns Key name shared by equivalent logical IDs.
+   */
+  idName(id: I): string {
+    return this.#idColumn.value(id);
   }
 
   /**
@@ -656,18 +665,43 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     plan: NormalizedQueryPlan<I>,
   ): Promise<readonly RecordEntry<I, R>[]> {
     const legal = DatastoreQueryPushdown.legal(plan);
-    if (
-      plan.predicate !== undefined &&
-      legal === undefined &&
-      !(plan.exhaustive && DatastoreQueryPushdown.largeIdSet(plan.predicate))
-    )
+    const largeIds =
+      plan.exhaustive && plan.predicate !== undefined
+        ? DatastoreQueryPushdown.largeIdSet(plan.predicate, plan.order)
+        : undefined;
+    if (plan.predicate !== undefined && legal === undefined && largeIds === undefined)
       throw new TypeError(
         "Datastore normalized query has an illegal predicate or inequality ordering.",
       );
     for (const order of plan.order ?? []) this.#codec.columnProperty(order.column);
-    if (plan.exhaustive)
-      return this.exhaustivePlanEntries(plan, legal !== undefined || plan.predicate === undefined);
+    if (plan.exhaustive) {
+      if (largeIds !== undefined) return this.largeIdPlanEntries(largeIds);
+      return this.exhaustivePlanEntries(plan, true);
+    }
     return this.boundedPlanEntries(plan);
+  }
+
+  /**
+   * Reads a mandatory large ID set through provider-legal key batches.
+   *
+   * @param ids Explicit IDs that every matching record must have.
+   * @returns Unique candidates for global predicate and ordering evaluation.
+   */
+  private async largeIdPlanEntries(ids: readonly I[]): Promise<readonly RecordEntry<I, R>[]> {
+    const unique = new Map<string, I>();
+    for (const id of ids) unique.set(this.#codec.idName(id), id);
+    const selected = [...unique.values()];
+    const entries: RecordEntry<I, R>[] = [];
+    for (let start = 0; start < selected.length; start += 30) {
+      const batch = selected.slice(start, start + 30);
+      entries.push(
+        ...(await this.exhaustivePlanEntries(
+          { exhaustive: true, predicate: { kind: "ids", ids: batch } },
+          true,
+        )),
+      );
+    }
+    return entries;
   }
 
   /**
@@ -1109,16 +1143,33 @@ class DatastoreQueryPushdownHelper {
   }
 
   /**
-   * Checks whether an ID predicate exceeds Datastore's IN filter width.
+   * Finds a mandatory ID set too wide for one Datastore IN filter.
    *
    * @typeParam I Identifier type in the predicate.
-   * @param predicate Predicate tree to inspect.
-   * @returns Whether a nested ID set requires a complete scan.
+   * @param predicate Predicate checked for a mandatory large ID set.
+   * @param order Ordering checked against any inequality comparison.
+   * @returns A required large ID set, or undefined for other shapes.
    */
-  largeIdSet<I>(predicate: NormalizedQueryPredicate<I>): boolean {
-    if (predicate.kind === "ids") return predicate.ids.length > 30;
-    if (predicate.kind === "comparison") return false;
-    return predicate.predicates.some((child) => this.largeIdSet(child));
+  largeIdSet<I>(
+    predicate: NormalizedQueryPredicate<I>,
+    order: NormalizedQueryPlan<I>["order"],
+  ): readonly I[] | undefined {
+    const leaves = predicate.kind === "all" ? predicate.predicates : [predicate];
+    if (leaves.some((leaf) => leaf.kind !== "ids" && leaf.kind !== "comparison")) return undefined;
+    const large = leaves.find((leaf) => leaf.kind === "ids" && leaf.ids.length > 30);
+    if (large?.kind !== "ids") return undefined;
+    const narrowed = leaves.map((leaf) =>
+      leaf.kind === "ids" && leaf.ids.length > 30 ? { ...leaf, ids: leaf.ids.slice(0, 1) } : leaf,
+    );
+    const representative: NormalizedQueryPredicate<I> =
+      predicate.kind === "all"
+        ? { kind: "all", predicates: narrowed }
+        : { kind: "ids", ids: large.ids.slice(0, 1) };
+    const legal = this.legal({
+      predicate: representative,
+      ...(order === undefined ? {} : { order }),
+    });
+    return legal === undefined ? undefined : large.ids;
   }
 
   /**

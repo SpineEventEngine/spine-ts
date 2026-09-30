@@ -532,7 +532,7 @@ Each filter path names one declared `(column)` proto field or supported system
 column, and its value must match that column's type. Range comparisons and
 ordering require a string or numeric scalar column, `Timestamp`, or `version`;
 ordering accepts only `ASCENDING` or `DESCENDING`. Use proto field names such as
-`openTaskCount`. At most 100 IDs, 16 simple filters, 8 composites, and 8
+`open_task_count` (the generated accessor is `openTaskCount`). At most 100 IDs, 16 simple filters, 8 composites, and 8
 ordering directives are accepted. Absent or zero wire limits use an implicit
 1,000-row cap without requiring ordering; a positive limit of at most 1,000
 requires ordering. Non-negative storage offsets are applied after sorting and

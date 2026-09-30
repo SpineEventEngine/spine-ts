@@ -841,3 +841,80 @@ Sol/medium, memory disabled, no inherited history or previous reports. Review th
 entire original-base-to-next-pushed-head diff with the same requirements brief
 and four concern dispositions. No source edits during review. This is the last
 of the three requested sequential rounds; fix all confirmed findings afterward.
+
+Round 2 fixes are pushed as ec7a035875a6f9940de2311e288a97b5478113ad; exact
+remote SHA and clean checkout verified. Round 3 reviews that frozen head against
+the original base. Fresh session 01a0f1c5-9372-7080-9001-045a2646bc0a confirms
+explicit Sol/medium and read-only sandbox. Dispatch disables memory and supplies
+no inherited conversation or previous results; separate backend model metadata
+is unavailable. No source edits while review is in progress.
+
+Round 3 is complete with three accepted P2 findings. Datastore rejects pushdown
+above 30 IDs and its exhaustive fallback reads the whole kind; this violates
+the plan's requirement to preserve selective reads. The Todo TaskListReader
+decodes every raw QueryResponse without checking its status, so a failed read
+becomes an empty result. The architecture guide now incorrectly names
+openTaskCount as a Proto field instead of open_task_count. Main confirmed all
+three in source, including Client.send returning the raw QueryResponse. API
+and maintainability have no additional confirmed findings; reliability has the
+first two, documentation the third.
+
+Correction assignment: retained repository/provider implementer
+01a0ed61-8899-76f2-ba6a-e5438eded07e, explicit Sol/medium, sole writer for these
+three fixes and focused tests. Main edits records only. Preserve current query
+semantics, supported Datastore shapes and global ordering/limits; narrow large
+explicit ID searches using bounded provider operations without a total result
+cap. Handle example response failure explicitly and preserve successful empty
+reads and client cleanup. Correct the wire column spelling without prose-pinning
+tests. No broad refactor, public API addition or unrelated history-trim changes.
+
+Main read systematic-debugging, test-driven-development and its testing
+anti-patterns reference fully. Their required evidence is failing focused
+regressions before the smallest corrections, followed by passing focused tests.
+Run single-worker focused checks, then the full release profile once after
+convergence because this round requires runtime changes. Recheck the affected
+Datastore query behavior on the existing emulator workflow. Estimated remaining
+work: 40–70 minutes including final verification. The requested three independent
+review rounds are complete; verify their accepted fixes before closing the task.
+
+The resumed implementer's header confirms explicit Sol/medium, same retained
+session, no visible fallback. In parallel with source corrections, dispatch the
+orchestrator's mechanical setup function as explicit Luna/low to prepare one
+dedicated Datastore emulator container only. No source edits or tests in this
+setup function; tests stay serial after source freezes. Preserve all other
+Docker resources and record the exact created container for later cleanup.
+
+Mechanical setup session 01a0f1cf-8a82-77c3-b1c6-9706bda8fc36 confirms explicit
+Luna/low. Created only spine-query-review-datastore-20260930, container ID
+3bdcc3ac39836db0ab7a2002424d13d52ef54a47073340fd7d85f2ea13874cc2, at
+127.0.0.1:61412. Readiness confirmed, no tests run during setup. No existing
+resources changed. Main retains the exact ID for cleanup after query checks.
+
+The failing-before regressions confirmed both behavior findings: missing key
+filters on large Datastore reads and failed QueryResponse decoded as an empty
+array. Corrections now pass 30 Datastore tests and focused Todo checks. Direct
+reader tests cover successful state decoding, empty results, errors, absent
+status and client closure; reader source coverage passes at 100% statements,
+functions and lines, 91.66% branches. The single Datastore-file coverage profile
+does not pass whole-project thresholds; it is diagnostic only, not release
+acceptance. Full-suite coverage remains mandatory. Formatting/lint test issues
+and an overly specific negative-test error assertion were corrected; retain
+their failed-attempt evidence rather than claiming an uninterrupted green run.
+
+Final verification assignment after source freezes: orchestrator-dispatched
+mechanical function, explicit Luna/low, no source edits or children. Finish cheap
+preflight, run only the Datastore query cases on the recorded emulator, then one
+verify:release and the exact 19-package consumer proof. No overlapping tests or
+live database variables during the hermetic release suite. Stop and report any
+failure without a blind full rerun. This supplements the completed three reviews;
+there is no new public contract or security boundary in the bounded corrections.
+
+Round 3 correction batch is accepted after main inspected source and tests. All
+three confirmed findings are resolved. Final focused evidence: 30 Datastore tests
+and seven selected Todo tests pass; affected build, tooling types, ESLint,
+formatting, cleanup, TSDoc, copyright and generated documentation checks pass.
+Datastore changed-code inspection hits 23/23 executable lines and 32/33 branches;
+the remaining shape is rejected before the provider. Unsupported query shapes,
+tenant namespaces and global result selection remain unchanged. No raw input is
+inserted into queries. All three independent whole-branch rounds and their fix
+batches are complete; live query and final release acceptance remain pending.
