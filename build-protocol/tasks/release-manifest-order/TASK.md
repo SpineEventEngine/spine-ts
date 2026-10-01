@@ -36,9 +36,11 @@ third-party patches, or unrelated runtime work is authorized.
   Scope: release scripts, regression tests, directly affected release docs.
 - Mechanical checks: orchestrator-dispatched function, `gpt-6-luna` / `low`
   when delegated. No new role.
-- Three sequential independent reviews: existing performance/reliability
-  reviewer, explicit `gpt-6-sol` / `medium`; each also checks the narrow diff's
-  requirements, style and script documentation. Fresh context every round.
+- Three sequential independent technical reviews: existing performance/
+  reliability reviewer in rounds 1 and 3, style/maintainability reviewer in
+  round 2, explicit `gpt-6-sol` / `medium`. Fresh context every round.
+- The existing documentation reviewer checks the changed runbook and script
+  documentation during round 2, explicit `gpt-6-luna` / `medium`.
 - TypeScript public API concern: N/A unless implementation changes an API;
   no framework declarations or runtime behavior are planned.
 - Final project security review: N/A for this bounded correction; release
