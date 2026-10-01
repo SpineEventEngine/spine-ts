@@ -187,6 +187,7 @@ it.skipIf(process.env.SPINE_ENTITY_DELIVERY_BENCH !== "1")(
       thousand.push(await measure(1_000, `thousand-${String(run + 1)}`));
     }
     process.stderr.write(`${JSON.stringify({ warmup, hundred, fiveHundred, thousand })}\n`);
+    for (const elapsed of thousand) expect(elapsed).toBeLessThan(1_000);
   },
   120_000,
 );

@@ -25,8 +25,9 @@ import { describe, expect, it } from "vitest";
 
 import { Delivery, type DeliveryEndpointMessage } from "../../src/delivery/delivery.js";
 import { DeliveryMonitor } from "../../src/delivery/delivery-monitor.js";
-import type { DeliveryOperationOptions } from "../../src/delivery/delivery-ports.js";
-import type { InboxReadOptions } from "../../src/delivery/inbox.js";
+import type { DeliveryInbox, DeliveryOperationOptions } from "../../src/delivery/delivery-ports.js";
+import { Inbox, type InboxReadOptions } from "../../src/delivery/inbox.js";
+import { InboxStorage } from "../../src/delivery/inbox-storage.js";
 import { commitFenced } from "../../src/repository/commit-fence.js";
 import { ShardIndex } from "../../src/index.js";
 
@@ -1251,30 +1252,37 @@ function createDelivery(config: {
   now?: () => Date;
 }): Delivery {
   const rows = config.rows ?? [];
+  const context = { name: "DeliveryWorker", multitenant: false as const };
+  const storageFactory = new InMemoryStorageFactory();
+  const inbox: DeliveryInbox = {
+    sessionKind: "LEASED",
+    receive: async () => {
+      throw new Error("not used");
+    },
+    read: async (_shard, options) => config.read?.(options) ?? [...rows],
+    readMessage: async () => undefined,
+    markDelivered: async (row) => config.mark?.(row) ?? row,
+    removeDuplicate: async (row) => {
+      if (config.removeDuplicate !== undefined) return config.removeDuplicate(row);
+      remove(rows, row);
+      return true;
+    },
+    ...(config.remove === undefined
+      ? {}
+      : { removeDelivered: async (row: DeliveryEndpointMessage) => config.remove!(row) }),
+  };
+  if (config.now !== undefined) {
+    // Keep fake message operations while exercising the concrete local storage clock path.
+    Reflect.set(inbox, "storage", new InboxStorage({ context, storageFactory, now: config.now }));
+    Object.setPrototypeOf(inbox, Inbox.prototype);
+  }
   return new Delivery({
-    context: { name: "DeliveryWorker", multitenant: false },
-    storageFactory: new InMemoryStorageFactory(),
+    context,
+    storageFactory,
     worker: config.worker ?? workerId("node", "restart"),
     ...(config.monitor === undefined ? {} : { monitor: config.monitor }),
     ...(config.pageSize === undefined ? {} : { pageSize: config.pageSize }),
-    inbox: {
-      sessionKind: "LEASED",
-      ...(config.now === undefined ? {} : { retentionTime: config.now }),
-      receive: async () => {
-        throw new Error("not used");
-      },
-      read: async (_shard, options) => config.read?.(options) ?? [...rows],
-      readMessage: async () => undefined,
-      markDelivered: async (row) => config.mark?.(row) ?? row,
-      removeDuplicate: async (row) => {
-        if (config.removeDuplicate !== undefined) return config.removeDuplicate(row);
-        remove(rows, row);
-        return true;
-      },
-      ...(config.remove === undefined
-        ? {}
-        : { removeDelivered: async (row) => config.remove!(row) }),
-    },
+    inbox,
     workRegistry: {
       sessionKind: "LEASED",
       pickUp: async (shard, worker) => config.registry?.pickUp(shard, worker) ?? session(shard),

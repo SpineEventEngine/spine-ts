@@ -28,6 +28,10 @@ Datastore transaction statement, scan behavior, and clock/dedup limits.
 Correction is queued until the complete review wave is collected. Full report:
 `/tmp/entity-delivery-doc-review.md`.
 
+After collection, main replaced that phrase with “Entity commit contracts”.
+The correction changes no technical guarantee; final document checks remain
+part of the shared preflight.
+
 ## Remaining concerns
 
 - Performance/reliability: explicit Sol/medium read-only assignment starts on
@@ -46,6 +50,14 @@ Correction is queued until the complete review wave is collected. Full report:
   Review runtime/type agreement and prepared-record reuse as it now stands;
   later canonical-key encoding is internal and outside this active assignment.
 - Style/maintainability: required for the changed production paths.
+  Assigned fresh existing style reviewer with explicit Sol/medium after all
+  changed-file gates passed. The encoder experiment has been reverted; runtime
+  files are stable at checkpoint `9ad2492ae` while review runs.
+- Concluding reliability assignment: fresh existing performance/reliability
+  reviewer, explicit Sol/medium, reads the repository/Stand prepared-record and
+  descriptor paths plus the real benchmark omitted from the earlier review.
+  No production writer runs during these two concluding assignments. Both are
+  read-only, Standard tier, without memory, inherited chat history or children.
 - Dedicated security: not reopened by this storage-performance extension, which
   adds no authentication, external input surface, credentials or publication
   authority. Existing final publishing security evidence remains applicable;
@@ -72,3 +84,155 @@ target as limitations, not successful verification. Repository/Stand prepared
 record reuse and any later equality changes remain outside this completed
 portion and require review. The accepted correction is queued for the combined
 review-fix batch.
+
+## TypeScript and API result
+
+Completed in a fresh explicit Sol/medium context with memories/children disabled
+and no fallback reported. The reviewer inspected the latest deferred input
+snapshots as well as committed changes. Two accepted P2 findings:
+
+1. `DeliveryInbox.retentionTime` and `RemoteInbox.retentionTime` expand exported
+   application-facing declarations despite `@internal`. Move clock access behind
+   an internal adapter connection; preserve injected-clock behavior and avoid a
+   public clock service.
+2. `RepositoryStand.preparedRecord` repacks original mutable inputs when IDs
+   differ, while Stand notifications use the pre-await snapshot. Build that
+   fallback from the prepared record, replacing only its authoritative packed
+   ID, and test mutation during a delayed read on this branch too.
+
+   Prefer simplifying this to one record-copy-and-ID-replacement path if that
+   preserves all existing checks: clone the prepared EntityRecord and set its
+   packed authoritative ID. That needs no equality branch, no repacking of
+   mutable state, and no original state/version/lifecycle arguments carried
+   through commit helpers solely for a fallback. ID validation, cancellation,
+   history data and subscriber snapshots must remain covered.
+
+The scanner signature, provider commit entrypoint, bundled implementations and
+inspected descriptor/version/history contracts were otherwise clean. Full
+report: `/tmp/entity-delivery-api-review.md`. No tests/builds were run by the
+reviewer. These findings join the complete-wave correction batch; style and
+the final narrowed reliability check remain.
+
+Implementation boundary for clock correction: remove all new public clock
+methods, including those on `Inbox` and `InboxStorage`, not merely the two
+examples in the finding. Local delivery already has the concrete `Inbox` and
+its `storage`; a module-internal storage accessor can read its configured clock.
+Remote delivery can retain the existing local-wall-time fallback. Prefer that
+existing construction path over adding another published cross-package clock
+registration API. Preserve tests with a storage clock ahead of and behind wall
+time, and the exact expiry boundary.
+
+## Main's deterministic test-oracle check
+
+Pending correction in `packages/storage/test/memory/canonical-key.test.ts`:
+the draft old-key reference uses ordinary `kind` and `payload` properties as
+type markers. The actual old implementation uses private Symbols, so an ordinary
+object with those two fields is not a tagged bigint/bytes value. Preserve the
+real marker distinction in the reference and add collision-shaped ordinary
+objects to the equivalence cases. This is a test-oracle correction, not a
+finding against the new production encoder. Include nested combinations and
+read-order evidence before accepting exact-equivalence claims.
+
+The encoder experiment and its experiment-only test were subsequently reverted
+because no repeatable speed benefit was measured. The test-oracle finding is
+therefore absent from current code, not accepted as a valid oracle. Any future
+encoder experiment must use the real marker distinction from the outset.
+
+## Concluding review results and accepted batch
+
+Style review completed with explicit Sol/medium in a fresh no-memory context.
+Accepted P2: the opt-in benchmark must assert every measured run is below
+1,000 ms, not merely print timings and pass state assertions. Keep it opt-in
+and print all raw timings before assertion; ordinary CI remains free from a
+wall-clock threshold. No other confirmed style/test-quality finding was reported.
+Report: `/tmp/entity-delivery-style-review.md`.
+
+The concluding reliability reviewer (also fresh explicit Sol/medium) traced an
+additional provider input-isolation defect while following the commit path:
+staging captures history keys, then awaits and reads caller records again.
+Changing a history version in that interval can write a different staged key
+and silently omit the history record from publication. Accepted P1 correction:
+snapshot affected input records and ID before queuing/asynchronous work, then
+use the same snapshots for keys and writes. Cover both a queued caller change
+and a change while staging is in progress with deterministic tests. Copy only
+the affected input, never saved collections. Report:
+`/tmp/entity-prepared-reliability-review.md`. This additional finding is accepted
+despite extending its requested scope; final narrowed review must still cover
+repository/Stand behavior after the fixes.
+
+The complete wave is now collected. Return one batch to the same explicitly
+configured Sol/medium implementer: wording, private clock access, remote cursor
+continuation, prepared-record ID replacement, in-flight input snapshots, and
+benchmark acceptance assertion. No issue is waived. After focused mechanical
+checks, re-review only substantively changed contracts and execution paths.
+
+Main interrupted the correction context after it proposed restarting from the
+beginning whenever cleanup removes a full page's last row. That would restore
+the repeated-prefix problem for retained rows followed by expired rows. Preserve
+the forward-scan requirement: track successful removals within the current page
+only and choose its last surviving row as the continuation. If every row was
+removed, keep the preceding surviving continuation (or the initial start when
+there was none). Nothing retained before that position needs replaying. Cover
+both duplicate and expired-row removals, fully removed pages, equal-time
+boundaries and the existing error for an unrelated missing remote cursor.
+Do not keep a growing scan-wide set or relax ambiguous remote ordering checks.
+The interrupted context keeps its edits and resumes with this clarification;
+it is not replaced by another writer.
+
+One final measured performance candidate may accompany that batch: a read-only
+diagnostic compared 1,485 keys against the actual built `TenantRecords.capture`
+and found identical keys using direct tagged encoding with native
+`Object.fromEntries`/`Object.entries` enumeration. This avoids the unsuccessful
+experiment's second custom sort and numeric-name parser. Three 10,000-key loops
+measured 108.60/104.44/105.20 ms for current encoding versus 68.75/67.56/68.16 ms
+for that alternative. This is component evidence only, not delivery acceptance.
+If tried, retain only exact-key behavior and measured benefit; no new cache,
+public API, validation bypass or dependency change. Use proper Symbol markers
+in any retained old-key reference. Full delivery still must pass its new assertion.
+
+## Built-output verification correction
+
+The benchmark imports storage through the package entrypoint, which resolves to
+`dist`; Vitest has no source alias for that import. The earlier encoder experiment
+ran `tsc --noEmit`, not an emitting build. Its before/after timings therefore do
+not establish the candidate's performance. The same implementer was interrupted
+and resumed with an explicit requirement to emit the affected packages before
+the retained-source baseline and after each candidate change. Correct unsupported
+claims in the performance report rather than treating that experiment as evidence.
+
+Checkpoint `9ad2492ae` CI also failed the declaration build: the exported
+`repositorySpecScanner` variable at `spec-scanner.ts:58` lacks an explicit type
+required by `isolatedDeclarations`; dependent declaration errors follow from that
+missing output. The affected emitting build must pass before final verification.
+Run: https://github.com/SpineEventEngine/spine-ts/actions/runs/36865616152
+
+## Planned focused correction review
+
+After the complete correction batch passes its focused mechanical checks, use
+two fresh, read-only contexts with explicit Sol/medium, Standard speed, no memory,
+no inherited discussion and no child agents:
+
+- Existing performance/reliability reviewer: affected-input snapshots and
+  publication in memory; repository/Stand snapshot and authoritative-ID behavior;
+  forward continuation after deletions; local retention clock; any retained key
+  encoder's exact equivalence and real rebuilt performance evidence. Check tenant
+  selection as well as record values around queue waits. Do not invent mutation
+  requirements for immutable schema configuration.
+- Existing TypeScript/API reviewer: no new public clock methods; scanner's
+  original public signature and emitted declarations; repository prepared-record
+  simplification, input validation, cancellation and notification behavior; TSDoc
+  accuracy for these corrected paths.
+
+The wording correction and explicit benchmark threshold are deterministic fixes
+and do not alone reopen documentation/style review. New substantive findings are
+returned together to the same implementation context. Earlier unrelated publishing
+review evidence remains applicable.
+
+Dispatch starts after corrected-source emitting builds, changed-file lint,
+formatting, cleanup and TSDoc checks passed. The combined selection passed 541
+tests; its partial-file coverage selection did not meet the global threshold and
+is not accepted as final coverage. The added remote first-page regression also
+passes. Runtime edits have stopped while the implementer finishes its report.
+Both reviewer assignments below are explicitly Sol/medium, Standard, ephemeral,
+with memories and child agents disabled. No runtime metadata is exposed by this
+surface. Performance acceptance remains unmet and is an explicit review input.

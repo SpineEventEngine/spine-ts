@@ -52,16 +52,6 @@ export interface DeliveryInbox {
   readonly sessionKind: DeliveryWorkSession["kind"];
 
   /**
-   * Reads the applicable local clock for retention filtering before mutation.
-   *
-   * The storage or remote server still decides whether a mutation may commit.
-   *
-   * @returns The current time for local retention filtering.
-   * @internal
-   */
-  retentionTime?(): Date;
-
-  /**
    * Persists one incoming message before any worker observes it.
    *
    * @param input Describes the message to make durable.

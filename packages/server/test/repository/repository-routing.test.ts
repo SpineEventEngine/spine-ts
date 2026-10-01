@@ -115,6 +115,7 @@ import {
   type EntityOptions,
   RepositoryIdentityError,
   ShardIndex,
+  Stand,
   EntityHandlers,
   HandlerRegistryIngestor,
   type EntityHandlersMetadata,
@@ -140,6 +141,7 @@ import { SystemClock } from "../../src/runtime/signal-metadata.js";
 import {
   repositoryAccess,
   repositoryReadAccess,
+  RepositoryStand,
   type RepositoryView,
 } from "../../src/repository/repository.js";
 import { EntityQueryDescription } from "@spine-event-engine/core/codegen";
@@ -6231,6 +6233,52 @@ describe("repository signal routing", () => {
       expect(ExecutingTaskProjection.subscriberCalls).toBe(0);
     } finally {
       await context.close();
+    }
+  });
+
+  it("replaces a prepared record ID without rereading state changed during a delayed Stand read", async () => {
+    const factory = new GatedStandReadStorageFactory();
+    const stand = new Stand({
+      context: { name: "PreparedRoutedSnapshot", multitenant: false },
+      storageFactory: factory,
+    });
+    stand.register(ProjectOverviewStateSchema);
+    const repository = createExecutingProjectionRepository();
+    const metadata = describeEntityMetadata(ProjectOverviewStateSchema);
+    const state = create(ProjectOverviewStateSchema, { id: "state-id", name: "Before" });
+    const version = create(VersionSchema, { number: 4 });
+    const lifecycle = { archived: true, deleted: false };
+    const observed: ProjectOverviewState[] = [];
+    stand.subscribe(ProjectOverviewStateSchema, (update) => {
+      observed.push(update.state);
+    });
+    factory.enableGate = true;
+    try {
+      const pending = standAccess.deferUpdate(
+        stand,
+        ProjectOverviewStateSchema,
+        state,
+        { version, lifecycle },
+        metadata,
+      );
+      await factory.reached;
+      state.name = "After";
+      version.number = 9;
+      lifecycle.archived = false;
+      factory.release();
+      const deferred = await pending;
+      const record = RepositoryStand.preparedRecord(repository, deferred, "routed-id");
+      expect(record.entityId).toEqual(Identifiers.pack("string", "routed-id"));
+      expect(EntityRecords.unpack(ProjectOverviewStateSchema, record)).toMatchObject({
+        state: { id: "state-id", name: "Before" },
+        version: 4n,
+        archived: true,
+      });
+      deferred.notify();
+      expect(observed).toMatchObject([{ id: "state-id", name: "Before" }]);
+    } finally {
+      factory.release();
+      await stand.close();
     }
   });
 
@@ -14878,6 +14926,55 @@ class CountingProbeStorageFactory extends InMemoryStorageFactory {
           this.closed++;
           if (probed) this.closedProbes++;
         }
+        storage.close();
+      },
+    };
+  }
+}
+
+class GatedStandReadStorageFactory extends InMemoryStorageFactory {
+  enableGate = false;
+
+  #entered = false;
+
+  #release!: () => void;
+  #reached!: () => void;
+  readonly reached = new Promise<void>((resolve) => {
+    this.#reached = resolve;
+  });
+  readonly #gate = new Promise<void>((resolve) => {
+    this.#release = resolve;
+  });
+
+  release(): void {
+    this.#release();
+  }
+
+  override createEntityStorage(input: unknown): unknown {
+    const storage = super.createEntityStorage(input) as {
+      readonly current: {
+        read(id: unknown): Promise<unknown>;
+        write(record: unknown): Promise<void>;
+      };
+      readonly states: unknown;
+      readonly events: unknown;
+      close(): void;
+    };
+    return {
+      current: {
+        read: async (id: unknown) => {
+          if (this.enableGate && !this.#entered) {
+            this.#entered = true;
+            this.#reached();
+            await this.#gate;
+          }
+          return storage.current.read(id);
+        },
+        write: (record: unknown) => storage.current.write(record),
+      },
+      states: storage.states,
+      events: storage.events,
+      close: () => {
         storage.close();
       },
     };

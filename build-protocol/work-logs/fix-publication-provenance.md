@@ -384,3 +384,26 @@ Independent documentation and stable storage/Inbox review are complete, with
 one wording correction and one remote removed-cursor regression queued for the
 combined finding batch. The API review is running independently; style and the
 final changed-path reliability review remain. The branch is not merge-ready.
+
+The complete review wave produced fixes for remote continuation after deletion,
+private retention-clock access, prepared-record ID replacement, mutable commit
+input capture and the benchmark's missing speed assertion. The same explicitly
+configured Sol/medium context completed this batch. Its 541 selected tests and
+final static checks pass. Selected memory-file branch coverage exceeds 90%, but
+the combined partial coverage selection does not meet the global threshold; a
+full release gate is still required. The checkpoint declaration-build error in
+the internal scanner is corrected and affected packages emit successfully.
+
+Main found that an earlier encoder experiment measured stale package output:
+the benchmark imports storage from `dist`, while that experiment only used
+`--noEmit`. The report now retracts its unsupported performance conclusion.
+Fresh emitting builds precede the new measurements. The exact-key native
+encoder passed its focused tests and modestly reduced adjacent measurements,
+but all five runs remained above one second. Later measurements also slowed
+under observed browser/WindowServer load; no target success is claimed.
+
+Two fresh no-memory Sol/medium reviewers now inspect the corrected API and
+reliability paths. Their assignments and verification limitations are recorded
+in entity-save-delivery-code-review.md. Main saves and immediately pushes a
+review-correction checkpoint; performance, final coverage and final-head CI
+remain open. No publication or merge is authorized.

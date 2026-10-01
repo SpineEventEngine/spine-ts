@@ -67,16 +67,6 @@ export class RemoteInbox implements DeliveryInbox {
   }
 
   /**
-   * Reads client time for local retention filtering before remote mutations.
-   *
-   * @returns The current client time.
-   * @internal
-   */
-  retentionTime(): Date {
-    return new Date();
-  }
-
-  /**
    * Writes a new inbox message.
    *
    * @param input Supplies the message fields excluding its generated identity.
@@ -223,8 +213,7 @@ export class RemoteInbox implements DeliveryInbox {
       return false;
     if (
       message.status !== "DELIVERED" ||
-      (message.keepUntil !== undefined &&
-        message.keepUntil.getTime() > this.retentionTime().getTime())
+      (message.keepUntil !== undefined && message.keepUntil.getTime() > Date.now())
     )
       return false;
     const current = await this.client.findOne(message.id, options);

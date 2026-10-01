@@ -643,7 +643,7 @@ const StoredValues = {
    * @returns A canonical key for the value.
    */
   key(value: unknown): string {
-    return StoredValues.encode(StoredValues.normalize(value));
+    return JSON.stringify(StoredValues.encoded(value));
   },
 
   /**
@@ -907,56 +907,29 @@ const StoredValues = {
   },
 
   /**
-   * Encodes a normalized value without type collisions.
-   * @param value Supplies the normalized value.
-   * @returns A canonical JSON string.
-   */
-  encode(value: NormalizedValue): string {
-    return JSON.stringify(StoredValues.encoded(value));
-  },
-
-  /**
-   * Converts a normalized value to its tagged JSON representation.
-   * @param value Supplies the normalized value.
+   * Converts a raw value to its tagged JSON representation.
+   * @param value Supplies the raw value.
    * @returns The tagged JSON representation.
    */
-  encoded(value: NormalizedValue): EncodedValue {
-    const kind = StoredValues.kind(value);
-    switch (kind) {
-      case "undefined":
-        return ["undefined"];
-      case "null":
-        return ["null"];
-      case "boolean":
-        if (typeof value !== "boolean")
-          throw new Error("Normalized boolean value has an unexpected type.");
-        return ["boolean", value];
-      case "number":
-        if (typeof value !== "number")
-          throw new Error("Normalized number value has an unexpected type.");
-        return ["number", String(value)];
-      case "string":
-        if (typeof value !== "string")
-          throw new Error("Normalized string value has an unexpected type.");
-        return ["string", value];
-      case "bigint":
-        return ["bigint", StoredValues.payload(value as NormalizedBigInt)];
-      case "bytes":
-        return ["bytes", StoredValues.payload(value as NormalizedBytes)];
-      case "array":
-        return [
-          "array",
-          ...(value as readonly NormalizedValue[]).map((entry) => StoredValues.encoded(entry)),
-        ];
-      case "object":
-        return [
-          "object",
-          ...Object.keys(value as NormalizedObject).map((key) => [
-            key,
-            StoredValues.encoded((value as NormalizedObject)[key]),
-          ]),
-        ];
-    }
+  encoded(value: unknown): EncodedValue {
+    if (value === undefined) return ["undefined"];
+    if (value === null) return ["null"];
+    if (typeof value === "boolean") return ["boolean", value];
+    if (typeof value === "number") return ["number", String(value)];
+    if (typeof value === "string") return ["string", value];
+    if (typeof value === "bigint") return ["bigint", value.toString()];
+    if (value instanceof Uint8Array) return ["bytes", [...value]];
+    if (Array.isArray(value))
+      return ["array", ...value.map((entry) => StoredValues.encoded(entry))];
+    if (typeof value !== "object") return ["undefined"];
+
+    // Evaluate fields in lexical order, then use native numeric-name enumeration.
+    const entries = Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, StoredValues.encoded(Reflect.get(value, key))]),
+    );
+    return ["object", ...Object.entries(entries)];
   },
 
   /**

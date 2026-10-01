@@ -29,7 +29,7 @@ import {
 } from "./delivery-monitor.js";
 import type { DeliveryInbox, DeliveryWorkRegistry, DeliveryWorkSession } from "./delivery-ports.js";
 import { Inbox, InboxTargets, type InboxMessage } from "./inbox.js";
-import { InboxStorage } from "./inbox-storage.js";
+import { InboxStorage, InboxStorageClock } from "./inbox-storage.js";
 import { ShardIndex } from "./shard-index.js";
 import { ShardedWorkRegistry } from "./sharded-work-registry.js";
 import { withDeliveryCommitFence } from "../repository/commit-fence.js";
@@ -366,6 +366,8 @@ class DeliveryDrain {
 
   readonly #blockedTargets = new Set<string>();
 
+  readonly #removedInPage = new Set<InboxMessage>();
+
   #current: DeliveryWorkSession;
 
   #ownershipLost = false;
@@ -433,6 +435,7 @@ class DeliveryDrain {
     let deliveredInScan = false;
     for (;;) {
       const messages = await this.#readPage(after);
+      this.#removedInPage.clear();
       if (messages.length === 0) {
         if (!deliveredInScan) return this.#complete("DRAINED");
         after = undefined;
@@ -449,7 +452,8 @@ class DeliveryDrain {
         deliveredInScan = false;
         continue;
       }
-      after = this.#continuation(messages);
+      const survivor = messages.findLast((message) => !this.#removedInPage.has(message));
+      if (survivor !== undefined) after = this.#continuation([survivor]);
     }
   }
 
@@ -553,6 +557,7 @@ class DeliveryDrain {
         ))
       )
         throw new Error("Inbox duplicate was not removed.");
+      this.#removedInPage.add(message);
       this.input.options.onDuplicateRemoved?.(message);
     } catch (error) {
       this.#recordFailure(message, error);
@@ -676,10 +681,12 @@ class DeliveryDrain {
     for (const message of messages) {
       if (
         message.status === "DELIVERED" &&
-        (message.keepUntil === undefined || message.keepUntil.getTime() <= now) &&
-        !(await this.#removeDelivered(message))
-      )
-        return false;
+        (message.keepUntil === undefined || message.keepUntil.getTime() <= now)
+      ) {
+        const removed = await this.#removeDelivered(message);
+        if (removed === undefined) return false;
+        if (removed) this.#removedInPage.add(message);
+      }
     }
     return true;
   }
@@ -688,17 +695,20 @@ class DeliveryDrain {
    * Removes one expired delivered message when supported.
    *
    * @param message Supplies the delivered message to remove.
-   * @returns Whether removal completed and the session remains valid.
+   * @returns Whether the row was removed, or undefined if the session was lost.
    */
-  async #removeDelivered(message: InboxMessage): Promise<boolean> {
-    if (this.input.inbox.removeDelivered === undefined) return true;
-    if (this.input.options.operation?.signal?.aborted || !(await this.#validate())) return false;
+  async #removeDelivered(message: InboxMessage): Promise<boolean | undefined> {
+    if (this.input.inbox.removeDelivered === undefined) return false;
+    if (this.input.options.operation?.signal?.aborted || !(await this.#validate()))
+      return undefined;
     const removed = await this.input.inbox.removeDelivered(
       message,
       this.#current,
       this.input.options.operation,
     );
-    return !this.input.options.operation?.signal?.aborted && (removed || (await this.#validate()));
+    if (this.input.options.operation?.signal?.aborted || (!removed && !(await this.#validate())))
+      return undefined;
+    return removed;
   }
 
   /**
@@ -719,7 +729,9 @@ class DeliveryDrain {
    * @returns The time used to evaluate message retention.
    */
   #retentionTime(): Date {
-    return this.input.inbox.retentionTime?.() ?? new Date();
+    return this.input.inbox instanceof Inbox
+      ? InboxStorageClock.read(this.input.inbox.storage)
+      : new Date();
   }
 
   /**

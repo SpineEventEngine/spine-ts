@@ -13,7 +13,8 @@
  */
 
 import { clone, type Message } from "@bufbuild/protobuf";
-import type { Event, EventId } from "@spine-event-engine/proto";
+import { EventSchema, type Event, type EventId } from "@spine-event-engine/proto";
+import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 
 import { eventStoreAccess, eventStoreRecordSpec } from "../event/event-store.js";
 import { eventHistorySpec, stateHistorySpec } from "../entity/entity-history-record-spec.js";
@@ -95,12 +96,26 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
   commit<I, S extends Message>(input: EntityCommitInput<I, S>): Promise<void> {
     this.#requireOpen();
     this.#requireCompatible(input);
-    const backend = this.#entities.backend(input.entity);
+    const snapshot: EntityCommitInput<I, S> = {
+      ...input,
+      entityId: input.entity.id.clone(input.entityId),
+      next: clone(EntityRecordSchema, input.next),
+      ...(input.states === undefined
+        ? {}
+        : { states: input.states.map((record) => clone(EntityRecordSchema, record)) }),
+      ...(input.diagnostics === undefined
+        ? {}
+        : { diagnostics: input.diagnostics.map((event) => clone(EventSchema, event)) }),
+      ...(input.events === undefined
+        ? {}
+        : { events: input.events.map((event) => clone(EventSchema, event)) }),
+    };
+    const backend = this.#entities.backend(snapshot.entity);
     const work = () =>
-      backend.mutationQueue.run(ENTITY_SCOPE_MUTATION_KEY, () => this.#commit(input, backend));
-    return input.events === undefined || input.events.length === 0
+      backend.mutationQueue.run(ENTITY_SCOPE_MUTATION_KEY, () => this.#commit(snapshot, backend));
+    return snapshot.events === undefined || snapshot.events.length === 0
       ? work()
-      : eventStoreAccess.withLock(this.#factory, input.context, work);
+      : eventStoreAccess.withLock(this.#factory, snapshot.context, work);
   }
 
   /**

@@ -39,6 +39,23 @@ import type { DeliveryWorkSession } from "./delivery-ports.js";
 
 const defaultReadLimit = 100;
 const maxReadLimit = 1_000;
+const storageClocks = new WeakMap<InboxStorage, () => Date>();
+
+/**
+ * Internal clock access for concrete local inbox delivery.
+ * @internal
+ */
+export const InboxStorageClock: Readonly<{ read(storage: InboxStorage): Date }> = Object.freeze({
+  /**
+   * Reads the configured storage clock.
+   * @param storage Supplies the concrete local storage.
+   * @returns Its current retention time.
+   */
+  read(storage: InboxStorage): Date {
+    const clock = storageClocks.get(storage);
+    return clock === undefined ? new Date() : new Date(Values.now(clock));
+  },
+});
 
 /**
  * Stores direct generated inbox records in the configured durable family.
@@ -59,17 +76,8 @@ export class InboxStorage {
     this.#context = Values.snapshotContext(options.context);
     this.#storageFactory = options.storageFactory;
     this.#now = options.now ?? (() => new Date());
+    storageClocks.set(this, this.#now);
     Object.freeze(this);
-  }
-
-  /**
-   * Reads the configured clock for retention filtering in a delivery page.
-   *
-   * @returns The current configured time.
-   * @internal
-   */
-  retentionTime(): Date {
-    return new Date(Values.now(this.#now));
   }
 
   /**

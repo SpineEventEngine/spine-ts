@@ -32,6 +32,7 @@ import type { EntityCommitStorage } from "../../src/internal/entity-commit.js";
 import { EntityCommitStorageFactories } from "../../src/internal/entity-commit.js";
 import type { EntityStorageInput } from "../../src/internal/entity-history.js";
 import { InMemoryStorageFactory } from "../../src/memory/in-memory-storage-factory.js";
+import { MemoryEntityRecordStorage } from "../../src/memory/in-memory-entity-history.js";
 import { InMemoryRecordStorage } from "../../src/memory/in-memory-record-storage.js";
 import { TenantRecords } from "../../src/memory/tenant-records.js";
 import { RecordStorage } from "../../src/record/record-storage.js";
@@ -128,6 +129,120 @@ describe("MemoryEntityCommitStorage", () => {
     events.close();
     commits.close();
     entity.close();
+  });
+
+  it("keeps staged history keys and writes on the pre-await input snapshot", async () => {
+    const factory = new InMemoryStorageFactory();
+    const input = entityInput();
+    const entity = factory.createEntityStorage(input) as EntityHandle;
+    const commits = commitStorage(factory, input);
+    const entered = deferred();
+    const release = deferred();
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- Call keeps the concrete storage receiver.
+    const original = MemoryEntityRecordStorage.prototype.write;
+    const write = vi
+      .spyOn(MemoryEntityRecordStorage.prototype, "write")
+      .mockImplementation(async function (this: MemoryEntityRecordStorage<unknown>, record) {
+        entered.resolve(undefined);
+        await release.promise;
+        return original.call(this, record);
+      });
+    const next = current("accepted", 1n);
+    const retained = state("accepted", 1n);
+    const observed = diagnostic("accepted-diagnostic", 1n);
+    const delivery = event("accepted-delivery");
+    try {
+      const pending = commits.commit({
+        context: input.context,
+        entity: input,
+        entityId: "task",
+        next,
+        states: [retained],
+        diagnostics: [observed],
+        events: [delivery],
+      });
+      await entered.promise;
+      if (
+        next.version === undefined ||
+        retained.version === undefined ||
+        observed.context?.version === undefined ||
+        delivery.id === undefined
+      )
+        throw new Error("Expected versioned records and an Event ID.");
+      next.version.number = 8;
+      retained.version.number = 8;
+      observed.context.version.number = 8;
+      delivery.id.value = "later-delivery";
+      release.resolve(undefined);
+      await expect(pending).resolves.toBeUndefined();
+      await expect(entity.current.read("task")).resolves.toEqual(current("accepted", 1n));
+      await expect(entity.states.backward("task", 1)).resolves.toEqual([state("accepted", 1n)]);
+      expect((await entity.events.backward("task", 1))[0]?.id?.value).toBe("accepted-diagnostic");
+      const events = new EventStore(input.context, factory);
+      expect((await events.read()).map((entry) => entry.id?.value)).toEqual(["accepted-delivery"]);
+      events.close();
+    } finally {
+      release.resolve(undefined);
+      write.mockRestore();
+      commits.close();
+      entity.close();
+    }
+  });
+
+  it("snapshots a queued commit before the earlier Entity write releases", async () => {
+    const factory = new InMemoryStorageFactory();
+    const input = entityInput();
+    const entity = factory.createEntityStorage(input) as EntityHandle;
+    const commits = commitStorage(factory, input);
+    const entered = deferred();
+    const release = deferred();
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- Call keeps the concrete storage receiver.
+    const original = MemoryEntityRecordStorage.prototype.write;
+    let writes = 0;
+    const write = vi
+      .spyOn(MemoryEntityRecordStorage.prototype, "write")
+      .mockImplementation(async function (this: MemoryEntityRecordStorage<unknown>, record) {
+        if (++writes === 1) {
+          entered.resolve(undefined);
+          await release.promise;
+        }
+        return original.call(this, record);
+      });
+    try {
+      const first = commits.commit({
+        context: input.context,
+        entity: input,
+        entityId: "task",
+        next: current("first", 1n),
+        states: [state("first", 1n)],
+      });
+      await entered.promise;
+      const next = current("second", 2n);
+      const retained = state("second", 2n);
+      const second = commits.commit({
+        context: input.context,
+        entity: input,
+        entityId: "task",
+        next,
+        states: [retained],
+      });
+      if (next.version === undefined || retained.version === undefined)
+        throw new Error("Expected versioned Entity records.");
+      next.version.number = 9;
+      retained.version.number = 9;
+      release.resolve(undefined);
+      await Promise.all([first, second]);
+      await expect(entity.current.read("task")).resolves.toEqual(current("second", 2n));
+      await expect(entity.states.backward("task", 2)).resolves.toEqual([
+        state("second", 2n),
+        state("first", 1n),
+      ]);
+    } finally {
+      release.resolve(undefined);
+      write.mockRestore();
+      commits.close();
+      entity.close();
+    }
   });
 
   it("rejects a divergent live history slot before changing current state", async () => {

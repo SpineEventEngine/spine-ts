@@ -55,7 +55,12 @@ export const SpecScanner: EntitySpecScanner = Object.freeze({
  * Reads Entity specifications using repository-validated metadata when available.
  * @internal
  */
-export const repositorySpecScanner = Object.freeze({
+export const repositorySpecScanner: {
+  readonly scan: (
+    entityType: EntityConstructor,
+    metadata?: EntityMetadata,
+  ) => RecordSpec<Message | PrimitiveId, EntityRecord>;
+} = Object.freeze({
   /**
    * Reads an Entity specification with already validated metadata.
    * @param entityType Entity class to inspect.

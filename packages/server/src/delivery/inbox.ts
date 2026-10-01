@@ -49,16 +49,6 @@ export class Inbox {
   }
 
   /**
-   * Reads the storage clock for page-local retention filtering.
-   *
-   * @returns The current storage time.
-   * @internal
-   */
-  retentionTime(): Date {
-    return this.storage.retentionTime();
-  }
-
-  /**
    * Stores one message in durable inbox storage.
    *
    * @param input Describes the message to make durable.

@@ -15,7 +15,7 @@ types, and entity history interfaces.
 
 Storage-adapter implementers import the complete provider-only contract set from
 `@spine-event-engine/storage/provider`: Event Store record access, Entity
-history and atomic commit contracts, query values, tenant boundaries/catalogs,
+history and Entity commit contracts, query values, tenant boundaries/catalogs,
 and delivery-cleanup handles. The storage root intentionally does not export
 these provider seams; application code uses its root storage contracts instead.
 

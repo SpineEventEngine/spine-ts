@@ -1,11 +1,10 @@
 # Performance corrections report
 
-Status: bounded behavior-preserving corrections and focused checks are complete.
-The one-second acceptance target is **not met**. Main's uncontended final five
-fresh-context runs measured 1162.899917, 1171.200583, 1175.728208,
-1182.376000, and 1174.916708 ms. An independent architecture assessment found
-one further internal metadata reuse path and no demonstrated need for a human
-scope decision; the bounded follow-up and its measurements appear below.
+Status: the review correction batch is implemented and the one-second acceptance
+target is **not met**. Main's earlier uncontended five fresh-context runs
+measured 1162.899917, 1171.200583, 1175.728208, 1182.376000, and
+1174.916708 ms. The source-built measurements for the current correction are
+recorded at the end of this report.
 No validation, coordination, benchmark work, or publication behavior was skipped.
 
 ## Preflight correction
@@ -207,3 +206,109 @@ unavoidable floor. An unbounded query index or new validation contract would
 expand the approved scope and needs a separate evidence-backed decision. No
 Docker, full suite, commit, push, version edit, or publication was performed
 here.
+
+## Prepared-record reuse and direct key-encoding experiment
+
+The preceding prepared-record slice reused the accepted, validated
+`EntityRecord` from Stand's deferred update during repository commit, avoiding
+the second `EntityRecords.pack` of the same state. The identical unprofiled
+benchmark rows supplied from that slice were:
+
+| Stage                        | Five 1,000-recipient runs (ms)                                  |
+| ---------------------------- | --------------------------------------------------------------- |
+| Before prepared-record reuse | 1088.708833, 1093.098125, 1132.544625, 1083.287500, 1079.138917 |
+| After prepared-record reuse  | 1122.446875, 1099.751917, 1089.074125, 1071.510500, 1075.441459 |
+
+Those samples overlap; the reuse is retained for avoiding duplicate validated
+packing, with no claimed standalone performance gain or one-second success.
+This report did not rerun that production slice.
+
+The preceding direct-key encoder experiment's 1,000-recipient measurements
+were 1291.664583, 1247.580583, 1233.618625, 1266.267041, 1265.410792 ms
+before its source edit, and 1289.245708, 1268.771625, 1266.354250,
+1230.928125, 1268.311666 ms afterward. Those timings **cannot establish a
+performance conclusion about that source edit**: the recorded commands ran
+TypeScript checks with `--noEmit` and then a benchmark that imports the storage
+package from `dist`, without an emitting build between the rows. One additional
+post-edit row overlapped a typecheck and is also unsuitable for comparison.
+The experiment's focused source tests passed, and its source edit was reverted
+at the time. This audit does not reclassify earlier unrelated measurements
+without build-status evidence.
+
+## Complete review correction batch and current performance
+
+- The exported `DeliveryInbox`, `Inbox`, `InboxStorage`, and `RemoteInbox`
+  retention-clock methods were removed. Local delivery reads its concrete
+  Inbox storage clock through a server-internal accessor; remote delivery uses
+  client wall time. The ahead/behind/exact-boundary test passes.
+- Forward delivery tracks successful duplicate and expired-delivered removals
+  only within the current bounded page. The last surviving row remains the
+  cursor, or the preceding surviving cursor is retained when the page is
+  wholly removed. Real remote tests cover a productive full page, an equal-time
+  successor, a duplicate last row, a fully removed page with and without a
+  prior survivor, and the direct adapter's unrelated absent-cursor rejection.
+  Exact and ambiguous remote cursor checks remain unchanged.
+- `RepositoryStand.preparedRecord` clones the validated deferred `EntityRecord`
+  and replaces its packed authoritative ID. Aggregate, Projection, and Process
+  Manager commit helpers no longer carry original state/version/lifecycle only
+  to repack them. A delayed Stand-read test mutates the caller's state,
+  Version, and lifecycle before completion, then verifies the prepared record,
+  authoritative ID, and subscriber snapshot. Existing family failure and
+  notification-cancellation tests passed in the focused selection.
+- The in-memory provider snapshots the affected Entity ID, current record,
+  state-history records, diagnostic Events, and delivery Events before the
+  queue or Event Store lock. Staging keys and staged writes use those same
+  snapshots. Deterministic queued and in-flight mutations preserve current and
+  history data; affected-only staging and rollback tests also pass.
+- The opt-in benchmark prints raw timings and then asserts **each** of its five
+  measured 1,000-recipient runs is below 1,000 ms. Ordinary test runs skip it.
+  Its final run fails this acceptance assertion as intended.
+
+The current native direct-key encoder removes the intermediate normalized tree
+for key creation while leaving comparison normalization unchanged. It evaluates
+object getters in lexical key order, then uses native `Object.fromEntries` and
+`Object.entries` to emit JavaScript's numeric-name enumeration order. The
+test-local old-key oracle uses private Symbol tags for bigint and bytes, so
+ordinary `kind`/`payload` objects remain ordinary objects. Exact strings match
+for more than 500 deterministic primitive, numeric, byte, bigint, nested, sparse-array,
+prototype, `__proto__`, array-index-boundary, and collision-shaped cases.
+Getter evaluation order and public read/CAS/delete behavior also pass.
+
+Before measuring this encoder, `tsc -p packages/storage/tsconfig.json` and
+`tsc -p packages/server/tsconfig.json` emitted the retained source successfully.
+From `packages/server`, `import.meta.resolve` confirmed the benchmark's storage
+and server packages resolve to their respective `dist/index.js` files. After
+the encoder edit, storage was emitted again. All rows below use the same
+no-coverage, single-worker benchmark with fresh contexts and exact handler
+counts; milliseconds are raw.
+
+| Source-built stage                    |     Warm-up |        100 |        500 | Five measured 1,000-recipient runs                              |
+| ------------------------------------- | ----------: | ---------: | ---------: | --------------------------------------------------------------- |
+| Retained source before native encoder | 1181.543000 | 106.124125 | 534.383584 | 1093.796833, 1078.325792, 1080.462542, 1070.253917, 1067.278666 |
+| Native encoder, first run             | 1162.916167 | 103.325500 | 518.590000 | 1066.560875, 1051.207000, 1052.988625, 1050.481125, 1050.301459 |
+| Native encoder, repeat                | 1166.205583 | 103.578625 | 523.766833 | 1062.488333, 1101.001166, 1054.563167, 1044.582584, 1045.180041 |
+| Final emitted runtime, first run      | 1330.207833 | 125.160500 | 603.248584 | 1260.758875, 1202.098541, 1148.048583, 1142.442625, 1169.156750 |
+| Final emitted runtime, repeat         | 1287.111667 | 110.897083 | 632.077750 | 1274.827750, 1252.204000, 1254.258834, 1237.553084, 1217.450875 |
+
+The first two native-encoder rows show a modest source-built improvement over
+the adjacent baseline, but one run overlaps its range. The final emitted
+runtime rows were slower across warm-up and smaller workloads as well; a local
+process snapshot showed high Chrome renderer and WindowServer CPU activity.
+These rows do not isolate the encoder's effect, and every row fails the
+one-second target. The encoder is retained for exact-key equivalence and the
+adjacent measured reduction, without claiming a target pass or a fixed gain.
+
+The combined focused source-test selection passed 541 tests with the ordinary
+benchmark skipped. Its selected changed-source coverage measured 94.88%
+storage-memory statements and 90.93% branches, including 95.65%/92.77% for
+the commit file and 94.56%/90.29% for tenant records. The combined command
+exited nonzero on global coverage thresholds: all selected files together
+reached 89.93% statements and 83.28% branches, below 90%. Server delivery,
+Inbox storage, repository, and remote adapter source coverage are recorded in
+that command's output; this bounded selection is not release coverage. The
+new first-page removal test subsequently passed in a 24/24 remote selection.
+All changed TypeScript files passed ESLint, Prettier, repository typecheck,
+cleanup, and TSDoc checks; after the last test and comment corrections, the
+affected ESLint, Prettier, typecheck, TSDoc, and diff checks also passed. No
+full release suite, Docker, Git
+mutation, version edit, or publication was performed by this implementer.
