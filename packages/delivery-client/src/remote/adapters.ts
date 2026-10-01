@@ -67,6 +67,16 @@ export class RemoteInbox implements DeliveryInbox {
   }
 
   /**
+   * Reads client time for local retention filtering before remote mutations.
+   *
+   * @returns The current client time.
+   * @internal
+   */
+  retentionTime(): Date {
+    return new Date();
+  }
+
+  /**
    * Writes a new inbox message.
    *
    * @param input Supplies the message fields excluding its generated identity.
@@ -213,7 +223,8 @@ export class RemoteInbox implements DeliveryInbox {
       return false;
     if (
       message.status !== "DELIVERED" ||
-      (message.keepUntil !== undefined && message.keepUntil.getTime() > Date.now())
+      (message.keepUntil !== undefined &&
+        message.keepUntil.getTime() > this.retentionTime().getTime())
     )
       return false;
     const current = await this.client.findOne(message.id, options);
@@ -258,6 +269,7 @@ class RemoteSessionOwner {
    * Frozen remote pickup produces non-renewable exclusive sessions.
    */
   readonly #sessions = new WeakMap<ExclusiveDeliveryWorkSession, RemoteShardSession>();
+
   readonly #sessionsByShard = new Map<string, Set<ExclusiveDeliveryWorkSession>>();
 
   /**
@@ -359,6 +371,12 @@ class RemoteSessionOwner {
     return undefined;
   }
 
+  /**
+   * Calls the client to release a probe session acquired accidentally.
+   *
+   * @param session Supplies the session to release.
+   * @returns Completion after the bounded release attempt.
+   */
   async #cleanupAccidentalPickup(session: RemoteShardSession): Promise<void> {
     try {
       await this.client.release(session, { timeoutMs: 1_000 });
@@ -367,6 +385,11 @@ class RemoteSessionOwner {
     }
   }
 
+  /**
+   * Removes a session from local validation state.
+   *
+   * @param session Supplies the session to invalidate.
+   */
   #invalidate(session: ExclusiveDeliveryWorkSession): void {
     this.#sessions.delete(session);
     this.#removeSession(RemoteValues.shardKey(session.shard), session);
@@ -401,6 +424,12 @@ class RemoteSessionOwner {
     }
   }
 
+  /**
+   * Removes one session from the shard's local session set.
+   *
+   * @param key Identifies the shard session set.
+   * @param session Supplies the session to remove.
+   */
   #removeSession(key: string, session: ExclusiveDeliveryWorkSession): void {
     const sessions = this.#sessionsByShard.get(key);
     if (sessions === undefined) return;
@@ -419,6 +448,7 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
    * Identifies the exclusive session model used by the remote registry.
    */
   readonly sessionKind = "EXCLUSIVE" as const;
+
   readonly #owner: RemoteSessionOwner;
 
   /**
@@ -489,6 +519,12 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
  * Groups immutable remote-adapter value operations.
  */
 const RemoteValues = Object.freeze({
+  /**
+   * Creates a detached message with a generated inbox identity.
+   *
+   * @param input Supplies the inbox message fields.
+   * @returns The encoded inbox message with a generated ID.
+   */
   receiveMessage(input: InboxMessageInput): InboxMessage {
     const message = DeliveryMessageCodec.snapshot({
       ...input,
@@ -502,28 +538,68 @@ const RemoteValues = Object.freeze({
     return message;
   },
 
+  /**
+   * Returns a frozen object with its original type.
+   *
+   * @typeParam T Object type.
+   * @param value Supplies the object to freeze.
+   * @returns The frozen object.
+   */
   freeze<T extends object>(value: T): T {
     return Object.freeze(value);
   },
 
+  /**
+   * Creates the local key for a shard.
+   *
+   * @param value Supplies the shard index.
+   * @returns The shard index and count as a key.
+   */
   shardKey(value: ShardIndex): string {
     return `${String(value.index)}/${String(value.ofTotal)}`;
   },
 
+  /**
+   * Returns the millisecond before a page anchor for exclusive paging.
+   *
+   * @param value Supplies the received-time continuation.
+   * @returns The preceding millisecond as a new Date.
+   */
   pageAnchor(value: Date): Date {
     const milliseconds = value.getTime();
     if (milliseconds <= -62_135_596_800_000) throw new DeliveryPagingError();
     return new Date(milliseconds - 1);
   },
 
+  /**
+   * Compares shard indexes by index and shard count.
+   *
+   * @param left Supplies the first shard.
+   * @param right Supplies the second shard.
+   * @returns Whether both values identify the same shard.
+   */
   sameShard(left: ShardIndex, right: ShardIndex): boolean {
     return left.index === right.index && left.ofTotal === right.ofTotal;
   },
 
+  /**
+   * Compares worker IDs by node and worker values.
+   *
+   * @param left Supplies the first worker ID.
+   * @param right Supplies the second worker ID.
+   * @returns Whether both values identify the same worker.
+   */
   sameWorker(left: DeliveryWorkerId, right: DeliveryWorkerId): boolean {
     return left.nodeId === right.nodeId && left.value === right.value;
   },
 
+  /**
+   * Finds the exact continuation in one remote page.
+   *
+   * @param page Supplies the ordered remote page.
+   * @param after Supplies the requested continuation position.
+   * @returns The index after the matching message.
+   */
   exactAfter(page: readonly InboxMessage[], after: NonNullable<InboxReadOptions["after"]>): number {
     const exact = page.findIndex(
       (message) =>
@@ -535,6 +611,13 @@ const RemoteValues = Object.freeze({
     return exact + 1;
   },
 
+  /**
+   * Compares all stored fields of two inbox messages.
+   *
+   * @param left Supplies the first message.
+   * @param right Supplies the second message.
+   * @returns Whether all compared fields match.
+   */
   sameMessage(left: InboxMessage, right: InboxMessage): boolean {
     return (
       left.id.value === right.id.value &&
@@ -552,10 +635,24 @@ const RemoteValues = Object.freeze({
     );
   },
 
+  /**
+   * Compares optional dates by their millisecond values.
+   *
+   * @param left Supplies the first date.
+   * @param right Supplies the second date.
+   * @returns Whether both dates are absent or represent the same time.
+   */
   sameDate(left: Date | undefined, right: Date | undefined): boolean {
     return left === undefined ? right === undefined : left.getTime() === right?.getTime();
   },
 
+  /**
+   * Compares optional Protobuf Any values by type URL and bytes.
+   *
+   * @param left Supplies the first Any value.
+   * @param right Supplies the second Any value.
+   * @returns Whether both values have the same type URL and bytes.
+   */
   sameAny(left: InboxMessage["signal"], right: InboxMessage["signal"]): boolean {
     return left === undefined || right === undefined
       ? left === right
@@ -564,6 +661,12 @@ const RemoteValues = Object.freeze({
           left.value.every((value, index) => value === right.value[index]);
   },
 
+  /**
+   * Validates and copies a worker ID for the remote protocol.
+   *
+   * @param worker Supplies the worker ID.
+   * @returns The detached remote worker ID.
+   */
   worker(worker: WorkerId): DeliveryWorkerId {
     const nodeId = worker.nodeId?.value;
     if (

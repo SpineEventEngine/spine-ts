@@ -20,12 +20,22 @@ import {
   describeEntityMetadata,
   entitySchemaOf,
   type EntityConstructor,
+  type EntityMetadata,
 } from "./entity-metadata.js";
 import { entityRecordSpec } from "./entity-storage-descriptor.js";
 import type { PrimitiveId } from "../repository/primitive-id.js";
 
 interface EntitySpecScanner {
-  scan(entityType: EntityConstructor): RecordSpec<Message | PrimitiveId, EntityRecord>;
+  /**
+   * Reads an Entity class with optional validated repository metadata.
+   * @param entityType Entity class to inspect.
+   * @param metadata Repository metadata already validated for its schema.
+   * @returns The generated Entity record specification.
+   */
+  scan(
+    entityType: EntityConstructor,
+    metadata?: EntityMetadata,
+  ): RecordSpec<Message | PrimitiveId, EntityRecord>;
 }
 
 /**
@@ -38,16 +48,23 @@ export const SpecScanner: EntitySpecScanner = Object.freeze({
    * Reads immutable generated schema metadata from an Entity class.
    *
    * @param entityType Entity class whose generated state schema is scanned.
+   * @param metadata Repository metadata already validated for this schema.
    * @returns The JVM EntityRecord storage specification for that entity state.
    */
-  scan(entityType: EntityConstructor): RecordSpec<Message | PrimitiveId, EntityRecord> {
+  scan(
+    entityType: EntityConstructor,
+    metadata?: EntityMetadata,
+  ): RecordSpec<Message | PrimitiveId, EntityRecord> {
     const schema = entitySchemaOf(entityType);
     if (schema === undefined) {
       throw new Error("Entity class has no generated state schema metadata.");
     }
+    if (metadata !== undefined && metadata.schema !== schema)
+      throw new Error("Repository metadata does not match the Entity state schema.");
+    const description = metadata ?? describeEntityMetadata(schema);
     return entityRecordSpec(
       schema,
-      describeEntityMetadata(schema).columns.map(
+      description.columns.map(
         (field) =>
           new RecordColumn<Message>(
             field.name,
@@ -55,6 +72,7 @@ export const SpecScanner: EntitySpecScanner = Object.freeze({
             (state) => (state as Record<string, unknown>)[field.localName],
           ),
       ),
+      description,
     );
   },
 });

@@ -25,9 +25,11 @@ import { describe, expect, it } from "vitest";
 
 import { Aggregate, Projection, Repository, SpecScanner } from "../../src/index.js";
 import {
+  EntityIds,
   EntityRecords,
   entityStorageDescriptor,
 } from "../../src/entity/entity-storage-descriptor.js";
+import { describeEntityMetadata } from "../../src/entity/entity-metadata.js";
 import {
   ProjectOverviewIdSchema,
   ProjectOverviewStateSchema,
@@ -53,6 +55,33 @@ function scan(entityType: unknown) {
 }
 
 describe("SpecScanner", () => {
+  it("reuses matching repository metadata and rejects another state descriptor", () => {
+    register(TaskProjection, ProjectOverviewStateSchema);
+    const metadata = describeEntityMetadata(ProjectOverviewStateSchema);
+    const matching = SpecScanner.scan(TaskProjection, metadata);
+
+    expect(matching.idType).toBe("string");
+    expect(matching.columns.map((column) => column.name)).toEqual(
+      SpecScanner.scan(TaskProjection).columns.map((column) => column.name),
+    );
+    expect(() =>
+      SpecScanner.scan(TaskProjection, describeEntityMetadata(MessageIdStateSchema)),
+    ).toThrow();
+  });
+  it("packs scalar and message IDs identically from validated descriptors", () => {
+    const scalarField = describeEntityMetadata(ProjectOverviewStateSchema).idField.descriptor;
+    const messageField = describeEntityMetadata(MessageIdStateSchema).idField.descriptor;
+    const messageId = create(ProjectOverviewIdSchema, { value: "project-1" });
+
+    expect(EntityIds.packField(scalarField, "project-1")).toEqual(
+      EntityIds.pack(ProjectOverviewStateSchema, "project-1"),
+    );
+    expect(EntityIds.packField(messageField, messageId)).toEqual(
+      EntityIds.pack(MessageIdStateSchema, messageId),
+    );
+    expect(() => EntityIds.packField(scalarField, 42)).toThrow();
+    expect(() => EntityIds.packField(messageField, { value: 42 })).toThrow();
+  });
   it("derives its current EntityRecord specification from the Entity class alone", () => {
     register(TaskProjection, ProjectOverviewStateSchema);
     const spec = scan(TaskProjection);
@@ -275,6 +304,22 @@ describe("SpecScanner", () => {
     ).toBeUndefined();
     expect(() => descriptor.id.key(null as never)).toThrow(/string/i);
     expect(() => descriptor.id.key({ value: "task-1" } as never)).toThrow(/string/i);
+  });
+
+  it("reuses matching metadata for storage ID keys without changing packed IDs", () => {
+    register(TaskProjection, ProjectOverviewStateSchema);
+    const context = { name: "Tasks", multitenant: false } as const;
+    const spec = scan(TaskProjection);
+    const metadata = describeEntityMetadata(ProjectOverviewStateSchema);
+    const regular = entityStorageDescriptor(context, spec);
+    const prepared = entityStorageDescriptor(context, spec, metadata);
+
+    expect(prepared.id.pack("task-1")).toEqual(regular.id.pack("task-1"));
+    expect(prepared.id.key("task-1")).toBe(regular.id.key("task-1"));
+    expect(() => prepared.id.key(null as never)).toThrow(/string/i);
+    expect(() =>
+      entityStorageDescriptor(context, spec, describeEntityMetadata(MessageIdStateSchema)),
+    ).toThrow();
   });
 
   it("round-trips scalar Entity IDs through the storage codec packer", () => {

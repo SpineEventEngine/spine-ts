@@ -548,6 +548,70 @@ describe("InMemoryRecordStorage", () => {
     ]);
   });
 
+  it("keeps bounded object sorting and Unicode continuations equal to full ordering", async () => {
+    const storage = createLookupStorage({
+      é: { rank: 10 },
+      "\uE000": { rank: 2 },
+      "\u{10000}": { rank: 2 },
+      tail: { rank: 20 },
+    });
+    await storage.writeAll(createLookupEvents(["tail", "\u{10000}", "é", "\uE000"]));
+    const sort = [
+      { field: "value", direction: "asc" as const },
+      { field: "id", direction: "asc" as const },
+    ];
+    const full = await storage.index({ sort });
+    const bounded = await storage.index({ sort, offset: 1, limit: 2 });
+    const continued = await storage.index({
+      sort,
+      after: {
+        values: [
+          { field: "value", value: { rank: 2 } },
+          { field: "id", value: create(EventIdSchema, { value: "\uE000" }) },
+        ],
+        id: create(EventIdSchema, { value: "\uE000" }),
+      },
+      limit: 2,
+    });
+
+    expect(bounded).toEqual(full.slice(1, 3));
+    expect(continued).toEqual(full.slice(1, 3));
+  });
+
+  it("replaces prepared ordering values with the record and isolates returned IDs", async () => {
+    const storage = createStorage();
+    await storage.writeAll([
+      createEvent("event-a", "type.spine.io/tasks.TaskClosed", 1n),
+      createEvent("event-b", "type.spine.io/tasks.TaskClosed", 2n),
+    ]);
+    const query = { sort: [{ field: "timestamp", direction: "asc" as const }], limit: 2 };
+    const first = await storage.queryEntries(query);
+    if (first[0]?.id !== undefined) first[0].id.value = "changed";
+    await storage.write(createEvent("event-a", "type.spine.io/tasks.TaskClosed", 3n));
+
+    const next = await storage.index(query);
+
+    expect(next.map((id) => id.value)).toEqual(["event-b", "event-a"]);
+  });
+
+  it("prepares filters per query call and observes later caller changes", async () => {
+    const storage = createStorage();
+    await storage.writeAll([
+      createEvent("event-a", "type.spine.io/tasks.TaskClosed", 1n),
+      createEvent("event-b", "type.spine.io/tasks.TaskCreated", 2n),
+    ]);
+    const values = ["type.spine.io/tasks.TaskClosed"];
+    const query = {
+      filters: [{ column: "typeUrl", value: values }],
+      sort: [{ field: "id", direction: "asc" as const }],
+      limit: 1,
+    };
+
+    expect((await storage.index(query)).map((id) => id.value)).toEqual(["event-a"]);
+    values[0] = "type.spine.io/tasks.TaskCreated";
+    expect((await storage.index(query)).map((id) => id.value)).toEqual(["event-b"]);
+  });
+
   it("rejects uncloneable runtime column values", async () => {
     const storage = createLookupStorage({
       "event-function": () => "uncloneable",

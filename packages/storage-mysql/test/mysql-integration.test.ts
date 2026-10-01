@@ -315,7 +315,7 @@ live("MySQL-family record layout", () => {
         await expect(eventStore.read()).resolves.toHaveLength(
           initialEvents + index + expected.deliveryEvents,
         );
-        await expect(commits.commit(mutation(context, input, id))).resolves.toBe("committed");
+        await expect(commits.commit(mutation(context, input, id))).resolves.toBeUndefined();
         const persisted = await mysqlCurrentRecord(pool, input, id);
         if (persisted === undefined) throw new Error("Committed Entity record is missing.");
         expect(Buffer.from(toBinary(EntityRecordSchema, persisted))).toEqual(
@@ -331,7 +331,7 @@ live("MySQL-family record layout", () => {
     }
   }, 15_000);
 
-  it("rejects closed, cross-source, conflicting, and identifier-less Entity commits", async () => {
+  it("rejects closed, cross-source, and identifier-less Entity commits", async () => {
     const context = {
       name: `t0134_commit_errors_${String(Date.now())}`,
       multitenant: false,
@@ -352,9 +352,8 @@ live("MySQL-family record layout", () => {
       await expect(
         commits.commit({
           ...mutation(context, input, "conflict"),
-          expected: current("different"),
         }),
-      ).resolves.toBe("conflict");
+      ).resolves.toBeUndefined();
       await expect(
         commits.commit({
           ...mutation(context, input, "missing-event-id"),
@@ -403,12 +402,8 @@ live("MySQL-family record layout", () => {
             "CHARACTER SET latin1 COLLATE latin1_bin NOT NULL, ENGINE=MyISAM",
         );
 
-      await expect(commits.commit(mutation(context, input, "with-history"))).resolves.toBe(
-        "committed",
-      );
-      await expect(commits.commit(mutation(context, input, "current-only"))).resolves.toBe(
-        "committed",
-      );
+      await expect(commits.commit(mutation(context, input, "with-history"))).resolves.toBeUndefined();
+      await expect(commits.commit(mutation(context, input, "current-only"))).resolves.toBeUndefined();
     } finally {
       for (const table of tables) await pool.query(`ALTER TABLE \`${table}\` ENGINE=InnoDB`);
       eventRecords.close();
@@ -476,7 +471,7 @@ live("MySQL-family record layout", () => {
     }
   });
 
-  it("serializes conflicting InnoDB Entity commits from separate handles", async () => {
+  it("serializes InnoDB Entity commits from separate handles", async () => {
     if (url === undefined) throw new Error("SPINE_TS_MYSQL_URL is required.");
     const context = { name: `t0134_concurrent_${String(Date.now())}`, multitenant: false } as const;
     const input = entityInput(context);
@@ -490,8 +485,7 @@ live("MySQL-family record layout", () => {
         next: { ...current("same"), state: packed("different") },
       };
       const outcomes = await Promise.all([first.commit(left), second.commit(right)]);
-      expect(outcomes.filter((outcome) => outcome === "committed")).toHaveLength(1);
-      expect(outcomes.filter((outcome) => outcome === "conflict")).toHaveLength(1);
+      expect(outcomes).toEqual([undefined, undefined]);
       await expect(mysqlCurrentRecord(pool, input, "same")).resolves.toBeDefined();
     } finally {
       first.close();
@@ -508,9 +502,9 @@ live("MySQL-family record layout", () => {
     const id = `replay-${String(Date.now())}`;
     try {
       const same = mutation(context, input, id);
-      await expect(commits.commit(same)).resolves.toBe("committed");
+      await expect(commits.commit(same)).resolves.toBeUndefined();
       const before = await mysqlCurrentRecord(pool, input, id);
-      await expect(commits.commit(same)).resolves.toBe("committed");
+      await expect(commits.commit(same)).resolves.toBeUndefined();
       await expect(mysqlCurrentRecord(pool, input, id)).resolves.toEqual(before);
     } finally {
       commits.close();

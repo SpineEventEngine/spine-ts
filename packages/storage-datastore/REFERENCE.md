@@ -109,12 +109,14 @@ This is deliberately the overlap, not MySQL parity: nested or disjunctive
 predicates and provider-illegal inequality/order shapes reject before provider
 access. Normalized plans have no offset; `RecordQuery.offset` is separate.
 
-The internal Entity commit reads current and immutable keys then applies current,
-enabled histories, and delivery events in one Datastore transaction. It rejects
-more than 25 entity groups, 500 mutations, or its conservative transaction-size
-limit before opening the transaction. Current mismatch returns `conflict`.
-An already-applied identical retry returns `committed`; divergent immutable
-content fails. Only ABORTED provider failures retry, for at most three attempts.
+The provider Entity commit writes the supplied current record, enabled histories,
+and delivery events in one Datastore transaction. It does not compare current
+state with an expected previous record. The operation rejects more than 25
+entity groups, 500 mutations, or its conservative transaction-size limit before
+opening the transaction. Success resolves without a value. Identical immutable
+retries remain accepted; divergent immutable content fails. Associated records
+are still completed when the current record already matches the supplied value.
+Only ABORTED provider failures retry, for at most three attempts.
 
 History reads use stable finite keyset pages. State history provides backward,
 state-at-time, trim, and truncate behavior; event history provides backward and

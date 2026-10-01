@@ -61,6 +61,14 @@ shared-runner correctness tests; report raw runs rather than hiding outliers.
 If the target is missed, profile the remaining measured cost and revise the
 bounded plan before proposing broader changes. Do not report success early.
 
+Implementation measurement follow-up: the first two runtime slices reduced the
+five 1,000-recipient runs from 4.04–4.29 seconds to 1.315–1.389 seconds. A CPU
+profile identifies repeated schema-option work and record comparisons as
+remaining candidates. The bounded follow-up may reuse already prepared values
+within existing operation/storage-handle lifetimes. It must not skip validation,
+change ordering or coordination, patch dependencies, or add a public cache/API.
+Details and overlapping sample totals are in implementation-preflight-corrections.md.
+
 ## 2. Remove the unsupported Entity conflict mechanism
 
 Change the internal Entity commit port to accept the new record and associated

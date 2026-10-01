@@ -223,7 +223,7 @@ describe("PostgreSQL live storage acceptance", () => {
     const commits = EntityCommitStorageFactories.create(factory, input);
     const entity = entityStorage(factory, input);
     try {
-      await expect(commits.commit(entityMutation(scope, input, id))).resolves.toBe("committed");
+      await expect(commits.commit(entityMutation(scope, input, id))).resolves.toBeUndefined();
       await expect(entity.current.read(id)).resolves.toEqual(current(id, "next", 1));
       await expect(entity.states.backward(id, 10)).resolves.toHaveLength(1);
       await expect(entity.events.backward(id, 10)).resolves.toHaveLength(1);
@@ -247,7 +247,7 @@ describe("PostgreSQL live storage acceptance", () => {
     }
   });
 
-  it("allows only one concurrent Entity commit with the same expected record", async () => {
+  it("serializes concurrent Entity commits from separate handles", async () => {
     const second = await postgresBuilder().setOptions({ url }).build();
     const scope = context("entity_cas");
     const input = entityInput(scope, false, false);
@@ -269,8 +269,7 @@ describe("PostgreSQL live storage acceptance", () => {
           next: current(id, "b", 1),
         }),
       ]);
-      expect(results.filter((result) => result === "committed")).toHaveLength(1);
-      expect(results.filter((result) => result === "conflict")).toHaveLength(1);
+      expect(results).toEqual([undefined, undefined]);
     } finally {
       firstCommit.close();
       secondCommit.close();

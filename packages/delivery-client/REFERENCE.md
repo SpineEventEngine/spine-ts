@@ -69,6 +69,11 @@ removes exact duplicates without treating them as delivered acknowledgements.
 Remote duplicate removal compares the current snapshot before sending the
 existing best-effort removal request.
 
+Local retention filtering uses the client's clock for both retained-row
+duplicate recognition and cleanup eligibility. It skips cleanup requests for
+rows whose retention deadline is still in the future. This does not synchronize
+client and server clocks or change the remote server's mutation checks.
+
 ## Remote delivery in an environment
 
 `RemoteDelivery.connectTo({ endpoint, clientOptions? })` creates one lazy

@@ -835,9 +835,11 @@ delivery and handler storage part of one distributed transaction.
 
 `keepUntil` is the optional deduplication-protection deadline, not a second
 retention setting. A delivered row is cleanup-eligible when that deadline is
-absent or elapsed. Under current shard ownership, environment delivery performs
-one bounded cleanup page, plus at most one continuation after a full protected
-page makes no removal. Direct local storage atomically verifies ownership and
+absent or elapsed (`keepUntil <= now`). Delivery skips per-record mutation checks
+and deletion attempts for rows whose deadline is still in the future. Cleanup
+and retained-row duplicate recognition use the same applicable clock. Eligible
+rows still receive final time and shard checks before deletion.
+Direct local storage atomically verifies ownership and
 the exact delivered snapshot during removal. A remote adapter may instead read
 and compare the snapshot before sending a separate best-effort removal request;
 that sequence is not an atomic compare-and-delete guarantee. Pending, retryable,
@@ -858,7 +860,6 @@ const context = BoundedContext.singleTenant("Tasks")
 
 Aggregate commands and Process Manager commands/events derive their target shard
 internally and persist their envelope in the target Entity Inbox before any
-handler runs. Delivery is never a post-request callback: local and remote
 handler runs. Local intake can directly drain the persisted Inbox in the
 current request path. Attached `ServerEnvironment` ports acknowledge admission
 and delivery workers replay it through the same path. Projection rows remain
@@ -873,13 +874,22 @@ durable supervisor state, topology failover, exactly-once effects, or automatic
 retry of unknown remote mutations.
 
 Each Inbox read is bounded to one page. That bound does not limit the total
-pending work: an active drain can advance to another page while it retains the
-shard. Delivery compares pending rows with delivered rows in the current page
+pending work: an active drain continues from the last row read until that scan
+ends. It restarts from the beginning only if the completed scan delivered
+messages, allowing it to find work added during delivery. It finishes after a
+scan delivers nothing; it does not restart after each productive page.
+Delivery compares pending rows with delivered rows in the current page
 and a process-local cache of the 1,000 most recent deliveries, then removes
 duplicates. The 30-second Inbox deduplication window controls how long delivered
 rows remain available as duplicate evidence; it is not a replay-retention
 period. Persisted accepted rows follow their delivery lifecycle and may be
 replayed according to that lifecycle after the deduplication window has elapsed.
+
+Direct delivery uses the Inbox storage's configured clock for both retained-row
+duplicate checks and early cleanup filtering. Custom `DeliveryInbox` adapters
+may provide the optional internal `retentionTime()` method; otherwise delivery
+uses local wall-clock time. Remote delivery uses client time for these local
+checks and does not assume it is synchronized with the remote server.
 
 `DeliveryMonitor` is an instantiable, customizable policy seam exposing
 asynchronous continuation, start/completion, failed-reception, pickup-failure,

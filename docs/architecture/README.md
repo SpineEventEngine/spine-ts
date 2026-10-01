@@ -800,7 +800,11 @@ target ID before handler code.
 Inbox delivery reads bounded raw pages and removes pending duplicates by signal
 ID plus typed Inbox target. Duplicate evidence comes from delivered rows in the
 current page and a process-local cache of the 1,000 most recent deliveries. The
-30-second deduplication window controls how long delivered rows are retained;
+drain finishes a forward scan before restarting; it starts another scan only
+when the completed scan delivered messages. Unexpired delivered rows are kept
+without attempting cleanup, and retained-row duplicate checks use the same
+applicable clock as cleanup. This does not introduce an unbounded duplicate set.
+The 30-second deduplication window controls how long delivered rows are retained;
 it is not replay retention. A different target or a newly created signal with a
 different ID is not suppressed because its payload happens to be equal.
 Bounded contexts create internal system-pairing metadata and a tenant index.

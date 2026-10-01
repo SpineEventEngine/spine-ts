@@ -26,14 +26,19 @@ export const CanonicalUtf8 = {
    * @returns A negative, zero, or positive comparison result.
    */
   compare(left: string, right: string): number {
-    const leftBytes = CanonicalUtf8.bytes(left);
-    const rightBytes = CanonicalUtf8.bytes(right);
-    const length = Math.min(leftBytes.length, rightBytes.length);
-    for (let index = 0; index < length; index += 1) {
-      const difference = (leftBytes[index] ?? 0) - (rightBytes[index] ?? 0);
+    if (left === right) return 0;
+    let leftIndex = 0;
+    let rightIndex = 0;
+    while (leftIndex < left.length && rightIndex < right.length) {
+      const first = left.codePointAt(leftIndex);
+      const second = right.codePointAt(rightIndex);
+      if (first === undefined || second === undefined) break;
+      const difference = first - second;
       if (difference !== 0) return difference;
+      leftIndex += first > 0xffff ? 2 : 1;
+      rightIndex += second > 0xffff ? 2 : 1;
     }
-    return leftBytes.length - rightBytes.length;
+    return (leftIndex < left.length ? 1 : 0) - (rightIndex < right.length ? 1 : 0);
   },
 
   /**

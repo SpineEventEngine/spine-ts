@@ -69,6 +69,132 @@ describe("Delivery direct worker", () => {
     expect(reads).toEqual([undefined, undefined]);
   });
 
+  it("continues after productive pages and restarts once after the whole scan", async () => {
+    const shard = ShardIndex.single();
+    const retained = ["retained-a", "retained-b"].map((id) => ({
+      ...message(id, id, shard),
+      status: "DELIVERED" as const,
+      keepUntil: new Date(Date.now() + 60_000),
+    }));
+    const pending = ["a", "b", "c"].map((id) => message(id, id, shard));
+    const pages = [[...retained], pending.slice(0, 2), pending.slice(2), [...retained], []];
+    const after: (string | undefined)[] = [];
+    const delivery = createDelivery({
+      pageSize: 2,
+      read: async (options) => {
+        after.push(options?.after?.messageId);
+        return pages.shift() ?? [];
+      },
+    });
+
+    const run = await delivery.drain(shard, { onMessage: () => undefined });
+
+    expect(run).toMatchObject({ status: "DRAINED", delivered: 3 });
+    expect(after).toEqual([undefined, "retained-b", "b", undefined, "retained-b"]);
+  });
+
+  it("ends a scan after duplicate removal without a successful delivery", async () => {
+    const shard = ShardIndex.single();
+    const retained = {
+      ...message("retained", "target", shard),
+      status: "DELIVERED" as const,
+      keepUntil: new Date(Date.now() + 60_000),
+    };
+    const duplicate = { ...message("duplicate", "target", shard), signalId: retained.signalId };
+    const pages = [[retained, duplicate], []];
+    let reads = 0;
+    let removals = 0;
+    const delivery = createDelivery({
+      pageSize: 2,
+      read: async () => {
+        reads += 1;
+        return pages.shift() ?? [];
+      },
+      removeDuplicate: async () => {
+        removals += 1;
+        return true;
+      },
+    });
+
+    await expect(delivery.drain(shard, { onMessage: () => undefined })).resolves.toMatchObject({
+      status: "DRAINED",
+      delivered: 0,
+    });
+    expect(reads).toBe(2);
+    expect(removals).toBe(1);
+  });
+
+  it.each([
+    { offset: 60_000, expectedDelivery: 1, expectedRemoval: 1 },
+    { offset: -60_000, expectedDelivery: 0, expectedRemoval: 0 },
+    { offset: 0, expectedDelivery: 1, expectedRemoval: 1 },
+  ])(
+    "uses the inbox clock for retained identity and cleanup at offset $offset",
+    async ({ offset, expectedDelivery, expectedRemoval }) => {
+      const shard = ShardIndex.single();
+      const boundary = Date.now();
+      const retained = {
+        ...message("retained", "target", shard),
+        status: "DELIVERED" as const,
+        keepUntil: new Date(boundary),
+      };
+      const pending = { ...message("pending", "target", shard), signalId: retained.signalId };
+      const pages = [[retained, pending], []];
+      const removed: string[] = [];
+      const duplicates: string[] = [];
+      const delivery = createDelivery({
+        now: () => new Date(boundary + offset),
+        read: async () => pages.shift() ?? [],
+        remove: async (row) => {
+          removed.push(row.id.value);
+          return true;
+        },
+        removeDuplicate: async (row) => {
+          duplicates.push(row.id.value);
+          return true;
+        },
+      });
+
+      const run = await delivery.drain(shard, { onMessage: () => undefined });
+
+      expect(run.delivered).toBe(expectedDelivery);
+      expect(removed).toHaveLength(expectedRemoval);
+      expect(duplicates).toHaveLength(1 - expectedDelivery);
+    },
+  );
+
+  it("skips per-record checks for future retained rows", async () => {
+    const shard = ShardIndex.single();
+    const future = {
+      ...message("future", "target", shard),
+      status: "DELIVERED" as const,
+      keepUntil: new Date(Date.now() + 60_000),
+    };
+    let checks = 0;
+    let removals = 0;
+    const delivery = createDelivery({
+      rows: [future],
+      registry: {
+        pickUp: async () => session(shard),
+        renew: async () => {
+          checks += 1;
+          return session(shard);
+        },
+        release: async () => true,
+      },
+      remove: async () => {
+        removals += 1;
+        return false;
+      },
+    });
+
+    await expect(delivery.drain(shard, { onMessage: () => undefined })).resolves.toMatchObject({
+      status: "DRAINED",
+    });
+    expect(checks).toBe(1);
+    expect(removals).toBe(0);
+  });
+
   it("delivers after an expired retained identity is cleaned from a new wrapper", async () => {
     const shard = ShardIndex.single();
     const expired = {
@@ -379,7 +505,7 @@ describe("Delivery direct worker", () => {
       status: "DRAINED",
       delivered: 1,
     });
-    expect(reads).toBe(3);
+    expect(reads).toBe(4);
     expect(removals).toBe(1);
   });
 
@@ -967,9 +1093,10 @@ describe("Delivery direct worker", () => {
     });
     expect(run).toMatchObject({ status: "DRAINED", delivered: 1, failed: 1 });
     expect(seen).toEqual(["blocked", "independent"]);
-    expect(reads).toHaveLength(4);
+    expect(reads).toHaveLength(5);
     expect(reads[1]?.after).toMatchObject({ messageId: "blocked" });
-    expect(reads[3]?.after).toMatchObject({ messageId: "blocked" });
+    expect(reads[3]?.after).toBeUndefined();
+    expect(reads[4]?.after).toMatchObject({ messageId: "blocked" });
     expect([...pending].map((row) => row.signalId)).toEqual(["blocked"]);
   });
 
@@ -991,6 +1118,43 @@ describe("Delivery direct worker", () => {
       },
     });
     expect(seen).toEqual(["first", "second"]);
+  });
+
+  it("finds a same-time insertion behind a removed cursor on the second scan", async () => {
+    const shard = ShardIndex.single();
+    const whenReceived = new Date(1_000);
+    const rows = ["m", "z"].map((id) => ({
+      ...message(id, id, shard),
+      whenReceived,
+    }));
+    const seen: string[] = [];
+    const after: (string | undefined)[] = [];
+    const delivery = createDelivery({
+      pageSize: 1,
+      read: async (options) => {
+        const cursor = options?.after?.messageId;
+        after.push(cursor);
+        return rows
+          .filter((row) => cursor === undefined || row.id.value > cursor)
+          .sort((left, right) => left.id.value.localeCompare(right.id.value))
+          .slice(0, 1);
+      },
+      mark: async (row) => {
+        remove(rows, row);
+        return row;
+      },
+    });
+
+    const run = await delivery.drain(shard, {
+      onMessage: (row) => {
+        seen.push(row.id.value);
+        if (row.id.value === "m") rows.push({ ...message("a", "a", shard), whenReceived });
+      },
+    });
+
+    expect(run).toMatchObject({ status: "DRAINED", delivered: 3 });
+    expect(seen).toEqual(["m", "z", "a"]);
+    expect(after).toEqual([undefined, "m", "z", undefined, "a", undefined]);
   });
 
   it("releases only after an in-flight callback settles when aborted", async () => {
@@ -1084,6 +1248,7 @@ function createDelivery(config: {
   remove?: (row: DeliveryEndpointMessage) => Promise<boolean>;
   monitor?: DeliveryMonitor;
   pageSize?: number;
+  now?: () => Date;
 }): Delivery {
   const rows = config.rows ?? [];
   return new Delivery({
@@ -1094,6 +1259,7 @@ function createDelivery(config: {
     ...(config.pageSize === undefined ? {} : { pageSize: config.pageSize }),
     inbox: {
       sessionKind: "LEASED",
+      ...(config.now === undefined ? {} : { retentionTime: config.now }),
       receive: async () => {
         throw new Error("not used");
       },

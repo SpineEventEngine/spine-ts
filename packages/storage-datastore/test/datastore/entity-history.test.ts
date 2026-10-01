@@ -156,13 +156,12 @@ describe("Datastore generated Entity records", () => {
         states: [],
         diagnostics: [],
       }),
-    ).resolves.toBe("committed");
+    ).resolves.toBeUndefined();
     await expect(
       commits.commit({
         context: entity.context,
         entity,
         entityId: "task",
-        expected: record("current", 1),
         next: record("next", 2),
         diagnostics: [event("diagnostic", 2)],
       }),
@@ -475,8 +474,8 @@ describe("Datastore generated Entity records", () => {
       diagnostics: [event("diagnostic", 1)],
       events: [event("delivery", 1)],
     };
-    await expect(commit.commit(mutation)).resolves.toBe("committed");
-    await expect(commit.commit(mutation)).resolves.toBe("committed");
+    await expect(commit.commit(mutation)).resolves.toBeUndefined();
+    await expect(commit.commit(mutation)).resolves.toBeUndefined();
     expect(backend.entities).toHaveLength(4);
   });
 
@@ -526,7 +525,7 @@ describe("Datastore generated Entity records", () => {
     await expect(storage.events.backward("task", 1)).resolves.toEqual([]);
   });
 
-  it("rejects a conflicting current record and rolls back an unapplied provider failure", async () => {
+  it("replaces current state and rolls back an unapplied provider failure", async () => {
     const backend = new HistoryDatastoreBackend();
     const client = backend.client();
     const store = DatastoreStorageFactory.newBuilder()
@@ -545,10 +544,9 @@ describe("Datastore generated Entity records", () => {
         context: entity.context,
         entity,
         entityId: "task",
-        expected: record("wrong", 1),
         next: record("two", 2),
       }),
-    ).resolves.toBe("conflict");
+    ).resolves.toBeUndefined();
     const original = client.transaction.bind(client);
     client.transaction = () => {
       const transaction = original();
@@ -560,12 +558,11 @@ describe("Datastore generated Entity records", () => {
         context: entity.context,
         entity,
         entityId: "task",
-        expected: record("one", 1),
         next: record("two", 2),
       }),
     ).rejects.toThrow("Datastore Entity transaction failed");
     expect(await store.createEntityStorage(entity).current.read("task")).toMatchObject({
-      version: { number: 1 },
+      version: { number: 2 },
     });
   });
 
@@ -601,7 +598,7 @@ describe("Datastore generated Entity records", () => {
         next: record("one", 1),
         events,
       }),
-    ).resolves.toBe("committed");
+    ).resolves.toBeUndefined();
     expect(backend.maxTransactionGroups).toBe(25);
   });
 
@@ -681,12 +678,12 @@ describe("Datastore generated Entity records", () => {
     expect(backend.entities).toHaveLength(0);
     backend.failTransactionCommit = undefined;
     backend.abortedTransactions = 2;
-    await expect(commit.commit(mutation)).resolves.toBe("committed");
+    await expect(commit.commit(mutation)).resolves.toBeUndefined();
     expect(client.transactionCalls).toBe(5);
     backend.abortedTransactions = 3;
-    await expect(
-      commit.commit({ ...mutation, expected: record("one", 1), next: record("two", 2) }),
-    ).rejects.toThrow("Datastore Entity transaction failed");
+    await expect(commit.commit({ ...mutation, next: record("two", 2) })).rejects.toThrow(
+      "Datastore Entity transaction failed",
+    );
     expect(client.transactionCalls).toBe(8);
   });
 

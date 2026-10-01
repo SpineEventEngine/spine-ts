@@ -283,3 +283,54 @@ report. It may not change runtime code or the reviewed test correction.
 Report operation counts and stage timings at 100/500/1,000 recipients, including
 the repeated inbox scans and full-map copies in the memory commit path.
 No performance claim is accepted until the measurements support it.
+
+## 1 October: approved Entity storage and delivery correction
+
+The earlier routing-test correction was pushed as `74c6b5615` and its exact-head
+CI passed. The separate runtime investigation then identified whole-collection
+memory copies and repeated Inbox prefix scans. After reviewing current official
+JVM source, the human requested a plan, approved its independent review, and
+authorized implementation. The prior analysis-only restriction above is now
+superseded for this approved extension, not for unrelated runtime changes.
+
+The approved plan and ledger are in
+`tasks/fix-publication-provenance/entity-save-delivery-plan.md`; its architecture
+and no-memory independent review are recorded beside it. Planning/rules checkpoint
+`2a4a64610` passed cheap document checks and was immediately pushed to origin.
+D-0123 records the accepted correction. Version-only snapshot.19 preparation
+already exists on this branch and must remain separate from runtime changes.
+
+Implementation uses one explicitly dispatched Sol/medium context,
+`01a0f732-e0c9-7970-a2d5-67afc04e3d69`, standard tier, memories/children disabled.
+Native capacity was exhausted, so the capable Desktop CLI is used. Actual runtime
+metadata is not exposed; explicit profile fields are recorded and no fallback
+was reported. Main retains Markdown documentation and Git integration. A parallel
+fresh Luna/medium source inventory completed without edits and identified the
+affected active documentation and established live-provider test commands.
+
+The repeatable baseline uses real Event delivery and verifies all final states:
+five fresh 1,000-recipient runs measured 4,041–4,289 ms without coverage on
+Node 24.18.0 / Apple M3 Max. Detailed settings and raw measurements are in the
+implementation report. The under-one-second requirement is not yet met.
+The storage and delivery slices are implemented. Entity commits no longer
+compare expected old state, memory prepares only affected records, Inbox scans
+finish before restarting, and early cleanup and retained-row checks share the
+applicable clock. Follow-up work reduces repeated ID and query preparation.
+Focused verification passed 590 storage tests, 68 selected server tests,
+affected typechecks, lint, TSDoc, formatting and cleanup rules. The selected
+memory commit file exceeds all four coverage thresholds.
+
+Real PostgreSQL 16/18, MySQL 8.4 and MariaDB 11.4 checks passed, including
+MyISAM/Aria partial-write behavior. Datastore Inbox cleanup passed; tracing of
+its combined Entity/history test confirms commits and appends completed before
+history trimming stalled. The complete test still fails and is not reported
+as green. All disposable containers were removed. Full details are in the
+task progress and implementation reports.
+
+The uncontended five-run result is 1,163–1,182 ms, still above the one-second
+goal. Further optimization is paused for an independent Astra/high assessment
+of the demonstrated blocker and narrower profiling of the timed operation.
+This checkpoint is not merge-ready: performance acceptance, independent code
+review, final release verification and final-head CI remain. No merge or package
+publication is authorized. Snapshot.19 remains the existing common version;
+the latest registry check found no such version for the 19 public packages.

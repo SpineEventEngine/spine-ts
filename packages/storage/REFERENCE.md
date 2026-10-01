@@ -114,9 +114,15 @@ not open or allocate its grouped records. Current Entity loading always uses
 the current record, never retained history. Event history is diagnostic data,
 not a source for rebuilding current state.
 
-The provider SPI's Entity commit contract combines one current record with
-the nonempty enabled history families and delivery events. For the in-memory
-provider only, that operation stages and atomically publishes its touched
-families. Its outcomes are `"committed"` and `"conflict"`; it has no receipt or
-`"replayed"` outcome. Other providers define and document their atomicity
-guarantees.
+The provider SPI's Entity commit accepts the next current record and associated
+enabled history and delivery events, without an expected previous record.
+`commit()` returns `Promise<void>`: success resolves without a value and storage
+errors reject. There is no Entity conflict result. This changes the published
+`storage/provider` types for custom adapters; application APIs and persisted
+record layouts are unchanged.
+
+The in-memory provider prepares only the affected records before applying them
+together. Saving one Entity does not copy other Entities or whole history/Event
+Store collections. Automatic Entity versions, immutable-record checks and
+unrelated Inbox conditional updates remain. Other providers document their
+transaction and partial-write guarantees separately.

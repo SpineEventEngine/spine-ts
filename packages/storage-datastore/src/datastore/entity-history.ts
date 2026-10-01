@@ -26,7 +26,6 @@ import {
   eventHistorySpec,
   stateHistorySpec,
   type EntityCommitInput,
-  type EntityCommitResult,
   type EntityCommitStorage,
   type EntityEventHistoryPort,
   type EntityRecordStorage,
@@ -51,6 +50,8 @@ interface PreparedCommitRow {
 /**
  * Opens one generated record family with its resolved Datastore layout.
  *
+ * @typeParam I Record identifier type.
+ * @typeParam R Stored Protobuf message type.
  * @param spec The generated record-family contract.
  * @param group The optional generated storage group.
  * @returns The opened record-storage handle.
@@ -62,6 +63,9 @@ export type OpenEntityRecords = <I, R extends Message>(
 
 /**
  * Groups Entity current and optional history record families.
+ *
+ * @typeParam I Entity identifier type.
+ * @typeParam S Entity state message type.
  */
 export class DatastoreEntityStorage<I, S extends Message> {
   // prettier-ignore
@@ -80,7 +84,9 @@ export class DatastoreEntityStorage<I, S extends Message> {
    * Provides access to retained Entity state history.
    */
   readonly states: EntityStateHistoryPort<I, S>;
+
   readonly #records: readonly { close(): void }[];
+
   #open = true;
 
   /**
@@ -151,10 +157,12 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
   /**
    * Commits one Entity state transition and its generated history records.
    *
+   * @typeParam I Entity identifier type.
+   * @typeParam S Entity state message type.
    * @param input The Entity mutation to commit.
-   * @returns The committed or conflicting outcome.
+   * @returns Completion after Datastore commits the mutation.
    */
-  async commit<I, S extends Message>(input: EntityCommitInput<I, S>): Promise<EntityCommitResult> {
+  async commit<I, S extends Message>(input: EntityCommitInput<I, S>): Promise<void> {
     this.validate(input);
     const current = this.openRecords(input.entity.recordSpec) as DatastoreRecordStorage<
       I,
@@ -182,18 +190,30 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
     }
   }
 
+  /**
+   * Retries the prepared Datastore transaction after bounded aborts.
+   *
+   * @typeParam I Entity identifier type.
+   * @typeParam S Entity state type.
+   * @param input Supplies current and immutable records.
+   * @param current Provides current Entity storage.
+   * @param states Provides state history when enabled.
+   * @param diagnostics Provides diagnostic history when enabled.
+   * @param events Provides delivery Event storage.
+   * @returns Completion after a successful transaction.
+   */
   private async run<I, S extends Message>(
     input: EntityCommitInput<I, S>,
     current: DatastoreRecordStorage<I, EntityRecord>,
     states: DatastoreRecordStorage<unknown, EntityRecord> | undefined,
     diagnostics: DatastoreRecordStorage<unknown, Event> | undefined,
     events: DatastoreRecordStorage<unknown, Event>,
-  ): Promise<EntityCommitResult> {
+  ): Promise<void> {
     const prepared = this.prepare(input, current, states, diagnostics, events);
     validateCommitSize(prepared.map((row) => row.entity));
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
-        return await this.tryCommit(input, current, prepared);
+        return await this.tryCommit(current, prepared);
       } catch (error) {
         if (isAborted(error) && attempt < 2) {
           await abortBackoff(attempt);
@@ -205,6 +225,17 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
     throw new Error("Datastore transaction did not complete.");
   }
 
+  /**
+   * Builds affected rows before opening a transaction.
+   *
+   * @typeParam I Entity identifier type.
+   * @param input Supplies records to materialize.
+   * @param current Provides current Entity storage.
+   * @param states Provides state history when enabled.
+   * @param diagnostics Provides diagnostic history when enabled.
+   * @param events Provides delivery Event storage.
+   * @returns Deduplicated rows for the transaction.
+   */
   private prepare<I>(
     input: EntityCommitInput<I, Message>,
     current: DatastoreRecordStorage<I, EntityRecord>,
@@ -220,26 +251,38 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
     ]);
   }
 
-  private async tryCommit<I, S extends Message>(
-    input: EntityCommitInput<I, S>,
+  /**
+   * Applies one prepared transaction attempt and rolls back on failure.
+   *
+   * @typeParam I Entity identifier type.
+   * @param current Opens a transaction for the Entity scope.
+   * @param prepared Supplies current and immutable rows.
+   * @returns Completion after the transaction commits.
+   */
+  private async tryCommit<I>(
     current: DatastoreRecordStorage<I, EntityRecord>,
     prepared: readonly PreparedCommitRow[],
-  ): Promise<EntityCommitResult> {
+  ): Promise<void> {
     const transaction = current.transaction();
     try {
       await transaction.run();
       const values = await this.load(transaction, prepared);
-      if (await this.conflict(transaction, input, current, values)) return "conflict";
       this.validateImmutable(prepared, values);
       this.apply(transaction, prepared, values);
       await transaction.commit();
-      return "committed";
     } catch (error) {
       await rollback(transaction);
       throw error;
     }
   }
 
+  /**
+   * Loads affected keys in stable order within one transaction.
+   *
+   * @param transaction Supplies the active Datastore transaction.
+   * @param prepared Supplies affected rows.
+   * @returns Existing data indexed by key.
+   */
   private async load(
     transaction: ReturnType<Datastore["transaction"]>,
     prepared: readonly PreparedCommitRow[],
@@ -256,21 +299,12 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
     return new Map(values);
   }
 
-  private async conflict<I, S extends Message>(
-    transaction: ReturnType<Datastore["transaction"]>,
-    input: EntityCommitInput<I, S>,
-    current: DatastoreRecordStorage<I, EntityRecord>,
-    values: ReadonlyMap<string, Record<string, unknown> | undefined>,
-  ): Promise<boolean> {
-    const live = values.get(keyId(current.transactionEntity(input.next).key));
-    const expected =
-      input.expected === undefined ? undefined : current.transactionEntity(input.expected).data;
-    if (sameData(live, expected) || sameData(live, current.transactionEntity(input.next).data))
-      return false;
-    await transaction.rollback();
-    return true;
-  }
-
+  /**
+   * Rejects divergent data already stored under immutable keys.
+   *
+   * @param prepared Supplies proposed immutable rows.
+   * @param values Supplies existing data for affected keys.
+   */
   private validateImmutable(
     prepared: readonly PreparedCommitRow[],
     values: ReadonlyMap<string, Record<string, unknown> | undefined>,
@@ -282,6 +316,13 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
     }
   }
 
+  /**
+   * Writes missing immutable rows and changed current state in the transaction.
+   *
+   * @param transaction Supplies the active Datastore transaction.
+   * @param prepared Supplies current and immutable rows.
+   * @param values Supplies existing data for affected keys.
+   */
   private apply(
     transaction: ReturnType<Datastore["transaction"]>,
     prepared: readonly PreparedCommitRow[],
@@ -294,6 +335,14 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
     }
   }
 
+  /**
+   * Closes temporary record-family handles after the commit attempt.
+   *
+   * @param current Supplies current Entity storage.
+   * @param states Supplies state history when enabled.
+   * @param diagnostics Supplies diagnostic history when enabled.
+   * @param events Supplies delivery Event storage.
+   */
   private closeRecords(
     current: { close(): void },
     states: { close(): void } | undefined,
@@ -313,6 +362,13 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
     this.#open = false;
   }
 
+  /**
+   * Validates the Entity, tenant, history, and Event boundaries of a commit.
+   *
+   * @typeParam I Entity identifier type.
+   * @typeParam S Entity state type.
+   * @param input Supplies the proposed commit.
+   */
   private validate<I, S extends Message>(input: EntityCommitInput<I, S>): void {
     if (!this.#open) throw new Error("Entity commit storage is closed.");
     if (
@@ -329,20 +385,53 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
   }
 }
 
+/**
+ * Provides the current Entity records through one record-family handle.
+ *
+ * @typeParam I Entity identifier type.
+ * @typeParam S Entity state message type.
+ */
 class CurrentStorage<I, S extends Message> implements EntityRecordStorage<I> {
+  /**
+   * Creates current-record access for one Entity storage contract.
+   *
+   * @param input Defines the Entity identity and columns.
+   * @param records Provides current Entity record storage.
+   */
   constructor(
     private readonly input: EntityStorageInput<I, S>,
     private readonly records: RecordStorage<I, EntityRecord>,
   ) {}
+
+  /**
+   * Reads one current Entity record.
+   *
+   * @param id Identifies the Entity.
+   * @returns The current record, or undefined when none is stored.
+   */
   read(id: I): Promise<EntityRecord | undefined> {
     return this.records.read(id);
   }
+
+  /**
+   * Stores the current record for its Entity.
+   *
+   * @param record Supplies the current Entity record.
+   * @returns Completion after the record is stored.
+   */
   async write(record: EntityRecord): Promise<void> {
     const id = record.entityId === undefined ? undefined : this.input.id.unpack(record.entityId);
     if (id === undefined)
       throw new Error("Entity current record ID does not match its Entity ID schema.");
     await this.records.write(record);
   }
+
+  /**
+   * Returns current Entity records and their configured columns.
+   *
+   * @param plan Specifies the normalized query.
+   * @returns Matching Entity records and column values.
+   */
   async query(plan: import("@spine-event-engine/storage").NormalizedQueryPlan<I>) {
     return (await this.records.queryPlanEntries(plan)).map((entry) => ({
       ...entry,
@@ -353,7 +442,19 @@ class CurrentStorage<I, S extends Message> implements EntityRecordStorage<I> {
   }
 }
 
+/**
+ * Provides retained Entity state history through one record-family handle.
+ *
+ * @typeParam I Entity identifier type.
+ * @typeParam S Entity state message type.
+ */
 class StateHistory<I, S extends Message> implements EntityStateHistoryPort<I, S> {
+  /**
+   * Creates state-history access for one Entity storage contract.
+   *
+   * @param input Defines the Entity identity and state schema.
+   * @param records Provides retained state-history records.
+   */
   constructor(
     private readonly input: EntityStorageInput<I, S>,
     private readonly records: RecordStorage<
@@ -361,10 +462,26 @@ class StateHistory<I, S extends Message> implements EntityStateHistoryPort<I, S>
       EntityRecord
     >,
   ) {}
+
+  /**
+   * Stores one immutable state-history record.
+   *
+   * @param record Supplies the state-history record.
+   * @returns Completion after the record is retained.
+   */
   append(record: EntityRecord): Promise<void> {
     this.requireOpen();
     return immutable(this.records, record);
   }
+
+  /**
+   * Reads recent state-history records in reverse order.
+   *
+   * @param id Identifies the Entity.
+   * @param depth Sets the maximum number of records to read.
+   * @param from Sets an optional upper version bound.
+   * @returns Matching records from newest to oldest.
+   */
   async backward(id: I, depth: number, from?: bigint): Promise<readonly EntityRecord[]> {
     this.requireOpen();
     requireDepth(depth);
@@ -380,6 +497,14 @@ class StateHistory<I, S extends Message> implements EntityStateHistoryPort<I, S>
       depth,
     );
   }
+
+  /**
+   * Reads the Entity state recorded at or before a time.
+   *
+   * @param id Identifies the Entity.
+   * @param time Sets the latest creation time to include.
+   * @returns The matching state, or undefined when none exists.
+   */
   async stateAt(id: I, time: Timestamp): Promise<S | undefined> {
     this.requireOpen();
     const page = await this.provider().queryProviderPage({
@@ -395,6 +520,14 @@ class StateHistory<I, S extends Message> implements EntityStateHistoryPort<I, S>
       ? undefined
       : fromBinary(this.input.stateSchema, found.state.value);
   }
+
+  /**
+   * Stores no more than the newest state-history records for an Entity.
+   *
+   * @param id Identifies the Entity.
+   * @param keep Sets the number of newest records to retain.
+   * @returns Completion after older records are removed.
+   */
   async trim(id: I, keep: number): Promise<void> {
     this.requireOpen();
     requireKeep(keep);
@@ -412,6 +545,13 @@ class StateHistory<I, S extends Message> implements EntityStateHistoryPort<I, S>
       if (!page.hasMore) break;
     }
   }
+
+  /**
+   * Removes state-history records created before a time.
+   *
+   * @param time Sets the exclusive creation-time boundary.
+   * @returns Completion after matching records are removed.
+   */
   async truncate(time: Timestamp): Promise<void> {
     this.requireOpen();
     for (;;) {
@@ -427,10 +567,19 @@ class StateHistory<I, S extends Message> implements EntityStateHistoryPort<I, S>
       if (!page.hasMore) break;
     }
   }
+
+  /**
+   * Closes the state-history record handle.
+   */
   close(): void {
     this.records.close();
   }
 
+  /**
+   * Returns the Datastore provider for state-history queries.
+   *
+   * @returns The typed Datastore record-storage handle.
+   */
   private provider(): DatastoreRecordStorage<
     import("@spine-event-engine/proto/generated/spine/server/entity/state_key_pb.js").EntityStateKey,
     EntityRecord
@@ -441,10 +590,21 @@ class StateHistory<I, S extends Message> implements EntityStateHistoryPort<I, S>
     >;
   }
 
+  /**
+   * Rejects operations after the record handle closes.
+   */
   private requireOpen(): void {
     if (!this.records.isOpen()) throw new Error("Entity history storage is closed.");
   }
 
+  /**
+   * Reads a bounded sequence of matching state-history pages.
+   *
+   * @param filters Specifies the Datastore filters.
+   * @param order Specifies the Datastore sort order.
+   * @param depth Sets the maximum number of records to read.
+   * @returns Matching records in page order.
+   */
   private async pages(
     filters: readonly import("./record-storage.js").DatastoreRangeFilter[],
     order: readonly { readonly property: string; readonly direction: "asc" | "desc" }[],
@@ -467,15 +627,43 @@ class StateHistory<I, S extends Message> implements EntityStateHistoryPort<I, S>
   }
 }
 
+/**
+ * Provides retained Entity Event history through one record-family handle.
+ *
+ * @typeParam I Entity identifier type.
+ * @typeParam S Entity state message type.
+ */
 class EventHistory<I, S extends Message> implements EntityEventHistoryPort<I> {
+  /**
+   * Creates Event-history access for one Entity storage contract.
+   *
+   * @param input Defines the Entity identity and state schema.
+   * @param records Provides retained Event-history records.
+   */
   constructor(
     private readonly input: EntityStorageInput<I, S>,
     private readonly records: RecordStorage<import("@spine-event-engine/proto").EventId, Event>,
   ) {}
+
+  /**
+   * Stores one immutable Entity Event-history record.
+   *
+   * @param event Supplies the Event-history record.
+   * @returns Completion after the Event is retained.
+   */
   append(event: Event): Promise<void> {
     this.requireOpen();
     return immutable(this.records, event);
   }
+
+  /**
+   * Reads recent Entity Events in reverse order.
+   *
+   * @param id Identifies the Entity.
+   * @param depth Sets the maximum number of Events to read.
+   * @param from Sets an optional upper version bound.
+   * @returns Matching Events from newest to oldest.
+   */
   async backward(id: I, depth: number, from?: bigint): Promise<readonly Event[]> {
     this.requireOpen();
     requireDepth(depth);
@@ -500,6 +688,13 @@ class EventHistory<I, S extends Message> implements EntityEventHistoryPort<I> {
     }
     return result;
   }
+
+  /**
+   * Removes Entity Events created before a time.
+   *
+   * @param time Sets the exclusive creation-time boundary.
+   * @returns Completion after matching Events are removed.
+   */
   async truncate(time: Timestamp): Promise<void> {
     this.requireOpen();
     for (;;) {
@@ -515,10 +710,19 @@ class EventHistory<I, S extends Message> implements EntityEventHistoryPort<I> {
       if (!page.hasMore) break;
     }
   }
+
+  /**
+   * Closes the Event-history record handle.
+   */
   close(): void {
     this.records.close();
   }
 
+  /**
+   * Returns the Datastore provider for Event-history queries.
+   *
+   * @returns The typed Datastore record-storage handle.
+   */
   private provider(): DatastoreRecordStorage<import("@spine-event-engine/proto").EventId, Event> {
     return this.records as DatastoreRecordStorage<
       import("@spine-event-engine/proto").EventId,
@@ -526,11 +730,23 @@ class EventHistory<I, S extends Message> implements EntityEventHistoryPort<I> {
     >;
   }
 
+  /**
+   * Rejects operations after the record handle closes.
+   */
   private requireOpen(): void {
     if (!this.records.isOpen()) throw new Error("Entity history storage is closed.");
   }
 }
 
+/**
+ * Stores a history record once and rejects divergent content for its ID.
+ *
+ * @typeParam I Record identifier type.
+ * @typeParam R Stored Protobuf message type.
+ * @param records Provides immutable history record storage.
+ * @param record Supplies the history record to retain.
+ * @returns Completion after the record is present.
+ */
 async function immutable<I, R extends Message>(
   records: RecordStorage<I, R>,
   record: R,
@@ -547,6 +763,17 @@ async function immutable<I, R extends Message>(
   )
     throw new Error("Immutable history record has divergent content.");
 }
+
+/**
+ * Prepares Datastore rows for one record family.
+ *
+ * @typeParam I Record identifier type.
+ * @typeParam R Stored Protobuf message type.
+ * @param storage Provides the record-family handle when enabled.
+ * @param records Supplies records to prepare.
+ * @param immutable Marks whether existing rows must remain unchanged.
+ * @returns The prepared rows for the transaction.
+ */
 function preparedRows<I, R extends Message>(
   storage: DatastoreRecordStorage<I, R> | undefined,
   records: readonly R[],
@@ -568,6 +795,14 @@ function preparedRows<I, R extends Message>(
     entity: storage.transactionEntity(record),
   }));
 }
+
+/**
+ * Removes duplicate immutable rows and rejects conflicting content.
+ *
+ * @typeParam R Prepared row type.
+ * @param rows Supplies prepared current and history rows.
+ * @returns Rows with duplicate immutable keys removed.
+ */
 function coalesceImmutableRows<
   R extends {
     readonly immutable: boolean;
@@ -599,6 +834,15 @@ function requireKeep(value: number): void {
     throw new Error("History retention must be a non-negative safe integer.");
 }
 
+/**
+ * Creates a Datastore filter for one Entity identifier.
+ *
+ * @typeParam I Entity identifier type.
+ * @typeParam S Entity state message type.
+ * @param input Defines the Entity ID schema.
+ * @param id Identifies the Entity to match.
+ * @returns The Datastore Entity ID filter.
+ */
 function entityFilter<I, S extends Message>(
   input: EntityStorageInput<I, S>,
   id: I,
@@ -651,7 +895,21 @@ function abortBackoff(attempt: number): Promise<void> {
   const delayMs = 20 * (attempt + 1) + Math.floor(Math.random() * 40);
   return new Promise((resolve) => setTimeout(resolve, delayMs));
 }
-async function rollback(transaction: { rollback(): Promise<unknown> }): Promise<void> {
+
+/**
+ * Rolls back a failed Datastore transaction when possible.
+ *
+ * @param transaction Supplies the transaction to roll back.
+ * @returns Completion after rollback finishes or fails.
+ */
+async function rollback(transaction: {
+  /**
+   * Rolls back the pending transaction.
+   *
+   * @returns The provider's rollback result.
+   */
+  rollback(): Promise<unknown>;
+}): Promise<void> {
   try {
     await transaction.rollback();
   } catch {
@@ -692,6 +950,13 @@ function validateEvents(events: readonly Event[]): void {
     throw new Error("Entity commit requires non-blank unique delivery-event IDs.");
 }
 
+/**
+ * Checks that current and history records identify the committed Entity.
+ *
+ * @typeParam I Entity identifier type.
+ * @typeParam S Entity state message type.
+ * @param input Supplies the Entity commit to check.
+ */
 function validateCommitEntityId<I, S extends Message>(input: EntityCommitInput<I, S>): void {
   const nextId =
     input.next.entityId === undefined ? undefined : input.entity.id.unpack(input.next.entityId);

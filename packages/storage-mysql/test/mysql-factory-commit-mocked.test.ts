@@ -112,7 +112,7 @@ describe("MysqlStorageFactory mocked entity commits", () => {
           diagnostics: [create(EventSchema)],
           events: [create(EventSchema, { id: create(EventIdSchema, { value: "event-1" }) })],
         }),
-      ).resolves.toBe("committed");
+      ).resolves.toBeUndefined();
       expect(seam.calls).toEqual(
         transactional
           ? ["families.prepare", "events.prepare", "state", "diagnostic", "event", "write"]

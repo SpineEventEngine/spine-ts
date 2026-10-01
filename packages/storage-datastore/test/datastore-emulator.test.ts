@@ -244,32 +244,29 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
           diagnostics: [entityEvent("diagnostic", 1)],
           events: [entityEvent("delivery", 1)],
         }),
-      ).resolves.toBe("committed");
+      ).resolves.toBeUndefined();
       await expect(
         handle.commits.commit({
           context,
           entity,
           entityId: "task",
-          expected: entityRecord("wrong", 1),
           next: entityRecord("next", 2),
         }),
-      ).resolves.toBe("conflict");
+      ).resolves.toBeUndefined();
       await expect(
         handle.commits.commit({ context, entity, entityId: "task", next: first }),
-      ).resolves.toBe("committed");
+      ).resolves.toBeUndefined();
       const concurrent = await Promise.all(
         ["two", "three"].map((value) =>
           handle.commits.commit({
             context,
             entity,
             entityId: "task",
-            expected: first,
             next: entityRecord(value, 2),
           }),
         ),
       );
-      expect(concurrent.filter((result) => result === "committed")).toHaveLength(1);
-      expect(concurrent.filter((result) => result === "conflict")).toHaveLength(1);
+      expect(concurrent).toEqual([undefined, undefined]);
       await expect(handle.current.read("task")).resolves.toMatchObject({ version: { number: 2 } });
 
       const kinds = await Promise.all([
