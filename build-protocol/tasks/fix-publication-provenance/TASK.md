@@ -22,6 +22,13 @@ Reuse the clean managed checkout; do not create another chat.
   internal dependency pins and lockfile changes are a separate commit.
 - Do not publish packages, rerun workflows, create a PR, or merge without request.
 - Keep all explanations and documentation simple. No unrelated compatibility work.
+- Investigate the human-reported routing performance separately from the CI
+  test correction: 1,000 deliveries should take under one second. Measure the
+  current one-event-to-1,000-Process-Managers case without coverage as the
+  application baseline, and report coverage overhead separately. Provide
+  measured causes and a correction proposal; changing the test does not meet
+  the runtime performance target. Broader runtime optimization is analysis
+  scope until the proposed correction is agreed.
 
 ## Evidence and approach
 

@@ -162,3 +162,124 @@ audits, release profile, actual-library regression and archive proof. An earlier
 green SHA must not be reported as final. No workflow rerun, real publication,
 merge, tag mutation or third-party patch was performed. Live OIDC publication
 can only be established by a later authorized protected publishing run.
+
+## CI routing-test investigation
+
+Build run 36765936378 for c92cd98bcc8dbf07ae601c4e26985843fbb39474
+passed installation and both dependency audits, then failed the release profile.
+The public check annotation identifies one 15-second timeout: the existing test
+that retains the first Process Manager recipient batch when a later handoff
+fails (repository-routing.test.ts:8160). The archive and npm-regression steps
+were skipped. This run is not accepted as a green result.
+
+The existing implementer (01a0f345-089a-7431-b87b-94ee1adb86a6) resumes with
+explicit gpt-6-sol/medium, standard tier, no memories or child agents, first to
+reproduce and trace the timeout. Do not increase timeouts or retry CI without
+evidence. Expected correction and focused verification/review: 0.5–1 hour,
+including the subsequent GitHub verification wait. Per-response runtime model
+metadata remains unavailable; explicit dispatch configuration is recorded.
+
+The implementer completed the investigation with no lasting code change. The
+named test passed twice without coverage (3.97 and 3.95 seconds), and with
+coverage (6.18 seconds). All 324 routing tests passed in the file-level run;
+the partial coverage commands exited 1 because the repository-wide coverage
+thresholds are not achievable with only that file. These commands are not a
+replacement for the full release gate. Temporary phase instrumentation was
+removed; it measured about 26 ms to the first handoff, 3.9 seconds through
+dispatch and the intended second-batch failure, and 35 ms for reading rows and
+closing the context. No timeout increase or speculative correction was made.
+
+Full GitHub logs could not be downloaded through the public API (403); the
+in-app browser also requires sign-in, and no other browser is connected. The
+current blocker is the missing full failed-job log. Request the downloaded log
+or an authenticated browser before continuing the investigation. CI remains
+red at c92cd98; no publication, rerun, new commit or push was performed during
+this investigation.
+
+## Routing timeout follow-up, 2026-10-01
+
+The human supplied the failed-job summary: one timed-out routing test, 5,133
+passing tests, and 842.20 seconds of test execution. It still does not locate
+the slow await, but confirms the isolated failure. Resume the existing
+implementer with explicit Sol/medium, standard tier, memories/children disabled.
+Investigate scaling and unnecessary work in the 1,000-recipient path before
+choosing a correction; neither a timeout increase nor a speculative runtime
+change is an acceptance criterion. Preserve batching, first-batch persistence,
+ordering and failure assertions. Estimate: 0.5–1 hour including focused
+verification, independent relevant review and CI. Desktop CLI supports the
+explicit model/reasoning fields; per-response runtime metadata is unavailable.
+
+### Implementer correction and focused evidence
+
+The first-batch test combined two behaviors: durable handoff across the 1,000
+recipient boundary and immediate local replay of every recipient. The latter
+made the test expensive. Direct `LocalEntityInbox.receiveAll` writes 1,000 rows
+and then drains them one at a time; each direct drain enters the shard delivery
+path and reads its inbox page. Temporary diagnostic runs under V8 coverage
+measured about 0.33 seconds for 100 distinct reactions, 2.03 seconds for 500,
+and 6.12 seconds for 1,000. A one-recipient diagnostic did not exercise this
+batch path. These measurements show growing repeated delivery work but do not
+establish a production correctness defect or the exact await that timed out in
+CI. Temporary diagnostic edits were removed.
+
+The bounded test correction transfers delivery to environment ports backed by
+the **same in-memory storage** before dispatch. The actual `receiveAll` still
+persists all 1,000 distinct first-batch recipients, now as pending rows without
+1,000 unrelated handler replays. The test checks every stored recipient ID,
+first-batch persistence, ordered handoff, lazy second-batch construction, the
+single warning, and the intentional second-batch rejection. Production runtime
+code and the 15-second limit are unchanged. The retained test took 132 ms
+without coverage, compared with about 3.9 seconds before the correction.
+
+Focused verification passed:
+
+- `pnpm exec vitest run --maxWorkers=1 --testTimeout=15000 packages/server/test/repository/repository-routing.test.ts -t 'records the first Process Manager recipient batch before a later handoff fails'`: 1 test passed.
+- `pnpm exec vitest run --coverage --coverage.reporter=none --coverage.thresholds.lines=0 --coverage.thresholds.functions=0 --coverage.thresholds.branches=0 --coverage.thresholds.statements=0 --maxWorkers=1 --testTimeout=15000 packages/server/test/repository/repository-routing.test.ts -t 'records the first Process Manager recipient batch before a later handoff fails|sends every remote Process Manager batch and preserves earlier rows on failure'`: 2 tests passed; focused thresholds were zeroed because this is not the full coverage gate.
+- `pnpm exec vitest run --maxWorkers=1 --testTimeout=15000 packages/server/test/repository/repository-routing.test.ts`: all 324 tests passed.
+- `pnpm exec eslint packages/server/test/repository/repository-routing.test.ts`, `pnpm exec prettier --check packages/server/test/repository/repository-routing.test.ts`, `pnpm typecheck:tooling`, `pnpm lint:cleanup`, and `git diff --check`: passed.
+
+The full release profile and GitHub workflow were not rerun. CI remains red at
+`c92cd98` until a later final-head run verifies this correction. No publication,
+commit, or push was performed in this implementation pass.
+
+The human challenged the causal explanation before any correction was pushed.
+The earlier downloaded successful prepare log at baseline 9e114729 records the
+same test at 8,839 ms, all 324 routing tests at 21,040 ms, and overall test time
+541.25 seconds (1_prepare.txt in logs_99479141341.zip). The failed run reports
+842.20 seconds overall. Runtime source, this test, Vitest configuration, Node
+version and the release test command are unchanged in c92cd98. Parsed lockfile
+comparison shows one added package version, grpc-js 1.14.5, no changed metadata
+for retained package versions, and 334 removed versions after Lerna removal.
+This is evidence of a previously expensive test and a slower run, not proof
+of the exact cause. The existing Sol/medium implementer will inspect the
+dependency and release-test differences for plausible cross-test effects
+before accepting the test-only correction. No additional code change or full
+verification run is authorized in this diagnostic assignment.
+
+The human additionally requested a separate performance analysis with a
+sub-second target for 1,000 signals. The reproduced scenario is one event
+routed to 1,000 Process Manager instances. Measure application execution
+without coverage and separate instrumentation overhead; identify storage,
+handler/state commit and acknowledgement costs. A faster test is not a
+runtime fix. Keep this work read-only apart from a concise analysis record
+and disposable diagnostics; propose any runtime optimization before expanding
+the implementation. Additional estimate: 0.3–0.6 hours for profiling, source
+analysis and a plain-language report, partly overlapping the current reviews.
+
+The read-only causal comparison found no concrete regression: Vitest's fresh
+run ordering puts this largest test file before release-script tests, the
+new npm reproduction step runs after the failing gate, and a focused import
+trace loaded neither grpc-js nor Datastore. Retained test-runner, coverage,
+protobuf and Linux native binding snapshots are unchanged. Failed-run
+per-file timings are still unavailable, so the broader slowdown is not
+attributed to a proven cause. Independent review session
+01a0f685-263a-77c3-a4a4-d02c683dd8ca accepted the focused test correction
+with no P0–P2 findings. The correction is ready to commit and push after final
+format checks; GitHub must verify the resulting exact head.
+
+The same Sol/medium implementer will next profile the original direct delivery
+scenario separately, using disposable diagnostics and an external analysis
+report. It may not change runtime code or the reviewed test correction.
+Report operation counts and stage timings at 100/500/1,000 recipients, including
+the repeated inbox scans and full-map copies in the memory commit path.
+No performance claim is accepted until the measurements support it.

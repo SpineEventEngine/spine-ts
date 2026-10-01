@@ -8169,6 +8169,15 @@ describe("repository signal routing", () => {
       .build();
     const dispatcher = repositoryAccess.eventDispatcher(repository);
     if (dispatcher === undefined) throw new Error("Expected Process Manager dispatcher.");
+    const delivery = new Delivery({
+      context: { name: "BatchFailure", multitenant: false },
+      storageFactory: factory,
+    });
+    // Keep the durable handoff in the same storage without replaying 1,000 unrelated handlers.
+    const descriptor = boundedContextAccess.delivery(context);
+    await descriptor.transition(descriptor.endpoints(), () => undefined, {
+      ports: { inbox: delivery.inbox, workRegistry: delivery.shards },
+    });
     // eslint-disable-next-line @typescript-eslint/unbound-method -- The spy calls it with the original Inbox instance.
     const receiveAll = LocalEntityInbox.prototype.receiveAll;
     const sizes: number[] = [];
@@ -8213,16 +8222,16 @@ describe("repository signal routing", () => {
       expect(sizes).toEqual([1_000, 1]);
       expect(eventIdReadsAtHandoff[1]).toBeGreaterThan(eventIdReadsAtHandoff[0] ?? 0);
       expect(warning).toHaveBeenCalledTimes(1);
-      const delivery = new Delivery({
-        context: { name: "BatchFailure", multitenant: false },
-        storageFactory: factory,
-      });
       const stored = await delivery.inbox.read(ShardIndex.single(), {
-        statuses: ["DELIVERED"],
+        statuses: ["TO_DELIVER"],
         limit: 1_000,
       });
       expect(stored).toHaveLength(1_000);
       expect(stored.every((row) => row.signalId === "batch-event")).toBe(true);
+      expect(stored.map((row) => Identifiers.unpack("string", row.inboxId.targetId))).toEqual(
+        ids.slice(0, 1_000),
+      );
+      expect(SplitRouteProcessManager.startedIds).toEqual([]);
     } finally {
       releaseFirst();
       handoff.mockRestore();

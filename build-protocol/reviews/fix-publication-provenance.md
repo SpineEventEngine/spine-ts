@@ -325,3 +325,28 @@ fresh pre-push registry check still finds snapshot.19 absent for all 19 public
 packages. Final integration uses the existing branch and human-created PR #14;
 GitHub's exact-head checks record corrected-tree full verification. No live
 publication is claimed from local checks or PR CI.
+
+# Routing timeout correction review, 2026-10-01
+
+Fresh independent performance/reliability review: explicit `gpt-6-sol` with
+`medium` reasoning, standard tier, memories and child agents disabled. Scope:
+the uncommitted repository-routing.test.ts correction relative to c92cd98,
+the surrounding integration coverage and the measured work in the failed test.
+Check whether the delivery-mode change preserves the intended batching and
+persistence assertions rather than hiding a local-delivery defect. No source
+writes or full builds are allowed. Desktop CLI records explicit configuration;
+per-response runtime model metadata is unavailable. Focused tests and static
+checks passed before dispatch. Independent session
+`01a0f685-263a-77c3-a4a4-d02c683dd8ca` completed with no P0–P2 findings.
+It confirmed real persistence of all first-batch IDs, the distinct purpose of
+the adjacent remote test and direct-delivery coverage in surrounding tests.
+The faster test is not evidence of the original CI timeout's exact cause or a
+runtime performance fix. Explicit Sol/medium configuration was verified; no
+runtime fallback was reported. The review process exited normally.
+
+This test-only correction changes no public documentation or API. Documentation
+and TypeScript/API concerns are N/A beyond checking the evidence and comment.
+No production structure or security boundary changed, so prior style/security
+reviews are not reopened. Reliability review includes test isolation and
+regression coverage. Full release verification will run in final-head CI after
+convergence; do not duplicate it locally merely to trigger the same CI gate.
