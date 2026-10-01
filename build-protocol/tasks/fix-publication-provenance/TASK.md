@@ -2,6 +2,12 @@
 
 ## Scope and requirements
 
+Current extension (1 October): the human requested planning and independent
+review of [Entity save and delivery corrections](entity-save-delivery-plan.md)
+on this same branch. That plan's requirements ledger supplements the ledger
+below. Runtime implementation was approved after plan review on 1 October. Earlier
+publishing readiness does not establish completion of the new performance work.
+
 Started 2026-09-30. Branch `fix-publication-provenance` starts from freshly
 fetched official `origin/master` at `9e1147298248a8e0b095bf41ecabd8d8dbb2b511`.
 The compatibility investigation remains saved on `proto-client-compatibility`.
@@ -27,8 +33,8 @@ Reuse the clean managed checkout; do not create another chat.
   current one-event-to-1,000-Process-Managers case without coverage as the
   application baseline, and report coverage overhead separately. Provide
   measured causes and a correction proposal; changing the test does not meet
-  the runtime performance target. Broader runtime optimization is analysis
-  scope until the proposed correction is agreed.
+  the runtime performance target. The human has now requested the correction
+  plan and independent review, then approved implementation on 1 October.
 
 ## Evidence and approach
 

@@ -1,5 +1,103 @@
 # Planning progress
 
+## 1 October: approved runtime implementation
+
+The human approved the reviewed plan. High-risk classification and the completed
+Astra/high architecture pass remain applicable; do not repeat planning without
+a material blocker. Estimate: 2–3 hours active work for storage, delivery,
+measurement, tests, documentation, reviews and integration; full verification
+and CI waiting are additional. No publishing or merging.
+
+Continue in the existing isolated worktree on `fix-publication-provenance`.
+The dirty files are the preceding planning records and must be preserved. Node
+24.18.0 and pnpm 11.9.0 are installed. Docker responds and currently has no
+running containers. The official origin is SpineEventEngine/spine-ts.
+
+Selected skills read: subagent-driven-development, test-driven-development and
+testing-anti-patterns, using-git-worktrees, requesting-code-review,
+verification-before-completion, architecture-decision-records. Existing isolation
+and recent verification supersede generic full-baseline setup advice. Project
+rules retain one implementer context across fixes and existing specialist roles.
+
+Assignment recorded before dispatch: existing implementer, explicit
+`gpt-6-sol` / `medium`, standard tier, no memories or children. Native capacity
+was already exhausted during planning; use the capable Desktop CLI with explicit
+fields. First bounded brief: entity-storage-implementation-brief.md. It covers
+the real baseline measurement, four-provider commit contract, in-memory updates,
+repository callers and focused tests. Main retains Markdown docs and Git. Actual
+runtime metadata is recorded if exposed, otherwise dispatch/profile evidence
+and that limitation are retained. No independent review is replaced by self-review.
+
+Parallel read-only assignment: orchestrator-dispatched documentation/API
+verification using explicit `gpt-6-luna` / `medium`, standard tier, fresh
+ephemeral session with memories/children disabled. Inspect active Markdown
+claims affected by the commit interface and delivery change, and existing live
+provider test commands. Return exact corrections and test prerequisites; no
+edits, tests, Docker activity or Git actions. Main applies documentation edits.
+
+## 1 October: storage and delivery correction planning
+
+The human requested that the proposed corrections be planned on this branch
+and reviewed independently before implementation. Baseline: `74c6b5615` on
+`fix-publication-provenance`, initially clean. The earlier runtime investigation
+and latest official JVM source are recorded in findings.md; the new plan is
+entity-save-delivery-plan.md. No production or test changes are authorized by
+this planning request. Estimate for planning, source checks, review and reporting:
+0.3–0.5 hours; no full builds or tests.
+
+Skill check: the exposed inventory includes planning-with-files and
+requesting-code-review, both read completely, plus the repository's expected
+skill manifest. Existing task applicability evidence remains valid for unchanged
+inventory; these selected entrypoints were checked directly. Use existing task
+files rather than new root-level planning files. Implementation skills and
+test execution are deferred because this turn is planning only. Desktop supports
+explicit model/reasoning dispatch. No new chat, branch or worktree is needed.
+
+Planned assignments, recorded before dispatch:
+
+- Existing requirements splitter: `gpt-6-astra`, `high`, fresh context. One
+  bounded architecture pass on removing Entity expected-state checks, preparing
+  only changed memory records, and JVM-like scan continuation. Read-only; no
+  children, builds, tests or Git changes. Required because persistence and
+  delivery coordination change.
+- Existing performance/reliability reviewer: `gpt-6-sol`, `medium`, fresh
+  context, no conversation history or memory. Independently review the resulting
+  written plan against code, JVM evidence and the full human requirements ledger.
+  Read-only; no children, builds, tests or Git changes.
+
+Both model and reasoning must be explicit in dispatch. Record returned runtime
+metadata when exposed; otherwise retain dispatch/profile evidence and say that
+actual runtime metadata is unavailable. No implementation readiness is claimed
+until the review is completed and findings are addressed.
+
+Native architecture dispatch with explicit Astra/high and no inherited turns
+was rejected at the surface's agent limit; no result is attributed to it.
+The capable desktop CLI now runs the same bounded role with explicit
+`gpt-6-astra`, `model_reasoning_effort=high`, standard tier, read-only sandbox,
+ephemeral session, memories and child agents disabled. Output evidence is in
+`/tmp/entity-save-delivery-architecture.md`. No dependency on an old reviewer
+context. Verification-before-completion was also read for the final record check.
+
+Architecture completed in `01a0f712-b8a7-79b2-b310-39b0495ae825`. Incorporated
+bounded corrections to replay/collision semantics, atomic memory updates,
+provider API declarations, nontransactional engine tests and scan/clock rules.
+Rejected an unbounded scan-wide identity set because neither current TS nor JVM
+establishes the stronger guarantee it would introduce. The independent reviewer
+was explicitly asked to check for an actual regression instead.
+
+Fresh independent Sol/medium review completed in
+`01a0f717-da3c-78c2-bcb4-e42cb0762317`, with no inherited turns, memories or prior
+reviewer report. One accepted finding: use the applicable clock for retained-row
+duplicate recognition as well as early cleanup. Added explicit offset/equality
+tests and preserved separate recent-cache behavior. Reviewer found no unresolved
+product questions or demonstrated need for stronger duplicate tracking. Both
+CLI processes exited successfully; configured profiles match the assignments,
+while actual runtime metadata is not exposed. Full dispositions are recorded
+in entity-save-delivery-review.md. No production files or tests were changed.
+
+A combined documentation patch failed its exact-context check without changing
+files. Re-read the affected text and applied the corrected bounded patch.
+
 2026-09-30: Planning begun after the human selected provenance retention and
 Lerna removal. Read the protocol, current task records, workflow, package
 manifest, and relevant skill instructions. No build, test suite, dependency

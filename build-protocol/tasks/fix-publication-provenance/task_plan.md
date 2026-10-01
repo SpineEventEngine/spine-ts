@@ -1,5 +1,17 @@
 # Replace Lerna: planning
 
+## Current branch extension: Entity saves and Inbox delivery
+
+On 1 October the human requested a written plan and independent review for
+the storage and delivery corrections identified during the routing performance
+investigation. See [the correction plan](entity-save-delivery-plan.md).
+This extends `fix-publication-provenance`; it does not create another branch.
+The human approved implementation on 1 October after plan review. Runtime
+implementation is in progress. Earlier publishing completion evidence does not
+verify these corrections.
+The architecture pass and fresh independent plan review are complete. Accepted
+findings are incorporated, with no unresolved product questions.
+
 ## Scope and requirements
 
 The human approved the npm CLI replacement and its narrowly bounded retry on

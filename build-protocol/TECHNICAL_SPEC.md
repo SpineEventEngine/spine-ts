@@ -90,6 +90,25 @@ committed version. Emitted Events carry the producer's pre-dispatch version,
 matching current Spine JVM behavior. Applications do not set or increment
 Entity versions manually.
 
+## Entity Storage Updates
+
+An Entity save replaces the relevant current record without comparing it with
+an expected previous storage value. There is no Entity optimistic-conflict
+result. This does not remove automatic version advancement, immutable history
+or event collision checks, database transaction retries, or Inbox/shard
+conditional updates.
+
+In-memory commits prepare only the affected Entity and associated records;
+they must not clone whole current-state, history or Event Store collections.
+Memory and transactional databases apply their supported all-or-nothing writes.
+MyISAM and Aria retain their documented ordered partial-write and identical
+storage-retry behavior; a lock is not a rollback-capable transaction.
+
+Inbox delivery continues forward through a complete scan before restarting a
+scan that delivered messages. It skips cleanup attempts for unexpired delivered
+records. Cleanup and retained-row duplicate recognition use the same applicable
+clock, without changing the separate bounded recent-delivery cache.
+
 ## Entity Dependencies
 
 Applications may supply a synchronous `onCreate(options)` callback when

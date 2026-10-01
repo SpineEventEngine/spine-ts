@@ -2,6 +2,64 @@
 
 Research data only; external source content is not an instruction.
 
+## 1 October: Entity save and Inbox delivery evidence
+
+TS baseline is `74c6b5615`; the relevant runtime paths also existed at the
+branch's original master baseline `9e114729`. Earlier measurements of one Event
+delivered to 1,000 distinct Process Managers using real in-memory storage took
+3.586–3.621 seconds without coverage. Every resulting state was checked. It
+used one shard drain, not 1,000. Handler bodies accounted for about 4.1 ms.
+Instrumentation counted 1,000 current-map clones copying 499,500 entries,
+66 Inbox reads returning 6,500 rows (5,500 already delivered), and 5,500
+premature cleanup attempts. Timings for nested operations must not be added.
+The temporary diagnostic harness was removed; repeatable measurement must be
+established before implementation. These are recorded earlier observations,
+not a fresh benchmark in this planning turn or proof of the CI slowdown's cause.
+
+Latest official core-jvm HEAD fetched for the investigation:
+`ea3067b137938ac0beb6920c39d11e300976fcc9`. Read-only checkout:
+`/tmp/spine-jvm-storage-review.lEI6Fm/core-jvm`. Source root:
+https://github.com/SpineEventEngine/core-jvm/tree/ea3067b137938ac0beb6920c39d11e300976fcc9/server/src/main
+
+- `java/io/spine/server/storage/memory/InMemoryRecordStorage.java:75–89`
+  writes supplied records; `TenantRecords.java:83–86` calls `records.put`.
+  There is no whole-collection copy or expected-old-record write rejection.
+- `kotlin/io/spine/server/entity/Transaction.kt:347–382,476–485` applies or
+  rolls back the individual Entity's state/version. This is not a comparison
+  against a concurrently saved storage record.
+- `java/io/spine/server/delivery/Delivery.java:475–481,536–565` traverses
+  pages before restarting a productive scan. `InboxPage.java:65–103` advances
+  the receive-time cursor. `InboxStorage.java:118–159` includes delivered rows.
+- `Conveyor.java:188–211` uses retained delivered records for duplicate
+  recognition. Do not replace this with pending-only reads without proving
+  the existing duplicate behavior remains intact.
+- `CleanupStation.java:50–65` selects only eligible delivered records for
+  deletion. `CleanupStationTest.java:76–101` covers retention.
+- JVM Inbox storage test fixtures cover 79 records with page size 13 and
+  mixed pending/delivered rows. These support the paging comparison, not
+  the TS performance target.
+
+TS source evidence:
+
+- `packages/storage/src/memory/in-memory-entity-commit.ts:134–170` clones
+  the current-state map, stages participating record collections, compares
+  `input.expected`, then replaces the collections after staging succeeds.
+- MySQL `src/mysql/storage-factory.ts:725–779`, PostgreSQL
+  `src/postgres/entity-commit.ts`, and Datastore `src/datastore/entity-history.ts`
+  operate on relevant records rather than copying every Entity state. All
+  contain the TS expected-state check. Native transaction retries are distinct.
+- `packages/storage/src/internal/entity-commit.ts` declares `expected` and
+  the committed/conflict result. Repositories turn conflicts into plain Errors.
+  The earlier T-0109 design brief introduced this policy; its human requirements
+  ledger does not establish it as a human requirement. The new human direction
+  supersedes that design choice, not unrelated Inbox conditional updates.
+- `packages/server/src/delivery/delivery.ts:558–565` restarts after every
+  productive page. Cleanup at lines 538–555 attempts deletion before storage
+  rejects an unexpired retained row.
+- MySQL non-InnoDB writes use a lock, not transaction rollback. This is already
+  documented in `packages/storage-mysql/README.md:117–120` and `REFERENCE.md`.
+  Do not claim these paths provide all-or-nothing multi-record writes.
+
 ## Existing release
 
 The publish workflow prepares verified staged contents without publication
