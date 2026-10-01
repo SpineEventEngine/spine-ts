@@ -345,3 +345,158 @@ this slice ran, after which `pnpm docs:api:check` passed with 29 documented and
 The changed memory source/test also passed a final targeted ESLint and Prettier
 check. The full release coverage suite remains for main; no new performance
 experiment was run in this correction batch.
+
+## First independent review correction: performance and live Datastore evidence
+
+The reviewed head `153ebbd8a` failed the unchanged, one-worker, source-built
+benchmark with five 1,000-recipient posts of **1234.013500, 1245.568875,
+1215.341083, 1186.454458, and 1219.917834 ms**. Each run still checked every
+final state and exactly one handler call per recipient before the speed
+assertion. The required reduction is at least 186.454458 ms for that best run,
+and 245.568875 ms for the slowest.
+
+To localize current cost without changing work, I forced emitting builds of
+core, storage, and server, then ran the benchmark's existing worker-only
+`node:inspector/promises` diagnostic mode with
+`SPINE_ENTITY_DELIVERY_PROFILE_DIR=/tmp/entity-delivery-worker-round2-20261001`.
+Raw warm-up/100/500 measurements were 1228.496959/107.619292/536.793750 ms;
+the five measured posts were **1172.164583, 1125.688333, 1128.224417,
+1117.244583, and 1101.100459 ms**. The unchanged under-one-second assertion
+failed. Profiling perturbs timing, so these numbers are diagnostic rather than
+an acceptance comparison.
+
+The five saved in-post profiles contain 3,773 samples weighted to 5,642.403 ms.
+Inclusive weights include validation `validate` 1,408.3 ms,
+`createRootRegistry` 980.8 ms, Protobuf `getOption` 825.6 ms, storage
+`compareAndSet` 649.1 ms, and Inbox `selectBounded` 346.7 ms. Inclusive weights
+overlap. Among self weights, `nestedTypes` was 544.8 ms, `createZeroMessage`
+402.5 ms, registry `add` 367.0 ms, `createExtensionContainer` 339.5 ms, and
+garbage collection 263.2 ms. The in-post validation call stacks include System
+Event packing, handler diagnostics, EventBus acceptance, causal origin packing,
+prepared Entity state packing, and replay validation. These are distinct
+required checks or values; the current profile does not prove an equivalent
+single-use prepared value that can remove the 186–246 ms acceptance gap.
+
+The installed `@spine-event-engine/validation` implementation calls
+`ValidationEngine.createRootRegistry(schema)` on every public
+`validate(schema, message)` invocation. Its declaration accepts only schema and
+message; it exposes no prepared-registry argument. The registry cost alone is
+about 196.2 ms per measured post, overlapping other validation frames.
+Eliminating that repeated work while preserving validation would require a
+supported dependency contract or a separately approved internal validation
+architecture. I made **no runtime performance edit**: prior small optimizations
+already failed to meet the target, and neither removing validation nor changing
+the benchmark, workload, storage CAS, or published API is authorized. The P1
+one-second requirement remains open; no target pass is claimed.
+
+The official pinned JVM checkout was confirmed at
+`ea3067b137938ac0beb6920c39d11e300976fcc9`; its `Delivery.runDelivery`
+and `InboxPage` continuation methods were read. This correction changed no
+runtime delivery code or paging behavior.
+
+The Datastore live trace at `/tmp/entity-live-provider-datastore-trace-report.txt`
+shows the first, sequential, replay, and concurrent commits, current read, and
+all state appends through version 129 completed. The 30-second timeout began
+after `states.trim("task", 1)` started. The `trim` loop and its provider
+`queryProviderPage`/`deleteProviderEntries` method bodies are unchanged
+from base `9e1147298`. That proves no direct source change in those methods;
+it does **not** prove a base run with the same data also stalls. The trace does
+not separate the trim query from the bulk delete. No Datastore source or test
+was changed and no emulator was started in this correction.
+
+The smallest separate live proof of the changed commit behavior is an additive
+emulator test that commits one current Entity plus retained state, diagnostic
+Event, and delivery Event; repeats the identical commit; replaces current state
+without expected-state CAS; then reads current and the four physical families
+and verifies their bytes and row counts. It can reuse the existing unique
+project/context and `finally` cleanup pattern. Keep the original combined
+history-trim test intact. After performance measurements stop, main can run
+that focused live test once. To classify the trim stall itself, instrument the
+provider page query and delete separately and compare the same 129-row scenario
+against base in a disposable emulator; source equality alone is insufficient.
+
+The stale `packages/server/REFERENCE.md` paragraph now describes the concrete
+Inbox's configured clock and remote client wall time, and says
+`DeliveryInbox` has no clock method. Focused delivery/inbox tests passed 57/57.
+Core, storage, and server emitting typechecks passed. Changed-file Prettier,
+TSDoc, cleanup, documentation-audience, and `git diff --check` passed. There
+was no changed runtime source in this correction, so changed-source coverage
+and runtime ESLint are not applicable. No full suite, Docker, Git mutation,
+version edit, dependency patch, or publication was performed here.
+
+## Round-one live Datastore commit proof and bounded trim diagnosis
+
+Using only the disposable `spine-entity-commit-round1` container, I ran the
+cached `gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators` image
+(`cloud-sdk 578.0.0`) on host port `127.0.0.1:18081`, with project
+`spine-entity-commit-round1`. The new additive test in
+`packages/storage-datastore/test/datastore-emulator.test.ts` uses generated
+ProjectState, ProjectCreated, and ProjectId fixtures and unique project cleanup. It commits
+current, state history, diagnostic Event history, and delivery Event together;
+replays identical input; and commits a new current record without an expected
+state. It compares complete Protobuf bytes on public readback, checks one
+physical row in each of the four tenant-A families, and checks empty public
+reads and zero physical rows in the corresponding tenant-B families. Its first
+red run exposed only a Buffer-versus-Uint8Array assertion mismatch in the
+test; replacing object equality with full Protobuf-byte equality made the
+focused live command green:
+
+`DATASTORE_EMULATOR_HOST=127.0.0.1:18081 DATASTORE_PROJECT_ID=spine-entity-commit-round1 pnpm exec vitest --config vitest.infrastructure.config.ts run packages/storage-datastore/test/datastore-emulator.test.ts -t 'commits and replays all Entity families within one tenant' --maxWorkers=1`
+
+Result: **1 passed, 5 skipped**, 109 ms test time on the final run. The old
+combined trim test remains unchanged.
+
+For the trim diagnosis, temporary setup at `/tmp/entity-round1-trim.setup.ts`
+wrapped the existing provider page query and delete and stopped after eight
+pages. The original combined test reached trim and, on each of eight pages,
+`queryProviderPage` returned **128 entries with `hasMore=true`**;
+`deleteProviderEntries` accepted **127 keys and completed** before the next
+query. A temporary append-only diagnostic test, subsequently removed, appended
+the same **129 state rows** without any Entity commit and reproduced the exact
+eight-page **128-query/127-delete** sequence. The bounded stop intentionally
+failed these diagnostic runs; logs are
+`/tmp/entity-round1-trim-pages.log` and
+`/tmp/entity-round1-trim-append-only.log`. An unbounded instrumented run of the
+original test timed out at its unchanged 30-second limit after more than
+12,000 query/delete boundary log lines (`/tmp/entity-round1-trim-current.log`).
+The operation is a repeating page/delete loop, not one stalled Datastore call.
+
+The `StateHistory.append`, `StateHistory.trim`, `immutable`,
+`DatastoreRecordStorage.queryProviderPage`, and
+`DatastoreRecordStorage.deleteProviderEntries` executable bodies match base
+`9e1147298`; the record-storage file has no diff at all. The append-only
+reproduction also excludes the changed Entity commit transaction from this
+failure path. This precisely scopes the observed stall to the unchanged
+history/provider path, but does not claim that the full old commit test was
+run at the base revision. No unrelated trim fix was added solely to clear it.
+
+Focused final checks passed: changed-test ESLint, Prettier diff, tooling
+`tsc --noEmit -p tsconfig.eslint.json`, `pnpm lint:cleanup`,
+`pnpm lint:tsdoc`, and `git diff --check`. This slice changed only the live
+test and this report. No performance/dependency code, full suite, version, Git,
+or publication action was performed.
+
+### Final domain-fixture correction
+
+Review found that the initial additive test still used the older StringValue
+state and payload-free Event helpers. The final test now packs a generated
+`ProjectStateSchema` as Entity state, `ProjectCreatedSchema` as each Event
+payload, and `ProjectIdSchema` as the Entity and producer identifier. The
+physical current/history family names derive from `ProjectStateSchema.typeName`.
+The older baseline test and its helpers are unchanged. The same byte-exact
+readbacks, replay, new current without an expected-state guard, four row counts,
+and tenant-B absence assertions remain. The first rerun failed before test
+execution because the new ID helper name collided with the existing emulator
+project ID constant; renaming the helper resolved the parse error.
+
+Final live command, against the disposable `spine-entity-commit-round1-final`
+Datastore-mode emulator on `127.0.0.1:18081`:
+
+`DATASTORE_EMULATOR_HOST=127.0.0.1:18081 DATASTORE_PROJECT_ID=spine-entity-commit-round1-final pnpm exec vitest --config vitest.infrastructure.config.ts run packages/storage-datastore/test/datastore-emulator.test.ts -t 'commits and replays all Entity families within one tenant' --maxWorkers=1`
+
+Result: **1 passed, 5 skipped**, 555 ms test time. Changed-test ESLint,
+test and reference Prettier diffs, tooling `tsc --noEmit -p tsconfig.eslint.json`,
+cleanup, TSDoc, and `git diff --check` all passed. The corrected server
+reference now describes the configured local Inbox clock and remote wall time
+without the unnecessary public-method sentence. No runtime or dependency
+implementation changed.

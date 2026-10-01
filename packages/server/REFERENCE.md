@@ -885,11 +885,10 @@ rows remain available as duplicate evidence; it is not a replay-retention
 period. Persisted accepted rows follow their delivery lifecycle and may be
 replayed according to that lifecycle after the deduplication window has elapsed.
 
-Direct delivery uses the Inbox storage's configured clock for both retained-row
-duplicate checks and early cleanup filtering. Custom `DeliveryInbox` adapters
-may provide the optional internal `retentionTime()` method; otherwise delivery
-uses local wall-clock time. Remote delivery uses client time for these local
-checks and does not assume it is synchronized with the remote server.
+Direct delivery uses the configured Inbox storage clock for both retained-row
+duplicate checks and early cleanup filtering. Remote delivery uses local client
+wall-clock time for these checks and does not assume it is synchronized with
+the remote server.
 
 `DeliveryMonitor` is an instantiable, customizable policy seam exposing
 asynchronous continuation, start/completion, failed-reception, pickup-failure,

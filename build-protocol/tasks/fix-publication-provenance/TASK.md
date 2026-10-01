@@ -80,6 +80,13 @@ Desktop exposes explicit model/reasoning dispatch. Standard speed only.
 
 ## Current status: implemented and reviewed
 
+Current checkpoint: `153ebbd8a` passed the full local release/publication checks
+and GitHub CI run 36873032271, including 5,165 tests and all 19 prepared-package
+consumer checks. The human then requested three additional independent
+whole-branch review-and-fix rounds. Their current evidence is in
+[three-round-review.md](three-round-review.md). The one-second performance
+target is still unmet; passing CI does not complete that requirement.
+
 The human has selected keeping Sigstore provenance and removing Lerna, with
 Changesets considered but not selected. See [the replacement
 plan](task_plan.md) and [source findings](findings.md). The recommendation is

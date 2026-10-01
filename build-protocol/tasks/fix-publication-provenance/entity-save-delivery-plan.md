@@ -6,6 +6,12 @@ Planning and independent review complete on `fix-publication-provenance`, extend
 publishing task at `74c6b5615`. The human approved implementation on 1 October
 after the independent review. Implementation is now in progress.
 
+At checkpoint `153ebbd8a`, functional release verification and GitHub CI pass.
+The one-second delivery target remains unmet. The human's additional three
+independent whole-branch reviews and corrections are tracked in
+[three-round-review.md](three-round-review.md). The work below remains the
+approved plan; its completed checks and outstanding evidence are recorded there.
+
 Classification: high-risk implementation, because it changes persistence and
 delivery coordination. Planning itself changes only project records. The
 source evidence is in [findings.md](findings.md); the earlier publishing work
@@ -257,8 +263,9 @@ The independent reviewer identified the shared clock for cleanup and retained-ro
 duplicate recognition; Section 5 now covers both. See
 [review dispositions](entity-save-delivery-review.md).
 
-This is not implementation acceptance. Performance, provider verification and
-final-head CI remain future work.
+This is not implementation acceptance. The performance target and Datastore
+verification gap remain open; SQL provider checks and checkpoint CI passed.
+Any further correction must receive its relevant checks and final-head CI.
 
 ## Initial file and test scope
 

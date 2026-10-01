@@ -23,6 +23,7 @@ import {
 } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import {
   ColumnTypes,
+  EventStore,
   RecordColumn,
   RecordSpec,
   StorageGroup,
@@ -31,6 +32,9 @@ import {
 import type { EntityStorageInput } from "@spine-event-engine/storage/provider";
 import { describe, expect, it } from "vitest";
 
+import { ProjectCreatedSchema } from "../../core/test-fixtures/generated/project_events_pb.js";
+import { ProjectStateSchema } from "../../core/test-fixtures/generated/project_states_pb.js";
+import { ProjectIdSchema } from "../../server/test-fixtures/generated/repository-routing/project_identifiers_pb.js";
 import { DatastoreQueryLimitError, DatastoreStorageFactory } from "../src/index.js";
 
 const emulatorHost = process.env.DATASTORE_EMULATOR_HOST;
@@ -301,6 +305,92 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
     }
   }, 30_000);
 
+  it("commits and replays all Entity families within one tenant", async () => {
+    const client = new Datastore({ projectId: unique("entity-commit-project").toLowerCase() });
+    const contextA = {
+      name: unique("entity-commit"),
+      multitenant: true,
+      tenantId: tenant("a"),
+    } as const;
+    const contextB = { name: contextA.name, multitenant: true, tenantId: tenant("b") } as const;
+    const entityA = projectEntityInput(contextA);
+    const entityB = projectEntityInput(contextB);
+    const stringifiers = new StringifierRegistry();
+    stringifiers.setTypeRegistry(
+      new TypeRegistry([ProjectIdSchema, ProjectStateSchema, ProjectCreatedSchema]),
+    );
+    const factory = DatastoreStorageFactory.newBuilder()
+      .setClient(client)
+      .setStringifierRegistry(stringifiers)
+      .build();
+    const handleA = factory.createEntityStorage(entityA);
+    const handleB = factory.createEntityStorage(entityB);
+    const deliveryA = new EventStore(contextA, factory);
+    const deliveryB = new EventStore(contextB, factory);
+    const first = {
+      context: contextA,
+      entity: entityA,
+      entityId: "project-1",
+      next: projectRecord("Current project", 1),
+      states: [projectRecord("Retained project", 1)],
+      diagnostics: [projectEvent("project-diagnostic", 1)],
+      events: [projectEvent("project-delivery", 1)],
+    };
+    const kinds = [
+      ProjectStateSchema.typeName,
+      `${ProjectStateSchema.typeName}_EntityRecord`,
+      `${ProjectStateSchema.typeName}_Event`,
+      EventSchema.typeName,
+    ];
+
+    try {
+      await expect(handleA.commits.commit(first)).resolves.toBeUndefined();
+      await expect(handleA.commits.commit(first)).resolves.toBeUndefined();
+      await expect(
+        handleA.commits.commit({
+          context: contextA,
+          entity: entityA,
+          entityId: "project-1",
+          next: projectRecord("Updated project", 2),
+        }),
+      ).resolves.toBeUndefined();
+      const current = await handleA.current.read("project-1");
+      if (current === undefined) throw new Error("Expected the committed current Entity.");
+      expect(toBinary(EntityRecordSchema, current)).toEqual(
+        toBinary(EntityRecordSchema, projectRecord("Updated project", 2)),
+      );
+      expect(
+        (await handleA.states.backward("project-1", 2)).map((row) =>
+          toBinary(EntityRecordSchema, row),
+        ),
+      ).toEqual(first.states.map((row) => toBinary(EntityRecordSchema, row)));
+      expect(
+        (await handleA.events.backward("project-1", 2)).map((row) => toBinary(EventSchema, row)),
+      ).toEqual(first.diagnostics.map((row) => toBinary(EventSchema, row)));
+      expect((await deliveryA.read()).map((row) => toBinary(EventSchema, row))).toEqual(
+        first.events.map((row) => toBinary(EventSchema, row)),
+      );
+      await expect(handleB.current.read("project-1")).resolves.toBeUndefined();
+      await expect(handleB.states.backward("project-1", 2)).resolves.toEqual([]);
+      await expect(handleB.events.backward("project-1", 2)).resolves.toEqual([]);
+      await expect(deliveryB.read()).resolves.toEqual([]);
+
+      const storedA = await Promise.all(kinds.map((kind) => rows(client, kind, "Va")));
+      const storedB = await Promise.all(kinds.map((kind) => rows(client, kind, "Vb")));
+      expect(storedA.map((records) => records.length)).toEqual([1, 1, 1, 1]);
+      expect(storedA.flat().every((row) => row.bytes instanceof Uint8Array)).toBe(true);
+      expect(storedB.map((records) => records.length)).toEqual([0, 0, 0, 0]);
+    } finally {
+      deliveryA.close();
+      deliveryB.close();
+      handleA.close();
+      handleB.close();
+      await Promise.all(
+        kinds.flatMap((kind) => [deleteKind(client, kind, "Va"), deleteKind(client, kind, "Vb")]),
+      );
+    }
+  }, 30_000);
+
   it("reports corrupt physical payloads without leaking provider details", async () => {
     const client = datastore();
     const context = { name: unique("corrupt"), multitenant: false } as const;
@@ -403,6 +493,77 @@ function entityEvent(id: string, version: number) {
       timestamp: create(TimestampSchema, { seconds: BigInt(version) }),
       version: { number: version },
     },
+  });
+}
+
+function projectEntityInput(
+  context: StorageContext,
+): EntityStorageInput<string, ReturnType<typeof projectState>> {
+  return {
+    context,
+    id: {
+      clone: (id) => id,
+      key: (id) => id,
+      pack: packProjectId,
+      unpack: (id) =>
+        id.typeUrl.endsWith(ProjectIdSchema.typeName)
+          ? fromBinary(ProjectIdSchema, id.value).value
+          : undefined,
+    },
+    columns: [],
+    recordSpec: new RecordSpec<string, EntityRecord>({
+      sourceType: ProjectStateSchema,
+      recordType: EntityRecordSchema,
+      idKind: "string",
+      extractId: (record) => {
+        if (record.entityId === undefined) throw new Error("EntityRecord.entityId is required.");
+        return fromBinary(ProjectIdSchema, record.entityId.value).value;
+      },
+    }),
+    sourceType: ProjectStateSchema,
+    stateSchema: ProjectStateSchema,
+    stateHistory: true,
+    eventHistory: true,
+  };
+}
+
+function projectState(title: string) {
+  return create(ProjectStateSchema, { id: "project-1", title });
+}
+
+function packProjectId(value: string) {
+  return create(AnySchema, {
+    typeUrl: `type.spine.io/${ProjectIdSchema.typeName}`,
+    value: toBinary(ProjectIdSchema, create(ProjectIdSchema, { value })),
+  });
+}
+
+function projectRecord(title: string, version: number) {
+  return create(EntityRecordSchema, {
+    entityId: packProjectId("project-1"),
+    state: create(AnySchema, {
+      typeUrl: `type.spine.io/${ProjectStateSchema.typeName}`,
+      value: toBinary(ProjectStateSchema, projectState(title)),
+    }),
+    version: { number: version, timestamp: create(TimestampSchema, { seconds: BigInt(version) }) },
+  });
+}
+
+function projectEvent(id: string, version: number) {
+  return create(EventSchema, {
+    id: create(EventIdSchema, { value: id }),
+    context: {
+      producerId: packProjectId("project-1"),
+      timestamp: create(TimestampSchema, { seconds: BigInt(version) }),
+      version: { number: version },
+    },
+    message: create(AnySchema, {
+      typeUrl: `type.spine.io/${ProjectCreatedSchema.typeName}`,
+      value: toBinary(
+        ProjectCreatedSchema,
+        create(ProjectCreatedSchema, { memberId: [`member-${id}`] }),
+      ),
+    }),
   });
 }
 
