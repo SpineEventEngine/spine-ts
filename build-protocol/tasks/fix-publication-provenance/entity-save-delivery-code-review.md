@@ -236,3 +236,66 @@ passes. Runtime edits have stopped while the implementer finishes its report.
 Both reviewer assignments below are explicitly Sol/medium, Standard, ephemeral,
 with memories and child agents disabled. No runtime metadata is exposed by this
 surface. Performance acceptance remains unmet and is an explicit review input.
+
+Both focused reviews completed without a reported profile fallback. Reliability
+confirmed one remaining tenant-isolation defect: commit input records are copied,
+but their context/tenant value is still shared across the queue wait. Snapshot
+the actual selected tenant for current, history and delivery records and cover a
+queued caller mutation. The other assigned correctness paths, direct encoder and
+test oracle had no further confirmed findings. Its optional suggestion to remove
+one duplicate delivery-Event clone is not a finding and does not address the
+benchmark path without delivery Events; defer it rather than adding speculative
+work. Report: /tmp/entity-corrections-reliability-rereview.md.
+
+API review found only stale local delivery-client declarations that still expose
+the removed clock method. Regenerate that affected package and inspect its output;
+this is a missing local build step, not a surviving source method or a published
+artifact. Report: /tmp/entity-corrections-api-rereview.md. Both fields were explicit
+in both dispatches; actual runtime metadata remains unavailable.
+
+The human now explicitly prioritizes green CI. The latest checkpoint c6b8397d2
+is running verification after passing audits. Return this complete correction
+batch to the same Sol/medium implementer: tenant snapshot regression/fix, emitting
+all affected package outputs, and mandatory cheap preflight. Do not add further
+performance experiments before completing that verification. Full release and
+exact-head CI must pass; review completion does not substitute for either.
+
+CI c6b8397d2 failed before tests because `scripts/check-api-docs.mjs` still
+requires the intentionally removed EntityCommitResult export. Full authenticated
+logs confirm the same local failure. The configured environment GITHUB_TOKEN is
+expired; invoking gh with GITHUB_TOKEN and GH_TOKEN unset uses the existing valid
+saved login without changing credentials. No logs from the human are now needed.
+Main takes the deterministic two-list correction in the documentation checker
+and its fixture; these files are outside the implementer's current assignment.
+Run the existing checker tests and actual generated-document check. All other
+expected exports and documentation validation remain required.
+
+The two-list correction passes all five existing checker tests and the actual
+TypeDoc generation/export check. The implementer also completed every other
+non-test gate after the isolated formatting correction. Regenerated delivery-client
+declarations no longer expose the removed clock method. The tenant regression
+failed before the fix and all 25 memory commit tests now pass.
+
+Dispatch final narrowed tenant review: existing performance/reliability concern,
+fresh explicit Sol/medium, Standard, no memory/history/children, read-only. Inspect
+only the memory commit/test diff since c6b8397d2 and adjacent tenant/lock selection.
+Confirm call-time tenant capture, fixed handle scope, associated records in the
+same tenant, and rejection of a genuinely different tenant. No full branch review
+or performance certification is requested. Runtime is stable while this runs.
+
+Final tenant review completed with explicit Sol/medium and no reported fallback;
+actual runtime metadata is unavailable. No further findings in the assigned
+tenant/backend/history/Event lock paths. Report: /tmp/entity-tenant-final-review.md.
+The 25 focused memory commit tests pass; changed commit coverage is 95.79%
+statements and 93.02% branches. The queued test demonstrated the defect before
+the fix. All accepted correctness/API/documentation/style findings are resolved.
+Full release coverage, archive consumer proof and final-head CI are still required;
+the under-one-second benchmark remains a separate unmet acceptance requirement.
+
+Final mechanical verification assignment: orchestrator-dispatched function,
+explicit Luna/low, Standard, no memories or child agents. Run verify:publish once
+on the corrected checkout, then the actual-library Rekor reproduction and exact
+archive consumer proof used by CI. Capture complete logs and command exits under
+/tmp. Do not edit files, Git state, thresholds, timeouts or dependencies, and do
+not run another test worker or benchmark concurrently. Stop on a failing command
+and return its exact evidence. Main follows the exact pushed PR head on GitHub.

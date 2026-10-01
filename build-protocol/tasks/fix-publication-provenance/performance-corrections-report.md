@@ -312,3 +312,36 @@ cleanup, and TSDoc checks; after the last test and comment corrections, the
 affected ESLint, Prettier, typecheck, TSDoc, and diff checks also passed. No
 full release suite, Docker, Git
 mutation, version edit, or publication was performed by this implementer.
+
+## Tenant-snapshot correction and CI preflight
+
+`MemoryEntityCommitStorage.commit` now captures the selected tenant and diagnostic
+context before acquiring the Event Store lock or entering the Entity queue. The
+same captured context selects the current backend, history slices, delivery
+records, and lock. The commit handle keeps its original tenant key independently
+of mutable caller input. Compatibility checks also reject an Entity input whose
+actual tenant differs from the commit context. Existing record and Entity-ID
+snapshots remain in place; no generated-schema configuration policy changed.
+
+The queued-mutation regression first failed: after caller TenantId A changed to
+B during a staged write, tenant A lacked a retained history row. It now passes
+with both versions of current/history and the delivery Event in A, B empty, and
+subsequent commits through the drifted handle rejected. The complete focused
+memory-commit file passed 25/25 tests. Focused V8 coverage of the changed source
+passed: 95.79% statements (114/119), 93.02% branches (80/86), 100% functions
+(32/32), and 96.26% lines (103/107).
+
+Protobuf generation and `pnpm typecheck:build:generated` emitted all workspace
+package outputs successfully. Emitted declarations for `DeliveryInbox`, `Inbox`,
+`InboxStorage`, and `RemoteInbox` contain no `retentionTime` method;
+`SpecScanner.scan(entityType)` and `EntityCommitStorage.commit(input)` retain
+their original public signatures. Tooling typecheck, full ESLint, cleanup,
+TSDoc, copyright, formatting, documentation audience/snippets, Proto lint and
+generated-cleanliness, logging/dependency checks, release-readiness, and
+`git diff --check` passed. The API-docs gate initially found a stale expected
+`EntityCommitResult` export in its checker; main corrected the checker while
+this slice ran, after which `pnpm docs:api:check` passed with 29 documented and
+29 declared storage-provider exports. Its focused Vitest file passed 5/5 tests.
+The changed memory source/test also passed a final targeted ESLint and Prettier
+check. The full release coverage suite remains for main; no new performance
+experiment was run in this correction batch.

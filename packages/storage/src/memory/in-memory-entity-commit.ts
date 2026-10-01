@@ -63,6 +63,10 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
 
   readonly #input: EntityStorageInput<unknown, Message>;
 
+  readonly #tenantKey: TenantBoundary["key"];
+
+  readonly #multitenant: boolean;
+
   #open = true;
 
   /**
@@ -83,6 +87,8 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
     this.#factory = factory;
     this.#openRecords = openRecords;
     this.#input = input;
+    this.#tenantKey = TenantBoundary.of(input.context).key;
+    this.#multitenant = input.context.multitenant;
   }
 
   /**
@@ -96,8 +102,15 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
   commit<I, S extends Message>(input: EntityCommitInput<I, S>): Promise<void> {
     this.#requireOpen();
     this.#requireCompatible(input);
+    const tenant = TenantBoundary.of(input.context);
+    const context: StorageContext =
+      tenant.tenantId === undefined
+        ? { name: input.context.name, multitenant: false }
+        : { name: input.context.name, multitenant: true, tenantId: tenant.tenantId };
     const snapshot: EntityCommitInput<I, S> = {
       ...input,
+      context,
+      entity: { ...input.entity, context },
       entityId: input.entity.id.clone(input.entityId),
       next: clone(EntityRecordSchema, input.next),
       ...(input.states === undefined
@@ -391,8 +404,9 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
    */
   #requireCompatible<I, S extends Message>(input: EntityCommitInput<I, S>): void {
     if (
-      input.context.multitenant !== this.#input.context.multitenant ||
-      TenantBoundary.of(input.context).key !== TenantBoundary.of(this.#input.context).key ||
+      input.context.multitenant !== this.#multitenant ||
+      TenantBoundary.of(input.context).key !== this.#tenantKey ||
+      TenantBoundary.of(input.entity.context).key !== this.#tenantKey ||
       input.entity.sourceType.typeName !== this.#input.sourceType.typeName
     ) {
       throw new Error("Entity commit handle cannot commit another Entity storage scope.");

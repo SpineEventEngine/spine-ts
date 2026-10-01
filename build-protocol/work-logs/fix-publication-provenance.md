@@ -407,3 +407,19 @@ reliability paths. Their assignments and verification limitations are recorded
 in entity-save-delivery-code-review.md. Main saves and immediately pushes a
 review-correction checkpoint; performance, final coverage and final-head CI
 remain open. No publication or merge is authorized.
+
+The final tenant-isolation correction captures the tenant before queueing and
+keeps the handle's original scope stable. Its new regression failed before the
+fix; all 25 memory commit tests now pass with 93.02% changed-file branch coverage.
+A fresh standalone Sol/medium reviewer found no further issue in the small diff
+and its direct storage/lock paths. The other corrected API/reliability concerns
+were already reviewed; emitted clock declarations are now current.
+
+The latest checkpoint CI failed because the API documentation export inventory
+still required the removed EntityCommitResult. Main corrected that inventory and
+its test list. The existing five tests and actual TypeDoc check pass. Full logs
+were obtained using the existing saved gh login without the expired environment
+token; no credential was changed or stored. All other non-test generated checks
+pass. Save and push the correction now, then run the full local release/audit,
+Rekor reproduction and exact-archive checks and await CI for that exact new head.
+The one-second performance target remains unmet and is not confused with CI success.

@@ -19,7 +19,13 @@ import {
   TimestampSchema,
   type Timestamp,
 } from "@bufbuild/protobuf/wkt";
-import { EventIdSchema, EventSchema, VersionSchema, type Event } from "@spine-event-engine/proto";
+import {
+  EventIdSchema,
+  EventSchema,
+  TenantIdSchema,
+  VersionSchema,
+  type Event,
+} from "@spine-event-engine/proto";
 import {
   EntityRecordSchema,
   type EntityRecord,
@@ -242,6 +248,98 @@ describe("MemoryEntityCommitStorage", () => {
       write.mockRestore();
       commits.close();
       entity.close();
+    }
+  });
+
+  it("keeps queued current, history, and delivery records in the selected tenant", async () => {
+    const factory = new InMemoryStorageFactory();
+    const tenantId = create(TenantIdSchema, { kind: { case: "value", value: "A" } });
+    const selected = { name: "Tasks", multitenant: true as const, tenantId };
+    const input = { ...entityInput(), context: selected };
+    const commits = commitStorage(factory, input);
+    const entered = deferred();
+    const release = deferred();
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- Call keeps the concrete storage receiver.
+    const original = MemoryEntityRecordStorage.prototype.write;
+    let writes = 0;
+    const write = vi
+      .spyOn(MemoryEntityRecordStorage.prototype, "write")
+      .mockImplementation(async function (this: MemoryEntityRecordStorage<unknown>, record) {
+        if (++writes === 1) {
+          entered.resolve(undefined);
+          await release.promise;
+        }
+        return original.call(this, record);
+      });
+    try {
+      const first = commits.commit({
+        context: selected,
+        entity: input,
+        entityId: "task",
+        next: current("first", 1n),
+        states: [state("first", 1n)],
+      });
+      await entered.promise;
+      const second = commits.commit({
+        context: selected,
+        entity: input,
+        entityId: "task",
+        next: current("second", 2n),
+        states: [state("second", 2n)],
+        events: [event("queued-A")],
+      });
+      tenantId.kind = { case: "value", value: "B" };
+      release.resolve(undefined);
+      await Promise.all([first, second]);
+
+      const contextA = {
+        name: "Tasks",
+        multitenant: true as const,
+        tenantId: create(TenantIdSchema, { kind: { case: "value", value: "A" } }),
+      };
+      const entityA = factory.createEntityStorage({ ...input, context: contextA }) as EntityHandle;
+      await expect(entityA.current.read("task")).resolves.toEqual(current("second", 2n));
+      await expect(entityA.states.backward("task", 2)).resolves.toEqual([
+        state("second", 2n),
+        state("first", 1n),
+      ]);
+      const eventsA = new EventStore(contextA, factory);
+      expect((await eventsA.read()).map((entry) => entry.id?.value)).toEqual(["queued-A"]);
+      eventsA.close();
+      entityA.close();
+
+      const contextB = {
+        name: "Tasks",
+        multitenant: true as const,
+        tenantId: create(TenantIdSchema, { kind: { case: "value", value: "B" } }),
+      };
+      const entityB = factory.createEntityStorage({ ...input, context: contextB }) as EntityHandle;
+      await expect(entityB.current.read("task")).resolves.toBeUndefined();
+      await expect(entityB.states.backward("task", 2)).resolves.toEqual([]);
+      const eventsB = new EventStore(contextB, factory);
+      expect(await eventsB.read()).toEqual([]);
+      eventsB.close();
+      entityB.close();
+      expect(() =>
+        commits.commit({
+          context: selected,
+          entity: input,
+          entityId: "task",
+          next: current("wrong-scope", 3n),
+        }),
+      ).toThrow(/another Entity storage scope/);
+      expect(() =>
+        commits.commit({
+          context: contextA,
+          entity: input,
+          entityId: "task",
+          next: current("wrong-entity-scope", 3n),
+        }),
+      ).toThrow(/another Entity storage scope/);
+    } finally {
+      release.resolve(undefined);
+      write.mockRestore();
+      commits.close();
     }
   });
 
