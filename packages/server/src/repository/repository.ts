@@ -129,7 +129,7 @@ import {
   EntityRecords,
   entityStorageDescriptor,
 } from "../entity/entity-storage-descriptor.js";
-import { SpecScanner } from "../entity/spec-scanner.js";
+import { repositorySpecScanner } from "../entity/spec-scanner.js";
 import {
   CommandRegistrationReadiness,
   type CommandRegistrationReadinessLookup,
@@ -2168,6 +2168,7 @@ class AggregateExecutionSupport {
       this.#repository.stateSchema,
       state,
       RepositoryStand.standUpdateOptions(this.#storageContext.tenantId, versionMessage, lifecycle),
+      this.#repository.metadata,
     );
     try {
       await this.#commitAggregateRecord(
@@ -2178,6 +2179,7 @@ class AggregateExecutionSupport {
         lifecycle,
         events,
         diagnostics,
+        deferred,
       );
       entityStateHistoryCaches.get(loaded.entity)?.clear();
     } catch (error) {
@@ -2216,6 +2218,7 @@ class AggregateExecutionSupport {
    * @param lifecycle Accepted lifecycle flags.
    * @param events Produced Events to retain and publish.
    * @param diagnostics Events to retain in the diagnostic history.
+   * @param deferred Stand update containing the prepared record.
    * @returns Completion after the storage commit.
    */
   #commitAggregateRecord(
@@ -2226,14 +2229,15 @@ class AggregateExecutionSupport {
     lifecycle: EntityLifecycleFlags,
     events: readonly Event[],
     diagnostics: readonly Event[],
+    deferred: Awaited<ReturnType<typeof standAccess.deferUpdate>>,
   ): Promise<void> {
-    const record = EntityRecords.pack(
-      this.#repository.stateSchema,
+    const record = RepositoryStand.preparedRecord(
+      this.#repository,
+      deferred,
       entityId,
       state,
       version,
       lifecycle,
-      this.#repository.idField,
     );
     return loaded.commits.commit({
       context: this.#storageContext,
@@ -3184,6 +3188,7 @@ class ProjectionEventExecution {
       this.#repository.stateSchema,
       state,
       RepositoryStand.standUpdateOptions(tenantOptions.tenantId, version, lifecycle),
+      this.#repository.metadata,
     );
     await this.#commitProjectionOrCancel(loaded, entityId, state, version, lifecycle, deferred);
     this.#notifyProjection(deferred);
@@ -3210,7 +3215,7 @@ class ProjectionEventExecution {
     deferred: Awaited<ReturnType<typeof standAccess.deferUpdate>>,
   ): Promise<void> {
     try {
-      await this.#commitProjectionRecord(loaded, entityId, state, version, lifecycle);
+      await this.#commitProjectionRecord(loaded, entityId, state, version, lifecycle, deferred);
     } catch (error) {
       deferred.cancel();
       throw error;
@@ -3238,6 +3243,7 @@ class ProjectionEventExecution {
    * @param state Accepted Projection state.
    * @param version Current Spine Version.
    * @param lifecycle Accepted lifecycle flags.
+   * @param deferred Stand update containing the prepared record.
    * @returns Completion after the storage commit.
    */
   #commitProjectionRecord(
@@ -3246,14 +3252,15 @@ class ProjectionEventExecution {
     state: Message,
     version: Version,
     lifecycle: EntityLifecycleFlags,
+    deferred: Awaited<ReturnType<typeof standAccess.deferUpdate>>,
   ): Promise<void> {
-    const record = EntityRecords.pack(
-      this.#repository.stateSchema,
+    const record = RepositoryStand.preparedRecord(
+      this.#repository,
+      deferred,
       entityId,
       state,
       version,
       lifecycle,
-      this.#repository.idField,
     );
     return loaded.commits.commit({
       context: loaded.storageInput.context,
@@ -3631,6 +3638,7 @@ class ProcessManagerExecutionSupport {
       this.#repository.stateSchema,
       state,
       RepositoryStand.standUpdateOptions(options.tenantId, version, lifecycle),
+      this.#repository.metadata,
     );
     await this.#storeProcessManagerRecord(
       loaded,
@@ -3683,7 +3691,15 @@ class ProcessManagerExecutionSupport {
     deferred: Awaited<ReturnType<typeof standAccess.deferUpdate>>,
   ): Promise<void> {
     try {
-      await this.#commitProcessManagerRecord(loaded, entityId, state, version, lifecycle, events);
+      await this.#commitProcessManagerRecord(
+        loaded,
+        entityId,
+        state,
+        version,
+        lifecycle,
+        events,
+        deferred,
+      );
       entityStateHistoryCaches.get(loaded.entity)?.clear();
     } catch (error) {
       deferred.cancel();
@@ -3700,6 +3716,7 @@ class ProcessManagerExecutionSupport {
    * @param version Current Spine Version.
    * @param lifecycle Accepted lifecycle flags.
    * @param events Diagnostic Events to retain when configured.
+   * @param deferred Stand update containing the prepared record.
    * @returns Completion after the storage commit.
    */
   #commitProcessManagerRecord(
@@ -3709,15 +3726,16 @@ class ProcessManagerExecutionSupport {
     version: Version,
     lifecycle: EntityLifecycleFlags,
     events: readonly Event[],
+    deferred: Awaited<ReturnType<typeof standAccess.deferUpdate>>,
   ): Promise<void> {
     const history = RepositoryStorage.historyConfiguration(this.#repository);
-    const record = EntityRecords.pack(
-      this.#repository.stateSchema,
+    const record = RepositoryStand.preparedRecord(
+      this.#repository,
+      deferred,
       entityId,
       state,
       version,
       lifecycle,
-      this.#repository.idField,
     );
     return loaded.commits.commit({
       context: loaded.storageInput.context,
@@ -6079,6 +6097,44 @@ Object.freeze(RepositorySignals);
  */
 const RepositoryStand = {
   /**
+   * Returns the validated Stand snapshot when it has the authoritative routed ID.
+   *
+   * @param repository Supplies the state schema and validated ID descriptor.
+   * @param deferred Contains the prepared Stand record.
+   * @param entityId Authoritative routed Entity identifier.
+   * @param state Accepted Entity state for the mismatched-ID fallback.
+   * @param version Accepted Entity version for the fallback.
+   * @param lifecycle Accepted lifecycle for the fallback.
+   * @returns The prepared record or the original authoritative-ID packing result.
+   */
+  preparedRecord(
+    repository: RepositoryView,
+    deferred: Awaited<ReturnType<typeof standAccess.deferUpdate>>,
+    entityId: unknown,
+    state: Message,
+    version: Version,
+    lifecycle: EntityLifecycleFlags,
+  ): EntityRecord {
+    const actualId = deferred.record.entityId;
+    const expectedId = EntityIds.packField(repository.idField.descriptor, entityId);
+    if (
+      actualId !== undefined &&
+      Buffer.from(toBinary(AnySchema, actualId)).equals(
+        Buffer.from(toBinary(AnySchema, expectedId)),
+      )
+    )
+      return deferred.record;
+    return EntityRecords.pack(
+      repository.stateSchema,
+      entityId,
+      state,
+      version,
+      lifecycle,
+      repository.idField,
+    );
+  },
+
+  /**
    * Builds tenant, Version, and lifecycle options for a Stand update.
    *
    * @param tenantId Tenant receiving the update, when present.
@@ -8027,7 +8083,7 @@ const RepositoryStorage = {
   ): EntityStorageInput<unknown, Message> {
     const descriptor = entityStorageDescriptor(
       context,
-      SpecScanner.scan(repository.entityType, repository.metadata),
+      repositorySpecScanner.scan(repository.entityType, repository.metadata),
       repository.metadata,
     ) as EntityStorageInput<unknown, Message>;
     const history = RepositoryStorage.historyConfiguration(repository);

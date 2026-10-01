@@ -27,15 +27,11 @@ import type { PrimitiveId } from "../repository/primitive-id.js";
 
 interface EntitySpecScanner {
   /**
-   * Reads an Entity class with optional validated repository metadata.
+   * Reads an Entity class.
    * @param entityType Entity class to inspect.
-   * @param metadata Repository metadata already validated for its schema.
    * @returns The generated Entity record specification.
    */
-  scan(
-    entityType: EntityConstructor,
-    metadata?: EntityMetadata,
-  ): RecordSpec<Message | PrimitiveId, EntityRecord>;
+  scan(entityType: EntityConstructor): RecordSpec<Message | PrimitiveId, EntityRecord>;
 }
 
 /**
@@ -48,17 +44,31 @@ export const SpecScanner: EntitySpecScanner = Object.freeze({
    * Reads immutable generated schema metadata from an Entity class.
    *
    * @param entityType Entity class whose generated state schema is scanned.
-   * @param metadata Repository metadata already validated for this schema.
    * @returns The JVM EntityRecord storage specification for that entity state.
+   */
+  scan(entityType: EntityConstructor): RecordSpec<Message | PrimitiveId, EntityRecord> {
+    return repositorySpecScanner.scan(entityType);
+  },
+});
+
+/**
+ * Reads Entity specifications using repository-validated metadata when available.
+ * @internal
+ */
+export const repositorySpecScanner = Object.freeze({
+  /**
+   * Reads an Entity specification with already validated metadata.
+   * @param entityType Entity class to inspect.
+   * @param metadata Repository metadata already validated for its schema.
+   * @returns The generated Entity record specification.
    */
   scan(
     entityType: EntityConstructor,
     metadata?: EntityMetadata,
   ): RecordSpec<Message | PrimitiveId, EntityRecord> {
     const schema = entitySchemaOf(entityType);
-    if (schema === undefined) {
+    if (schema === undefined)
       throw new Error("Entity class has no generated state schema metadata.");
-    }
     if (metadata !== undefined && metadata.schema !== schema)
       throw new Error("Repository metadata does not match the Entity state schema.");
     const description = metadata ?? describeEntityMetadata(schema);

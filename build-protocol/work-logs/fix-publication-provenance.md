@@ -334,3 +334,53 @@ This checkpoint is not merge-ready: performance acceptance, independent code
 review, final release verification and final-head CI remain. No merge or package
 publication is authorized. Snapshot.19 remains the existing common version;
 the latest registry check found no such version for the 19 public packages.
+
+Checkpoint `f5f6cce81` was pushed immediately. A fresh no-memory requirements
+splitter assessment used explicit Astra/high, Standard tier, with child agents
+disabled. The surface exposes configured dispatch, not actual runtime metadata;
+no fallback was reported. It found a bounded next step rather than a demonstrated
+need to change the validation dependency. Restore the public `SpecScanner.scan`
+signature and keep prepared metadata internal. Measure passing existing validated
+ID metadata through Stand's repository-only deferred update path, retaining it
+only with correctness checks and measured benefit.
+
+The assessment also corrected the profiling evidence: coordinator-only profiles
+do not describe delivery work, and transformed source locations in the original
+profile had mislabeled `tagged` and `normalize` frames. The implementer has now
+captured CPU samples in the worker around the timed Event post itself. These
+show substantial validation/registry and Inbox conditional-update work, but do
+not prove an unavoidable one-second floor or justify bypassing validation.
+The same Sol/medium implementation context will receive the accepted correction
+batch after its diagnostic-only assignment finishes. Its explicit model and
+reasoning remain required; no new production writer is assigned.
+
+The bounded follow-up restored the public scanner signature and passed 66
+Stand/scanner, 10 selected repository and 62 Inbox/storage tests. Stand metadata
+reuse gave a small repeated measured improvement, but five final runs remain
+1,077–1,159 ms. The benchmark now checks exactly one handler call for each ID.
+The same explicit Sol/medium context receives the next source-backed batch:
+the checkpoint CI lint findings and preparation of the same Entity record twice
+in Stand and the repository. Existing conditional record equality may avoid
+JSON encoding only if equivalence, including sparse-array behavior, is proven.
+No check or validation may be removed for performance. These bounded candidates
+and their constraints are recorded in implementation-preflight-corrections.md.
+Remaining estimate is 0.8–1.5 hours including review and release/CI waiting;
+the measured performance gap remains the uncertainty.
+
+The prepared-record slice passed 411 focused tests, 90.74% selected branch
+coverage, targeted typechecking, all-changed-file ESLint/formatting, cleanup and
+TSDoc. It corrected ten CI findings and seven additional test lint findings.
+Final five timings remain 1,072–1,122 ms; overlapping baseline results do not
+establish a reliable large benefit for record reuse in isolation. Validation is
+preserved, and mutation tests cover state, Version and lifecycle during awaits.
+The comparison replacement was rejected because it changes sparse-array
+equality. The next bounded measurement uses the same explicit Sol/medium
+implementer to test direct canonical-key encoding with identical output,
+including numeric object keys and array holes. Only the memory key encoder,
+its tests, benchmark measurements and performance report are assigned. No new
+cache, public API, altered comparison or dependency change is authorized.
+
+Independent documentation and stable storage/Inbox review are complete, with
+one wording correction and one remote removed-cursor regression queued for the
+combined finding batch. The API review is running independently; style and the
+final changed-path reliability review remain. The branch is not merge-ready.

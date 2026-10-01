@@ -72,7 +72,9 @@ describe("MemoryEntityCommitStorage", () => {
     };
     const commits = commitStorage(factory, input);
     for (let index = 0; index < 500; index++) {
-      await entity.current.write(current(`seed-${index}`, 1n, undefined, `seed-${index}`));
+      await entity.current.write(
+        current(`seed-${String(index)}`, 1n, undefined, `seed-${String(index)}`),
+      );
     }
     const original = globalThis.structuredClone;
     const cloneMap = vi.spyOn(globalThis, "structuredClone").mockImplementation((value) => {
@@ -114,9 +116,11 @@ describe("MemoryEntityCommitStorage", () => {
       states: [retained],
       events: [delivery],
     });
-    next.version!.number = 99;
-    retained.version!.number = 99;
-    delivery.id!.value = "changed";
+    if (next.version === undefined || retained.version === undefined || delivery.id === undefined)
+      throw new Error("Expected versioned Entity records and a delivery ID.");
+    next.version.number = 99;
+    retained.version.number = 99;
+    delivery.id.value = "changed";
     await expect(entity.current.read("task")).resolves.toEqual(current("next", 1n));
     await expect(entity.states.backward("task", 1)).resolves.toEqual([state("next", 1n)]);
     const events = new EventStore(input.context, factory);
@@ -159,14 +163,14 @@ describe("MemoryEntityCommitStorage", () => {
     const entity = factory.createEntityStorage(input) as EntityHandle;
     const commits = commitStorage(factory, input);
     let applications = 0;
-    const original = TenantRecords.prototype.apply;
+    const original = Reflect.get(TenantRecords.prototype, "apply");
     const apply = vi.spyOn(TenantRecords.prototype, "apply").mockImplementation(function (
       this: TenantRecords<unknown, Message>,
       slot,
     ) {
       applications++;
       if (applications === 5) throw new Error("injected live write failure");
-      return original.call(this, slot);
+      original.call(this, slot);
     });
     try {
       await expect(

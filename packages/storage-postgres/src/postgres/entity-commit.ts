@@ -243,7 +243,7 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
     const records = new PostgresCommitRecords(input, this.open);
     try {
       await records.prepare();
-      return await this.#coordinator.commit((client) => this.apply(client, input, records));
+      await this.#coordinator.commit((client) => this.apply(client, input, records));
     } finally {
       records.close();
     }
@@ -390,7 +390,6 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
    */
   private validateRows<Id, State extends Message>(input: EntityCommitInput<Id, State>): void {
     for (const record of [input.next, ...(input.states ?? [])]) {
-      if (record === undefined) continue;
       const decoded = this.entity.id.unpack(record.entityId ?? ({} as never));
       if (
         decoded === undefined ||

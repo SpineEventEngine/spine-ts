@@ -37,24 +37,18 @@ import { TenantRecords } from "./tenant-records.js";
 
 /**
  * Opens the in-memory tenant slice for a generated record family.
+ * @typeParam I Record identifier type.
+ * @typeParam R Record message type.
+ * @param context Supplies the storage and tenant context.
+ * @param spec Supplies the materialized record layout.
+ * @param group Selects a grouped history family when present.
+ * @returns The tenant record slice.
  */
-interface OpenRecords {
-  /**
-   * Opens one record family for a storage and tenant context.
-   *
-   * @typeParam I Record identifier type.
-   * @typeParam R Record message type.
-   * @param context Supplies the storage and tenant context.
-   * @param spec Supplies the materialized record layout.
-   * @param group Selects a grouped history family when present.
-   * @returns The tenant record slice.
-   */
-  <I, R extends Message>(
-    context: StorageContext,
-    spec: RecordSpec<I, R>,
-    group?: StorageGroup,
-  ): TenantRecords<I, R>;
-}
+type OpenRecords = <I, R extends Message>(
+  context: StorageContext,
+  spec: RecordSpec<I, R>,
+  group?: StorageGroup,
+) => TenantRecords<I, R>;
 
 /**
  * Implements provider Entity commits for one shared in-memory backend.
@@ -224,12 +218,18 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
     input: EntityCommitInput<I, S>,
     live: ReturnType<MemoryEntityCommitStorage["live"]>,
   ) {
-    const stateIds = (input.states ?? []).map(
-      (record) => live.stateLayout!.spec.materialize(record).id,
-    );
-    const diagnosticIds = (input.diagnostics ?? []).map(
-      (event) => live.eventLayout!.spec.materialize(event).id,
-    );
+    const stateIds = (input.states ?? []).map((record) => {
+      const layout = live.stateLayout;
+      if (layout === undefined)
+        throw new TypeError("Cannot read properties of undefined (reading 'spec')");
+      return layout.spec.materialize(record).id;
+    });
+    const diagnosticIds = (input.diagnostics ?? []).map((event) => {
+      const layout = live.eventLayout;
+      if (layout === undefined)
+        throw new TypeError("Cannot read properties of undefined (reading 'spec')");
+      return layout.spec.materialize(event).id;
+    });
     const materialized = (input.events ?? []).map((event) =>
       eventStoreRecordSpec.materialize(clone(eventStoreRecordSpec.recordType, event)),
     );
@@ -292,7 +292,7 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
     const next = stage.stagedBackend.current.get(stage.key);
     try {
       for (const change of changes) change.apply();
-      backend.current.set(stage.key, next!);
+      backend.current.set(stage.key, next);
     } catch (error) {
       if (stage.previous === undefined) backend.current.delete(stage.key);
       else backend.current.set(stage.key, stage.previous);

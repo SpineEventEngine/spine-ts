@@ -30,6 +30,7 @@ import {
   entityStorageDescriptor,
 } from "../../src/entity/entity-storage-descriptor.js";
 import { describeEntityMetadata } from "../../src/entity/entity-metadata.js";
+import { repositorySpecScanner } from "../../src/entity/spec-scanner.js";
 import {
   ProjectOverviewIdSchema,
   ProjectOverviewStateSchema,
@@ -58,14 +59,14 @@ describe("SpecScanner", () => {
   it("reuses matching repository metadata and rejects another state descriptor", () => {
     register(TaskProjection, ProjectOverviewStateSchema);
     const metadata = describeEntityMetadata(ProjectOverviewStateSchema);
-    const matching = SpecScanner.scan(TaskProjection, metadata);
+    const matching = repositorySpecScanner.scan(TaskProjection, metadata);
 
     expect(matching.idType).toBe("string");
     expect(matching.columns.map((column) => column.name)).toEqual(
       SpecScanner.scan(TaskProjection).columns.map((column) => column.name),
     );
     expect(() =>
-      SpecScanner.scan(TaskProjection, describeEntityMetadata(MessageIdStateSchema)),
+      repositorySpecScanner.scan(TaskProjection, describeEntityMetadata(MessageIdStateSchema)),
     ).toThrow();
   });
   it("packs scalar and message IDs identically from validated descriptors", () => {

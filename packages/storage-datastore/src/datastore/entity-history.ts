@@ -184,7 +184,7 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
       : undefined;
     const events = this.openRecords(eventStoreRecordSpec) as DatastoreRecordStorage<unknown, Event>;
     try {
-      return await this.run(input, current, states, diagnostics, events);
+      await this.run(input, current, states, diagnostics, events);
     } finally {
       this.closeRecords(current, states, diagnostics, events);
     }
@@ -213,7 +213,8 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
     validateCommitSize(prepared.map((row) => row.entity));
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
-        return await this.tryCommit(current, prepared);
+        await this.tryCommit(current, prepared);
+        return;
       } catch (error) {
         if (isAborted(error) && attempt < 2) {
           await abortBackoff(attempt);

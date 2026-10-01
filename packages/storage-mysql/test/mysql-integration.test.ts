@@ -402,8 +402,12 @@ live("MySQL-family record layout", () => {
             "CHARACTER SET latin1 COLLATE latin1_bin NOT NULL, ENGINE=MyISAM",
         );
 
-      await expect(commits.commit(mutation(context, input, "with-history"))).resolves.toBeUndefined();
-      await expect(commits.commit(mutation(context, input, "current-only"))).resolves.toBeUndefined();
+      await expect(
+        commits.commit(mutation(context, input, "with-history")),
+      ).resolves.toBeUndefined();
+      await expect(
+        commits.commit(mutation(context, input, "current-only")),
+      ).resolves.toBeUndefined();
     } finally {
       for (const table of tables) await pool.query(`ALTER TABLE \`${table}\` ENGINE=InnoDB`);
       eventRecords.close();

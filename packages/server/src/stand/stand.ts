@@ -36,6 +36,7 @@ import {
   EntityRecords,
   standEntityStorageDescriptor,
 } from "../entity/entity-storage-descriptor.js";
+import type { EntityMetadata } from "../entity/entity-metadata.js";
 import { SubscriptionObservers, type StandObservedState } from "./subscription-observer.js";
 import type { EventBus, EventSubscription } from "../bus/event-bus.js";
 import type { Subscription, SubscriptionUpdate } from "@spine-event-engine/proto/client";
@@ -237,6 +238,18 @@ interface Subscriber<Schema extends MessageSchema = MessageSchema> {
 }
 
 /**
+ * Captures one prepared subscriber update before its persisted notification.
+ * @typeParam Schema Registered state schema.
+ */
+interface PendingStandUpdate<Schema extends MessageSchema> {
+  readonly id: unknown;
+  readonly previousState: MessageShape<Schema> | undefined;
+  readonly state: MessageShape<Schema>;
+  readonly tenantId: TenantId | undefined;
+  readonly version: Version | undefined;
+}
+
+/**
  * One state type registered with the Stand.
  *
  * @typeParam Schema State schema.
@@ -286,8 +299,8 @@ export class Stand {
   constructor(options: StandOptions) {
     this.#context = Stand.#cloneContext(options.context);
     this.#storageFactory = options.storageFactory;
-    deferredUpdates.set(this, (schema, state, updateOptions) =>
-      this.#deferUpdate(schema, state, updateOptions),
+    deferredUpdates.set(this, (schema, state, updateOptions, metadata) =>
+      this.#deferUpdate(schema, state, updateOptions, metadata),
     );
     currentReads.set(this, (schema, id, readOptions) => this.#readCurrent(schema, id, readOptions));
   }
@@ -561,14 +574,16 @@ export class Stand {
    * @param schema Registered state schema.
    * @param state State to persist.
    * @param options Tenant and version metadata.
+   * @param metadata Repository-validated metadata for this schema, when available.
    * @returns Deferred write and notification actions.
    */
   async #deferUpdate<Schema extends MessageSchema>(
     schema: Schema,
     state: MessageShape<Schema>,
     options: StandUpdateOptions,
+    metadata?: EntityMetadata,
   ): Promise<DeferredStandUpdate> {
-    return await this.#prepareUpdate(schema, state, options);
+    return await this.#prepareUpdate(schema, state, options, metadata);
   }
 
   /**
@@ -578,71 +593,135 @@ export class Stand {
    * @param schema Registered state schema.
    * @param state State to persist.
    * @param options Tenant and version metadata.
+   * @param metadata Repository-validated metadata for this schema, when available.
    * @returns Prepared write with cleanup actions.
    */
   async #prepareUpdate<Schema extends MessageSchema>(
     schema: Schema,
     state: MessageShape<Schema>,
     options: StandUpdateOptions,
+    metadata?: EntityMetadata,
   ): Promise<PreparedStandUpdate> {
     const finish = this.#beginOperation();
     let storage: CurrentStorageLease | undefined;
     try {
       const registration = this.#registration(schema, "update");
+      if (metadata !== undefined && metadata.schema !== registration.schema)
+        throw new Error("Repository metadata does not match the Entity state schema.");
       const tenantId = this.#tenantId(options.tenantId);
+      const snapshot = Stand.#snapshotUpdateOptions(options);
       const stateCopy = clone(schema, state);
       const id = Stand.#readStateId(stateCopy, registration);
       storage = this.#leaseCurrent(registration, tenantId);
-      const currentStorage = storage;
-      const previous = this.#hasTenantSubscribers(registration, tenantId)
-        ? await currentStorage.current.read(id)
-        : undefined;
-      const previousState =
-        previous === undefined
-          ? undefined
-          : (EntityRecords.unpack(registration.schema, previous).state as MessageShape<Schema>);
-      const subscribers = [...this.#tenantSubscribers(registration, this.#tenantKey(tenantId))];
-      const record = EntityRecords.pack(
-        registration.schema,
-        id,
-        stateCopy,
-        options.version ?? 0n,
-        options.lifecycle ?? { archived: false, deleted: false },
+      const previousState = await this.#previousUpdateState(registration, tenantId, id, storage);
+      return this.#preparedUpdate(
+        registration,
+        { id, previousState, state: stateCopy, tenantId, version: snapshot.version },
+        snapshot,
+        metadata,
+        storage,
+        finish,
       );
-      let settled = false;
-      const settle = () => {
-        if (!settled) {
-          settled = true;
-          currentStorage.release();
-          finish();
-        }
-      };
-      return Object.freeze({
-        cancel: settle,
-        write: () => currentStorage.current.write(record),
-        notify: () => {
-          try {
-            this.#notify(
-              registration,
-              {
-                id,
-                previousState,
-                state: stateCopy,
-                tenantId,
-                version: options.version,
-              },
-              subscribers,
-            );
-          } finally {
-            settle();
-          }
-        },
-      });
     } catch (error) {
       storage?.release();
       finish();
       throw error;
     }
+  }
+
+  /**
+   * Copies mutable Version and lifecycle input before update preparation awaits.
+   * @param options Update metadata supplied by the caller.
+   * @returns Detached metadata for packing and notification.
+   */
+  static #snapshotUpdateOptions(options: StandUpdateOptions): StandUpdateOptions {
+    return {
+      ...(options.version === undefined ? {} : { version: clone(VersionSchema, options.version) }),
+      ...(options.lifecycle === undefined ? {} : { lifecycle: { ...options.lifecycle } }),
+    };
+  }
+
+  /**
+   * Reads the previous state only when a subscriber in this tenant needs it.
+   * @typeParam Schema Registered state schema.
+   * @param registration Registered state metadata.
+   * @param tenantId Tenant for this update.
+   * @param id Entity identifier.
+   * @param storage Leased current-record storage.
+   * @returns Previous state when a matching subscriber exists.
+   */
+  async #previousUpdateState<Schema extends MessageSchema>(
+    registration: Registration<Schema>,
+    tenantId: TenantId | undefined,
+    id: unknown,
+    storage: CurrentStorageLease,
+  ): Promise<MessageShape<Schema> | undefined> {
+    if (!this.#hasTenantSubscribers(registration, tenantId)) return undefined;
+    const previous = await storage.current.read(id);
+    return previous === undefined
+      ? undefined
+      : (EntityRecords.unpack(registration.schema, previous).state as MessageShape<Schema>);
+  }
+
+  /**
+   * Captures the deferred write and subscriber notification actions.
+   * @typeParam Schema Registered state schema.
+   * @param registration Registered state metadata.
+   * @param update Detached state update for subscribers.
+   * @param options Version and lifecycle metadata to persist.
+   * @param metadata Repository-validated metadata for this schema, when available.
+   * @param storage Leased current-record storage.
+   * @param onFinish Completes the Stand operation.
+   * @returns Deferred actions for persistence and notification.
+   */
+  #preparedUpdate<Schema extends MessageSchema>(
+    registration: Registration<Schema>,
+    update: PendingStandUpdate<Schema>,
+    options: StandUpdateOptions,
+    metadata: EntityMetadata | undefined,
+    storage: CurrentStorageLease,
+    onFinish: () => void,
+  ): PreparedStandUpdate {
+    const subscribers = [
+      ...this.#tenantSubscribers(registration, this.#tenantKey(update.tenantId)),
+    ];
+    const record = EntityRecords.pack(
+      registration.schema,
+      update.id,
+      update.state,
+      options.version ?? 0n,
+      options.lifecycle ?? { archived: false, deleted: false },
+      metadata?.idField,
+    );
+    const settle = Stand.#settleUpdate(storage, onFinish);
+    return Object.freeze({
+      cancel: settle,
+      record,
+      write: () => storage.current.write(record),
+      notify: () => {
+        try {
+          this.#notify(registration, update, subscribers);
+        } finally {
+          settle();
+        }
+      },
+    });
+  }
+
+  /**
+   * Closes a deferred update's lease and operation at most once.
+   * @param storage Leased current-record storage.
+   * @param onFinish Completes the Stand operation.
+   * @returns Idempotent cleanup action.
+   */
+  static #settleUpdate(storage: CurrentStorageLease, onFinish: () => void): () => void {
+    let settled = false;
+    return () => {
+      if (settled) return;
+      settled = true;
+      storage.release();
+      onFinish();
+    };
   }
 
   /**
@@ -1139,6 +1218,11 @@ interface CurrentStorageLease {
  */
 interface DeferredStandUpdate {
   /**
+   * Validated, encoded state record captured before the repository commit.
+   */
+  readonly record: EntityRecord;
+
+  /**
    * Delivers the persisted update to subscribers.
    */
   notify(): void;
@@ -1234,6 +1318,7 @@ interface StandAccess {
    * @param schema Registered state schema.
    * @param state New state value.
    * @param options Tenant and version metadata.
+   * @param metadata Repository-validated metadata for this schema, when available.
    * @returns Deferred update actions.
    */
   deferUpdate<Schema extends MessageSchema>(
@@ -1241,6 +1326,7 @@ interface StandAccess {
     schema: Schema,
     state: MessageShape<Schema>,
     options: StandUpdateOptions,
+    metadata?: EntityMetadata,
   ): Promise<DeferredStandUpdate>;
 }
 
@@ -1315,6 +1401,7 @@ export const standAccess: StandAccess = Object.freeze({
    * @param schema Registered state schema.
    * @param state New state value.
    * @param options Tenant and version metadata.
+   * @param metadata Repository-validated metadata for this schema, when available.
    * @returns Deferred update actions.
    */
   deferUpdate<Schema extends MessageSchema>(
@@ -1322,11 +1409,12 @@ export const standAccess: StandAccess = Object.freeze({
     schema: Schema,
     state: MessageShape<Schema>,
     options: StandUpdateOptions,
+    metadata?: EntityMetadata,
   ): Promise<DeferredStandUpdate> {
     const deferred = deferredUpdates.get(stand);
     if (deferred === undefined)
       throw new TypeError("Stand deferred update requires a Stand instance.");
-    return deferred(schema, state, options);
+    return deferred(schema, state, options, metadata);
   },
 });
 
@@ -1337,12 +1425,14 @@ export const standAccess: StandAccess = Object.freeze({
  * @param schema Registered state schema.
  * @param state New state value.
  * @param options Tenant and version metadata.
+ * @param metadata Repository-validated metadata for this schema, when available.
  * @returns Prepared persistence actions.
  */
 type DeferredUpdateCall = <Schema extends MessageSchema>(
   schema: Schema,
   state: MessageShape<Schema>,
   options: StandUpdateOptions,
+  metadata?: EntityMetadata,
 ) => Promise<DeferredStandUpdate>;
 
 /**

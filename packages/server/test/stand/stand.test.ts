@@ -46,6 +46,7 @@ import {
   EntityRecords,
   standEntityStorageDescriptor,
 } from "../../src/entity/entity-storage-descriptor.js";
+import { describeEntityMetadata } from "../../src/entity/entity-metadata.js";
 import {
   SubscriptionRuntime,
   subscriptionRuntimeAccess,
@@ -145,6 +146,73 @@ describe("Stand", () => {
     expect(() => {
       stand.register(ProjectOverviewStateSchema);
     }).toThrow(/closed/);
+  });
+
+  it("accepts matching repository metadata for deferred updates and rejects another schema", async () => {
+    const stand = new Stand({
+      context: { name: "DeferredMetadata", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    stand.register(ProjectOverviewStateSchema);
+    const state = createState("deferred-id", "Deferred");
+    const deferred = await standAccess.deferUpdate(
+      stand,
+      ProjectOverviewStateSchema,
+      state,
+      {},
+      describeEntityMetadata(ProjectOverviewStateSchema),
+    );
+    deferred.cancel();
+    expect(await stand.read(ProjectOverviewStateSchema, "deferred-id")).toBeUndefined();
+    await expect(
+      standAccess.deferUpdate(
+        stand,
+        ProjectOverviewStateSchema,
+        createState("mismatched", "Invalid"),
+        {},
+        describeEntityMetadata(ProjectStateSchema),
+      ),
+    ).rejects.toThrow(/metadata does not match/);
+    expect(await stand.read(ProjectOverviewStateSchema, "mismatched")).toBeUndefined();
+    await stand.close();
+  });
+
+  it("keeps a prepared deferred record isolated from state mutation during preparation", async () => {
+    const stand = new Stand({
+      context: { name: "PreparedRecord", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    stand.register(ProjectOverviewStateSchema);
+    const metadata = describeEntityMetadata(ProjectOverviewStateSchema);
+    const state = createState("prepared-id", "Before");
+    const accepted = clone(ProjectOverviewStateSchema, state);
+    const version = create(VersionSchema, { number: 4 });
+    const acceptedVersion = clone(VersionSchema, version);
+    const lifecycle = { archived: true, deleted: false };
+    const acceptedLifecycle = { ...lifecycle };
+    const pending = standAccess.deferUpdate(
+      stand,
+      ProjectOverviewStateSchema,
+      state,
+      { version, lifecycle },
+      metadata,
+    );
+    state.name = "After";
+    version.number = 9;
+    lifecycle.archived = false;
+    const deferred = await pending;
+    expect(deferred.record).toEqual(
+      EntityRecords.pack(
+        ProjectOverviewStateSchema,
+        "prepared-id",
+        accepted,
+        acceptedVersion,
+        acceptedLifecycle,
+        metadata.idField,
+      ),
+    );
+    deferred.cancel();
+    await stand.close();
   });
 
   it("does not attach a deleted definition after its snapshot is released", async () => {

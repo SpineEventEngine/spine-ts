@@ -14929,7 +14929,7 @@ class GatedAggregateEventStorageFactory extends InMemoryStorageFactory {
       commit: async <I, S extends Message>(unit: EntityCommitInput<I, S>): Promise<void> => {
         this.#reached();
         await this.#gate;
-        return await storage.commit(unit);
+        await storage.commit(unit);
       },
       close: () => {
         storage.close();
@@ -14951,7 +14951,7 @@ class FailingEntityCommitStorageFactory extends InMemoryStorageFactory {
           this.#remainingFailures -= 1;
           throw new Error("forced Entity commit failure");
         }
-        return await storage.commit(unit);
+        await storage.commit(unit);
       },
       close: () => {
         storage.close();
@@ -15008,7 +15008,7 @@ class FailingSourceDiagnosticStorageFactory extends InMemoryStorageFactory {
           this.#failCommit = false;
           throw new Error("forced source diagnostic commit failure");
         }
-        return await storage.commit(unit);
+        await storage.commit(unit);
       },
       close: () => {
         storage.close();
