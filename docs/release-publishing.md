@@ -106,9 +106,11 @@ release automatically. GitHub-hosted runners use Node 24, pnpm 11.9.0, and npm
 
 Preparation builds and tests the packages, creates their archives, and installs
 those archives in a fresh consumer project. It saves the archives together with
-their package names, versions, hashes and source commit. The publishing job
-checks this information and passes the same archives directly to npm. It does
-not rebuild or repack them.
+their package names, versions, hashes and source commit. Preparation then reads
+the saved release using the same checks as the publishing job, including
+dependency order and archive contents. Pull requests run this check too,
+without publishing. The publishing job checks the saved release again and
+passes the same archives directly to npm. It does not rebuild or repack them.
 
 The consumer test may download third-party dependencies from the registry.
 Every framework package comes from the prepared local archives, and dependency

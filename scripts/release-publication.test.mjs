@@ -59,7 +59,7 @@ describe("npm publication recovery", () => {
   });
 
   const sourceSha = "a".repeat(40);
-  const version = "2.0.0-snapshot.19";
+  const version = "2.0.0-snapshot.20";
   const base = {
     name: "@spine-event-engine/proto",
     version,
@@ -417,7 +417,7 @@ describe("npm publication recovery", () => {
     const calls = [];
     const newerTags = async (kind, entry) =>
       kind === "tags" && entry.name === dependent.name
-        ? { snapshot: "2.0.0-snapshot.20" }
+        ? { snapshot: "2.0.0-snapshot.21" }
         : registry(new Set())(kind, entry);
     await expect(
       publishPrepared({

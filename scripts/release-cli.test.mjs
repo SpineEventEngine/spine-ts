@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
 import { Buffer } from "node:buffer";
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -11,13 +11,13 @@ import { expectedReleaseModel, readReleaseManifests } from "./release-policy.mjs
 const sourceSha = "a".repeat(40);
 const expected = {
   tag: "snapshot",
-  version: "2.0.0-snapshot.19",
+  version: "2.0.0-snapshot.20",
   packages: [{ name: "@spine-event-engine/proto", dependencies: [] }],
 };
 const packed = {
   name: expected.packages[0].name,
   version: expected.version,
-  tarball: "/tmp/spine-event-engine-proto-2.0.0-snapshot.19.tgz",
+  tarball: "/tmp/spine-event-engine-proto-2.0.0-snapshot.20.tgz",
   integrity: "sha512-YQ==",
   dependencies: [],
 };
@@ -55,12 +55,62 @@ describe("release CLI", () => {
           calls.push("persist");
           expect(value.sourceSha).toBe(sourceSha);
         },
+        load: () => {
+          calls.push("load");
+        },
       });
-      expect(calls).toEqual(["pack", "prove", "persist"]);
-      expect(manifest.packages[0].tarball).toBe("spine-event-engine-proto-2.0.0-snapshot.19.tgz");
+      expect(calls).toEqual(["pack", "prove", "persist", "load"]);
+      expect(manifest.packages[0].tarball).toBe("spine-event-engine-proto-2.0.0-snapshot.20.tgz");
     } finally {
       rmSync(directory, { force: true, recursive: true });
     }
+  });
+
+  it("reopens a saved check archive through the publication validation handoff", () => {
+    const directory = mkdtempSync(join(tmpdir(), "spine-check-test-"));
+    rmSync(directory, { recursive: true });
+    const calls = [];
+    prepareRelease({
+      destination: directory,
+      check: true,
+      expected,
+      sourceSha,
+      pack: () => {
+        calls.push("pack");
+        return [packed];
+      },
+      prove: () => calls.push("prove"),
+      persist: (path, value) => {
+        calls.push("persist");
+        writeFileSync(path, JSON.stringify(value));
+      },
+      load: (path, policy, sha) => {
+        calls.push("load");
+        expect(policy).toBe(expected);
+        expect(sha).toBe(sourceSha);
+        expect(
+          JSON.parse(readFileSync(join(path, "release-manifest.json"), "utf8")).sourceSha,
+        ).toBe(sourceSha);
+      },
+    });
+    expect(calls).toEqual(["pack", "prove", "persist", "load"]);
+    expect(existsSync(directory)).toBe(false);
+  });
+
+  it("rejects an incomplete saved release before publication through the default loader", () => {
+    const directory = mkdtempSync(join(tmpdir(), "spine-load-test-"));
+    rmSync(directory, { recursive: true });
+    expect(() =>
+      prepareRelease({
+        destination: directory,
+        expected,
+        sourceSha,
+        pack: () => [packed],
+        prove: () => {},
+        persist: (path, value) => writeFileSync(path, JSON.stringify(value)),
+      }),
+    ).toThrow("Invalid release manifest inventory");
+    expect(existsSync(directory)).toBe(false);
   });
 
   it("removes incomplete preparation and never persists after failed proof", () => {
