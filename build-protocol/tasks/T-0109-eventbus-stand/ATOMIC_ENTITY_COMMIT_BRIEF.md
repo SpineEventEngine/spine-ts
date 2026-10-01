@@ -1,5 +1,10 @@
 # T-0109 Atomic Entity Commit Brief
 
+Historical design: D-0123 supersedes the expected-current-record comparison and
+conflict outcome below. Current implementation work follows
+[the Entity storage and delivery plan](../fix-publication-provenance/entity-save-delivery-plan.md).
+The remaining text records the original design, not the current provider API.
+
 ## Problem
 
 Stand currently writes the latest Entity state before later history and

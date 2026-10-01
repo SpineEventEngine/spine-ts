@@ -24,12 +24,11 @@ import type { RecordSpec } from "../record/record-spec.js";
 import type { RecordEntry } from "../record/record-storage.js";
 import { CanonicalUtf8 } from "./canonical-utf8.js";
 
-const tenantRecordsHost = globalThis as typeof globalThis & {
-  structuredClone<Value>(value: Value): Value;
-};
-
 /**
- * Record slice owned by one tenant of an in-memory record storage.
+ * Record slice for one tenant of an in-memory record storage.
+ *
+ * @typeParam I Record identifier type.
+ * @typeParam R Stored Protobuf message type.
  */
 export class TenantRecords<I, R extends Message> {
   readonly #records = new Map<string, StoredEntry<I, R>>();
@@ -115,30 +114,83 @@ export class TenantRecords<I, R extends Message> {
   }
 
   /**
-   * Copies the materialized rows for a provider-owned staged commit.
+   * Captures one complete materialized slot for an Entity commit.
    *
-   * @returns An independent snapshot of the current rows.
+   * @param id Identifies the affected slot.
+   * @returns The slot key and its prior entry, including materialized columns.
    */
-  snapshot(): Map<string, StoredEntry<I, R>> {
-    return tenantRecordsHost.structuredClone(this.#records);
+  capture(id: I): StoredSlot<I, R> {
+    const key = StoredValues.key(id);
+    return { key, entry: this.#records.get(key) };
   }
 
   /**
-   * Replaces all rows from a fully validated staged snapshot.
+   * Applies or restores one prepared slot without recomputing its key.
    *
-   * @param snapshot Supplies the staged materialized rows.
+   * @param slot Supplies the prepared key and complete entry or prior absence.
    */
-  replace(snapshot: Map<string, StoredEntry<I, R>>): void {
-    this.#records.clear();
-    for (const [key, value] of snapshot) this.#records.set(key, value);
+  apply(slot: StoredSlot<I, R>): void {
+    if (slot.entry === undefined) this.#records.delete(slot.key);
+    else this.#records.set(slot.key, slot.entry);
   }
 }
 
+/**
+ * Describes one record after its storage columns are materialized.
+ *
+ * @typeParam I Record identifier type.
+ * @typeParam R Stored Protobuf message type.
+ */
 type StoredRecord<I, R extends Message> = ReturnType<RecordSpec<I, R>["materialize"]>;
 
+/**
+ * Stores one materialized record with its storage slot identity.
+ *
+ * @typeParam I Record identifier type.
+ * @typeParam R Stored Protobuf message type.
+ */
 interface StoredEntry<I, R extends Message> {
   readonly slotId: I;
   readonly stored: StoredRecord<I, R>;
+}
+
+/**
+ * Holds comparison values prepared once for one bounded query.
+ *
+ * @typeParam I Record identifier type.
+ * @typeParam R Stored Protobuf message type.
+ */
+interface PreparedEntry<I, R extends Message> {
+  readonly entry: StoredEntry<I, R>;
+  readonly id: NormalizedValue;
+  readonly values: readonly NormalizedValue[];
+}
+
+/**
+ * Holds normalized continuation values for one bounded query.
+ */
+interface PreparedContinuation {
+  readonly id: NormalizedValue;
+  readonly values: readonly NormalizedValue[];
+}
+
+/**
+ * Holds the canonical expected values for one query filter.
+ */
+interface PreparedFilter {
+  readonly column: string;
+  readonly keys: readonly string[];
+}
+
+/**
+ * Captures one affected record slot for a prepared commit.
+ *
+ * @typeParam I Record identifier type.
+ * @typeParam R Stored Protobuf message type.
+ */
+interface StoredSlot<I, R extends Message> {
+  readonly key: string;
+  readonly entry: StoredEntry<I, R> | undefined;
 }
 
 /**
@@ -149,6 +201,11 @@ const StoredRecords = {
 
   /**
    * Determines whether two materialized records represent the same stored value.
+   * @typeParam I Record identifier type.
+   * @typeParam R Stored Protobuf message type.
+   * @param left Supplies the first materialized record, when present.
+   * @param right Supplies the second materialized record, when present.
+   * @returns Whether both records have the same stored value.
    */
   equal<I, R extends Message>(
     left: StoredRecord<I, R> | undefined,
@@ -166,7 +223,13 @@ const TenantRecordQuery = {
   // prettier-ignore
 
   /**
-   * Produces logical entries for one tenant-scoped query.
+   * Returns logical entries for one tenant-scoped query.
+   * @typeParam I Record identifier type.
+   * @typeParam R Stored Protobuf message type.
+   * @param entries Supplies this tenant's stored entries.
+   * @param spec Defines record identity and materialized columns.
+   * @param query Specifies filters, ordering, continuation, and windowing.
+   * @returns Matching logical record entries in query order.
    */
   entries<I, R extends Message>(
     entries: Iterable<StoredEntry<I, R>>,
@@ -192,52 +255,200 @@ const TenantRecordQuery = {
   },
 
   /**
-   * Selects the finite ordered window without retaining every matching entry.
+   * Returns the finite ordered window without retaining every matching entry.
+   * @typeParam I Record identifier type.
+   * @typeParam R Stored Protobuf message type.
+   * @param entries Supplies this tenant's stored entries.
+   * @param spec Defines record identity and materialized columns.
+   * @param query Specifies filters, ordering, continuation, and windowing.
+   * @returns The selected window, or undefined when bounded selection does not apply.
    */
   selectBounded<I, R extends Message>(
     entries: Iterable<StoredEntry<I, R>>,
     spec: RecordSpec<I, R>,
     query: RecordQuery<I>,
   ): readonly StoredEntry<I, R>[] | undefined {
-    if (query.limit === undefined || !Number.isFinite(query.limit)) return undefined;
+    const windowSize = TenantRecordQuery.boundedWindowSize(query.limit, query.offset);
+    if (windowSize === undefined) return undefined;
     const offset = query.offset ?? 0;
-    const windowSize = offset + query.limit;
-    if (
-      !Number.isInteger(offset) ||
-      !Number.isInteger(query.limit) ||
-      offset < 0 ||
-      query.limit < 0
-    ) {
-      return undefined;
-    }
     if (windowSize === 0) return [];
 
     const orders = query.sort ?? [];
-    const selected: StoredEntry<I, R>[] = [];
+    const selected: PreparedEntry<I, R>[] = [];
+    const filters = TenantRecordQuery.prepareFilters(query.filters);
+    const after =
+      query.after === undefined ? undefined : TenantRecordQuery.prepareContinuation(query.after);
     for (const entry of entries) {
       if (
-        !TenantRecordQuery.matches(spec, entry, query) ||
-        (query.after !== undefined &&
-          TenantRecordQuery.compareToContinuation(entry, orders, query.after) <= 0)
-      ) {
+        !TenantRecordQuery.matchesIds(spec, entry, query.ids) ||
+        !TenantRecordQuery.matchesPreparedFilters(entry.stored, filters)
+      )
         continue;
-      }
-      TenantRecordQuery.insertSelected(selected, entry, windowSize, orders);
+      const prepared = TenantRecordQuery.prepareEntry(entry, orders);
+      if (
+        after !== undefined &&
+        TenantRecordQuery.comparePreparedAfter(prepared, orders, after) <= 0
+      )
+        continue;
+      TenantRecordQuery.insertSelected(selected, prepared, windowSize, orders);
     }
-    return selected.slice(offset);
+    return selected.slice(offset).map((candidate) => candidate.entry);
   },
 
   /**
-   * Inserts an entry into a bounded, ordered top window.
+   * Determines the finite selection capacity of one bounded query.
+   * @param limit Maximum returned record count.
+   * @param offset Number of leading matches to skip.
+   * @returns Required capacity, or undefined for an unbounded query.
+   */
+  boundedWindowSize(limit: number | undefined, offset: number | undefined): number | undefined {
+    if (limit === undefined || !Number.isFinite(limit)) return undefined;
+    const start = offset ?? 0;
+    if (!Number.isInteger(start) || !Number.isInteger(limit) || start < 0 || limit < 0)
+      return undefined;
+    return start + limit;
+  },
+
+  /**
+   * Prepares expected filter values once for a bounded query.
+   * @param filters Supplies the requested column filters.
+   * @returns Canonical expected values for each filter.
+   */
+  prepareFilters(
+    filters: readonly RecordFilter[] | undefined,
+  ): readonly PreparedFilter[] | undefined {
+    return filters?.map((filter) => ({
+      column: filter.column,
+      keys: (Array.isArray(filter.value) ? filter.value : [filter.value]).map((value) =>
+        StoredValues.key(value),
+      ),
+    }));
+  },
+
+  /**
+   * Matches materialized columns against filter keys prepared for this query.
+   * @typeParam I Record identifier type.
+   * @typeParam R Stored Protobuf message type.
+   * @param entry Supplies the materialized record.
+   * @param filters Supplies the prepared column filters, when present.
+   * @returns Whether every filter matches the record.
+   */
+  matchesPreparedFilters<I, R extends Message>(
+    entry: StoredRecord<I, R>,
+    filters: readonly PreparedFilter[] | undefined,
+  ): boolean {
+    if (filters === undefined || filters.length === 0) return true;
+    return filters.every((filter) =>
+      filter.keys.includes(StoredValues.key(TenantRecordQuery.resolveValue(entry, filter.column))),
+    );
+  },
+
+  /**
+   * Normalizes an entry's identity and ordered fields once for this query.
+   * @typeParam I Record identifier type.
+   * @typeParam R Stored Protobuf message type.
+   * @param entry Supplies the matching materialized record.
+   * @param orders Specifies the requested sort fields.
+   * @returns The prepared comparison values and original entry.
+   */
+  prepareEntry<I, R extends Message>(
+    entry: StoredEntry<I, R>,
+    orders: readonly RecordOrder[],
+  ): PreparedEntry<I, R> {
+    const id = StoredValues.normalize(entry.slotId);
+    return {
+      entry,
+      id,
+      values: orders.map((order) =>
+        order.field === "id"
+          ? id
+          : StoredValues.normalize(TenantRecordQuery.resolveValue(entry.stored, order.field)),
+      ),
+    };
+  },
+
+  /**
+   * Normalizes the requested keyset position once for this query.
+   * @typeParam I Record identifier type.
+   * @param after Supplies the keyset position.
+   * @returns The prepared continuation values.
+   */
+  prepareContinuation<I>(after: RecordContinuation<I>): PreparedContinuation {
+    return {
+      id: StoredValues.normalize(after.id),
+      values: after.values.map((value) => StoredValues.normalize(value.value)),
+    };
+  },
+
+  /**
+   * Compares prepared entries by requested fields and storage identity.
+   * @typeParam I Record identifier type.
+   * @typeParam R Stored Protobuf message type.
+   * @param left Supplies the first prepared entry.
+   * @param right Supplies the second prepared entry.
+   * @param orders Specifies the requested sort fields.
+   * @returns A negative, zero, or positive comparison result.
+   */
+  comparePrepared<I, R extends Message>(
+    left: PreparedEntry<I, R>,
+    right: PreparedEntry<I, R>,
+    orders: readonly RecordOrder[],
+  ): number {
+    for (let index = 0; index < orders.length; index += 1) {
+      const order = orders[index];
+      if (order === undefined) throw new Error("Record query sort order is invalid.");
+      const comparison =
+        order.field === "id"
+          ? StoredValues.compareIdentityNormalized(left.id, right.id)
+          : StoredValues.compareNormalized(left.values[index], right.values[index]);
+      if (comparison !== 0) return order.direction === "desc" ? comparison * -1 : comparison;
+    }
+    return StoredValues.compareIdentityNormalized(left.id, right.id);
+  },
+
+  /**
+   * Compares one prepared entry to a normalized keyset continuation.
+   * @typeParam I Record identifier type.
+   * @typeParam R Stored Protobuf message type.
+   * @param entry Supplies the prepared entry.
+   * @param orders Specifies the requested sort fields.
+   * @param after Supplies the prepared continuation.
+   * @returns A negative, zero, or positive comparison result.
+   */
+  comparePreparedAfter<I, R extends Message>(
+    entry: PreparedEntry<I, R>,
+    orders: readonly RecordOrder[],
+    after: PreparedContinuation,
+  ): number {
+    for (let index = 0; index < orders.length; index += 1) {
+      const order = orders[index];
+      if (order === undefined) throw new Error("Record query continuation sort order is invalid.");
+      const comparison =
+        order.field === "id"
+          ? StoredValues.compareIdentityNormalized(entry.id, after.values[index])
+          : StoredValues.compareNormalized(entry.values[index], after.values[index]);
+      if (comparison !== 0) return order.direction === "desc" ? comparison * -1 : comparison;
+    }
+    return StoredValues.compareIdentityNormalized(entry.id, after.id);
+  },
+
+  /**
+   * Adds an entry to a bounded, ordered top window.
+   * @typeParam I Record identifier type.
+   * @typeParam R Stored Protobuf message type.
+   * @param selected Supplies the current prepared window to update.
+   * @param entry Supplies the prepared candidate entry.
+   * @param windowSize Sets the maximum number of entries to retain.
+   * @param orders Specifies the requested sort order.
    */
   insertSelected<I, R extends Message>(
-    selected: StoredEntry<I, R>[],
-    entry: StoredEntry<I, R>,
+    selected: PreparedEntry<I, R>[],
+    entry: PreparedEntry<I, R>,
     windowSize: number,
     orders: readonly RecordOrder[],
   ): void {
-    const comparison = (candidate: StoredEntry<I, R>): number =>
-      TenantRecordQuery.compareEntries(candidate, entry, orders);
+    const comparison = (candidate: PreparedEntry<I, R>): number =>
+      TenantRecordQuery.comparePrepared(candidate, entry, orders);
     let low = 0;
     let high = selected.length;
     while (low < high) {
@@ -254,6 +465,11 @@ const TenantRecordQuery = {
 
   /**
    * Applies offset and limit after filtering, ordering, and continuation.
+   * @typeParam T Record entry type.
+   * @param records Supplies ordered matching records.
+   * @param offset Sets the number of leading records to skip.
+   * @param limit Sets the maximum number of records to return.
+   * @returns The requested record window.
    */
   applyWindow<T>(
     records: readonly T[],
@@ -266,6 +482,12 @@ const TenantRecordQuery = {
 
   /**
    * Removes entries at or before a keyset continuation.
+   * @typeParam I Record identifier type.
+   * @typeParam R Stored Protobuf message type.
+   * @param records Supplies ordered matching records.
+   * @param orders Specifies the requested sort order.
+   * @param after Supplies the continuation position, when present.
+   * @returns Records after the continuation position.
    */
   continueAfter<I, R extends Message>(
     records: readonly StoredEntry<I, R>[],
@@ -280,7 +502,13 @@ const TenantRecordQuery = {
   },
 
   /**
-   * Orders entries by requested fields and storage-slot identity.
+   * Returns the comparison of entries by requested fields and storage-slot identity.
+   * @typeParam I Record identifier type.
+   * @typeParam R Stored Protobuf message type.
+   * @param left Supplies the first entry to compare.
+   * @param right Supplies the second entry to compare.
+   * @param orders Specifies the requested sort order.
+   * @returns A negative, zero, or positive comparison result.
    */
   compareEntries<I, R extends Message>(
     left: StoredEntry<I, R>,
@@ -301,7 +529,13 @@ const TenantRecordQuery = {
   },
 
   /**
-   * Orders an entry relative to one keyset continuation.
+   * Returns the comparison of an entry with one keyset continuation.
+   * @typeParam I Record identifier type.
+   * @typeParam R Stored Protobuf message type.
+   * @param entry Supplies the entry to compare.
+   * @param orders Specifies the requested sort order.
+   * @param after Supplies the continuation position.
+   * @returns A negative, zero, or positive comparison result.
    */
   compareToContinuation<I, R extends Message>(
     entry: StoredEntry<I, R>,
@@ -325,6 +559,12 @@ const TenantRecordQuery = {
 
   /**
    * Matches one entry against ID and column filters.
+   * @typeParam I Record identifier type.
+   * @typeParam R Stored Protobuf message type.
+   * @param spec Defines record identity and materialized columns.
+   * @param entry Supplies the candidate entry.
+   * @param query Specifies ID and column filters.
+   * @returns Whether the entry matches the query filters.
    */
   matches<I, R extends Message>(
     spec: RecordSpec<I, R>,
@@ -339,6 +579,11 @@ const TenantRecordQuery = {
 
   /**
    * Matches materialized values against all requested column filters.
+   * @typeParam I Record identifier type.
+   * @typeParam R Stored Protobuf message type.
+   * @param entry Supplies the materialized record and columns.
+   * @param filters Specifies column filters, when present.
+   * @returns Whether every filter matches the entry.
    */
   matchesFilters<I, R extends Message>(
     entry: StoredRecord<I, R>,
@@ -354,6 +599,12 @@ const TenantRecordQuery = {
 
   /**
    * Matches an entry's storage slot against requested logical IDs.
+   * @typeParam I Record identifier type.
+   * @typeParam R Stored Protobuf message type.
+   * @param spec Defines how record identifiers are copied.
+   * @param entry Supplies the candidate entry.
+   * @param ids Specifies requested identifiers, when present.
+   * @returns Whether the entry matches a requested identifier.
    */
   matchesIds<I, R extends Message>(
     spec: RecordSpec<I, R>,
@@ -366,6 +617,11 @@ const TenantRecordQuery = {
 
   /**
    * Resolves an ID, materialized column, or record path value.
+   * @typeParam I Record identifier type.
+   * @typeParam R Stored Protobuf message type.
+   * @param entry Supplies the materialized record.
+   * @param field Names the ID, column, or record path to read.
+   * @returns The resolved field value.
    */
   resolveValue<I, R extends Message>(entry: StoredRecord<I, R>, field: string): unknown {
     if (field === "id") return entry.id;
@@ -383,13 +639,18 @@ const StoredValues = {
 
   /**
    * Creates a canonical value key.
+   * @param value Supplies the value to encode.
+   * @returns A canonical key for the value.
    */
   key(value: unknown): string {
-    return StoredValues.encode(StoredValues.normalize(value));
+    return JSON.stringify(StoredValues.encoded(value));
   },
 
   /**
    * Compares values with the storage ordering rules.
+   * @param left Supplies the first value.
+   * @param right Supplies the second value.
+   * @returns A negative, zero, or positive comparison result.
    */
   compare(left: unknown, right: unknown): number {
     return StoredValues.compareNormalized(
@@ -400,6 +661,9 @@ const StoredValues = {
 
   /**
    * Compares storage slot identities with canonical UTF-8 text ordering.
+   * @param left Supplies the first identity.
+   * @param right Supplies the second identity.
+   * @returns A negative, zero, or positive comparison result.
    */
   compareIdentity(left: unknown, right: unknown): number {
     return StoredValues.compareIdentityNormalized(
@@ -410,6 +674,9 @@ const StoredValues = {
 
   /**
    * Reads a dot-separated path from an object value.
+   * @param value Supplies the value to inspect.
+   * @param path Names the dot-separated property path.
+   * @returns The value at the path, or undefined when absent.
    */
   readPath(value: unknown, path: string): unknown {
     let current = value;
@@ -422,6 +689,9 @@ const StoredValues = {
 
   /**
    * Compares normalized values of the same or distinct kinds.
+   * @param left Supplies the first normalized value.
+   * @param right Supplies the second normalized value.
+   * @returns A negative, zero, or positive comparison result.
    */
   compareNormalized(left: NormalizedValue, right: NormalizedValue): number {
     const leftKind = StoredValues.kind(left);
@@ -459,6 +729,9 @@ const StoredValues = {
 
   /**
    * Compares normalized storage identities, treating text as canonical UTF-8 bytes.
+   * @param left Supplies the first normalized identity.
+   * @param right Supplies the second normalized identity.
+   * @returns A negative, zero, or positive comparison result.
    */
   compareIdentityNormalized(left: NormalizedValue, right: NormalizedValue): number {
     const leftKind = StoredValues.kind(left);
@@ -499,6 +772,9 @@ const StoredValues = {
 
   /**
    * Compares numbers while placing NaN after other numbers.
+   * @param left Supplies the first number.
+   * @param right Supplies the second number.
+   * @returns A negative, zero, or positive comparison result.
    */
   compareNumbers(left: number, right: number): number {
     if (Number.isNaN(left) || Number.isNaN(right))
@@ -508,6 +784,9 @@ const StoredValues = {
 
   /**
    * Compares encoded bigint payloads numerically.
+   * @param left Supplies the first encoded bigint.
+   * @param right Supplies the second encoded bigint.
+   * @returns A negative, zero, or positive comparison result.
    */
   compareBigInts(left: string, right: string): number {
     const l = BigInt(left);
@@ -517,6 +796,10 @@ const StoredValues = {
 
   /**
    * Compares lists lexicographically.
+   * @typeParam T List element type.
+   * @param left Supplies the first list.
+   * @param right Supplies the second list.
+   * @returns A negative, zero, or positive comparison result.
    */
   compareLists<T>(left: readonly T[], right: readonly T[]): number {
     for (let index = 0; index < Math.min(left.length, right.length); index += 1) {
@@ -534,6 +817,9 @@ const StoredValues = {
 
   /**
    * Compares normalized objects by keys and then values.
+   * @param left Supplies the first normalized object.
+   * @param right Supplies the second normalized object.
+   * @returns A negative, zero, or positive comparison result.
    */
   compareObjects(left: NormalizedObject, right: NormalizedObject): number {
     const leftKeys = Object.keys(left);
@@ -548,6 +834,9 @@ const StoredValues = {
 
   /**
    * Compares strings in code-unit order.
+   * @param left Supplies the first string.
+   * @param right Supplies the second string.
+   * @returns A negative, zero, or positive comparison result.
    */
   compareText(left: string, right: string): number {
     return left < right ? -1 : left > right ? 1 : 0;
@@ -555,6 +844,9 @@ const StoredValues = {
 
   /**
    * Compares identity-value lists recursively.
+   * @param left Supplies the first normalized identity list.
+   * @param right Supplies the second normalized identity list.
+   * @returns A negative, zero, or positive comparison result.
    */
   compareIdentityLists(
     left: readonly NormalizedValue[],
@@ -569,6 +861,9 @@ const StoredValues = {
 
   /**
    * Compares object-shaped identities by canonical keys and values.
+   * @param left Supplies the first normalized identity object.
+   * @param right Supplies the second normalized identity object.
+   * @returns A negative, zero, or positive comparison result.
    */
   compareIdentityObjects(left: NormalizedObject, right: NormalizedObject): number {
     const leftKeys = Object.keys(left);
@@ -584,6 +879,8 @@ const StoredValues = {
 
   /**
    * Normalizes a value for canonical storage comparison.
+   * @param value Supplies the value to normalize.
+   * @returns The normalized value representation.
    */
   normalize(value: unknown): NormalizedValue {
     if (typeof value === "bigint") return StoredValues.tagged("bigint", value.toString());
@@ -610,56 +907,35 @@ const StoredValues = {
   },
 
   /**
-   * Encodes a normalized value without type collisions.
+   * Converts a raw value to its tagged JSON representation.
+   * @param value Supplies the raw value.
+   * @returns The tagged JSON representation.
    */
-  encode(value: NormalizedValue): string {
-    return JSON.stringify(StoredValues.encoded(value));
+  encoded(value: unknown): EncodedValue {
+    if (value === undefined) return ["undefined"];
+    if (value === null) return ["null"];
+    if (typeof value === "boolean") return ["boolean", value];
+    if (typeof value === "number") return ["number", String(value)];
+    if (typeof value === "string") return ["string", value];
+    if (typeof value === "bigint") return ["bigint", value.toString()];
+    if (value instanceof Uint8Array) return ["bytes", [...value]];
+    if (Array.isArray(value))
+      return ["array", ...value.map((entry) => StoredValues.encoded(entry))];
+    if (typeof value !== "object") return ["undefined"];
+
+    // Evaluate fields in lexical order, then use native numeric-name enumeration.
+    const entries = Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, StoredValues.encoded(Reflect.get(value, key))]),
+    );
+    return ["object", ...Object.entries(entries)];
   },
 
   /**
-   * Converts a normalized value to its tagged JSON representation.
-   */
-  encoded(value: NormalizedValue): EncodedValue {
-    const kind = StoredValues.kind(value);
-    switch (kind) {
-      case "undefined":
-        return ["undefined"];
-      case "null":
-        return ["null"];
-      case "boolean":
-        if (typeof value !== "boolean")
-          throw new Error("Normalized boolean value has an unexpected type.");
-        return ["boolean", value];
-      case "number":
-        if (typeof value !== "number")
-          throw new Error("Normalized number value has an unexpected type.");
-        return ["number", String(value)];
-      case "string":
-        if (typeof value !== "string")
-          throw new Error("Normalized string value has an unexpected type.");
-        return ["string", value];
-      case "bigint":
-        return ["bigint", StoredValues.payload(value as NormalizedBigInt)];
-      case "bytes":
-        return ["bytes", StoredValues.payload(value as NormalizedBytes)];
-      case "array":
-        return [
-          "array",
-          ...(value as readonly NormalizedValue[]).map((entry) => StoredValues.encoded(entry)),
-        ];
-      case "object":
-        return [
-          "object",
-          ...Object.keys(value as NormalizedObject).map((key) => [
-            key,
-            StoredValues.encoded((value as NormalizedObject)[key]),
-          ]),
-        ];
-    }
-  },
-
-  /**
-   * Identifies a normalized value kind.
+   * Returns the kind of a normalized value.
+   * @param value Supplies the normalized value.
+   * @returns The normalized value kind.
    */
   kind(value: NormalizedValue): ValueKind {
     if (value === undefined) return "undefined";
@@ -674,6 +950,11 @@ const StoredValues = {
 
   /**
    * Creates a frozen tagged normalized value.
+   * @typeParam K Tag kind.
+   * @typeParam P Payload type.
+   * @param kind Identifies the tag kind.
+   * @param payload Supplies the tag payload.
+   * @returns The frozen tagged value.
    */
   tagged<K extends TaggedValueKind, P>(kind: K, payload: P): NormalizedTaggedValue<K, P> {
     const tagged = Object.create(null) as NormalizedTaggedValue<K, P>;
@@ -686,6 +967,8 @@ const StoredValues = {
 
   /**
    * Reads a recognized normalized tag.
+   * @param value Supplies the object to inspect.
+   * @returns The recognized tag, or undefined for an ordinary object.
    */
   tag(value: object): TaggedValueKind | undefined {
     const tag = (value as Partial<NormalizedTaggedValue<TaggedValueKind, unknown>>)[normalizedKind];
@@ -694,6 +977,7 @@ const StoredValues = {
 
   /**
    * Creates an object with no prototype for normalized fields.
+   * @returns An empty object without a prototype.
    */
   emptyObject(): NormalizedObject {
     return Object.create(null) as NormalizedObject;
@@ -701,6 +985,9 @@ const StoredValues = {
 
   /**
    * Reads a tagged normalized payload.
+   * @typeParam P Payload type.
+   * @param value Supplies the tagged value.
+   * @returns The tagged payload.
    */
   payload<P>(value: NormalizedTaggedValue<TaggedValueKind, P>): P {
     return value[normalizedPayload];
@@ -739,6 +1026,12 @@ type EncodedValue = readonly unknown[];
 
 type TaggedValueKind = "bigint" | "bytes";
 
+/**
+ * Pairs a normalized value kind with its encoded payload.
+ *
+ * @typeParam K Normalized value kind.
+ * @typeParam P Encoded payload type.
+ */
 interface NormalizedTaggedValue<K extends TaggedValueKind, P> {
   readonly [normalizedKind]: K;
   readonly [normalizedPayload]: P;

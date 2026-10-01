@@ -19,10 +19,15 @@ import {
   TimestampSchema,
   type Timestamp,
 } from "@bufbuild/protobuf/wkt";
-import { EventIdSchema, EventSchema, VersionSchema, type Event } from "@spine-event-engine/proto";
+import {
+  EventIdSchema,
+  EventSchema,
+  TenantIdSchema,
+  VersionSchema,
+  type Event,
+} from "@spine-event-engine/proto";
 import {
   EntityRecordSchema,
-  LifecycleFlagsSchema,
   type EntityRecord,
 } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { describe, expect, it, vi } from "vitest";
@@ -33,12 +38,378 @@ import type { EntityCommitStorage } from "../../src/internal/entity-commit.js";
 import { EntityCommitStorageFactories } from "../../src/internal/entity-commit.js";
 import type { EntityStorageInput } from "../../src/internal/entity-history.js";
 import { InMemoryStorageFactory } from "../../src/memory/in-memory-storage-factory.js";
+import { MemoryEntityRecordStorage } from "../../src/memory/in-memory-entity-history.js";
 import { InMemoryRecordStorage } from "../../src/memory/in-memory-record-storage.js";
+import { TenantRecords } from "../../src/memory/tenant-records.js";
 import { RecordStorage } from "../../src/record/record-storage.js";
 import { RecordSpec } from "../../src/record/record-spec.js";
 import { StorageFactory } from "../../src/storage/storage-factory.js";
 
 describe("MemoryEntityCommitStorage", () => {
+  it("replaces a different current record without an expected-state result", async () => {
+    const factory = new InMemoryStorageFactory();
+    const input = entityInput(false);
+    const entity = factory.createEntityStorage(input) as EntityHandle;
+    const commits = commitStorage(factory, input);
+    await commits.commit({
+      context: input.context,
+      entity: input,
+      entityId: "task",
+      next: current("one", 1n),
+    });
+
+    await expect(
+      commits.commit({
+        context: input.context,
+        entity: input,
+        entityId: "task",
+        next: current("two", 2n),
+      }),
+    ).resolves.toBeUndefined();
+    await expect(entity.current.read("task")).resolves.toEqual(current("two", 2n));
+    commits.close();
+    entity.close();
+  });
+
+  it("does not clone unrelated current records while committing one Entity", async () => {
+    const factory = new InMemoryStorageFactory();
+    const input = entityInput(false);
+    const entity = factory.createEntityStorage(input) as EntityHandle & {
+      current: { write(record: EntityRecord): Promise<void> };
+    };
+    const commits = commitStorage(factory, input);
+    for (let index = 0; index < 500; index++) {
+      await entity.current.write(
+        current(`seed-${String(index)}`, 1n, undefined, `seed-${String(index)}`),
+      );
+    }
+    const original = globalThis.structuredClone;
+    const cloneMap = vi.spyOn(globalThis, "structuredClone").mockImplementation((value) => {
+      if (value instanceof Map) throw new Error("whole-map copy");
+      return original(value);
+    });
+    try {
+      await expect(
+        commits.commit({
+          context: input.context,
+          entity: input,
+          entityId: "task",
+          next: current("next", 1n),
+        }),
+      ).resolves.toBeUndefined();
+    } finally {
+      cloneMap.mockRestore();
+    }
+    await expect(entity.current.read("seed-499")).resolves.toEqual(
+      current("seed-499", 1n, undefined, "seed-499"),
+    );
+    commits.close();
+    entity.close();
+  });
+
+  it("isolates current, history, and delivery records from caller mutation", async () => {
+    const factory = new InMemoryStorageFactory();
+    const input = entityInput();
+    const entity = factory.createEntityStorage(input) as EntityHandle;
+    const commits = commitStorage(factory, input);
+    const next = current("next", 1n);
+    const retained = state("next", 1n);
+    const delivery = event("delivery-isolated");
+    await commits.commit({
+      context: input.context,
+      entity: input,
+      entityId: "task",
+      next,
+      states: [retained],
+      events: [delivery],
+    });
+    if (next.version === undefined || retained.version === undefined || delivery.id === undefined)
+      throw new Error("Expected versioned Entity records and a delivery ID.");
+    next.version.number = 99;
+    retained.version.number = 99;
+    delivery.id.value = "changed";
+    await expect(entity.current.read("task")).resolves.toEqual(current("next", 1n));
+    await expect(entity.states.backward("task", 1)).resolves.toEqual([state("next", 1n)]);
+    const events = new EventStore(input.context, factory);
+    expect((await events.read()).map((entry) => entry.id?.value)).toEqual(["delivery-isolated"]);
+    events.close();
+    commits.close();
+    entity.close();
+  });
+
+  it("keeps staged history keys and writes on the pre-await input snapshot", async () => {
+    const factory = new InMemoryStorageFactory();
+    const input = entityInput();
+    const entity = factory.createEntityStorage(input) as EntityHandle;
+    const commits = commitStorage(factory, input);
+    const entered = deferred();
+    const release = deferred();
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- Call keeps the concrete storage receiver.
+    const original = MemoryEntityRecordStorage.prototype.write;
+    const write = vi
+      .spyOn(MemoryEntityRecordStorage.prototype, "write")
+      .mockImplementation(async function (this: MemoryEntityRecordStorage<unknown>, record) {
+        entered.resolve(undefined);
+        await release.promise;
+        return original.call(this, record);
+      });
+    const next = current("accepted", 1n);
+    const retained = state("accepted", 1n);
+    const observed = diagnostic("accepted-diagnostic", 1n);
+    const delivery = event("accepted-delivery");
+    try {
+      const pending = commits.commit({
+        context: input.context,
+        entity: input,
+        entityId: "task",
+        next,
+        states: [retained],
+        diagnostics: [observed],
+        events: [delivery],
+      });
+      await entered.promise;
+      if (
+        next.version === undefined ||
+        retained.version === undefined ||
+        observed.context?.version === undefined ||
+        delivery.id === undefined
+      )
+        throw new Error("Expected versioned records and an Event ID.");
+      next.version.number = 8;
+      retained.version.number = 8;
+      observed.context.version.number = 8;
+      delivery.id.value = "later-delivery";
+      release.resolve(undefined);
+      await expect(pending).resolves.toBeUndefined();
+      await expect(entity.current.read("task")).resolves.toEqual(current("accepted", 1n));
+      await expect(entity.states.backward("task", 1)).resolves.toEqual([state("accepted", 1n)]);
+      expect((await entity.events.backward("task", 1))[0]?.id?.value).toBe("accepted-diagnostic");
+      const events = new EventStore(input.context, factory);
+      expect((await events.read()).map((entry) => entry.id?.value)).toEqual(["accepted-delivery"]);
+      events.close();
+    } finally {
+      release.resolve(undefined);
+      write.mockRestore();
+      commits.close();
+      entity.close();
+    }
+  });
+
+  it("snapshots a queued commit before the earlier Entity write releases", async () => {
+    const factory = new InMemoryStorageFactory();
+    const input = entityInput();
+    const entity = factory.createEntityStorage(input) as EntityHandle;
+    const commits = commitStorage(factory, input);
+    const entered = deferred();
+    const release = deferred();
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- Call keeps the concrete storage receiver.
+    const original = MemoryEntityRecordStorage.prototype.write;
+    let writes = 0;
+    const write = vi
+      .spyOn(MemoryEntityRecordStorage.prototype, "write")
+      .mockImplementation(async function (this: MemoryEntityRecordStorage<unknown>, record) {
+        if (++writes === 1) {
+          entered.resolve(undefined);
+          await release.promise;
+        }
+        return original.call(this, record);
+      });
+    try {
+      const first = commits.commit({
+        context: input.context,
+        entity: input,
+        entityId: "task",
+        next: current("first", 1n),
+        states: [state("first", 1n)],
+      });
+      await entered.promise;
+      const next = current("second", 2n);
+      const retained = state("second", 2n);
+      const second = commits.commit({
+        context: input.context,
+        entity: input,
+        entityId: "task",
+        next,
+        states: [retained],
+      });
+      if (next.version === undefined || retained.version === undefined)
+        throw new Error("Expected versioned Entity records.");
+      next.version.number = 9;
+      retained.version.number = 9;
+      release.resolve(undefined);
+      await Promise.all([first, second]);
+      await expect(entity.current.read("task")).resolves.toEqual(current("second", 2n));
+      await expect(entity.states.backward("task", 2)).resolves.toEqual([
+        state("second", 2n),
+        state("first", 1n),
+      ]);
+    } finally {
+      release.resolve(undefined);
+      write.mockRestore();
+      commits.close();
+      entity.close();
+    }
+  });
+
+  it("keeps queued current, history, and delivery records in the selected tenant", async () => {
+    const factory = new InMemoryStorageFactory();
+    const tenantId = create(TenantIdSchema, { kind: { case: "value", value: "A" } });
+    const selected = { name: "Tasks", multitenant: true as const, tenantId };
+    const input = { ...entityInput(), context: selected };
+    const commits = commitStorage(factory, input);
+    const entered = deferred();
+    const release = deferred();
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- Call keeps the concrete storage receiver.
+    const original = MemoryEntityRecordStorage.prototype.write;
+    let writes = 0;
+    const write = vi
+      .spyOn(MemoryEntityRecordStorage.prototype, "write")
+      .mockImplementation(async function (this: MemoryEntityRecordStorage<unknown>, record) {
+        if (++writes === 1) {
+          entered.resolve(undefined);
+          await release.promise;
+        }
+        return original.call(this, record);
+      });
+    try {
+      const first = commits.commit({
+        context: selected,
+        entity: input,
+        entityId: "task",
+        next: current("first", 1n),
+        states: [state("first", 1n)],
+      });
+      await entered.promise;
+      const second = commits.commit({
+        context: selected,
+        entity: input,
+        entityId: "task",
+        next: current("second", 2n),
+        states: [state("second", 2n)],
+        events: [event("queued-A")],
+      });
+      tenantId.kind = { case: "value", value: "B" };
+      release.resolve(undefined);
+      await Promise.all([first, second]);
+
+      const contextA = {
+        name: "Tasks",
+        multitenant: true as const,
+        tenantId: create(TenantIdSchema, { kind: { case: "value", value: "A" } }),
+      };
+      const entityA = factory.createEntityStorage({ ...input, context: contextA }) as EntityHandle;
+      await expect(entityA.current.read("task")).resolves.toEqual(current("second", 2n));
+      await expect(entityA.states.backward("task", 2)).resolves.toEqual([
+        state("second", 2n),
+        state("first", 1n),
+      ]);
+      const eventsA = new EventStore(contextA, factory);
+      expect((await eventsA.read()).map((entry) => entry.id?.value)).toEqual(["queued-A"]);
+      eventsA.close();
+      entityA.close();
+
+      const contextB = {
+        name: "Tasks",
+        multitenant: true as const,
+        tenantId: create(TenantIdSchema, { kind: { case: "value", value: "B" } }),
+      };
+      const entityB = factory.createEntityStorage({ ...input, context: contextB }) as EntityHandle;
+      await expect(entityB.current.read("task")).resolves.toBeUndefined();
+      await expect(entityB.states.backward("task", 2)).resolves.toEqual([]);
+      const eventsB = new EventStore(contextB, factory);
+      expect(await eventsB.read()).toEqual([]);
+      eventsB.close();
+      entityB.close();
+      expect(() =>
+        commits.commit({
+          context: selected,
+          entity: input,
+          entityId: "task",
+          next: current("wrong-scope", 3n),
+        }),
+      ).toThrow(/another Entity storage scope/);
+      expect(() =>
+        commits.commit({
+          context: contextA,
+          entity: input,
+          entityId: "task",
+          next: current("wrong-entity-scope", 3n),
+        }),
+      ).toThrow(/another Entity storage scope/);
+    } finally {
+      release.resolve(undefined);
+      write.mockRestore();
+      commits.close();
+    }
+  });
+
+  it("rejects a divergent live history slot before changing current state", async () => {
+    const factory = new InMemoryStorageFactory();
+    const input = entityInput();
+    const entity = factory.createEntityStorage(input) as EntityHandle;
+    const commits = commitStorage(factory, input);
+    await commits.commit({
+      context: input.context,
+      entity: input,
+      entityId: "task",
+      next: current("first", 1n),
+      states: [state("first", 1n)],
+    });
+    await expect(
+      commits.commit({
+        context: input.context,
+        entity: input,
+        entityId: "task",
+        next: current("second", 2n),
+        states: [state("different", 1n)],
+      }),
+    ).rejects.toThrow(/divergent content/);
+    await expect(entity.current.read("task")).resolves.toEqual(current("first", 1n));
+    await expect(entity.states.backward("task", 2)).resolves.toEqual([state("first", 1n)]);
+    commits.close();
+    entity.close();
+  });
+
+  it("restores affected entries if live application throws after an earlier write", async () => {
+    const factory = new InMemoryStorageFactory();
+    const input = entityInput();
+    const entity = factory.createEntityStorage(input) as EntityHandle;
+    const commits = commitStorage(factory, input);
+    let applications = 0;
+    const original = Reflect.get(TenantRecords.prototype, "apply");
+    const apply = vi.spyOn(TenantRecords.prototype, "apply").mockImplementation(function (
+      this: TenantRecords<unknown, Message>,
+      slot,
+    ) {
+      applications++;
+      if (applications === 5) throw new Error("injected live write failure");
+      original.call(this, slot);
+    });
+    try {
+      await expect(
+        commits.commit({
+          context: input.context,
+          entity: input,
+          entityId: "task",
+          next: current("partial", 1n),
+          states: [state("partial", 1n)],
+          diagnostics: [diagnostic("partial-diagnostic", 1n)],
+          events: [event("partial-delivery")],
+        }),
+      ).rejects.toThrow(/injected live write failure/);
+    } finally {
+      apply.mockRestore();
+    }
+    await expect(entity.current.read("task")).resolves.toBeUndefined();
+    await expect(entity.states.backward("task", 1)).resolves.toEqual([]);
+    await expect(entity.events.backward("task", 1)).resolves.toEqual([]);
+    const events = new EventStore(input.context, factory);
+    await expect(events.read()).resolves.toEqual([]);
+    events.close();
+    commits.close();
+    entity.close();
+  });
+
   it("makes current state, both histories, and delivery events visible as one commit", async () => {
     const factory = new InMemoryStorageFactory();
     const input = entityInput();
@@ -56,7 +427,7 @@ describe("MemoryEntityCommitStorage", () => {
         diagnostics: [diagnostic("diagnostic-1", 1n)],
         events: [delivery],
       }),
-    ).resolves.toBe("committed");
+    ).resolves.toBeUndefined();
 
     await expect(entity.current.read("task")).resolves.toEqual(current("next", 1n));
     await expect(entity.states.backward("task", 10)).resolves.toEqual([state("next", 1n)]);
@@ -76,7 +447,7 @@ describe("MemoryEntityCommitStorage", () => {
         diagnostics: [diagnostic("diagnostic-1", 1n)],
         events: [delivery],
       }),
-    ).resolves.toBe("conflict");
+    ).rejects.toThrow(/unique delivery-event IDs/);
     events.close();
     commits.close();
     entity.close();
@@ -135,7 +506,7 @@ describe("MemoryEntityCommitStorage", () => {
     entity.close();
   });
 
-  it("serializes competing compatible handles and returns a current-state conflict", async () => {
+  it("serializes competing compatible handles and permits later replacement", async () => {
     const factory = new InMemoryStorageFactory();
     const input = entityInput();
     const first = commitStorage(factory, input);
@@ -154,7 +525,7 @@ describe("MemoryEntityCommitStorage", () => {
         next: current("second", 1n),
       }),
     ]);
-    expect(results.sort()).toEqual(["committed", "conflict"]);
+    expect(results).toEqual([undefined, undefined]);
     await expect(
       first.commit({
         context: input.context,
@@ -162,7 +533,7 @@ describe("MemoryEntityCommitStorage", () => {
         entityId: "task",
         next: current("divergent", 2n),
       }),
-    ).resolves.toBe("conflict");
+    ).resolves.toBeUndefined();
     first.close();
     expect(() =>
       first.commit({
@@ -252,7 +623,6 @@ describe("MemoryEntityCommitStorage", () => {
         context: input.context,
         entity: input,
         entityId: "task",
-        expected: seeded,
         next: current("new", 2n, create(TimestampSchema, { seconds: 2n })),
         states: [state("new", 2n)],
       });
@@ -281,18 +651,15 @@ describe("MemoryEntityCommitStorage", () => {
         entityId: "task",
         next: seeded,
       }),
-    ).resolves.toBe("committed");
-    const loaded = (await entity.current.read("task")) as EntityRecord;
-
+    ).resolves.toBeUndefined();
     await expect(
       commits.commit({
         context: input.context,
         entity: input,
         entityId: "task",
-        expected: loaded,
         next: current("after", 2n, create(TimestampSchema, { seconds: 42n, nanos: 8 })),
       }),
-    ).resolves.toBe("committed");
+    ).resolves.toBeUndefined();
     await expect(entity.current.read("task")).resolves.toEqual(
       current("after", 2n, create(TimestampSchema, { seconds: 42n, nanos: 8 })),
     );
@@ -314,7 +681,7 @@ describe("MemoryEntityCommitStorage", () => {
         entityId: "task",
         next: current("current-only", 1n),
       }),
-    ).resolves.toBe("committed");
+    ).resolves.toBeUndefined();
 
     await expect(entity.current.read("task")).resolves.toEqual(current("current-only", 1n));
     await expect(entity.states.backward("task", 10)).resolves.toEqual([]);
@@ -340,7 +707,7 @@ describe("MemoryEntityCommitStorage", () => {
         entityId: "task",
         next: current("current-only", 1n),
       }),
-    ).resolves.toBe("committed");
+    ).resolves.toBeUndefined();
 
     expect(createStorage).not.toHaveBeenCalled();
     await expect(entity.current.read("task")).resolves.toEqual(current("current-only", 1n));
@@ -365,7 +732,7 @@ describe("MemoryEntityCommitStorage", () => {
         entityId: "task",
         next: current("current-only", 1n),
       }),
-    ).resolves.toBe("committed");
+    ).resolves.toBeUndefined();
 
     expect(read).not.toHaveBeenCalled();
     expect(close).not.toHaveBeenCalled();
@@ -449,21 +816,11 @@ describe("MemoryEntityCommitStorage", () => {
     entity.close();
   });
 
-  it("returns conflict for absent or meaningfully different expected current records", async () => {
+  it("replaces current records with no expected-state condition", async () => {
     const factory = new InMemoryStorageFactory();
     const input = entityInput();
     const commits = commitStorage(factory, input);
     const persisted = current("persisted", 1n);
-
-    await expect(
-      commits.commit({
-        context: input.context,
-        entity: input,
-        entityId: "task",
-        expected: current("missing", 0n),
-        next: current("unexpected", 1n),
-      }),
-    ).resolves.toBe("conflict");
     await expect(
       commits.commit({
         context: input.context,
@@ -471,37 +828,18 @@ describe("MemoryEntityCommitStorage", () => {
         entityId: "task",
         next: persisted,
       }),
-    ).resolves.toBe("committed");
-
-    for (const [, expected] of [
-      ["undefined", undefined],
-      ["state", current("different", 1n)],
-      ["version", current("persisted", 2n)],
-      [
-        "archived",
-        create(EntityRecordSchema, {
-          ...persisted,
-          lifecycleFlags: create(LifecycleFlagsSchema, { archived: true }),
-        }),
-      ],
-      [
-        "deleted",
-        create(EntityRecordSchema, {
-          ...persisted,
-          lifecycleFlags: create(LifecycleFlagsSchema, { deleted: true }),
-        }),
-      ],
-    ] as const) {
-      await expect(
-        commits.commit({
-          context: input.context,
-          entity: input,
-          entityId: "task",
-          ...(expected === undefined ? {} : { expected }),
-          next: current("unexpected", 2n),
-        }),
-      ).resolves.toBe("conflict");
-    }
+    ).resolves.toBeUndefined();
+    await expect(
+      commits.commit({
+        context: input.context,
+        entity: input,
+        entityId: "task",
+        next: current("unexpected", 2n),
+      }),
+    ).resolves.toBeUndefined();
+    const entity = factory.createEntityStorage(input) as EntityHandle;
+    await expect(entity.current.read("task")).resolves.toEqual(current("unexpected", 2n));
+    entity.close();
     commits.close();
   });
 
@@ -522,7 +860,7 @@ describe("MemoryEntityCommitStorage", () => {
         entityId: "task",
         next: current("sibling", 1n),
       }),
-    ).resolves.toBe("committed");
+    ).resolves.toBeUndefined();
     second.close();
   });
 

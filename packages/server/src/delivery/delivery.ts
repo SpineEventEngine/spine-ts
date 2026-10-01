@@ -29,7 +29,7 @@ import {
 } from "./delivery-monitor.js";
 import type { DeliveryInbox, DeliveryWorkRegistry, DeliveryWorkSession } from "./delivery-ports.js";
 import { Inbox, InboxTargets, type InboxMessage } from "./inbox.js";
-import { InboxStorage } from "./inbox-storage.js";
+import { InboxStorage, InboxStorageClock } from "./inbox-storage.js";
 import { ShardIndex } from "./shard-index.js";
 import { ShardedWorkRegistry } from "./sharded-work-registry.js";
 import { withDeliveryCommitFence } from "../repository/commit-fence.js";
@@ -186,6 +186,7 @@ export class Delivery {
    * Acquires and releases direct shard ownership.
    */
   readonly shards: DeliveryWorkRegistry;
+
   readonly #monitor: DeliveryMonitor;
 
   /**
@@ -353,20 +354,41 @@ export class Delivery {
   }
 }
 
+/**
+ * Processes inbox pages while retaining one shard session.
+ */
 class DeliveryDrain {
   readonly #statistics = counts();
+
   readonly #failures: DeliveryFailure[] = [];
+
   readonly #deduplication: DeliveryDeduplication;
+
   readonly #blockedTargets = new Set<string>();
+
+  readonly #removedInPage = new Set<InboxMessage>();
+
   #current: DeliveryWorkSession;
+
   #ownershipLost = false;
+
   #failureLimitReached = false;
 
+  /**
+   * Creates a drain for one acquired shard session.
+   *
+   * @param input Supplies the inbox, callbacks, and shard session.
+   */
   constructor(private readonly input: DeliveryDrainInputState) {
     this.#current = input.session;
     this.#deduplication = new DeliveryDeduplication(input.inbox);
   }
 
+  /**
+   * Executes delivery and releases the shard session.
+   *
+   * @returns The terminal delivery outcome and counts.
+   */
   async run(): Promise<DeliveryRun> {
     let run: DeliveryRun;
     try {
@@ -378,6 +400,11 @@ class DeliveryDrain {
     return (await this.#release()) ? run : this.#complete("FAILED");
   }
 
+  /**
+   * Removes the session and reports completion when release succeeds.
+   *
+   * @returns Whether the session was released.
+   */
   async #release(): Promise<boolean> {
     const released = await safelyValue(
       () => this.input.shards.release(this.#current, this.input.options.operation),
@@ -387,26 +414,55 @@ class DeliveryDrain {
     return released;
   }
 
+  /**
+   * Checks whether monitoring permits this drain to start.
+   *
+   * @returns Whether page processing may start.
+   */
   async #canStart(): Promise<boolean> {
     if (!(await safelyBoolean(() => this.input.monitor.shouldContinueAfter("DELIVERY"))))
       return false;
     return safely(() => this.input.monitor.onDeliveryStarted(this.input.shard));
   }
 
+  /**
+   * Reads and processes inbox pages until the shard is drained or stopped.
+   *
+   * @returns The terminal delivery outcome.
+   */
   async #readPages(): Promise<DeliveryRun> {
     let after: import("./inbox.js").InboxReadContinuation | undefined;
+    let deliveredInScan = false;
     for (;;) {
       const messages = await this.#readPage(after);
-      if (messages.length === 0) return this.#complete("DRAINED");
+      this.#removedInPage.clear();
+      if (messages.length === 0) {
+        if (!deliveredInScan) return this.#complete("DRAINED");
+        after = undefined;
+        deliveredInScan = false;
+        continue;
+      }
       const deliveredBefore = this.#statistics.delivered;
       if (!(await this.#processPage(messages))) return this.#complete("STOPPED");
       if (!(await this.#cleanupPage(messages))) return this.#complete("STOPPED");
-      const next = this.#nextPage(messages, deliveredBefore);
-      if (next.complete) return this.#complete("DRAINED");
-      after = next.after;
+      deliveredInScan ||= this.#statistics.delivered !== deliveredBefore;
+      if (messages.length < this.input.pageSize) {
+        if (!deliveredInScan) return this.#complete("DRAINED");
+        after = undefined;
+        deliveredInScan = false;
+        continue;
+      }
+      const survivor = messages.findLast((message) => !this.#removedInPage.has(message));
+      if (survivor !== undefined) after = this.#continuation([survivor]);
     }
   }
 
+  /**
+   * Reads the next inbox page after an optional continuation.
+   *
+   * @param after Supplies the prior page position, when present.
+   * @returns The ordered inbox messages in the next page.
+   */
   #readPage(after: import("./inbox.js").InboxReadContinuation | undefined) {
     return this.input.inbox.read(this.input.shard, {
       limit: this.input.pageSize,
@@ -415,8 +471,14 @@ class DeliveryDrain {
     });
   }
 
+  /**
+   * Processes every message in one page.
+   *
+   * @param messages Supplies the inbox page to process.
+   * @returns Whether page processing may continue.
+   */
   async #processPage(messages: readonly InboxMessage[]): Promise<boolean> {
-    const page = this.#deduplication.page(messages);
+    const page = this.#deduplication.page(messages, this.#retentionTime());
     for (const message of messages) {
       if (!(await this.#processMessage(message, page))) return false;
       if (this.#failureLimitReached) return false;
@@ -424,6 +486,13 @@ class DeliveryDrain {
     return true;
   }
 
+  /**
+   * Processes one message unless it is skipped or its target is blocked.
+   *
+   * @param message Supplies the inbox message.
+   * @param page Provides duplicate checks for this page.
+   * @returns Whether processing may continue.
+   */
   async #processMessage(message: InboxMessage, page: ReturnType<DeliveryDeduplication["page"]>) {
     if (this.input.options.operation?.signal?.aborted) return false;
     if (this.#shouldSkip(message)) return true;
@@ -435,6 +504,12 @@ class DeliveryDrain {
     return this.#deliver(message, target);
   }
 
+  /**
+   * Determines whether an inbox message is ineligible for endpoint delivery.
+   *
+   * @param message Supplies the message to check.
+   * @returns Whether the message should be skipped.
+   */
   #shouldSkip(message: InboxMessage): boolean {
     return (
       message.status !== "TO_DELIVER" ||
@@ -443,10 +518,21 @@ class DeliveryDrain {
     );
   }
 
+  /**
+   * Builds the key used to block further messages for one target.
+   *
+   * @param message Supplies the inbox message.
+   * @returns The target type and ID key.
+   */
   #targetKey(message: InboxMessage): string {
     return `${message.inboxId.targetTypeUrl}:${InboxTargets.key(message.inboxId.targetId)}`;
   }
 
+  /**
+   * Checks monitoring and verifies that the shard session remains current.
+   *
+   * @returns Whether this message may be processed.
+   */
   async #mayProcess(): Promise<boolean> {
     return (
       (await safelyBoolean(() => this.input.monitor.shouldContinueAfter("PAGE"))) &&
@@ -454,6 +540,13 @@ class DeliveryDrain {
     );
   }
 
+  /**
+   * Removes a duplicate message and records a failure if removal fails.
+   *
+   * @param message Supplies the duplicate message.
+   * @param target Identifies the target to block after a failure.
+   * @returns Whether processing may continue.
+   */
   async #removeDuplicate(message: InboxMessage, target: string): Promise<boolean> {
     try {
       if (
@@ -464,6 +557,7 @@ class DeliveryDrain {
         ))
       )
         throw new Error("Inbox duplicate was not removed.");
+      this.#removedInPage.add(message);
       this.input.options.onDuplicateRemoved?.(message);
     } catch (error) {
       this.#recordFailure(message, error);
@@ -472,6 +566,13 @@ class DeliveryDrain {
     return true;
   }
 
+  /**
+   * Delivers one message and records its outcome.
+   *
+   * @param message Supplies the inbox message.
+   * @param target Identifies the message target.
+   * @returns Whether processing may continue.
+   */
   async #deliver(message: InboxMessage, target: string): Promise<boolean> {
     try {
       this.#statistics.accepted += 1;
@@ -485,6 +586,14 @@ class DeliveryDrain {
     return true;
   }
 
+  /**
+   * Records endpoint failure and runs the configured recovery action.
+   *
+   * @param message Supplies the failed inbox message.
+   * @param target Identifies the message target.
+   * @param error Supplies the endpoint or acknowledgement failure.
+   * @returns Completion after the recovery action finishes.
+   */
   async #handleReceptionFailure(
     message: InboxMessage,
     target: string,
@@ -508,16 +617,34 @@ class DeliveryDrain {
       this.#blockedTargets.add(target);
   }
 
+  /**
+   * Marks a message delivered after checking the shard session.
+   *
+   * @param message Supplies the inbox message to acknowledge.
+   * @returns Completion after the message is marked delivered.
+   */
   async #acknowledge(message: InboxMessage): Promise<void> {
     if (!(await this.#validate())) throw new Error("Shard ownership was lost.");
     await this.#markDelivered(message);
   }
 
+  /**
+   * Dispatches the message again and acknowledges it.
+   *
+   * @param message Supplies the inbox message to repeat.
+   * @returns Completion after dispatch and acknowledgement.
+   */
   async #repeat(message: InboxMessage): Promise<void> {
     await this.#dispatch(message);
     await this.#acknowledge(message);
   }
 
+  /**
+   * Dispatches a message while validating the shard session before the call.
+   *
+   * @param message Supplies the inbox message for the endpoint.
+   * @returns Completion after endpoint dispatch.
+   */
   async #dispatch(message: InboxMessage): Promise<void> {
     await withDeliveryCommitFence(
       async () => {
@@ -527,6 +654,12 @@ class DeliveryDrain {
     );
   }
 
+  /**
+   * Marks a message delivered and updates local counts and callbacks.
+   *
+   * @param message Supplies the inbox message to acknowledge.
+   * @returns Completion after durable acknowledgement.
+   */
   async #markDelivered(message: InboxMessage): Promise<void> {
     if ((await this.input.inbox.markDelivered(message, this.input.options.operation)) === undefined)
       throw new Error("Inbox message was not marked delivered.");
@@ -535,36 +668,77 @@ class DeliveryDrain {
     this.input.options.onDelivered?.(message);
   }
 
+  /**
+   * Removes expired delivered messages from one page when supported.
+   *
+   * @param messages Supplies the inbox page to clean up.
+   * @returns Whether cleanup completed while the session remained valid.
+   */
   async #cleanupPage(messages: readonly InboxMessage[]): Promise<boolean> {
     if (this.input.inbox.removeDelivered === undefined) return true;
     if (!(await this.#validate())) return false;
+    const now = this.#retentionTime().getTime();
     for (const message of messages) {
-      if (message.status === "DELIVERED" && !(await this.#removeDelivered(message))) return false;
+      if (
+        message.status === "DELIVERED" &&
+        (message.keepUntil === undefined || message.keepUntil.getTime() <= now)
+      ) {
+        const removed = await this.#removeDelivered(message);
+        if (removed === undefined) return false;
+        if (removed) this.#removedInPage.add(message);
+      }
     }
     return true;
   }
 
-  async #removeDelivered(message: InboxMessage): Promise<boolean> {
-    if (this.input.inbox.removeDelivered === undefined) return true;
-    if (this.input.options.operation?.signal?.aborted || !(await this.#validate())) return false;
+  /**
+   * Removes one expired delivered message when supported.
+   *
+   * @param message Supplies the delivered message to remove.
+   * @returns Whether the row was removed, or undefined if the session was lost.
+   */
+  async #removeDelivered(message: InboxMessage): Promise<boolean | undefined> {
+    if (this.input.inbox.removeDelivered === undefined) return false;
+    if (this.input.options.operation?.signal?.aborted || !(await this.#validate()))
+      return undefined;
     const removed = await this.input.inbox.removeDelivered(
       message,
       this.#current,
       this.input.options.operation,
     );
-    return !this.input.options.operation?.signal?.aborted && (removed || (await this.#validate()));
+    if (this.input.options.operation?.signal?.aborted || (!removed && !(await this.#validate())))
+      return undefined;
+    return removed;
   }
 
-  #nextPage(messages: readonly InboxMessage[], deliveredBefore: number) {
-    if (this.#statistics.delivered !== deliveredBefore) return { complete: false };
+  /**
+   * Creates the continuation following the last message in a page.
+   *
+   * @param messages Supplies the non-empty inbox page.
+   * @returns The continuation identifying its last message.
+   */
+  #continuation(messages: readonly InboxMessage[]): import("./inbox.js").InboxReadContinuation {
     const last = messages.at(-1);
-    if (last === undefined || messages.length < this.input.pageSize) return { complete: true };
-    return {
-      complete: false,
-      after: { messageId: last.id.value, whenReceived: last.whenReceived, version: last.version },
-    };
+    if (last === undefined) throw new Error("Inbox page has no continuation.");
+    return { messageId: last.id.value, whenReceived: last.whenReceived, version: last.version };
   }
 
+  /**
+   * Reads the inbox retention clock or the current time.
+   *
+   * @returns The time used to evaluate message retention.
+   */
+  #retentionTime(): Date {
+    return this.input.inbox instanceof Inbox
+      ? InboxStorageClock.read(this.input.inbox.storage)
+      : new Date();
+  }
+
+  /**
+   * Checks the shard session and records when it is lost.
+   *
+   * @returns Whether the shard session remains valid.
+   */
   async #validate(): Promise<boolean> {
     const current = await safelyValue(
       () => this.input.shards.validateOwnership(this.#current, this.input.options.operation),
@@ -575,6 +749,12 @@ class DeliveryDrain {
     return current !== undefined;
   }
 
+  /**
+   * Records an ephemeral delivery failure up to the configured limit.
+   *
+   * @param message Supplies the failed inbox message.
+   * @param error Supplies the observed failure.
+   */
   #recordFailure(message: InboxMessage, error: unknown): void {
     this.#statistics.failed += 1;
     if (this.#failures.length < deliveryFailureLimit)
@@ -582,10 +762,21 @@ class DeliveryDrain {
     this.#failureLimitReached = this.#failures.length === deliveryFailureLimit;
   }
 
+  /**
+   * Creates a terminal result from the current counters and failures.
+   *
+   * @param status Identifies the terminal delivery outcome.
+   * @returns The immutable delivery result.
+   */
   #complete(status: DeliveryRun["status"]): DeliveryRun {
     return result(status, this.#statistics, this.#failures);
   }
 
+  /**
+   * Sends delivery completion to the monitor.
+   *
+   * @returns Completion after the monitor callback settles.
+   */
   #completeMonitoring(): Promise<void> {
     return Promise.resolve(
       this.input.monitor.onDeliveryCompleted(
@@ -751,6 +942,15 @@ async function safelyBoolean(action: () => boolean | Promise<boolean>): Promise<
     return false;
   }
 }
+
+/**
+ * Returns an action result or a fallback when the action fails.
+ *
+ * @typeParam T Action result type.
+ * @param action Supplies the action to run.
+ * @param fallback Supplies the result to use after failure.
+ * @returns The action result or fallback value.
+ */
 async function safelyValue<T>(action: () => T | Promise<T>, fallback: T): Promise<T> {
   try {
     return await action();
@@ -766,30 +966,61 @@ function isEndpointMessage(message: InboxMessage): boolean {
   );
 }
 
+/**
+ * Tracks recently delivered messages for one inbox.
+ */
 class DeliveryDeduplication {
   readonly #recent: RecentDeliveries;
 
+  /**
+   * Creates or reuses recent delivery state for the supplied inbox.
+   *
+   * @param inbox Supplies the inbox used as the deduplication key.
+   */
   constructor(inbox: DeliveryInbox) {
     const current = recentDeliveries.get(inbox);
     this.#recent = current ?? new RecentDeliveries();
     if (current === undefined) recentDeliveries.set(inbox, this.#recent);
   }
 
-  page(messages: readonly InboxMessage[]): DeliveryPageDeduplication {
-    return new DeliveryPageDeduplication(messages, this.#recent);
+  /**
+   * Creates duplicate checks for one page and retention time.
+   *
+   * @param messages Supplies the messages in the page.
+   * @param now Supplies the time used to check message retention.
+   * @returns Duplicate checks for the page.
+   */
+  page(messages: readonly InboxMessage[], now: Date): DeliveryPageDeduplication {
+    return new DeliveryPageDeduplication(messages, this.#recent, now);
   }
 
+  /**
+   * Records a message as recently delivered.
+   *
+   * @param message Supplies the delivered message.
+   */
   recordDelivered(message: InboxMessage): void {
     this.#recent.add(message);
   }
 }
 
+/**
+ * Checks duplicates within a page and the recent-delivery cache.
+ */
 class DeliveryPageDeduplication {
   readonly #identities: Set<string>;
 
+  /**
+   * Creates duplicate checks from retained messages in one page.
+   *
+   * @param messages Supplies the inbox page.
+   * @param recent Provides recently delivered message identities.
+   * @param now Supplies the time used to check message retention.
+   */
   constructor(
     messages: readonly InboxMessage[],
     private readonly recent: RecentDeliveries,
+    now: Date,
   ) {
     this.#identities = new Set(
       messages
@@ -797,12 +1028,18 @@ class DeliveryPageDeduplication {
           (message) =>
             message.status === "DELIVERED" &&
             message.keepUntil !== undefined &&
-            message.keepUntil.getTime() > Date.now(),
+            message.keepUntil.getTime() > now.getTime(),
         )
         .map((message) => RecentDeliveries.key(message)),
     );
   }
 
+  /**
+   * Checks whether a message appeared earlier in the page or cache.
+   *
+   * @param message Supplies the message to check.
+   * @returns Whether this message is a duplicate.
+   */
   isDuplicate(message: InboxMessage): boolean {
     const identity = RecentDeliveries.key(message);
     if (this.#identities.has(identity) || this.recent.has(identity)) return true;
@@ -811,13 +1048,27 @@ class DeliveryPageDeduplication {
   }
 }
 
+/**
+ * Stores a bounded set of recently delivered message identities.
+ */
 class RecentDeliveries {
   readonly #identities = new Map<string, undefined>();
 
+  /**
+   * Checks whether an identity is in the recent-delivery set.
+   *
+   * @param identity Supplies the encoded message identity.
+   * @returns Whether that identity is present.
+   */
   has(identity: string): boolean {
     return this.#identities.has(identity);
   }
 
+  /**
+   * Adds a message identity and removes the oldest entry when over capacity.
+   *
+   * @param message Supplies the delivered message.
+   */
   add(message: InboxMessage): void {
     const identity = RecentDeliveries.key(message);
     this.#identities.delete(identity);
@@ -828,6 +1079,12 @@ class RecentDeliveries {
     }
   }
 
+  /**
+   * Creates the identity key used for recent-delivery checks.
+   *
+   * @param message Supplies the message to identify.
+   * @returns The serialized message identity.
+   */
   static key(message: InboxMessage): string {
     return JSON.stringify([
       message.signalId,

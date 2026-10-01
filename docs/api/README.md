@@ -309,7 +309,10 @@ by the process. A different target or a new signal ID remains independently
 deliverable, even when the domain payload is equal.
 
 Each Inbox read is bounded to one page, not to a total backlog: an active drain
-can advance through later pages while it retains the shard. The 30-second Inbox
+advances through later pages while it retains the shard. After reaching the end,
+it starts another scan only if it delivered messages during the completed scan.
+It stops after a scan with no deliveries, rather than returning to the beginning
+after every productive page. The 30-second Inbox
 deduplication window controls how long delivered rows remain available as
 duplicate evidence. It is not a replay-retention period; accepted rows follow
 their Inbox lifecycle and may be replayed after the duplicate window has elapsed.

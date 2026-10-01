@@ -491,7 +491,6 @@ const expectedStorageProviderDocumentedExports = [
   "DeliveryCleanupStorageFactories",
   "DeliveryCleanupStorageFactory",
   "EntityCommitInput",
-  "EntityCommitResult",
   "EntityCommitStorage",
   "EntityCommitStorageFactories",
   "EntityCommitStorageFactory",

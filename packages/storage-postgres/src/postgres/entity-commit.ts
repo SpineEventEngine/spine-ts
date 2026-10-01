@@ -26,7 +26,6 @@ import {
   eventStoreRecordSpec,
   stateHistorySpec,
   type EntityCommitInput,
-  type EntityCommitResult,
   type EntityCommitStorage,
   type EntityStorageInput,
 } from "@spine-event-engine/storage/provider";
@@ -236,17 +235,15 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
    *
    * @typeParam Id Entity identifier type supplied by the commit.
    * @typeParam State Entity state message type supplied by the commit.
-   * @param input Defines the expected and next current records plus histories.
-   * @returns Whether PostgreSQL committed the mutation or found a conflict.
+   * @param input Defines the next current record plus histories.
+   * @returns Completion after PostgreSQL commits the mutation.
    */
-  async commit<Id, State extends Message>(
-    input: EntityCommitInput<Id, State>,
-  ): Promise<EntityCommitResult> {
+  async commit<Id, State extends Message>(input: EntityCommitInput<Id, State>): Promise<void> {
     this.validate(input);
     const records = new PostgresCommitRecords(input, this.open);
     try {
       await records.prepare();
-      return await this.#coordinator.commit((client) => this.apply(client, input, records));
+      await this.#coordinator.commit((client) => this.apply(client, input, records));
     } finally {
       records.close();
     }
@@ -270,25 +267,19 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
    * @param client PostgreSQL transaction client.
    * @param input Defines the Entity records to commit.
    * @param records Provides the prepared record families.
-   * @returns Whether records were committed or conflicted.
+   * @returns Completion after records are committed.
    */
   private async apply<Id, State extends Message>(
     client: PoolClient,
     input: EntityCommitInput<Id, State>,
     records: PostgresCommitRecords<Id, State>,
-  ): Promise<EntityCommitResult> {
+  ): Promise<void> {
     await this.locks(client, input, records);
     const current = await records.current.read(client, input.entityId, "for-update");
-    if (
-      !PostgresCommitValues.same(current, input.expected) &&
-      !PostgresCommitValues.same(current, input.next)
-    )
-      return "conflict";
     await this.preflight(client, input, records);
     await this.append(client, input, records);
     if (!PostgresCommitValues.same(current, input.next))
       await records.current.write(client, input.next);
-    return "committed";
   }
 
   /**
@@ -398,8 +389,7 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
    * @param input Defines current and historical records to validate.
    */
   private validateRows<Id, State extends Message>(input: EntityCommitInput<Id, State>): void {
-    for (const record of [input.expected, input.next, ...(input.states ?? [])]) {
-      if (record === undefined) continue;
+    for (const record of [input.next, ...(input.states ?? [])]) {
       const decoded = this.entity.id.unpack(record.entityId ?? ({} as never));
       if (
         decoded === undefined ||

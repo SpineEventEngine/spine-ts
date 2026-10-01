@@ -1,244 +1,379 @@
-import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import {
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { packFrameworkArtifacts, proveExactTarballConsumer } from "./snapshot-artifacts.mjs";
+import { createReleaseManifest, validateReleaseManifest } from "./release-artifacts.mjs";
+import {
+  createPublicationReport,
+  createPublicRegistry,
+  confirmPrepared,
+  publishPrepared,
+  validatePriorReport,
+  npmPublishArgs,
+} from "./release-publication.mjs";
 import { expectedReleaseModel, readReleaseManifests } from "./release-policy.mjs";
 import { verifyRegistryReleaseState } from "./release-registry.mjs";
+import {
+  inspectPackedArtifact,
+  packFrameworkArtifacts,
+  proveExactTarballConsumer,
+} from "./snapshot-artifacts.mjs";
 
 const root = resolve(new URL("..", import.meta.url).pathname);
-const run = (command, args, cwd = root) => {
+const manifestName = "release-manifest.json";
+
+/**
+ * Runs a local preparation command and fails if it exits unsuccessfully.
+ *
+ * @param command Executable to run.
+ * @param args Command arguments.
+ * @param cwd Working directory.
+ */
+function run(command, args, cwd = root) {
   const result = spawnSync(command, args, { cwd, encoding: "utf8", stdio: "inherit" });
   if (result.status !== 0) throw new Error(command + " failed");
-};
-const option = (argv, name) => {
-  const index = argv.indexOf(name);
-  if (index === -1 || argv[index + 1] === undefined || argv[index + 1].startsWith("--"))
-    return undefined;
-  return argv[index + 1];
-};
+}
 
 /**
- * Packs, consumer-proves, and optionally stages release archives with interruption cleanup.
+ * Reads a named option without interpreting it as a command.
  *
- * @param root Repository root passed to package preparation callbacks.
- * @param output Destination for a persistent release preparation.
- * @param check Whether to use and remove a temporary verification directory.
- * @param mkdtemp Callback that creates the temporary check directory.
- * @param exists Callback that tests whether an output path already exists.
- * @param mkdir Callback that creates a persistent output directory.
- * @param remove Callback that recursively removes an abandoned preparation directory.
- * @param pack Callback that creates and inspects package archives.
- * @param prove Callback that installs the archives in an external consumer.
- * @param registerSignal Callback that installs an interruption handler and returns its remover.
- * @param exit Callback that terminates after signal-triggered cleanup.
- * @param expected Validated release model to combine with prepared packages.
- * @param stage Optional callback that extracts archives for publication tooling.
- * @returns The release model with prepared packages after successful proof.
+ * @param argv Command arguments.
+ * @param name Option to locate.
+ * @returns Option value, when supplied.
+ */
+function option(argv, name) {
+  const index = argv.indexOf(name);
+  return index < 0 || argv[index + 1]?.startsWith("--") ? undefined : argv[index + 1];
+}
+
+/**
+ * Reads the checkout commit and rejects a mismatched GitHub publication source.
+ *
+ * @returns Full lowercase Git commit SHA.
+ */
+function sourceCommit() {
+  const result = spawnSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" });
+  const sha = result.stdout?.trim();
+  if (result.status !== 0 || !/^[a-f0-9]{40}$/u.test(sha)) throw new Error("Invalid source commit");
+  if (process.env.GITHUB_SHA && process.env.GITHUB_SHA !== sha)
+    throw new Error("GitHub source commit differs from checkout");
+  return sha;
+}
+
+/**
+ * Packs, proves, and records exact archives in a persistent or temporary directory.
+ *
+ * @param destination Persistent release directory.
+ * @param check Whether to use a temporary verification directory.
+ * @param expected Current release policy.
+ * @param sourceSha Commit that prepared the archive.
+ * @param pack Archive packing callback.
+ * @param prove External consumer proof callback.
+ * @param persist Manifest writer.
+ * @param registerSignal Interruption registration callback.
+ * @param exit Process exit callback.
+ * @param createDirectory Persistent output creation callback.
+ * @returns Validated release manifest.
  */
 export function prepareRelease({
-  root,
-  output,
+  destination,
   check = false,
-  mkdtemp,
-  exists,
-  mkdir,
-  remove,
+  expected,
+  sourceSha,
   pack,
   prove,
-  registerSignal,
-  exit,
-  expected,
-  stage,
+  persist,
+  registerSignal = (signal, handler) => {
+    process.once(signal, handler);
+    return () => process.off(signal, handler);
+  },
+  exit = process.exit,
+  createDirectory = (directory) => mkdirSync(directory),
 }) {
-  const destination = check ? mkdtemp() : output;
-  if (!check && exists(destination))
+  if (!check && existsSync(destination))
     throw new Error("Release output already exists: " + destination);
-  let completed = false;
-  let owned = check;
-  let cleaned = false;
+  const output = check ? mkdtempSync(join(tmpdir(), "spine-release-")) : destination;
+  const state = { created: check };
+  let complete = false;
   const cleanup = () => {
-    if (owned && !completed && !cleaned) {
-      cleaned = true;
-      remove(destination);
-    }
+    if (state.created) rmSync(output, { force: true, recursive: true });
   };
-  const unregister = ["SIGINT", "SIGTERM"].map(
-    (signal) =>
-      registerSignal?.(signal, () => {
-        cleanup();
-        exit?.(signal === "SIGINT" ? 130 : 143);
-      }) ?? (() => {}),
-  );
   try {
-    if (!check) {
-      mkdir(destination);
-      owned = true;
-    }
-    const packages = pack({ root, destination });
-    prove({ root, destination, packages });
-    stage?.({ destination, packages });
-    completed = true;
-    return { ...expected, packages };
+    const manifest = withPreparationSignals(cleanup, registerSignal, exit, () => {
+      if (!check) createPreparationOutput(output, createDirectory, state);
+      return recordPreparedRelease(output, check, expected, sourceSha, pack, prove, persist);
+    });
+    complete = true;
+    return manifest;
   } finally {
-    for (const removeHandler of unregister) removeHandler();
-    if (owned && check && !cleaned) {
-      cleaned = true;
-      remove(destination);
-    } else if (owned && !completed) cleanup();
+    if (check || !complete) cleanup();
   }
 }
 
 /**
- * Writes each prepared tarball into its package-specific extracted publication directory.
+ * Creates persistent output after interruption handlers are registered.
  *
- * @param destination Release preparation directory that receives extracted package contents.
- * @param packages Prepared package entries containing names and tarball paths.
- * @param run Command runner used to extract each gzip archive.
+ * @param output New release directory.
+ * @param createDirectory Directory creation callback.
+ * @param state Tracks whether interruption cleanup may remove the directory.
  */
-export function stageReleaseContents({ destination, packages, run }) {
-  for (const { name, tarball } of packages) {
-    const directory = join(destination, "packages", name.split("/")[1], ".publish");
-    mkdirSync(directory, { recursive: true });
-    run("tar", ["-xzf", tarball, "--strip-components=1", "-C", directory]);
+function createPreparationOutput(output, createDirectory, state) {
+  state.created = true;
+  try {
+    createDirectory(output);
+  } catch (error) {
+    if (error.code === "EEXIST") state.created = false;
+    throw error;
   }
 }
 
 /**
- * Creates a minimal Lerna workspace containing a selected set of staged release packages.
+ * Packs and proves archives before recording their release manifest.
  *
- * @param destination Empty directory where the publication workspace is created.
- * @param entries Release manifest entries providing source paths and package manifests.
- * @param selectedNames Unique public package names selected after registry preflight.
- * @param copy Callback that copies staged package payloads into the workspace.
- * @param mkdir Callback that creates workspace and package directories.
- * @param write Callback that writes workspace and package manifests.
+ * @param output Preparation directory.
+ * @param check Whether this is temporary verification.
+ * @param expected Current release policy.
+ * @param sourceSha Source commit.
+ * @param pack Archive packing callback.
+ * @param prove External consumer proof callback.
+ * @param persist Manifest writer.
+ * @returns Prepared release manifest.
  */
-export function createPublicationWorkspace({
-  destination,
-  entries,
-  selectedNames,
-  copy,
-  mkdir,
-  write,
+function recordPreparedRelease(output, check, expected, sourceSha, pack, prove, persist) {
+  const packages = pack({ root, destination: output });
+  prove({ root, destination: output, packages });
+  const value = createReleaseManifest({ expected, packages, sourceSha });
+  if (!check) persist(join(output, manifestName), value);
+  return value;
+}
+
+/**
+ * Removes incomplete archives on SIGINT or SIGTERM during preparation.
+ *
+ * @param cleanup Removes the created preparation directory on interruption.
+ * @param registerSignal Signal registration callback.
+ * @param exit Process exit callback.
+ * @param work Synchronous packing and proof operation.
+ * @returns Result of completed preparation work.
+ */
+function withPreparationSignals(cleanup, registerSignal, exit, work) {
+  const interrupt = (code) => {
+    cleanup();
+    exit(code);
+  };
+  const removeInterrupt = registerSignal("SIGINT", () => interrupt(130));
+  const removeTerminate = registerSignal("SIGTERM", () => interrupt(143));
+  try {
+    return work();
+  } finally {
+    removeInterrupt();
+    removeTerminate();
+  }
+}
+
+/**
+ * Writes a release or attempt report atomically.
+ *
+ * @param path Destination JSON path.
+ * @param value Serializable report.
+ */
+function writeReport(path, value) {
+  const temporary = path + ".tmp";
+  writeFileSync(temporary, JSON.stringify(value, null, 2) + "\n", { mode: 0o600 });
+  renameSync(temporary, path);
+}
+
+/**
+ * Validates archive bytes, content, inventory, version, and source before publication.
+ *
+ * @param directory Saved release directory.
+ * @param expected Current checkout release policy.
+ * @param sourceSha Current checkout commit.
+ * @returns Validated manifest with archive paths local to the saved directory.
+ */
+export function loadPrepared(directory, expected, sourceSha) {
+  const manifest = JSON.parse(readFileSync(join(directory, manifestName), "utf8"));
+  const checksum = (file) =>
+    "sha512-" +
+    createHash("sha512")
+      .update(readFileSync(join(directory, file)))
+      .digest("base64");
+  validateReleaseManifest(manifest, expected, checksum, sourceSha);
+  const archives = readdirSync(directory)
+    .filter((name) => name.endsWith(".tgz"))
+    .sort();
+  if (
+    JSON.stringify(archives) !==
+    JSON.stringify(manifest.packages.map(({ tarball }) => tarball).sort())
+  )
+    throw new Error("Saved release contains extra or missing archives");
+  for (const entry of manifest.packages) {
+    const actual = inspectPackedArtifact({ root, tarball: join(directory, entry.tarball), run });
+    if (
+      actual.name !== entry.name ||
+      actual.version !== entry.version ||
+      actual.integrity !== entry.integrity ||
+      JSON.stringify(actual.dependencies) !== JSON.stringify(entry.dependencies)
+    )
+      throw new Error("Archive content differs from release manifest: " + entry.name);
+  }
+  return manifest;
+}
+
+/**
+ * Creates distinct empty npm configuration files without inherited credentials.
+ *
+ * @param directory Temporary directory for both empty configuration files.
+ * @returns Environment for a token-free npm invocation.
+ */
+export function npmEnvironment(directory) {
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter(
+      ([key]) =>
+        !/^(?:NPM_TOKEN|NODE_AUTH_TOKEN|npm_config_.*(?:token|password|auth|userconfig|globalconfig))$/iu.test(
+          key,
+        ),
+    ),
+  );
+  env.NPM_CONFIG_USERCONFIG = join(directory, "user.npmrc");
+  env.NPM_CONFIG_GLOBALCONFIG = join(directory, "global.npmrc");
+  writeFileSync(env.NPM_CONFIG_USERCONFIG, "", { mode: 0o600 });
+  writeFileSync(env.NPM_CONFIG_GLOBALCONFIG, "", { mode: 0o600 });
+  return env;
+}
+
+/**
+ * Publishes one archive through npm with isolated empty config files.
+ *
+ * @param archive Prepared archive path.
+ * @param tag Validated release tag.
+ * @returns npm exit status and captured JSON diagnostics.
+ */
+function invokeNpm(archive, tag) {
+  const directory = mkdtempSync(join(tmpdir(), "spine-npm-config-"));
+  try {
+    const result = spawnSync("npm", npmPublishArgs(archive, tag), {
+      cwd: root,
+      encoding: "utf8",
+      env: npmEnvironment(directory),
+      maxBuffer: 1024 * 1024,
+    });
+    return { status: result.status ?? 1, stdout: result.stdout ?? "", stderr: result.stderr ?? "" };
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+}
+
+/**
+ * Executes publication or read-only confirmation over a saved release.
+ *
+ * @param input Saved release directory.
+ * @param reportPath Durable attempt report path.
+ * @param priorPath Previous attempt report path, required for a writing rerun.
+ * @param verifyOnly Whether to perform read-only confirmation.
+ * @param dependencies Focused-test collaborators.
+ * @returns Final package report.
+ */
+export async function executeRelease({
+  input,
+  reportPath,
+  priorPath,
+  verifyOnly = false,
+  dependencies = {},
 }) {
-  const byName = new Map(
-    entries
-      .filter(({ path }) => path.startsWith("packages/"))
-      .map(({ path, manifest }) => [manifest.name, { manifest, path }]),
-  );
-  if (!selectedNames.length || new Set(selectedNames).size !== selectedNames.length)
-    throw new Error("Publication workspace requires a non-empty unique selection");
-  if (selectedNames.some((name) => !byName.has(name)))
-    throw new Error("Publication workspace selection is outside the release inventory");
-  mkdir(join(destination, "packages"));
-  write(
-    join(destination, "package.json"),
-    JSON.stringify({ name: "spine-lerna-publication", private: true, version: "0.0.0" }) + "\n",
-  );
-  write(join(destination, "pnpm-workspace.yaml"), "packages:\n  - packages/*\n");
-  write(
-    join(destination, "lerna.json"),
-    JSON.stringify({ version: "independent", npmClient: "pnpm", useNx: false }) + "\n",
-  );
-  for (const name of selectedNames) {
-    const { manifest, path } = byName.get(name);
-    const directory = join(destination, "packages", path.split("/")[1]);
-    const publicationManifest = { ...manifest };
-    delete publicationManifest.devDependencies;
-    mkdir(directory);
-    write(join(directory, "package.json"), JSON.stringify(publicationManifest) + "\n");
-    copy(join(path.slice(0, -"package.json".length), ".publish"), join(directory, ".publish"));
-  }
+  const expected = dependencies.expected ?? expectedReleaseModel(readReleaseManifests(root));
+  const release =
+    dependencies.load?.(input, expected, sourceCommit()) ??
+    loadPrepared(input, expected, sourceCommit());
+  const prior = priorPath ? JSON.parse(readFileSync(priorPath, "utf8")) : undefined;
+  if (!verifyOnly && Number(process.env.GITHUB_RUN_ATTEMPT ?? 1) > 1 && prior === undefined)
+    throw new Error("A rerun requires its previous publication report");
+  if (prior !== undefined) validatePriorReport(prior, release, !verifyOnly);
+  const save = dependencies.save ?? ((value) => writeReport(reportPath, value));
+  const registry = dependencies.registry ?? createPublicRegistry(globalThis.fetch);
+  const invoke = dependencies.invoke ?? ((tarball, tag) => invokeNpm(join(input, tarball), tag));
+  let report;
+  if (verifyOnly) {
+    report = prior ?? createPublicationReport(release);
+    for (const record of report.packages) record.status = "unconfirmed";
+    await save(report);
+  } else report = await publishPrepared({ release, registry, invoke, save, prior });
+  report = await confirmPrepared({ release, report, registry, save, ...dependencies.confirmation });
+  if (report.packages.some(({ status }) => status !== "published" && status !== "already present"))
+    throw new Error("Publication confirmation remains unconfirmed");
+  return report;
 }
 
 /**
- * Dispatches release preparation, tag display, registry preflight, or workspace creation commands.
+ * Dispatches release preparation, preflight, publication, and read-only verification.
  *
- * @param argv Command-line arguments, including the release subcommand.
- * @param dependencies Injectable filesystem, registry, and release collaborators.
- * @returns Subcommand result, or a promise for asynchronous registry operations.
+ * @param argv Command arguments.
+ * @param dependencies Focused-test collaborators.
+ * @returns Command result.
  */
 export async function main({ argv = process.argv, dependencies = {} } = {}) {
-  const {
-    createWorkspace = createPublicationWorkspace,
-    expectedModel = expectedReleaseModel,
-    fetchResponse = globalThis.fetch,
-    prepare = prepareRelease,
-    readManifests = readReleaseManifests,
-    verifyRegistry = verifyRegistryReleaseState,
-    write = (text) => process.stdout.write(text),
-  } = dependencies;
-  if (argv[2] === "prepare") {
-    const check = argv.includes("--check");
-    const output = check ? undefined : option(argv, "--output");
-    if (!check && output === undefined) throw new Error("prepare requires --check or --output");
-    if (dependencies.prepare !== undefined) return prepare({ check, output });
-    return prepare({
-      root,
-      output: check ? undefined : resolve(output),
-      check,
-      mkdtemp: () => mkdtempSync(join(tmpdir(), "spine-release-")),
-      exists: existsSync,
-      mkdir: (path) => mkdirSync(path, { recursive: true }),
-      remove: (path) => rmSync(path, { force: true, recursive: true }),
-      pack: ({ destination }) => packFrameworkArtifacts({ root, destination, run }),
-      prove: ({ destination, packages }) =>
-        proveExactTarballConsumer({ root, destination, run, packages }),
-      stage: ({ destination, packages }) => stageReleaseContents({ destination, packages, run }),
-      registerSignal: (signal, handler) => {
-        process.once(signal, handler);
-        return () => process.off(signal, handler);
-      },
-      exit: (code) => process.exit(code),
-      expected: expectedModel(readManifests(root)),
+  const command = argv[2];
+  const expected = dependencies.expected ?? expectedReleaseModel(readReleaseManifests(root));
+  if (command === "tag") {
+    (dependencies.write ?? process.stdout.write.bind(process.stdout))(expected.tag + "\n");
+    return;
+  }
+  if (command === "preflight")
+    return (dependencies.preflight ?? verifyRegistryReleaseState)(
+      expected,
+      dependencies.fetch ?? globalThis.fetch,
+    );
+  if (command === "prepare") return prepareCommand(argv, expected, dependencies);
+  if (command === "publish" || command === "verify-registry") {
+    const input = option(argv, "--input");
+    const reportPath = option(argv, "--report");
+    if (!input || !reportPath) throw new Error(command + " requires --input and --report");
+    return (dependencies.execute ?? executeRelease)({
+      input: resolve(input),
+      reportPath: resolve(reportPath),
+      priorPath: option(argv, "--prior-report"),
+      verifyOnly: command === "verify-registry",
+      dependencies,
     });
   }
-  const release = expectedModel(readManifests(root));
-  if (argv[2] === "tag") {
-    write(release.tag + "\n");
-    return;
-  }
-  if (argv[2] === "preflight") return verifyRegistry(release, fetchResponse);
-  if (argv[2] === "prepare-publication-workspace") {
-    const output = option(argv, "--output");
-    if (output === undefined) throw new Error("prepare-publication-workspace requires --output");
-    const scopes = await verifyRegistry(release, fetchResponse);
-    const packageNames = new Set(release.packages.map(({ name }) => name));
-    if (
-      !Array.isArray(scopes) ||
-      !scopes.length ||
-      new Set(scopes).size !== scopes.length ||
-      scopes.some((name) => !packageNames.has(name))
-    )
-      throw new Error("Strict registry selection did not produce exact missing package scopes");
-    const destination = resolve(output);
-    if (existsSync(destination))
-      throw new Error("Publication workspace already exists: " + destination);
-    try {
-      createWorkspace({
-        destination,
-        entries: readManifests(root),
-        selectedNames: scopes,
-        copy: (source, target) => cpSync(join(root, source), target, { recursive: true }),
-        mkdir: (path) => mkdirSync(path, { recursive: true }),
-        write: writeFileSync,
-      });
-    } catch (error) {
-      rmSync(destination, { force: true, recursive: true });
-      throw error;
-    }
-    return;
-  }
-  throw new Error(
-    "Supported commands are prepare, tag, preflight, and prepare-publication-workspace",
-  );
+  throw new Error("Supported commands: prepare, tag, preflight, publish, verify-registry");
 }
-if (
-  process.argv[1] !== undefined &&
-  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
-)
+
+/**
+ * Runs the archive preparation command with the current checkout policy.
+ *
+ * @param argv Command arguments.
+ * @param expected Current release model.
+ * @param dependencies Focused-test collaborators.
+ * @returns Prepared release manifest.
+ */
+function prepareCommand(argv, expected, dependencies) {
+  const check = argv.includes("--check");
+  const output = option(argv, "--output");
+  if (!check && !output) throw new Error("prepare requires --check or --output");
+  return (dependencies.prepare ?? prepareRelease)({
+    destination: output && resolve(output),
+    check,
+    expected,
+    sourceSha: sourceCommit(),
+    pack: ({ destination }) => packFrameworkArtifacts({ root, destination, run }),
+    prove: ({ destination, packages }) =>
+      proveExactTarballConsumer({ root, destination, packages, run }),
+    persist: writeReport,
+  });
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href)
   await main();

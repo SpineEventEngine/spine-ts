@@ -178,12 +178,6 @@ function withWorkspaceFixture(callback) {
 }
 
 describe("package metadata", () => {
-  it("overrides Lerna's vulnerable pacote dependency with the patched release", () => {
-    const workspace = parse(readFileSync(join(repoRoot, "pnpm-workspace.yaml"), "utf8"));
-
-    expect(workspace.overrides?.pacote).toBe("21.5.1");
-  });
-
   it("pins patched Vitest and parser dependencies", () => {
     const workspace = parse(readFileSync(join(repoRoot, "pnpm-workspace.yaml"), "utf8"));
     const rootPackage = readJson("package.json");

@@ -5769,7 +5769,8 @@ Consequences:
 
 ## D-0117: Delegate Externally Versioned Publication To Lerna
 
-Status: Accepted
+Status: Superseded by D-0122 for publication tooling and recovery. Historical
+record; implementation transition tracked in fix-publication-provenance.
 
 Date: 2026-08-26
 
@@ -5920,3 +5921,86 @@ Consequences: Project configuration supplies Astra High as the default for new
 project chats unless a person explicitly overrides it. Every child dispatch
 still names its model and reasoning. The tracked Codex profiles and the two
 active routing documents must remain synchronized when routing changes.
+
+## D-0122: Publish Tested Archives Through npm
+
+Status: Accepted; implemented, with release evidence tracked in the task record
+
+Date: 2026-09-30
+
+Context: Lerna is used only for publication. The latest failed release created
+some provenance records but could not retrieve them after a retried submission
+received a Rekor HTTP 409 conflict. The triggering network failure is unknown.
+The human requires keeping Sigstore provenance and token-free trusted publishing,
+removing Lerna, and avoiding vendor patches or long batch retries.
+
+Decision:
+
+- Keep pnpm for installation, building and packing; publish tested archives with
+  the pinned npm CLI. Reuse the existing package inventory, dependency order and
+  release policy. Do not add Changesets or a second versioning workflow.
+- Keep preparation separate from the OIDC-authorized publication job. Transfer
+  tested archives with their names, versions, checksums and source commit.
+- Publish serially with explicit provenance, registry, access and version-derived
+  tag. Snapshot releases advance snapshot only, never latest.
+- Permit at most one fresh npm invocation for a package after a positively
+  identified pre-upload Rekor HTTP 409 conflict. Establish that identification
+  with the actual pinned tooling before enabling it. No broad error retry,
+  Sigstore timeout increase, dependency patch or custom signing is permitted.
+- Record package-level outcomes and verify all public packages automatically.
+  A delayed public read is unconfirmed, not evidence an accepted upload failed.
+  Never resend an ambiguous upload merely because a later read returns 404.
+- Reuse the same archives for recovery; reject content mismatches and tag rollback.
+  Keep a read-only verification path separate from publication.
+
+Alternatives: Changesets adds version/changelog features we do not need and still
+requires the same recovery and registry checks. Its current pnpm adapter delegates
+to pnpm publication. Pinned pnpm recursive publication treats unresolved registry
+reads as missing and can lose its summary after a thrown error. Neither fixes the
+underlying Sigstore behavior. See the task's source findings for exact versions.
+
+Consequences: This replaces D-0117's Lerna-only requirement and permits a small
+npm command coordinator in existing release tooling. npm remains responsible for
+authentication, signing and registry uploads. Local regression checks prove only
+the behavior they exercise; successful live OIDC publication still requires an
+authorized GitHub publishing run. No publication or PR merge is authorized here.
+
+## D-0123: Save Only Changed Entity Records And Finish Inbox Scans
+
+Status: Accepted; implementation in progress
+
+Date: 2026-10-01
+
+Context: A real 1,000-recipient in-memory delivery exposed repeated copying of
+growing Entity collections and repeated reads of processed Inbox pages. The
+human rejected the TS-only expected-state conflict feature and requested the
+smallest correction consistent with current JVM behavior. The official JVM
+source inspected was `ea3067b137938ac0beb6920c39d11e300976fcc9`.
+
+Decision:
+
+- Entity commits replace the supplied current record without an expected-old-
+  state conflict result. Keep automatic versions, immutable-record checks,
+  native database retries, and unrelated Inbox/shard conditional updates.
+- Prepare only changed records in memory and apply them together under the
+  existing serialization rules. Do not copy whole Entity, history or Event
+  Store collections or add a generic transaction framework.
+- Finish a forward Inbox scan before restarting a scan that delivered messages.
+  Preserve page-local duplicate checks and the bounded recent-delivery cache;
+  do not introduce an unbounded identity set or persistent deduplication index.
+- Skip cleanup attempts for unexpired delivered records. Cleanup and retained-row
+  duplicate recognition use consistent time, with final checks before deletion.
+- Preserve documented MyISAM/Aria ordered partial writes and identical storage
+  retries. A lock does not provide rollback; no emulated transaction is added.
+
+Alternatives rejected: retaining the earlier conflict policy merely because
+tests enforce it; copying whole collections for rollback; skipping all delivered
+rows in queries; strengthening deduplication beyond the supported JVM pattern.
+
+Consequences: This supersedes the expected-state/conflict portion of the earlier
+T-0109 atomic-commit design brief. The published storage/provider interface
+changes; application handler APIs and persisted/wire layouts do not. All bundled
+adapters change together, without a compatibility shim for previous snapshots.
+The real 1,000-recipient benchmark must meet the under-one-second target;
+the design alone is not evidence of that result. See
+[the approved plan](tasks/fix-publication-provenance/entity-save-delivery-plan.md).

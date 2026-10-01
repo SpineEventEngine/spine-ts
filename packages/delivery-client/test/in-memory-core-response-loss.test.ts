@@ -18,7 +18,7 @@ import { describe, expect, it, vi } from "vitest";
 import { InboxService, ShardService } from "@spine-event-engine/proto/delivery-server";
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { create } from "@bufbuild/protobuf";
-import { DeliveryBuilder, ShardIndex } from "@spine-event-engine/server";
+import { DeliveryBuilder, ShardIndex, type InboxMessage } from "@spine-event-engine/server";
 import { InMemoryDelivery } from "@spine-event-engine/delivery-server";
 import { DeliveryClient, DeliveryOutcomeUnknownError, RemoteWorkRegistry } from "../src/index.js";
 import { RemoteInbox } from "../src/remote/adapters.js";
@@ -97,6 +97,196 @@ describe("in-memory delivery core response loss", () => {
     await expect(delivery.run({ shard, onMessage })).resolves.toEqual({ status: "COMPLETED" });
     expect(onMessage).toHaveBeenCalledWith(expect.objectContaining({ id: pending.id }));
     await expect(client.findOne(expired.id)).resolves.toBeUndefined();
+  });
+
+  it("continues a productive full remote page after cleanup removes its final cursor", async () => {
+    const core = InMemoryDelivery.create();
+    const client = DeliveryClient.usingTransport(
+      createRouterTransport((router) => router.service(InboxService, core.inbox)),
+    );
+    const inbox = new RemoteInbox(client);
+    const first = { ...domainMessage("first"), signalId: "first", whenReceived: new Date(1_000) };
+    const expired = {
+      ...domainMessage("expired-cursor"),
+      signalId: "expired-cursor",
+      whenReceived: new Date(2_000),
+      keepUntil: new Date(Date.now() - 60_000),
+    };
+    const later = { ...domainMessage("later"), signalId: "later", whenReceived: new Date(2_000) };
+    await client.writeOne(first);
+    await client.writeOne(expired);
+    await inbox.markDelivered(expired);
+    await client.writeOne(later);
+    const shard = ShardIndex.single();
+    const session = { kind: "EXCLUSIVE" as const, shard };
+    const onMessage = vi.fn((message: InboxMessage) => {
+      void message;
+    });
+    const delivery = new DeliveryBuilder()
+      .withContext({ name: "RemovedRemoteCursor", multitenant: false })
+      .withStorageFactory({} as never)
+      .withInbox(inbox)
+      .withWorkRegistry({
+        sessionKind: "EXCLUSIVE",
+        pickUp: () => Promise.resolve(session),
+        validateOwnership: () => Promise.resolve(session),
+        release: () => Promise.resolve(true),
+      })
+      .withPageSize(2)
+      .build();
+
+    await expect(delivery.run({ shard, onMessage })).resolves.toEqual({ status: "COMPLETED" });
+    expect(onMessage.mock.calls.map(([message]) => message.id.value)).toEqual(["first", "later"]);
+    await expect(client.findOne(expired.id)).resolves.toBeUndefined();
+  });
+
+  it("keeps a surviving cursor through a fully removed remote page", async () => {
+    const core = InMemoryDelivery.create();
+    const client = DeliveryClient.usingTransport(
+      createRouterTransport((router) => router.service(InboxService, core.inbox)),
+    );
+    const inbox = new RemoteInbox(client);
+    const first = {
+      ...domainMessage("retained-first"),
+      signalId: "retained-first",
+      keepUntil: new Date(Date.now() + 60_000),
+    };
+    await client.writeOne(first);
+    for (const index of [1, 2, 3]) {
+      const expired = {
+        ...domainMessage(`expired-${String(index)}`),
+        signalId: `expired-${String(index)}`,
+        whenReceived: new Date((index + 1) * 1_000),
+        keepUntil: new Date(Date.now() - 60_000),
+      };
+      await client.writeOne(expired);
+      await inbox.markDelivered(expired);
+    }
+    const later = {
+      ...domainMessage("after-removed-page"),
+      signalId: "after-removed-page",
+      whenReceived: new Date(5_000),
+    };
+    await client.writeOne(later);
+    const shard = ShardIndex.single();
+    const session = { kind: "EXCLUSIVE" as const, shard };
+    const onMessage = vi.fn((message: InboxMessage) => {
+      void message;
+    });
+    const delivery = new DeliveryBuilder()
+      .withContext({ name: "AllRemovedRemotePage", multitenant: false })
+      .withStorageFactory({} as never)
+      .withInbox(inbox)
+      .withWorkRegistry({
+        sessionKind: "EXCLUSIVE",
+        pickUp: () => Promise.resolve(session),
+        validateOwnership: () => Promise.resolve(session),
+        release: () => Promise.resolve(true),
+      })
+      .withPageSize(2)
+      .build();
+
+    await expect(delivery.run({ shard, onMessage })).resolves.toEqual({ status: "COMPLETED" });
+    expect(onMessage.mock.calls.map(([message]) => message.id.value)).toEqual([
+      "retained-first",
+      "after-removed-page",
+    ]);
+  });
+
+  it("starts at the beginning again when the first full page is wholly removed", async () => {
+    const core = InMemoryDelivery.create();
+    const client = DeliveryClient.usingTransport(
+      createRouterTransport((router) => router.service(InboxService, core.inbox)),
+    );
+    const inbox = new RemoteInbox(client);
+    for (const index of [1, 2]) {
+      const expired = {
+        ...domainMessage(`initial-expired-${String(index)}`),
+        signalId: `initial-expired-${String(index)}`,
+        whenReceived: new Date(index * 1_000),
+        keepUntil: new Date(Date.now() - 60_000),
+      };
+      await client.writeOne(expired);
+      await inbox.markDelivered(expired);
+    }
+    const later = {
+      ...domainMessage("after-initial-removal"),
+      signalId: "after-initial-removal",
+      whenReceived: new Date(3_000),
+    };
+    await client.writeOne(later);
+    const shard = ShardIndex.single();
+    const session = { kind: "EXCLUSIVE" as const, shard };
+    const onMessage = vi.fn((message: InboxMessage) => {
+      void message;
+    });
+    const delivery = new DeliveryBuilder()
+      .withContext({ name: "InitialRemovedRemotePage", multitenant: false })
+      .withStorageFactory({} as never)
+      .withInbox(inbox)
+      .withWorkRegistry({
+        sessionKind: "EXCLUSIVE",
+        pickUp: () => Promise.resolve(session),
+        validateOwnership: () => Promise.resolve(session),
+        release: () => Promise.resolve(true),
+      })
+      .withPageSize(2)
+      .build();
+
+    await expect(delivery.run({ shard, onMessage })).resolves.toEqual({ status: "COMPLETED" });
+    expect(onMessage.mock.calls.map(([message]) => message.id.value)).toEqual([
+      "after-initial-removal",
+    ]);
+  });
+
+  it("continues after removing a duplicate at the end of a full remote page", async () => {
+    const core = InMemoryDelivery.create();
+    const client = DeliveryClient.usingTransport(
+      createRouterTransport((router) => router.service(InboxService, core.inbox)),
+    );
+    const inbox = new RemoteInbox(client);
+    const first = {
+      ...domainMessage("first-duplicate-source"),
+      signalId: "shared-signal",
+      keepUntil: new Date(Date.now() + 60_000),
+    };
+    const duplicate = {
+      ...domainMessage("duplicate-cursor"),
+      signalId: first.signalId,
+      whenReceived: new Date(2_000),
+    };
+    const later = {
+      ...domainMessage("after-duplicate"),
+      signalId: "other-signal",
+      whenReceived: new Date(2_000),
+    };
+    await client.writeOne(first);
+    await client.writeOne(duplicate);
+    await client.writeOne(later);
+    const shard = ShardIndex.single();
+    const session = { kind: "EXCLUSIVE" as const, shard };
+    const onMessage = vi.fn((message: InboxMessage) => {
+      void message;
+    });
+    const delivery = new DeliveryBuilder()
+      .withContext({ name: "DuplicateRemoteCursor", multitenant: false })
+      .withStorageFactory({} as never)
+      .withInbox(inbox)
+      .withWorkRegistry({
+        sessionKind: "EXCLUSIVE",
+        pickUp: () => Promise.resolve(session),
+        validateOwnership: () => Promise.resolve(session),
+        release: () => Promise.resolve(true),
+      })
+      .withPageSize(2)
+      .build();
+
+    await expect(delivery.run({ shard, onMessage })).resolves.toEqual({ status: "COMPLETED" });
+    expect(onMessage.mock.calls.map(([message]) => message.id.value)).toEqual([
+      "first-duplicate-source",
+      "after-duplicate",
+    ]);
+    await expect(client.findOne(duplicate.id)).resolves.toBeUndefined();
   });
 
   it("recognizes a delivered acknowledgement committed before a lost response", async () => {

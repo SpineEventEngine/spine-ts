@@ -1,4 +1,12 @@
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, win32 } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -18,6 +26,8 @@ import {
   waitForChildClose,
 } from "./snapshot-process-termination.mjs";
 import { EventEmitter } from "node:events";
+import { parse } from "yaml";
+import { frameworkPackageNames } from "./package-artifacts.mjs";
 
 const repoRoot = new URL("..", import.meta.url).pathname;
 
@@ -265,6 +275,47 @@ describe("snapshot artifact containment", () => {
       rmSync(root, { recursive: true, force: true });
     }
   }, 180_000);
+
+  it("installs every exact archive online with scripts disabled before consumer proof", () => {
+    const destination = mkdtempSync(join(tmpdir(), "spine-exact-command-"));
+    const packages = frameworkPackageNames.map((name) => ({
+      name,
+      tarball: join(destination, name.split("/")[1] + ".tgz"),
+    }));
+    const expected = Object.fromEntries(
+      packages.map(({ name, tarball }) => [name, "file:" + tarball]),
+    );
+    const calls = [];
+    try {
+      expect(
+        proveExactTarballConsumer({
+          root: repoRoot,
+          destination,
+          packages,
+          run: (command, args, cwd) => {
+            calls.push([command, args]);
+            if (command !== "pnpm") return;
+            expect(args).toEqual(["install", "--ignore-scripts"]);
+            expect(
+              JSON.parse(readFileSync(join(cwd, "package.json"), "utf8")).dependencies,
+            ).toEqual(expected);
+            expect(parse(readFileSync(join(cwd, "pnpm-workspace.yaml"), "utf8")).overrides).toEqual(
+              expected,
+            );
+            mkdirSync(join(cwd, "node_modules"));
+          },
+        }),
+      ).toEqual(packages);
+      expect(calls.map(([command]) => command)).toEqual([
+        "pnpm",
+        process.execPath,
+        process.execPath,
+      ]);
+      expect(existsSync(join(destination, "consumer"))).toBe(false);
+    } finally {
+      rmSync(destination, { recursive: true, force: true });
+    }
+  });
 
   it("installs, compiles, imports, and executes all exact framework tarballs", () => {
     const root = mkdtempSync(join(tmpdir(), "spine-exact-tarball-consumer-"));

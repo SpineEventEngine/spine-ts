@@ -29,7 +29,12 @@ import {
 } from "@spine-event-engine/storage";
 import type { EntityStorageInput } from "@spine-event-engine/storage/provider";
 
-import { describeEntityMetadata, type DescriptorMessageSchema } from "./entity-metadata.js";
+import {
+  describeEntityMetadata,
+  type DescriptorFieldMetadata,
+  type DescriptorMessageSchema,
+  type EntityMetadata,
+} from "./entity-metadata.js";
 import type { PrimitiveId } from "../repository/primitive-id.js";
 
 /**
@@ -48,6 +53,7 @@ export const EntityRecords: EntityRecordConverter = Object.freeze({
    * @param state The current Entity state.
    * @param version The persisted Entity version.
    * @param lifecycle The persisted Entity lifecycle.
+   * @param idField A previously validated ID descriptor, when available.
    * @returns The generated JVM EntityRecord envelope.
    */
   pack(
@@ -56,12 +62,16 @@ export const EntityRecords: EntityRecordConverter = Object.freeze({
     state: Message,
     version: bigint | import("@spine-event-engine/proto").Version,
     lifecycle: { readonly archived: boolean; readonly deleted: boolean },
+    idField?: DescriptorFieldMetadata,
   ): EntityRecord {
     const versionNumber = typeof version === "bigint" ? version : BigInt(version.number);
     if (versionNumber < 0n || versionNumber > 2_147_483_647n) {
       throw new RangeError("EntityRecord version must fit the non-negative JVM int32 range.");
     }
-    const packedId = EntityIds.pack(schema, entityId);
+    const packedId =
+      idField === undefined
+        ? EntityIds.pack(schema, entityId)
+        : EntityIds.packField(idField.descriptor, entityId);
     return create(EntityRecordSchema, {
       entityId: packedId,
       state: AnyMessages.pack(schema, state),
@@ -109,21 +119,33 @@ export const EntityRecords: EntityRecordConverter = Object.freeze({
 /**
  * Creates provider input from a class-derived EntityRecord specification.
  *
+ * @typeParam I Entity identifier type.
  * @param context Identifies the storage namespace for entity records.
  * @param spec The Entity-class storage specification.
+ * @param metadata Repository metadata already validated for this schema.
  * @returns The storage input for generated JVM EntityRecord values.
  */
 export function entityStorageDescriptor<I>(
   context: StorageContext,
   spec: RecordSpec<I, EntityRecord>,
+  metadata?: EntityMetadata,
 ): EntityStorageInput<I, Message> {
+  if (metadata !== undefined && metadata.schema !== spec.sourceType)
+    throw new Error("Repository metadata does not match the Entity state schema.");
+  const packId = (id: I): Any =>
+    metadata === undefined
+      ? EntityIds.pack(spec.sourceType, id)
+      : EntityIds.packField(metadata.idField.descriptor, id);
   return {
     columns: spec.columns,
     context,
     id: {
       clone: (id) => structuredClone(id),
-      key: (id) => canonicalEntityIdKey(spec.sourceType, id),
-      pack: (id) => EntityIds.pack(spec.sourceType, id),
+      key: (id) =>
+        metadata === undefined
+          ? canonicalEntityIdKey(spec.sourceType, id)
+          : Buffer.from(toBinary(AnySchema, packId(id))).toString("base64"),
+      pack: packId,
       unpack: (id): I | undefined => {
         try {
           return spec.idValueIn(create(EntityRecordSchema, { entityId: id }));
@@ -145,14 +167,33 @@ export function entityStorageDescriptor<I>(
  */
 export const EntityIds: Readonly<{
   pack(schema: DescriptorMessageSchema, entityId: unknown): Any;
+  packField(field: DescriptorFieldMetadata["descriptor"], entityId: unknown): Any;
 }> = Object.freeze({
+  /**
+   * Packs an ID after validating its Entity state metadata.
+   *
+   * @param schema Entity state schema to validate.
+   * @param entityId Identifier to pack.
+   * @returns The packed identifier.
+   */
   pack(schema: DescriptorMessageSchema, entityId: unknown): Any {
     const idField = describeEntityMetadata(schema).idField.descriptor;
-    if (idField.fieldKind === "message") {
-      return Identifiers.pack(idField.message as DescriptorMessageSchema, entityId as never);
+    return EntityIds.packField(idField, entityId);
+  },
+
+  /**
+   * Packs an ID using an Entity descriptor validated by its repository.
+   *
+   * @param field The repository's validated ID field descriptor.
+   * @param entityId Identifier to pack.
+   * @returns The packed identifier.
+   */
+  packField(field: DescriptorFieldMetadata["descriptor"], entityId: unknown): Any {
+    if (field.fieldKind === "message") {
+      return Identifiers.pack(field.message as DescriptorMessageSchema, entityId as never);
     }
-    if (idField.fieldKind === "scalar") {
-      switch (primitiveIdKind(idField.scalar)) {
+    if (field.fieldKind === "scalar") {
+      switch (primitiveIdKind(field.scalar)) {
         case "string":
           return Identifiers.pack("string", entityId as string);
         case "int32":
@@ -190,40 +231,20 @@ export function standEntityStorageDescriptor(
  *
  * @param schema Generated Entity state schema.
  * @param columns State columns materialized from an unpacked EntityRecord.
+ * @param metadata Repository metadata already validated for this schema.
  * @returns The generated EntityRecord specification.
  * @internal
  */
 export function entityRecordSpec(
   schema: DescriptorMessageSchema,
   columns: readonly RecordColumn<Message>[],
+  metadata?: EntityMetadata,
 ): RecordSpec<Message | PrimitiveId, EntityRecord> {
-  const metadata = describeEntityMetadata(schema);
-  const input = {
-    sourceType: schema,
-    recordType: EntityRecordSchema,
-    columns: [
-      new RecordColumn<EntityRecord>(
-        "archived",
-        ColumnTypes.scalar(ScalarType.BOOL),
-        (record) => record.lifecycleFlags?.archived ?? false,
-      ),
-      new RecordColumn<EntityRecord>(
-        "deleted",
-        ColumnTypes.scalar(ScalarType.BOOL),
-        (record) => record.lifecycleFlags?.deleted ?? false,
-      ),
-      new RecordColumn<EntityRecord>("version", ColumnTypes.message(VersionSchema), (record) =>
-        clone(VersionSchema, record.version ?? create(VersionSchema)),
-      ),
-      ...columns.map(
-        (column) =>
-          new RecordColumn<EntityRecord>(column.name, column.type, (record) =>
-            column.valueIn(EntityRecords.unpack(schema, record).state),
-          ),
-      ),
-    ],
-  };
-  const idField = metadata.idField.descriptor;
+  if (metadata !== undefined && metadata.schema !== schema)
+    throw new Error("Repository metadata does not match the Entity state schema.");
+  const description = metadata ?? describeEntityMetadata(schema);
+  const input = EntityRecordSpecValues.input(schema, columns);
+  const idField = description.idField.descriptor;
   if (idField.fieldKind === "message")
     return new RecordSpec<Message, EntityRecord>({
       ...input,
@@ -239,6 +260,45 @@ export function entityRecordSpec(
     });
   throw new Error(`Entity ID field "${idField.name}" must be scalar or message-valued.`);
 }
+
+/**
+ * Builds the shared columns of generated Entity records.
+ */
+const EntityRecordSpecValues = {
+  /**
+   * Creates record columns while retaining the generated state schema.
+   * @param schema Generated Entity state schema.
+   * @param columns Columns materialized from the unpacked state.
+   * @returns The common EntityRecord specification fields.
+   */
+  input(schema: DescriptorMessageSchema, columns: readonly RecordColumn<Message>[]) {
+    return {
+      sourceType: schema,
+      recordType: EntityRecordSchema,
+      columns: [
+        new RecordColumn<EntityRecord>(
+          "archived",
+          ColumnTypes.scalar(ScalarType.BOOL),
+          (record) => record.lifecycleFlags?.archived ?? false,
+        ),
+        new RecordColumn<EntityRecord>(
+          "deleted",
+          ColumnTypes.scalar(ScalarType.BOOL),
+          (record) => record.lifecycleFlags?.deleted ?? false,
+        ),
+        new RecordColumn<EntityRecord>("version", ColumnTypes.message(VersionSchema), (record) =>
+          clone(VersionSchema, record.version ?? create(VersionSchema)),
+        ),
+        ...columns.map(
+          (column) =>
+            new RecordColumn<EntityRecord>(column.name, column.type, (record) =>
+              column.valueIn(EntityRecords.unpack(schema, record).state),
+            ),
+        ),
+      ],
+    };
+  },
+};
 
 function primitiveIdKind(type: ScalarType): "string" | "int32" | "int64" {
   switch (type) {
@@ -286,13 +346,31 @@ type EntityRecordValue = Readonly<{
 }>;
 
 type EntityRecordConverter = Readonly<{
+  /**
+   * Packs current state and metadata into a generated Entity record.
+   * @param schema Generated Entity state schema.
+   * @param entityId Authoritative Entity identifier.
+   * @param state Current Entity state.
+   * @param version Persisted Entity version.
+   * @param lifecycle Persisted lifecycle flags.
+   * @param idField Previously validated ID descriptor, when available.
+   * @returns The generated Entity record.
+   */
   pack(
     schema: DescriptorMessageSchema,
     entityId: unknown,
     state: Message,
     version: bigint | import("@spine-event-engine/proto").Version,
     lifecycle: { readonly archived: boolean; readonly deleted: boolean },
+    idField?: DescriptorFieldMetadata,
   ): EntityRecord;
+
+  /**
+   * Unpacks current state and metadata from a generated Entity record.
+   * @param schema Generated Entity state schema.
+   * @param record Stored Entity record.
+   * @returns Its state and durable metadata.
+   */
   unpack(schema: DescriptorMessageSchema, record: EntityRecord): EntityRecordValue;
 }>;
 

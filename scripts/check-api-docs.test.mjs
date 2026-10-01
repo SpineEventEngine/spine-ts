@@ -26,7 +26,6 @@ const expectedStorageProviderExports = [
   "DeliveryCleanupStorageFactories",
   "DeliveryCleanupStorageFactory",
   "EntityCommitInput",
-  "EntityCommitResult",
   "EntityCommitStorage",
   "EntityCommitStorageFactories",
   "EntityCommitStorageFactory",

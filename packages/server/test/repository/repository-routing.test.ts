@@ -88,11 +88,7 @@ import type {
   EntityStorageInput,
 } from "@spine-event-engine/storage/provider";
 import type { EntityRecord } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
-import type {
-  EntityCommitInput,
-  EntityCommitResult,
-  EntityCommitStorage,
-} from "@spine-event-engine/storage/provider";
+import type { EntityCommitInput, EntityCommitStorage } from "@spine-event-engine/storage/provider";
 import {
   CommandDispatchedToHandlerSchema,
   EntityArchivedSchema,
@@ -119,6 +115,7 @@ import {
   type EntityOptions,
   RepositoryIdentityError,
   ShardIndex,
+  Stand,
   EntityHandlers,
   HandlerRegistryIngestor,
   type EntityHandlersMetadata,
@@ -144,6 +141,7 @@ import { SystemClock } from "../../src/runtime/signal-metadata.js";
 import {
   repositoryAccess,
   repositoryReadAccess,
+  RepositoryStand,
   type RepositoryView,
 } from "../../src/repository/repository.js";
 import { EntityQueryDescription } from "@spine-event-engine/core/codegen";
@@ -6238,6 +6236,52 @@ describe("repository signal routing", () => {
     }
   });
 
+  it("replaces a prepared record ID without rereading state changed during a delayed Stand read", async () => {
+    const factory = new GatedStandReadStorageFactory();
+    const stand = new Stand({
+      context: { name: "PreparedRoutedSnapshot", multitenant: false },
+      storageFactory: factory,
+    });
+    stand.register(ProjectOverviewStateSchema);
+    const repository = createExecutingProjectionRepository();
+    const metadata = describeEntityMetadata(ProjectOverviewStateSchema);
+    const state = create(ProjectOverviewStateSchema, { id: "state-id", name: "Before" });
+    const version = create(VersionSchema, { number: 4 });
+    const lifecycle = { archived: true, deleted: false };
+    const observed: ProjectOverviewState[] = [];
+    stand.subscribe(ProjectOverviewStateSchema, (update) => {
+      observed.push(update.state);
+    });
+    factory.enableGate = true;
+    try {
+      const pending = standAccess.deferUpdate(
+        stand,
+        ProjectOverviewStateSchema,
+        state,
+        { version, lifecycle },
+        metadata,
+      );
+      await factory.reached;
+      state.name = "After";
+      version.number = 9;
+      lifecycle.archived = false;
+      factory.release();
+      const deferred = await pending;
+      const record = RepositoryStand.preparedRecord(repository, deferred, "routed-id");
+      expect(record.entityId).toEqual(Identifiers.pack("string", "routed-id"));
+      expect(EntityRecords.unpack(ProjectOverviewStateSchema, record)).toMatchObject({
+        state: { id: "state-id", name: "Before" },
+        version: 4n,
+        archived: true,
+      });
+      deferred.notify();
+      expect(observed).toMatchObject([{ id: "state-id", name: "Before" }]);
+    } finally {
+      factory.release();
+      await stand.close();
+    }
+  });
+
   it("uses one custom Event plan for every Aggregate target", async () => {
     GuardedAggregate.reset();
     let routeCalls = 0;
@@ -8169,6 +8213,15 @@ describe("repository signal routing", () => {
       .build();
     const dispatcher = repositoryAccess.eventDispatcher(repository);
     if (dispatcher === undefined) throw new Error("Expected Process Manager dispatcher.");
+    const delivery = new Delivery({
+      context: { name: "BatchFailure", multitenant: false },
+      storageFactory: factory,
+    });
+    // Keep the durable handoff in the same storage without replaying 1,000 unrelated handlers.
+    const descriptor = boundedContextAccess.delivery(context);
+    await descriptor.transition(descriptor.endpoints(), () => undefined, {
+      ports: { inbox: delivery.inbox, workRegistry: delivery.shards },
+    });
     // eslint-disable-next-line @typescript-eslint/unbound-method -- The spy calls it with the original Inbox instance.
     const receiveAll = LocalEntityInbox.prototype.receiveAll;
     const sizes: number[] = [];
@@ -8213,16 +8266,16 @@ describe("repository signal routing", () => {
       expect(sizes).toEqual([1_000, 1]);
       expect(eventIdReadsAtHandoff[1]).toBeGreaterThan(eventIdReadsAtHandoff[0] ?? 0);
       expect(warning).toHaveBeenCalledTimes(1);
-      const delivery = new Delivery({
-        context: { name: "BatchFailure", multitenant: false },
-        storageFactory: factory,
-      });
       const stored = await delivery.inbox.read(ShardIndex.single(), {
-        statuses: ["DELIVERED"],
+        statuses: ["TO_DELIVER"],
         limit: 1_000,
       });
       expect(stored).toHaveLength(1_000);
       expect(stored.every((row) => row.signalId === "batch-event")).toBe(true);
+      expect(stored.map((row) => Identifiers.unpack("string", row.inboxId.targetId))).toEqual(
+        ids.slice(0, 1_000),
+      );
+      expect(SplitRouteProcessManager.startedIds).toEqual([]);
     } finally {
       releaseFirst();
       handoff.mockRestore();
@@ -9699,111 +9752,6 @@ describe("repository signal routing", () => {
       context.stand().read(ProjectStateSchema, "aggregate-fails"),
     ).resolves.toBeUndefined();
     expect(changes).toEqual([]);
-  });
-
-  it("cancels aggregate, projection, and process-manager delivery when atomic storage replays", async () => {
-    const aggregateChanges: SpineEvent[] = [];
-    const aggregate = BoundedContext.singleTenant("Tasks")
-      .add(createExecutingRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [EntityStateChangedSchema],
-        dispatch: (event) => {
-          aggregateChanges.push(event);
-          return Promise.resolve();
-        },
-      })
-      .withStorageFactory(new OutcomeEntityCommitStorageFactory(["conflict"]))
-      .build();
-    const projection = BoundedContext.singleTenant("Tasks")
-      .add(createExecutingProjectionRepository())
-      .withStorageFactory(new OutcomeEntityCommitStorageFactory(["conflict"]))
-      .build();
-    const processManager = BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerAssignRepository())
-      .withStorageFactory(new OutcomeEntityCommitStorageFactory(["conflict"]))
-      .build();
-
-    try {
-      await aggregate
-        .commandBus()
-        .post(createAggregateCommand("aggregate-replay", "aggregate-replay"));
-      await projection
-        .eventBus()
-        .post(createProjectCreated("projection-replay", "projection-replay"));
-      await processManager.commandBus().post(createAggregateCommand("pm-replay", "pm-replay"));
-
-      await expect(
-        aggregate.stand().read(ProjectStateSchema, "aggregate-replay"),
-      ).resolves.toBeUndefined();
-      await expect(
-        projection.stand().read(ProjectOverviewStateSchema, "projection-replay"),
-      ).resolves.toBeUndefined();
-      await expect(
-        processManager.stand().read(ProjectQueueStateSchema, "pm-replay"),
-      ).resolves.toBeUndefined();
-      expect(aggregateChanges).toEqual([]);
-    } finally {
-      await Promise.all([aggregate.close(), projection.close(), processManager.close()]);
-    }
-  });
-
-  it("rejects aggregate, projection, and process-manager delivery on atomic commit conflicts", async () => {
-    const lifecycleEvents: SpineEvent[] = [];
-    const aggregate = BoundedContext.singleTenant("Tasks")
-      .add(createExecutingRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [
-          EntityCreatedSchema,
-          EntityStateChangedSchema,
-          EntityArchivedSchema,
-          EntityUnarchivedSchema,
-          EntityDeletedSchema,
-          EntityRestoredSchema,
-        ],
-        dispatch: (event) => {
-          lifecycleEvents.push(event);
-          return Promise.resolve();
-        },
-      })
-      .withStorageFactory(new OutcomeEntityCommitStorageFactory(["conflict"]))
-      .build();
-    const projection = BoundedContext.singleTenant("Tasks")
-      .add(createExecutingProjectionRepository())
-      .withStorageFactory(new OutcomeEntityCommitStorageFactory(["conflict"]))
-      .build();
-    const processManager = BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerAssignRepository())
-      .withStorageFactory(new OutcomeEntityCommitStorageFactory(["conflict"]))
-      .build();
-
-    try {
-      await expect(
-        aggregate
-          .commandBus()
-          .post(createAggregateCommand("aggregate-conflict", "aggregate-conflict")),
-      ).resolves.toBeUndefined();
-      await expect(
-        projection
-          .eventBus()
-          .post(createProjectCreated("projection-conflict", "projection-conflict")),
-      ).resolves.toBeUndefined();
-      await expect(
-        processManager.commandBus().post(createAggregateCommand("pm-conflict", "pm-conflict")),
-      ).resolves.toBeUndefined();
-
-      await expect(
-        aggregate.stand().read(ProjectStateSchema, "aggregate-conflict"),
-      ).resolves.toBeUndefined();
-      await expect(
-        projection.stand().read(ProjectOverviewStateSchema, "projection-conflict"),
-      ).resolves.toBeUndefined();
-      await expect(
-        processManager.stand().read(ProjectQueueStateSchema, "pm-conflict"),
-      ).resolves.toBeUndefined();
-      expect(lifecycleEvents).toEqual([]);
-    } finally {
-      await Promise.all([aggregate.close(), projection.close(), processManager.close()]);
-    }
   });
 
   it("does not expose process-manager state or follow-ups when its atomic commit fails", async () => {
@@ -14984,6 +14932,55 @@ class CountingProbeStorageFactory extends InMemoryStorageFactory {
   }
 }
 
+class GatedStandReadStorageFactory extends InMemoryStorageFactory {
+  enableGate = false;
+
+  #entered = false;
+
+  #release!: () => void;
+  #reached!: () => void;
+  readonly reached = new Promise<void>((resolve) => {
+    this.#reached = resolve;
+  });
+  readonly #gate = new Promise<void>((resolve) => {
+    this.#release = resolve;
+  });
+
+  release(): void {
+    this.#release();
+  }
+
+  override createEntityStorage(input: unknown): unknown {
+    const storage = super.createEntityStorage(input) as {
+      readonly current: {
+        read(id: unknown): Promise<unknown>;
+        write(record: unknown): Promise<void>;
+      };
+      readonly states: unknown;
+      readonly events: unknown;
+      close(): void;
+    };
+    return {
+      current: {
+        read: async (id: unknown) => {
+          if (this.enableGate && !this.#entered) {
+            this.#entered = true;
+            this.#reached();
+            await this.#gate;
+          }
+          return storage.current.read(id);
+        },
+        write: (record: unknown) => storage.current.write(record),
+      },
+      states: storage.states,
+      events: storage.events,
+      close: () => {
+        storage.close();
+      },
+    };
+  }
+}
+
 class GatedAggregateEventStorageFactory extends InMemoryStorageFactory {
   #release!: () => void;
   #reached!: () => void;
@@ -15026,12 +15023,10 @@ class GatedAggregateEventStorageFactory extends InMemoryStorageFactory {
   ): EntityCommitStorage {
     const storage = super.createEntityCommitStorage(input);
     return {
-      commit: async <I, S extends Message>(
-        unit: EntityCommitInput<I, S>,
-      ): Promise<EntityCommitResult> => {
+      commit: async <I, S extends Message>(unit: EntityCommitInput<I, S>): Promise<void> => {
         this.#reached();
         await this.#gate;
-        return await storage.commit(unit);
+        await storage.commit(unit);
       },
       close: () => {
         storage.close();
@@ -15048,14 +15043,12 @@ class FailingEntityCommitStorageFactory extends InMemoryStorageFactory {
   ): EntityCommitStorage {
     const storage = super.createEntityCommitStorage(input);
     return {
-      commit: async <I, S extends Message>(
-        unit: EntityCommitInput<I, S>,
-      ): Promise<EntityCommitResult> => {
+      commit: async <I, S extends Message>(unit: EntityCommitInput<I, S>): Promise<void> => {
         if (this.#remainingFailures > 0) {
           this.#remainingFailures -= 1;
           throw new Error("forced Entity commit failure");
         }
-        return await storage.commit(unit);
+        await storage.commit(unit);
       },
       close: () => {
         storage.close();
@@ -15107,38 +15100,13 @@ class FailingSourceDiagnosticStorageFactory extends InMemoryStorageFactory {
   ): EntityCommitStorage {
     const storage = super.createEntityCommitStorage(input);
     return {
-      commit: async <I, S extends Message>(
-        unit: EntityCommitInput<I, S>,
-      ): Promise<EntityCommitResult> => {
+      commit: async <I, S extends Message>(unit: EntityCommitInput<I, S>): Promise<void> => {
         if (this.#failCommit && (unit.diagnostics?.length ?? 0) > 0) {
           this.#failCommit = false;
           throw new Error("forced source diagnostic commit failure");
         }
-        return await storage.commit(unit);
+        await storage.commit(unit);
       },
-      close: () => {
-        storage.close();
-      },
-    } satisfies EntityCommitStorage;
-  }
-}
-
-class OutcomeEntityCommitStorageFactory extends InMemoryStorageFactory {
-  #outcomes: EntityCommitResult[];
-
-  constructor(outcomes: readonly EntityCommitResult[]) {
-    super();
-    this.#outcomes = [...outcomes];
-  }
-
-  protected override createEntityCommitStorage<I, S extends Message>(
-    input: EntityStorageInput<I, S>,
-  ): EntityCommitStorage {
-    const storage = super.createEntityCommitStorage(input);
-    return {
-      commit: async <I, S extends Message>(
-        unit: EntityCommitInput<I, S>,
-      ): Promise<EntityCommitResult> => this.#outcomes.shift() ?? (await storage.commit(unit)),
       close: () => {
         storage.close();
       },

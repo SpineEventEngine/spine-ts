@@ -22,4 +22,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm audit:release
       - run: pnpm verify:release
+      - run: node --version | grep -Fx 'v24.18.0' && npm --version | grep -Fx '11.16.0'
+      - run: node --test scripts/npm-rekor-recovery.repro.mjs
       - run: node scripts/release-cli.mjs prepare --check

@@ -63,7 +63,10 @@ import {
 import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
 import type { Query } from "@spine-event-engine/proto/client";
 import { EntityTypeNameSchema } from "@spine-event-engine/proto/generated/spine/system/server/entity_type_pb.js";
-import type { EntityRecord } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
+import {
+  EntityRecordSchema,
+  type EntityRecord,
+} from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import {
   type StorageContext,
   type StorageFactory,
@@ -129,7 +132,7 @@ import {
   EntityRecords,
   entityStorageDescriptor,
 } from "../entity/entity-storage-descriptor.js";
-import { SpecScanner } from "../entity/spec-scanner.js";
+import { repositorySpecScanner } from "../entity/spec-scanner.js";
 import {
   CommandRegistrationReadiness,
   type CommandRegistrationReadinessLookup,
@@ -2168,18 +2171,10 @@ class AggregateExecutionSupport {
       this.#repository.stateSchema,
       state,
       RepositoryStand.standUpdateOptions(this.#storageContext.tenantId, versionMessage, lifecycle),
+      this.#repository.metadata,
     );
     try {
-      const outcome = await this.#commitAggregateRecord(
-        loaded,
-        entityId,
-        state,
-        versionMessage,
-        lifecycle,
-        events,
-        diagnostics,
-      );
-      if (outcome !== "committed") throw new Error("Concurrent Aggregate state commit conflict.");
+      await this.#commitAggregateRecord(loaded, entityId, events, diagnostics, deferred);
       entityStateHistoryCaches.get(loaded.entity)?.clear();
     } catch (error) {
       deferred.cancel();
@@ -2212,34 +2207,23 @@ class AggregateExecutionSupport {
    *
    * @param loaded Loaded Aggregate and commit storage.
    * @param entityId Aggregate identifier.
-   * @param state Accepted Aggregate state.
-   * @param version Current Spine Version.
-   * @param lifecycle Accepted lifecycle flags.
    * @param events Produced Events to retain and publish.
    * @param diagnostics Events to retain in the diagnostic history.
-   * @returns The storage commit outcome.
+   * @param deferred Stand update containing the prepared record.
+   * @returns Completion after the storage commit.
    */
   #commitAggregateRecord(
     loaded: LoadedAggregate,
     entityId: unknown,
-    state: Message,
-    version: Version,
-    lifecycle: EntityLifecycleFlags,
     events: readonly Event[],
     diagnostics: readonly Event[],
-  ): Promise<"committed" | "conflict"> {
-    const record = EntityRecords.pack(
-      this.#repository.stateSchema,
-      entityId,
-      state,
-      version,
-      lifecycle,
-    );
+    deferred: Awaited<ReturnType<typeof standAccess.deferUpdate>>,
+  ): Promise<void> {
+    const record = RepositoryStand.preparedRecord(this.#repository, deferred, entityId);
     return loaded.commits.commit({
       context: this.#storageContext,
       entity: loaded.storageInput,
       entityId,
-      ...(loaded.current === undefined ? {} : { expected: loaded.current }),
       next: record,
       ...(RepositoryStorage.historyConfiguration(this.#repository).stateHistory
         ? { states: [record] }
@@ -3185,8 +3169,9 @@ class ProjectionEventExecution {
       this.#repository.stateSchema,
       state,
       RepositoryStand.standUpdateOptions(tenantOptions.tenantId, version, lifecycle),
+      this.#repository.metadata,
     );
-    await this.#commitProjectionOrCancel(loaded, entityId, state, version, lifecycle, deferred);
+    await this.#commitProjectionOrCancel(loaded, entityId, deferred);
     this.#notifyProjection(deferred);
     this.#publishProjectionChange(loaded, oldState, mode, state, lifecycle, version);
   }
@@ -3196,29 +3181,16 @@ class ProjectionEventExecution {
    *
    * @param loaded Loaded Projection and commit storage.
    * @param entityId Projection identifier.
-   * @param state Accepted Projection state.
-   * @param version Current Spine Version.
-   * @param lifecycle Accepted lifecycle flags.
    * @param deferred Deferred Stand update to cancel if storage rejects the commit.
    * @returns Completion after a successful storage commit.
    */
   async #commitProjectionOrCancel(
     loaded: LoadedRepositoryEntity,
     entityId: unknown,
-    state: Message,
-    version: Version,
-    lifecycle: EntityLifecycleFlags,
     deferred: Awaited<ReturnType<typeof standAccess.deferUpdate>>,
   ): Promise<void> {
     try {
-      const outcome = await this.#commitProjectionRecord(
-        loaded,
-        entityId,
-        state,
-        version,
-        lifecycle,
-      );
-      if (outcome !== "committed") throw new Error("Concurrent Projection state commit conflict.");
+      await this.#commitProjectionRecord(loaded, entityId, deferred);
     } catch (error) {
       deferred.cancel();
       throw error;
@@ -3243,30 +3215,19 @@ class ProjectionEventExecution {
    *
    * @param loaded Loaded Projection and commit storage.
    * @param entityId Projection identifier.
-   * @param state Accepted Projection state.
-   * @param version Current Spine Version.
-   * @param lifecycle Accepted lifecycle flags.
-   * @returns The storage commit outcome.
+   * @param deferred Stand update containing the prepared record.
+   * @returns Completion after the storage commit.
    */
   #commitProjectionRecord(
     loaded: LoadedRepositoryEntity,
     entityId: unknown,
-    state: Message,
-    version: Version,
-    lifecycle: EntityLifecycleFlags,
-  ): Promise<"committed" | "conflict"> {
-    const record = EntityRecords.pack(
-      this.#repository.stateSchema,
-      entityId,
-      state,
-      version,
-      lifecycle,
-    );
+    deferred: Awaited<ReturnType<typeof standAccess.deferUpdate>>,
+  ): Promise<void> {
+    const record = RepositoryStand.preparedRecord(this.#repository, deferred, entityId);
     return loaded.commits.commit({
       context: loaded.storageInput.context,
       entity: loaded.storageInput,
       entityId,
-      ...(loaded.current === undefined ? {} : { expected: loaded.current }),
       next: record,
       ...(RepositoryStorage.historyConfiguration(this.#repository).stateHistory
         ? { states: [record] }
@@ -3639,16 +3600,9 @@ class ProcessManagerExecutionSupport {
       this.#repository.stateSchema,
       state,
       RepositoryStand.standUpdateOptions(options.tenantId, version, lifecycle),
+      this.#repository.metadata,
     );
-    await this.#storeProcessManagerRecord(
-      loaded,
-      entityId,
-      state,
-      version,
-      lifecycle,
-      events,
-      deferred,
-    );
+    await this.#storeProcessManagerRecord(loaded, entityId, events, deferred);
     this.#notifyProcessManager(deferred, events);
     return true;
   }
@@ -3674,9 +3628,6 @@ class ProcessManagerExecutionSupport {
    *
    * @param loaded Process Manager and commit storage.
    * @param entityId Process Manager identifier.
-   * @param state Accepted Process Manager state.
-   * @param version Current Spine Version.
-   * @param lifecycle Accepted lifecycle flags.
    * @param events Diagnostic Events to retain when configured.
    * @param deferred Stand update to notify or cancel.
    * @returns Completion after durable persistence.
@@ -3684,24 +3635,11 @@ class ProcessManagerExecutionSupport {
   async #storeProcessManagerRecord(
     loaded: LoadedRepositoryEntity,
     entityId: unknown,
-    state: Message,
-    version: Version,
-    lifecycle: EntityLifecycleFlags,
     events: readonly Event[],
     deferred: Awaited<ReturnType<typeof standAccess.deferUpdate>>,
   ): Promise<void> {
     try {
-      const outcome = await this.#commitProcessManagerRecord(
-        loaded,
-        entityId,
-        state,
-        version,
-        lifecycle,
-        events,
-      );
-      if (outcome !== "committed") {
-        throw new Error("Concurrent Process Manager state commit conflict.");
-      }
+      await this.#commitProcessManagerRecord(loaded, entityId, events, deferred);
       entityStateHistoryCaches.get(loaded.entity)?.clear();
     } catch (error) {
       deferred.cancel();
@@ -3714,33 +3652,22 @@ class ProcessManagerExecutionSupport {
    *
    * @param loaded Loaded Process Manager and commit storage.
    * @param entityId Process Manager identifier.
-   * @param state Accepted Process Manager state.
-   * @param version Current Spine Version.
-   * @param lifecycle Accepted lifecycle flags.
    * @param events Diagnostic Events to retain when configured.
-   * @returns The storage commit outcome.
+   * @param deferred Stand update containing the prepared record.
+   * @returns Completion after the storage commit.
    */
   #commitProcessManagerRecord(
     loaded: LoadedRepositoryEntity,
     entityId: unknown,
-    state: Message,
-    version: Version,
-    lifecycle: EntityLifecycleFlags,
     events: readonly Event[],
-  ): Promise<"committed" | "conflict"> {
+    deferred: Awaited<ReturnType<typeof standAccess.deferUpdate>>,
+  ): Promise<void> {
     const history = RepositoryStorage.historyConfiguration(this.#repository);
-    const record = EntityRecords.pack(
-      this.#repository.stateSchema,
-      entityId,
-      state,
-      version,
-      lifecycle,
-    );
+    const record = RepositoryStand.preparedRecord(this.#repository, deferred, entityId);
     return loaded.commits.commit({
       context: loaded.storageInput.context,
       entity: loaded.storageInput,
       entityId,
-      ...(loaded.current === undefined ? {} : { expected: loaded.current }),
       next: record,
       ...(history.stateHistory ? { states: [record] } : {}),
       ...(history.processManagerEventHistory
@@ -5403,7 +5330,7 @@ const RepositorySignals = {
     entityId: unknown,
     version?: Version,
   ): NonNullable<Event["context"]> {
-    const producerId = EntityIds.pack(repository.stateSchema, entityId);
+    const producerId = EntityIds.packField(repository.idField.descriptor, entityId);
     return create(EventContextSchema, {
       ...context,
       producerId,
@@ -5867,7 +5794,7 @@ class EntityStateChangePublishing {
    * @returns Packed identifier.
    */
   #packEntityId(repository: RepositoryView, entityId: unknown) {
-    return EntityIds.pack(repository.stateSchema, entityId);
+    return EntityIds.packField(repository.idField.descriptor, entityId);
   }
 }
 const EntityStateChangePublisher = Object.freeze(new EntityStateChangePublishing());
@@ -6050,7 +5977,7 @@ class HandlerDispatchPublishing {
    * @returns Packed identifier.
    */
   #packEntityId(repository: RepositoryView, entityId: unknown): Any {
-    return EntityIds.pack(repository.stateSchema, entityId);
+    return EntityIds.packField(repository.idField.descriptor, entityId);
   }
 
   /**
@@ -6094,8 +6021,28 @@ Object.freeze(RepositorySignals);
 
 /**
  * Internal repository stand operations.
+ * @internal
  */
-const RepositoryStand = {
+export const RepositoryStand = {
+  /**
+   * Returns the validated Stand snapshot with the authoritative routed ID.
+   *
+   * @param repository Supplies the state schema and validated ID descriptor.
+   * @param deferred Contains the prepared Stand record.
+   * @param entityId Authoritative routed Entity identifier.
+   * @returns An isolated prepared record with the authoritative packed ID.
+   */
+  preparedRecord(
+    repository: RepositoryView,
+    deferred: Awaited<ReturnType<typeof standAccess.deferUpdate>>,
+    entityId: unknown,
+  ): EntityRecord {
+    const expectedId = EntityIds.packField(repository.idField.descriptor, entityId);
+    const record = clone(EntityRecordSchema, deferred.record);
+    record.entityId = expectedId;
+    return record;
+  },
+
   /**
    * Builds tenant, Version, and lifecycle options for a Stand update.
    *
@@ -8016,9 +7963,9 @@ const RepositoryStorage = {
     factory: StorageFactory,
     input: EntityStorageInput<I, S>,
   ): RepositoryEntityStorage<I, S> {
-    const handle = RepositoryStorage.openEntityStorage(factory, input);
     const key = JSON.stringify({ context: input.context, state: input.sourceType.typeName });
     let handles = repositoryEntityHandles.get(repository);
+    const handle = RepositoryStorage.openEntityStorage(factory, input);
     if (handles === undefined) {
       handles = new Map();
       repositoryEntityHandles.set(repository, handles);
@@ -8045,7 +7992,8 @@ const RepositoryStorage = {
   ): EntityStorageInput<unknown, Message> {
     const descriptor = entityStorageDescriptor(
       context,
-      SpecScanner.scan(repository.entityType),
+      repositorySpecScanner.scan(repository.entityType, repository.metadata),
+      repository.metadata,
     ) as EntityStorageInput<unknown, Message>;
     const history = RepositoryStorage.historyConfiguration(repository);
     return {

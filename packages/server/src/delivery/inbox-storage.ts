@@ -39,13 +39,32 @@ import type { DeliveryWorkSession } from "./delivery-ports.js";
 
 const defaultReadLimit = 100;
 const maxReadLimit = 1_000;
+const storageClocks = new WeakMap<InboxStorage, () => Date>();
+
+/**
+ * Internal clock access for concrete local inbox delivery.
+ * @internal
+ */
+export const InboxStorageClock: Readonly<{ read(storage: InboxStorage): Date }> = Object.freeze({
+  /**
+   * Reads the configured storage clock.
+   * @param storage Supplies the concrete local storage.
+   * @returns Its current retention time.
+   */
+  read(storage: InboxStorage): Date {
+    const clock = storageClocks.get(storage);
+    return clock === undefined ? new Date() : new Date(Values.now(clock));
+  },
+});
 
 /**
  * Stores direct generated inbox records in the configured durable family.
  */
 export class InboxStorage {
   readonly #context: StorageContext;
+
   readonly #storageFactory: StorageFactory;
+
   readonly #now: () => Date;
 
   /**
@@ -57,6 +76,7 @@ export class InboxStorage {
     this.#context = Values.snapshotContext(options.context);
     this.#storageFactory = options.storageFactory;
     this.#now = options.now ?? (() => new Date());
+    storageClocks.set(this, this.#now);
     Object.freeze(this);
   }
 
@@ -298,6 +318,12 @@ export interface InboxStorageOptions {
 }
 
 const Values = Object.freeze({
+  /**
+   * Copies the storage context and its tenant ID.
+   *
+   * @param context Supplies the context to copy.
+   * @returns A detached context snapshot.
+   */
   snapshotContext(context: StorageContext): StorageContext {
     return context.multitenant
       ? {
@@ -307,28 +333,71 @@ const Values = Object.freeze({
         }
       : { name: context.name, multitenant: false };
   },
+
+  /**
+   * Converts an inbox status to its stored numeric value.
+   *
+   * @param value Supplies the inbox status.
+   * @returns The stored status value.
+   */
   status(value: DeliveryStatus): number {
     return { TO_DELIVER: 1, SCHEDULED: 2, DELIVERED: 3, TO_CATCH_UP: 4 }[value];
   },
+
+  /**
+   * Builds the Protobuf inbox message ID from its value and shard.
+   *
+   * @param value Supplies the inbox message ID.
+   * @returns The wire-format message ID.
+   */
   id(value: InboxMessageId): WireInboxMessageId {
     return create(InboxMessageIdSchema, {
       uuid: value.value,
       index: { index: value.shard.index, ofTotal: value.shard.ofTotal },
     });
   },
+
+  /**
+   * Reads the required ID from a wire inbox message.
+   *
+   * @param value Supplies the wire inbox message.
+   * @returns Its message ID.
+   */
   wireId(value: WireInboxMessage): WireInboxMessageId {
     if (value.id === undefined) throw new InboxMessageError("Inbox message ID is invalid.");
     return value.id;
   },
+
+  /**
+   * Compares two wire inbox messages by their encoded record data.
+   *
+   * @param left Supplies the first wire message.
+   * @param right Supplies the second wire message.
+   * @returns Whether both messages encode to the same data.
+   */
   same(left: WireInboxMessage, right: WireInboxMessage): boolean {
     return Buffer.from(toBinary(inboxRecordSpec.recordType, left)).equals(
       Buffer.from(toBinary(inboxRecordSpec.recordType, right)),
     );
   },
+
+  /**
+   * Checks and returns a shard index.
+   *
+   * @param value Supplies the value to check.
+   * @returns The valid shard index.
+   */
   shard(value: unknown): ShardIndex {
     if (!(value instanceof ShardIndex)) throw new InboxMessageError("Inbox shard is invalid.");
     return value;
   },
+
+  /**
+   * Checks an inbox page limit.
+   *
+   * @param value Supplies the requested limit.
+   * @returns The valid page limit.
+   */
   limit(value: unknown): number {
     if (
       !Number.isSafeInteger(value) ||
@@ -342,12 +411,27 @@ const Values = Object.freeze({
     }
     return value;
   },
+
+  /**
+   * Checks an optional inbox page offset.
+   *
+   * @param value Supplies the requested offset.
+   * @returns The valid offset, or undefined when omitted.
+   */
   offset(value: unknown): number | undefined {
     if (value === undefined) return undefined;
     if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0)
       throw new InboxMessageError("Inbox read offset must be a non-negative safe integer.");
     return value;
   },
+
+  /**
+   * Converts and checks a continuation for one shard query.
+   *
+   * @param value Supplies the continuation, when present.
+   * @param shard Identifies the shard being queried.
+   * @returns The normalized record-query continuation.
+   */
   after(value: InboxReadOptions["after"], shard: ShardIndex) {
     if (value === undefined) return undefined;
     if (
@@ -369,6 +453,13 @@ const Values = Object.freeze({
       id: Values.id({ value: value.messageId, shard }),
     };
   },
+
+  /**
+   * Converts milliseconds to a Protobuf timestamp.
+   *
+   * @param ms Supplies the time in milliseconds.
+   * @returns The equivalent Protobuf timestamp.
+   */
   timestamp(ms: number) {
     const seconds = Math.floor(ms / 1_000);
     return create(TimestampSchema, {
@@ -376,16 +467,36 @@ const Values = Object.freeze({
       nanos: (ms - seconds * 1_000) * 1_000_000,
     });
   },
+
+  /**
+   * Checks for atomic compare-and-set support in inbox record storage.
+   *
+   * @param storage Supplies the inbox record storage.
+   */
   atomic(storage: RecordStorage<WireInboxMessageId, WireInboxMessage>): void {
     if (!storage.atomicCompareAndSet)
       throw new InboxMessageError("Inbox storage requires atomic compare-and-set.");
   },
+
+  /**
+   * Reads and validates the configured clock.
+   *
+   * @param clock Supplies the time source.
+   * @returns The current time in milliseconds.
+   */
   now(clock: () => Date): number {
     const value = clock();
     if (!(value instanceof Date) || !Number.isFinite(value.getTime()))
       throw new InboxMessageError("Inbox storage clock returned an invalid time.");
     return value.getTime();
   },
+
+  /**
+   * Creates the storage context used for inbox records.
+   *
+   * @param context Supplies the caller's storage context.
+   * @returns The context reserved for delivery inbox storage.
+   */
   context(context: StorageContext): StorageContext {
     return context.multitenant
       ? {
@@ -395,6 +506,13 @@ const Values = Object.freeze({
         }
       : { name: `${context.name}.delivery.inbox`, multitenant: false };
   },
+
+  /**
+   * Converts a shard session to its stored Protobuf record.
+   *
+   * @param value Supplies the shard session.
+   * @returns The stored shard-session record.
+   */
   session(value: import("./sharded-work-registry.js").ShardSession) {
     return create(ShardSessionRecordSchema, {
       index: { index: value.shard.index, ofTotal: value.shard.ofTotal },
@@ -402,6 +520,15 @@ const Values = Object.freeze({
       worker: value.worker,
     });
   },
+
+  /**
+   * Checks whether a stored session matches the expected live session.
+   *
+   * @param value Supplies the stored session record.
+   * @param expected Supplies the expected shard session.
+   * @param now Supplies the current time in milliseconds.
+   * @returns Whether the shard, worker, and expiry match.
+   */
   sessionCurrent(
     value: import("@spine-event-engine/proto/delivery").ShardSessionRecord,
     expected: import("./sharded-work-registry.js").ShardSession,

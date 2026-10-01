@@ -130,6 +130,8 @@ export interface MysqlCreateOperation {
  *
  * @param table Describes the resolved table layout.
  * @returns Returns the create-table operation.
+ * @typeParam I Record identifier type.
+ * @typeParam R Stored Protobuf message type.
  */
 export type CreateOperationFactory = <I, R extends Message>(
   table: MysqlTableSpec<I, R>,
@@ -174,6 +176,7 @@ export interface MysqlStorageFactoryBuilder {
    * @param sourceType Identifies the ungrouped family source Protobuf type.
    * @param name Specifies the physical table name.
    * @returns Returns this builder.
+   * @typeParam S Source Protobuf message type.
    */
   setTableName<S extends Message>(sourceType: GenMessage<S>, name: string): this;
 
@@ -184,6 +187,8 @@ export interface MysqlStorageFactoryBuilder {
    * @param recordType Identifies the record Protobuf type.
    * @param name Specifies the physical table name.
    * @returns Returns this builder.
+   * @typeParam S Source Protobuf message type.
+   * @typeParam R Stored Protobuf record type.
    */
   setTableName<S extends Message, R extends Message>(
     sourceType: GenMessage<S>,
@@ -237,10 +242,23 @@ export { MysqlStorageOperationError } from "./errors.js";
  */
 export class MysqlStorageFactory extends StorageFactory {
   readonly #handles = new Set<{ close(): void }>();
+
   readonly #resolver: MysqlTableResolver;
+
   readonly #databases: ReadonlyMap<string | symbol, MysqlDatabase>;
+
   readonly #catalog: TenantCatalog;
+
   #closed: Promise<void> | undefined;
+
+  /**
+   * Creates the factory from connected tenant databases.
+   *
+   * @param databases Supplies configured tenant databases.
+   * @param resolver Resolves record-family table names.
+   * @param createOperation Creates optional table SQL.
+   * @param stringifiers Converts message-valued IDs and columns.
+   */
   private constructor(
     databases: readonly MysqlDatabase[],
     resolver = new MysqlTableResolver(),
@@ -320,7 +338,9 @@ export class MysqlStorageFactory extends StorageFactory {
    * @param context Provides the storage context.
    * @param spec Describes the record family.
    * @param group Identifies an optional storage group.
-   * @returns Returns the record-family storage handle.
+   * @typeParam I Record identifier type.
+   * @typeParam R Stored Protobuf message type.
+   * @returns The record-family storage handle.
    */
   protected override onCreateRecordStorage<I, R extends Message>(
     context: StorageContext,
@@ -329,6 +349,18 @@ export class MysqlStorageFactory extends StorageFactory {
   ): RecordStorage<I, R> {
     return this.createMysqlRecordStorage(context, spec, group);
   }
+
+  /**
+   * Creates a record-family handle for its tenant database.
+   *
+   * @typeParam I Record identifier type.
+   * @typeParam R Stored Protobuf message type.
+   * @param context Supplies the storage and tenant context.
+   * @param spec Defines the record family.
+   * @param group Selects a grouped history family, when present.
+   * @param database Supplies the resolved tenant database.
+   * @returns The opened MySQL record-storage handle.
+   */
   private createMysqlRecordStorage<I, R extends Message>(
     context: StorageContext,
     spec: RecordSpec<I, R>,
@@ -368,8 +400,10 @@ export class MysqlStorageFactory extends StorageFactory {
   /**
    * Creates MySQL storage for one Entity family.
    *
+   * @typeParam I Entity identifier type.
+   * @typeParam S Entity state message type.
    * @param input Configures the Entity storage families.
-   * @returns Returns the MySQL Entity storage handle.
+   * @returns The MySQL Entity storage handle.
    */
   private createEntityStorage<I, S extends Message>(
     input: EntityStorageInput<I, S>,
@@ -387,10 +421,14 @@ export class MysqlStorageFactory extends StorageFactory {
   }
 
   /**
-   * Creates MySQL storage for atomic Entity commits.
+   * Creates MySQL storage for Entity commits. MyISAM and Aria tables may retain
+   * partial writes when a commit fails; transactional table engines roll back
+   * the commit.
    *
+   * @typeParam I Entity identifier type.
+   * @typeParam S Entity state message type.
    * @param input Configures the Entity storage families.
-   * @returns Returns the Entity commit storage handle.
+   * @returns The Entity commit storage handle.
    */
   private createEntityCommitStorage<I, S extends Message>(
     input: EntityStorageInput<I, S>,
@@ -409,6 +447,13 @@ export class MysqlStorageFactory extends StorageFactory {
     this.#handles.add(handle);
     return handle;
   }
+
+  /**
+   * Creates the connection lifecycle for one tenant database.
+   *
+   * @param database Supplies the tenant database pool.
+   * @returns The connection acquisition and release operations.
+   */
   private connections(database: MysqlDatabase): MysqlRecordLifecycle {
     return {
       databaseName: database.databaseName,
@@ -419,6 +464,12 @@ export class MysqlStorageFactory extends StorageFactory {
     };
   }
 
+  /**
+   * Resolves the database configured for a storage context.
+   *
+   * @param context Supplies the storage and tenant context.
+   * @returns The configured tenant database.
+   */
   private database(context: StorageContext): MysqlDatabase {
     const boundary = TenantBoundary.of(context);
     const database = this.#databases.get(boundary.key);
@@ -433,7 +484,7 @@ export class MysqlStorageFactory extends StorageFactory {
   /**
    * Connects to MySQL and creates an initialized storage factory.
    *
-   * @param options Specifies the MySQL connection options.
+   * @param entries Supplies the tenant database configurations to connect.
    * @param resolver Resolves configured record-family table names.
    * @param createOperation Creates optional table-creation SQL.
    * @param stringifiers Converts message-valued IDs and columns.
@@ -476,12 +527,26 @@ export class MysqlStorageFactory extends StorageFactory {
     }
   }
 }
+
+/**
+ * Collects MySQL storage settings before opening database pools.
+ */
 class Builder implements MysqlStorageFactoryBuilder {
   #options: MysqlStorageOptions | undefined;
+
   #tenantOptions: readonly MysqlTenantStorageOptions[] | undefined;
+
   readonly #resolver = new MysqlTableResolver();
+
   #operation: CreateOperationFactory | undefined;
+
   #stringifiers = new StringifierRegistry();
+
+  /**
+   * Creates a builder with its storage-factory connection function.
+   *
+   * @param connect Connects the configured tenant databases.
+   */
   constructor(
     private readonly connect: (
       entries: readonly MysqlDatabaseConfig[],
@@ -490,6 +555,7 @@ class Builder implements MysqlStorageFactoryBuilder {
       stringifiers: StringifierRegistry,
     ) => Promise<MysqlStorageFactory>,
   ) {}
+
   // prettier-ignore
 
   /**
@@ -533,6 +599,7 @@ class Builder implements MysqlStorageFactoryBuilder {
    * @param sourceType Identifies the ungrouped family source Protobuf type.
    * @param name Specifies the physical table name.
    * @returns Returns this builder.
+   * @typeParam S Source Protobuf message type.
    */
   setTableName<S extends Message>(sourceType: GenMessage<S>, name: string): this;
 
@@ -543,6 +610,8 @@ class Builder implements MysqlStorageFactoryBuilder {
    * @param recordType Identifies the record Protobuf type.
    * @param name Specifies the physical table name.
    * @returns Returns this builder.
+   * @typeParam S Source Protobuf message type.
+   * @typeParam R Stored Protobuf record type.
    */
   setTableName<S extends Message, R extends Message>(
     sourceType: GenMessage<S>,
@@ -645,10 +714,22 @@ interface MysqlDatabaseConfig {
 }
 
 const MysqlConfigurations = Object.freeze({
+  /**
+   * Creates a database configuration for single-tenant storage.
+   *
+   * @param options Supplies the MySQL connection options.
+   * @returns The single-tenant database configuration.
+   */
   single(options: MysqlStorageOptions): MysqlDatabaseConfig {
     return MysqlConfigurations.parse(TenantBoundary.single, options);
   },
 
+  /**
+   * Creates database configurations for multitenant storage.
+   *
+   * @param entries Supplies tenant IDs and their database options.
+   * @returns The tenant database configurations.
+   */
   multitenant(entries: readonly MysqlTenantStorageOptions[]): readonly MysqlDatabaseConfig[] {
     if (entries.length === 0) {
       throw new MysqlStorageConfigurationError("Multitenant MySQL storage requires tenants.");
@@ -673,6 +754,13 @@ const MysqlConfigurations = Object.freeze({
     return configured;
   },
 
+  /**
+   * Validates and resolves one tenant database configuration.
+   *
+   * @param boundary Identifies the tenant boundary.
+   * @param options Supplies the MySQL connection options.
+   * @returns The resolved database configuration.
+   */
   parse(boundary: TenantBoundary, options: MysqlStorageOptions): MysqlDatabaseConfig {
     let url: URL;
     try {
@@ -709,8 +797,25 @@ const MysqlConfigurations = Object.freeze({
   },
 });
 
+/**
+ * Commits one MySQL Entity mutation under native transaction or table coordination.
+ *
+ * @typeParam I Captured Entity identifier type.
+ * @typeParam S Captured Entity state type.
+ */
 class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStorage {
   #open = true;
+
+  /**
+   * Creates a commit handle for one Entity scope and MySQL coordinator.
+   *
+   * @param entity Defines the captured Entity scope.
+   * @param openStorage Opens the current and history families.
+   * @param openEvents Opens delivery Event storage.
+   * @param coordinator Serializes the provider commit.
+   * @param databaseName Identifies the database in lock keys.
+   * @param onClose Removes the handle from factory tracking.
+   */
   constructor(
     private readonly entity: EntityStorageInput<I, S>,
     private readonly openStorage: () => MysqlEntityStorage<I, S>,
@@ -722,20 +827,19 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
     private readonly databaseName: string,
     private readonly onClose: () => void,
   ) {}
+
+  /**
+   * Commits current state and associated immutable records within provider coordination.
+   *
+   * @typeParam Id Committed Entity identifier type.
+   * @typeParam State Committed Entity state type.
+   * @param input Supplies the affected Entity and immutable records.
+   * @returns Completion after the provider commit.
+   */
   async commit<Id, State extends Message>(
     input: import("@spine-event-engine/storage/provider").EntityCommitInput<Id, State>,
-  ): Promise<import("@spine-event-engine/storage/provider").EntityCommitResult> {
-    if (!this.#open) throw new MysqlStorageOperationError("Entity commit storage is closed.");
-    if (input.entity.sourceType.typeName !== this.entity.sourceType.typeName)
-      throw new MysqlStorageOperationError("Entity commit source type is incompatible.");
-    if (!this.accepts(input))
-      throw new MysqlStorageOperationError("Entity commit context is incompatible.");
-    if (!this.entity.stateHistory && (input.states?.length ?? 0) > 0)
-      throw new MysqlStorageOperationError("Entity state history is disabled.");
-    if (!this.entity.eventHistory && (input.diagnostics?.length ?? 0) > 0)
-      throw new MysqlStorageOperationError("Entity event history is disabled.");
-    if ((input.events ?? []).some((event) => event.id === undefined))
-      throw new MysqlStorageOperationError("Entity commit requires delivery-event IDs.");
+  ): Promise<void> {
+    this.validate(input);
     const storage = this.openStorage();
     const events = this.openEvents();
     try {
@@ -747,32 +851,14 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
         entityKey: input.entity.id.key(input.entityId),
         sourceTypeName: this.entity.sourceType.typeName,
       });
-      return await this.coordinator.commit(
+      await this.coordinator.commit(
         [...families.tableNames(), events.tableName],
         lockKey,
         (connection, transactional) =>
           families.withConnection(connection, () =>
-            events.withConnection(connection, async () => {
-              const current = await families.readCurrentLocked(input.entityId as unknown as I);
-              if (!sameEntity(current, input.expected) && !sameEntity(current, input.next))
-                return "conflict";
-              if (!transactional) {
-                await families.preflightImmutable(input.states ?? [], input.diagnostics ?? []);
-                for (const event of input.events ?? []) await events.assertImmutable(event);
-              }
-              for (const state of input.states ?? []) await families.appendStateImmutable(state);
-              for (const diagnostic of input.diagnostics ?? [])
-                await families.appendDiagnosticImmutable(diagnostic);
-              for (const event of input.events ?? []) {
-                if (event.id === undefined)
-                  throw new MysqlStorageOperationError(
-                    "Entity commit requires delivery-event IDs.",
-                  );
-                await events.writeImmutable(event);
-              }
-              if (!sameEntity(current, input.next)) await storage.current.write(input.next);
-              return "committed";
-            }),
+            events.withConnection(connection, () =>
+              this.apply(input, storage, families, events, transactional),
+            ),
           ),
       );
     } catch (error) {
@@ -782,11 +868,81 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
       storage.close();
     }
   }
+
+  /**
+   * Applies immutable rows before current state on one coordinated connection.
+   *
+   * @typeParam Id Committed Entity identifier type.
+   * @typeParam State Committed Entity state type.
+   * @param input Supplies the affected records.
+   * @param storage Provides current Entity storage.
+   * @param families Provides state and diagnostic history storage.
+   * @param events Provides delivery Event storage.
+   * @param transactional Whether the connection supports rollback.
+   * @returns Completion after associated records and current state are written.
+   */
+  private async apply<Id, State extends Message>(
+    input: import("@spine-event-engine/storage/provider").EntityCommitInput<Id, State>,
+    storage: MysqlEntityStorage<I, S>,
+    families: ReturnType<MysqlEntityStorage<I, S>["commitCapability"]>,
+    events: MysqlRecordStorage<
+      import("@spine-event-engine/proto").EventId,
+      import("@spine-event-engine/proto").Event
+    >,
+    transactional: boolean,
+  ): Promise<void> {
+    const current = await families.readCurrentLocked(input.entityId as unknown as I);
+    if (!transactional) {
+      await families.preflightImmutable(input.states ?? [], input.diagnostics ?? []);
+      for (const event of input.events ?? []) await events.assertImmutable(event);
+    }
+    for (const state of input.states ?? []) await families.appendStateImmutable(state);
+    for (const diagnostic of input.diagnostics ?? [])
+      await families.appendDiagnosticImmutable(diagnostic);
+    for (const event of input.events ?? []) await events.writeImmutable(event);
+    if (!sameEntity(current, input.next)) await storage.current.write(input.next);
+  }
+
+  /**
+   * Validates the commit against this handle's Entity scope and configured histories.
+   *
+   * @typeParam Id Committed Entity identifier type.
+   * @typeParam State Committed Entity state type.
+   * @param input Supplies the Entity and Event records to validate.
+   */
+  private validate<Id, State extends Message>(
+    input: import("@spine-event-engine/storage/provider").EntityCommitInput<Id, State>,
+  ): void {
+    if (!this.#open) throw new MysqlStorageOperationError("Entity commit storage is closed.");
+    if (input.entity.sourceType.typeName !== this.entity.sourceType.typeName)
+      throw new MysqlStorageOperationError("Entity commit source type is incompatible.");
+    if (!this.accepts(input))
+      throw new MysqlStorageOperationError("Entity commit context is incompatible.");
+    if (!this.entity.stateHistory && (input.states?.length ?? 0) > 0)
+      throw new MysqlStorageOperationError("Entity state history is disabled.");
+    if (!this.entity.eventHistory && (input.diagnostics?.length ?? 0) > 0)
+      throw new MysqlStorageOperationError("Entity event history is disabled.");
+    if ((input.events ?? []).some((event) => event.id === undefined))
+      throw new MysqlStorageOperationError("Entity commit requires delivery-event IDs.");
+  }
+
+  /**
+   * Closes this commit handle after work already started settles.
+   */
   close(): void {
     if (!this.#open) return;
     this.#open = false;
     this.onClose();
   }
+
+  /**
+   * Checks the captured tenant boundary for one commit input.
+   *
+   * @typeParam Id Committed Entity identifier type.
+   * @typeParam State Committed Entity state type.
+   * @param input Supplies the requested context.
+   * @returns Whether the context matches this handle.
+   */
   private accepts<Id, State extends Message>(
     input: import("@spine-event-engine/storage/provider").EntityCommitInput<Id, State>,
   ): boolean {

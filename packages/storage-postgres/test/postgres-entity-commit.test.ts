@@ -208,7 +208,7 @@ describe("PostgreSQL Entity commit", () => {
 
     await expect(
       commit.commit({ context: entity.context, entity, entityId: "task", next: record("task") }),
-    ).resolves.toBe("committed");
+    ).resolves.toBeUndefined();
 
     expect(driver.connect).toHaveBeenCalledTimes(before + 2);
     expect(driver.query.mock.calls.map(([sql]) => sql)).toContain(
@@ -225,7 +225,7 @@ describe("PostgreSQL Entity commit", () => {
 
     await expect(
       commit.commit({ context: entity.context, entity, entityId: "task", next: record("task") }),
-    ).resolves.toBe("committed");
+    ).resolves.toBeUndefined();
 
     expect(driver.connect).toHaveBeenCalledTimes(before + 3);
     expect(driver.query.mock.calls.filter(([sql]) => sql === "ROLLBACK")).toHaveLength(1);
@@ -260,7 +260,7 @@ describe("PostgreSQL Entity commit", () => {
         next: record("task"),
         states: [record("task")],
       }),
-    ).resolves.toBe("committed");
+    ).resolves.toBeUndefined();
 
     expect(driver.connect).toHaveBeenCalledTimes(before + 3);
   });
@@ -309,7 +309,7 @@ describe("PostgreSQL Entity commit", () => {
     expect(driver.release).toHaveBeenCalledTimes(2);
   });
 
-  it("returns conflict from a locked current record without writes", async () => {
+  it("replaces a locked current record", async () => {
     const factory = await postgresFactory();
     const entity = entityInput();
     const commit = EntityCommitStorageFactories.create(factory, entity);
@@ -323,15 +323,15 @@ describe("PostgreSQL Entity commit", () => {
         entityId: "task",
         next: record("task", "next"),
       }),
-    ).resolves.toBe("conflict");
+    ).resolves.toBeUndefined();
 
-    expect(driver.query.mock.calls.filter(([sql]) => sql.startsWith("INSERT"))).toHaveLength(
-      writes,
-    );
+    expect(
+      driver.query.mock.calls.filter(([sql]) => sql.startsWith("INSERT")).length,
+    ).toBeGreaterThan(writes);
     driver.setCurrent(undefined);
   });
 
-  it("rejects incompatible state schema and expected Entity identity before acquisition", async () => {
+  it("rejects incompatible state schema and next Entity identity before acquisition", async () => {
     const factory = await postgresFactory();
     const entity = entityInput();
     const commit = EntityCommitStorageFactories.create(factory, entity);
@@ -350,8 +350,7 @@ describe("PostgreSQL Entity commit", () => {
         context: entity.context,
         entity,
         entityId: "task",
-        expected: record("other"),
-        next: record("task"),
+        next: record("other"),
       }),
     ).rejects.toThrow("does not identify");
     expect(driver.connect).toHaveBeenCalledTimes(connections);
@@ -416,7 +415,7 @@ describe("PostgreSQL Entity commit", () => {
         diagnostics: [event("diagnostic")],
         events: [event("delivery")],
       }),
-    ).resolves.toBe("committed");
+    ).resolves.toBeUndefined();
 
     expect(driver.durableWrites()).toBe(4);
     expect(driver.query.mock.calls.filter(([sql]) => sql.includes("DO NOTHING"))).toHaveLength(3);
@@ -440,7 +439,7 @@ describe("PostgreSQL Entity commit", () => {
         next: record("task"),
         events: [replay],
       }),
-    ).resolves.toBe("committed");
+    ).resolves.toBeUndefined();
 
     const before = driver.durableWrites();
     await expect(
@@ -448,7 +447,6 @@ describe("PostgreSQL Entity commit", () => {
         context: entity.context,
         entity,
         entityId: "task",
-        expected: record("task"),
         next: record("task", "changed"),
         events: [collision],
       }),
@@ -467,10 +465,10 @@ describe("PostgreSQL Entity commit", () => {
 
     await expect(
       first.commit({ context: entity.context, entity, entityId: "task", next }),
-    ).resolves.toBe("committed");
+    ).resolves.toBeUndefined();
     await expect(
       second.commit({ context: entity.context, entity, entityId: "task", next }),
-    ).resolves.toBe("committed");
+    ).resolves.toBeUndefined();
     await expect(
       second.commit({
         context: entity.context,
@@ -478,7 +476,7 @@ describe("PostgreSQL Entity commit", () => {
         entityId: "task",
         next: record("task", "different"),
       }),
-    ).resolves.toBe("conflict");
+    ).resolves.toBeUndefined();
 
     firstFactory.close();
     secondFactory.close();
@@ -504,7 +502,7 @@ describe("PostgreSQL Entity commit", () => {
     expect(driver.end).toHaveBeenCalledTimes(1);
     driver.unblock();
 
-    await expect(inFlight).resolves.toBe("committed");
+    await expect(inFlight).resolves.toBeUndefined();
     await drained;
     await expect(
       commit.commit({ context: entity.context, entity, entityId: "task", next: record("task") }),

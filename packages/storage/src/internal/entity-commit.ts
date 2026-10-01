@@ -21,17 +21,21 @@ import type { EntityStorageInput } from "./entity-history.js";
 import type { StorageFactory } from "../storage/storage-factory.js";
 
 /**
- * Describes one provider-owned atomic mutation for an Entity commit.
+ * Describes one coordinated provider mutation for an Entity commit.
  *
  * This provider-only contract combines current state, retained histories, and
- * framework delivery events. It is intentionally not an application-level
- * transaction API.
+ * framework delivery events. Memory and transactional database providers apply
+ * the changes atomically. MyISAM and Aria tables can retain partial writes.
+ * This contract is not an application-level transaction API.
+ *
+ * @typeParam I Entity identifier type.
+ * @typeParam S Entity state message type.
  */
 export interface EntityCommitInput<I, S extends Message> {
   // prettier-ignore
 
   /**
-   * Identifies the storage scope that owns this commit.
+   * Identifies the storage scope for this commit.
    */
   readonly context: StorageContext;
 
@@ -44,11 +48,6 @@ export interface EntityCommitInput<I, S extends Message> {
    * Identifies the Entity record being changed.
    */
   readonly entityId: I;
-
-  /**
-   * Requires this current record before applying the next record.
-   */
-  readonly expected?: EntityRecord;
 
   /**
    * Stores the next current record.
@@ -72,26 +71,26 @@ export interface EntityCommitInput<I, S extends Message> {
 }
 
 /**
- * Reports the durable outcome of one Entity commit attempt.
- */
-export type EntityCommitResult = "committed" | "conflict";
-
-/**
- * A provider handle for atomic changes to one bounded Entity scope.
+ * A provider handle for coordinated changes to one bounded Entity scope.
+ *
+ * Memory and transactional database providers apply each commit atomically.
+ * MyISAM and Aria tables can retain partial writes if a commit fails.
  */
 export interface EntityCommitStorage {
   // prettier-ignore
 
   /**
-   * Applies one complete Entity mutation.
+   * Applies one Entity mutation across its current, history, and delivery records.
    *
+   * @typeParam I Entity identifier type.
+   * @typeParam S Entity state message type.
    * @param input Defines the unit of Entity, history, and delivery-event work.
-   * @returns Resolves to the committed or conflict outcome.
+   * @returns Resolves when the Entity mutation completes.
    */
-  commit<I, S extends Message>(input: EntityCommitInput<I, S>): Promise<EntityCommitResult>;
+  commit<I, S extends Message>(input: EntityCommitInput<I, S>): Promise<void>;
 
   /**
-   * Closes this independently owned commit handle.
+   * Closes this independent commit handle.
    */
   close(): void;
 }
@@ -103,8 +102,10 @@ export interface EntityCommitStorageFactory {
   // prettier-ignore
 
   /**
-   * Creates a handle that atomically mutates Entity persistence for one provider.
+   * Creates a handle that coordinates Entity persistence changes for one provider.
    *
+   * @typeParam I Entity identifier type.
+   * @typeParam S Entity state message type.
    * @param input Identifies the Entity storage layout the handle may commit.
    * @returns The independently closeable provider commit handle.
    */
@@ -120,19 +121,21 @@ interface EntityCommitFactoryAccess {
   // prettier-ignore
 
   /**
-   * Registers the atomic commit capability of one storage factory.
+   * Registers the Entity commit capability of one storage factory.
    *
    * @param factory Identifies the storage factory that provides the capability.
-   * @param creator Creates atomic commit handles for that provider.
+   * @param creator Creates coordinated commit handles for that provider.
    */
   register(factory: StorageFactory, creator: EntityCommitStorageFactory): void;
 
   /**
-   * Creates an atomic commit handle registered by a storage provider.
+   * Creates a commit handle registered by a storage provider.
    *
+   * @typeParam I Entity identifier type.
+   * @typeParam S Entity state message type.
    * @param factory Identifies the provider storage factory.
    * @param input Defines the Entity storage layout to commit.
-   * @returns The provider-owned atomic commit handle.
+   * @returns The provider commit handle.
    */
   create<I, S extends Message>(
     factory: StorageFactory,
@@ -141,7 +144,7 @@ interface EntityCommitFactoryAccess {
 }
 
 /**
- * Provides the typed internal lookup for provider-owned atomic commit handles.
+ * Provides the typed internal lookup for provider-managed atomic commit handles.
  *
  * Provider adapters register their creator while constructing their factory;
  * the end-user storage root deliberately exposes no commit-construction method.
@@ -151,6 +154,15 @@ export const EntityCommitStorageFactories: EntityCommitFactoryAccess = Object.fr
     creators.set(factory, creator);
   },
 
+  /**
+   * Creates the registered provider's Entity commit handle.
+   *
+   * @typeParam I Entity identifier type.
+   * @typeParam S Entity state message type.
+   * @param factory Identifies the registered provider.
+   * @param input Defines the Entity scope.
+   * @returns The provider commit handle.
+   */
   create<I, S extends Message>(
     factory: StorageFactory,
     input: EntityStorageInput<I, S>,

@@ -1,328 +1,430 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { Buffer } from "node:buffer";
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import {
-  createPublicationWorkspace,
-  main,
-  prepareRelease,
-  stageReleaseContents,
-} from "./release-cli.mjs";
-import { frameworkPackageNames } from "./package-artifacts.mjs";
+import { executeRelease, main, npmEnvironment, prepareRelease } from "./release-cli.mjs";
+import { expectedReleaseModel, readReleaseManifests } from "./release-policy.mjs";
+
+const sourceSha = "a".repeat(40);
+const expected = {
+  tag: "snapshot",
+  version: "2.0.0-snapshot.19",
+  packages: [{ name: "@spine-event-engine/proto", dependencies: [] }],
+};
+const packed = {
+  name: expected.packages[0].name,
+  version: expected.version,
+  tarball: "/tmp/spine-event-engine-proto-2.0.0-snapshot.19.tgz",
+  integrity: "sha512-YQ==",
+  dependencies: [],
+};
 
 describe("release CLI", () => {
-  it.each(["publish", "verify-registry"])("rejects the removed %s command", (command) => {
-    const result = spawnSync(process.execPath, ["scripts/release-cli.mjs", command], {
-      cwd: new URL("..", import.meta.url).pathname,
-      encoding: "utf8",
-      env: {
-        ...process.env,
-        GITHUB_ACTIONS: undefined,
-        GITHUB_EVENT_NAME: undefined,
-        GITHUB_REPOSITORY: undefined,
-        GITHUB_REF: undefined,
-        GITHUB_SHA: undefined,
-        GITHUB_WORKFLOW: undefined,
-      },
-    });
-    expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("Supported commands");
-  });
-
-  it("prints the policy-derived tag without a publication capability", async () => {
-    const result = spawnSync(process.execPath, ["scripts/release-cli.mjs", "tag"], {
-      cwd: new URL("..", import.meta.url).pathname,
-      encoding: "utf8",
-    });
-    expect(result.status).toBe(0);
-    expect(result.stdout).toBe("snapshot\n");
-    await expect(main({ argv: ["node", "cli", "publish"], environment: {} })).rejects.toThrow(
-      "Supported commands",
-    );
-  });
-
-  it("routes each safe command through injected dependencies without public fetches", async () => {
-    const release = {
-      tag: "snapshot",
-      version: "2.0.0-snapshot.5",
-      packages: [{ name: "@synthetic/base" }],
-    };
-    const calls = [];
-    const dependencies = {
-      expectedModel: () => release,
-      readManifests: (root) => {
-        calls.push({ kind: "read", root });
-        return [];
-      },
-      fetchResponse: "safe-fetch",
-      verifyRegistry: (...args) => calls.push({ kind: "verify", args }),
-      write: (text) => calls.push({ kind: "write", text }),
-    };
-    await main({ argv: ["node", "cli", "tag"], dependencies });
-    await main({ argv: ["node", "cli", "preflight"], dependencies });
-    await main({
-      argv: ["node", "cli", "prepare", "--output", "relative-release"],
-      dependencies: {
-        ...dependencies,
-        prepare: (options) => calls.push({ kind: "prepare", options }),
-      },
-    });
-    expect(calls).toContainEqual({ kind: "write", text: "snapshot\n" });
-    expect(calls.filter(({ kind }) => kind === "verify")).toEqual([
-      { kind: "verify", args: [release, "safe-fetch"] },
-    ]);
-    expect(calls).toContainEqual({
-      kind: "prepare",
-      options: { check: false, output: "relative-release" },
-    });
-  });
-
-  it("creates an isolated non-Git workspace from only the strict missing selection", () => {
-    const writes = [];
-    const copies = [];
-    const directories = [];
-    const entries = [
-      {
-        path: "packages/base/package.json",
-        manifest: { name: "@synthetic/base", version: "1.0.0" },
-      },
-      {
-        path: "packages/unselected/package.json",
-        manifest: { name: "@synthetic/unselected", version: "1.0.0" },
-      },
-    ];
-    createPublicationWorkspace({
-      destination: "/owned/publication",
-      entries,
-      selectedNames: ["@synthetic/base"],
-      mkdir: (path) => directories.push(path),
-      write: (path, contents) => writes.push({ path, contents }),
-      copy: (source, target) => copies.push({ source, target }),
-    });
-    expect(directories).toEqual([
-      "/owned/publication/packages",
-      "/owned/publication/packages/base",
-    ]);
-    expect(writes.map(({ path }) => path)).toEqual([
-      "/owned/publication/package.json",
-      "/owned/publication/pnpm-workspace.yaml",
-      "/owned/publication/lerna.json",
-      "/owned/publication/packages/base/package.json",
-    ]);
-    expect(copies).toEqual([
-      {
-        source: "packages/base/.publish",
-        target: "/owned/publication/packages/base/.publish",
-      },
-    ]);
-    for (const selection of [[], ["@synthetic/missing"], ["@synthetic/base", "@synthetic/base"]])
-      expect(() =>
-        createPublicationWorkspace({
-          destination: "/owned/publication",
-          entries,
-          selectedNames: selection,
-          mkdir: () => {},
-          write: () => {},
-          copy: () => {},
-        }),
-      ).toThrow("Publication workspace");
-  });
-
-  it("routes strict selection into a disposable workspace and fails closed before creation", async () => {
-    const release = {
-      tag: "snapshot",
-      version: "2.0.0-snapshot.5",
-      packages: [{ name: "@synthetic/base" }],
-    };
-    const calls = [];
-    const output = join(tmpdir(), "spine-release-cli-workspace-" + Date.now());
-    const dependencies = {
-      expectedModel: () => release,
-      fetchResponse: "safe-fetch",
-      readManifests: () => [
-        { path: "packages/base/package.json", manifest: { name: "@synthetic/base" } },
-      ],
-      createWorkspace: (options) => calls.push(options),
-    };
-    await main({
-      argv: ["node", "cli", "prepare-publication-workspace", "--output", output],
-      dependencies: { ...dependencies, verifyRegistry: () => ["@synthetic/base"] },
-    });
-    expect(calls).toHaveLength(1);
-    expect(calls[0]).toMatchObject({ selectedNames: ["@synthetic/base"] });
-    for (const selection of [[], ["@other/package"], ["@synthetic/base", "@synthetic/base"]])
-      await expect(
-        main({
-          argv: ["node", "cli", "prepare-publication-workspace", "--output", output],
-          dependencies: { ...dependencies, verifyRegistry: () => selection },
-        }),
-      ).rejects.toThrow("Strict registry selection");
-    await expect(
-      main({ argv: ["node", "cli", "prepare-publication-workspace"], dependencies }),
-    ).rejects.toThrow("requires --output");
-  });
-
-  it("routes checked preparation and rejects a missing output", async () => {
-    const prepare = vi.fn();
-    await main({ argv: ["node", "cli", "prepare", "--check"], dependencies: { prepare } });
-    expect(prepare).toHaveBeenCalledWith({ check: true, output: undefined });
-    await expect(main({ argv: ["node", "cli", "prepare"] })).rejects.toThrow("requires");
-  });
-
-  it("prepares and cleans the real checked staged release without registry mutation", async () => {
-    const release = await main({ argv: ["node", "cli", "prepare", "--check"] });
-    expect(release).toMatchObject({ tag: "snapshot", version: "2.0.0-snapshot.18" });
-    expect(release.packages).toEqual(
-      expect.arrayContaining([expect.objectContaining({ name: "@spine-event-engine/core" })]),
-    );
-  }, 30_000);
-
-  it("packs once, proves the exact returned list, and cleans check output", () => {
-    const removed = [];
-    const expected = {
-      tag: "snapshot",
-      version: "2.0.0-snapshot.4",
-      packages: frameworkPackageNames
-        .map((name) => ({ name, dependencies: [] }))
-        .sort((left, right) => left.name.localeCompare(right.name)),
-    };
-    const packages = expected.packages.map(({ name }, index) => ({
-      name,
-      tarball: "/tmp/release/" + index + ".tgz",
-      integrity: "sha512-YQ==",
-      dependencies: [],
-    }));
-    prepareRelease({
-      root: "root",
-      check: true,
-      mkdtemp: () => "/tmp/release",
-      exists: () => false,
-      mkdir: () => {},
-      remove: (path) => removed.push(path),
-      pack: () => packages,
-      prove: ({ packages: actual }) => expect(actual).toBe(packages),
-      expected,
-    });
-    expect(removed).toEqual(["/tmp/release"]);
-  });
-
-  it("does not delete an existing explicit output", () => {
-    expect(() => prepareRelease({ output: "/existing", exists: () => true })).toThrow(
-      "already exists",
-    );
-  });
-
-  it("stages every packed package under its Lerna contents directory", () => {
-    const runs = [];
-    const destination = mkdtempSync(join(tmpdir(), "spine-release-stage-test-"));
+  it("starts pinned npm with distinct empty configuration files", () => {
+    const directory = mkdtempSync(join(tmpdir(), "spine-npm-config-test-"));
     try {
-      stageReleaseContents({
-        destination,
-        packages: [
-          { name: "@synthetic/base", tarball: "/tmp/base.tgz" },
-          { name: "@synthetic/dependent", tarball: "/tmp/dependent.tgz" },
-        ],
-        run: (command, args) => runs.push({ command, args }),
-      });
-      expect(runs).toEqual([
-        {
-          command: "tar",
-          args: [
-            "-xzf",
-            "/tmp/base.tgz",
-            "--strip-components=1",
-            "-C",
-            join(destination, "packages/base/.publish"),
-          ],
-        },
-        {
-          command: "tar",
-          args: [
-            "-xzf",
-            "/tmp/dependent.tgz",
-            "--strip-components=1",
-            "-C",
-            join(destination, "packages/dependent/.publish"),
-          ],
-        },
-      ]);
+      const env = npmEnvironment(directory);
+      expect(env.NPM_CONFIG_USERCONFIG).not.toBe(env.NPM_CONFIG_GLOBALCONFIG);
+      const result = spawnSync("npm", ["config", "get", "registry"], { encoding: "utf8", env });
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout.trim()).toBe("https://registry.npmjs.org/");
     } finally {
-      rmSync(destination, { force: true, recursive: true });
+      rmSync(directory, { force: true, recursive: true });
+    }
+  });
+  it("persists one manifest only after archive packing and consumer proof", () => {
+    const directory = mkdtempSync(join(tmpdir(), "spine-preparation-test-"));
+    rmSync(directory, { recursive: true });
+    const calls = [];
+    try {
+      const manifest = prepareRelease({
+        destination: directory,
+        expected,
+        sourceSha,
+        pack: () => {
+          calls.push("pack");
+          return [packed];
+        },
+        prove: () => {
+          calls.push("prove");
+        },
+        persist: (_path, value) => {
+          calls.push("persist");
+          expect(value.sourceSha).toBe(sourceSha);
+        },
+      });
+      expect(calls).toEqual(["pack", "prove", "persist"]);
+      expect(manifest.packages[0].tarball).toBe("spine-event-engine-proto-2.0.0-snapshot.19.tgz");
+    } finally {
+      rmSync(directory, { force: true, recursive: true });
     }
   });
 
-  it.each(["pack", "prove", "stage"])("removes owned output when %s fails", (phase) => {
-    const removed = [];
-    const expected = {
-      tag: "snapshot",
-      version: "2.0.0-snapshot.4",
-      packages: frameworkPackageNames
-        .map((name) => ({ name, dependencies: [] }))
-        .sort((left, right) => left.name.localeCompare(right.name)),
-    };
-    const packages = expected.packages.map(({ name }, index) => ({
-      name,
-      tarball: "/owned/" + index + ".tgz",
-      integrity: "sha512-YQ==",
-      dependencies: [],
-    }));
+  it("removes incomplete preparation and never persists after failed proof", () => {
+    const directory = mkdtempSync(join(tmpdir(), "spine-preparation-test-"));
+    rmSync(directory, { recursive: true });
     expect(() =>
       prepareRelease({
-        output: "/owned",
-        exists: () => false,
-        mkdir: () => {},
-        remove: (path) => removed.push(path),
-        pack: () => {
-          if (phase === "pack") throw new Error(phase);
-          return packages;
-        },
-        prove: () => {
-          if (phase === "prove") throw new Error(phase);
-        },
-        stage: () => {
-          if (phase === "stage") throw new Error(phase);
-        },
+        destination: directory,
         expected,
+        sourceSha,
+        pack: () => [packed],
+        prove: () => {
+          throw new Error("consumer failed");
+        },
+        persist: () => {
+          throw new Error("unexpected persistence");
+        },
       }),
-    ).toThrow(phase);
-    expect(removed).toEqual(["/owned"]);
+    ).toThrow("consumer failed");
+    expect(existsSync(directory)).toBe(false);
+  });
+
+  it("rejects a mismatched inspected version before persistence", () => {
+    const directory = mkdtempSync(join(tmpdir(), "spine-version-test-"));
+    rmSync(directory, { recursive: true });
+    let persisted = false;
+    expect(() =>
+      prepareRelease({
+        destination: directory,
+        expected,
+        sourceSha,
+        pack: () => [{ ...packed, version: "2.0.0-snapshot.18" }],
+        prove: () => {},
+        persist: () => {
+          persisted = true;
+        },
+      }),
+    ).toThrow("Packed artifact version");
+    expect(persisted).toBe(false);
+    expect(existsSync(directory)).toBe(false);
+  });
+
+  it("registers cleanup before persistent output creation and preserves existing output", () => {
+    const directory = mkdtempSync(join(tmpdir(), "spine-create-signal-"));
+    rmSync(directory, { recursive: true });
+    const handlers = new Map();
+    expect(() =>
+      prepareRelease({
+        destination: directory,
+        expected,
+        sourceSha,
+        registerSignal: (name, handler) => {
+          handlers.set(name, handler);
+          return () => handlers.delete(name);
+        },
+        exit: () => {
+          throw new Error("interrupted during creation");
+        },
+        createDirectory: (path) => {
+          expect(handlers.has("SIGINT")).toBe(true);
+          mkdirSync(path);
+          handlers.get("SIGINT")();
+        },
+        pack: () => [],
+        prove: () => {},
+        persist: () => {},
+      }),
+    ).toThrow("interrupted during creation");
+    expect(existsSync(directory)).toBe(false);
+    mkdirSync(directory);
+    expect(() => prepareRelease({ destination: directory, expected, sourceSha })).toThrow(
+      "already exists",
+    );
+    expect(existsSync(directory)).toBe(true);
+    rmSync(directory, { recursive: true });
   });
 
   it.each([
     ["SIGINT", 130],
     ["SIGTERM", 143],
-  ])("cleans owned output for %s", (signal, code) => {
+  ])("cleans preparation on %s", (signal, code) => {
+    const directory = mkdtempSync(join(tmpdir(), "spine-preparation-signal-"));
+    rmSync(directory, { recursive: true });
     const handlers = new Map();
-    const removed = [];
     expect(() =>
       prepareRelease({
-        output: "/owned",
-        exists: () => false,
-        mkdir: () => {},
-        remove: (path) => removed.push(path),
-        pack: () => {
-          handlers.get(signal)();
-          throw new Error("stop");
-        },
+        destination: directory,
+        expected,
+        sourceSha,
         registerSignal: (name, handler) => {
           handlers.set(name, handler);
-          return () => {};
+          return () => handlers.delete(name);
         },
-        exit: (actual) => {
-          expect(actual).toBe(code);
-          throw new Error("exit sentinel");
+        exit: (status) => {
+          expect(status).toBe(code);
+          throw new Error("interrupted");
         },
+        pack: () => {
+          handlers.get(signal)();
+          return [packed];
+        },
+        prove: () => {},
+        persist: () => {},
       }),
-    ).toThrow("exit sentinel");
-    expect(handlers.has(signal)).toBe(true);
-    expect(removed).toEqual(["/owned"]);
+    ).toThrow("interrupted");
+    expect(existsSync(directory)).toBe(false);
+    expect(handlers.size).toBe(0);
   });
 
-  it("rejects prepare without an output mode", async () => {
-    await expect(main({ argv: ["node", "cli", "prepare"], environment: {} })).rejects.toThrow(
-      "requires --check or --output",
-    );
+  it("routes publication and read-only verification through separate commands", async () => {
+    const calls = [];
+    const dependencies = {
+      expected,
+      execute: async (options) => {
+        calls.push(options);
+      },
+    };
+    await main({
+      argv: ["node", "cli", "publish", "--input", "release", "--report", "report.json"],
+      dependencies,
+    });
+    await main({
+      argv: ["node", "cli", "verify-registry", "--input", "release", "--report", "report.json"],
+      dependencies,
+    });
+    expect(calls.map(({ verifyOnly }) => verifyOnly)).toEqual([false, true]);
+    await expect(
+      main({ argv: ["node", "cli", "prepare-publication-workspace"], dependencies }),
+    ).rejects.toThrow("Supported commands");
+  });
+
+  it("verifies an already-published release without invoking npm", async () => {
+    const release = {
+      ...expected,
+      sourceSha,
+      packages: [{ ...packed, version: expected.version }],
+    };
+    const statement = {
+      predicateType: "https://slsa.dev/provenance/v1",
+      subject: [
+        {
+          name: `pkg:npm/%40spine-event-engine/proto@${expected.version}`,
+          digest: { sha512: "61" },
+        },
+      ],
+      predicate: {
+        buildDefinition: {
+          externalParameters: {
+            workflow: {
+              repository: "https://github.com/SpineEventEngine/spine-ts",
+              path: ".github/workflows/publish.yml",
+              ref: "refs/heads/master",
+            },
+          },
+          resolvedDependencies: [
+            {
+              uri: "git+https://github.com/SpineEventEngine/spine-ts@refs/heads/master",
+              digest: { gitCommit: sourceSha },
+            },
+          ],
+        },
+      },
+    };
+    const registry = async (kind) =>
+      kind === "tags"
+        ? { snapshot: expected.version }
+        : kind === "artifact"
+          ? {
+              name: packed.name,
+              version: expected.version,
+              dist: {
+                integrity: packed.integrity,
+                attestations: {
+                  url: `https://registry.npmjs.org/-/npm/v1/attestations/@spine-event-engine%2fproto@${expected.version}`,
+                },
+              },
+            }
+          : {
+              attestations: [
+                {
+                  bundle: {
+                    mediaType: "application/vnd.dev.sigstore.bundle.v0.3+json",
+                    dsseEnvelope: {
+                      payloadType: "application/vnd.in-toto+json",
+                      payload: Buffer.from(JSON.stringify(statement)).toString("base64"),
+                      signatures: [{ sig: "c2ln", keyid: "" }],
+                    },
+                    verificationMaterial: {
+                      certificate: { rawBytes: "Y2VydA==" },
+                      tlogEntries: [
+                        {
+                          logId: { keyId: "a2V5" },
+                          kindVersion: { kind: "dsse", version: "0.0.1" },
+                          canonicalizedBody: "Ym9keQ==",
+                          inclusionPromise: { signedEntryTimestamp: "c2V0" },
+                          inclusionProof: {
+                            rootHash: "cm9vdA==",
+                            hashes: [],
+                            checkpoint: { envelope: "checkpoint" },
+                          },
+                        },
+                      ],
+                    },
+                  },
+                },
+              ],
+            };
+    const report = await executeRelease({
+      input: "/unused",
+      reportPath: "/unused-report",
+      verifyOnly: true,
+      dependencies: {
+        expected,
+        load: () => release,
+        registry,
+        save: async () => {},
+        invoke: async () => {
+          throw new Error("unexpected npm publish");
+        },
+      },
+    });
+    expect(report.packages[0].status).toBe("already present");
+  });
+
+  it("retains a complete 19-package report when the first npm upload fails", async () => {
+    const root = new URL("..", import.meta.url).pathname;
+    const model = expectedReleaseModel(readReleaseManifests(root));
+    const release = {
+      ...model,
+      sourceSha,
+      packages: model.packages.map((entry) => ({
+        ...entry,
+        version: model.version,
+        tarball: entry.name.split("/")[1] + ".tgz",
+        integrity: "sha512-YQ==",
+      })),
+    };
+    let saved;
+    let tick = 0;
+    await expect(
+      executeRelease({
+        input: "/unused",
+        reportPath: "/unused-report",
+        dependencies: {
+          expected: model,
+          load: () => release,
+          save: async (value) => {
+            saved = globalThis.structuredClone(value);
+          },
+          registry: async (kind) => (kind === "tags" ? {} : undefined),
+          confirmation: { now: () => tick++, sleep: async () => {}, windowMs: 4 },
+          invoke: async () => ({ status: 1, stdout: JSON.stringify({ error: { code: "E401" } }) }),
+        },
+      }),
+    ).rejects.toThrow("Publication confirmation remains unconfirmed");
+    expect(saved.packages).toHaveLength(19);
+    expect(saved.packages[0].status).toBe("unconfirmed");
+    expect(saved.packages.slice(1).every(({ status }) => status === "not attempted")).toBe(true);
+  });
+
+  it("confirms an uncertain npm result after delayed registry visibility without resending", async () => {
+    const release = { ...expected, sourceSha, packages: [packed] };
+    let reads = 0;
+    let sends = 0;
+    let time = 0;
+    let waits = 0;
+    const report = await executeRelease({
+      input: "/unused",
+      reportPath: "/unused-report",
+      dependencies: {
+        expected,
+        load: () => release,
+        save: async () => {},
+        confirmation: {
+          now: () => time,
+          sleep: async (ms) => {
+            time += ms;
+            waits++;
+          },
+          windowMs: 4_000,
+        },
+        registry: async (kind, entry) => {
+          if (kind === "artifact") {
+            reads++;
+            if (reads <= 3) return undefined;
+            return {
+              name: entry.name,
+              version: expected.version,
+              dist: {
+                integrity: entry.integrity,
+                attestations: {
+                  url: `https://registry.npmjs.org/-/npm/v1/attestations/@spine-event-engine%2fproto@${expected.version}`,
+                },
+              },
+            };
+          }
+          if (kind === "tags") return reads >= 2 ? { snapshot: expected.version } : {};
+          return {
+            attestations: [
+              {
+                bundle: {
+                  mediaType: "application/vnd.dev.sigstore.bundle.v0.3+json",
+                  dsseEnvelope: {
+                    payloadType: "application/vnd.in-toto+json",
+                    payload: Buffer.from(
+                      JSON.stringify({
+                        predicateType: "https://slsa.dev/provenance/v1",
+                        subject: [
+                          {
+                            name: `pkg:npm/%40spine-event-engine/proto@${expected.version}`,
+                            digest: { sha512: "61" },
+                          },
+                        ],
+                        predicate: {
+                          buildDefinition: {
+                            externalParameters: {
+                              workflow: {
+                                repository: "https://github.com/SpineEventEngine/spine-ts",
+                                path: ".github/workflows/publish.yml",
+                                ref: "refs/heads/master",
+                              },
+                            },
+                            resolvedDependencies: [
+                              {
+                                uri: "git+https://github.com/SpineEventEngine/spine-ts@refs/heads/master",
+                                digest: { gitCommit: sourceSha },
+                              },
+                            ],
+                          },
+                        },
+                      }),
+                    ).toString("base64"),
+                    signatures: [{ sig: "c2ln", keyid: "" }],
+                  },
+                  verificationMaterial: {
+                    certificate: { rawBytes: "Y2VydA==" },
+                    tlogEntries: [
+                      {
+                        logId: { keyId: "a2V5" },
+                        kindVersion: { kind: "dsse", version: "0.0.1" },
+                        canonicalizedBody: "Ym9keQ==",
+                        inclusionPromise: { signedEntryTimestamp: "c2V0" },
+                        inclusionProof: {
+                          rootHash: "cm9vdA==",
+                          hashes: [],
+                          checkpoint: { envelope: "checkpoint" },
+                        },
+                      },
+                    ],
+                  },
+                },
+              },
+            ],
+          };
+        },
+        invoke: async () => {
+          sends++;
+          return { status: 1, stdout: JSON.stringify({ error: { code: "E409" } }) };
+        },
+      },
+    });
+    expect(sends).toBe(1);
+    expect(reads).toBe(4);
+    expect(waits).toBe(1);
+    expect(report.packages[0].status).toBe("published");
   });
 });
