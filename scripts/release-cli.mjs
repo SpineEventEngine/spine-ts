@@ -82,6 +82,7 @@ function sourceCommit() {
  * @param pack Archive packing callback.
  * @param prove External consumer proof callback.
  * @param persist Manifest writer.
+ * @param load Saved archive validator used before preparation succeeds.
  * @param registerSignal Interruption registration callback.
  * @param exit Process exit callback.
  * @param createDirectory Persistent output creation callback.
@@ -95,6 +96,7 @@ export function prepareRelease({
   pack,
   prove,
   persist,
+  load = loadPrepared,
   registerSignal = (signal, handler) => {
     process.once(signal, handler);
     return () => process.off(signal, handler);
@@ -113,7 +115,7 @@ export function prepareRelease({
   try {
     const manifest = withPreparationSignals(cleanup, registerSignal, exit, () => {
       if (!check) createPreparationOutput(output, createDirectory, state);
-      return recordPreparedRelease(output, check, expected, sourceSha, pack, prove, persist);
+      return recordPreparedRelease(output, expected, sourceSha, pack, prove, persist, load);
     });
     complete = true;
     return manifest;
@@ -143,19 +145,20 @@ function createPreparationOutput(output, createDirectory, state) {
  * Packs and proves archives before recording their release manifest.
  *
  * @param output Preparation directory.
- * @param check Whether this is temporary verification.
  * @param expected Current release policy.
  * @param sourceSha Source commit.
  * @param pack Archive packing callback.
  * @param prove External consumer proof callback.
  * @param persist Manifest writer.
+ * @param load Saved archive validator.
  * @returns Prepared release manifest.
  */
-function recordPreparedRelease(output, check, expected, sourceSha, pack, prove, persist) {
+function recordPreparedRelease(output, expected, sourceSha, pack, prove, persist, load) {
   const packages = pack({ root, destination: output });
   prove({ root, destination: output, packages });
   const value = createReleaseManifest({ expected, packages, sourceSha });
-  if (!check) persist(join(output, manifestName), value);
+  persist(join(output, manifestName), value);
+  load(output, expected, sourceSha);
   return value;
 }
 
@@ -259,12 +262,13 @@ export function npmEnvironment(directory) {
  *
  * @param archive Prepared archive path.
  * @param tag Validated release tag.
+ * @param spawn Process runner for the network-producing npm command.
  * @returns npm exit status and captured JSON diagnostics.
  */
-function invokeNpm(archive, tag) {
+function invokeNpm(archive, tag, spawn = spawnSync) {
   const directory = mkdtempSync(join(tmpdir(), "spine-npm-config-"));
   try {
-    const result = spawnSync("npm", npmPublishArgs(archive, tag), {
+    const result = spawn("npm", npmPublishArgs(archive, tag), {
       cwd: root,
       encoding: "utf8",
       env: npmEnvironment(directory),
@@ -302,8 +306,11 @@ export async function executeRelease({
     throw new Error("A rerun requires its previous publication report");
   if (prior !== undefined) validatePriorReport(prior, release, !verifyOnly);
   const save = dependencies.save ?? ((value) => writeReport(reportPath, value));
-  const registry = dependencies.registry ?? createPublicRegistry(globalThis.fetch);
-  const invoke = dependencies.invoke ?? ((tarball, tag) => invokeNpm(join(input, tarball), tag));
+  const registry =
+    dependencies.registry ?? createPublicRegistry(dependencies.fetch ?? globalThis.fetch);
+  const invoke =
+    dependencies.invoke ??
+    ((tarball, tag) => invokeNpm(join(input, tarball), tag, dependencies.spawn ?? spawnSync));
   let report;
   if (verifyOnly) {
     report = prior ?? createPublicationReport(release);

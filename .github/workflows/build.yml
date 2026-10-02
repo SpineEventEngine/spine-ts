@@ -12,16 +12,35 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+      - uses: ./.github/actions/prepare-release
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          version: 11.9.0
+          name: release
+          path: ${{ runner.temp }}/release
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 1
+  trial:
+    needs: verify
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version-file: .node-version
+          node-version: 24.18.0
           package-manager-cache: false
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm audit:release
-      - run: pnpm verify:release
       - run: node --version | grep -Fx 'v24.18.0' && npm --version | grep -Fx '11.16.0'
-      - run: node --test scripts/npm-rekor-recovery.repro.mjs
-      - run: node scripts/release-cli.mjs prepare --check
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: release
+          path: ${{ runner.temp }}/release
+      - run: node scripts/release-trial.mjs --input "$RUNNER_TEMP/release" --output "$RUNNER_TEMP/publication-trial-report"
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: publication-trial-report
+          path: ${{ runner.temp }}/publication-trial-report
+          if-no-files-found: warn
+          retention-days: 14

@@ -83,7 +83,12 @@ export function validateReleaseManifest(manifest, expected, checksum, sourceSha)
  * @param expected Current release package entries.
  */
 function assertReleaseOrder(packages, expected) {
-  const order = dependencyFirstOrder(packages);
+  const order = dependencyFirstOrder(
+    packages.map(({ name, dependencies }) => ({
+      name,
+      dependencies: Object.fromEntries(dependencies.map((dependency) => [dependency, true])),
+    })),
+  );
   if (
     order.some((name, index) => name !== packages[index].name) ||
     expected.some(

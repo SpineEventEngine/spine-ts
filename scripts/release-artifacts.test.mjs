@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { createReleaseManifest, validateReleaseManifest } from "./release-artifacts.mjs";
 import { frameworkPackageNames } from "./package-artifacts.mjs";
+import { expectedReleaseModel, readReleaseManifests } from "./release-policy.mjs";
 
 const expected = {
   tag: "snapshot",
@@ -21,6 +22,24 @@ const packages = expected.packages.map(({ name }) => ({
 const manifest = () => createReleaseManifest({ expected, packages, sourceSha });
 
 describe("release artifacts", () => {
+  it("validates the actual workspace dependency graph after manifest creation", () => {
+    const workspace = expectedReleaseModel(
+      readReleaseManifests(new URL("..", import.meta.url).pathname),
+    );
+    const inspected = workspace.packages.map(({ name, dependencies }) => ({
+      name,
+      version: workspace.version,
+      tarball: `/tmp/release/${name.slice(1).replace("/", "-")}-${workspace.version}.tgz`,
+      integrity: "sha512-YQ==",
+      dependencies,
+    }));
+    expect(inspected.some(({ dependencies }) => dependencies.length > 0)).toBe(true);
+    const value = createReleaseManifest({ expected: workspace, packages: inspected, sourceSha });
+    expect(() =>
+      validateReleaseManifest(value, workspace, () => "sha512-YQ==", sourceSha),
+    ).not.toThrow();
+  });
+
   it("writes portable dependency-ordered manifest entries and validates their checksums", () => {
     const manifest = createReleaseManifest({
       expected,
