@@ -1,4 +1,5 @@
 import { Buffer } from "node:buffer";
+import { readRegistryGet, TemporaryRegistryError } from "./release-get.mjs";
 
 const registryUrl = "https://registry.npmjs.org/";
 const repositoryUrl = "https://github.com/SpineEventEngine/spine-ts";
@@ -55,45 +56,35 @@ export function npmPublishArgs(tarball, tag) {
  *
  * @param fetchResponse Fetch implementation for public registry reads.
  * @param path Registry resource path.
- * @param timeoutMs Maximum duration for the complete read.
+ * @param limitMs Optional caller deadline remaining for the complete read.
+ * @param timeoutMs Maximum duration of each GET attempt.
  * @returns Parsed JSON, or undefined for an explicit 404.
  */
-async function readRegistry(fetchResponse, path, timeoutMs) {
-  const controller = new globalThis.AbortController();
-  let timer;
-  const timed = new Promise((_, reject) => {
-    timer = globalThis.setTimeout(() => {
-      controller.abort();
-      reject(new Error("Registry read timed out: " + path));
-    }, timeoutMs);
+async function readRegistry(fetchResponse, path, limitMs, timeoutMs) {
+  return readRegistryGet(fetchResponse, registryUrl + path, {
+    timeoutMs,
+    limitMs,
   });
-  try {
-    const response = await Promise.race([
-      fetchResponse(registryUrl + path, { signal: controller.signal }),
-      timed,
-    ]);
-    if (response.status === 404) return undefined;
-    if (!response.ok) throw new Error("Registry read failed: " + response.status);
-    return await Promise.race([response.json(), timed]);
-  } finally {
-    globalThis.clearTimeout(timer);
-    controller.abort();
-  }
 }
 
 /**
  * Creates a reader for exact versions, npm tags, and npm-hosted attestations.
  *
  * @param fetchResponse Fetch implementation for public registry reads.
- * @param timeoutMs Maximum duration for one read.
+ * @param timeoutMs Maximum duration of each GET attempt.
  * @returns Registry reader keyed by resource kind and package.
  */
 export function createPublicRegistry(fetchResponse, timeoutMs = 10_000) {
-  return async (kind, entry, limitMs = timeoutMs) => {
+  return async (kind, entry, limitMs) => {
     const encoded = encodeURIComponent(entry.name);
-    const bound = Math.min(timeoutMs, limitMs);
+    const bound = limitMs;
     if (kind === "artifact") {
-      const record = await readRegistry(fetchResponse, encoded + "/" + entry.version, bound);
+      const record = await readRegistry(
+        fetchResponse,
+        encoded + "/" + entry.version,
+        bound,
+        timeoutMs,
+      );
       if (record === undefined) return undefined;
       if (
         record?.name !== entry.name ||
@@ -104,7 +95,12 @@ export function createPublicRegistry(fetchResponse, timeoutMs = 10_000) {
       return record;
     }
     if (kind === "tags") {
-      const tags = await readRegistry(fetchResponse, "-/package/" + encoded + "/dist-tags", bound);
+      const tags = await readRegistry(
+        fetchResponse,
+        "-/package/" + encoded + "/dist-tags",
+        bound,
+        timeoutMs,
+      );
       if (tags === undefined) return {};
       if (
         tags === null ||
@@ -117,7 +113,7 @@ export function createPublicRegistry(fetchResponse, timeoutMs = 10_000) {
     }
     if (kind === "attestations") {
       const path = "-/npm/v1/attestations/" + entry.name.replace("/", "%2f") + "@" + entry.version;
-      return readRegistry(fetchResponse, path, bound);
+      return readRegistry(fetchResponse, path, bound, timeoutMs);
     }
     throw new Error("Unknown registry resource kind");
   };
@@ -300,6 +296,39 @@ export function validatePriorReport(prior, release, forWrite = false) {
       )
     )
       throw new Error("Invalid prior publication report package");
+    if (forWrite) {
+      const results = record.attempts.map(({ result }) => result);
+      const final = results.at(-1);
+      const validOrder = results.length < 2 || results[0] === "pre-upload-conflict";
+      const accepted = final === "accepted";
+      const validConflicts = record.attempts.every((attempt) => {
+        if (attempt.result !== "pre-upload-conflict") return true;
+        const diagnostics = attempt.diagnostics;
+        return (
+          Number.isInteger(diagnostics?.exitCode) &&
+          diagnostics.exitCode !== 0 &&
+          isRekorConflict(JSON.stringify({ error: diagnostics }))
+        );
+      });
+      const validStatus =
+        results.length === 0
+          ? ["not attempted", "already present"].includes(record.status)
+          : final === "started"
+            ? ["not attempted", "failed"].includes(record.status)
+            : final === "pre-upload-conflict"
+              ? record.status === "failed"
+              : final === "unconfirmed"
+                ? ["unconfirmed", "published"].includes(record.status)
+                : ["published", "unconfirmed"].includes(record.status);
+      if (
+        !validOrder ||
+        !validConflicts ||
+        !validStatus ||
+        (accepted && record.attempts.at(-1).diagnostics?.exitCode !== 0) ||
+        results.slice(0, -1).includes("accepted")
+      )
+        throw new Error("Invalid prior publication report package");
+    }
   }
 }
 
@@ -343,7 +372,7 @@ async function packageState(registry, entry, release, limitMs) {
  * @param invoke npm CLI invocation.
  * @param save Durable report writer.
  * @param prior Previous attempt report, when rerunning.
- * @returns Publication report after confirmed reads or a stopped publication.
+ * @returns Publication report with accepted uploads or a stopped publication.
  */
 export async function publishPrepared({ release, registry, invoke, save, prior }) {
   if (currentRunAttempt() > 1 && prior === undefined)
@@ -370,7 +399,7 @@ export async function publishPrepared({ release, registry, invoke, save, prior }
 }
 
 /**
- * Reads every package before a write and checks contradictory tags and prior attempts.
+ * Reads packages without accepted uploads before a write and checks contradictions.
  *
  * @param release Prepared release.
  * @param registry Public registry reader.
@@ -380,13 +409,22 @@ export async function publishPrepared({ release, registry, invoke, save, prior }
  */
 async function publicationPreflight(release, registry, report, save) {
   const states = new Map();
-  for (const entry of release.packages)
+  for (const entry of release.packages) {
+    const record = report.packages.find(({ name }) => name === entry.name);
+    if (record.attempts.at(-1)?.result === "accepted") continue;
     states.set(entry.name, await packageState(registry, entry, release));
+  }
   for (const entry of release.packages) {
     const state = states.get(entry.name);
     const record = report.packages.find(({ name }) => name === entry.name);
+    if (state === undefined) {
+      record.status = "published";
+      continue;
+    }
     const selected = state.tags[release.tag];
     const opposite = release.tag === "snapshot" ? "latest" : "snapshot";
+    if (record.status === "already present" && state.status === "missing")
+      throw new Error("Prior published version is missing for " + entry.name);
     checkWriteTags(state, release, entry);
     if (
       record.initialTags !== undefined &&
@@ -404,7 +442,10 @@ async function publicationPreflight(release, registry, report, save) {
     )
       throw new Error("Prior upload outcome is unconfirmed for " + entry.name);
   }
-  if ([...states.values()].every(({ status }) => status !== "missing"))
+  if (
+    states.size === release.packages.length &&
+    [...states.values()].every(({ status }) => status !== "missing")
+  )
     throw new Error("Release version is already fully published");
   await save(report);
   return states;
@@ -440,6 +481,7 @@ function checkWriteTags(state, release, entry) {
  */
 async function publishEntry(release, entry, initial, report, registry, invoke, save) {
   const record = report.packages.find(({ name }) => name === entry.name);
+  if (initial === undefined) return;
   if (initial.status !== "missing") {
     record.status = "already present";
     await save(report);
@@ -506,7 +548,12 @@ async function publishAttempt(entry, tag, record, report, invoke, save) {
         ? "pre-upload-conflict"
         : "unconfirmed";
   evidence.diagnostics = sanitizedDiagnostics(result);
-  record.status = evidence.result === "pre-upload-conflict" ? "failed" : "unconfirmed";
+  record.status =
+    evidence.result === "accepted"
+      ? "published"
+      : evidence.result === "pre-upload-conflict"
+        ? "failed"
+        : "unconfirmed";
   await save(report);
   return evidence.result;
 }
@@ -560,7 +607,7 @@ function sanitizedDiagnostics(result) {
 }
 
 /**
- * Verifies all package states within one shared visibility window without writes.
+ * Verifies package states within one shared window, retaining fresh confirmations.
  *
  * @param release Prepared release.
  * @param report Durable attempt report.
@@ -581,20 +628,36 @@ export async function confirmPrepared({
   windowMs = 60_000,
 }) {
   const deadline = now() + windowMs;
+  const confirmed = new Set();
   do {
     let pending = false;
     for (const entry of release.packages) {
       const record = report.packages.find(({ name }) => name === entry.name);
-      if (record.status === "failed" || record.status === "not attempted") continue;
+      if (
+        record.status === "failed" ||
+        record.status === "not attempted" ||
+        confirmed.has(entry.name)
+      )
+        continue;
       if (now() >= deadline) return report;
       const bounded = (kind, item) => registry(kind, item, Math.max(1, deadline - now()));
-      const state = await packageState(bounded, entry, release);
+      let state;
+      try {
+        state = await packageState(bounded, entry, release);
+      } catch (error) {
+        if (!(error instanceof TemporaryRegistryError)) throw error;
+        record.status = "unconfirmed";
+        pending = true;
+        await save(report);
+        continue;
+      }
       const opposite = release.tag === "snapshot" ? "latest" : "snapshot";
       if (record.initialTags && state.tags[opposite] !== record.initialTags.opposite)
         throw new Error("Opposite tag moved for " + entry.name);
-      if (state.status === "confirmed")
+      if (state.status === "confirmed") {
         record.status = record.attempts.length ? "published" : "already present";
-      else {
+        confirmed.add(entry.name);
+      } else {
         record.status = "unconfirmed";
         pending = true;
       }

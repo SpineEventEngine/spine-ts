@@ -84,6 +84,38 @@ describe("offline release trial boundaries", () => {
     }
   });
 
+  it("supplies delayed and fatal reads at the guarded HTTP boundary", async () => {
+    const encoded = encodeURIComponent(entry.name);
+    const url = `https://registry.npmjs.org/${encoded}/${entry.version}`;
+    const delayed = createTrialServices(release, "/tmp", Infinity, "delayed-body");
+    delayed.published.add(entry.name);
+    const response = await delayed.fetch(url);
+    expect(response.status).toBe(200);
+    const marker = Symbol("pending");
+    expect(await Promise.race([response.json(), Promise.resolve(marker)])).toBe(marker);
+    expect((await delayed.fetch(url)).status).toBe(200);
+    const denied = createTrialServices(release, "/tmp", Infinity, "denied");
+    expect((await denied.fetch(`https://registry.npmjs.org/${encoded}`)).status).toBe(401);
+    const malformed = createTrialServices(release, "/tmp", Infinity, "malformed");
+    expect(await (await malformed.fetch(`https://registry.npmjs.org/${encoded}`)).json()).toEqual(
+      [],
+    );
+    expect(delayed.calls + denied.calls + malformed.calls).toBe(0);
+  });
+
+  it("keeps accepted uploads publicly invisible in the offline service", async () => {
+    const services = createTrialServices(release, "/tmp", Infinity, "invisible");
+    services.published.add(entry.name);
+    const encoded = encodeURIComponent(entry.name);
+    expect(
+      (await services.fetch(`https://registry.npmjs.org/${encoded}/${entry.version}`)).status,
+    ).toBe(404);
+    const tags = await services.fetch(`https://registry.npmjs.org/-/package/${encoded}/dist-tags`);
+    expect(await tags.json()).toEqual({ latest: "1.0.0" });
+    expect(services.published.has(entry.name)).toBe(true);
+    expect(services.calls).toBe(0);
+  });
+
   it("simulates only exact registry reads and isolated npm publication arguments", async () => {
     const directory = mkdtempSync(join(tmpdir(), "spine-trial-service-"));
     const userConfig = join(directory, "user.npmrc");

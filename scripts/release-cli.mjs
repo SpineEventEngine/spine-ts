@@ -316,10 +316,18 @@ export async function executeRelease({
     report = prior ?? createPublicationReport(release);
     for (const record of report.packages) record.status = "unconfirmed";
     await save(report);
+    report = await confirmPrepared({
+      release,
+      report,
+      registry,
+      save,
+      ...dependencies.confirmation,
+    });
   } else report = await publishPrepared({ release, registry, invoke, save, prior });
-  report = await confirmPrepared({ release, report, registry, save, ...dependencies.confirmation });
   if (report.packages.some(({ status }) => status !== "published" && status !== "already present"))
-    throw new Error("Publication confirmation remains unconfirmed");
+    throw new Error(
+      verifyOnly ? "Registry visibility remains unconfirmed" : "Publication remains unconfirmed",
+    );
   return report;
 }
 
