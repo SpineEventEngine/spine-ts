@@ -5,7 +5,8 @@ an npm token. Never add a token fallback.
 
 1. Push a feature branch; a human maintainer opens a pull request to `master`.
 2. `build.yml` audits all and production dependencies before release verification,
-   then proves the packed artifacts without publishing.
+   prepares the saved archives, and transfers them to a fresh Node-only job for
+   an offline publication trial.
 3. A human merges the pull request.
 4. `publish.yml` runs for the `master` push. It uses npm `11.16.0` to publish
    the tested package archives with OIDC authentication and provenance.
@@ -108,9 +109,26 @@ Preparation builds and tests the packages, creates their archives, and installs
 those archives in a fresh consumer project. It saves the archives together with
 their package names, versions, hashes and source commit. Preparation then reads
 the saved release using the same checks as the publishing job, including
-dependency order and archive contents. Pull requests run this check too,
-without publishing. The publishing job checks the saved release again and
-passes the same archives directly to npm. It does not rebuild or repack them.
+dependency order and archive contents. Pull requests and the publishing workflow
+use the same preparation action, including frozen install, audits, verification,
+the pinned npm/Rekor loopback fixture, and saved archive preparation. The PR
+job downloads the archives into a fresh Node-only runner and runs the actual
+preflight, publication, report, rerun, and read-only verification entrypoints.
+Only registry HTTP responses and the network-producing `npm publish` subprocess
+are replaced with strict local responses. The trial checks all 19 packages,
+a partial failed attempt, the saved prior report on rerun, and read-only
+confirmation. It writes and rereads real reports. Unexpected URLs or npm
+arguments fail the trial. Trial reports are uploaded even on failure under the
+distinct `publication-trial-report` artifact; they are never recovery evidence
+for a real publication run. No npm, Sigstore, signing, or OIDC service request is
+made by the trial. The publishing job checks the saved release again and passes
+the same archives directly to npm; it does not rebuild or repack them.
+
+This offline trial proves local release policy, archive handoff, argument and
+configuration construction, and report handling. It cannot prove public npm
+availability, trusted-publisher configuration, GitHub environment authorization,
+or live provenance acceptance. CI dependency downloads, audits, and GitHub
+artifact transfer still use their normal services.
 
 The consumer test may download third-party dependencies from the registry.
 Every framework package comes from the prepared local archives, and dependency

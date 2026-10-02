@@ -11,13 +11,54 @@ describe("release workflows", () => {
     const build = YAML.parse(read("build.yml"));
     const steps = build.jobs.verify.steps;
     expect(build.permissions).toEqual({ contents: "read" });
-    expect(steps.map(({ run }) => run).filter(Boolean)).toContain(
-      "node --test scripts/npm-rekor-recovery.repro.mjs",
+    expect(steps.map(({ uses }) => uses)).toContain("./.github/actions/prepare-release");
+    expect(steps.find(({ with: settings }) => settings?.name === "release")).toBeDefined();
+    const trial = build.jobs.trial;
+    expect(trial.needs).toBe("verify");
+    expect(trial.steps.some(({ with: settings }) => settings?.name === "release")).toBe(true);
+    expect(trial.steps.map(({ run }) => run)).toContain(
+      'node scripts/release-trial.mjs --input "$RUNNER_TEMP/release" --output "$RUNNER_TEMP/publication-trial-report"',
     );
-    expect(steps.map(({ run }) => run).filter(Boolean)).toContain(
-      "node scripts/release-cli.mjs prepare --check",
+    const report = trial.steps.find(
+      ({ with: settings }) => settings?.name === "publication-trial-report",
     );
+    expect(report.if).toBe("always()");
+    expect(report.with.path).toBe("${{ runner.temp }}/publication-trial-report");
+    expect(trial.steps.some(({ with: settings }) => settings?.name === "publication-report")).toBe(
+      false,
+    );
+    expect(trial.steps.some(({ run }) => run?.includes("pnpm install"))).toBe(false);
+    expect(trial.steps.some(({ uses }) => uses?.startsWith("pnpm/"))).toBe(false);
+    expect(
+      trial.steps.find(({ uses }) => uses?.startsWith("actions/setup-node@")).with,
+    ).toMatchObject({
+      "node-version": "24.18.0",
+      "package-manager-cache": false,
+    });
     expect(read("build.yml")).not.toMatch(/id-token|npm publish|secrets\./u);
+  });
+
+  it("shares pinned preparation steps and runs audits before release verification", () => {
+    const action = YAML.parse(
+      readFileSync(join(root, ".github/actions/prepare-release/action.yml"), "utf8"),
+    );
+    const runs = action.runs.steps.map(({ run }) => run).filter(Boolean);
+    expect(action.runs.using).toBe("composite");
+    expect(
+      action.runs.steps.find(({ uses }) => uses?.startsWith("pnpm/action-setup@")).with,
+    ).toEqual({
+      version: "11.9.0",
+    });
+    expect(runs).toContain("pnpm install --frozen-lockfile --ignore-scripts");
+    expect(runs.indexOf("pnpm audit:release")).toBeLessThan(runs.indexOf("pnpm verify:release"));
+    expect(runs).toContain("node --test scripts/npm-rekor-recovery.repro.mjs");
+    expect(runs).toContain('node scripts/release-cli.mjs prepare --output "$RUNNER_TEMP/release"');
+    for (const name of ["build.yml", "publish.yml"])
+      expect(
+        YAML.parse(read(name)).jobs[name === "build.yml" ? "verify" : "prepare"].steps.map(
+          ({ uses }) => uses,
+        ),
+      ).toContain("./.github/actions/prepare-release");
   });
 
   it("separates verified archive preparation from token-free OIDC publication", () => {
@@ -30,10 +71,7 @@ describe("release workflows", () => {
       queue: "max",
       "cancel-in-progress": false,
     });
-    expect(prepare.steps.map(({ run }) => run).filter(Boolean)).toContain("pnpm verify:publish");
-    expect(prepare.steps.map(({ run }) => run).filter(Boolean)).toContain(
-      'node scripts/release-cli.mjs prepare --output "$RUNNER_TEMP/release"',
-    );
+    expect(prepare.steps.map(({ uses }) => uses)).toContain("./.github/actions/prepare-release");
     expect(publish.permissions).toEqual({ contents: "read", actions: "read", "id-token": "write" });
     const command = publish.steps.find(({ run }) => run?.includes("release-cli.mjs publish")).run;
     expect(command).toContain(

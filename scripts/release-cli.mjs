@@ -262,12 +262,13 @@ export function npmEnvironment(directory) {
  *
  * @param archive Prepared archive path.
  * @param tag Validated release tag.
+ * @param spawn Process runner for the network-producing npm command.
  * @returns npm exit status and captured JSON diagnostics.
  */
-function invokeNpm(archive, tag) {
+function invokeNpm(archive, tag, spawn = spawnSync) {
   const directory = mkdtempSync(join(tmpdir(), "spine-npm-config-"));
   try {
-    const result = spawnSync("npm", npmPublishArgs(archive, tag), {
+    const result = spawn("npm", npmPublishArgs(archive, tag), {
       cwd: root,
       encoding: "utf8",
       env: npmEnvironment(directory),
@@ -305,8 +306,11 @@ export async function executeRelease({
     throw new Error("A rerun requires its previous publication report");
   if (prior !== undefined) validatePriorReport(prior, release, !verifyOnly);
   const save = dependencies.save ?? ((value) => writeReport(reportPath, value));
-  const registry = dependencies.registry ?? createPublicRegistry(globalThis.fetch);
-  const invoke = dependencies.invoke ?? ((tarball, tag) => invokeNpm(join(input, tarball), tag));
+  const registry =
+    dependencies.registry ?? createPublicRegistry(dependencies.fetch ?? globalThis.fetch);
+  const invoke =
+    dependencies.invoke ??
+    ((tarball, tag) => invokeNpm(join(input, tarball), tag, dependencies.spawn ?? spawnSync));
   let report;
   if (verifyOnly) {
     report = prior ?? createPublicationReport(release);

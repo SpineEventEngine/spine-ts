@@ -1,12 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { spawnSync } from "node:child_process";
 import { Buffer } from "node:buffer";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import { executeRelease, main, npmEnvironment, prepareRelease } from "./release-cli.mjs";
 import { expectedReleaseModel, readReleaseManifests } from "./release-policy.mjs";
+import { withProcessGuard } from "./release-trial.mjs";
 
 const sourceSha = "a".repeat(40);
 const expected = {
@@ -22,7 +23,87 @@ const packed = {
   dependencies: [],
 };
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+});
+
 describe("release CLI", () => {
+  it("routes registry reads through the injected HTTP transport", async () => {
+    vi.stubGlobal("fetch", () => {
+      throw new Error("unexpected real fetch");
+    });
+    await expect(
+      executeRelease({
+        input: "/unused",
+        reportPath: "/unused/report.json",
+        dependencies: {
+          expected,
+          load: () => ({ ...expected, sourceSha, packages: [packed] }),
+          fetch: async () => ({ status: 500, ok: false }),
+          save: () => {},
+        },
+      }),
+    ).rejects.toThrow("Registry read failed: 500");
+  });
+
+  it("builds npm arguments and isolated config before the injected subprocess", async () => {
+    vi.stubEnv("NPM_TOKEN", "dummy-npm-token");
+    vi.stubEnv("NODE_AUTH_TOKEN", "dummy-node-token");
+    vi.stubEnv("npm_config__authToken", "dummy-config-token");
+    const directory = mkdtempSync(join(tmpdir(), "spine-spawn-test-"));
+    const reportPath = join(directory, "report.json");
+    const calls = [];
+    try {
+      await expect(
+        withProcessGuard(directory, () =>
+          executeRelease({
+            input: directory,
+            reportPath,
+            dependencies: {
+              expected,
+              load: () => ({ ...expected, sourceSha, packages: [packed] }),
+              registry: async (kind) => (kind === "tags" ? {} : undefined),
+              spawn: (command, args, options) => {
+                calls.push({ command, args, options });
+                expect(options.env.NPM_TOKEN).toBeUndefined();
+                expect(options.env.NODE_AUTH_TOKEN).toBeUndefined();
+                expect(options.env.npm_config__authToken).toBeUndefined();
+                expect(readFileSync(options.env.NPM_CONFIG_USERCONFIG, "utf8")).toBe("");
+                expect(readFileSync(options.env.NPM_CONFIG_GLOBALCONFIG, "utf8")).toBe("");
+                return { status: 1, stdout: JSON.stringify({ error: { code: "EFAIL" } }) };
+              },
+              confirmation: { now: () => 0, windowMs: 0 },
+            },
+          }),
+        ),
+      ).rejects.toThrow("Publication confirmation remains unconfirmed");
+      expect(calls).toHaveLength(1);
+      expect(calls[0].command).toBe("npm");
+      expect(calls[0].options.cwd).toBe(resolve(new URL("..", import.meta.url).pathname));
+      expect(calls[0].args).toEqual([
+        "publish",
+        join(directory, packed.tarball),
+        "--provenance",
+        "--ignore-scripts",
+        "--access",
+        "public",
+        "--tag",
+        "snapshot",
+        "--registry",
+        "https://registry.npmjs.org/",
+        "--json",
+      ]);
+      expect(calls[0].options.env.NPM_CONFIG_USERCONFIG).not.toBe(
+        calls[0].options.env.NPM_CONFIG_GLOBALCONFIG,
+      );
+      expect(existsSync(calls[0].options.env.NPM_CONFIG_USERCONFIG)).toBe(false);
+      expect(JSON.parse(readFileSync(reportPath, "utf8")).packages[0].attempts).toHaveLength(1);
+    } finally {
+      rmSync(directory, { force: true, recursive: true });
+    }
+  });
+
   it("starts pinned npm with distinct empty configuration files", () => {
     const directory = mkdtempSync(join(tmpdir(), "spine-npm-config-test-"));
     try {

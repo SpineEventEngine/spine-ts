@@ -665,6 +665,16 @@ recorded branch/ref and external Git history.
 
 ## Quality Gates
 
+Every pull request to master must exercise the same local release procedures
+as publishing. Share their preparation steps, transfer the prepared
+archives to a fresh job, and exercise loading, package order, reports, failures,
+reruns, and confirmation through the real release code. Replace only the
+publication-service I/O with local test responses. PR checks must not publish,
+request signing credentials, or contact npm/Sigstore for the trial publication.
+Dependency installation, security audits, and GitHub artifact transfer remain
+normal CI operations. Passing local checks does not prove remote service
+availability or trusted-publisher configuration.
+
 A task cannot be marked complete until:
 
 - implementation goal is achieved;

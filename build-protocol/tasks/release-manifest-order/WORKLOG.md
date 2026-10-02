@@ -86,3 +86,104 @@
 - Implementation, three reviews, local release verification, version alignment,
   and branch synchronization are complete. Remaining step: open a PR and check
   its final-SHA CI before merging. No unresolved code findings or questions.
+
+## 2026-10-02: Extend PR checks to the full local publication flow
+
+The user expanded this same unmerged task: regular CI must run all publication
+procedures except real publication-service calls. Fresh fetch confirms master
+unchanged. Requirements, comparison, plan and assignments are in `CI_PARITY.md`;
+the standing requirement is also recorded in `BUILD_PROTOCOL.md`.
+
+Resumed the existing implementer session `01a0f8a5-beee-7b50-8adf-02d466054306`
+with explicit Sol/medium, Standard speed, memories and delegation disabled.
+Only that context changes workflows, release scripts/tests and release docs.
+Main manages task/protocol records. No additional version bump is needed for
+this continuation; snapshot.20 remains this branch's intended release.
+
+PR #15 now exists and is attached to this chat. The implementer confirmed that
+the previous high-level registry/invoke test substitutions bypass HTTP parsing
+and npm argument/config construction. New substitutions belong at fetch and
+subprocess I/O instead. One expected-red subprocess test reached real npm with
+a missing local archive (no publication); acceptance additionally requires
+guards that reject real I/O even if injection is accidentally ignored.
+
+Local persistent preparation passed for all 19 actual archives at
+`/tmp/spine-ci-release-check-20261002`; it includes fresh consumer installation,
+typechecking/runtime proof and the saved manifest/archive loader. Main will
+run the trial against that directory after subprocess fallback is blocked.
+Initial changed-file formatting found only the new plan table; fixed with
+Prettier. The expensive release gate will run once in PR CI after review,
+not both locally and remotely.
+
+Before independent review, return these concrete draft findings to the same
+implementer: add an independent real-process guard (HTTP already guarded),
+preserve the existing PR `verify` check name, save trial reports under a
+distinct always-uploaded artifact, reject missing CLI option names, and avoid
+overwriting the simulated selected tag for stable releases. These corrections
+do not change actual publication policy or add a production fake mode.
+
+Independent review assignments for the expanded changeset, after cheap
+preflight, all fresh sessions with memory and delegation disabled:
+
+1. Existing performance/reliability reviewer, explicit Sol/medium: actual
+   release entrypoints, saved archive transfer, I/O isolation, report recovery,
+   failure handling, and focused tests. Fix accepted findings before round 2.
+2. Existing style/maintainability reviewer, explicit Sol/medium, with the
+   existing documentation reviewer on Luna/medium in parallel. Review current
+   code and public claims against the full human ledger; collect both results
+   before corrections. TypeScript/public API concern is N/A: no framework
+   declarations, package APIs, Protobuf or application examples changed.
+3. Existing performance/reliability reviewer, explicit Sol/medium, plus final
+   security reviewer, explicit Sol/high, on isolated publication-service I/O
+   and real publishing defaults. Collect both before the final correction batch.
+
+Each dispatch must explicitly set its model and reasoning, Standard speed,
+and no inherited conversation. The bundled Desktop CLI provides these
+profiles; actual runtime introspection is unavailable, so configured flags
+and session IDs are recorded. Full release verification and the fresh-job
+trial then run in PR #15 for the exact pushed commit. No real publication is
+part of this task.
+
+### Expanded implementation and review evidence
+
+- The same implementer completed the correction batch. Real I/O fallback is
+  blocked independently of injection, `verify` keeps its check name, trial
+  reports have a separate artifact, missing CLI paths fail clearly, selected
+  tags are preserved correctly, and trial publication order is checked.
+- Main reran the six focused release test files: 79 tests passed. Tooling
+  typecheck, scoped ESLint, cleanup, TSDoc, documentation audience, formatting,
+  and diff checks passed. The guarded CLI trial passed against all 19 real
+  archives, including a saved partial report and successful recovery. The
+  implementation report gives exact commands and output locations.
+- Round 1: fresh session `01a0fbb4-50f6-7a50-b580-f1d4beefd24d`, explicit
+  Sol/medium performance/reliability profile. No P0/P1/P2 findings. Reviewed
+  complete branch release code plus the uncommitted CI extension and ledger.
+  No corrections required before round 2. CLI profile flags match assignment;
+  separate runtime model introspection was not exposed.
+- Round 2: fresh style session `01a0fbb6-e00e-71f2-b4f2-bc3cdcac0ab7`
+  used explicit Sol/medium; independent documentation session
+  `01a0fbb6-e496-71a3-aac6-f6e236e32b24` used explicit Luna/medium. Both
+  reported no P0/P1/P2 findings. Accepted the style review's P3 suggestion to
+  strengthen the existing subprocess test with working-directory and removed
+  token-variable assertions; returned this small batch to the same implementer
+  before round 3. Real publication behavior remains unchanged.
+- The round-2 assertion correction passed; main reran all 79 focused tests
+  and scoped lint successfully. The local npm/Rekor loopback fixture also
+  passed without external publication-service traffic.
+- Round 3: fresh reliability session `01a0fbbb-99db-7b20-854c-3f00fa9647c1`
+  used explicit Sol/medium, and final security session
+  `01a0fbbb-9e61-73b1-8919-27818c47b4f6` used explicit Sol/high. Both
+  returned no P0/P1/P2 findings. Runtime profiles were explicitly dispatched;
+  no contrary runtime metadata was exposed. All review sessions have exited.
+  The security advisory notes that a future change from the current guarded
+  `spawnSync` publishing call to another process primitive must update its
+  guard/test; no such alternative publication call exists in this changeset.
+  External service availability remains intentionally outside offline proof.
+- Review dispositions: style clean (advisory test improvement incorporated),
+  documentation clean, reliability clean, final security clean; TypeScript/API
+  concern N/A for unchanged public framework declarations and contracts.
+- Ready to push the CI extension on the existing snapshot.20 branch. Required
+  full release verification and fresh-runner trial are pending PR #15 for
+  the pushed commit; local focused evidence is not substituted for that result.
+  Do not add a follow-up commit solely to record this commit's SHA: Git history
+  and the PR's exact-head checks provide that evidence.

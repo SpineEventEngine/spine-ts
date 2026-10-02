@@ -1,0 +1,24 @@
+name: Prepare release archives
+description: Audit, verify, and prepare the saved release used by PR and publication jobs.
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+      with:
+        version: 11.9.0
+    - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+      with:
+        node-version-file: .node-version
+        package-manager-cache: false
+    - shell: bash
+      run: pnpm install --frozen-lockfile --ignore-scripts
+    - shell: bash
+      run: pnpm audit:release
+    - shell: bash
+      run: pnpm verify:release
+    - shell: bash
+      run: node --version | grep -Fx 'v24.18.0' && npm --version | grep -Fx '11.16.0'
+    - shell: bash
+      run: node --test scripts/npm-rekor-recovery.repro.mjs
+    - shell: bash
+      run: node scripts/release-cli.mjs prepare --output "$RUNNER_TEMP/release"
