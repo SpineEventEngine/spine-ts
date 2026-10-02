@@ -29,6 +29,25 @@ afterEach(() => {
 });
 
 describe("release CLI", () => {
+  it("finishes accepted publication while the public version remains invisible", async () => {
+    const reads = [];
+    const report = await executeRelease({
+      input: "/unused",
+      reportPath: "/unused-report",
+      dependencies: {
+        expected,
+        load: () => ({ ...expected, sourceSha, packages: [packed] }),
+        registry: async (kind) => {
+          reads.push(kind);
+          return kind === "tags" ? { latest: "1.0.0" } : undefined;
+        },
+        invoke: async () => ({ status: 0, stdout: "{}" }),
+        save: async () => {},
+      },
+    });
+    expect(report.packages[0].status).toBe("published");
+    expect(reads).toEqual(["artifact", "tags", "tags"]);
+  });
   it("routes registry reads through the injected HTTP transport", async () => {
     vi.stubGlobal("fetch", () => {
       throw new Error("unexpected real fetch");
@@ -77,7 +96,7 @@ describe("release CLI", () => {
             },
           }),
         ),
-      ).rejects.toThrow("Publication confirmation remains unconfirmed");
+      ).rejects.toThrow("Publication remains unconfirmed");
       expect(calls).toHaveLength(1);
       expect(calls[0].command).toBe("npm");
       expect(calls[0].options.cwd).toBe(resolve(new URL("..", import.meta.url).pathname));
@@ -446,7 +465,7 @@ describe("release CLI", () => {
           invoke: async () => ({ status: 1, stdout: JSON.stringify({ error: { code: "E401" } }) }),
         },
       }),
-    ).rejects.toThrow("Publication confirmation remains unconfirmed");
+    ).rejects.toThrow("Publication remains unconfirmed");
     expect(saved.packages).toHaveLength(19);
     expect(saved.packages[0].status).toBe("unconfirmed");
     expect(saved.packages.slice(1).every(({ status }) => status === "not attempted")).toBe(true);
@@ -458,104 +477,109 @@ describe("release CLI", () => {
     let sends = 0;
     let time = 0;
     let waits = 0;
+    const dependencies = {
+      expected,
+      load: () => release,
+      save: async () => {},
+      confirmation: {
+        now: () => time,
+        sleep: async (ms) => {
+          time += ms;
+          waits++;
+        },
+        windowMs: 4_000,
+      },
+      registry: async (kind, entry) => {
+        if (kind === "artifact") {
+          reads++;
+          if (reads <= 3) return undefined;
+          return {
+            name: entry.name,
+            version: expected.version,
+            dist: {
+              integrity: entry.integrity,
+              attestations: {
+                url: `https://registry.npmjs.org/-/npm/v1/attestations/@spine-event-engine%2fproto@${expected.version}`,
+              },
+            },
+          };
+        }
+        if (kind === "tags") return reads >= 2 ? { snapshot: expected.version } : {};
+        return {
+          attestations: [
+            {
+              bundle: {
+                mediaType: "application/vnd.dev.sigstore.bundle.v0.3+json",
+                dsseEnvelope: {
+                  payloadType: "application/vnd.in-toto+json",
+                  payload: Buffer.from(
+                    JSON.stringify({
+                      predicateType: "https://slsa.dev/provenance/v1",
+                      subject: [
+                        {
+                          name: `pkg:npm/%40spine-event-engine/proto@${expected.version}`,
+                          digest: { sha512: "61" },
+                        },
+                      ],
+                      predicate: {
+                        buildDefinition: {
+                          externalParameters: {
+                            workflow: {
+                              repository: "https://github.com/SpineEventEngine/spine-ts",
+                              path: ".github/workflows/publish.yml",
+                              ref: "refs/heads/master",
+                            },
+                          },
+                          resolvedDependencies: [
+                            {
+                              uri: "git+https://github.com/SpineEventEngine/spine-ts@refs/heads/master",
+                              digest: { gitCommit: sourceSha },
+                            },
+                          ],
+                        },
+                      },
+                    }),
+                  ).toString("base64"),
+                  signatures: [{ sig: "c2ln", keyid: "" }],
+                },
+                verificationMaterial: {
+                  certificate: { rawBytes: "Y2VydA==" },
+                  tlogEntries: [
+                    {
+                      logId: { keyId: "a2V5" },
+                      kindVersion: { kind: "dsse", version: "0.0.1" },
+                      canonicalizedBody: "Ym9keQ==",
+                      inclusionPromise: { signedEntryTimestamp: "c2V0" },
+                      inclusionProof: {
+                        rootHash: "cm9vdA==",
+                        hashes: [],
+                        checkpoint: { envelope: "checkpoint" },
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          ],
+        };
+      },
+      invoke: async () => {
+        sends++;
+        return { status: 1, stdout: JSON.stringify({ error: { code: "E409" } }) };
+      },
+    };
+    await expect(
+      executeRelease({ input: "/unused", reportPath: "/unused-report", dependencies }),
+    ).rejects.toThrow("Publication remains unconfirmed");
     const report = await executeRelease({
       input: "/unused",
       reportPath: "/unused-report",
-      dependencies: {
-        expected,
-        load: () => release,
-        save: async () => {},
-        confirmation: {
-          now: () => time,
-          sleep: async (ms) => {
-            time += ms;
-            waits++;
-          },
-          windowMs: 4_000,
-        },
-        registry: async (kind, entry) => {
-          if (kind === "artifact") {
-            reads++;
-            if (reads <= 3) return undefined;
-            return {
-              name: entry.name,
-              version: expected.version,
-              dist: {
-                integrity: entry.integrity,
-                attestations: {
-                  url: `https://registry.npmjs.org/-/npm/v1/attestations/@spine-event-engine%2fproto@${expected.version}`,
-                },
-              },
-            };
-          }
-          if (kind === "tags") return reads >= 2 ? { snapshot: expected.version } : {};
-          return {
-            attestations: [
-              {
-                bundle: {
-                  mediaType: "application/vnd.dev.sigstore.bundle.v0.3+json",
-                  dsseEnvelope: {
-                    payloadType: "application/vnd.in-toto+json",
-                    payload: Buffer.from(
-                      JSON.stringify({
-                        predicateType: "https://slsa.dev/provenance/v1",
-                        subject: [
-                          {
-                            name: `pkg:npm/%40spine-event-engine/proto@${expected.version}`,
-                            digest: { sha512: "61" },
-                          },
-                        ],
-                        predicate: {
-                          buildDefinition: {
-                            externalParameters: {
-                              workflow: {
-                                repository: "https://github.com/SpineEventEngine/spine-ts",
-                                path: ".github/workflows/publish.yml",
-                                ref: "refs/heads/master",
-                              },
-                            },
-                            resolvedDependencies: [
-                              {
-                                uri: "git+https://github.com/SpineEventEngine/spine-ts@refs/heads/master",
-                                digest: { gitCommit: sourceSha },
-                              },
-                            ],
-                          },
-                        },
-                      }),
-                    ).toString("base64"),
-                    signatures: [{ sig: "c2ln", keyid: "" }],
-                  },
-                  verificationMaterial: {
-                    certificate: { rawBytes: "Y2VydA==" },
-                    tlogEntries: [
-                      {
-                        logId: { keyId: "a2V5" },
-                        kindVersion: { kind: "dsse", version: "0.0.1" },
-                        canonicalizedBody: "Ym9keQ==",
-                        inclusionPromise: { signedEntryTimestamp: "c2V0" },
-                        inclusionProof: {
-                          rootHash: "cm9vdA==",
-                          hashes: [],
-                          checkpoint: { envelope: "checkpoint" },
-                        },
-                      },
-                    ],
-                  },
-                },
-              },
-            ],
-          };
-        },
-        invoke: async () => {
-          sends++;
-          return { status: 1, stdout: JSON.stringify({ error: { code: "E409" } }) };
-        },
-      },
+      verifyOnly: true,
+      dependencies,
     });
     expect(sends).toBe(1);
     expect(reads).toBe(4);
     expect(waits).toBe(1);
-    expect(report.packages[0].status).toBe("published");
+    expect(report.packages[0].status).toBe("already present");
   });
 });

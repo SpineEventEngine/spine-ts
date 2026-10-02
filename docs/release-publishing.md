@@ -117,10 +117,15 @@ preflight, publication, report, rerun, and read-only verification entrypoints.
 Only registry HTTP responses and the network-producing `npm publish` subprocess
 are replaced with strict local responses. The trial checks all 19 packages,
 a partial failed attempt, the saved prior report on rerun, and read-only
-confirmation. It writes and rereads real reports. Unexpected URLs or npm
-arguments fail the trial. Trial reports are uploaded even on failure under the
-distinct `publication-trial-report` artifact; they are never recovery evidence
-for a real publication run. No npm, Sigstore, signing, or OIDC service request is
+verification. It proves that all 19 accepted uploads finish when none of the
+new versions is publicly readable, and that a rerun skips accepted uploads
+while they remain invisible. It also checks a delayed registry response body
+during explicit verification, plus fatal permission and malformed responses.
+It writes and rereads real reports. Unexpected URLs or npm arguments fail the
+trial. Trial reports are
+uploaded even on failure under the distinct `publication-trial-report` artifact;
+they are never recovery evidence for a real publication run. No npm, Sigstore,
+signing, or OIDC service request is
 made by the trial. The publishing job checks the saved release again and passes
 the same archives directly to npm; it does not rebuild or repack them.
 
@@ -134,9 +139,14 @@ The consumer test may download third-party dependencies from the registry.
 Every framework package comes from the prepared local archives, and dependency
 installation scripts remain disabled.
 
-Before publication, the job checks all 19 packages against npm's public registry.
-It stops on authentication errors, unavailable or malformed responses, conflicting
-published content, or a release tag that already points to a newer version.
+Before a first publication attempt, the job checks all 19 packages against
+npm's public registry. A rerun skips public reads for validated accepted uploads.
+Each registry GET has a 10-second request-and-body limit and at most three
+attempts for temporary transport failures, HTTP 429, or HTTP 5xx, with short
+delays between attempts. Exhaustion stops publication; it never establishes
+that a package is absent. The job stops on authentication errors, permanently
+unavailable or malformed responses, conflicting published content, or a release
+tag that already points to a newer version.
 Packages are published one at a time in dependency order. Each package's tag is
 checked again immediately before its publication.
 
@@ -162,23 +172,29 @@ errors do not qualify. A second failure stops publication of later packages.
 No dependency is patched, no Sigstore timeout is increased, and provenance is
 never disabled.
 
-### Confirmation and the result report
+### Publication and public verification reports
 
 The job reports every package as published, already present, failed, unconfirmed,
-or not attempted. It checks the exact version, archive hash, selected tag and
-the npm-hosted provenance record, including the package, source commit and
-publishing workflow. Snapshot publication must leave `latest` unchanged.
+or not attempted. A zero exit code from npm is durably recorded as an accepted
+upload and marks that package published. The publishing command succeeds once
+all packages were accepted or already present; it does not wait for newly
+uploaded versions to appear in public registry reads.
 
-This confirmation compares npm's provenance record with the expected details
-and checks for its signature, certificate and transparency-log proof. It trusts
-npm's HTTPS endpoint; it does not independently verify the cryptographic
-signatures.
+The separate read-only `verify-registry` command checks public visibility of
+the exact version, archive hash, selected tag, and npm-hosted provenance record,
+including the package, source commit, and publishing workflow. Snapshot
+publication must leave `latest` unchanged. This verification checks for the
+provenance signature, certificate, and transparency-log proof. It trusts npm's
+HTTPS endpoint; it does not independently verify the cryptographic signatures.
 
-Public registry data can appear later than the upload succeeds. Confirmation
+Public registry data can appear later than npm accepts an upload. Verification
 uses one shared 60-second window for the release, not a separate minute for
-each package. Missing evidence after that window is reported as unconfirmed;
-it is not treated as proof that publication failed or that permissions are wrong.
-Confirmation never uploads a package or changes a tag.
+each package. Temporary read failures leave the package unconfirmed and can be
+revisited within that same window. Packages positively confirmed during this
+verification are not reread while others remain pending. A previous upload
+report alone is not fresh public confirmation. Missing evidence after that
+window is reported as unconfirmed; it does not reverse an accepted upload or prove that
+permissions are wrong. Verification never uploads a package or changes a tag.
 
 ### Recovering a failed run
 
@@ -189,16 +205,20 @@ before npm starts and is saved even when the publishing step fails.
 A failed publication job can resume only with its original archives and a valid
 report from the immediately preceding attempt of the same run and source commit.
 An older report cannot establish what happened during an intervening cancelled
-attempt. An uncertain earlier
-upload must first be positively confirmed: a later 404 does not authorize sending
-the package again. Missing reports, different archive bytes, conflicting tags or
+attempt. A recorded accepted upload with a zero npm exit code is skipped on a
+rerun even if its public version is still invisible. A saved pre-upload Rekor
+conflict permits the documented fresh attempt only when its recorded npm exit
+was nonzero and its diagnostics match the exact proven conflict. Remaining
+packages retain the exact-version and tag checks before writes. An uncertain earlier
+upload must first be positively confirmed: a later 404 does not authorize
+sending the package again. Missing reports, different archive bytes, conflicting tags or
 newer releases stop further uploads. A cancelled runner may leave no report;
 that case also requires investigation rather than a blind retry. The workflow
 keeps the `release` artifact for one day and `publication-report` for 14 days.
 Having the report alone is not enough to resume after the archives expire.
 
-When every package was uploaded but confirmation failed, use the read-only
-verification command described below instead of publishing again. Do not rerun
+When every package was accepted but public visibility is still pending, use the
+read-only verification command described below. Do not rerun
 preparation and assume newly created archives are identical. If the original
 artifacts have expired, prepare a new common version unless equality with the
 original hashes can be established.

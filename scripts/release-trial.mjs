@@ -8,7 +8,7 @@ import { join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { main } from "./release-cli.mjs";
-import { npmPublishArgs } from "./release-publication.mjs";
+import { createPublicRegistry, npmPublishArgs } from "./release-publication.mjs";
 import { frameworkPackageNames } from "./package-artifacts.mjs";
 
 const registryUrl = "https://registry.npmjs.org/";
@@ -171,24 +171,48 @@ function resources(release) {
  * @param release Prepared release manifest.
  * @param input Saved archive directory.
  * @param interruptAfter Number of accepted uploads before one simulated read failure.
+ * @param fault Optional denied, malformed, delayed-body, or invisible registry response.
  * @returns Injected I/O and observable trial state.
  */
-export function createTrialServices(release, input, interruptAfter = Infinity) {
+export function createTrialServices(release, input, interruptAfter = Infinity, fault) {
   const published = new Set();
   const paths = resources(release);
   let calls = 0;
   let interrupted = false;
+  let faultUsed = false;
+  const reads = [];
   const fetch = async (url, options = {}) => {
     const target = paths.get(url);
     if (!target) throw new Error("Unexpected trial URL: " + url);
     if ((options.method ?? "GET") !== "GET" || options.body !== undefined)
       throw new Error("Unexpected trial HTTP request");
     const { kind, entry } = target;
+    reads.push({ kind, name: entry.name });
+    if (fault === "denied" && kind === "packument" && entry === release.packages[0])
+      return { status: 401, ok: false };
+    if (fault === "malformed" && kind === "packument" && entry === release.packages[0])
+      return response([]);
+    if (
+      fault === "delayed-body" &&
+      !faultUsed &&
+      published.size === release.packages.length &&
+      kind === "artifact" &&
+      entry === release.packages[0]
+    ) {
+      faultUsed = true;
+      return { status: 200, ok: true, json: () => new Promise(() => {}) };
+    }
     if (!interrupted && published.size === interruptAfter && kind === "tags") {
       interrupted = true;
       throw new Error("Simulated registry interruption");
     }
-    return trialResponse(kind, entry, published, release, paths);
+    return trialResponse(
+      kind,
+      entry,
+      fault === "invisible" ? new Set() : published,
+      release,
+      paths,
+    );
   };
   const spawn = (command, args, options) => {
     const result = trialSpawn(command, args, options, release, input, published);
@@ -199,6 +223,7 @@ export function createTrialServices(release, input, interruptAfter = Infinity) {
     fetch,
     spawn,
     published,
+    reads,
     get calls() {
       return calls;
     },
@@ -285,13 +310,92 @@ function trialSpawn(command, args, options, release, input, published) {
  * @param reportPath Report path to write.
  * @param services Local service boundaries.
  * @param priorPath Earlier report, when resuming or verifying.
+ * @param timeoutMs Optional shorter GET attempt timeout for the delayed-body trial.
  * @returns Release CLI result.
  */
-function run(command, input, reportPath, services, priorPath) {
+function run(command, input, reportPath, services, priorPath, timeoutMs) {
   const argv = ["node", "release-cli.mjs", command];
   if (command !== "preflight") argv.push("--input", input, "--report", reportPath);
   if (priorPath) argv.push("--prior-report", priorPath);
-  return main({ argv, dependencies: { fetch: services.fetch, spawn: services.spawn } });
+  return main({
+    argv,
+    dependencies: {
+      fetch: services.fetch,
+      spawn: services.spawn,
+      confirmation: services.confirmation,
+      ...(timeoutMs === undefined
+        ? {}
+        : { registry: createPublicRegistry(services.fetch, timeoutMs) }),
+    },
+  });
+}
+
+/**
+ * Exercises a delayed body and fatal registry responses through release commands.
+ *
+ * @param release Prepared release identity.
+ * @param input Saved archive directory.
+ * @param output Trial report directory.
+ * @returns Promise that completes after the read-failure checks pass.
+ */
+async function runReadFailures(release, input, output) {
+  const delayed = createTrialServices(release, input, Infinity, "delayed-body");
+  await run("preflight", input, "", delayed);
+  const result = await run(
+    "publish",
+    input,
+    join(output, "delayed-body.json"),
+    delayed,
+    undefined,
+    5,
+  );
+  assert(result.packages.every(({ status }) => status === "published"));
+  assert.equal(delayed.calls, release.packages.length);
+  await run(
+    "verify-registry",
+    input,
+    join(output, "delayed-read-only.json"),
+    delayed,
+    join(output, "delayed-body.json"),
+    5,
+  );
+  for (const fault of ["denied", "malformed"]) {
+    const services = createTrialServices(release, input, Infinity, fault);
+    await assert.rejects(
+      run("preflight", input, "", services),
+      /Registry read failed: 401|ambiguous registry response/u,
+    );
+    assert.equal(services.calls, 0);
+  }
+}
+
+/**
+ * Proves accepted uploads finish while every new version remains publicly absent.
+ *
+ * @param release Prepared release identity.
+ * @param input Saved archive directory.
+ * @param output Trial report directory.
+ */
+async function runInvisible(release, input, output) {
+  const services = createTrialServices(release, input, Infinity, "invisible");
+  const reportPath = join(output, "invisible.json");
+  const result = await run("publish", input, reportPath, services);
+  assert(result.packages.every(({ status }) => status === "published"));
+  assert.equal(services.calls, release.packages.length);
+  assert.equal(services.reads.length, release.packages.length * 3);
+  let tick = 0;
+  services.confirmation = {
+    now: () => tick++,
+    sleep: async () => {
+      tick = 100;
+    },
+    windowMs: 100,
+  };
+  await assert.rejects(
+    run("verify-registry", input, join(output, "invisible-read-only.json"), services, reportPath),
+    /Registry visibility remains unconfirmed/u,
+  );
+  assert.equal(services.calls, release.packages.length);
 }
 
 /**
@@ -319,7 +423,7 @@ async function runNormal(release, input, output) {
  * @param output Trial report directory.
  */
 async function runRecovery(release, input, output) {
-  const services = createTrialServices(release, input, 2);
+  const services = createTrialServices(release, input, 2, "invisible");
   await run("preflight", input, "", services);
   const partialPath = join(output, "partial.json");
   await assert.rejects(
@@ -328,17 +432,16 @@ async function runRecovery(release, input, output) {
   );
   const partial = JSON.parse(readFileSync(partialPath, "utf8"));
   assert.equal(partial.packages.filter(({ attempts }) => attempts.length).length, 2);
+  const readCount = services.reads.length;
   process.env.GITHUB_RUN_ATTEMPT = "2";
   const resumedPath = join(output, "resumed.json");
   const resumed = await run("publish", input, resumedPath, services, partialPath);
   assert(resumed.packages.every(({ status }) => ["published", "already present"].includes(status)));
   assert.equal(services.calls, frameworkPackageNames.length);
-  await run(
-    "verify-registry",
-    input,
-    join(output, "resumed-read-only.json"),
-    services,
-    resumedPath,
+  assert(
+    services.reads
+      .slice(readCount)
+      .every(({ name }) => !release.packages.slice(0, 2).some((entry) => entry.name === name)),
   );
 }
 
@@ -364,10 +467,13 @@ export async function runTrial(input, output) {
     process.env.GITHUB_RUN_ATTEMPT = "1";
     await withProcessGuard(input, async () => {
       await runNormal(release, input, output);
+      await runInvisible(release, input, output);
+      await runReadFailures(release, input, output);
       await runRecovery(release, input, output);
     });
     process.stdout.write(
-      "Offline publication trial: 19 normal, partial failure, rerun, and read-only checks passed.\n",
+      "Offline publication trial: normal, partial failure, rerun, delayed read recovery, " +
+        "fatal reads, and read-only checks passed for 19 packages.\n",
     );
   } finally {
     globalThis.fetch = previousFetch;

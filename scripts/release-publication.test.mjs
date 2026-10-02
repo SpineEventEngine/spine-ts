@@ -12,6 +12,7 @@ import {
   validatePriorReport,
 } from "./release-publication.mjs";
 import { expectedReleaseModel, readReleaseManifests } from "./release-policy.mjs";
+import { TemporaryRegistryError } from "./release-get.mjs";
 
 const recordId = "108e9186e8c5677a245de144eb51ce7c25da7fd499317cef7acfecf9a480e3b2d7dc97903b374234";
 const conflictText = `an equivalent entry already exists in the transparency log with UUID ${recordId}`;
@@ -21,6 +22,10 @@ const conflict = {
     summary: `error creating tlog entry - (409) ${conflictText}`,
     detail: `(409) ${conflictText}`,
   },
+};
+const savedConflict = {
+  result: "pre-upload-conflict",
+  diagnostics: { exitCode: 1, ...conflict.error },
 };
 
 afterEach(() => vi.unstubAllEnvs());
@@ -174,9 +179,169 @@ describe("npm publication recovery", () => {
       registry: registry(visible),
       save: async () => {},
       now: () => 0,
-      windowMs: 1,
+      windowMs: 1_000,
     });
     expect(report.packages.map(({ status }) => status)).toEqual(["published", "published"]);
+  });
+
+  it("records accepted uploads as published without reading post-upload visibility", async () => {
+    const calls = [];
+    const report = await publishPrepared({
+      release,
+      registry: async (kind, entry) => {
+        calls.push(`${kind}:${entry.name}`);
+        return kind === "tags" ? { latest: "1.0.0" } : undefined;
+      },
+      save: async () => {},
+      invoke: async () => ({ status: 0, stdout: "{}" }),
+    });
+    expect(report.packages.map(({ status }) => status)).toEqual(["published", "published"]);
+    expect(calls.filter((call) => call.startsWith("artifact:"))).toHaveLength(2);
+    expect(calls.filter((call) => call.startsWith("tags:"))).toHaveLength(4);
+  });
+
+  it("skips invisible accepted uploads on an immediate rerun", async () => {
+    const prior = createPublicationReport(release);
+    prior.packages[0].status = "published";
+    prior.packages[0].attempts.push({ result: "accepted", diagnostics: { exitCode: 0 } });
+    prior.packages[0].initialTags = { selected: undefined, opposite: "1.0.0" };
+    vi.stubEnv("GITHUB_RUN_ATTEMPT", "2");
+    const reads = [];
+    const uploads = [];
+    const report = await publishPrepared({
+      release,
+      prior,
+      registry: async (kind, entry) => {
+        reads.push(entry.name);
+        return kind === "tags" ? { latest: "1.0.0" } : undefined;
+      },
+      save: async () => {},
+      invoke: async (archive) => {
+        uploads.push(archive);
+        return { status: 0, stdout: "{}" };
+      },
+    });
+    expect(reads).not.toContain(base.name);
+    expect(uploads).toEqual([dependent.tarball]);
+    expect(report.packages.map(({ status }) => status)).toEqual(["published", "published"]);
+  });
+
+  it("rejects contradictory accepted evidence before reads or writes", async () => {
+    vi.stubEnv("GITHUB_RUN_ATTEMPT", "2");
+    let calls = 0;
+    for (const change of [
+      (record) => {
+        record.attempts[0].diagnostics.exitCode = 1;
+      },
+      (record) => {
+        record.status = "failed";
+      },
+      (record) => {
+        record.attempts.push({ result: "started" });
+      },
+    ]) {
+      const prior = createPublicationReport(release);
+      prior.runAttempt = 1;
+      prior.packages[0].status = "published";
+      prior.packages[0].attempts.push({ result: "accepted", diagnostics: { exitCode: 0 } });
+      change(prior.packages[0]);
+      await expect(
+        publishPrepared({
+          release,
+          prior,
+          registry: async () => {
+            calls++;
+            throw new Error("unexpected read");
+          },
+          save: async () => {},
+          invoke: async () => {
+            calls++;
+            throw new Error("unexpected write");
+          },
+        }),
+      ).rejects.toThrow("Invalid prior publication report package");
+    }
+    expect(calls).toBe(0);
+  });
+
+  it("rejects false pre-upload conflicts before reads or writes", async () => {
+    vi.stubEnv("GITHUB_RUN_ATTEMPT", "2");
+    let calls = 0;
+    for (const diagnostics of [
+      { exitCode: 0, ...conflict.error },
+      { exitCode: 1 },
+      { exitCode: 1, code: "E409", summary: conflict.error.summary, detail: conflict.error.detail },
+    ]) {
+      const prior = createPublicationReport(release);
+      prior.runAttempt = 1;
+      prior.packages[0].status = "failed";
+      prior.packages[0].attempts.push({ result: "pre-upload-conflict", diagnostics });
+      await expect(
+        publishPrepared({
+          release,
+          prior,
+          registry: async () => {
+            calls++;
+            throw new Error("unexpected read");
+          },
+          save: async () => {},
+          invoke: async () => {
+            calls++;
+            throw new Error("unexpected write");
+          },
+        }),
+      ).rejects.toThrow("Invalid prior publication report package");
+    }
+    expect(calls).toBe(0);
+  });
+
+  it("uses a proven saved pre-upload conflict for one bounded rerun", async () => {
+    const prior = createPublicationReport(release);
+    prior.packages[0].status = "failed";
+    prior.packages[0].attempts.push({
+      result: "pre-upload-conflict",
+      diagnostics: {
+        exitCode: 1,
+        ...conflict.error,
+      },
+    });
+    vi.stubEnv("GITHUB_RUN_ATTEMPT", "2");
+    const uploads = [];
+    const result = await publishPrepared({
+      release,
+      prior,
+      registry: registry(new Set()),
+      save: async () => {},
+      invoke: async (archive) => {
+        uploads.push(archive);
+        return { status: 0, stdout: "{}" };
+      },
+    });
+    expect(uploads).toEqual([base.tarball, dependent.tarball]);
+    expect(result.packages[0].attempts.map(({ result }) => result)).toEqual([
+      "pre-upload-conflict",
+      "accepted",
+    ]);
+  });
+
+  it("does not turn a formerly visible version's disappearance into upload permission", async () => {
+    const prior = createPublicationReport(release);
+    prior.packages[0].status = "already present";
+    vi.stubEnv("GITHUB_RUN_ATTEMPT", "2");
+    let uploads = 0;
+    await expect(
+      publishPrepared({
+        release,
+        prior,
+        registry: async (kind) => (kind === "tags" ? { latest: "1.0.0" } : undefined),
+        save: async () => {},
+        invoke: async () => {
+          uploads++;
+          return { status: 0, stdout: "{}" };
+        },
+      }),
+    ).rejects.toThrow("Prior published version is missing");
+    expect(uploads).toBe(0);
   });
 
   it.each([
@@ -251,12 +416,38 @@ describe("npm publication recovery", () => {
     ).rejects.toThrow("Prior upload outcome");
   });
 
+  it("never resends an uncertain upload when a rerun still sees 404", async () => {
+    const prior = await publishPrepared({
+      release,
+      registry: registry(new Set()),
+      save: async () => {},
+      invoke: async () => ({ status: 1, stdout: JSON.stringify({ error: { code: "E409" } }) }),
+    });
+    expect(prior.packages[0].status).toBe("unconfirmed");
+    vi.stubEnv("GITHUB_RUN_ATTEMPT", "2");
+    let uploads = 0;
+    await expect(
+      publishPrepared({
+        release,
+        prior,
+        registry: registry(new Set()),
+        save: async () => {},
+        invoke: async () => {
+          uploads++;
+          return { status: 0, stdout: "{}" };
+        },
+      }),
+    ).rejects.toThrow("Prior upload outcome");
+    expect(uploads).toBe(0);
+  });
+
   it("never exceeds two conflict attempts across job reruns", async () => {
     const prior = createPublicationReport(release);
     prior.packages[0].attempts.push(
-      { result: "pre-upload-conflict" },
-      { result: "pre-upload-conflict" },
+      globalThis.structuredClone(savedConflict),
+      globalThis.structuredClone(savedConflict),
     );
+    prior.packages[0].status = "failed";
     vi.stubEnv("GITHUB_RUN_ATTEMPT", "2");
     let calls = 0;
     await expect(
@@ -289,7 +480,8 @@ describe("npm publication recovery", () => {
 
   it("rejects stale or malformed attempt evidence before npm", async () => {
     const prior = createPublicationReport(release);
-    prior.packages[0].attempts.push({ result: "pre-upload-conflict" });
+    prior.packages[0].attempts.push(globalThis.structuredClone(savedConflict));
+    prior.packages[0].status = "failed";
     vi.stubEnv("GITHUB_RUN_ATTEMPT", "3");
     let calls = 0;
     const options = {
@@ -328,7 +520,8 @@ describe("npm publication recovery", () => {
   it("uses only the immediate prior attempt and preserves the retry cap", async () => {
     vi.stubEnv("GITHUB_RUN_ATTEMPT", "2");
     const prior = createPublicationReport(release);
-    prior.packages[0].attempts.push({ result: "pre-upload-conflict" });
+    prior.packages[0].attempts.push(globalThis.structuredClone(savedConflict));
+    prior.packages[0].status = "failed";
     vi.stubEnv("GITHUB_RUN_ATTEMPT", "3");
     let calls = 0;
     let saved;
@@ -540,6 +733,38 @@ describe("npm publication recovery", () => {
     expect(time).toBe(1_000);
   });
 
+  it("retains a fresh confirmation while another package remains pending", async () => {
+    const report = createPublicationReport(release);
+    report.packages[0].status = "published";
+    report.packages[0].attempts.push({ result: "accepted" });
+    report.packages[1].status = "unconfirmed";
+    const visible = new Set([base.name]);
+    const read = registry(visible);
+    let baseReads = 0;
+    let dependentReads = 0;
+    let time = 0;
+    await confirmPrepared({
+      release,
+      report,
+      registry: async (kind, entry) => {
+        if (kind === "artifact" && entry.name === base.name && ++baseReads > 1)
+          throw new TemporaryRegistryError("later outage");
+        if (kind === "artifact" && entry.name === dependent.name && ++dependentReads > 1)
+          visible.add(dependent.name);
+        return read(kind, entry);
+      },
+      save: async () => {},
+      now: () => time,
+      sleep: async (ms) => {
+        time += ms;
+      },
+      windowMs: 1_500,
+    });
+    expect(baseReads).toBe(1);
+    expect(dependentReads).toBe(2);
+    expect(report.packages.map(({ status }) => status)).toEqual(["published", "already present"]);
+  });
+
   it("rejects visible metadata with a wrong selected tag before npm", async () => {
     let calls = 0;
     await expect(
@@ -580,6 +805,47 @@ describe("npm publication recovery", () => {
     await expect(malformed("tags", base)).rejects.toThrow("Invalid registry tags");
   });
 
+  it("keeps a timed-out confirmation unconfirmed and recovers within the shared window", async () => {
+    const one = { ...release, packages: [base] };
+    const report = createPublicationReport(one);
+    report.packages[0].status = "unconfirmed";
+    report.packages[0].attempts.push({ result: "accepted" });
+    let failures = 0;
+    const registry = createPublicRegistry(async (url) => {
+      if (url.includes("/dist-tags"))
+        return { status: 200, ok: true, json: async () => ({ snapshot: version }) };
+      if (url.includes("/attestations/"))
+        return { status: 200, ok: true, json: async () => attestations(base) };
+      if (failures++ < 3) return { status: 200, ok: true, json: () => new Promise(() => {}) };
+      return {
+        status: 200,
+        ok: true,
+        json: async () => ({
+          name: base.name,
+          version,
+          dist: {
+            integrity: base.integrity,
+            attestations: {
+              url: `https://registry.npmjs.org/-/npm/v1/attestations/${base.name.replace("/", "%2f")}@${version}`,
+            },
+          },
+        }),
+      };
+    }, 5);
+    const snapshots = [];
+    await confirmPrepared({
+      release: one,
+      report,
+      registry,
+      save: async (value) => snapshots.push(globalThis.structuredClone(value)),
+      windowMs: 2_000,
+      sleep: async () => {},
+    });
+    expect(report.packages[0].status).toBe("published");
+    expect(snapshots.some((item) => item.packages[0].status === "unconfirmed")).toBe(true);
+    expect(failures).toBe(4);
+  });
+
   it("keeps missing confirmation unconfirmed within one shared deadline", async () => {
     const report = createPublicationReport(release);
     report.packages[0].status = "unconfirmed";
@@ -609,11 +875,11 @@ describe("npm publication recovery", () => {
     const model = expectedReleaseModel(readReleaseManifests(root));
     const entries = model.packages.map((entry) => ({
       ...entry,
-      version: model.version,
+      version,
       tarball: entry.name.split("/")[1] + ".tgz",
       integrity: "sha512-YQ==",
     }));
-    const full = { ...model, sourceSha, packages: entries };
+    const full = { ...model, version, sourceSha, packages: entries };
     const byArchive = new Map(entries.map((entry) => [entry.tarball, entry.name]));
     const visible = new Set();
     const calls = [];
@@ -634,7 +900,7 @@ describe("npm publication recovery", () => {
       registry: registry(visible),
       save: async () => {},
       now: () => 0,
-      windowMs: 1,
+      windowMs: 1_000,
     });
     expect(calls).toEqual(entries.map(({ name }) => name));
     expect(report.packages).toHaveLength(19);
