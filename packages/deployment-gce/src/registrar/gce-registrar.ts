@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { type ApplicationNode, type LeasedNodeRegistry } from "@spine-event-engine/deployment";
 import { randomUUID } from "node:crypto";
 import type { ILogLayer } from "loglayer";
@@ -131,7 +132,7 @@ export class GceRegistrar {
     this.#port = options.port;
     this.#identity = options.identity ?? randomUUID();
     this.#scheduler = options.scheduler ?? systemGceScheduler;
-    this.#now = options.now ?? Date.now;
+    this.#now = options.now ?? (() => Time.currentTimeMillis());
     this.#deadlines = options.deadlines ?? systemGceDeadlines;
     if (
       options.operationTimeoutMs !== undefined &&

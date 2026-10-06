@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { fork, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
@@ -1116,7 +1117,7 @@ const ManagedServerCoordinatorValues = Object.freeze({
   },
   dependencies: {
     clock: {
-      now: () => Date.now(),
+      now: () => Time.currentTimeMillis(),
       setTimeout: (onTimeout: () => void, delay: number) => setTimeout(onTimeout, delay),
       clearTimeout: (timer: unknown) => {
         clearTimeout(timer as ReturnType<typeof setTimeout>);

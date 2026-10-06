@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { TypeUrls, AnyMessages } from "@spine-event-engine/core";
@@ -537,8 +538,8 @@ async function waitForRuntimeTurn(): Promise<void> {
 }
 
 async function waitUntil(predicate: () => boolean): Promise<void> {
-  const deadline = Date.now() + 500;
-  while (Date.now() < deadline) {
+  const deadline = Time.currentTimeMillis() + 500;
+  while (Time.currentTimeMillis() < deadline) {
     if (predicate()) {
       return;
     }

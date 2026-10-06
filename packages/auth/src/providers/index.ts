@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { importJWK, jwtVerify } from "jose";
 
 import type {
@@ -267,7 +268,7 @@ export function createOidcProvider(options: OidcProviderOptions): ConfiguredOidc
     "timeoutMilliseconds",
   );
   const http = options.fetch ?? fetch;
-  const clock = options.clock ?? Date.now;
+  const clock = options.clock ?? (() => Time.currentTimeMillis());
   let cachedKeys: { readonly keys: Jwk[]; readonly expiresAt: number } | undefined;
   let pendingKeys: PendingJwks | undefined;
   const loadKeys = async (refresh: boolean, signal: AbortSignal): Promise<Jwk[] | undefined> => {

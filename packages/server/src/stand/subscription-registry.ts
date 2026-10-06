@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { clone, ScalarType, toBinary } from "@bufbuild/protobuf";
 import { SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS } from "@spine-event-engine/core/spi/subscription-lifecycle";
 import {
@@ -275,7 +276,7 @@ export class InMemorySubscriptionRegistry implements StandSubscriptionRegistry {
       if (!sameSubscription(existing.subscription, subscription)) throw new StandConflictError(id);
       return Promise.resolve({ kind: "existing", entry: copy(existing) });
     }
-    const createdAt = Date.now();
+    const createdAt = Time.currentTimeMillis();
     const entry = freeze({
       subscription: clone(SubscriptionSchema, subscription),
       phase: "pending" as const,
@@ -299,7 +300,7 @@ export class InMemorySubscriptionRegistry implements StandSubscriptionRegistry {
     const entry = this.#entries.get(id);
     if (entry === undefined) return Promise.resolve({ kind: "missing" });
     if (entry.phase === "active") return Promise.resolve({ kind: "active", entry: copy(entry) });
-    if (expiresAt(entry) <= Date.now()) {
+    if (expiresAt(entry) <= Time.currentTimeMillis()) {
       this.#entries.delete(id);
       return Promise.resolve({ kind: "expired" });
     }
@@ -369,7 +370,7 @@ export class InMemorySubscriptionRegistry implements StandSubscriptionRegistry {
       .slice(0, cleanupPageSize + 1);
     const page = candidates
       .slice(0, cleanupPageSize)
-      .filter(([, entry]) => expiresAt(entry) <= Date.now());
+      .filter(([, entry]) => expiresAt(entry) <= Time.currentTimeMillis());
     for (const [id] of page) this.#entries.delete(id);
     return Promise.resolve({
       scanned: page.length,
@@ -377,7 +378,7 @@ export class InMemorySubscriptionRegistry implements StandSubscriptionRegistry {
       more:
         candidates.length > cleanupPageSize &&
         expiresAt(candidates[cleanupPageSize]?.[1] ?? fail("cleanup candidate is missing.")) <=
-          Date.now(),
+          Time.currentTimeMillis(),
     });
   }
 
@@ -466,7 +467,7 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
           throw new StandConflictError(value);
         return { kind: "existing", entry: copy(entry) };
       }
-      const createdAt = Date.now();
+      const createdAt = Time.currentTimeMillis();
       const entry = freeze({
         subscription: clone(SubscriptionSchema, subscription),
         phase: "pending" as const,
@@ -503,7 +504,7 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
       if (current === undefined) return { kind: "missing" };
       const entry = StandSubscriptionRecords.read(current, id);
       if (entry.phase === "active") return { kind: "active", entry: copy(entry) };
-      if (expiresAt(entry) <= Date.now()) {
+      if (expiresAt(entry) <= Time.currentTimeMillis()) {
         if (await this.#storage.compareAndSet(value, current, undefined))
           return { kind: "expired" };
         continue;
@@ -575,7 +576,7 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
     }));
     const page = candidates
       .slice(0, cleanupPageSize)
-      .filter((candidate) => expiresAt(candidate.entry) <= Date.now());
+      .filter((candidate) => expiresAt(candidate.entry) <= Time.currentTimeMillis());
     let deleted = 0;
     for (const { row } of page)
       if (await this.#storage.compareAndSet(row.id, row.record, undefined)) deleted += 1;
@@ -583,7 +584,7 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
     return {
       scanned: page.length,
       deleted,
-      more: lookahead !== undefined && expiresAt(lookahead.entry) <= Date.now(),
+      more: lookahead !== undefined && expiresAt(lookahead.entry) <= Time.currentTimeMillis(),
     };
   }
 

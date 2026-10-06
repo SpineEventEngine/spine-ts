@@ -1,3 +1,5 @@
+import { Time } from "../packages/core/src/time.ts";
+
 const template = `/*
  * Copyright {year}, CodeMatters. All rights reserved.
  *
@@ -19,7 +21,7 @@ const template = `/*
  * @param year Four-digit year inserted into the repository's canonical license comment.
  * @returns Complete Apache-2.0 copyright comment including its trailing newline.
  */
-export function copyrightHeader(year = new Date().getFullYear()) {
+export function copyrightHeader(year = new Date(Time.currentTimeMillis()).getFullYear()) {
   return template.replace("{year}", String(year));
 }
 

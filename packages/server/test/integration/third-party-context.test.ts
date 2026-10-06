@@ -149,7 +149,7 @@ describe("Wave 13 ThirdPartyContext", () => {
       })
       .buildAsync();
     const context = await DirectSourceThirdPartyContext.singleTenant("DirectSourceTimestampSource");
-    const before = Date.now();
+    const before = Time.currentTimeMillis();
     const precise = create(TimestampSchema, {
       seconds: BigInt(Math.floor(before / 1_000)),
       nanos: (before % 1_000) * 1_000_000 + 456_000,
@@ -172,7 +172,7 @@ describe("Wave 13 ThirdPartyContext", () => {
       const millis =
         Number(timestamp?.seconds ?? 0n) * 1_000 + Math.floor((timestamp?.nanos ?? 0) / 1_000_000);
       expect(millis).toBeGreaterThanOrEqual(before);
-      expect(millis).toBeLessThanOrEqual(Date.now());
+      expect(millis).toBeLessThanOrEqual(Time.currentTimeMillis());
     } finally {
       Time.setProvider(previousProvider);
       await Promise.all([receiver.close(), context.close()]);

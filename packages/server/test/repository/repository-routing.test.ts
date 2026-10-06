@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { clone, create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import {
@@ -14544,9 +14545,9 @@ function delay(ms: number): Promise<"pending"> {
 }
 
 async function waitForCondition(predicate: () => boolean): Promise<void> {
-  const deadline = Date.now() + 500;
+  const deadline = Time.currentTimeMillis() + 500;
 
-  while (Date.now() < deadline) {
+  while (Time.currentTimeMillis() < deadline) {
     if (predicate()) {
       return;
     }
@@ -14561,8 +14562,8 @@ async function waitForProjectOverviewState(
   id: string,
   tenantId?: string,
 ): Promise<ProjectOverviewState | undefined> {
-  const deadline = Date.now() + 500;
-  while (Date.now() < deadline) {
+  const deadline = Time.currentTimeMillis() + 500;
+  while (Time.currentTimeMillis() < deadline) {
     const state = await context
       .stand()
       .read(
@@ -14582,8 +14583,8 @@ async function waitForStoredEvents(
   eventStore: EventStore,
   count: number,
 ): Promise<readonly SpineEvent[]> {
-  const deadline = Date.now() + 500;
-  while (Date.now() < deadline) {
+  const deadline = Time.currentTimeMillis() + 500;
+  while (Time.currentTimeMillis() < deadline) {
     const events = await eventStore.read();
     if (events.length >= count) {
       return events;

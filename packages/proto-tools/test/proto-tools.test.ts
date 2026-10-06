@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "../../core/dist/time.js";
 import {
   chmodSync,
   existsSync,
@@ -2365,8 +2366,8 @@ describe("spine proto model tooling", () => {
         manifest,
         completed,
       ]);
-      const deadline = Date.now() + 1_000;
-      while (!existsSync(ready) && Date.now() < deadline) {
+      const deadline = Time.currentTimeMillis() + 1_000;
+      while (!existsSync(ready) && Time.currentTimeMillis() < deadline) {
         // Let the writer establish a deterministic pre-commit boundary.
       }
       expect(existsSync(ready)).toBe(true);

@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import type { ServiceImpl } from "@connectrpc/connect";
 import {
   AdminService,
@@ -97,7 +98,7 @@ export const DeliveryAssembly: Readonly<{
       shards: ShardHandlers.create(
         state,
         admission,
-        Date.now,
+        () => Time.currentTimeMillis(),
         configuration.processingTimeoutMs,
         (shard) => {
           admin.publish(shard);

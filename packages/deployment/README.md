@@ -51,6 +51,7 @@ cannot renew or remove a newer lease after a node ID is reused.
 
 ```ts
 import { ApplicationNode, LeasedNodeRegistry } from "@spine-event-engine/deployment";
+import { Time } from "@spine-event-engine/core/time";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 
 const factory = new InMemoryStorageFactory();
@@ -60,9 +61,9 @@ try {
   await registry.register({
     node: new ApplicationNode({ id: "node/a", endpoint: "https://10.0.0.1" }),
     registrationId: "process-startup-identity",
-    expiresAt: Date.now() + 30_000,
+    expiresAt: Time.currentTimeMillis() + 30_000,
   });
-  const liveNodes = await registry.read(Date.now());
+  const liveNodes = await registry.read(Time.currentTimeMillis());
   void liveNodes;
 } finally {
   await registry.close();

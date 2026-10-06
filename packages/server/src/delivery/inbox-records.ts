@@ -316,7 +316,7 @@ const Values = Object.freeze({
   validReceiveTime(value: Date | Timestamp): boolean {
     if (value instanceof Date) return Number.isFinite(value.getTime());
     return (
-      value?.$typeName === TimestampSchema.typeName &&
+      (value as unknown as { $typeName?: string } | null)?.$typeName === TimestampSchema.typeName &&
       value.seconds >= -62_135_596_800n &&
       value.seconds <= 253_402_300_799n &&
       Number.isInteger(value.nanos) &&

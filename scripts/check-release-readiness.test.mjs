@@ -1,3 +1,5 @@
+import { Time } from "../packages/core/src/time.ts";
+
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -478,11 +480,11 @@ describe("check-release-readiness", () => {
         ].join("\n"),
       });
       const readinessMarker = join(repoRoot, "import-ready");
-      const startedAt = Date.now();
+      const startedAt = Time.currentTimeMillis();
 
       const failure = captureFailure(() => runReleaseReadiness(repoRoot, { importTimeoutMs: 250 }));
 
-      expect(Date.now() - startedAt).toBeLessThan(600);
+      expect(Time.currentTimeMillis() - startedAt).toBeLessThan(600);
       expect(failure).toBeInstanceOf(Error);
       expect(failure.message).toContain(
         "Timed out package export after 250 ms: packages/runtime: @example/runtime",

@@ -812,7 +812,8 @@ const DeliveryRequestCodec: DeliveryRequestCodecApi = Object.freeze({
   timestamp(value: Date | Timestamp): { seconds: bigint; nanos: number } {
     if (!(value instanceof Date)) {
       if (
-        value?.$typeName !== TimestampSchema.typeName ||
+        (value as unknown as { $typeName?: string } | null)?.$typeName !==
+          TimestampSchema.typeName ||
         value.seconds < -62_135_596_800n ||
         value.seconds > 253_402_300_799n ||
         !Number.isInteger(value.nanos) ||
@@ -822,8 +823,7 @@ const DeliveryRequestCodec: DeliveryRequestCodecApi = Object.freeze({
         throw new TypeError("Delivery inbox timestamp is invalid.");
       return { seconds: value.seconds, nanos: value.nanos };
     }
-    if (Number.isNaN(value.getTime()))
-      throw new TypeError("Delivery inbox timestamp is invalid.");
+    if (Number.isNaN(value.getTime())) throw new TypeError("Delivery inbox timestamp is invalid.");
     const millis = value.getTime();
     return {
       seconds: BigInt(Math.floor(millis / 1000)),

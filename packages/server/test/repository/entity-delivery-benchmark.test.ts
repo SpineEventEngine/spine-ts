@@ -15,6 +15,7 @@
 import { create } from "@bufbuild/protobuf";
 import { StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { AnyMessages } from "@spine-event-engine/core";
+import { Time } from "@spine-event-engine/core/time";
 import {
   EventContextSchema,
   EventIdSchema,
@@ -54,7 +55,7 @@ class RoutedQueue extends ProcessManager<string, typeof ProjectQueueStateSchema>
 
 async function startCpuProfile(
   label: string,
-): Promise<((start: bigint, end: bigint) => Promise<void>) | undefined> {
+): Promise<((start: number, end: number) => Promise<void>) | undefined> {
   const directory = process.env.SPINE_ENTITY_DELIVERY_PROFILE_DIR;
   if (directory === undefined) return undefined;
   if (directory !== "/tmp" && !directory.startsWith("/tmp/")) {
@@ -75,11 +76,12 @@ async function startCpuProfile(
     session.disconnect();
     throw error;
   }
+  const profileOrigin = Time.monotonicTime();
   return async (start, end) => {
     try {
       const { profile } = await session.post("Profiler.stop");
-      const startMicros = Number(start / 1_000n);
-      const endMicros = Number(end / 1_000n);
+      const startMicros = profile.startTime + (start - profileOrigin) * 1_000;
+      const endMicros = profile.startTime + (end - profileOrigin) * 1_000;
       const samples: number[] = [];
       const timeDeltas: number[] = [];
       const hitCounts = new Map<number, number>();
@@ -154,12 +156,12 @@ async function measure(count: number, label: string): Promise<number> {
         ? undefined
         : await startCpuProfile(label);
     let elapsed = 0;
-    const start = process.hrtime.bigint();
+    const start = Time.monotonicTime();
     try {
       await context.eventBus().post(event);
     } finally {
-      const end = process.hrtime.bigint();
-      elapsed = Number(end - start) / 1_000_000;
+      const end = Time.monotonicTime();
+      elapsed = end - start;
       if (stopCpuProfile) await stopCpuProfile(start, end);
     }
     for (const id of ids) {

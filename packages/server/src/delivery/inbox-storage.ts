@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { clone, create, toBinary } from "@bufbuild/protobuf";
 import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import { TenantIdSchema } from "@spine-event-engine/proto";
@@ -53,7 +54,7 @@ export const InboxStorageClock: Readonly<{ read(storage: InboxStorage): Date }> 
    */
   read(storage: InboxStorage): Date {
     const clock = storageClocks.get(storage);
-    return clock === undefined ? new Date() : new Date(Values.now(clock));
+    return clock === undefined ? new Date(Time.currentTimeMillis()) : new Date(Values.now(clock));
   },
 });
 
@@ -75,7 +76,7 @@ export class InboxStorage {
   constructor(options: InboxStorageOptions) {
     this.#context = Values.snapshotContext(options.context);
     this.#storageFactory = options.storageFactory;
-    this.#now = options.now ?? (() => new Date());
+    this.#now = options.now ?? (() => new Date(Time.currentTimeMillis()));
     storageClocks.set(this, this.#now);
     Object.freeze(this);
   }
@@ -467,12 +468,14 @@ const Values = Object.freeze({
     });
   },
   receiveTime(value: Date | Timestamp): Timestamp {
-    return value instanceof Date ? Values.timestamp(value.getTime()) : clone(TimestampSchema, value);
+    return value instanceof Date
+      ? Values.timestamp(value.getTime())
+      : clone(TimestampSchema, value);
   },
   validReceiveTime(value: Date | Timestamp): boolean {
     if (value instanceof Date) return Number.isFinite(value.getTime());
     return (
-      value?.$typeName === TimestampSchema.typeName &&
+      (value as unknown as { $typeName?: string } | null)?.$typeName === TimestampSchema.typeName &&
       value.seconds >= -62_135_596_800n &&
       value.seconds <= 253_402_300_799n &&
       Number.isInteger(value.nanos) &&

@@ -48,7 +48,7 @@ export function createMessage(
     shard: ShardIndex.single(),
     whenReceived: create(TimestampSchema, {
       seconds: BigInt(Math.floor(whenReceived.getTime() / 1_000)),
-      nanos: (whenReceived.getTime() % 1_000 + 1_000) % 1_000 * 1_000_000,
+      nanos: (((whenReceived.getTime() % 1_000) + 1_000) % 1_000) * 1_000_000,
     }),
     version,
   });

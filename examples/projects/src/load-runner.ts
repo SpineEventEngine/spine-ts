@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { randomUUID } from "node:crypto";
 
 import { create } from "@bufbuild/protobuf";
@@ -134,13 +135,13 @@ export async function runProjectManagementLoad(
   options: ProjectManagementLoadOptions,
 ): Promise<ProjectManagementLoadResult> {
   const visibilityTimeoutMs = options.visibilityTimeoutMs ?? 5_000;
-  const startedAt = performance.now();
+  const startedAt = Time.monotonicTime();
   const settled = await Promise.allSettled(
     Array.from({ length: options.users }, (_, index) =>
       new ProjectManagementUserLoad(options.baseUrl, index, visibilityTimeoutMs).execute(),
     ),
   );
-  const elapsedMs = performance.now() - startedAt;
+  const elapsedMs = Time.monotonicTime() - startedAt;
   const results = settled.flatMap((result) =>
     result.status === "fulfilled" ? [result.value] : [],
   );
@@ -204,7 +205,7 @@ class ProjectManagementUserLoad {
     let read: SubscriptionRead | undefined;
     try {
       read = await this.startSubscription();
-      const submittedAt = performance.now();
+      const submittedAt = Time.monotonicTime();
       const commandAcknowledgementMs = await this.postCommand(submittedAt);
       const queryVisibilityMs = await this.waitForVisibility(submittedAt);
       const subscriptionDeliveryMs = await this.readSubscription(read.firstUpdate);
@@ -243,7 +244,7 @@ class ProjectManagementUserLoad {
         `CreateProject acknowledgement was ${acknowledgement.status?.status.case ?? "missing"}.`,
       );
     }
-    return performance.now() - submittedAt;
+    return Time.monotonicTime() - submittedAt;
   }
 
   private createCommand() {
@@ -260,7 +261,7 @@ class ProjectManagementUserLoad {
   private async readSubscription(
     firstUpdate: Promise<IteratorResult<SubscriptionUpdate>>,
   ): Promise<number> {
-    const startedAt = performance.now();
+    const startedAt = Time.monotonicTime();
     const update = await this.withTimeout(
       firstUpdate,
       "project subscription update",
@@ -269,7 +270,7 @@ class ProjectManagementUserLoad {
     if (update.done) throw new Error("Project subscription ended before its first update.");
     if (!this.isCorrelated(update.value))
       throw new Error(`Project subscription update was not correlated to ${this.id}.`);
-    return performance.now() - startedAt;
+    return Time.monotonicTime() - startedAt;
   }
 
   private isCorrelated(update: SubscriptionUpdate): boolean {
@@ -294,8 +295,8 @@ class ProjectManagementUserLoad {
   }
 
   private async waitForVisibility(startedAt: number): Promise<number> {
-    const deadline = performance.now() + this.visibilityTimeoutMs;
-    while (performance.now() < deadline) {
+    const deadline = Time.monotonicTime() + this.visibilityTimeoutMs;
+    while (Time.monotonicTime() < deadline) {
       const response = await this.withTimeout(
         this.queries.read(this.createQuery()),
         "query visibility read",
@@ -306,7 +307,7 @@ class ProjectManagementUserLoad {
         return AnyMessages.unpack(row.state, ProjectSummarySchema)?.id === this.id;
       });
       if (response.response?.status?.status.case === "ok" && visible)
-        return performance.now() - startedAt;
+        return Time.monotonicTime() - startedAt;
       await new Promise((resolve) => setTimeout(resolve, 20));
     }
     throw new Error(

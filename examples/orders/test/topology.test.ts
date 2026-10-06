@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { create } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { createClient } from "@connectrpc/connect";
@@ -171,11 +172,11 @@ async function readEventually(
   id: string,
   actorContext: ReturnType<typeof metadata.actorContext>,
 ) {
-  const deadline = Date.now() + 5_000;
-  while (Date.now() < deadline) {
+  const deadline = Time.currentTimeMillis() + 5_000;
+  while (Time.currentTimeMillis() < deadline) {
     const response = await queries.read(
       create(QuerySchema, {
-        id: create(QueryIdSchema, { value: `query-${id}-${String(Date.now())}` }),
+        id: create(QueryIdSchema, { value: `query-${id}-${String(Time.currentTimeMillis())}` }),
         target: target(id),
         context: actorContext,
       }),

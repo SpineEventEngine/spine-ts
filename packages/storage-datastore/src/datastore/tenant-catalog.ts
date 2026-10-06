@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { Datastore } from "@google-cloud/datastore";
 import {
   TenantBoundary,
@@ -58,7 +59,7 @@ export class DatastoreTenantCatalog implements TenantCatalog {
   ) {
     this.#converter =
       converter instanceof NamespaceAssignments ? converter : new NamespaceAssignments(converter);
-    this.#now = options.now ?? Date.now;
+    this.#now = options.now ?? (() => Time.currentTimeMillis());
     this.#earlyTenantTtlMs = options.earlyTenantTtlMs ?? earlyTenantTtlMs;
     this.#maxEarlyTenants = options.maxEarlyTenants ?? maxEarlyTenants;
     if (!Number.isFinite(this.#earlyTenantTtlMs) || this.#earlyTenantTtlMs <= 0)

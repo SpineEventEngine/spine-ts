@@ -12,9 +12,9 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { clone, create, type Message, type MessageShape } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import {
   Client as NodeClient,
   type ClientKernel,
@@ -297,13 +297,16 @@ export class BlackBox {
       options.intervalMs ?? this.#intervalMs,
       "intervalMs",
     );
-    const deadline = Date.now() + timeoutMs;
+    const deadline = Time.monotonicTime() + timeoutMs;
     for (;;) {
       const value = await read();
       this.#assertOpen();
       if (accept(value)) return value;
-      if (Date.now() >= deadline) throw new BlackBoxTimeoutError(timeoutMs);
-      await BlackBoxClock.wait(Math.min(intervalMs, deadline - Date.now()), this.#waits.signal);
+      if (Time.monotonicTime() >= deadline) throw new BlackBoxTimeoutError(timeoutMs);
+      await BlackBoxClock.wait(
+        Math.min(intervalMs, deadline - Time.monotonicTime()),
+        this.#waits.signal,
+      );
     }
   }
 
@@ -907,7 +910,7 @@ const BlackBoxOptionsValues = Object.freeze({
       if (value.value.length === 0) throw new TypeError("BlackBox zoneId must not be empty.");
       return clone(ZoneIdSchema, value);
     }
-    const zone = value ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const zone = value ?? Time.currentTimeZone();
     if (zone.length === 0) throw new TypeError("BlackBox zoneId must not be empty.");
     return create(ZoneIdSchema, { value: zone });
   },
@@ -932,7 +935,7 @@ const BlackBoxClock = Object.freeze({
    * Creates the current Protobuf timestamp.
    */
   timestamp() {
-    return create(TimestampSchema, { seconds: BigInt(Math.floor(Date.now() / 1_000)) });
+    return Time.currentTime();
   },
 
   /**

@@ -1,3 +1,5 @@
+import { Time } from "@spine-event-engine/core/time";
+
 import { create, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
 import {
@@ -86,7 +88,7 @@ export function createMultiMachineApplication({ baseUrl, node }) {
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
         shard: ShardIndex.single(),
-        whenReceived: new Date(),
+        whenReceived: new Date(Time.currentTimeMillis()),
         version: 1n,
       });
     },

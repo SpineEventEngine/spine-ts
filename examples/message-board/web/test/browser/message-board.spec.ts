@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { expect, test } from "@playwright/test";
 
 test("posts and reads a real MessageBoard Projection through the local gateway", async ({
@@ -30,8 +31,8 @@ test("posts and reads a real MessageBoard Projection through the local gateway",
   await expect(usernameInput).toBeFocused();
   await expect(usernameInput).toHaveAttribute("aria-invalid", "true");
 
-  const username = `visitor-${String(Date.now())}`;
-  const message = `browser acceptance ${String(Date.now())}`;
+  const username = `visitor-${String(Time.currentTimeMillis())}`;
+  const message = `browser acceptance ${String(Time.currentTimeMillis())}`;
   await usernameInput.fill(username);
   await page.getByRole("textbox", { name: "Message" }).fill(message);
   await page.getByRole("button", { name: "Post message" }).click();
@@ -60,8 +61,8 @@ test("keeps live updates connected beyond the former local timeout", async ({ pa
   try {
     await sender.goto("/");
     await expect(sender.getByRole("status")).toHaveText("Updating live");
-    const username = `boundary-${String(Date.now())}`;
-    const message = `after former boundary ${String(Date.now())}`;
+    const username = `boundary-${String(Time.currentTimeMillis())}`;
+    const message = `after former boundary ${String(Time.currentTimeMillis())}`;
     await sender.getByRole("textbox", { name: "Username" }).fill(username);
     await sender.getByRole("textbox", { name: "Message" }).fill(message);
     await sender.getByRole("button", { name: "Post message" }).click();
@@ -110,7 +111,7 @@ test("keeps two stock browser tabs live through alternating posts after the form
 
     for (let sequence = 1; sequence <= 8; sequence += 1) {
       const writer = sequence % 2 === 0 ? sender : page;
-      const message = `alternating live message ${String(sequence)} ${String(Date.now())}`;
+      const message = `alternating live message ${String(sequence)} ${String(Time.currentTimeMillis())}`;
       await writer.getByRole("textbox", { name: "Username" }).fill(`writer-${String(sequence)}`);
       await writer.getByRole("textbox", { name: "Message" }).fill(message);
       await writer.getByRole("button", { name: "Post message" }).click();
@@ -123,7 +124,7 @@ test("keeps two stock browser tabs live through alternating posts after the form
     }
 
     await page.waitForTimeout(stabilityObservationMilliseconds);
-    const message = `after former timeout ${String(Date.now())}`;
+    const message = `after former timeout ${String(Time.currentTimeMillis())}`;
     await sender.getByRole("textbox", { name: "Username" }).fill("post-timeout-writer");
     await sender.getByRole("textbox", { name: "Message" }).fill(message);
     await sender.getByRole("button", { name: "Post message" }).click();

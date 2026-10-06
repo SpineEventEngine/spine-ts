@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
@@ -825,9 +826,9 @@ async function waitForConfigPublications(
   factory: RecordingTransportFactory,
   count: number,
 ): Promise<void> {
-  const deadline = Date.now() + 2_000;
+  const deadline = Time.currentTimeMillis() + 2_000;
   while (configPublications(factory).length < count) {
-    if (Date.now() >= deadline)
+    if (Time.currentTimeMillis() >= deadline)
       throw new Error(`Timed out waiting for ${String(count)} configuration publications.`);
     await new Promise((resolve) => setTimeout(resolve, 0));
   }

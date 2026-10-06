@@ -6019,6 +6019,13 @@ precision. Follow IncrementalNanos behavior without repository ordering counters
 Use controlled providers for tests. Parsing or converting supplied time values
 is not current-time acquisition. Agent work is a separate subsequent task.
 
+Keep the shared Time leaf usable by the existing dependency-free publication
+trial as well as normal installed packages. The trial imports release scripts
+from a clean checkout without installing dependencies. Time therefore uses the
+canonical Timestamp type without requiring its Protobuf runtime to load the
+clock. Do not introduce another script clock or an installation step in the
+publication trial to satisfy this migration.
+
 The implementation plan and evidence are in
 [the Time task](planning/spine-time-task.md) and
 [its work log](planning/spine-time-worklog.md).

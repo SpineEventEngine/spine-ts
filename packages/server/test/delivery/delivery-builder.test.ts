@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 /* eslint-disable @typescript-eslint/require-await */
 
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
@@ -609,7 +610,7 @@ function message(signalId: string, targetId: string, shard: ShardIndex) {
     label: "UPDATE_SUBSCRIBER" as const,
     status: "TO_DELIVER" as const,
     shard,
-    whenReceived: new Date(),
+    whenReceived: new Date(Time.currentTimeMillis()),
     version: 1n,
   };
 }

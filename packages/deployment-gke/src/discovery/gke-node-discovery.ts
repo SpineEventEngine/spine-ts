@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import {
   ApplicationNode,
   type NodeDiscovery,
@@ -170,7 +171,7 @@ export class GkeNodeDiscovery implements NodeDiscovery {
     this.#refreshIntervalMs = options.refreshIntervalMs ?? 10_000;
     this.#resolver = options.resolver ?? new NodeDnsResolver();
     this.#scheduler = options.scheduler ?? systemScheduler;
-    this.#now = options.now ?? Date.now;
+    this.#now = options.now ?? (() => Time.currentTimeMillis());
     this.#logger = options.logger;
   }
 

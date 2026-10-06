@@ -27,6 +27,7 @@
     "terraform"
   ],
   "dependencies": {
+    "@spine-event-engine/core": "workspace:*",
     "@spine-event-engine/deployment": "workspace:*",
     "loglayer": "9.4.0"
   },

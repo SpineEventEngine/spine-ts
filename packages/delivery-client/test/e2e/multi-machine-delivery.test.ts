@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { create } from "@bufbuild/protobuf";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import { createClient } from "@connectrpc/connect";
@@ -379,7 +380,7 @@ type FixtureCommand =
     };
 
 function command(child: ChildProcess, request: FixtureCommand): Promise<unknown> {
-  const id = `${request.command}:${String(Date.now())}:${String(Math.random())}`;
+  const id = `${request.command}:${String(Time.currentTimeMillis())}:${String(Math.random())}`;
   return new Promise((resolve, reject) => {
     const finish = onceResult<unknown>(child, resolve, reject, "Fixture command timed out.");
     const onMessage = (frame: unknown) => {
@@ -423,13 +424,13 @@ function readiness(child: ChildProcess): Promise<string> {
 }
 
 async function eventually(assertion: () => void, timeoutMs = 5_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
+  const deadline = Time.currentTimeMillis() + timeoutMs;
   for (;;) {
     try {
       assertion();
       return;
     } catch (error) {
-      if (Date.now() >= deadline) throw error;
+      if (Time.currentTimeMillis() >= deadline) throw error;
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
   }
@@ -463,7 +464,7 @@ function dispatchedFrame(
     typeof frame.node !== "string"
   )
     return undefined;
-  return { signalId: frame.signalId, node: frame.node, at: Date.now() };
+  return { signalId: frame.signalId, node: frame.node, at: Time.currentTimeMillis() };
 }
 
 function update(

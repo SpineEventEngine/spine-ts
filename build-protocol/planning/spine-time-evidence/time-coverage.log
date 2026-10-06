@@ -4,22 +4,21 @@
 
 
  Test Files  1 passed (1)
-      Tests  7 passed (7)
-   Start at  13:20:34
-   Duration  577ms (transform 278ms, setup 0ms, import 424ms, tests 7ms, environment 0ms)
+      Tests  13 passed (13)
+   Start at  13:27:48
+   Duration  478ms (transform 136ms, setup 0ms, import 247ms, tests 99ms, environment 0ms)
 
  % Coverage report from v8
 ----------|---------|----------|---------|---------|-------------------
-File      | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+File      | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s
 ----------|---------|----------|---------|---------|-------------------
-All files |   92.59 |       70 |      90 |   92.59 |                   
- time.ts  |   92.59 |       70 |      90 |   92.59 | 77,150            
+All files |     100 |       90 |     100 |     100 |
+ time.ts  |     100 |       90 |     100 |     100 | 137
 ----------|---------|----------|---------|---------|-------------------
 
 =============================== Coverage summary ===============================
-Statements   : 92.59% ( 25/27 )
-Branches     : 70% ( 7/10 )
-Functions    : 90% ( 9/10 )
-Lines        : 92.59% ( 25/27 )
+Statements   : 100% ( 27/27 )
+Branches     : 90% ( 9/10 )
+Functions    : 100% ( 10/10 )
+Lines        : 100% ( 27/27 )
 ================================================================================
-ERROR: Coverage for branches (70%) does not meet global threshold (90%)

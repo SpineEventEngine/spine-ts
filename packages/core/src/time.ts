@@ -12,8 +12,7 @@
  * the License.
  */
 
-import { create } from "@bufbuild/protobuf";
-import { type Timestamp, TimestampSchema } from "@bufbuild/protobuf/wkt";
+import type { Timestamp } from "@bufbuild/protobuf/wkt";
 
 /**
  * Supplies UTC time to framework code. Optional operations use the system clock when omitted.
@@ -66,7 +65,7 @@ const systemProvider: Required<TimeProvider> = {
     }
     const seconds = Math.floor(millis / 1_000);
     const nanos = (millis - seconds * 1_000) * 1_000_000 + increment * 1_000;
-    return create(TimestampSchema, { seconds: BigInt(seconds), nanos });
+    return { $typeName: "google.protobuf.Timestamp", seconds: BigInt(seconds), nanos };
   },
 
   /**
@@ -146,7 +145,7 @@ export const Time = {
    * @internal
    */
   setProvider(next: TimeProvider): TimeProvider {
-    if (next === null || typeof next?.currentTime !== "function") {
+    if (typeof (next as unknown as { currentTime?: unknown } | null)?.currentTime !== "function") {
       throw new TypeError("A time provider must supply currentTime().");
     }
     const previous = provider;

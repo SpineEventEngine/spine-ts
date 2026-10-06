@@ -1,3 +1,5 @@
+import { Time } from "../packages/core/src/time.ts";
+
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import {
@@ -40,7 +42,7 @@ process.stdout.write(
 );
 
 async function readyTimer() {
-  const deadline = Date.now() + 1_000;
+  const deadline = Time.currentTimeMillis() + 1_000;
   while (!existsSync(readyPath)) {
     const outcome = await Promise.race([
       childResult,
@@ -51,7 +53,7 @@ async function readyTimer() {
       if (child.pid !== undefined) await terminateGroup();
       throw new Error(`Command exited before readiness with status ${outcome.status}.`);
     }
-    if (child.exitCode !== null || Date.now() >= deadline) {
+    if (child.exitCode !== null || Time.currentTimeMillis() >= deadline) {
       if (child.pid !== undefined) await terminateGroup();
       throw new Error(`Timed-out command did not publish readiness signal: ${readyPath}`);
     }
@@ -99,8 +101,8 @@ async function terminateGroup() {
 
 async function gone(timeout) {
   if (process.platform === "win32") return await waitForChildClose(child, timeout);
-  const deadline = Date.now() + timeout;
-  while (Date.now() < deadline) {
+  const deadline = Time.currentTimeMillis() + timeout;
+  while (Time.currentTimeMillis() < deadline) {
     if (processGroupLiveness(child.pid) === "gone") return true;
     await new Promise((resolve) => globalThis.setTimeout(resolve, 10));
   }

@@ -7,6 +7,7 @@ import { dirname, join } from "node:path";
 import process from "node:process";
 import { fileURLToPath, URL } from "node:url";
 
+import { Time } from "../../../../packages/core/src/time.ts";
 import { BuildContextCleanup } from "./build-context-cleanup.mjs";
 
 const repositoryRoot = fileURLToPath(new URL("../../../../", import.meta.url));
@@ -45,7 +46,7 @@ const targets = [
 ];
 const targetPlans = {
   "simple-delivery-server": {
-    packages: ["packages/proto", "packages/delivery-server"],
+    packages: ["packages/proto", "packages/core", "packages/delivery-server"],
     build() {
       phase("generate Delivery Protobuf artifacts");
       run("pnpm", ["proto:generate"]);
@@ -97,7 +98,7 @@ try {
 }
 
 function phase(name) {
-  console.log(`Local image phase: ${name} at ${new Date().toISOString()}.`);
+  console.log(`Local image phase: ${name} at ${new Date(Time.currentTimeMillis()).toISOString()}.`);
 }
 
 function run(command, arguments_, environment = {}) {

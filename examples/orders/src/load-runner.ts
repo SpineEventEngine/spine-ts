@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { randomUUID } from "node:crypto";
 
 import { create } from "@bufbuild/protobuf";
@@ -162,10 +163,10 @@ class DatastoreOrdersLoadRun {
   }
 
   async execute(): Promise<DatastoreOrdersLoadResult> {
-    const startedAt = performance.now();
+    const startedAt = Time.monotonicTime();
     try {
       const settled = await this.settleUsers();
-      return this.summarize(settled, performance.now() - startedAt);
+      return this.summarize(settled, Time.monotonicTime() - startedAt);
     } finally {
       for (const session of this.sessions) session.abort();
     }
@@ -268,7 +269,7 @@ class DatastoreOrdersUserRun {
     let read: SubscriptionRead | undefined;
     try {
       read = await this.startSubscription();
-      const submittedAt = performance.now();
+      const submittedAt = Time.monotonicTime();
       const commandAcknowledgementMs = await this.postCommand(submittedAt);
       const queryVisibilityMs = await this.waitForVisibility(submittedAt);
       const subscriptionDeliveryMs = await this.readSubscription(read.firstUpdate);
@@ -306,7 +307,7 @@ class DatastoreOrdersUserRun {
       throw new Error(
         `CreateOrder acknowledgement was ${acknowledgement.status?.status.case ?? "missing"}.`,
       );
-    return performance.now() - submittedAt;
+    return Time.monotonicTime() - submittedAt;
   }
 
   private command() {
@@ -321,10 +322,10 @@ class DatastoreOrdersUserRun {
   }
 
   private async waitForVisibility(startedAt: number): Promise<number> {
-    const deadline = performance.now() + this.timeoutMs;
-    while (performance.now() < deadline) {
+    const deadline = Time.monotonicTime() + this.timeoutMs;
+    while (Time.monotonicTime() < deadline) {
       const response = await this.readQuery();
-      if (this.isVisible(response)) return performance.now() - startedAt;
+      if (this.isVisible(response)) return Time.monotonicTime() - startedAt;
       await new Promise((resolve) => setTimeout(resolve, 20));
     }
     throw new Error(`OrderSummary ${this.id} was not visible within ${String(this.timeoutMs)}ms.`);
@@ -361,7 +362,7 @@ class DatastoreOrdersUserRun {
   private async readSubscription(
     firstUpdate: Promise<IteratorResult<SubscriptionUpdate>>,
   ): Promise<number> {
-    const startedAt = performance.now();
+    const startedAt = Time.monotonicTime();
     const update = await this.withTimeout(
       firstUpdate,
       "order subscription update",
@@ -371,7 +372,7 @@ class DatastoreOrdersUserRun {
     if (update.done) throw new Error("Order subscription ended before its first update.");
     if (!this.isCorrelated(update.value))
       throw new Error(`Order subscription update was not correlated to ${this.id}.`);
-    return performance.now() - startedAt;
+    return Time.monotonicTime() - startedAt;
   }
 
   private isCorrelated(update: SubscriptionUpdate): boolean {

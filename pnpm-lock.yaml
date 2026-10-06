@@ -487,6 +487,9 @@ importers:
       '@connectrpc/connect-node':
         specifier: 2.1.2
         version: 2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))
+      '@spine-event-engine/core':
+        specifier: 2.0.0-snapshot.21
+        version: link:../core
       '@spine-event-engine/proto':
         specifier: 2.0.0-snapshot.21
         version: link:../proto
@@ -509,6 +512,9 @@ importers:
         specifier: 9.4.0
         version: 9.4.0
     devDependencies:
+      '@spine-event-engine/core':
+        specifier: workspace:*
+        version: link:../core
       '@spine-event-engine/storage-datastore':
         specifier: workspace:*
         version: link:../storage-datastore
@@ -521,6 +527,9 @@ importers:
 
   packages/deployment-gce:
     dependencies:
+      '@spine-event-engine/core':
+        specifier: workspace:*
+        version: link:../core
       '@spine-event-engine/deployment':
         specifier: workspace:*
         version: link:../deployment
@@ -546,6 +555,9 @@ importers:
 
   packages/deployment-gke:
     dependencies:
+      '@spine-event-engine/core':
+        specifier: workspace:*
+        version: link:../core
       '@spine-event-engine/deployment':
         specifier: workspace:*
         version: link:../deployment

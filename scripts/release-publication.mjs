@@ -1,3 +1,4 @@
+import { Time } from "../packages/core/src/time.ts";
 import { Buffer } from "node:buffer";
 import { readRegistryGet, TemporaryRegistryError } from "./release-get.mjs";
 
@@ -623,7 +624,7 @@ export async function confirmPrepared({
   report,
   registry,
   save,
-  now = Date.now,
+  now = () => Time.currentTimeMillis(),
   sleep = (ms) => new Promise((resolve) => globalThis.setTimeout(resolve, ms)),
   windowMs = 60_000,
 }) {

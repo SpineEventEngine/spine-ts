@@ -1,6 +1,7 @@
 // Posts one task through the configured Coordinator, then polls the
 // authoritative TaskList projection to prove the managed To-Do app works.
 
+import { Time } from "@spine-event-engine/core/time";
 import { log } from "node:console";
 import { randomUUID } from "node:crypto";
 import process from "node:process";
@@ -82,12 +83,12 @@ function createCommand(id, commandSuffix, context) {
 }
 
 async function readTaskListEventually(id, context) {
-  const deadline = Date.now() + queryDeadlineMs;
+  const deadline = Time.currentTimeMillis() + queryDeadlineMs;
   let lastResponse;
   let attempts = 0;
 
-  while (Date.now() < deadline) {
-    const remainingMs = Math.max(1, deadline - Date.now());
+  while (Time.currentTimeMillis() < deadline) {
+    const remainingMs = Math.max(1, deadline - Time.currentTimeMillis());
     const response = await withTimeout(
       queries.read(createTaskListQuery(id, context, attempts)),
       "TaskList query",
@@ -101,7 +102,7 @@ async function readTaskListEventually(id, context) {
     if (response.response?.status?.status.case === "ok" && taskList !== undefined) {
       return taskList;
     }
-    await delay(Math.min(queryRetryDelayMs, Math.max(0, deadline - Date.now())));
+    await delay(Math.min(queryRetryDelayMs, Math.max(0, deadline - Time.currentTimeMillis())));
   }
 
   throw new Error(

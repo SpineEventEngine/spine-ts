@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import type { BoardMessageView } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/message_board_pb.js";
 import { MessageCircle } from "lucide-react";
@@ -41,9 +42,9 @@ export interface MessageListProps {
  */
 export const MessageList = (props: MessageListProps): ReactElement => {
   const { rows } = props;
-  const [now, setNow] = useState(() => new Date());
+  const [now, setNow] = useState(() => new Date(Time.currentTimeMillis()));
   useEffect(() => {
-    const clock = window.setInterval(() => setNow(new Date()), 30_000);
+    const clock = window.setInterval(() => setNow(new Date(Time.currentTimeMillis())), 30_000);
     return () => window.clearInterval(clock);
   }, []);
 

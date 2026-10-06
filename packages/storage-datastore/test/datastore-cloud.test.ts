@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { create } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { Datastore } from "@google-cloud/datastore";
@@ -30,7 +31,7 @@ describe.skipIf(!cloudTestEnabled)("Datastore cloud smoke", () => {
       .setClient(client)
       .build()
       .createRecordStorage(
-        { name: `T0135Cloud${String(Date.now())}`, multitenant: false },
+        { name: `T0135Cloud${String(Time.currentTimeMillis())}`, multitenant: false },
         new RecordSpec({
           sourceType: StringValueSchema,
           recordType: StringValueSchema,
@@ -38,7 +39,9 @@ describe.skipIf(!cloudTestEnabled)("Datastore cloud smoke", () => {
           extractId: (record) => record.value,
         }),
       );
-    const record = create(StringValueSchema, { value: `cloud-${String(Date.now())}` });
+    const record = create(StringValueSchema, {
+      value: `cloud-${String(Time.currentTimeMillis())}`,
+    });
     try {
       await storage.write(record);
       await expect(storage.read(record.value)).resolves.toEqual(record);

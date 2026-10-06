@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { create } from "@bufbuild/protobuf";
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
@@ -82,8 +83,8 @@ describe("Delivery fencing", () => {
             kind: "LEASED" as const,
             shard,
             worker: create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" }),
-            pickedUpAt: new Date(),
-            expiresAt: new Date(),
+            pickedUpAt: new Date(Time.currentTimeMillis()),
+            expiresAt: new Date(Time.currentTimeMillis()),
           }),
         release: () => {
           releases += 1;

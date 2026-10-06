@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import type { ServiceImpl } from "@connectrpc/connect";
 import { InboxService, ShardService } from "@spine-event-engine/proto/delivery-server";
 
@@ -101,7 +102,7 @@ export const InMemoryDelivery: Readonly<{
       throw new RangeError("Processing timeout is invalid.");
     const state = new InMemoryDeliveryState(options);
     const admission = new MutationAdmission();
-    const now = options.now ?? Date.now;
+    const now = options.now ?? (() => Time.currentTimeMillis());
     return Object.freeze({
       inbox: InboxHandlers.create(state, admission),
       shards: ShardHandlers.create(state, admission, now, timeout),

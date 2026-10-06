@@ -1,3 +1,5 @@
+import { Time } from "../packages/core/src/time.ts";
+
 /**
  * Represents a temporary public registry GET failure without implying absence.
  */
@@ -14,9 +16,9 @@ export class TemporaryRegistryError extends Error {}
  * @returns Parsed JSON, or undefined for an explicit 404 response.
  */
 export async function readRegistryGet(fetchResponse, url, { timeoutMs = 10_000, limitMs } = {}) {
-  const deadline = limitMs === undefined ? Infinity : Date.now() + limitMs;
+  const deadline = limitMs === undefined ? Infinity : Time.currentTimeMillis() + limitMs;
   for (let attempt = 0; attempt < 3; attempt++) {
-    const remaining = deadline - Date.now();
+    const remaining = deadline - Time.currentTimeMillis();
     if (remaining <= 0) throw new TemporaryRegistryError("Registry read deadline expired: " + url);
     const controller = new globalThis.AbortController();
     let timer;
@@ -47,7 +49,7 @@ export async function readRegistryGet(fetchResponse, url, { timeoutMs = 10_000, 
           ? error
           : new TemporaryRegistryError("Registry transport failed: " + url, { cause: error });
       if (attempt === 2) throw failure;
-      const delay = Math.min(50 * (attempt + 1), deadline - Date.now());
+      const delay = Math.min(50 * (attempt + 1), deadline - Time.currentTimeMillis());
       if (delay <= 0) throw failure;
       await new Promise((resolve) => globalThis.setTimeout(resolve, delay));
     } finally {

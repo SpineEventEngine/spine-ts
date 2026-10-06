@@ -1616,7 +1616,7 @@ const BrowserClientValues = Object.freeze({
       if (value.value.length === 0) throw new TypeError("Client zoneId must not be empty.");
       return clone(ZoneIdSchema, value);
     }
-    const zone = value ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const zone = value ?? Time.currentTimeZone();
     if (zone.length === 0) throw new TypeError("Client zoneId must not be empty.");
     return create(ZoneIdSchema, { value: zone });
   },

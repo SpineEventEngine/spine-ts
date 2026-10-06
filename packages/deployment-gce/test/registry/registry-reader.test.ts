@@ -16,7 +16,9 @@
  * asynchronous contract methods without awaiting. */
 
 import { create, toBinary } from "@bufbuild/protobuf";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { DynamicUnaryForwarder, type DynamicUnaryClient } from "@spine-event-engine/auth";
+import { Time } from "@spine-event-engine/core/time";
 import {
   ApplicationNode,
   LeasedNodeRegistry,
@@ -105,9 +107,10 @@ describe("GceRegistryReader", () => {
     ).resolves.toMatchObject([{ id: "7" }]);
   });
 
-  it("uses Date.now when a registry reader clock is omitted", async () => {
-    const original = Date.now;
-    Date.now = () => 7;
+  it("uses Time when a registry reader clock is omitted", async () => {
+    const previous = Time.setProvider({
+      currentTime: () => create(TimestampSchema, { nanos: 7_000_000 }),
+    });
     try {
       const registry = {
         read: async (now: number) => [
@@ -118,7 +121,7 @@ describe("GceRegistryReader", () => {
         new GceRegistryReader(registry).read(new AbortController().signal),
       ).resolves.toMatchObject([{ id: "7" }]);
     } finally {
-      Date.now = original;
+      Time.setProvider(previous);
     }
   });
 

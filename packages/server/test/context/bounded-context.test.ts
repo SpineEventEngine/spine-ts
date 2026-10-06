@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -3178,8 +3179,8 @@ async function waitForCondition(
   predicate: () => boolean | Promise<boolean>,
   label: string,
 ): Promise<void> {
-  const deadline = Date.now() + 500;
-  while (Date.now() < deadline) {
+  const deadline = Time.currentTimeMillis() + 500;
+  while (Time.currentTimeMillis() < deadline) {
     if (await predicate()) {
       return;
     }

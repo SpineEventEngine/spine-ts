@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 /* eslint-disable @typescript-eslint/require-await */
 
@@ -37,7 +38,11 @@ describe("Delivery direct worker", () => {
     const whenReceived = create(TimestampSchema, { seconds: 1n, nanos: 123_456_000 });
     const row = { ...message("precise", "target", shard), whenReceived };
     const delivery = createDelivery({ rows: [row], mark: async () => undefined });
-    const run = await delivery.drain(shard, { onMessage: () => { throw new Error("failed"); } });
+    const run = await delivery.drain(shard, {
+      onMessage: () => {
+        throw new Error("failed");
+      },
+    });
     expect(run.failures[0]?.message.whenReceived).toEqual(whenReceived);
   });
 
@@ -84,7 +89,7 @@ describe("Delivery direct worker", () => {
     const retained = ["retained-a", "retained-b"].map((id) => ({
       ...message(id, id, shard),
       status: "DELIVERED" as const,
-      keepUntil: new Date(Date.now() + 60_000),
+      keepUntil: new Date(Time.currentTimeMillis() + 60_000),
     }));
     const pending = ["a", "b", "c"].map((id) => message(id, id, shard));
     const pages = [[...retained], pending.slice(0, 2), pending.slice(2), [...retained], []];
@@ -108,7 +113,7 @@ describe("Delivery direct worker", () => {
     const retained = {
       ...message("retained", "target", shard),
       status: "DELIVERED" as const,
-      keepUntil: new Date(Date.now() + 60_000),
+      keepUntil: new Date(Time.currentTimeMillis() + 60_000),
     };
     const duplicate = { ...message("duplicate", "target", shard), signalId: retained.signalId };
     const pages = [[retained, duplicate], []];
@@ -142,7 +147,7 @@ describe("Delivery direct worker", () => {
     "uses the inbox clock for retained identity and cleanup at offset $offset",
     async ({ offset, expectedDelivery, expectedRemoval }) => {
       const shard = ShardIndex.single();
-      const boundary = Date.now();
+      const boundary = Time.currentTimeMillis();
       const retained = {
         ...message("retained", "target", shard),
         status: "DELIVERED" as const,
@@ -178,7 +183,7 @@ describe("Delivery direct worker", () => {
     const future = {
       ...message("future", "target", shard),
       status: "DELIVERED" as const,
-      keepUntil: new Date(Date.now() + 60_000),
+      keepUntil: new Date(Time.currentTimeMillis() + 60_000),
     };
     let checks = 0;
     let removals = 0;
@@ -209,7 +214,7 @@ describe("Delivery direct worker", () => {
     const shard = ShardIndex.single();
     const expired = {
       ...message("expired", "target", shard),
-      keepUntil: new Date(Date.now() - 60_000),
+      keepUntil: new Date(Time.currentTimeMillis() - 60_000),
       status: "DELIVERED" as const,
     };
     const pending = { ...message("pending", "target", shard), signalId: expired.signalId };
@@ -1326,8 +1331,8 @@ function session(shard: ShardIndex) {
     kind: "LEASED" as const,
     shard,
     worker: workerId("node", "restart"),
-    pickedUpAt: new Date(),
-    expiresAt: new Date(Date.now() + 60_000),
+    pickedUpAt: new Date(Time.currentTimeMillis()),
+    expiresAt: new Date(Time.currentTimeMillis() + 60_000),
   };
 }
 function message(
@@ -1343,7 +1348,7 @@ function message(
     label,
     status: "TO_DELIVER",
     shard,
-    whenReceived: new Date(),
+    whenReceived: new Date(Time.currentTimeMillis()),
     version: 1n,
   };
 }

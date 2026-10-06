@@ -9,11 +9,15 @@ import process from "node:process";
 import test from "node:test";
 import { URL } from "node:url";
 
+import { Time } from "../../../../packages/core/dist/time.js";
 const containerRoot = new URL(".", import.meta.url);
 const datastoreEmulator = "google/cloud-sdk:578.0.0-emulators";
 
 test("local image builds regenerate application output before packing it", () => {
   const builder = readFileSync(new URL("build-local-images.mjs", containerRoot), "utf8");
+  assert.match(builder, /packages\/core\/src\/time\.ts/u);
+  const rpcClient = readFileSync(new URL("../compose/rpc-client.mjs", import.meta.url), "utf8");
+  assert.match(rpcClient, /@spine-event-engine\/core\/time/u);
   assert.match(builder, /phase\("build Message Board application"\)/u);
   assert.match(builder, /\["typecheck:build"\]/u);
   assert.ok(
@@ -30,6 +34,7 @@ test("the Delivery-only image target prepares only Delivery runtime artifacts", 
   );
 
   assert.match(plan, /packages\/delivery-server/u);
+  assert.match(plan, /packages\/core/u);
   assert.match(plan, /pnpm", \["exec", "tsc", "-b", "packages\/delivery-server"\]/u);
   assert.doesNotMatch(plan, /examples\/message-board\/web/u);
   assert.doesNotMatch(plan, /\["typecheck:build"\]/u);
@@ -178,7 +183,7 @@ test("MessageBoard commands share one artifact and required compiled modules imp
 });
 
 test("runtime commands keep Node as PID 1 and stop cleanly", () => {
-  const suffix = `${String(process.pid)}-${String(Date.now())}`;
+  const suffix = `${String(process.pid)}-${String(Time.currentTimeMillis())}`;
   const network = `spine-t0095-${suffix}`;
   const emulator = `spine-t0095-emulator-${suffix}`;
   const owned = [emulator];
@@ -334,12 +339,12 @@ function startRuntimeMatrix({ messageBoard, network, owned, signal, suffix }) {
     "spine-ts/standalone-gateway:local",
   ]);
   waitForLog(gateway, /MessageBoard gateway ready/u);
-  const activationStarted = Date.now();
+  const activationStarted = Time.currentTimeMillis();
   try {
     exerciseRegistry(network, "http://gateway:18082", "http://localhost:18082", messageBoard);
   } catch (error) {
     throw new Error(
-      `Browser subscription activation failed after ${String(Date.now() - activationStarted)}ms.\n` +
+      `Browser subscription activation failed after ${String(Time.currentTimeMillis() - activationStarted)}ms.\n` +
         `Coordinator (${application}) logs:\n${containerLogs(application)}\n` +
         `Gateway (${gateway}) logs:\n${containerLogs(gateway)}`,
       { cause: error },

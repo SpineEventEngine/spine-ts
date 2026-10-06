@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { create, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
 import { Identifiers } from "@spine-event-engine/core";
@@ -730,7 +731,7 @@ describe("LocalEntityInbox", () => {
     });
     const inbox = new LocalEntityInbox("Tasks");
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
-    const keepUntil = new Date(Date.now() + 30_000);
+    const keepUntil = new Date(Time.currentTimeMillis() + 30_000);
 
     inbox.register({
       targetTypeUrl,

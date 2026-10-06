@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { create } from "@bufbuild/protobuf";
 import {
   KeyObject,
@@ -147,7 +148,7 @@ export interface SignedSessionsOptions {
   readonly revocation?: SignedTokenRevocation;
 
   /**
-   * Unix-millisecond clock; defaults to `Date.now`.
+   * Unix-millisecond clock; defaults to `Time.currentTimeMillis`.
    */
   readonly clock?: SignedSessionClock;
 
@@ -350,7 +351,7 @@ export class SignedSessions implements SessionResolver {
       options.maxAttributeCharacters ?? 4_096,
       "maxAttributeCharacters",
     );
-    this.#clock = options.clock ?? { now: Date.now };
+    this.#clock = options.clock ?? { now: () => Time.currentTimeMillis() };
     this.#random = options.randomBytes ?? nodeRandomBytes;
     this.#revocation = options.revocation;
     if ((options.retiredKeys?.length ?? 0) + 1 > this.#maxKeys) throw new Error("maxKeys exceeded");

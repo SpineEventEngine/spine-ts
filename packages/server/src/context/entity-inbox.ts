@@ -183,7 +183,12 @@ export class LocalEntityInbox implements EntityInbox {
   ): Promise<InboxMessage> {
     await this.#followUpFor(input, deliveryTenantId);
     await this.#keepDeliveryTenant(deliveryTenantId);
-    const written = await this.#writeInboxRow(delivery, input, Time.currentTime(), deliveryTenantId);
+    const written = await this.#writeInboxRow(
+      delivery,
+      input,
+      Time.currentTime(),
+      deliveryTenantId,
+    );
     this.#trackMessage(written.message);
     try {
       await written.handoff.complete(() =>

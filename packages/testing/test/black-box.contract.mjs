@@ -1,8 +1,9 @@
 /* global setTimeout */
 
+import { Time } from "@spine-event-engine/core/time";
 import { BoundedContext } from "@spine-event-engine/server";
 import { create } from "@bufbuild/protobuf";
-import { StringValueSchema } from "@bufbuild/protobuf/wkt";
+import { StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { TypeUrls, AnyMessages } from "@spine-event-engine/core";
 import { TenantIdSchema, ZoneIdSchema } from "@spine-event-engine/proto";
 import {
@@ -84,6 +85,43 @@ export function registerBlackBoxContract(test, testing) {
       if (first?.name !== "First (projected)") throw new Error("projection was not immutable");
     } finally {
       await blackBox.close();
+    }
+  });
+
+  test("stamps a normal command's event and repository version with provider precision", async () => {
+    const instant = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 123_456_789 });
+    const previous = Time.setProvider({ currentTime: () => instant });
+    const blackBox = await BlackBox.from(projectContext());
+    try {
+      const posted = await blackBox
+        .asGuest()
+        .post(
+          CreateProjectSchema,
+          create(CreateProjectSchema, { id: "precise-project", name: "Precise" }),
+        );
+      if (posted.kind !== "ok") throw new Error("command was not accepted");
+      const events = await blackBox.eventually(
+        () => blackBox.assertEvents(),
+        (value) => value.length === 1,
+      );
+      if (events[0]?.context?.timestamp?.nanos !== instant.nanos)
+        throw new Error("event lost provider nanoseconds");
+      const next = await blackBox
+        .asGuest()
+        .post(
+          CreateProjectSchema,
+          create(CreateProjectSchema, { id: "precise-project", name: "Updated" }),
+        );
+      if (next.kind !== "ok") throw new Error("second command was not accepted");
+      const updated = await blackBox.eventually(
+        () => blackBox.assertEvents(),
+        (value) => value.length === 2,
+      );
+      if (updated[1]?.context?.version?.timestamp?.nanos !== instant.nanos)
+        throw new Error("repository version lost provider nanoseconds");
+    } finally {
+      await blackBox.close();
+      Time.setProvider(previous);
     }
   });
 
@@ -404,6 +442,29 @@ export function registerBlackBoxContract(test, testing) {
     }
   });
 
+  test("times out eventual waits while occurrence time is fixed", async () => {
+    const previous = Time.setProvider({ currentTime: () => create(TimestampSchema) });
+    const blackBox = await BlackBox.from(BoundedContext.singleTenant("FrozenClock").build());
+    try {
+      await assertRejects(
+        Promise.race([
+          blackBox.eventually(
+            () => 1,
+            () => false,
+            { timeoutMs: 5, intervalMs: 1 },
+          ),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("wall-clock wait stalled")), 100),
+          ),
+        ]),
+        BlackBoxTimeoutError,
+      );
+    } finally {
+      await blackBox.close();
+      Time.setProvider(previous);
+    }
+  });
+
   test("requires positive integer eventual timing values", async () => {
     const invalid = [0, -1, 0.5, Number.NaN, Number.POSITIVE_INFINITY];
     for (const value of invalid) {
@@ -668,8 +729,8 @@ function state(id, name, priority = 1) {
   return create(ProjectOverviewSchema, { id, name, priority });
 }
 async function emitUntil(pending, emit) {
-  const deadline = Date.now() + 2_000;
-  while (Date.now() < deadline) {
+  const deadline = Time.currentTimeMillis() + 2_000;
+  while (Time.currentTimeMillis() < deadline) {
     await emit();
     const attempted = await Promise.race([
       pending.then((value) => ({ value })),

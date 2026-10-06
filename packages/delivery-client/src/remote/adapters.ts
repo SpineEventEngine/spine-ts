@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { randomUUID } from "node:crypto";
 import { create } from "@bufbuild/protobuf";
 import { type Timestamp, TimestampSchema } from "@bufbuild/protobuf/wkt";
@@ -216,7 +217,7 @@ export class RemoteInbox implements DeliveryInbox {
       return false;
     if (
       message.status !== "DELIVERED" ||
-      (message.keepUntil !== undefined && message.keepUntil.getTime() > Date.now())
+      (message.keepUntil !== undefined && message.keepUntil.getTime() > Time.currentTimeMillis())
     )
       return false;
     const current = await this.client.findOne(message.id, options);

@@ -48,9 +48,11 @@ describe("direct InboxMessage storage", () => {
     await storage.write(second);
     const page = await storage.read(first.shard, { limit: 1 });
     expect(page[0]?.whenReceived).toEqual(firstTime);
+    const pageEntry = page[0];
+    if (pageEntry === undefined) throw new Error("Expected the first inbox page entry.");
     await expect(
       storage.read(first.shard, {
-        after: { messageId: first.id.value, whenReceived: page[0]!.whenReceived, version: 1n },
+        after: { messageId: first.id.value, whenReceived: pageEntry.whenReceived, version: 1n },
       }),
     ).resolves.toMatchObject([{ id: { value: "second" }, whenReceived: secondTime }]);
   });

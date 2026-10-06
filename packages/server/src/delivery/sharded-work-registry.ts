@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { clone, create } from "@bufbuild/protobuf";
 import { TenantIdSchema } from "@spine-event-engine/proto";
 import {
@@ -75,7 +76,7 @@ export class ShardedWorkRegistry {
     this.#context = copy(options.context);
     this.#factory = options.storageFactory;
     this.#lease = DeliveryLeases.requireMs("ShardedWorkRegistry", options.leaseMs ?? leaseDefault);
-    this.#now = options.now ?? (() => new Date());
+    this.#now = options.now ?? (() => new Date(Time.currentTimeMillis()));
     configs.set(this, {
       context: this.#context,
       storageFactory: this.#factory,

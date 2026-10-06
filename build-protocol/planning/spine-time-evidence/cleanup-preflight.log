@@ -1,0 +1,9 @@
+Cleanup enforcement failed: package src files must not grow flat
+  - packages/core/src/time.ts
+Cleanup enforcement failed: modified production/example callables exceed 35 physical lines
+  - packages/auth/src/oidc/index.ts:86-141 constructor
+  - packages/auth/src/providers/index.ts:245-392 createOidcProvider
+  - packages/auth/src/sessions/signed.ts:329-378 constructor
+  - packages/delivery-client/src/wire/codec.ts:255-295 decode
+  - packages/server/src/delivery/inbox-records.ts:153-202 read
+  - examples/message-board/web/src/message-list.tsx:43-99 MessageList

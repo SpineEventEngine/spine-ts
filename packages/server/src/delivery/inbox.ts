@@ -68,8 +68,7 @@ export class Inbox {
       status: this.#readInput(messageInput, "status", "Inbox delivery status") as DeliveryStatus,
       shard,
       whenReceived: this.#readInput(messageInput, "whenReceived", "Inbox receive time") as
-        | Date
-        | Timestamp,
+        Date | Timestamp,
       version: this.#readInput(messageInput, "version", "Inbox version") as bigint,
       ...(signal === undefined ? {} : { signal }),
       ...(keepUntil === undefined ? {} : { keepUntil }),

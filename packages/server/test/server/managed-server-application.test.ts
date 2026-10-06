@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { describe, expect, it, vi } from "vitest";
 import { EventEmitter } from "node:events";
 import { fork, type ChildProcess } from "node:child_process";
@@ -1713,7 +1714,7 @@ describe("ManagedServerApplication", () => {
   }, 20_000);
 
   it("waits for child-local synchronization before admitting its private listener", async () => {
-    const startedAt = Date.now();
+    const startedAt = Time.currentTimeMillis();
     const managed = await ManagedServerApplication.run({
       processCount: 1,
       port: 50_051,
@@ -1721,7 +1722,7 @@ describe("ManagedServerApplication", () => {
       createServer: () => Promise.reject(new Error("Parent must not assemble a child.")),
     });
     try {
-      expect(Date.now() - startedAt).toBeGreaterThanOrEqual(200);
+      expect(Time.currentTimeMillis() - startedAt).toBeGreaterThanOrEqual(200);
       expect(
         managedServerApplicationAccess.readyMembers(managed).map((member) => member.endpoint),
       ).toHaveLength(1);

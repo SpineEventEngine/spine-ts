@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { clone, create } from "@bufbuild/protobuf";
 import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { randomUUID } from "node:crypto";
@@ -731,7 +732,7 @@ class DeliveryDrain {
   #retentionTime(): Date {
     return this.input.inbox instanceof Inbox
       ? InboxStorageClock.read(this.input.inbox.storage)
-      : new Date();
+      : new Date(Time.currentTimeMillis());
   }
 
   /**
@@ -927,8 +928,7 @@ function snapshot(message: InboxMessage): InboxMessage {
       message.whenReceived instanceof Date
         ? create(TimestampSchema, {
             seconds: BigInt(Math.floor(message.whenReceived.getTime() / 1_000)),
-            nanos:
-              (message.whenReceived.getTime() % 1_000 + 1_000) % 1_000 * 1_000_000,
+            nanos: (((message.whenReceived.getTime() % 1_000) + 1_000) % 1_000) * 1_000_000,
           })
         : clone(TimestampSchema, message.whenReceived),
     ...(message.keepUntil === undefined ? {} : { keepUntil: new Date(message.keepUntil) }),

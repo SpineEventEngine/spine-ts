@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import * as http2 from "node:http2";
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -3401,9 +3402,9 @@ function nextTurn(): Promise<void> {
 }
 
 async function waitFor(predicate: () => boolean, ms = 250): Promise<void> {
-  const deadline = Date.now() + ms;
+  const deadline = Time.currentTimeMillis() + ms;
   while (!predicate()) {
-    if (Date.now() >= deadline) {
+    if (Time.currentTimeMillis() >= deadline) {
       throw new Error("Lifecycle condition was not reached in time.");
     }
     await nextTurn();

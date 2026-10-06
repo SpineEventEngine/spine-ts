@@ -1,0 +1,6457 @@
+[
+  {
+    "rule": "callable-summary",
+    "file": "examples/message-board/web/src/message-list.tsx",
+    "name": "initial@113(username)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "close@1443()"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "discard@1454()"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "finish@1468(value)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "freeze@95(value)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "utf8Bytes@85(value)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "cloneTenant@875(value)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "get@424(blackBox)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "instantiate@564(context,server,client,options,observation)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "set@417(blackBox,internals)"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "member@155"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "member@246"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "member@247"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "member@248"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "member@249"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "member@250"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "member@181"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "member@182"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "member@183"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "member@184"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "member@185"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "member@186"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "member@60"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "member@61"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "member@62"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "member@63"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "member@64"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "member@65"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "member@66"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "member@67"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "member@68"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "member@69"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "member@70"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "member@71"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "member@72"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "member@73"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "member@74"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "member@75"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "member@76"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "member@77"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "member@78"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "member@79"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "member@80"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "member@180"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "member@181"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "member@182"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "member@183"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "member@184"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "member@185"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "member@310"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "member@311"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "member@312"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "member@313"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "member@314"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "member@315"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "member@316"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "member@317"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "member@318"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "member@319"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "member@320"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "member@321"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "member@322"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "member@323"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "member@599"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "member@612"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "member@624"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "member@635"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "member@638"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "member@642"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@1406"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@1407"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@1408"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@1409"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@1410"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@1411"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@1412"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@1413"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@460"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@461"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@462"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@588"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@589"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@590"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@591"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@669"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@670"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@671"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@672"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@673"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@674"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@684"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@717"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@738"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@741"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@745"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@748"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@751"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@779"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@780"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@791"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@792"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@793"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@794"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@795"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@796"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@797"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@798"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@799"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@800"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@801"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@802"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@803"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@804"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "member@833"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/deployment-gce/src/registrar/gce-registrar.ts",
+    "name": "member@103"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/deployment-gce/src/registrar/gce-registrar.ts",
+    "name": "member@104"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/deployment-gce/src/registrar/gce-registrar.ts",
+    "name": "member@105"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/deployment-gce/src/registrar/gce-registrar.ts",
+    "name": "member@106"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/deployment-gce/src/registrar/gce-registrar.ts",
+    "name": "member@107"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/deployment-gce/src/registrar/gce-registrar.ts",
+    "name": "member@108"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/deployment-gce/src/registrar/gce-registrar.ts",
+    "name": "member@109"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/deployment-gce/src/registrar/gce-registrar.ts",
+    "name": "member@110"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/deployment-gce/src/registrar/gce-registrar.ts",
+    "name": "member@111"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/deployment-gce/src/registrar/gce-registrar.ts",
+    "name": "member@112"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/deployment-gce/src/registrar/gce-registrar.ts",
+    "name": "member@113"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/deployment-gce/src/registrar/gce-registrar.ts",
+    "name": "member@114"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/deployment-gce/src/registrar/gce-registrar.ts",
+    "name": "member@115"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/deployment-gce/src/registrar/gce-registrar.ts",
+    "name": "member@116"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/deployment-gce/src/registrar/gce-registrar.ts",
+    "name": "member@117"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/deployment-gce/src/registrar/gce-registrar.ts",
+    "name": "member@118"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/deployment-gke/src/discovery/gke-node-discovery.ts",
+    "name": "member@135"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/deployment-gke/src/discovery/gke-node-discovery.ts",
+    "name": "member@136"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/deployment-gke/src/discovery/gke-node-discovery.ts",
+    "name": "member@137"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/deployment-gke/src/discovery/gke-node-discovery.ts",
+    "name": "member@138"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/deployment-gke/src/discovery/gke-node-discovery.ts",
+    "name": "member@139"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/deployment-gke/src/discovery/gke-node-discovery.ts",
+    "name": "member@140"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/deployment-gke/src/discovery/gke-node-discovery.ts",
+    "name": "member@141"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/deployment-gke/src/discovery/gke-node-discovery.ts",
+    "name": "member@142"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/deployment-gke/src/discovery/gke-node-discovery.ts",
+    "name": "member@143"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/deployment-gke/src/discovery/gke-node-discovery.ts",
+    "name": "member@144"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/deployment-gke/src/discovery/gke-node-discovery.ts",
+    "name": "member@145"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/deployment-gke/src/discovery/gke-node-discovery.ts",
+    "name": "member@146"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/deployment-gke/src/discovery/gke-node-discovery.ts",
+    "name": "member@147"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/deployment-gke/src/discovery/gke-node-discovery.ts",
+    "name": "member@148"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/deployment-gke/src/discovery/gke-node-discovery.ts",
+    "name": "member@149"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/deployment-gke/src/discovery/gke-node-discovery.ts",
+    "name": "member@150"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/deployment-gke/src/discovery/gke-node-discovery.ts",
+    "name": "member@151"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/deployment-gke/src/discovery/gke-node-discovery.ts",
+    "name": "member@152"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/context/entity-inbox.ts",
+    "name": "member@41"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/context/entity-inbox.ts",
+    "name": "member@42"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/context/entity-inbox.ts",
+    "name": "member@43"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/context/entity-inbox.ts",
+    "name": "member@44"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/context/entity-inbox.ts",
+    "name": "member@45"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/context/entity-inbox.ts",
+    "name": "member@46"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/context/entity-inbox.ts",
+    "name": "member@47"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/context/entity-inbox.ts",
+    "name": "member@48"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/context/entity-inbox.ts",
+    "name": "member@49"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/context/entity-inbox.ts",
+    "name": "member@50"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/context/entity-inbox.ts",
+    "name": "member@51"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/context/entity-inbox.ts",
+    "name": "member@52"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/context/entity-inbox.ts",
+    "name": "member@53"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/context/projection-handoff.ts",
+    "name": "member@37"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/context/projection-handoff.ts",
+    "name": "member@38"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/context/projection-handoff.ts",
+    "name": "member@39"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/context/projection-handoff.ts",
+    "name": "member@40"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/context/projection-handoff.ts",
+    "name": "member@41"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/context/projection-handoff.ts",
+    "name": "member@42"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/context/projection-handoff.ts",
+    "name": "member@43"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/context/projection-handoff.ts",
+    "name": "member@44"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "name": "member@198"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "name": "member@225"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "name": "member@65"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "name": "member@66"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "name": "member@67"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "name": "member@68"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/integration/third-party-context.ts",
+    "name": "member@40"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/integration/third-party-context.ts",
+    "name": "member@41"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/runtime/signal-metadata.ts",
+    "name": "member@460"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "member@528"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "member@529"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "member@530"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "member@531"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "member@532"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "member@533"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "member@534"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "member@535"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "member@536"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "member@537"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "member@538"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "member@539"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "member@540"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/stand/subscription-registry.ts",
+    "name": "member@261"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/stand/subscription-registry.ts",
+    "name": "member@262"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/stand/subscription-registry.ts",
+    "name": "member@412"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/server/src/stand/subscription-registry.ts",
+    "name": "member@413"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/storage-datastore/src/datastore/tenant-catalog.ts",
+    "name": "member@42"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/storage-datastore/src/datastore/tenant-catalog.ts",
+    "name": "member@43"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/storage-datastore/src/datastore/tenant-catalog.ts",
+    "name": "member@44"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/storage-datastore/src/datastore/tenant-catalog.ts",
+    "name": "member@45"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/storage-datastore/src/datastore/tenant-catalog.ts",
+    "name": "member@46"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "member@161"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "member@162"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "member@163"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "member@164"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "member@165"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "member@166"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "member@167"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "member@168"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "member@169"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "member@170"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "member@171"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "member@172"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "member@173"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "member@647"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "member@648"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "member@699"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "member@700"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "member@701"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "member@780"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "member@781"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "member@782"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "member@786"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "member@793"
+  },
+  {
+    "rule": "class-member-spacing",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "member@827"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersLoadRun.classifyFailures(settled)(settled)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersLoadRun.constructor(options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersLoadRun.runUser(index)(index)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersLoadRun.summarize(settled,elapsedMs)(elapsedMs)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersLoadRun.summarize(settled,elapsedMs)(settled)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.cleanup(iterator)(iterator)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.constructor(baseUrl,index,timeoutMs,session)(baseUrl)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.constructor(baseUrl,index,timeoutMs,session)(index)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.constructor(baseUrl,index,timeoutMs,session)(session)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.constructor(baseUrl,index,timeoutMs,session)(timeoutMs)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.ignoreCancellation(promise)(promise)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.isCorrelated(update)(update)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.isVisible(response)(response)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.postCommand(submittedAt)(submittedAt)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.readSubscription(firstUpdate)(firstUpdate)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.waitForVisibility(startedAt)(startedAt)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.withTimeout(promise,label,timeoutMs,controller)(controller)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.withTimeout(promise,label,timeoutMs,controller)(label)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.withTimeout(promise,label,timeoutMs,controller)(promise)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.withTimeout(promise,label,timeoutMs,controller)(timeoutMs)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.cleanup(iterator)(iterator)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.constructor(baseUrl,index,visibilityTimeoutMs)(baseUrl)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.constructor(baseUrl,index,visibilityTimeoutMs)(index)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.constructor(baseUrl,index,visibilityTimeoutMs)(visibilityTimeoutMs)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.ignoreCancellation(promise)(promise)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.isCorrelated(update)(update)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.postCommand(submittedAt)(submittedAt)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.readSubscription(firstUpdate)(firstUpdate)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.waitForVisibility(startedAt)(startedAt)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.withTimeout(promise,label,timeoutMs)(label)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.withTimeout(promise,label,timeoutMs)(promise)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.withTimeout(promise,label,timeoutMs)(timeoutMs)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "boundedNonEmpty@930(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "callbackRejected@565(reason)(reason)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "constantTimeEquals@997(left,right)(left)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "constantTimeEquals@997(left,right)(right)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "copyBoundedRecord@804(value,rejectTokens)(rejectTokens)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "copyBoundedRecord@804(value,rejectTokens)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "copyResolvedSession@915(session)(session)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "expiryAt@987(now,ttl)(now)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "expiryAt@987(now,ttl)(ttl)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "isStrictHttpsUrl@944(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "nonEmpty@953(value,name)(name)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "nonEmpty@953(value,name)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "parseUrl@593(value,name)(name)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "parseUrl@593(value,name)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "plainRecord@934(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "positiveSafeInteger@973(value,name)(name)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "positiveSafeInteger@973(value,name)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "rejected@558(reason)(reason)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "sha256Base64Url@992(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "snapshotBrowserCodeVerifier@713(input)(input)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "snapshotCallbackInput@674(input)(input)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "snapshotCallbackState@664(input)(input)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "snapshotGrantExchangeInput@704(input)(input)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "snapshotResolvedIdentity@746(identity,expected)(expected)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "snapshotResolvedIdentity@746(identity,expected)(identity)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "snapshotSessionIssue@867(issue)(issue)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "snapshotStartInput@650(input)(input)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "strictHttpsUrl@586(value,name)(name)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "strictHttpsUrl@586(value,name)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "tokenLikeClaim@940(name)(name)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validBrowserCodeVerifier@722(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validCallbackInput@687(input)(input)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validExternalIdentity@726(identity,issuer)(identity)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validExternalIdentity@726(identity,issuer)(issuer)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validGrant@700(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validPrincipal@832(principal)(principal)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validRedirects@616(redirects)(redirects)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validScopes@603(scopes)(scopes)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validSessionIssue@853(issue)(issue)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validSessionTimestamp@902(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validStartInput@630(input,redirects)(input)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validStartInput@630(input,redirects)(redirects)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validTimestamp@979(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validateFunction@969(value,name)(name)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validateFunction@969(value,name)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validateProvider@959(provider)(provider)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "abortableRead@820(reader,signal)(reader)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "abortableRead@820(reader,signal)(signal)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "bounded@735(value,name)(name)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "bounded@735(value,name)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "boundedOperation@777(timeoutMilliseconds,externalSignal,operation)(externalSignal)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "boundedOperation@777(timeoutMilliseconds,externalSignal,operation)(operation)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "boundedOperation@777(timeoutMilliseconds,externalSignal,operation)(timeoutMilliseconds)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "cacheMilliseconds@847(headers)(headers)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "https@762(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "httpsBase@770(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "json@640(url,http,limits,signal,init)(http)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "json@640(url,http,limits,signal,init)(init)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "json@640(url,http,limits,signal,init)(limits)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "json@640(url,http,limits,signal,init)(signal)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "json@640(url,http,limits,signal,init)(url)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "jsonDocument@650(url,http,limits,signal,init)(http)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "jsonDocument@650(url,http,limits,signal,init)(init)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "jsonDocument@650(url,http,limits,signal,init)(limits)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "jsonDocument@650(url,http,limits,signal,init)(signal)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "jsonDocument@650(url,http,limits,signal,init)(url)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "parse64@716(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "plain@723(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "positive@758(value,name)(name)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "positive@758(value,name)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "safeNow@841(clock)(clock)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "string@730(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "validEmail@740(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "validExchange@711(input)(input)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "validPrimaryEmail@745(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "validScope@753(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "verifyToken@580(token,issuer,clientId,nonce,clock,keys)(clientId)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "verifyToken@580(token,issuer,clientId,nonce,clock,keys)(clock)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "verifyToken@580(token,issuer,clientId,nonce,clock,keys)(issuer)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "verifyToken@580(token,issuer,clientId,nonce,clock,keys)(keys)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "verifyToken@580(token,issuer,clientId,nonce,clock,keys)(nonce)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "verifyToken@580(token,issuer,clientId,nonce,clock,keys)(token)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "waitForSignal@805(operation,signal)(operation)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "waitForSignal@805(operation,signal)(signal)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "OpaqueSessions.expired(record,now)(now)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "OpaqueSessions.expired(record,now)(record)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "OpaqueSessions.live(id,now)(id)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "OpaqueSessions.live(id,now)(now)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "OpaqueSessions.record(principal,now)(now)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "OpaqueSessions.record(principal,now)(principal)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "OpaqueSessions.sweepExpired(now)(now)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "copyPrincipal@406(principal)(principal)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "credential@402(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "positiveSafeInteger@396(value,name)(name)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "positiveSafeInteger@396(value,name)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "resolved@415(record)(record)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "timestamp@422(milliseconds)(milliseconds)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "timestampValid@430(milliseconds)(milliseconds)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "base64url@743(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "boundedString@735(value,name)(name)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "boundedString@735(value,name)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "clockValue@868(clock)(clock)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "encode@746(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "json@749(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "nonnegative@730(value,name)(name)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "nonnegative@730(value,name)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "plain@754(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "positive@725(value,name)(name)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "positive@725(value,name)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "principalCopy@761(value,maxId,maxAttributes,maxChars)(maxAttributes)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "principalCopy@761(value,maxId,maxAttributes,maxChars)(maxChars)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "principalCopy@761(value,maxId,maxAttributes,maxChars)(maxId)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "principalCopy@761(value,maxId,maxAttributes,maxChars)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "rejected@684(reason)(reason)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "retentionDeadline@875(now,ttl,skew)(now)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "retentionDeadline@875(now,ttl,skew)(skew)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "retentionDeadline@875(now,ttl,skew)(ttl)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "rotation@687(reason)(reason)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "session@846(principal,seconds)(principal)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "session@846(principal,seconds)(seconds)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "signing@692(key)(key)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "timeValid@859(milliseconds)(milliseconds)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "timestamp@843(seconds)(seconds)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "validClaims@787(value,issuer,audience,ttl,skew,now,maxId,maxAttributes,maxChars)(audience)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "validClaims@787(value,issuer,audience,ttl,skew,now,maxId,maxAttributes,maxChars)(issuer)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "validClaims@787(value,issuer,audience,ttl,skew,now,maxId,maxAttributes,maxChars)(maxAttributes)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "validClaims@787(value,issuer,audience,ttl,skew,now,maxId,maxAttributes,maxChars)(maxChars)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "validClaims@787(value,issuer,audience,ttl,skew,now,maxId,maxAttributes,maxChars)(maxId)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "validClaims@787(value,issuer,audience,ttl,skew,now,maxId,maxAttributes,maxChars)(now)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "validClaims@787(value,issuer,audience,ttl,skew,now,maxId,maxAttributes,maxChars)(skew)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "validClaims@787(value,issuer,audience,ttl,skew,now,maxId,maxAttributes,maxChars)(ttl)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "validClaims@787(value,issuer,audience,ttl,skew,now,maxId,maxAttributes,maxChars)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "validJti@864(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "validKid@740(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "verification@710(key)(key)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "BoundedChannel.fail(error)(error)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "BoundedChannel.finish(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "BoundedChannel.push(value,bytes)(bytes)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "BoundedChannel.push(value,bytes)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "ClientOwner.add(subscription)(subscription)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "ClientOwner.constructor(source,onReauthenticateBeforeReconnect)(onReauthenticateBeforeReconnect)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "ClientOwner.constructor(source,onReauthenticateBeforeReconnect)(source)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "ClientOwner.onReauthenticateBeforeReconnect(signal,remainingMs)(remainingMs)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "ClientOwner.onReauthenticateBeforeReconnect(signal,remainingMs)(signal)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "ClientOwner.remove(subscription)(subscription)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "ClientOwner.run(signal,work)(signal)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "ClientOwner.run(signal,work)(work)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "DEFAULT_RETRY_POLICY.delayMs(attempt)(attempt)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "Request.constructor(owner,selectedTenant,selectedZoneId,subscriptions,actor)(actor)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "Request.constructor(owner,selectedTenant,selectedZoneId,subscriptions,actor)(owner)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "Request.constructor(owner,selectedTenant,selectedZoneId,subscriptions,actor)(selectedTenant)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "Request.constructor(owner,selectedTenant,selectedZoneId,subscriptions,actor)(selectedZoneId)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "Request.constructor(owner,selectedTenant,selectedZoneId,subscriptions,actor)(subscriptions)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "Request.createSubscription(topic,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "Request.createSubscription(topic,options)(topic)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "Request.post(schema,message,options)(message)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "Request.post(schema,message,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "Request.post(schema,message,options)(schema)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "Request.send(queryOrBuilder,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "Request.send(queryOrBuilder,options)(queryOrBuilder)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.activate(options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.constructor(owner,topic,signal,options,runtime)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.constructor(owner,topic,signal,options,runtime)(owner)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.constructor(owner,topic,signal,options,runtime)(runtime)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.constructor(owner,topic,signal,options,runtime)(signal)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.constructor(owner,topic,signal,options,runtime)(topic)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.consumeUpdates(updates,subscription,generation)(generation)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.consumeUpdates(updates,subscription,generation)(subscription)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.consumeUpdates(updates,subscription,generation)(updates)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@1020(error,previousWire)(error)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@1020(error,previousWire)(previousWire)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@1109(generation)(generation)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@1153(value,bytes)(bytes)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@1153(value,bytes)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@1158(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@1163(error,generation)(error)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@1163(error,generation)(generation)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@1180(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@1186(subscription)(subscription)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@847(signal)(signal)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@994(error)(error)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "abortError@1243(signal)(signal)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "browserSource@1532(transport)(transport)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "browserTransportOptions@1536(baseUrl,options)(baseUrl)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "browserTransportOptions@1536(baseUrl,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "cancelLateSubscription@1255(pending,transport)(pending)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "cancelLateSubscription@1255(pending,transport)(transport)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "cancelWire@1261(transport,subscription)(subscription)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "cancelWire@1261(transport,subscription)(transport)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "cloneMessage@1648(message)(message)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "cloneTopic@1566(topic,context)(context)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "cloneTopic@1566(topic,context)(topic)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "constructor@1415(name,capacity,byteCapacity)(byteCapacity)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "constructor@1415(name,capacity,byteCapacity)(capacity)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "constructor@1415(name,capacity,byteCapacity)(name)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "credentialedFetch@1552(credentials)(credentials)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "deepFreeze@1526(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "fail@1479(error)(error)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "finish@1468(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "freezeDelivery@1511(delivery)(delivery)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "freezeResynchronization@1517(delivery)(delivery)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "outcome@1624(status)(status)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "positiveSubscriptionOption@1379(value,fallback,name)(fallback)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "positiveSubscriptionOption@1379(value,fallback,name)(name)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "positiveSubscriptionOption@1379(value,fallback,name)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "push@1421(value,bytes)(bytes)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "push@1421(value,bytes)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "raceTerminal@1218(pending,signal,onTerminal)(onTerminal)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "raceTerminal@1218(pending,signal,onTerminal)(pending)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "raceTerminal@1218(pending,signal,onTerminal)(signal)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "requestMetadata@1558(onRequestMetadata)(onRequestMetadata)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "retryPolicy@1347(policy)(policy)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "sameTarget@1596(left,right)(left)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "sameTarget@1596(left,right)(right)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "sameTopic@1586(left,right,ignoreContext)(ignoreContext)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "sameTopic@1586(left,right,ignoreContext)(left)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "sameTopic@1586(left,right,ignoreContext)(right)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "scheduler@1367(scheduler)(scheduler)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "subscriptionRuntimeOptions@1294(options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "tenant@1603(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "validateAckId@1639(packed,id)(id)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "validateAckId@1639(packed,id)(packed)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "validateSubscription@1572(subscription,expectedTopic,allowRewrittenContext)(allowRewrittenContext)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "validateSubscription@1572(subscription,expectedTopic,allowRewrittenContext)(expectedTopic)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "validateSubscription@1572(subscription,expectedTopic,allowRewrittenContext)(subscription)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "validateSubscriptionOptions@1386(options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "zoneId@1614(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "sameTime@580(left,right)(left)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "sameTime@580(left,right)(right)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "timestamp@570(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "backoff@783(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "baseUrl@776(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "bounded@774(value,minimum,maximum,name)(maximum)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "bounded@774(value,minimum,maximum,name)(minimum)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "bounded@774(value,minimum,maximum,name)(name)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "bounded@774(value,minimum,maximum,name)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "callOptions@769(signal,timeoutMs)(signal)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "callOptions@769(signal,timeoutMs)(timeoutMs)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "date@525(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decode@154(message,expectedShard)(expectedShard)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decode@154(message,expectedShard)(message)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decode@527(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodeLabel@163(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodeObservation@506(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodePayload@162(message)(message)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodePicked@511(value,expectedShard,expectedWorker)(expectedShard)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodePicked@511(value,expectedShard,expectedWorker)(expectedWorker)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodePicked@511(value,expectedShard,expectedWorker)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodeReleased@524(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodeStatus@164(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodeTarget@158(typeUrl,value)(typeUrl)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodeTarget@158(typeUrl,value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodeUpdate@507(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodeWorker@528(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "duration@766(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "encode@153(message)(message)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "encode@508(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "encodeBatch@148(messages)(messages)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "encodeId@155(id)(id)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "encodeWorker@510(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "label@160(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "normalize@775(options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "pageSize@773(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "payload@159(signal)(signal)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "requestBytes@777(schema,value)(schema)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "requestBytes@777(schema,value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "responseBytes@778(schema,value)(schema)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "responseBytes@778(schema,value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "retries@782(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "snapshot@156(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "snapshot@509(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "status@161(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "status@526(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "target@157(inbox)(inbox)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "timeout@784(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "timestamp@767(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "validate@131(typeUrl,value)(typeUrl)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "validate@131(typeUrl,value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "validatePicked@516(value,expectedShard)(expectedShard)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "validatePicked@516(value,expectedShard)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/deployment-gke/src/discovery/gke-node-discovery.ts",
+    "name": "systemScheduler.schedule(delayMs,onTick)(delayMs)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/deployment-gke/src/discovery/gke-node-discovery.ts",
+    "name": "systemScheduler.schedule(delayMs,onTick)(onTick)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "date@327(value,label)(label)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "date@327(value,label)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "id@289(record)(record)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "input@203(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "inputLabel@376(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "inputStatus@385(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "label@338(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "payload@238(signal)(signal)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "payloadForLabel@266(label,signal,ErrorType)(ErrorType)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "payloadForLabel@266(label,signal,ErrorType)(label)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "payloadForLabel@266(label,signal,ErrorType)(signal)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "read@153(record,expectedId)(expectedId)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "read@153(record,expectedId)(record)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "readLabel@354(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "readStatus@365(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "receiveTime@311(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "shard@294(record)(record)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "signal@278(kind,payload)(kind)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "signal@278(kind,payload)(payload)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "status@346(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "target@245(value,ErrorType)(ErrorType)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "target@245(value,ErrorType)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "text@394(value,label)(label)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "text@394(value,label)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "timestamp@304(ms)(ms)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "validReceiveTime@316(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "write@122(input)(input)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/delivery/inbox-storage.ts",
+    "name": "receiveTime@470(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/delivery/inbox-storage.ts",
+    "name": "validReceiveTime@475(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/integration/third-party-context.ts",
+    "name": "ThirdPartyContext.constructor(context,multitenant)(context)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/integration/third-party-context.ts",
+    "name": "ThirdPartyContext.constructor(context,multitenant)(multitenant)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/runtime/signal-metadata.ts",
+    "name": "time@502(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "Deferred.reject(reason)(reason)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "Deferred.resolve(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "child@238(options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "close@1232(replica,clock)(clock)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "close@1232(replica,clock)(replica)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "closeFromEvent@368(close)(close)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "closeResultMessage@1217(message,slot,incarnation)(incarnation)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "closeResultMessage@1217(message,slot,incarnation)(message)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "closeResultMessage@1217(message,slot,incarnation)(slot)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "coordinatorPort@1111(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "drainingMessage@1200(message,slot,incarnation)(incarnation)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "drainingMessage@1200(message,slot,incarnation)(message)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "drainingMessage@1200(message,slot,incarnation)(slot)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "parent@362(options,manageProcessSignals)(manageProcessSignals)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "parent@362(options,manageProcessSignals)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "readyMessage@1155(message,slot,incarnation)(incarnation)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "readyMessage@1155(message,slot,incarnation)(message)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "readyMessage@1155(message,slot,incarnation)(slot)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "requireVolatileRegistries@377(server)(server)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "restart@1138(options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "send@388(message)(message)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "start@227(options,manageProcessSignals)(manageProcessSignals)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "start@227(options,manageProcessSignals)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "subscriptionInstalledMessage@1185(message,slot,incarnation)(incarnation)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "subscriptionInstalledMessage@1185(message,slot,incarnation)(message)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "subscriptionInstalledMessage@1185(message,slot,incarnation)(slot)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "synchronizingMessage@1170(message,slot,incarnation)(incarnation)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "synchronizingMessage@1170(message,slot,incarnation)(message)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "synchronizingMessage@1170(message,slot,incarnation)(slot)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "terminate@1272(child,clock,knownExit,allowGrace)(allowGrace)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "terminate@1272(child,clock,knownExit,allowGrace)(child)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "terminate@1272(child,clock,knownExit,allowGrace)(clock)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "terminate@1272(child,clock,knownExit,allowGrace)(knownExit)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "within@1294(promise,delay,clock)(clock)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "within@1294(promise,delay,clock)(delay)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "within@1294(promise,delay,clock)(promise)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage-datastore/src/datastore/tenant-catalog.ts",
+    "name": "DatastoreTenantCatalog.keepNow(boundary)(boundary)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBox.constructor(context,server,client,options,observation)(client)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBox.constructor(context,server,client,options,observation)(context)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBox.constructor(context,server,client,options,observation)(observation)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBox.constructor(context,server,client,options,observation)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBox.constructor(context,server,client,options,observation)(server)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBoxInternal.onRelease(handle)(handle)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBoxInternal.postEvent(actor,schema,message)(actor)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBoxInternal.postEvent(actor,schema,message)(message)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBoxInternal.postEvent(actor,schema,message)(schema)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBoxInternal.postExternalEvent(actor,schema,message)(actor)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBoxInternal.postExternalEvent(actor,schema,message)(message)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBoxInternal.postExternalEvent(actor,schema,message)(schema)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBoxInternal.track(handle)(handle)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Request.constructor(blackBox,request,actor)(actor)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Request.constructor(blackBox,request,actor)(blackBox)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Request.constructor(blackBox,request,actor)(request)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Request.createSubscription(topic,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Request.createSubscription(topic,options)(topic)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Request.post(schema,message,options)(message)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Request.post(schema,message,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Request.post(schema,message,options)(schema)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Request.postEvent(schema,message)(message)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Request.postEvent(schema,message)(schema)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Request.postExternalEvent(schema,message)(message)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Request.postExternalEvent(schema,message)(schema)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Request.send(query,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Request.send(query,options)(query)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Tracked.activate(arguments_)(arguments_)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Tracked.constructor(handle,onRelease)(handle)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Tracked.constructor(handle,onRelease)(onRelease)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "TrackedSubscription.activate(options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "TrackedSubscription.constructor(handle,onRelease)(handle)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "TrackedSubscription.constructor(handle,onRelease)(onRelease)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "TrackedSubscription.trackStream(source)(source)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "cloneTenant@875(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "get@424(blackBox)(blackBox)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "instantiate@564(context,server,client,options,observation)(client)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "instantiate@564(context,server,client,options,observation)(context)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "instantiate@564(context,server,client,options,observation)(observation)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "instantiate@564(context,server,client,options,observation)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "instantiate@564(context,server,client,options,observation)(server)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "normalize@853(context,options)(context)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "normalize@853(context,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "open@534(context,options,start,connect)(connect)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "open@534(context,options,start,connect)(context)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "open@534(context,options,start,connect)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "open@534(context,options,start,connect)(start)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "positiveInteger@921(value,name)(name)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "positiveInteger@921(value,name)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "rejected@968(results)(results)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "set@417(blackBox,internals)(blackBox)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "set@417(blackBox,internals)(internals)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "tenant@894(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "wait@944(milliseconds,signal)(milliseconds)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "wait@944(milliseconds,signal)(signal)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "zoneId@908(value)(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersLoadRun.classifyFailures(settled)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersLoadRun.execute()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersLoadRun.runUser(index)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersLoadRun.settleUsers()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersLoadRun.summarize(settled,elapsedMs)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.cleanup(iterator)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.command()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.execute()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.ignoreCancellation(promise)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.isCorrelated(update)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.isVisible(response)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.postCommand(submittedAt)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.query()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.readQuery()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.readSubscription(firstUpdate)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.startSubscription()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.target()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.topic()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.waitForVisibility(startedAt)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.withTimeout(promise,label,timeoutMs,controller)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.cleanup(iterator)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.createCommand()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.createQuery()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.createTarget()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.createTopic()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.execute()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.ignoreCancellation(promise)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.isCorrelated(update)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.postCommand(submittedAt)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.readSubscription(firstUpdate)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.startSubscription()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.waitForVisibility(startedAt)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.withTimeout(promise,label,timeoutMs)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "boundedNonEmpty@930(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "callbackRejected@565(reason)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "constantTimeEquals@997(left,right)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "copyBoundedRecord@804(value,rejectTokens)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "copyResolvedSession@915(session)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "exchangeRejected@582()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "expiryAt@987(now,ttl)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "isStrictHttpsUrl@944(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "nonEmpty@953(value,name)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "parseUrl@593(value,name)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "plainRecord@934(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "positiveSafeInteger@973(value,name)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "rejected@558(reason)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "sha256Base64Url@992(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "snapshotBrowserCodeVerifier@713(input)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "snapshotCallbackInput@674(input)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "snapshotCallbackState@664(input)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "snapshotGrantExchangeInput@704(input)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "snapshotResolvedIdentity@746(identity,expected)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "snapshotSessionIssue@867(issue)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "snapshotStartInput@650(input)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "strictHttpsUrl@586(value,name)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "tokenLikeClaim@940(name)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validBrowserCodeVerifier@722(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validCallbackInput@687(input)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validExternalIdentity@726(identity,issuer)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validGrant@700(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validPrincipal@832(principal)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validRedirects@616(redirects)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validScopes@603(scopes)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validSessionIssue@853(issue)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validSessionTimestamp@902(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validStartInput@630(input,redirects)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validTimestamp@979(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "abortableRead@820(reader,signal)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "bounded@735(value,name)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "boundedOperation@777(timeoutMilliseconds,externalSignal,operation)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "cacheMilliseconds@847(headers)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "https@762(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "httpsBase@770(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "json@640(url,http,limits,signal,init)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "jsonDocument@650(url,http,limits,signal,init)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "parse64@716(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "plain@723(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "positive@758(value,name)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "safeNow@841(clock)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "string@730(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "validEmail@740(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "validExchange@711(input)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "validPrimaryEmail@745(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "validScope@753(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "verifyToken@580(token,issuer,clientId,nonce,clock,keys)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "waitForSignal@805(operation,signal)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "OpaqueSessions.expired(record,now)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "OpaqueSessions.isClosed()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "OpaqueSessions.live(id,now)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "OpaqueSessions.nextId()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "OpaqueSessions.now()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "OpaqueSessions.record(principal,now)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "copyPrincipal@406(principal)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "credential@402(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "positiveSafeInteger@396(value,name)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "resolved@415(record)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "timestamp@422(milliseconds)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "timestampValid@430(milliseconds)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "base64url@743(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "boundedString@735(value,name)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "clockValue@868(clock)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "encode@746(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "json@749(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "nonnegative@730(value,name)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "plain@754(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "positive@725(value,name)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "principalCopy@761(value,maxId,maxAttributes,maxChars)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "rejected@684(reason)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "retentionDeadline@875(now,ttl,skew)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "rotation@687(reason)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "session@846(principal,seconds)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "signing@692(key)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "timeValid@859(milliseconds)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "timestamp@843(seconds)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "validClaims@787(value,issuer,audience,ttl,skew,now,maxId,maxAttributes,maxChars)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "validJti@864(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "validKid@740(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "verification@710(key)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "BoundedChannel.push(value,bytes)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "ClientOwner.close()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "ClientOwner.closeOwned()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "ClientOwner.onReauthenticateBeforeReconnect(signal,remainingMs)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "ClientOwner.run(signal,work)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "DEFAULT_RETRY_POLICY.delayMs(attempt)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "Request.createSubscription(topic,options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "Request.method@657()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "Request.post(schema,message,options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "Request.send(queryOrBuilder,options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.activate(options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.cancel()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.consumeUpdates(updates,subscription,generation)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.lifecycle()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@1001()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@1013()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@1020(error,previousWire)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@1101()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@1109(generation)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@1144()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@1186(subscription)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@1193()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@847(signal)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@918()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@994(error)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.updates()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "[Symbol.asyncIterator]@1487()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "abortError@1243(signal)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "browserSource@1532(transport)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "browserTransportOptions@1536(baseUrl,options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "build@628()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "cancelWire@1261(transport,subscription)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "cloneMessage@1648(message)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "cloneTopic@1566(topic,context)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "credentialedFetch@1552(credentials)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "deepFreeze@1526(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "freezeDelivery@1511(delivery)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "freezeResynchronization@1517(delivery)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "next@1494()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "outcome@1624(status)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "positiveSubscriptionOption@1379(value,fallback,name)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "push@1421(value,bytes)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "raceTerminal@1218(pending,signal,onTerminal)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "requestMetadata@1558(onRequestMetadata)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "retryPolicy@1347(policy)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "sameTarget@1596(left,right)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "sameTopic@1586(left,right,ignoreContext)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "scheduler@1367(scheduler)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "subscriptionRuntimeOptions@1294(options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "tenant@1603(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "validateSubscriptionOptions@1386(options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "zoneId@1614(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "sameTime@580(left,right)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "timestamp@570(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "backoff@783(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "bounded@774(value,minimum,maximum,name)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "callOptions@769(signal,timeoutMs)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "date@525(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decode@154(message,expectedShard)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decode@527(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodeLabel@163(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodeObservation@506(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodePayload@162(message)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodePicked@511(value,expectedShard,expectedWorker)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodeReleased@524(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodeStatus@164(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodeTarget@158(typeUrl,value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodeUpdate@507(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodeWorker@528(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "duration@766(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "encode@153(message)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "encode@508(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "encodeBatch@148(messages)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "encodeId@155(id)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "encodeWorker@510(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "label@160(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "normalize@775(options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "pageSize@773(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "payload@159(signal)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "protocol@768()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "retries@782(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "snapshot@156(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "snapshot@509(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "status@161(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "status@526(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "target@157(inbox)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "timeout@784(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "timestamp@767(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/deployment-gke/src/discovery/gke-node-discovery.ts",
+    "name": "systemScheduler.schedule(delayMs,onTick)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "date@327(value,label)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "id@289(record)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "input@203(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "label@338(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "payload@238(signal)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "read@153(record,expectedId)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "readLabel@354(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "readStatus@365(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "receiveTime@311(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "shard@294(record)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "signal@278(kind,payload)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "status@346(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "text@394(value,label)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "timestamp@304(ms)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "validReceiveTime@316(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "write@122(input)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/delivery/inbox-storage.ts",
+    "name": "receiveTime@470(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/delivery/inbox-storage.ts",
+    "name": "validReceiveTime@475(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/runtime/signal-metadata.ts",
+    "name": "time@502(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "child@238(options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "close@1232(replica,clock)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "closeResultMessage@1217(message,slot,incarnation)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "coordinatorPort@1111(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "deferred@1102()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "drainingMessage@1200(message,slot,incarnation)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "parent@362(options,manageProcessSignals)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "readyMessage@1155(message,slot,incarnation)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "restart@1138(options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "send@388(message)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "start@227(options,manageProcessSignals)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "subscriptionInstalledMessage@1185(message,slot,incarnation)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "synchronizingMessage@1170(message,slot,incarnation)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "terminate@1272(child,clock,knownExit,allowGrace)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "within@1294(promise,delay,clock)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBox.closeOnce()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBoxInternal.postEvent(actor,schema,message)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBoxInternal.postExternalEvent(actor,schema,message)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBoxInternal.track(handle)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Request.createSubscription(topic,options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Request.post(schema,message,options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Request.postEvent(schema,message)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Request.postExternalEvent(schema,message)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Request.send(query,options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Tracked.[Symbol.asyncIterator]()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Tracked.activate(arguments_)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Tracked.cancel()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "TrackedSubscription.activate(options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "TrackedSubscription.cancel()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "TrackedSubscription.lifecycle()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "TrackedSubscription.trackStream(source)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "TrackedSubscription.updates()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "[Symbol.asyncIterator]@735()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "build@679()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "cancel@152()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "cancel@153()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "cancel@778()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "cloneTenant@875(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "defaults@882()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "get@424(blackBox)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "instantiate@564(context,server,client,options,observation)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "normalize@853(context,options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "open@534(context,options,start,connect)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "positiveInteger@921(value,name)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "rejected@968(results)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "tenant@894(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "timestamp@937()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "wait@944(milliseconds,signal)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "zoneId@908(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersLoadRun.classifyFailures(settled)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersLoadRun.constructor(options)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersLoadRun.execute()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersLoadRun.runUser(index)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersLoadRun.settleUsers()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersLoadRun.summarize(settled,elapsedMs)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersLoadRun:ClassDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.cleanup(iterator)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.command()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.constructor(baseUrl,index,timeoutMs,session)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.execute()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.ignoreCancellation(promise)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.isCorrelated(update)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.isVisible(response)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.postCommand(submittedAt)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.query()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.readQuery()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.readSubscription(firstUpdate)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.startSubscription()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.target()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.topic()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.waitForVisibility(startedAt)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun.withTimeout(promise,label,timeoutMs,controller)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "DatastoreOrdersUserRun:ClassDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.cleanup(iterator)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.constructor(baseUrl,index,visibilityTimeoutMs)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.createCommand()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.createQuery()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.createTarget()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.createTopic()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.execute()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.ignoreCancellation(promise)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.isCorrelated(update)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.postCommand(submittedAt)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.readSubscription(firstUpdate)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.startSubscription()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.waitForVisibility(startedAt)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad.withTimeout(promise,label,timeoutMs)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "ProjectManagementUserLoad:ClassDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "boundedNonEmpty@930(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "callbackRejected@565(reason)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "constantTimeEquals@997(left,right)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "copyBoundedRecord@804(value,rejectTokens)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "copyResolvedSession@915(session)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "exchangeRejected@582()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "expiryAt@987(now,ttl)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "isStrictHttpsUrl@944(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "nonEmpty@953(value,name)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "parseUrl@593(value,name)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "plainRecord@934(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "positiveSafeInteger@973(value,name)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "rejected@558(reason)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "sha256Base64Url@992(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "snapshotBrowserCodeVerifier@713(input)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "snapshotCallbackInput@674(input)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "snapshotCallbackState@664(input)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "snapshotGrantExchangeInput@704(input)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "snapshotResolvedIdentity@746(identity,expected)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "snapshotSessionIssue@867(issue)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "snapshotStartInput@650(input)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "strictHttpsUrl@586(value,name)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "tokenLikeClaim@940(name)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validBrowserCodeVerifier@722(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validCallbackInput@687(input)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validExternalIdentity@726(identity,issuer)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validGrant@700(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validPrincipal@832(principal)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validRedirects@616(redirects)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validScopes@603(scopes)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validSessionIssue@853(issue)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validSessionTimestamp@902(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validStartInput@630(input,redirects)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validTimestamp@979(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validateFunction@969(value,name)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "validateProvider@959(provider)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "abortableRead@820(reader,signal)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "bounded@735(value,name)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "boundedOperation@777(timeoutMilliseconds,externalSignal,operation)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "cacheMilliseconds@847(headers)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "https@762(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "httpsBase@770(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "json@640(url,http,limits,signal,init)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "jsonDocument@650(url,http,limits,signal,init)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "parse64@716(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "plain@723(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "positive@758(value,name)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "safeNow@841(clock)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "string@730(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "validEmail@740(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "validExchange@711(input)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "validPrimaryEmail@745(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "validScope@753(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "verifyToken@580(token,issuer,clientId,nonce,clock,keys)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "waitForSignal@805(operation,signal)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "OpaqueSessions.expired(record,now)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "OpaqueSessions.failClosed()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "OpaqueSessions.isClosed()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "OpaqueSessions.live(id,now)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "OpaqueSessions.nextId()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "OpaqueSessions.now()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "OpaqueSessions.record(principal,now)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "OpaqueSessions.sweepExpired(now)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "copyPrincipal@406(principal)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "credential@402(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "positiveSafeInteger@396(value,name)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "resolved@415(record)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "timestamp@422(milliseconds)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "timestampValid@430(milliseconds)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "base64url@743(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "boundedString@735(value,name)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "clockValue@868(clock)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "encode@746(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "json@749(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "nonnegative@730(value,name)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "plain@754(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "positive@725(value,name)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "principalCopy@761(value,maxId,maxAttributes,maxChars)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "rejected@684(reason)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "retentionDeadline@875(now,ttl,skew)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "rotation@687(reason)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "session@846(principal,seconds)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "signing@692(key)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "timeValid@859(milliseconds)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "timestamp@843(seconds)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "validClaims@787(value,issuer,audience,ttl,skew,now,maxId,maxAttributes,maxChars)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "validJti@864(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "validKid@740(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "verification@710(key)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "BoundedChannel.close()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "BoundedChannel.discard()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "BoundedChannel.fail(error)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "BoundedChannel.finish(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "BoundedChannel.push(value,bytes)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "BoundedChannel:ClassExpression"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "ClientOwner.add(subscription)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "ClientOwner.assertOpen()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "ClientOwner.close()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "ClientOwner.closeOwned()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "ClientOwner.constructor(source,onReauthenticateBeforeReconnect)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "ClientOwner.onReauthenticateBeforeReconnect(signal,remainingMs)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "ClientOwner.remove(subscription)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "ClientOwner.run(signal,work)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "ClientOwner:ClassDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "DEFAULT_RETRY_POLICY.delayMs(attempt)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "Request.constructor(owner,selectedTenant,selectedZoneId,subscriptions,actor)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "Request.createSubscription(topic,options)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "Request.method@657()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "Request.post(schema,message,options)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "Request.send(queryOrBuilder,options)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "Request:ClassDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.activate(options)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.cancel()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.constructor(owner,topic,signal,options,runtime)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.consumeUpdates(updates,subscription,generation)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.lifecycle()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@1001()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@1013()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@1020(error,previousWire)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@1101()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@1109(generation)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@1144()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@1153(value,bytes)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@1158(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@1163(error,generation)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@1180(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@1186(subscription)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@1193()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@847(signal)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@918()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.method@994(error)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription.updates()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "TopicSubscription:ClassDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "[Symbol.asyncIterator]@1487()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "abortError@1243(signal)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "browserSource@1532(transport)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "browserTransportOptions@1536(baseUrl,options)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "build@628()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "cancelWire@1261(transport,subscription)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "cloneMessage@1648(message)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "cloneTopic@1566(topic,context)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "constructor@1415(name,capacity,byteCapacity)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "credentialedFetch@1552(credentials)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "deepFreeze@1526(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "fail@1479(error)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "freezeDelivery@1511(delivery)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "freezeResynchronization@1517(delivery)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "next@1494()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "outcome@1624(status)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "positiveSubscriptionOption@1379(value,fallback,name)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "push@1421(value,bytes)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "raceTerminal@1218(pending,signal,onTerminal)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "requestMetadata@1558(onRequestMetadata)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "retryPolicy@1347(policy)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "sameTarget@1596(left,right)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "sameTopic@1586(left,right,ignoreContext)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "scheduler@1367(scheduler)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "subscriptionRuntimeOptions@1294(options)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "tenant@1603(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "validateAckId@1639(packed,id)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "validateSubscription@1572(subscription,expectedTopic,allowRewrittenContext)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "validateSubscriptionOptions@1386(options)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "zoneId@1614(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "sameTime@580(left,right)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "timestamp@570(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "backoff@783(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "baseUrl@776(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "bounded@774(value,minimum,maximum,name)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "callOptions@769(signal,timeoutMs)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "date@525(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decode@154(message,expectedShard)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decode@527(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodeLabel@163(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodeObservation@506(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodePayload@162(message)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodePicked@511(value,expectedShard,expectedWorker)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodeReleased@524(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodeStatus@164(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodeTarget@158(typeUrl,value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodeUpdate@507(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodeWorker@528(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "duration@766(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "encode@153(message)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "encode@508(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "encodeBatch@148(messages)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "encodeId@155(id)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "encodeWorker@510(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "label@160(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "normalize@775(options)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "pageSize@773(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "payload@159(signal)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "protocol@768()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "requestBytes@777(schema,value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "responseBytes@778(schema,value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "retries@782(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "snapshot@156(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "snapshot@509(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "status@161(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "status@526(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "target@157(inbox)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "timeout@784(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "timestamp@767(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "validate@131(typeUrl,value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "validatePicked@516(value,expectedShard)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/deployment-gke/src/discovery/gke-node-discovery.ts",
+    "name": "systemScheduler.schedule(delayMs,onTick)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "date@327(value,label)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "id@289(record)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "input@203(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "inputLabel@376(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "inputStatus@385(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "label@338(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "payload@238(signal)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "payloadForLabel@266(label,signal,ErrorType)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "read@153(record,expectedId)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "readLabel@354(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "readStatus@365(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "receiveTime@311(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "shard@294(record)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "signal@278(kind,payload)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "status@346(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "target@245(value,ErrorType)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "text@394(value,label)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "timestamp@304(ms)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "validReceiveTime@316(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "write@122(input)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/inbox-storage.ts",
+    "name": "receiveTime@470(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/inbox-storage.ts",
+    "name": "validReceiveTime@475(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/integration/third-party-context.ts",
+    "name": "ThirdPartyContext.constructor(context,multitenant)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/runtime/signal-metadata.ts",
+    "name": "time@502(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "Deferred.reject(reason)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "Deferred.resolve(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "child@238(options)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "close@1232(replica,clock)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "closeFromEvent@368(close)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "closeResultMessage@1217(message,slot,incarnation)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "coordinatorPort@1111(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "deferred@1102()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "drainingMessage@1200(message,slot,incarnation)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "parent@362(options,manageProcessSignals)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "readyMessage@1155(message,slot,incarnation)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "requireVolatileRegistries@377(server)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "restart@1138(options)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "send@388(message)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "start@227(options,manageProcessSignals)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "subscriptionInstalledMessage@1185(message,slot,incarnation)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "synchronizingMessage@1170(message,slot,incarnation)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "terminate@1272(child,clock,knownExit,allowGrace)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "within@1294(promise,delay,clock)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage-datastore/src/datastore/tenant-catalog.ts",
+    "name": "DatastoreTenantCatalog.keepNow(boundary)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage-datastore/src/datastore/tenant-catalog.ts",
+    "name": "DatastoreTenantCatalog.purgeExpired()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage-datastore/src/datastore/tenant-catalog.ts",
+    "name": "DatastoreTenantCatalog.requireOpen()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBox.closeOnce()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBox.constructor(context,server,client,options,observation)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBoxInternal.assertOpen()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBoxInternal.onRelease(handle)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBoxInternal.postEvent(actor,schema,message)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBoxInternal.postExternalEvent(actor,schema,message)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBoxInternal.track(handle)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Request.constructor(blackBox,request,actor)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Request.createSubscription(topic,options)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Request.post(schema,message,options)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Request.postEvent(schema,message)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Request.postExternalEvent(schema,message)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Request.send(query,options)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Request:ClassDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Tracked.[Symbol.asyncIterator]()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Tracked.activate(arguments_)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Tracked.cancel()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Tracked.constructor(handle,onRelease)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Tracked:ClassDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "TrackedSubscription.activate(options)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "TrackedSubscription.cancel()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "TrackedSubscription.constructor(handle,onRelease)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "TrackedSubscription.lifecycle()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "TrackedSubscription.release()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "TrackedSubscription.trackStream(source)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "TrackedSubscription.updates()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "TrackedSubscription:ClassDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "[Symbol.asyncIterator]@735()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "build@679()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "cancel@152()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "cancel@153()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "cancel@778()"
+  },
+  {
+    "rule": "missing-type-param",
+    "file": "examples/orders/src/load-runner.ts",
+    "name": "withTimeout@421<T>"
+  },
+  {
+    "rule": "missing-type-param",
+    "file": "examples/projects/src/load-runner.ts",
+    "name": "withTimeout@358<T>"
+  },
+  {
+    "rule": "missing-type-param",
+    "file": "packages/auth/src/oidc/index.ts",
+    "name": "#runBounded@413<T>"
+  },
+  {
+    "rule": "missing-type-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "boundedOperation@777<T>"
+  },
+  {
+    "rule": "missing-type-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "waitForSignal@805<T>"
+  },
+  {
+    "rule": "missing-type-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "BoundedChannel@1404<Value>"
+  },
+  {
+    "rule": "missing-type-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "BoundedChannel@1653<Value>"
+  },
+  {
+    "rule": "missing-type-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "deepFreeze@1526<Value>"
+  },
+  {
+    "rule": "missing-type-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "post@563<Schema>"
+  },
+  {
+    "rule": "missing-type-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "post@607<Schema>"
+  },
+  {
+    "rule": "missing-type-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "raceTerminal@1218<Value>"
+  },
+  {
+    "rule": "missing-type-param",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "run@717<Result>"
+  },
+  {
+    "rule": "missing-type-param",
+    "file": "packages/deployment-gce/src/registrar/gce-registrar.ts",
+    "name": "#enqueue@246<Result>"
+  },
+  {
+    "rule": "missing-type-param",
+    "file": "packages/deployment-gce/src/registrar/gce-registrar.ts",
+    "name": "#operation@256<Result>"
+  },
+  {
+    "rule": "missing-type-param",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "name": "drainUntilEmpty@174<T>"
+  },
+  {
+    "rule": "missing-type-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "Deferred@432<Value>"
+  },
+  {
+    "rule": "missing-type-param",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "name": "deferred@1102<Value>"
+  },
+  {
+    "rule": "missing-type-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "#postEvent@327<Schema>"
+  },
+  {
+    "rule": "missing-type-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "#postExternalEvent@345<Schema>"
+  },
+  {
+    "rule": "missing-type-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "#track@364<Handle>"
+  },
+  {
+    "rule": "missing-type-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "Tracked@778<Handle>"
+  },
+  {
+    "rule": "missing-type-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "eventually@286<Value>"
+  },
+  {
+    "rule": "missing-type-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "post@656<Schema>"
+  },
+  {
+    "rule": "missing-type-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "postEvent@122<Schema>"
+  },
+  {
+    "rule": "missing-type-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "postEvent@142<Schema>"
+  },
+  {
+    "rule": "missing-type-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "postEvent@665<Schema>"
+  },
+  {
+    "rule": "missing-type-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "postExternalEvent@134<Schema>"
+  },
+  {
+    "rule": "missing-type-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "postExternalEvent@147<Schema>"
+  },
+  {
+    "rule": "missing-type-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "postExternalEvent@672<Schema>"
+  },
+  {
+    "rule": "missing-type-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "track@152<Handle>"
+  },
+  {
+    "rule": "missing-type-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "trackStream@729<Value>"
+  }
+]

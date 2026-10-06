@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { createHash, randomBytes as nodeRandomBytes, timingSafeEqual } from "node:crypto";
 import { create } from "@bufbuild/protobuf";
 import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
@@ -107,7 +108,7 @@ export class OidcFlow {
     this.#providerIssuer = options.provider.issuer;
     this.#identityMapping = options.identityMapping;
     this.#sessionIssuer = options.sessionIssuer;
-    this.#clock = options.clock ?? { now: Date.now };
+    this.#clock = options.clock ?? { now: () => Time.currentTimeMillis() };
     this.#random = options.randomBytes ?? nodeRandomBytes;
     this.#transactionTtlMilliseconds = OidcFlowValues.positiveSafeInteger(
       options.transactionTtlMilliseconds ?? DEFAULT_TRANSACTION_TTL,

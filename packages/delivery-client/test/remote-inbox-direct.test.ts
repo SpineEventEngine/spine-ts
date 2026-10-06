@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { describe, expect, it, vi } from "vitest";
 import { ShardIndex } from "@spine-event-engine/server";
 import { create } from "@bufbuild/protobuf";
@@ -48,7 +49,11 @@ describe("RemoteInbox direct behavior", () => {
     client.readPage.mockResolvedValueOnce([first, second]);
     await expect(
       inbox.read(ShardIndex.single(), {
-        after: { messageId: first.id.value, whenReceived: first.whenReceived, version: first.version },
+        after: {
+          messageId: first.id.value,
+          whenReceived: first.whenReceived,
+          version: first.version,
+        },
         limit: 1,
       }),
     ).resolves.toEqual([second]);
@@ -276,9 +281,9 @@ describe("RemoteInbox direct behavior", () => {
     const retained = {
       ...domainMessage("retained"),
       status: "DELIVERED" as const,
-      keepUntil: new Date(Date.now() + 60_000),
+      keepUntil: new Date(Time.currentTimeMillis() + 60_000),
     };
-    const expired = { ...retained, keepUntil: new Date(Date.now() - 1) };
+    const expired = { ...retained, keepUntil: new Date(Time.currentTimeMillis() - 1) };
 
     await expect(inbox.removeDelivered(retained, {} as never)).resolves.toBe(false);
     client.findOne.mockResolvedValueOnce(expired);

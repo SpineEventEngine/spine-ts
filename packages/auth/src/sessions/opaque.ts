@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { create } from "@bufbuild/protobuf";
 import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import { randomBytes as nodeRandomBytes } from "node:crypto";
@@ -188,7 +189,7 @@ export class OpaqueSessions implements SessionResolver {
    * @param options The optional clock, entropy, lifetime, and capacity settings.
    */
   constructor(options: OpaqueSessionsOptions = {}) {
-    this.clock = options.clock ?? { now: Date.now };
+    this.clock = options.clock ?? { now: () => Time.currentTimeMillis() };
     this.random = options.randomBytes ?? nodeRandomBytes;
     this.ttlMilliseconds = OpaqueSessionValues.positiveSafeInteger(
       options.ttlMilliseconds ?? 8 * 60 * 60 * 1_000,

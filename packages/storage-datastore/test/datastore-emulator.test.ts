@@ -12,13 +12,9 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { create, fromBinary, ScalarType, toBinary } from "@bufbuild/protobuf";
-import {
-  AnySchema,
-  StringValueSchema,
-  TimestampSchema,
-  type StringValue,
-} from "@bufbuild/protobuf/wkt";
+import { AnySchema, StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Datastore } from "@google-cloud/datastore";
 import { EventIdSchema, EventSchema, TenantIdSchema, type Event } from "@spine-event-engine/proto";
 import { StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
@@ -79,15 +75,19 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
       .organizeRecords(EventSchema, { kind: unique("PreciseTime") })
       .build()
       .createRecordStorage({ name, multitenant: false }, spec);
+    const firstEvent = events[0];
+    if (firstEvent === undefined) throw new Error("Expected the first precision event.");
     try {
       await storage.writeAll([...events].reverse());
       const stored = await storage.read("z-first");
       expect(stored?.context?.timestamp).toEqual(first);
       expect(stored === undefined ? undefined : toBinary(EventSchema, stored)).toEqual(
-        toBinary(EventSchema, events[0]!),
+        toBinary(EventSchema, firstEvent),
       );
       const ordered = await storage.query({ sort: [{ field: "received" }] });
-      expect(ordered.map((event) => event.id?.value)).toEqual(events.map((event) => event.id?.value));
+      expect(ordered.map((event) => event.id?.value)).toEqual(
+        events.map((event) => event.id?.value),
+      );
       expect(ordered.map((event) => event.context?.timestamp)).toEqual([first, middle, last]);
       expect(ordered.map((event) => toBinary(EventSchema, event))).toEqual(
         events.map((event) => toBinary(EventSchema, event)),
@@ -630,7 +630,7 @@ function projectEvent(id: string, version: number) {
 }
 
 function unique(part: string): string {
-  return `T0135${part}${String(Date.now())}${Math.random().toString(36).slice(2)}`;
+  return `T0135${part}${String(Time.currentTimeMillis())}${Math.random().toString(36).slice(2)}`;
 }
 
 function tenant(value: string) {

@@ -77,7 +77,10 @@ vi.mock("@connectrpc/connect-web", () => ({
 describe("Client", () => {
   it("stamps browser query context with the shared precise time", async () => {
     const instant = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 123_456_000 });
-    const previousProvider = Time.setProvider({ currentTime: () => instant });
+    const previousProvider = Time.setProvider({
+      currentTime: () => instant,
+      currentZone: () => "Pacific/Auckland",
+    });
     let context: Query["context"];
     const client = Client.usingTransport({
       transport: unaryTransport((_method, input) => {
@@ -88,6 +91,7 @@ describe("Client", () => {
     try {
       await client.asGuest().send(create(QuerySchema));
       expect(context?.timestamp).toEqual(instant);
+      expect(context?.zoneId?.value).toBe("Pacific/Auckland");
     } finally {
       await client.close();
       Time.setProvider(previousProvider);

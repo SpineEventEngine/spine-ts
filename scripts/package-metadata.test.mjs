@@ -405,6 +405,7 @@ describe("package metadata", () => {
     const task = rootPackage.scripts["verify:task"];
     const release = rootPackage.scripts["verify:release"];
     const generatedGates = rootPackage.scripts["verify:generated-gates"];
+    expect(generatedGates).toContain("pnpm check:time-reads");
     const releaseGenerated = rootPackage.scripts["verify:release:generated"];
 
     expect(rootPackage.scripts.verify).toBe("pnpm verify:release");
