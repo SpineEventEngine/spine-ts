@@ -59,8 +59,11 @@ use the system provider. Provider controls are internal test support.
 `finally`; `Time.resetProvider()` restores the system provider. Replacement
 affects every consumer of that module instance, so tests that share the
 instance must not replace its provider concurrently. Separate workers have
-separate module state. Use existing per-consumer clock inputs when independent
-consumers need different clocks within one runtime.
+separate module state. Install the provider before starting work, and await all
+work that uses it before replacing or restoring it. Monotonic readings from
+different providers may use different origins and must not be compared.
+Use existing per-consumer clock inputs when independent consumers need different
+clocks within one runtime.
 
 ```ts
 import { create } from "@bufbuild/protobuf";

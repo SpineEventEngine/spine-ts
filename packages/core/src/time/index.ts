@@ -139,7 +139,9 @@ export const Time = {
 
   /**
    * Replaces the provider for this module instance, primarily in sequential tests. Restore the
-   * returned provider in a `finally` block to avoid affecting later work.
+   * returned provider in a `finally` block to avoid affecting later work. Finish or await all
+   * dependent asynchronous work before replacing or restoring a provider. Monotonic readings
+   * from different providers are not comparable.
    * @param next Provider to install.
    * @returns Previously configured provider.
    * @internal
@@ -154,7 +156,8 @@ export const Time = {
   },
 
   /**
-   * Restores the shared system provider after a test.
+   * Restores the shared system provider after a test. Finish or await dependent asynchronous work
+   * before resetting; monotonic readings from different providers are not comparable.
    * @internal
    */
   resetProvider(): void {

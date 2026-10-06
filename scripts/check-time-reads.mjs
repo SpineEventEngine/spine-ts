@@ -128,8 +128,24 @@ export function findTimeBypasses(source, fileName = "fixture.ts") {
         !(
           (ts.isPropertyAccessExpression(node.parent) ||
             ts.isElementAccessExpression(node.parent)) &&
-          node.parent.expression === node
+          node.parent.expression === node &&
+          classify(node.parent) === kind
         );
+    } else if (ts.isIdentifier(node)) {
+      const kind = classify(node);
+      bypass =
+        (kind === "wall" || kind === "monotonic" || kind === "helper") &&
+        !ts.isImportSpecifier(node.parent) &&
+        !(ts.isVariableDeclaration(node.parent) && node.parent.name === node) &&
+        !(ts.isBindingElement(node.parent) && node.parent.name === node) &&
+        !(ts.isPropertyAccessExpression(node.parent) && node.parent.name === node) &&
+        !(
+          (ts.isPropertyAccessExpression(node.parent) ||
+            ts.isElementAccessExpression(node.parent)) &&
+          node.parent.expression === node &&
+          classify(node.parent) === kind
+        ) &&
+        !(ts.isCallExpression(node.parent) && node.parent.expression === node);
     }
     if (bypass) {
       const at = file.getLineAndCharacterOfPosition(node.getStart(file));

@@ -16,7 +16,7 @@ import { Time } from "@spine-event-engine/core/time";
 import { describe, expect, it, vi } from "vitest";
 import { ShardIndex } from "@spine-event-engine/server";
 import { create } from "@bufbuild/protobuf";
-import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { TimestampSchema, timestampFromDate } from "@bufbuild/protobuf/wkt";
 
 import { DeliveryPagingError, DeliveryProtocolError } from "../src/client/types.js";
 import type { DeliveryClient } from "../src/client/client.js";
@@ -47,16 +47,17 @@ describe("RemoteInbox direct behavior", () => {
       whenReceived: create(TimestampSchema, { seconds: 1n, nanos: 123_457_000 }),
     };
     client.readPage.mockResolvedValueOnce([first, second]);
-    await expect(
-      inbox.read(ShardIndex.single(), {
-        after: {
-          messageId: first.id.value,
-          whenReceived: first.whenReceived,
-          version: first.version,
-        },
-        limit: 1,
-      }),
-    ).resolves.toEqual([second]);
+    const read = await inbox.read(ShardIndex.single(), {
+      after: {
+        messageId: first.id.value,
+        whenReceived: first.whenReceived,
+        version: first.version,
+      },
+      limit: 1,
+    });
+    expect(read).toEqual([second]);
+    expect(read[0]?.whenReceived.seconds).toBe(1n);
+    expect(read[0]?.whenReceived.nanos).toBe(123_457_000);
     expect(client.readPage).toHaveBeenCalledWith(
       ShardIndex.single(),
       expect.objectContaining({
@@ -72,7 +73,7 @@ describe("RemoteInbox direct behavior", () => {
     const second = {
       ...domainMessage("second"),
       status: "DELIVERED" as const,
-      whenReceived: new Date(2_000),
+      whenReceived: timestampFromDate(new Date(2_000)),
     };
 
     await expect(inbox.receive(first)).resolves.toMatchObject({ outcome: "WRITTEN" });
@@ -141,8 +142,8 @@ describe("RemoteInbox direct behavior", () => {
     const client = new Client();
     const inbox = new RemoteInbox(client as never);
     const first = domainMessage("first");
-    const second = { ...domainMessage("second"), whenReceived: new Date(2_000) };
-    const third = { ...domainMessage("third"), whenReceived: new Date(3_000) };
+    const second = { ...domainMessage("second"), whenReceived: timestampFromDate(new Date(2_000)) };
+    const third = { ...domainMessage("third"), whenReceived: timestampFromDate(new Date(3_000)) };
 
     client.readPage.mockResolvedValueOnce([first, second, third]);
     await expect(
@@ -189,7 +190,7 @@ describe("RemoteInbox direct behavior", () => {
       ...domainMessage(`earlier-${String(index)}`),
       status: "DELIVERED" as const,
       version: BigInt(index + 2),
-      whenReceived: new Date((index + 2) * 1_000),
+      whenReceived: timestampFromDate(new Date((index + 2) * 1_000)),
     }));
     const pendingSource = earlier[999];
     const continuationAnchor = earlier[998];

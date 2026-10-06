@@ -829,7 +829,7 @@ class Request implements BlackBoxScope {
   }
 
   /**
-   * Returns the postEvent result.
+   * Posts a domain Event through the BlackBox context for this actor.
    *
    * @typeParam Schema The domain schema that determines the accepted message shape.
    * @param schema The domain message schema used to encode the payload.
@@ -844,7 +844,7 @@ class Request implements BlackBoxScope {
   }
 
   /**
-   * Returns the postExternalEvent result.
+   * Posts an external domain Event through the BlackBox context for this actor.
    *
    * @typeParam Schema The domain schema that determines the accepted message shape.
    * @param schema The domain message schema used to encode the payload.
@@ -970,8 +970,8 @@ class TrackedSubscription implements Subscription {
   /**
    * Removes cleanup tracking when iteration ends, fails, or returns early.
    *
-   * @typeParam Value The value type carried through reading or delivery.
-   * @param source The transport source used for RPC calls.
+   * @typeParam Value The update or lifecycle value yielded by the tracked stream.
+   * @param source The subscription stream whose terminal iteration releases tracking.
    * @returns An iterable that releases tracking on terminal iteration.
    */
   private trackStream<Value>(source: AsyncIterable<Value>): AsyncIterable<Value> {
@@ -981,7 +981,7 @@ class TrackedSubscription implements Subscription {
     const onCancel = () => this.cancel();
     return {
       /**
-       * Returns the asyncIterator] result.
+       * Returns an iterator that releases subscription tracking when it terminates.
        *
        * @returns An iterator that releases tracking when it terminates.
        */
@@ -1133,7 +1133,7 @@ class Tracked<
 }
 
 /**
- * Returns the NormalizedBlackBoxOptions result.
+ * Holds validated tenant, zone, timeout, and polling settings for a BlackBox.
  */
 interface NormalizedBlackBoxOptions {
   readonly tenant: TenantId | undefined;

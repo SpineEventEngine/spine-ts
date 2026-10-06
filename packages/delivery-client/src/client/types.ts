@@ -321,7 +321,8 @@ export interface DeliveryReadPageOptions extends DeliveryFindOneOptions {
   // prettier-ignore
 
   /**
-   * Continues a timestamp-ordered page after this received time.
+   * Continues a timestamp-ordered page after this received time. Date anchors have millisecond
+   * precision; Timestamp anchors preserve submillisecond precision.
    */
   readonly sinceWhen?: Date | import("@bufbuild/protobuf/wkt").Timestamp;
 

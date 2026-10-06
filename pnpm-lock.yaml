@@ -456,6 +456,9 @@ importers:
       '@connectrpc/connect-node':
         specifier: 2.1.2
         version: 2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))
+      '@spine-event-engine/core':
+        specifier: 2.0.0-snapshot.22
+        version: link:../core
       '@spine-event-engine/proto':
         specifier: 2.0.0-snapshot.22
         version: link:../proto
@@ -463,9 +466,6 @@ importers:
         specifier: 2.0.0-snapshot.22
         version: link:../server
     devDependencies:
-      '@spine-event-engine/core':
-        specifier: workspace:*
-        version: link:../core
       '@spine-event-engine/delivery-server':
         specifier: workspace:*
         version: link:../delivery-server

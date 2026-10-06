@@ -50,6 +50,30 @@ describe("time read bypass check", () => {
     expect(findTimeBypasses(source)).toHaveLength(7);
   });
 
+  it.each([
+    "Date.now.bind(Date)",
+    "Date.now.call(Date)",
+    "Date.now.apply(Date, [])",
+    "performance.now.bind(performance)",
+    "performance.now.call(performance)",
+    "performance.now.apply(performance, [])",
+    "process.hrtime.bind(process)",
+    "process.hrtime.call(process)",
+    "process.hrtime.bigint.bind(process.hrtime)",
+    "process.hrtime.bigint.call(process.hrtime)",
+  ])("rejects a bound or indirectly invoked clock member: %s", (source) => {
+    expect(findTimeBypasses(`${source};`)).not.toEqual([]);
+  });
+
+  it("rejects imported current-timestamp helpers when bound or forwarded as callbacks", () => {
+    const source = `
+      import { timestampNow as stamp } from "some-clock-library";
+      stamp.bind(null); stamp.call(null); stamp.apply(null, []);
+      setTimeout(stamp, 1);
+    `;
+    expect(findTimeBypasses(source)).toHaveLength(4);
+  });
+
   it("ignores comments, fixture strings, supplied dates, and timer scheduling", () => {
     const source = `
       // Date.now();

@@ -17,7 +17,7 @@ import { Time } from "@spine-event-engine/core/time";
 /* eslint-disable @typescript-eslint/require-await */
 
 import { create, toBinary } from "@bufbuild/protobuf";
-import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { AnySchema, TimestampSchema, timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { Identifiers } from "@spine-event-engine/core";
 import { EventSchema } from "@spine-event-engine/proto";
 import { WorkerIdSchema, type WorkerId } from "@spine-event-engine/proto/delivery";
@@ -294,11 +294,11 @@ describe("Delivery direct worker", () => {
     const unrelated = Array.from({ length: 1_000 }, (_, index) => ({
       ...message(`delivered-${String(index)}`, `target-${String(index)}`, shard),
       status: "DELIVERED" as const,
-      whenReceived: new Date(index),
+      whenReceived: timestampFromDate(new Date(index)),
     }));
     const pending = {
       ...message("pending", "pending-target", shard),
-      whenReceived: new Date(1_001),
+      whenReceived: timestampFromDate(new Date(1_001)),
     };
     let pendingDelivered = false;
     const read = async (options?: InboxReadOptions): Promise<DeliveryEndpointMessage[]> => {
@@ -937,20 +937,22 @@ describe("Delivery direct worker", () => {
         throw new Error("failed");
       },
     });
-    if (!(row.whenReceived instanceof Date)) throw new Error("Expected legacy Date input.");
-    const receivedMillis = row.whenReceived.getTime();
+    const received = create(TimestampSchema, {
+      seconds: row.whenReceived.seconds,
+      nanos: row.whenReceived.nanos,
+    });
     const mutable = row as unknown as {
       id: { value: string };
       inboxId: { targetId: string };
       shard: ShardIndex;
-      whenReceived: Date;
+      whenReceived: { nanos: number };
       keepUntil: Date;
       signal: { value: Uint8Array };
     };
     mutable.id.value = "mutated";
     mutable.inboxId.targetId = "mutated";
     mutable.shard = new ShardIndex(0, 2);
-    mutable.whenReceived.setTime(20_000);
+    mutable.whenReceived.nanos = 20_000;
     mutable.keepUntil.setTime(30_000);
     mutable.signal.value[0] = 9;
     const fact = run.failures[0]!.message;
@@ -959,12 +961,7 @@ describe("Delivery direct worker", () => {
       inboxId: { targetId: Identifiers.pack("string", "target") },
     });
     expect(fact.shard).toMatchObject({ index: 0, ofTotal: 1 });
-    expect(fact.whenReceived).toEqual(
-      create(TimestampSchema, {
-        seconds: BigInt(Math.floor(receivedMillis / 1_000)),
-        nanos: (receivedMillis % 1_000) * 1_000_000,
-      }),
-    );
+    expect(fact.whenReceived).toEqual(received);
     expect(fact.keepUntil?.getTime()).toBe(10_000);
     expect(fact.signal?.value[0]).toBe(1);
     expect(() => {
@@ -1144,7 +1141,7 @@ describe("Delivery direct worker", () => {
 
   it("finds a same-time insertion behind a removed cursor on the second scan", async () => {
     const shard = ShardIndex.single();
-    const whenReceived = new Date(1_000);
+    const whenReceived = timestampFromDate(new Date(1_000));
     const rows = ["m", "z"].map((id) => ({
       ...message(id, id, shard),
       whenReceived,
@@ -1348,7 +1345,7 @@ function message(
     label,
     status: "TO_DELIVER",
     shard,
-    whenReceived: new Date(Time.currentTimeMillis()),
+    whenReceived: timestampFromDate(new Date(Time.currentTimeMillis())),
     version: 1n,
   };
 }

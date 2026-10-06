@@ -19,6 +19,7 @@ import { describe, expect, it, vi } from "vitest";
 import { InboxService, ShardService } from "@spine-event-engine/proto/delivery-server";
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { create } from "@bufbuild/protobuf";
+import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { DeliveryBuilder, ShardIndex, type InboxMessage } from "@spine-event-engine/server";
 import { InMemoryDelivery } from "@spine-event-engine/delivery-server";
 import { DeliveryClient, DeliveryOutcomeUnknownError, RemoteWorkRegistry } from "../src/index.js";
@@ -108,14 +109,22 @@ describe("in-memory delivery core response loss", () => {
       createRouterTransport((router) => router.service(InboxService, core.inbox)),
     );
     const inbox = new RemoteInbox(client);
-    const first = { ...domainMessage("first"), signalId: "first", whenReceived: new Date(1_000) };
+    const first = {
+      ...domainMessage("first"),
+      signalId: "first",
+      whenReceived: timestampFromDate(new Date(1_000)),
+    };
     const expired = {
       ...domainMessage("expired-cursor"),
       signalId: "expired-cursor",
-      whenReceived: new Date(2_000),
+      whenReceived: timestampFromDate(new Date(2_000)),
       keepUntil: new Date(Time.currentTimeMillis() - 60_000),
     };
-    const later = { ...domainMessage("later"), signalId: "later", whenReceived: new Date(2_000) };
+    const later = {
+      ...domainMessage("later"),
+      signalId: "later",
+      whenReceived: timestampFromDate(new Date(2_000)),
+    };
     await client.writeOne(first);
     await client.writeOne(expired);
     await inbox.markDelivered(expired);
@@ -159,7 +168,7 @@ describe("in-memory delivery core response loss", () => {
       const expired = {
         ...domainMessage(`expired-${String(index)}`),
         signalId: `expired-${String(index)}`,
-        whenReceived: new Date((index + 1) * 1_000),
+        whenReceived: timestampFromDate(new Date((index + 1) * 1_000)),
         keepUntil: new Date(Time.currentTimeMillis() - 60_000),
       };
       await client.writeOne(expired);
@@ -168,7 +177,7 @@ describe("in-memory delivery core response loss", () => {
     const later = {
       ...domainMessage("after-removed-page"),
       signalId: "after-removed-page",
-      whenReceived: new Date(5_000),
+      whenReceived: timestampFromDate(new Date(5_000)),
     };
     await client.writeOne(later);
     const shard = ShardIndex.single();
@@ -206,7 +215,7 @@ describe("in-memory delivery core response loss", () => {
       const expired = {
         ...domainMessage(`initial-expired-${String(index)}`),
         signalId: `initial-expired-${String(index)}`,
-        whenReceived: new Date(index * 1_000),
+        whenReceived: timestampFromDate(new Date(index * 1_000)),
         keepUntil: new Date(Time.currentTimeMillis() - 60_000),
       };
       await client.writeOne(expired);
@@ -215,7 +224,7 @@ describe("in-memory delivery core response loss", () => {
     const later = {
       ...domainMessage("after-initial-removal"),
       signalId: "after-initial-removal",
-      whenReceived: new Date(3_000),
+      whenReceived: timestampFromDate(new Date(3_000)),
     };
     await client.writeOne(later);
     const shard = ShardIndex.single();
@@ -256,12 +265,12 @@ describe("in-memory delivery core response loss", () => {
     const duplicate = {
       ...domainMessage("duplicate-cursor"),
       signalId: first.signalId,
-      whenReceived: new Date(2_000),
+      whenReceived: timestampFromDate(new Date(2_000)),
     };
     const later = {
       ...domainMessage("after-duplicate"),
       signalId: "other-signal",
-      whenReceived: new Date(2_000),
+      whenReceived: timestampFromDate(new Date(2_000)),
     };
     await client.writeOne(first);
     await client.writeOne(duplicate);

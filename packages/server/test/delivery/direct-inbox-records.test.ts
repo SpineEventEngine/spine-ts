@@ -48,6 +48,8 @@ describe("direct InboxMessage storage", () => {
     await storage.write(second);
     const page = await storage.read(first.shard, { limit: 1 });
     expect(page[0]?.whenReceived).toEqual(firstTime);
+    expect(page[0]?.whenReceived.seconds).toBe(firstTime.seconds);
+    expect(page[0]?.whenReceived.nanos).toBe(firstTime.nanos);
     const pageEntry = page[0];
     if (pageEntry === undefined) throw new Error("Expected the first inbox page entry.");
     await expect(

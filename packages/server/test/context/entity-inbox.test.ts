@@ -14,7 +14,7 @@
 
 import { Time } from "@spine-event-engine/core/time";
 import { create, toBinary } from "@bufbuild/protobuf";
-import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
+import { AnySchema, timestampFromDate, type Any } from "@bufbuild/protobuf/wkt";
 import { Identifiers } from "@spine-event-engine/core";
 import { CommandSchema, EventSchema } from "@spine-event-engine/proto";
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
@@ -1678,7 +1678,7 @@ function writtenResult(
       ...input,
       shard: ShardIndex.single(),
       id: { value: `row-${String(version)}`, shard: ShardIndex.single() },
-      whenReceived: new Date("2026-07-12T09:00:00.000Z"),
+      whenReceived: timestampFromDate(new Date("2026-07-12T09:00:00.000Z")),
       version,
     },
   };

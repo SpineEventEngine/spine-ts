@@ -1,0 +1,7 @@
+**Required fixes**
+
+- **P2 — Clock bypass gate:** [check-time-reads.mjs](/Users/armiol/.codex/worktrees/spine-time/spine-ts/scripts/check-time-reads.mjs:123) misses bound clock callbacks. A focused probe returned no findings for `const now = Date.now.bind(Date); now()` or the equivalent `performance.now.bind(performance)`. The checker exempts a clock member whenever it is the object of another property access. Detect binding of clock methods and add those forms to [check-time-reads.test.mjs](/Users/armiol/.codex/worktrees/spine-time/spine-ts/scripts/check-time-reads.test.mjs:41).
+
+- **P2 — Semantic TSDoc:** [black-box.ts](/Users/armiol/.codex/worktrees/spine-time/spine-ts/packages/testing/src/black-box/black-box.ts:832) says “Returns the postEvent result,” while the method posts an event and returns `Promise<void>`. The same placeholder appears for `postExternalEvent` at line 847, with “Returns the asyncIterator] result” at line 984. [client.ts](/Users/armiol/.codex/worktrees/spine-time/spine-ts/packages/client-web/src/client/client.ts:1566) likewise describes an options interface as a “result.” These added comments do not meet the repository’s semantic TSDoc rule. Replace those summaries with the behavior or data each declaration represents.
+
+**Review limits:** This was read-only. I used the recorded verification evidence and focused source probes; I did not rerun broad suites. I found no other confirmed finding within the assigned concern.

@@ -29,6 +29,7 @@ import {
   InboxMessageError,
   type DeliveryStatus,
   type InboxMessage,
+  type InboxMessageInput,
   type InboxMessageId,
   type InboxReadOptions,
   type InboxWriteResult,
@@ -137,7 +138,7 @@ export class InboxStorage {
    * @param message Supplies the message to persist.
    * @returns Whether the row was written or matched an existing duplicate.
    */
-  async write(message: InboxMessage): Promise<InboxWriteResult> {
+  async write(message: InboxMessageInput & Pick<InboxMessage, "id">): Promise<InboxWriteResult> {
     const record = InboxRecords.write(message);
     const id = Values.wireId(record);
     const storage = this.#storage();

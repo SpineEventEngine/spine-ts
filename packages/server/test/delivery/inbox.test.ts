@@ -26,6 +26,28 @@ import { ShardedWorkRegistry } from "../../src/delivery/sharded-work-registry.js
 import { createMessage } from "./inbox-message-fixture.js";
 
 describe("Inbox", () => {
+  it("returns Timestamp precision after accepting a legacy Date receive time", async () => {
+    const inbox = new Inbox(
+      new InboxStorage({
+        context: { name: "DateReceiveOutput", multitenant: false },
+        storageFactory: new InMemoryStorageFactory(),
+      }),
+    );
+    const receipt = await inbox.receive({
+      ...createMessage("legacy-date", "signal", 1n),
+      whenReceived: new Date(1_234),
+    });
+    expect(receipt.message.whenReceived.seconds).toBe(1n);
+    expect(receipt.message.whenReceived.nanos).toBe(234_000_000);
+
+    const page = await inbox.read(ShardIndex.single());
+    expect(page[0]?.whenReceived.seconds).toBe(1n);
+    expect(page[0]?.whenReceived.nanos).toBe(234_000_000);
+    const direct = await inbox.readMessage(receipt.message.id);
+    expect(direct?.whenReceived.seconds).toBe(1n);
+    expect(direct?.whenReceived.nanos).toBe(234_000_000);
+  });
+
   it("forwards duplicate-removal cancellation to direct storage", async () => {
     const factory = new InMemoryStorageFactory();
     const context = { name: "T0227-duplicate", multitenant: false } as const;

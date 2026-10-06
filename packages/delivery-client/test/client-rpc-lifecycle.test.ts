@@ -107,6 +107,8 @@ describe("DeliveryClient RPC and lifecycle", () => {
 
     const command = await client.findOne(id);
     expect(command).toMatchObject({ label: "HANDLE_COMMAND", status: "TO_DELIVER", version: 2n });
+    expect(command?.whenReceived.seconds).toBe(1n);
+    expect(command?.whenReceived.nanos).toBe(0);
     expect(command?.signal?.typeUrl).toBe("type.spine.io/spine.core.Command");
     expect(Object.isFrozen(command)).toBe(true);
     expect(Object.isFrozen(command?.id)).toBe(true);
@@ -124,6 +126,8 @@ describe("DeliveryClient RPC and lifecycle", () => {
     const client = DeliveryClient.usingTransport(fake.transport, { pageSize: 2 });
 
     const page = await client.readPage(ShardIndex.single());
+    expect(page[0]?.whenReceived.seconds).toBe(1n);
+    expect(page[0]?.whenReceived.nanos).toBe(0);
 
     expect(fake.unary).toHaveBeenLastCalledWith(
       expect.objectContaining({ name: "FindManyInShard" }),
@@ -396,6 +400,16 @@ describe("DeliveryClient RPC and lifecycle", () => {
     fake.fail(new ConnectError("invalid request: secret-payload", Code.InvalidArgument));
 
     await expect(client.writeOne(domainMessage())).rejects.toBeInstanceOf(DeliveryProtocolError);
+    expect(fake.unary).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts legacy Date receive times in a write batch", async () => {
+    const fake = transport();
+    const client = DeliveryClient.usingTransport(fake.transport);
+    fake.reply(create(EmptySchema));
+    await expect(
+      client.writeMany([{ ...domainMessage("legacy-date"), whenReceived: new Date(1_234) }]),
+    ).resolves.toBeUndefined();
     expect(fake.unary).toHaveBeenCalledTimes(1);
   });
 

@@ -13,7 +13,7 @@
  */
 
 import { create, toBinary } from "@bufbuild/protobuf";
-import { AnySchema } from "@bufbuild/protobuf/wkt";
+import { AnySchema, timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { Identifiers } from "@spine-event-engine/core";
 import { CommandSchema, EventSchema } from "@spine-event-engine/proto";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
@@ -351,7 +351,7 @@ describe("LocalProjectionInbox", () => {
           label: "UPDATE_SUBSCRIBER",
           status,
           shard: ShardIndex.single(),
-          whenReceived: new Date("2026-07-08T09:00:00.000Z"),
+          whenReceived: timestampFromDate(new Date("2026-07-08T09:00:00.000Z")),
           version: 1n,
         }),
       ).rejects.toThrow(

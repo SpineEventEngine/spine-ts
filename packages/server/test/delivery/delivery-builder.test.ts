@@ -610,7 +610,7 @@ function message(signalId: string, targetId: string, shard: ShardIndex) {
     label: "UPDATE_SUBSCRIBER" as const,
     status: "TO_DELIVER" as const,
     shard,
-    whenReceived: new Date(Time.currentTimeMillis()),
+    whenReceived: Time.currentTime(),
     version: 1n,
   };
 }

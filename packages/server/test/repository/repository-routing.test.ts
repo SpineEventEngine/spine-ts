@@ -24,6 +24,7 @@ import {
   Int64ValueSchema,
   StringValueSchema,
   TimestampSchema,
+  timestampFromDate,
 } from "@bufbuild/protobuf/wkt";
 import {
   TypeUrls,
@@ -7637,7 +7638,7 @@ describe("repository signal routing", () => {
         label: "HANDLE_COMMAND",
         status: "DELIVERED",
         shard: ShardIndex.single(),
-        whenReceived: new Date("2026-07-08T09:02:30.000Z"),
+        whenReceived: timestampFromDate(new Date("2026-07-08T09:02:30.000Z")),
         version: 1n,
       }),
     ).rejects.toThrow("Entity Inbox replay requires a bound repository runtime.");

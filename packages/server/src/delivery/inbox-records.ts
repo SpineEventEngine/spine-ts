@@ -42,6 +42,7 @@ import {
   type DeliveryLabel,
   type DeliveryStatus,
   type InboxMessage,
+  type InboxMessageInput,
 } from "./inbox.js";
 import { ShardIndex } from "./shard-index.js";
 
@@ -69,7 +70,7 @@ export const InboxRecords: Readonly<{
    * @param message The domain inbox message to persist.
    * @returns A generated inbox record suitable for durable storage.
    */
-  write(message: InboxMessage): WireInboxMessage;
+  write(message: InboxMessageInput & Pick<InboxMessage, "id">): WireInboxMessage;
 }> = Object.freeze({
   /**
    * Decodes a durable inbox record and verifies its embedded identifier when requested.
@@ -88,7 +89,7 @@ export const InboxRecords: Readonly<{
    * @param message The domain inbox message to persist.
    * @returns A generated inbox record suitable for durable storage.
    */
-  write(message: InboxMessage): WireInboxMessage {
+  write(message: InboxMessageInput & Pick<InboxMessage, "id">): WireInboxMessage {
     return Values.write(message);
   },
 });
@@ -153,7 +154,7 @@ const Values = Object.freeze({
    * @param input The domain inbox message to validate and encode.
    * @returns A generated inbox record suitable for durable storage.
    */
-  write(input: InboxMessage): WireInboxMessage {
+  write(input: InboxMessageInput & Pick<InboxMessage, "id">): WireInboxMessage {
     const message = Values.input(input);
     Values.target(message.inboxId.targetId, InboxMessageError);
     Values.payloadForLabel(message.label, message.signal, InboxMessageError);
@@ -274,18 +275,11 @@ const Values = Object.freeze({
    * @param value The candidate domain inbox message.
    * @returns The validated domain inbox message.
    */
-  input(value: InboxMessage): InboxMessage {
-    const id = value.id;
+  input(
+    value: InboxMessageInput & Pick<InboxMessage, "id">,
+  ): InboxMessageInput & Pick<InboxMessage, "id"> {
+    Values.validateIdentity(value);
     const inbox = value.inboxId;
-    const shard = value.shard;
-    if (
-      typeof id.value !== "string" ||
-      id.value.trim().length === 0 ||
-      !(id.shard instanceof ShardIndex) ||
-      !(shard instanceof ShardIndex) ||
-      id.shard.key() !== shard.key()
-    )
-      throw new InboxMessageError("Inbox message ID shard does not match message shard.");
     if (
       typeof inbox.targetId.typeUrl !== "string" ||
       inbox.targetId.typeUrl.trim().length === 0 ||
@@ -308,6 +302,23 @@ const Values = Object.freeze({
     )
       throw new InboxMessageError("Inbox keep-until time is invalid.");
     return value;
+  },
+
+  /**
+   * Validates the inbox identity and its matching shard before encoding.
+   * @param value The inbox write input whose identity is checked.
+   */
+  validateIdentity(value: InboxMessageInput & Pick<InboxMessage, "id">): void {
+    const id = value.id;
+    const shard = value.shard;
+    if (
+      typeof id.value !== "string" ||
+      id.value.trim().length === 0 ||
+      !(id.shard instanceof ShardIndex) ||
+      !(shard instanceof ShardIndex) ||
+      id.shard.key() !== shard.key()
+    )
+      throw new InboxMessageError("Inbox message ID shard does not match message shard.");
   },
 
   /**

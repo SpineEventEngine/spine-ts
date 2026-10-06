@@ -1563,7 +1563,7 @@ const ClientTerminalValues = Object.freeze({
 });
 
 /**
- * Returns the RequiredSubscriptionRuntimeOptions result.
+ * Holds validated subscription queue limits, retry policy, and scheduler.
  */
 interface RequiredSubscriptionRuntimeOptions {
   readonly updateCapacity: number;

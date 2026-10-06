@@ -305,9 +305,9 @@ export interface InboxMessage {
   readonly shard: ShardIndex;
 
   /**
-   * Durable receive time. Reads from storage return a full-precision Timestamp.
+   * Durable receive time normalized to a full-precision Timestamp on reads.
    */
-  readonly whenReceived: Date | Timestamp;
+  readonly whenReceived: Timestamp;
 
   /**
    * Ordering tie-breaker for equal receive times.

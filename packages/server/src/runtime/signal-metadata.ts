@@ -117,7 +117,8 @@ export interface SignalMetadataOptions {
   // prettier-ignore
 
   /**
-   * Supplies timestamps; defaults to shared `Time` from `@spine-event-engine/core/time`. Legacy `Clock` values remain accepted.
+   * Supplies timestamps; defaults to shared `Time` from `@spine-event-engine/core/time`.
+   * Legacy `Clock` values remain accepted.
    */
   readonly clock?: Clock | TimeProvider;
 }

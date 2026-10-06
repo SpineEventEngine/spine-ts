@@ -26,10 +26,22 @@ import { createMessage } from "./inbox-message-fixture.js";
 describe("InboxRecords", () => {
   it("preserves microsecond receive time through a durable Inbox record", () => {
     const instant = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 123_456_000 });
-    const message = { ...createMessage("precise", "signal", 1n), whenReceived: instant } as never;
+    const message = { ...createMessage("precise", "signal", 1n), whenReceived: instant };
     const wire = InboxRecords.write(message);
     expect(wire.whenReceived).toEqual(instant);
-    expect(InboxRecords.read(wire).whenReceived).toEqual(instant);
+    const restored = InboxRecords.read(wire);
+    expect(restored.whenReceived.seconds).toBe(instant.seconds);
+    expect(restored.whenReceived.nanos).toBe(instant.nanos);
+  });
+
+  it("normalizes a legacy Date write input to a Timestamp read output", () => {
+    const wire = InboxRecords.write({
+      ...createMessage("legacy-date", "signal", 1n),
+      whenReceived: new Date(1_234),
+    });
+    const restored = InboxRecords.read(wire);
+    expect(restored.whenReceived.seconds).toBe(1n);
+    expect(restored.whenReceived.nanos).toBe(234_000_000);
   });
 
   it("round-trips one generated direct Inbox record without sharing caller snapshots", () => {

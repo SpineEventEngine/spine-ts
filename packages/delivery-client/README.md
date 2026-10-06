@@ -41,6 +41,9 @@ void shards;
 Read operations can use the configured bounded retry policy. Mutations never
 retry automatically: a lost mutation response means the remote outcome is
 unknown and must be reconciled before any later action.
+Inbox reads return Protobuf `Timestamp` receive times. A `Date` supplied as a
+`sinceWhen` page anchor has millisecond precision; supply a `Timestamp` to
+preserve submillisecond precision.
 
 <!-- docs-snippet-path: packages/delivery-client/src/client/client.ts -->
 
