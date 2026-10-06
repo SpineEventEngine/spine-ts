@@ -8,4 +8,6 @@ Corrections implemented: removed Date backward-compatibility paths; restored pla
 
 The existing implementer continues with explicitly configured gpt-6-sol/medium. The parent maintains task records and core prose; source changes have one implementation context. No PR or merge is authorized. Hosted CI is not established; the earlier GitHub CLI status query returned HTTP 401 while SSH pushes succeeded.
 
-Correction checks: 223 focused tests, 78 delivery-helper tests, 17 clock-policy tests and 4 Proto-module tests passed. Build/tooling typechecks and the remaining cheap gates passed. TSDoc requires a post-commit rerun because its combined committed/local scope includes three files restored exactly to baseline. Final full release verification is pending.
+Correction checks: 223 focused tests, 78 delivery-helper tests, 17 clock-policy tests and 4 Proto-module tests passed. Build/tooling typechecks and the remaining cheap gates passed. The post-commit TSDoc check passed. Final full release verification is pending.
+
+First fresh review returned three findings, now corrected: Datastore SDK rounding at 1,001,000 nanos, a platform-clock assertion in a controlled-Time test, and runtime MJS classification. The correction passed 51 focused tests and a live Datastore indexed-order/pagination test. Two fresh reviews and final release verification remain.

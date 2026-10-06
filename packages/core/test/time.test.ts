@@ -43,7 +43,7 @@ describe("Time", () => {
     });
     expect(Time.currentTime()).toBe(first);
     expect(Time.currentTimeZone()).toBe("Europe/Lisbon");
-    expect(Date.now()).toBe(1_123);
+    expect(Time.currentTimeMillis()).toBe(1_123);
 
     const previous = Time.setProvider({ currentTime: () => second });
     expect(Time.currentTime()).toBe(second);

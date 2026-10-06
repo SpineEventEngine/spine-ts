@@ -978,8 +978,8 @@ Runtime metadata exports include `SignalMetadata`,
 generated command IDs, event IDs, timestamps, actor/tenant command context,
 source-command/source-event origin chains, primitive (`string | number |
 boolean`) producer IDs, and validated int32 `Version` metadata through one
-implementation. Generated IDs use Node secure UUIDs; tests can supply a fixed
-a `TimeProvider` and source envelopes. This API prepares signal metadata; it does not
+implementation. Generated IDs use Node secure UUIDs; tests can supply a
+`TimeProvider` and source envelopes. This API prepares signal metadata; it does not
 discover or invoke handlers, deliver messages, or save them.
 Existing Command and Event envelopes retain their supplied IDs without UUID-format
 validation; the UUID guarantee applies to newly generated IDs, not to decoding,

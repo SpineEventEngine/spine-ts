@@ -89,6 +89,9 @@ describe("time read bypass check", () => {
     expect(timeReadPolicy("packages/server/src/delivery/inbox.ts")).toBe("runtime");
     expect(timeReadPolicy("examples/message-board/app/src/system-clock.ts")).toBe("runtime");
     expect(timeReadPolicy("examples/message-board/web/src/relative-time.ts")).toBe("runtime");
+    expect(timeReadPolicy("examples/message-board/app/src/runtime-clock.mjs")).toBe("runtime");
+    expect(timeReadPolicy("packages/server/src/runtime-clock.mjs")).toBe("runtime");
+    expect(findTimeBypasses("Date.now();", "runtime-clock.mjs")).not.toEqual([]);
     expect(timeReadPolicy("packages/delivery-client/test-fixtures/multi-machine-app.mjs")).toBe(
       "runtime",
     );
@@ -98,6 +101,7 @@ describe("time read bypass check", () => {
       "scripts/release-get.mjs",
       "examples/message-board/deploy/container/build-local-images.mjs",
       "examples/message-board/web/test/interop/harness.mjs",
+      "packages/proto-tools/src/generation/generation-reuse.mjs",
       "packages/server/test/repository/entity-delivery-benchmark.test.ts",
     ])
       expect(timeReadPolicy(path)).toBe("platform");

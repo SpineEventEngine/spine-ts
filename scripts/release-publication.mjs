@@ -623,7 +623,7 @@ export async function confirmPrepared({
   report,
   registry,
   save,
-  now = () => Date.now(),
+  now = Date.now,
   sleep = (ms) => new Promise((resolve) => globalThis.setTimeout(resolve, ms)),
   windowMs = 60_000,
 }) {

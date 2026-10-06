@@ -43,6 +43,7 @@ export class DatastoreColumnMapping implements ColumnMapping<unknown> {
   /**
    * Returns the conversion for one generated column type.
    *
+   * @typeParam V The Protobuf value type described by the column.
    * @param type The generated Protobuf column type.
    * @returns The JVM-compatible Datastore conversion.
    */
@@ -75,6 +76,13 @@ export class DatastoreColumnMapping implements ColumnMapping<unknown> {
 }
 
 const DatastoreMappings = Object.freeze({
+  /**
+   * Returns the native Datastore representation of a Protobuf scalar.
+   *
+   * @typeParam V The scalar value type accepted by the returned conversion.
+   * @param type The Protobuf scalar kind and width.
+   * @returns A conversion that preserves the scalar's range and native Datastore type.
+   */
   scalar<V>(type: ScalarType): ColumnTypeMapping<V, unknown> {
     switch (type) {
       case ScalarType.STRING:
@@ -102,6 +110,13 @@ const DatastoreMappings = Object.freeze({
     }
   },
 
+  /**
+   * Converts a signed integer column after enforcing its declared width.
+   *
+   * @param value The bigint, safe number, or decimal string to convert.
+   * @param bits The declared 32-bit or 64-bit signed width.
+   * @returns Canonical decimal text accepted by Datastore.int.
+   */
   signed(value: unknown, bits: 32 | 64): string {
     const integer = this.integer(value);
     const limit = 1n << BigInt(bits - 1);
@@ -110,6 +125,13 @@ const DatastoreMappings = Object.freeze({
     return integer.toString();
   },
 
+  /**
+   * Converts an unsigned integer within Datastore's signed provider range.
+   *
+   * @param value The bigint, safe number, or decimal string to convert.
+   * @param bits The declared 32-bit or 64-bit unsigned width.
+   * @returns Canonical decimal text accepted by Datastore.int.
+   */
   unsigned(value: unknown, bits: 32 | 64): string {
     const integer = this.integer(value);
     if (integer < 0n || integer >= 1n << BigInt(bits))
@@ -119,6 +141,12 @@ const DatastoreMappings = Object.freeze({
     return integer.toString();
   },
 
+  /**
+   * Parses an integer column without accepting fractional or unsafe numbers.
+   *
+   * @param value The bigint, safe number, or canonical decimal string to parse.
+   * @returns The exact integer value.
+   */
   integer(value: unknown): bigint {
     if (typeof value === "bigint") return value;
     if (typeof value === "number" && Number.isSafeInteger(value)) return BigInt(value);
@@ -126,6 +154,12 @@ const DatastoreMappings = Object.freeze({
     throw new Error("Datastore integer column is invalid.");
   },
 
+  /**
+   * Wraps Protobuf seconds and nanos for the Datastore SDK's native timestamp column.
+   *
+   * @param value The Protobuf Timestamp fields to validate and preserve.
+   * @returns A Date accepted by the SDK while retaining submillisecond nanos.
+   */
   timestamp(value: unknown): Date {
     const timestamp = value as { readonly seconds: bigint; readonly nanos: number };
     if (
@@ -139,7 +173,16 @@ const DatastoreMappings = Object.freeze({
   },
 });
 
+/**
+ * Exposes precise Protobuf timestamp fields through the Datastore SDK's Date API.
+ */
 class DatastoreTimestamp extends Date {
+  /**
+   * Creates a Datastore Date from exact Protobuf seconds and nanoseconds.
+   *
+   * @param seconds Whole seconds since the Unix epoch.
+   * @param nanos Nanoseconds within that second.
+   */
   constructor(
     private readonly seconds: bigint,
     private readonly nanos: number,
@@ -149,11 +192,26 @@ class DatastoreTimestamp extends Date {
       throw new Error("Datastore timestamp column is outside the supported range.");
   }
 
+  /**
+   * Returns the whole-second epoch time used by the SDK timestamp encoder.
+   *
+   * @returns Epoch milliseconds at the start of the stored second.
+   */
   override getTime(): number {
     return Number(this.seconds * 1_000n);
   }
 
+  /**
+   * Returns fractional milliseconds adjusted for the SDK's nanos multiplication.
+   *
+   * @returns Milliseconds whose serialized integer nanos match the source timestamp.
+   */
   override getMilliseconds(): number {
-    return this.nanos / 1_000_000;
+    const milliseconds = this.nanos / 1_000_000;
+    // The Datastore SDK multiplies this value by 1e6. Bias a rounded-down
+    // quotient so Protobuf integer normalization retains the original nanos.
+    return Math.trunc(milliseconds * 1_000_000) === this.nanos
+      ? milliseconds
+      : milliseconds + milliseconds * Number.EPSILON;
   }
 }

@@ -42,9 +42,9 @@ const projectId = process.env.DATASTORE_PROJECT_ID ?? "spine-t0135-emulator";
 
 describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
   it("preserves microsecond timestamp ordering and a page boundary in live Datastore", async () => {
-    const first = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 123_001_000 });
-    const middle = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 123_500_000 });
-    const last = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 123_999_000 });
+    const first = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 1_000_000 });
+    const middle = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 1_001_000 });
+    const last = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 1_002_000 });
     const eventAt = (id: string, timestamp: typeof first) => {
       const event = projectEvent(id, 1);
       if (event.context === undefined) throw new Error("Expected event context.");
