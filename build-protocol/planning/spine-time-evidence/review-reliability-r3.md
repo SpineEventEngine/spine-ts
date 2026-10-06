@@ -1,3 +1,0 @@
-**Scoped acceptance — no confirmed actionable findings.** The writer now uses the existing `generationIdForContents` helper without changing its hash inputs. The changed regression test covers repeat generation and a package version change; existing helper tests cover generated content changes and staging reuse. The regenerated manifest and marker match each other and an independent hash recomputation of the current generated tree.
-
-Material limitation: I relied on the recorded focused tests and clean preflight; I did not rerun broad tests. The full release retry remains pending. No Time runtime changes were reviewed.

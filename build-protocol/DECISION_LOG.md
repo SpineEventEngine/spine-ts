@@ -6007,7 +6007,7 @@ the design alone is not evidence of that result. See
 
 ## D-0124: Shared Spine Time For Every Time Read
 
-Status: Accepted; implemented and locally verified, hosted CI pending
+Status: Accepted; revising occurrence APIs to remove backward-compatibility paths
 
 Date: 2026-10-06
 

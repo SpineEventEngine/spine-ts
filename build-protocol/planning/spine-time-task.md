@@ -53,7 +53,7 @@ Add a repository check that rejects time-acquisition bypasses outside the Time p
 
 Store, serialize and compare the complete seconds/nanos value needed by the Time contract. Converting occurrence timestamps to epoch milliseconds, JavaScript Date or a database column with millisecond precision must not erase distinctions used for ordering.
 
-Inspect every supported storage provider, index, query predicate and transport codec involved in occurrence timestamps. Migrate precision-losing paths where required. Preserve existing external contracts or document and handle an unavoidable schema/data migration explicitly.
+Inspect every supported storage provider, index, query predicate and transport codec involved in occurrence timestamps. Migrate precision-losing paths where required. Use canonical Timestamp values for occurrence-time inputs, outputs and pagination. Backward compatibility is not required: do not retain Date input unions, old Clock adapters or compatibility-only types. Update callers and tests to the current Time/TimeProvider contract. Keep Date conversion only where it serves an actual external API or explicit supplied-value conversion; do not use it as an occurrence-ordering representation. Document any storage schema/data migration if one is actually needed.
 
 A consumer that requires an epoch-millisecond value for a deadline or an external API can convert a Time-provided value. Such conversion must not become the representation used for precise occurrence ordering.
 
@@ -82,6 +82,7 @@ Task 2: Agent entities depends on the completed Time task. Agent implementation 
 
 ## Human-Imposed Requirements Ledger
 
+- Backward compatibility is not a requirement. Remove Date compatibility for occurrence-time contracts and obsolete Clock facades; update callers instead of preserving legacy overloads.
 - Implement Task 1 only: JVM-like shared Time and its adoption everywhere first-party code reads time; Agent work is separate.
 - Follow JVM IncrementalNanos and provider behavior; preserve full occurrence timestamp precision and do not add repository history counters.
 - Preserve existing Entity and database transaction semantics; no transaction redesign is authorized.

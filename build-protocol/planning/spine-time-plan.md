@@ -25,21 +25,21 @@ framework execution uses compiled entry. Do not mix provider-mutating source
 and dist instances in one graph. Keep sequential provider mutation within
 isolated test files; no AsyncLocalStorage clock subsystem.
 
-Preserve legacy Clock.now(): Date inputs using adapters. SignalMetadata accepts
-TimeProvider too; default timestamp creation returns full Time timestamp without
-Date conversion. Explicit supplied Date conversion remains supported. SystemClock
-can delegate both precise currentTime and legacy now to Time.
+Use TimeProvider for signal/browser time injection. Remove the obsolete Date-based
+Clock facade and Date compatibility branches. Signal occurrence and Inbox APIs
+accept canonical Timestamp values; update all first-party callers and tests.
+Explicit conversion of supplied values at an actual external boundary remains
+separate from reading or representing occurrence time.
 
 SQL columns already epoch nanos: preserve them. Test Datastore SDK precise
 encoding and use full protobuf payload for occurrence decoding. Inbox whenReceived
-and pagination anchors must carry Timestamp; normalize supplied legacy Date at
-input boundaries. Lease/expiry fields may retain documented millisecond contracts.
+and pagination anchors must carry Timestamp on both input and output. Lease/expiry fields may retain documented millisecond contracts.
 No new wire fields/database schema, Time wrapper Date, counters or Agent code.
 
 ## Sequential slices under one implementation context
 
 A. Time leaf, exports and TDD contract tests, browser/bootstrap proof.
-B. Runtime occurrence creation and compatible clock adapters.
+B. Runtime occurrence creation and TimeProvider injection.
 C. Precise inbox receipt, pagination and transport/store tests.
 D. Every remaining time read in packages, scripts, tests, examples; AST bypass gate.
 E. Focused preflight, concern-specific review, correction batch, one converged
