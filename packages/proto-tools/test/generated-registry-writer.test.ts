@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { Time } from "../../core/dist/time/index.js";
+import { Time } from "@spine-event-engine/core/time";
 import {
   constants,
   existsSync,

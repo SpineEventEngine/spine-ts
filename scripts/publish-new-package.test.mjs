@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -10,15 +11,18 @@ import {
 } from "./publish-new-package.mjs";
 
 const repoRoot = new URL("..", import.meta.url).pathname;
+const releaseVersion = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+).version;
 
 describe("new package publication", () => {
   it("resolves a public package from the fixed release inventory", () => {
     expect(resolveNewPackageTarget(repoRoot, "packages/storage-postgres")).toEqual({
-      archiveName: "spine-event-engine-storage-postgres-2.0.0-snapshot.21.tgz",
+      archiveName: `spine-event-engine-storage-postgres-${releaseVersion}.tgz`,
       directory: "packages/storage-postgres",
       name: "@spine-event-engine/storage-postgres",
       tag: "snapshot",
-      version: "2.0.0-snapshot.21",
+      version: releaseVersion,
     });
     expect(() => resolveNewPackageTarget(repoRoot, "examples/todo")).toThrow(
       "public package directory",

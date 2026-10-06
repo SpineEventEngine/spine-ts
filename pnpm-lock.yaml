@@ -608,6 +608,9 @@ importers:
         specifier: 6.0.3
         version: 6.0.3
     devDependencies:
+      '@spine-event-engine/core':
+        specifier: 2.0.0-snapshot.22
+        version: link:../core
       '@types/semver':
         specifier: 7.7.1
         version: 7.7.1

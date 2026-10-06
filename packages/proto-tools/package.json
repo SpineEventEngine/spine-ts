@@ -50,6 +50,7 @@
     "typescript": "6.0.3"
   },
   "devDependencies": {
+    "@spine-event-engine/core": "2.0.0-snapshot.22",
     "@types/semver": "7.7.1"
   }
 }

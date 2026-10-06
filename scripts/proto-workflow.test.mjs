@@ -38,6 +38,7 @@ import {
 } from "./proto-workflow.mjs";
 import { fixtureRunner, generateProtoFixtures } from "./generate-proto-fixtures.mjs";
 import { writeSpineProtoArtifacts } from "./generate-spine-proto-artifacts.mjs";
+import { generationIdForContents } from "../packages/proto-tools/src/generation/generation-reuse.mjs";
 
 describe("internal fixture Buf boundary", () => {
   it.each(["core", "server"])(
@@ -2660,12 +2661,24 @@ describe("proto-workflow", () => {
       expect(readFileSync(join(generatedRoot, "proto-module.ts"), "utf8")).toContain(
         "Generated from Proto: model/value.proto.",
       );
-      expect(JSON.parse(readFileSync(manifest, "utf8"))).toMatchObject({
+      const first = JSON.parse(readFileSync(manifest, "utf8"));
+      expect(first).toMatchObject({
         packageName: "@example/proto",
       });
+      expect(first.generationId).toMatch(/^[0-9a-f]{64}$/u);
+      expect(first.generationId).toBe(generationIdForContents(first, generatedRoot));
       const firstManifest = readFileSync(manifest, "utf8");
       writeSpineProtoArtifacts(repoRoot, generatedRoot, manifest);
       expect(readFileSync(manifest, "utf8")).toBe(firstManifest);
+      writeFileSync(
+        join(packageRoot, "package.json"),
+        JSON.stringify({ name: "@example/proto", version: "1.0.1" }),
+      );
+      writeSpineProtoArtifacts(repoRoot, generatedRoot, manifest);
+      const changed = JSON.parse(readFileSync(manifest, "utf8"));
+      expect(changed.generationId).toMatch(/^[0-9a-f]{64}$/u);
+      expect(changed.generationId).toBe(generationIdForContents(changed, generatedRoot));
+      expect(changed.generationId).not.toBe(first.generationId);
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }

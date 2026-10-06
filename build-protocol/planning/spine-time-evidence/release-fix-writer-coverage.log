@@ -1,0 +1,22 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/spine-time/spine-ts
+      Coverage enabled with v8
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed | 110 skipped (112)
+   Start at  15:20:07
+   Duration  248ms (transform 61ms, setup 0ms, import 100ms, tests 17ms, environment 0ms)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s
+-------------------|---------|----------|---------|---------|-------------------
+-------------------|---------|----------|---------|---------|-------------------
+
+=============================== Coverage summary ===============================
+Statements   : 100% ( 36/36 )
+Branches     : 100% ( 10/10 )
+Functions    : 100% ( 10/10 )
+Lines        : 100% ( 33/33 )
+================================================================================

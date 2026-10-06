@@ -1,0 +1,8 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/spine-time/spine-ts
+
+
+ Test Files  6 passed (6)
+      Tests  6 passed | 162 skipped (168)
+   Start at  15:18:24
+   Duration  1.21s (transform 775ms, setup 0ms, import 1.14s, tests 868ms, environment 0ms)
