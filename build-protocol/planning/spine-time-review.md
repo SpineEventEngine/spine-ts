@@ -52,3 +52,5 @@ Style and documentation findings are resolved. API found one remaining P2 compat
 ## Final API re-review dispatch
 
 After the compatible snapshot-input correction and clean preflight, dispatch the existing typescript_api_docs_reviewer through a fresh ephemeral CLI context, explicitly gpt-6-sol/medium with Standard speed and read-only access. Review only changes from f2d10ab73 that restore legacy Date mutation inputs and retain Timestamp reads, including directly related tests and declarations. No delegation or edits. Confirm runtime metadata before accepting the result. All other review dispositions remain current.
+
+Final API re-review passes with no remaining actionable finding. Runtime header confirms explicit gpt-6-sol/medium, read-only mode, session 01a1117b-1e2d-7f70-9b67-3734bf9dc55f, with no reported fallback. Report: spine-time-evidence/review-api-r3.md. The compatibility fix is committed and pushed as 7521a0a4c. All scoped review concerns now have accepted dispositions. All collaboration children are completed and all fresh CLI review/helper processes have exited. Full release verification is next.
