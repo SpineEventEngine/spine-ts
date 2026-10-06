@@ -1,4 +1,4 @@
-import { Time } from "../packages/core/src/time.ts";
+import { Time } from "../packages/core/src/time/index.ts";
 import { Buffer } from "node:buffer";
 import { readRegistryGet, TemporaryRegistryError } from "./release-get.mjs";
 

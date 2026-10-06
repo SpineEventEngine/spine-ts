@@ -9,7 +9,7 @@ import process from "node:process";
 import test from "node:test";
 import { URL } from "node:url";
 
-import { Time } from "../../../../packages/core/dist/time.js";
+import { Time } from "../../../../packages/core/dist/time/index.js";
 const containerRoot = new URL(".", import.meta.url);
 const datastoreEmulator = "google/cloud-sdk:578.0.0-emulators";
 

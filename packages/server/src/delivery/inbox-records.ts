@@ -54,12 +54,40 @@ export type InboxRecordMessage = InboxMessage;
  * Converts between the ergonomic port view and the generated durable record.
  */
 export const InboxRecords: Readonly<{
+  /**
+   * Decodes a durable inbox record and verifies its embedded identifier when requested.
+   *
+   * @param record The generated durable inbox record.
+   * @param expectedId The optional row identifier to compare with the embedded identifier.
+   * @returns An immutable inbox view with detached payload and occurrence Timestamp.
+   */
   read(record: WireInboxMessage, expectedId?: WireInboxMessageId): InboxMessage;
+
+  /**
+   * Validates and serializes an inbox message into the generated durable record.
+   *
+   * @param message The domain inbox message to persist.
+   * @returns A generated inbox record suitable for durable storage.
+   */
   write(message: InboxMessage): WireInboxMessage;
 }> = Object.freeze({
+  /**
+   * Decodes a durable inbox record and verifies its embedded identifier when requested.
+   *
+   * @param record The generated durable inbox record.
+   * @param expectedId The optional row identifier to compare with the embedded identifier.
+   * @returns An immutable inbox view with detached payload and occurrence Timestamp.
+   */
   read(record: WireInboxMessage, expectedId?: WireInboxMessageId): InboxMessage {
     return Values.read(record, expectedId);
   },
+
+  /**
+   * Validates and serializes an inbox message into the generated durable record.
+   *
+   * @param message The domain inbox message to persist.
+   * @returns A generated inbox record suitable for durable storage.
+   */
   write(message: InboxMessage): WireInboxMessage {
     return Values.write(message);
   },
@@ -119,6 +147,12 @@ export const inboxRecordSpec: RecordSpec<WireInboxMessageId, WireInboxMessage> =
 });
 
 const Values = Object.freeze({
+  /**
+   * Validates and serializes an inbox message into the generated durable record.
+   *
+   * @param input The domain inbox message to validate and encode.
+   * @returns A generated inbox record suitable for durable storage.
+   */
   write(input: InboxMessage): WireInboxMessage {
     const message = Values.input(input);
     Values.target(message.inboxId.targetId, InboxMessageError);
@@ -150,16 +184,46 @@ const Values = Object.freeze({
         : { keepUntil: Values.timestamp(message.keepUntil.getTime()) }),
     });
   },
+
+  /**
+   * Decodes a durable inbox record and verifies its embedded identifier when requested.
+   *
+   * @param record The generated durable inbox record.
+   * @param expectedId The optional row identifier to compare with the embedded identifier.
+   * @returns An immutable inbox view with detached payload and occurrence Timestamp.
+   */
   read(record: WireInboxMessage, expectedId?: WireInboxMessageId): InboxMessage {
+    const { id, shard, inbox, entity, signal, payload, whenReceived } = Values.readParts(
+      record,
+      expectedId,
+    );
+    return Object.freeze({
+      id: Object.freeze({ value: Values.text(id.uuid, "Inbox message ID"), shard }),
+      inboxId: Object.freeze({ targetId: clone(AnySchema, entity), targetTypeUrl: inbox.typeUrl }),
+      signalId: signal,
+      ...(payload === undefined ? {} : { signal: payload }),
+      label: Values.readLabel(record.label),
+      status: Values.readStatus(record.status),
+      shard,
+      whenReceived: clone(TimestampSchema, whenReceived),
+      version: BigInt(record.version),
+      ...(record.keepUntil === undefined
+        ? {}
+        : { keepUntil: Values.date(record.keepUntil, "Inbox keep-until time") }),
+    });
+  },
+
+  /**
+   * Checks required stored fields, identifier, shard, and payload before building the domain view.
+   *
+   * @param record The generated durable inbox record.
+   * @param expectedId The optional row identifier to compare with the embedded identifier.
+   * @returns Validated identifiers, target, signal, and receipt timestamp.
+   */
+  readParts(record: WireInboxMessage, expectedId?: WireInboxMessageId) {
     const id = Values.id(record);
     const shard = Values.shard(record);
-    if (
-      expectedId !== undefined &&
-      (id.uuid !== expectedId.uuid ||
-        id.index?.index !== expectedId.index?.index ||
-        id.index?.ofTotal !== expectedId.index?.ofTotal)
-    )
-      throw new DeliveryStorageCorruptionError("Inbox message does not match its storage ID.");
+    Values.validateExpectedId(id, expectedId);
     const inbox = record.inboxId;
     const entity = inbox?.entityId?.id;
     const signal = record.signalId?.value;
@@ -185,21 +249,31 @@ const Values = Object.freeze({
         ? undefined
         : Values.signal(record.payload.case, record.payload.value);
     Values.payloadForLabel(Values.readLabel(record.label), payload, DeliveryStorageCorruptionError);
-    return Object.freeze({
-      id: Object.freeze({ value: Values.text(id.uuid, "Inbox message ID"), shard }),
-      inboxId: Object.freeze({ targetId: clone(AnySchema, entity), targetTypeUrl: inbox.typeUrl }),
-      signalId: signal,
-      ...(payload === undefined ? {} : { signal: payload }),
-      label: Values.readLabel(record.label),
-      status: Values.readStatus(record.status),
-      shard,
-      whenReceived: clone(TimestampSchema, record.whenReceived),
-      version: BigInt(record.version),
-      ...(record.keepUntil === undefined
-        ? {}
-        : { keepUntil: Values.date(record.keepUntil, "Inbox keep-until time") }),
-    });
+    return { id, shard, inbox, entity, signal, payload, whenReceived: record.whenReceived };
   },
+
+  /**
+   * Rejects a stored row whose embedded identifier differs from the requested row.
+   *
+   * @param id The embedded inbox message identifier.
+   * @param expectedId The optional row identifier to compare with the embedded identifier.
+   */
+  validateExpectedId(id: WireInboxMessageId, expectedId?: WireInboxMessageId): void {
+    if (
+      expectedId !== undefined &&
+      (id.uuid !== expectedId.uuid ||
+        id.index?.index !== expectedId.index?.index ||
+        id.index?.ofTotal !== expectedId.index?.ofTotal)
+    )
+      throw new DeliveryStorageCorruptionError("Inbox message does not match its storage ID.");
+  },
+
+  /**
+   * Validates domain inbox fields, receipt time, label, status, and optional expiry.
+   *
+   * @param value The candidate domain inbox message.
+   * @returns The validated domain inbox message.
+   */
   input(value: InboxMessage): InboxMessage {
     const id = value.id;
     const inbox = value.inboxId;
@@ -235,6 +309,13 @@ const Values = Object.freeze({
       throw new InboxMessageError("Inbox keep-until time is invalid.");
     return value;
   },
+
+  /**
+   * Encodes a serialized Command or Event into the corresponding wire payload.
+   *
+   * @param signal The command or event payload to encode.
+   * @returns The wire command or event union.
+   */
   payload(signal: Any) {
     if (signal.typeUrl === "type.spine.io/spine.core.Command")
       return { case: "command" as const, value: fromBinary(CommandSchema, signal.value) };
@@ -242,6 +323,13 @@ const Values = Object.freeze({
       return { case: "event" as const, value: fromBinary(EventSchema, signal.value) };
     throw new InboxMessageError("Inbox signal must contain a command or event payload.");
   },
+
+  /**
+   * Checks known target identifier encodings and wraps decoding errors for the caller.
+   *
+   * @param value The serialized entity identifier to validate.
+   * @param ErrorType The error constructor appropriate to input validation or stored-data corruption.
+   */
   target(
     value: Any,
     ErrorType: typeof InboxMessageError | typeof DeliveryStorageCorruptionError,
@@ -263,6 +351,14 @@ const Values = Object.freeze({
       throw new ErrorType("Inbox target ID is invalid.", { cause: error });
     }
   },
+
+  /**
+   * Checks that a command label carries a Command and other labels carry an Event.
+   *
+   * @param label The operation name used in timeout errors.
+   * @param signal The command or event payload to encode.
+   * @param ErrorType The error constructor appropriate to input validation or stored-data corruption.
+   */
   payloadForLabel(
     label: DeliveryLabel,
     signal: Any | undefined,
@@ -275,6 +371,14 @@ const Values = Object.freeze({
     if (signal?.typeUrl !== expected)
       throw new ErrorType("Inbox delivery label does not match its signal payload.");
   },
+
+  /**
+   * Packs a generated Command or Event as a domain signal Any.
+   *
+   * @param kind The signal domain kind.
+   * @param payload The generated command or event payload.
+   * @returns The serialized command or event Any value.
+   */
   signal(kind: "command" | "event", payload: unknown): Any {
     return kind === "command"
       ? create(AnySchema, {
@@ -286,11 +390,25 @@ const Values = Object.freeze({
           value: toBinary(EventSchema, payload as never),
         });
   },
+
+  /**
+   * Returns the required embedded identifier or reports stored-data corruption.
+   *
+   * @param record The generated durable inbox record.
+   * @returns The embedded generated identifier.
+   */
   id(record: WireInboxMessage): WireInboxMessageId {
     if (record.id === undefined)
       throw new DeliveryStorageCorruptionError("Inbox message ID is missing.");
     return record.id;
   },
+
+  /**
+   * Decodes the stored identifier shard or reports stored-data corruption.
+   *
+   * @param record The generated durable inbox record.
+   * @returns The validated shard index.
+   */
   shard(record: WireInboxMessage): ShardIndex {
     const index = record.id?.index;
     if (index === undefined)
@@ -301,6 +419,13 @@ const Values = Object.freeze({
       throw new DeliveryStorageCorruptionError("Inbox message shard is invalid.", { cause: error });
     }
   },
+
+  /**
+   * Converts a Unix millisecond instant to Protobuf seconds and nanos.
+   *
+   * @param ms The Unix millisecond instant to encode.
+   * @returns A Protobuf Timestamp at millisecond precision.
+   */
   timestamp(ms: number) {
     const seconds = Math.floor(ms / 1_000);
     return create(TimestampSchema, {
@@ -308,11 +433,25 @@ const Values = Object.freeze({
       nanos: (ms - seconds * 1_000) * 1_000_000,
     });
   },
+
+  /**
+   * Copies an occurrence Timestamp without reducing nanos, or converts a millisecond Date.
+   *
+   * @param value The occurrence Date or Protobuf Timestamp.
+   * @returns A cloned occurrence Timestamp; Date input has millisecond precision.
+   */
   receiveTime(value: Date | Timestamp): Timestamp {
     return value instanceof Date
       ? Values.timestamp(value.getTime())
       : clone(TimestampSchema, value);
   },
+
+  /**
+   * Checks finite Date input or valid Protobuf Timestamp fields without reducing nanosecond precision.
+   *
+   * @param value The candidate occurrence Date or Protobuf Timestamp.
+   * @returns Whether the Date or Protobuf Timestamp is in its valid range.
+   */
   validReceiveTime(value: Date | Timestamp): boolean {
     if (value instanceof Date) return Number.isFinite(value.getTime());
     return (
@@ -324,6 +463,14 @@ const Values = Object.freeze({
       value.nanos < 1_000_000_000
     );
   },
+
+  /**
+   * Converts stored Protobuf seconds and nanos to a millisecond Date for the expiry boundary.
+   *
+   * @param value The stored Protobuf timestamp fields.
+   * @param label The field name used in corruption errors.
+   * @returns A Date rounded down to milliseconds from the Protobuf timestamp.
+   */
   date(value: { readonly seconds: bigint; readonly nanos: number }, label: string): Date {
     const ms = Number(value.seconds) * 1000 + Math.floor(value.nanos / 1_000_000);
     if (
@@ -335,6 +482,13 @@ const Values = Object.freeze({
       throw new DeliveryStorageCorruptionError(`${label} is invalid.`);
     return new Date(ms);
   },
+
+  /**
+   * Maps a domain delivery label to its generated enum value.
+   *
+   * @param value The domain delivery label.
+   * @returns The matching generated inbox label.
+   */
   label(value: DeliveryLabel): InboxLabel {
     return {
       HANDLE_COMMAND: InboxLabel.HANDLE_COMMAND,
@@ -343,6 +497,13 @@ const Values = Object.freeze({
       CATCH_UP: InboxLabel.CATCH_UP,
     }[value];
   },
+
+  /**
+   * Maps a domain delivery status to its generated enum value.
+   *
+   * @param value The domain delivery status.
+   * @returns The matching generated delivery status.
+   */
   status(value: DeliveryStatus): InboxMessageStatus {
     return {
       TO_DELIVER: InboxMessageStatus.TO_DELIVER,
@@ -351,6 +512,13 @@ const Values = Object.freeze({
       TO_CATCH_UP: InboxMessageStatus.TO_CATCH_UP,
     }[value];
   },
+
+  /**
+   * Maps a stored enum to a known domain label or reports corruption.
+   *
+   * @param value The stored wire label enum.
+   * @returns The domain delivery label.
+   */
   readLabel(value: InboxLabel): DeliveryLabel {
     const result: Partial<Record<InboxLabel, DeliveryLabel>> = {
       [InboxLabel.HANDLE_COMMAND]: "HANDLE_COMMAND",
@@ -362,6 +530,13 @@ const Values = Object.freeze({
       throw new DeliveryStorageCorruptionError("Inbox label is invalid.");
     return result[value];
   },
+
+  /**
+   * Maps a stored enum to a known domain status or reports corruption.
+   *
+   * @param value The stored wire status enum.
+   * @returns The domain delivery status.
+   */
   readStatus(value: InboxMessageStatus): DeliveryStatus {
     const result: Partial<Record<InboxMessageStatus, DeliveryStatus>> = {
       [InboxMessageStatus.TO_DELIVER]: "TO_DELIVER",
@@ -373,6 +548,12 @@ const Values = Object.freeze({
       throw new DeliveryStorageCorruptionError("Inbox status is invalid.");
     return result[value];
   },
+
+  /**
+   * Rejects labels outside the supported domain delivery states.
+   *
+   * @param value The candidate domain delivery label.
+   */
   inputLabel(value: unknown): void {
     if (!(
       value === "HANDLE_COMMAND" ||
@@ -382,6 +563,12 @@ const Values = Object.freeze({
     ))
       throw new InboxMessageError("Inbox delivery label is invalid.");
   },
+
+  /**
+   * Rejects statuses outside the supported domain delivery states.
+   *
+   * @param value The candidate domain delivery status.
+   */
   inputStatus(value: unknown): void {
     if (!(
       value === "TO_DELIVER" ||
@@ -391,6 +578,14 @@ const Values = Object.freeze({
     ))
       throw new InboxMessageError("Inbox delivery status is invalid.");
   },
+
+  /**
+   * Validates nonblank stored text and reports corruption otherwise.
+   *
+   * @param value The stored text field to check.
+   * @param label The field name used in corruption errors.
+   * @returns The nonblank stored text.
+   */
   text(value: unknown, label: string): string {
     if (typeof value !== "string" || value.trim().length === 0)
       throw new DeliveryStorageCorruptionError(`${label} is invalid.`);

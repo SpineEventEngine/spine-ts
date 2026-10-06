@@ -258,7 +258,9 @@ export class InMemorySubscriptionRegistry implements StandSubscriptionRegistry {
    * Indicates that in-memory definitions do not survive restart.
    */
   readonly persistent = false;
+
   readonly #entries = new Map<string, StandSubscriptionEntry>();
+
   #closed = false;
 
   /**
@@ -409,7 +411,9 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
    * Indicates that the backing storage owns durable definitions.
    */
   readonly persistent = true;
+
   readonly #storage: RecordStorage<SubscriptionId, SubscriptionRecord>;
+
   #closed = false;
 
   /**

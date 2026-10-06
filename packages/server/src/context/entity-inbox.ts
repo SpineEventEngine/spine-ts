@@ -38,18 +38,31 @@ import {
  */
 export class LocalEntityInbox implements EntityInbox {
   readonly #contextName: string;
+
   readonly #targets = new Map<string, EntityInboxTarget>();
+
   readonly #endpoints = new Map<string, readonly DeliveryEndpoint[]>();
+
   readonly #readiness: DeliveryReadiness;
+
   readonly #keepTenant: (tenantId: TenantId) => Promise<void>;
+
   readonly #strategy: DeliveryStrategy;
+
   readonly #inFlightHandoffs = new Map<string, Promise<InboxMessage>>();
+
   readonly #inFlightBatchHandoffs = new Map<string, Promise<readonly InboxMessage[]>>();
+
   readonly #inFlightMessageIds = new Set<string>();
+
   readonly #acknowledgedMessageIds = new Set<string>();
+
   readonly #followUps = new Map<string, Promise<void>>();
+
   readonly #followUpScope = new AsyncLocalStorage<symbol>();
+
   readonly #followUpToken = Symbol("entity-inbox-follow-up");
+
   #nextVersion = 0n;
 
   /**

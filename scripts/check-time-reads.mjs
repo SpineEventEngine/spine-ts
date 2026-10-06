@@ -159,7 +159,7 @@ if (process.argv[1] && resolve(process.argv[1]) === scriptPath) {
     if (
       !/\.(?:[cm]?[jt]s|tsx|jsx)$/.test(path) ||
       /(?:^|\/)(?:generated|dist|node_modules)(?:\/|$)/.test(path) ||
-      path === "packages/core/src/time.ts"
+      path === "packages/core/src/time/index.ts"
     )
       continue;
     for (const finding of findTimeBypasses(readFileSync(resolve(root, path), "utf8"), path)) {

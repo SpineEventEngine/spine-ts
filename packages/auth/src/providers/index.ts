@@ -243,83 +243,137 @@ export async function discoverOidcProvider(
  * @returns The configured OIDC provider.
  */
 export function createOidcProvider(options: OidcProviderOptions): ConfiguredOidcProvider {
-  const issuer = ProviderValues.https(options.issuer);
-  const authorizationEndpoint = ProviderValues.https(options.authorizationEndpoint);
-  const tokenEndpoint = ProviderValues.https(options.tokenEndpoint);
-  const jwksEndpoint = ProviderValues.https(options.jwksEndpoint);
-  const clientId = ProviderValues.bounded(options.clientId, "clientId");
-  const clientAuthentication = options.clientAuthentication ?? "none";
-  if (
-    !(["client_secret_basic", "client_secret_post", "none"] as const).includes(clientAuthentication)
-  )
-    throw new TypeError("clientAuthentication");
-  const clientSecret =
-    options.clientSecret === undefined
-      ? undefined
-      : ProviderValues.bounded(options.clientSecret, "clientSecret");
-  if (clientAuthentication !== "none" && clientSecret === undefined)
-    throw new TypeError("clientSecret");
-  const limit = ProviderValues.positive(
-    options.maxResponseBytes ?? DEFAULT_LIMIT,
-    "maxResponseBytes",
-  );
-  const timeout = ProviderValues.positive(
-    options.timeoutMilliseconds ?? DEFAULT_TIMEOUT,
-    "timeoutMilliseconds",
-  );
-  const http = options.fetch ?? fetch;
-  const clock = options.clock ?? (() => Time.currentTimeMillis());
-  let cachedKeys: { readonly keys: Jwk[]; readonly expiresAt: number } | undefined;
-  let pendingKeys: PendingJwks | undefined;
-  const loadKeys = async (refresh: boolean, signal: AbortSignal): Promise<Jwk[] | undefined> => {
-    const now = ProviderValues.safeNow(clock);
-    if (!refresh && cachedKeys && cachedKeys.expiresAt > now) return cachedKeys.keys;
-    let pending = pendingKeys;
-    if (!pending) {
-      const controller = new AbortController();
-      const request = ProviderValues.boundedOperation(
-        timeout,
-        controller.signal,
-        async (requestSignal) => {
-          const jwks = await ProviderValues.jsonDocument(
-            jwksEndpoint,
-            http,
-            { maxResponseBytes: limit },
-            requestSignal,
-          );
-          const keys =
-            ProviderValues.plain(jwks.value) &&
-            Array.isArray(jwks.value.keys) &&
-            jwks.value.keys.length <= MAX_JWKS
-              ? (jwks.value.keys.filter(ProviderValues.plain) as Jwk[])
-              : undefined;
-          if (!keys) return undefined;
-          cachedKeys = Object.freeze({
-            keys,
-            expiresAt: now + jwks.cacheMilliseconds,
-          });
-          return keys;
-        },
+  const settings = ProviderValues.oidcSettings(options);
+  const provider = new OidcVerifier(settings).provider();
+  return Object.freeze({
+    authorizationEndpoint: settings.authorizationEndpoint,
+    recommendedScopes: Object.freeze(["openid"]),
+    provider,
+  });
+}
+
+interface OidcProviderSettings {
+  readonly issuer: string;
+  readonly authorizationEndpoint: string;
+  readonly tokenEndpoint: string;
+  readonly jwksEndpoint: string;
+  readonly clientId: string;
+  readonly clientAuthentication: OidcClientAuthentication;
+  readonly clientSecret: string | undefined;
+  readonly limit: number;
+  readonly timeout: number;
+  readonly http: ProviderFetch;
+  readonly clock: () => number;
+}
+
+/**
+ * Verifies authorization codes while sharing one bounded JWKS cache per provider.
+ */
+class OidcVerifier {
+  #cachedKeys: { readonly keys: Jwk[]; readonly expiresAt: number } | undefined;
+
+  #pendingKeys: PendingJwks | undefined;
+
+  /**
+   * Captures the validated provider metadata and injected runtime functions.
+   * @param settings Validated endpoints, client credentials, limits, and clock.
+   */
+  constructor(private readonly settings: OidcProviderSettings) {}
+
+  /**
+   * Exposes the verified-identity contract without exposing cache state.
+   * @returns A frozen OIDC identity adapter.
+   */
+  provider(): OidcVerifiedIdentityProvider {
+    return Object.freeze({
+      issuer: this.settings.issuer,
+      exchangeAuthorizationCode: (input: OidcAuthorizationCodeExchange) => this.exchange(input),
+    });
+  }
+
+  /**
+   * Processes one valid authorization code under the provider deadline.
+   * @param input The code, verifier, nonce, and cancellation signal.
+   * @returns The verified identity, or undefined on rejection.
+   */
+  async exchange(input: OidcAuthorizationCodeExchange): Promise<ExternalIdentity | undefined> {
+    try {
+      if (input.clientId !== this.settings.clientId || !ProviderValues.validExchange(input))
+        return undefined;
+      return await ProviderValues.boundedOperation(this.settings.timeout, input.signal, (signal) =>
+        this.exchangeBounded(input, signal),
       );
-      pending = {
-        promise: request,
-        controller,
-        waiters: 0,
-        settled: false,
-      };
-      pendingKeys = pending;
-      const owned = pending;
-      void request.then(
-        () => {
-          owned.settled = true;
-          if (pendingKeys === owned) pendingKeys = undefined;
-        },
-        () => {
-          owned.settled = true;
-          if (pendingKeys === owned) pendingKeys = undefined;
-        },
-      );
+    } catch {
+      return undefined;
     }
+  }
+
+  /**
+   * Verifies the ID token returned by a bounded token request.
+   * @param input The accepted authorization-code exchange.
+   * @param signal The operation cancellation signal.
+   * @returns The verified identity, or undefined for an invalid token.
+   */
+  async exchangeBounded(input: OidcAuthorizationCodeExchange, signal: AbortSignal) {
+    const token = await ProviderValues.json(
+      this.settings.tokenEndpoint,
+      this.settings.http,
+      { maxResponseBytes: this.settings.limit },
+      signal,
+      this.tokenRequest(input, signal),
+    );
+    const idToken = ProviderValues.plain(token) ? ProviderValues.string(token.id_token) : undefined;
+    if (idToken === undefined) return undefined;
+    return ProviderValues.verifyToken(
+      idToken,
+      this.settings.issuer,
+      this.settings.clientId,
+      input.expectedNonce,
+      this.settings.clock,
+      (refresh) => this.loadKeys(refresh, signal),
+    );
+  }
+
+  /**
+   * Builds the authorization-code form and selected client-authentication header.
+   * @param input The accepted exchange request.
+   * @param signal The operation cancellation signal.
+   * @returns The token endpoint request parameters.
+   */
+  tokenRequest(input: OidcAuthorizationCodeExchange, signal: AbortSignal): RequestInit {
+    const { clientId, clientAuthentication, clientSecret } = this.settings;
+    const body = new URLSearchParams({
+      grant_type: "authorization_code",
+      code: input.code,
+      redirect_uri: input.callbackUri,
+      client_id: clientId,
+      code_verifier: input.providerCodeVerifier,
+    });
+    const headers = new Headers({
+      accept: "application/json",
+      "content-type": "application/x-www-form-urlencoded",
+    });
+    if (clientAuthentication === "client_secret_post")
+      body.set("client_secret", clientSecret ?? "");
+    if (clientAuthentication === "client_secret_basic")
+      headers.set(
+        "authorization",
+        `Basic ${Buffer.from(`${clientId}:${clientSecret ?? ""}`).toString("base64")}`,
+      );
+    return { method: "POST", redirect: "error", signal, headers, body };
+  }
+
+  /**
+   * Loads signing keys from a valid cache or shared in-flight JWKS fetch.
+   * @param refresh Whether to bypass the cached key set.
+   * @param signal The caller cancellation signal.
+   * @returns Verified candidate signing keys, or undefined for invalid JWKS.
+   */
+  async loadKeys(refresh: boolean, signal: AbortSignal): Promise<Jwk[] | undefined> {
+    const now = ProviderValues.safeNow(this.settings.clock);
+    if (!refresh && this.#cachedKeys && this.#cachedKeys.expiresAt > now)
+      return this.#cachedKeys.keys;
+    const pending = this.#pendingKeys ?? this.startKeyRequest(now);
     pending.waiters++;
     try {
       return await ProviderValues.waitForSignal(pending.promise, signal);
@@ -327,68 +381,58 @@ export function createOidcProvider(options: OidcProviderOptions): ConfiguredOidc
       pending.waiters--;
       if (pending.waiters === 0 && !pending.settled) pending.controller.abort();
     }
-  };
-  const provider: OidcVerifiedIdentityProvider = Object.freeze({
-    issuer,
-    async exchangeAuthorizationCode(input: OidcAuthorizationCodeExchange) {
-      try {
-        if (input.clientId !== clientId || !ProviderValues.validExchange(input)) return undefined;
-        const secret = clientSecret ?? "";
-        return await ProviderValues.boundedOperation(timeout, input.signal, async (signal) => {
-          const body = new URLSearchParams({
-            grant_type: "authorization_code",
-            code: input.code,
-            redirect_uri: input.callbackUri,
-            client_id: clientId,
-            code_verifier: input.providerCodeVerifier,
-          });
-          const headers = new Headers({
-            accept: "application/json",
-            "content-type": "application/x-www-form-urlencoded",
-          });
-          if (clientAuthentication === "client_secret_post") body.set("client_secret", secret);
-          if (clientAuthentication === "client_secret_basic")
-            headers.set(
-              "authorization",
-              `Basic ${Buffer.from(`${clientId}:${secret}`).toString("base64")}`,
-            );
-          const token = await ProviderValues.json(
-            tokenEndpoint,
-            http,
-            { maxResponseBytes: limit },
-            signal,
-            {
-              method: "POST",
-              redirect: "error",
-              signal,
-              headers,
-              body,
-            },
-          );
-          const idToken = ProviderValues.plain(token)
-            ? ProviderValues.string(token.id_token)
-            : undefined;
-          if (idToken === undefined) return undefined;
-          const verified = await ProviderValues.verifyToken(
-            idToken,
-            issuer,
-            clientId,
-            input.expectedNonce,
-            clock,
-            (refresh) => loadKeys(refresh, signal),
-          );
-          return verified;
-        });
-      } catch {
-        return undefined;
-      }
-    },
-  });
-  return Object.freeze({
-    authorizationEndpoint,
-    recommendedScopes: Object.freeze(["openid"]),
-    provider,
-  });
+  }
+
+  /**
+   * Starts one bounded JWKS request and clears it when settled.
+   * @param now The clock reading used for cache expiry.
+   * @returns The shared in-flight request state.
+   */
+  startKeyRequest(now: number): PendingJwks {
+    const controller = new AbortController();
+    const request = ProviderValues.boundedOperation(
+      this.settings.timeout,
+      controller.signal,
+      (signal) => this.fetchKeys(now, signal),
+    );
+    const pending: PendingJwks = { promise: request, controller, waiters: 0, settled: false };
+    this.#pendingKeys = pending;
+    void request.then(
+      () => {
+        pending.settled = true;
+        if (this.#pendingKeys === pending) this.#pendingKeys = undefined;
+      },
+      () => {
+        pending.settled = true;
+        if (this.#pendingKeys === pending) this.#pendingKeys = undefined;
+      },
+    );
+    return pending;
+  }
+
+  /**
+   * Fetches a bounded JWKS document and caches accepted asymmetric candidates.
+   * @param now The clock reading used for cache expiry.
+   * @param signal The request cancellation signal.
+   * @returns Filtered signing keys, or undefined for invalid JWKS.
+   */
+  async fetchKeys(now: number, signal: AbortSignal): Promise<Jwk[] | undefined> {
+    const jwks = await ProviderValues.jsonDocument(
+      this.settings.jwksEndpoint,
+      this.settings.http,
+      { maxResponseBytes: this.settings.limit },
+      signal,
+    );
+    const keys =
+      ProviderValues.plain(jwks.value) &&
+      Array.isArray(jwks.value.keys) &&
+      jwks.value.keys.length <= MAX_JWKS
+        ? (jwks.value.keys.filter(ProviderValues.plain) as Jwk[])
+        : undefined;
+    if (!keys) return undefined;
+    this.#cachedKeys = Object.freeze({ keys, expiresAt: now + jwks.cacheMilliseconds });
+    return keys;
+  }
 }
 
 /**
@@ -577,6 +621,75 @@ export function createGitHubProvider(options: GitHubProviderOptions): Configured
  * Parses provider responses, bounds I/O, and verifies OIDC details.
  */
 const ProviderValues = Object.freeze({
+  /**
+   * Validates trusted OIDC metadata and client authentication settings.
+   * @param options The configured provider endpoints and bounds.
+   * @returns Copied provider settings for a verifier.
+   */
+  oidcSettings(options: OidcProviderOptions): OidcProviderSettings {
+    const issuer = ProviderValues.https(options.issuer);
+    const authorizationEndpoint = ProviderValues.https(options.authorizationEndpoint);
+    const tokenEndpoint = ProviderValues.https(options.tokenEndpoint);
+    const jwksEndpoint = ProviderValues.https(options.jwksEndpoint);
+    const clientId = ProviderValues.bounded(options.clientId, "clientId");
+    const { clientAuthentication, clientSecret } = ProviderValues.oidcCredentials(options);
+    const limit = ProviderValues.positive(
+      options.maxResponseBytes ?? DEFAULT_LIMIT,
+      "maxResponseBytes",
+    );
+    const timeout = ProviderValues.positive(
+      options.timeoutMilliseconds ?? DEFAULT_TIMEOUT,
+      "timeoutMilliseconds",
+    );
+    const http = options.fetch ?? fetch;
+    const clock = options.clock ?? (() => Time.currentTimeMillis());
+    return {
+      issuer,
+      authorizationEndpoint,
+      tokenEndpoint,
+      jwksEndpoint,
+      clientId,
+      clientAuthentication,
+      clientSecret,
+      limit,
+      timeout,
+      http,
+      clock,
+    };
+  },
+
+  /**
+   * Validates the selected OIDC client-secret authentication mode.
+   * @param options The configured authentication mode and optional secret.
+   * @returns A valid mode and copied secret.
+   */
+  oidcCredentials(options: OidcProviderOptions) {
+    const clientAuthentication = options.clientAuthentication ?? "none";
+    if (
+      !(["client_secret_basic", "client_secret_post", "none"] as const).includes(
+        clientAuthentication,
+      )
+    )
+      throw new TypeError("clientAuthentication");
+    const clientSecret =
+      options.clientSecret === undefined
+        ? undefined
+        : ProviderValues.bounded(options.clientSecret, "clientSecret");
+    if (clientAuthentication !== "none" && clientSecret === undefined)
+      throw new TypeError("clientSecret");
+    return { clientAuthentication, clientSecret };
+  },
+
+  /**
+   * Verifies an ID token with bounded JWKS candidates and expected claims.
+   * @param token The provider ID token to verify.
+   * @param issuer The trusted issuer.
+   * @param clientId The configured OAuth client identifier.
+   * @param nonce The expected nonce from the flow.
+   * @param clock The provider millisecond clock.
+   * @param keys The shared JWKS loader.
+   * @returns The verified external identity, or undefined for an invalid token.
+   */
   async verifyToken(
     token: string,
     issuer: string,
@@ -637,6 +750,16 @@ const ProviderValues = Object.freeze({
       });
     return Object.freeze({ issuer, subject: claims.sub, claims: Object.freeze(kept) });
   },
+
+  /**
+   * Reads a bounded JSON response body.
+   * @param url The provider HTTPS endpoint.
+   * @param http The injected HTTP client.
+   * @param limits The accepted response-size limit.
+   * @param signal The request cancellation signal.
+   * @param init Additional HTTP request fields.
+   * @returns The parsed JSON value.
+   */
   async json(
     url: string,
     http: ProviderFetch,
@@ -647,6 +770,15 @@ const ProviderValues = Object.freeze({
     return (await ProviderValues.jsonDocument(url, http, limits, signal, init)).value;
   },
 
+  /**
+   * Reads a JSON document with response cache metadata and abort support.
+   * @param url The provider HTTPS endpoint.
+   * @param http The injected HTTP client.
+   * @param limits The accepted response-size limit.
+   * @param signal The request cancellation signal.
+   * @param init Additional HTTP request fields.
+   * @returns The parsed JSON value and remaining cache lifetime.
+   */
   async jsonDocument(
     url: string,
     http: ProviderFetch,
@@ -708,11 +840,23 @@ const ProviderValues = Object.freeze({
       cacheMilliseconds: ProviderValues.cacheMilliseconds(response.headers),
     });
   },
+
+  /**
+   * Checks authorization-code exchange fields before contacting a provider.
+   * @param input The authorization-code exchange input.
+   * @returns Whether the exchange fields are valid.
+   */
   validExchange(input: OidcAuthorizationCodeExchange) {
     return [input.code, input.callbackUri, input.providerCodeVerifier, input.expectedNonce].every(
       (value) => typeof value === "string" && value.length > 0 && value.length <= 4096,
     );
   },
+
+  /**
+   * Parses a URL-safe base64 JSON value.
+   * @param value The URL-safe base64 JSON string to decode.
+   * @returns The parsed value, or undefined for invalid JSON.
+   */
   parse64(value: string): unknown {
     try {
       return JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
@@ -720,6 +864,12 @@ const ProviderValues = Object.freeze({
       return undefined;
     }
   },
+
+  /**
+   * Checks whether a value is a plain record.
+   * @param value The unknown value to test for plain-record shape.
+   * @returns Whether the value is a plain record.
+   */
   plain(value: unknown): value is Record<string, unknown> {
     return (
       typeof value === "object" &&
@@ -727,21 +877,46 @@ const ProviderValues = Object.freeze({
       Object.getPrototypeOf(value) === Object.prototype
     );
   },
+
+  /**
+   * Returns a bounded non-empty string when valid.
+   * @param value The string to check for the configured length bound.
+   * @returns The bounded string, or undefined when invalid.
+   */
   string(value: unknown): string | undefined {
     return typeof value === "string" && value.length > 0 && value.length <= 4096
       ? value
       : undefined;
   },
+
+  /**
+   * Validates a bounded named string.
+   * @param value The named string option to validate.
+   * @param name The named option in validation errors.
+   * @returns The validated string.
+   */
   bounded(value: unknown, name: string): string {
     const result = ProviderValues.string(value);
     if (!result) throw new TypeError(name);
     return result;
   },
+
+  /**
+   * Checks a bounded email address shape.
+   * @param value The email address to check.
+   * @returns Whether the address meets the accepted shape.
+   */
   validEmail(value: unknown): value is string {
     return (
       typeof value === "string" && value.length <= 320 && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value)
     );
   },
+
+  /**
+   * Checks a verified primary email record.
+   * @param value The email record to check for primary verification.
+   * @returns Whether the record contains a verified primary address.
+   */
   validPrimaryEmail(value: unknown): value is { readonly email: string } {
     return (
       ProviderValues.plain(value) &&
@@ -750,15 +925,34 @@ const ProviderValues = Object.freeze({
       ProviderValues.validEmail(value.email)
     );
   },
+
+  /**
+   * Checks a bounded whitespace-free OAuth scope.
+   * @param value The OAuth scope string to validate.
+   * @returns Whether the scope is valid.
+   */
   validScope(value: unknown): value is string {
     return (
       typeof value === "string" && value.length > 0 && value.length <= 128 && !/\s/u.test(value)
     );
   },
+
+  /**
+   * Validates a positive safe integer option.
+   * @param value The integer option to validate.
+   * @param name The named option in validation errors.
+   * @returns The validated positive integer.
+   */
   positive(value: unknown, name: string): number {
     if (!Number.isSafeInteger(value) || (value as number) <= 0) throw new TypeError(name);
     return value as number;
   },
+
+  /**
+   * Validates an HTTPS URL without credentials or fragment.
+   * @param value The HTTPS URL to validate.
+   * @returns The validated HTTPS URL.
+   */
   https(value: string): string {
     const text = ProviderValues.bounded(value, "URL");
     const url = new URL(text);
@@ -767,6 +961,11 @@ const ProviderValues = Object.freeze({
     return text;
   },
 
+  /**
+   * Validates an HTTPS base URL without a query.
+   * @param value The HTTPS base URL to validate.
+   * @returns The HTTPS base URL without trailing slashes.
+   */
   httpsBase(value: string): string {
     ProviderValues.https(value);
     const url = new URL(value);
@@ -774,6 +973,14 @@ const ProviderValues = Object.freeze({
     return value.replace(/\/+$/u, "");
   },
 
+  /**
+   * Executes a provider operation under a combined abort signal and deadline.
+   * @typeParam T The result type returned by the provider operation.
+   * @param timeoutMilliseconds The maximum operation duration.
+   * @param externalSignal The caller cancellation signal.
+   * @param operation The asynchronous operation to await.
+   * @returns The operation result before timeout or abort.
+   */
   async boundedOperation<T>(
     timeoutMilliseconds: number,
     externalSignal: AbortSignal | undefined,
@@ -802,6 +1009,13 @@ const ProviderValues = Object.freeze({
     }
   },
 
+  /**
+   * Waits for one shared provider operation or caller cancellation.
+   * @typeParam T The result type returned by the provider operation.
+   * @param operation The asynchronous operation to await.
+   * @param signal The request cancellation signal.
+   * @returns The shared operation result before caller cancellation.
+   */
   async waitForSignal<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
     if (signal.aborted) throw new Error("Provider operation aborted.");
     let rejectAbort: ((reason: Error) => void) | undefined;
@@ -817,6 +1031,12 @@ const ProviderValues = Object.freeze({
     }
   },
 
+  /**
+   * Reads one response-stream chunk with cancellation.
+   * @param reader The response body stream reader.
+   * @param signal The request cancellation signal.
+   * @returns The next stream chunk or completion marker.
+   */
   async abortableRead(
     reader: ReadableStreamDefaultReader<Uint8Array>,
     signal: AbortSignal | undefined,
@@ -838,12 +1058,22 @@ const ProviderValues = Object.freeze({
     });
   },
 
+  /**
+   * Reads a non-negative safe millisecond clock value.
+   * @param clock The provider millisecond clock.
+   * @returns The validated current epoch milliseconds.
+   */
   safeNow(clock: () => number): number {
     const value = clock();
     if (!Number.isSafeInteger(value) || value < 0) throw new TypeError("clock");
     return value;
   },
 
+  /**
+   * Calculates remaining JWKS cache time from HTTP headers.
+   * @param headers The HTTP response headers.
+   * @returns Remaining cache time in milliseconds.
+   */
   cacheMilliseconds(headers: Headers): number {
     const directives = (headers.get("cache-control") ?? "")
       .split(",")

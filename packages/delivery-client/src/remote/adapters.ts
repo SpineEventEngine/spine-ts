@@ -567,6 +567,11 @@ const RemoteValues = Object.freeze({
       : create(TimestampSchema, { seconds: timestamp.seconds, nanos: timestamp.nanos - 1 });
   },
 
+  /**
+   * Converts a legacy Date to a Protobuf timestamp while preserving an existing timestamp.
+   * @param value The supplied receive time.
+   * @returns The Protobuf receive time.
+   */
   timestamp(value: Date | Timestamp): Timestamp {
     if (!(value instanceof Date)) return value;
     const millis = value.getTime();
@@ -577,6 +582,12 @@ const RemoteValues = Object.freeze({
     });
   },
 
+  /**
+   * Compares two receive times at nanosecond precision.
+   * @param left The first receive time.
+   * @param right The second receive time.
+   * @returns Whether both instants have equal seconds and nanoseconds.
+   */
   sameTime(left: Date | Timestamp, right: Date | Timestamp): boolean {
     const first = RemoteValues.timestamp(left);
     const second = RemoteValues.timestamp(right);

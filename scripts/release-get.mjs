@@ -1,4 +1,4 @@
-import { Time } from "../packages/core/src/time.ts";
+import { Time } from "../packages/core/src/time/index.ts";
 
 /**
  * Represents a temporary public registry GET failure without implying absence.

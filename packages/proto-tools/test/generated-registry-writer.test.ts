@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { Time } from "../../core/dist/time.js";
+import { Time } from "../../core/dist/time/index.js";
 import {
   constants,
   existsSync,

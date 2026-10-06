@@ -7,7 +7,7 @@ import { dirname, join } from "node:path";
 import process from "node:process";
 import { fileURLToPath, URL } from "node:url";
 
-import { Time } from "../../../../packages/core/src/time.ts";
+import { Time } from "../../../../packages/core/src/time/index.ts";
 import { BuildContextCleanup } from "./build-context-cleanup.mjs";
 
 const repositoryRoot = fileURLToPath(new URL("../../../../", import.meta.url));

@@ -100,21 +100,37 @@ export interface GceRegistrarLifecycle {
  */
 export class GceRegistrar {
   readonly #registry: LeasedNodeRegistry;
+
   #node: ApplicationNode | undefined;
+
   readonly #metadata: GceMetadataProvider | undefined;
+
   readonly #port: number | undefined;
+
   readonly #identity: string;
+
   readonly #scheduler: GceScheduler;
+
   readonly #now: () => number;
+
   readonly #deadlines: GceDeadlineFactory;
+
   readonly #operationTimeoutMs: number;
+
   readonly #operations: GceOperationRunner;
+
   readonly #logger: ILogLayer | undefined;
+
   #cancel: (() => void) | undefined;
+
   #closed = false;
+
   #started = false;
+
   #confirmed = false;
+
   #work = Promise.resolve();
+
   #abort = new AbortController();
 
   /**
@@ -243,6 +259,12 @@ export class GceRegistrar {
     }
   }
 
+  /**
+   * Serializes one registrar operation after previously admitted work.
+   * @typeParam Result The result produced by the queued operation.
+   * @param operation The asynchronous operation to queue.
+   * @returns The queued operation result.
+   */
   #enqueue<Result>(operation: () => Promise<Result>): Promise<Result> {
     const next = this.#work.then(operation, operation);
     // spine-log-boundary: deployment_gce.registrar_work_tail
@@ -253,6 +275,13 @@ export class GceRegistrar {
     return next;
   }
 
+  /**
+   * Runs one bounded registry operation under registrar shutdown control.
+   * @typeParam Result The registry operation's result type.
+   * @param operation The signal-aware registry operation.
+   * @param includeShutdown Whether shutdown cancels the operation.
+   * @returns The registry operation result.
+   */
   #operation<Result>(
     operation: (signal: AbortSignal) => Promise<Result>,
     includeShutdown = true,

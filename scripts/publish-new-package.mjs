@@ -1,4 +1,4 @@
-import { Time } from "../packages/core/src/time.ts";
+import { Time } from "../packages/core/src/time/index.ts";
 
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";

@@ -176,15 +176,31 @@ interface SubscriptionRead {
   readonly firstUpdate: Promise<IteratorResult<SubscriptionUpdate>>;
 }
 
+/**
+ * Runs one project user through command acknowledgement, query visibility, and subscription delivery.
+ */
 class ProjectManagementUserLoad {
   private readonly session: Http2SessionManager;
+
   private readonly commands: ReturnType<typeof createClient<typeof CommandService>>;
+
   private readonly queries: ReturnType<typeof createClient<typeof QueryService>>;
+
   private readonly subscriptions: ReturnType<typeof createClient<typeof SubscriptionService>>;
+
   private readonly id: string;
+
   private readonly actorContext: ReturnType<typeof metadata.actorContext>;
+
   private readonly controller = new AbortController();
 
+  /**
+   * Prepares one user’s transport, unique project ID, and actor context.
+   *
+   * @param baseUrl The gRPC server URL.
+   * @param index The independent user index used to build unique identifiers.
+   * @param visibilityTimeoutMs The visibility deadline interval in milliseconds.
+   */
   constructor(
     baseUrl: string,
     private readonly index: number,
@@ -201,6 +217,11 @@ class ProjectManagementUserLoad {
     });
   }
 
+  /**
+   * Executes one user flow from subscription setup through command, query, and correlated update.
+   *
+   * @returns The three measured latencies for the user.
+   */
   async execute(): Promise<UserResult> {
     let read: SubscriptionRead | undefined;
     try {
@@ -219,6 +240,11 @@ class ProjectManagementUserLoad {
     }
   }
 
+  /**
+   * Starts a topic subscription and begins waiting for its first update before posting the command.
+   *
+   * @returns The iterator and its pending first read.
+   */
   private async startSubscription(): Promise<SubscriptionRead> {
     const subscription = await this.withTimeout(
       this.subscriptions.subscribe(this.createTopic()),
@@ -233,6 +259,12 @@ class ProjectManagementUserLoad {
     return { iterator, firstUpdate };
   }
 
+  /**
+   * Posts the create command and measures the time to a successful acknowledgement.
+   *
+   * @param submittedAt The monotonic instant immediately before posting the command.
+   * @returns Elapsed monotonic milliseconds since command submission.
+   */
   private async postCommand(submittedAt: number): Promise<number> {
     const acknowledgement = await this.withTimeout(
       this.commands.post(this.createCommand()),
@@ -247,6 +279,11 @@ class ProjectManagementUserLoad {
     return Time.monotonicTime() - submittedAt;
   }
 
+  /**
+   * Builds a CreateProject command for this user’s project ID.
+   *
+   * @returns The generated command message.
+   */
   private createCommand() {
     return create(CommandSchema, {
       id: metadata.commandId(),
@@ -258,6 +295,12 @@ class ProjectManagementUserLoad {
     });
   }
 
+  /**
+   * Waits for a correlated state update and measures subscription delivery latency.
+   *
+   * @param firstUpdate The first pending subscription iterator result.
+   * @returns Elapsed monotonic milliseconds for the first correlated update.
+   */
   private async readSubscription(
     firstUpdate: Promise<IteratorResult<SubscriptionUpdate>>,
   ): Promise<number> {
@@ -273,6 +316,12 @@ class ProjectManagementUserLoad {
     return Time.monotonicTime() - startedAt;
   }
 
+  /**
+   * Checks whether an entity update contains the created summary for this user.
+   *
+   * @param update The subscription update to correlate with this user’s entity.
+   * @returns Whether the update refers to this user’s entity.
+   */
   private isCorrelated(update: SubscriptionUpdate): boolean {
     return (
       update.update.case === "entityUpdates" &&
@@ -284,6 +333,12 @@ class ProjectManagementUserLoad {
     );
   }
 
+  /**
+   * Cancels the subscription and bounds iterator cleanup after the user flow.
+   *
+   * @param iterator The optional active subscription iterator.
+   * @returns Completion after best-effort subscription iterator cleanup.
+   */
   private async cleanup(iterator?: AsyncIterator<SubscriptionUpdate>): Promise<void> {
     this.controller.abort();
     this.session.abort();
@@ -294,6 +349,12 @@ class ProjectManagementUserLoad {
     }
   }
 
+  /**
+   * Waits for this user’s summary by polling until a monotonic visibility deadline.
+   *
+   * @param startedAt The monotonic instant when the command was submitted.
+   * @returns Elapsed monotonic milliseconds since command submission.
+   */
   private async waitForVisibility(startedAt: number): Promise<number> {
     const deadline = Time.monotonicTime() + this.visibilityTimeoutMs;
     while (Time.monotonicTime() < deadline) {
@@ -315,6 +376,11 @@ class ProjectManagementUserLoad {
     );
   }
 
+  /**
+   * Builds a project summary query with a unique request ID.
+   *
+   * @returns The generated query message.
+   */
   private createQuery() {
     return create(QuerySchema, {
       id: create(QueryIdSchema, { value: `load-query-${this.id}-${randomUUID()}` }),
@@ -323,6 +389,11 @@ class ProjectManagementUserLoad {
     });
   }
 
+  /**
+   * Builds a topic targeting this user’s project summary.
+   *
+   * @returns The generated subscription topic.
+   */
   private createTopic() {
     return create(TopicSchema, {
       id: create(TopicIdSchema, { value: `load-topic-${this.id}` }),
@@ -331,6 +402,11 @@ class ProjectManagementUserLoad {
     });
   }
 
+  /**
+   * Builds an ID filter for this user’s ProjectSummary.
+   *
+   * @returns The generated query and subscription target.
+   */
   private createTarget() {
     return create(TargetSchema, {
       type: TypeUrls.derive(ProjectSummarySchema),
@@ -347,6 +423,12 @@ class ProjectManagementUserLoad {
     });
   }
 
+  /**
+   * Observes an outstanding subscription read so expected cancellation rejection is handled.
+   *
+   * @param promise The asynchronous operation to await.
+   * @returns Completion after the pending read settles or rejects during cancellation.
+   */
   private async ignoreCancellation(promise: Promise<unknown>): Promise<void> {
     try {
       await promise;
@@ -355,6 +437,15 @@ class ProjectManagementUserLoad {
     }
   }
 
+  /**
+   * Waits for an operation or a timeout and clears the timer after settlement.
+   *
+   * @typeParam T The operation result type preserved through the timeout.
+   * @param promise The asynchronous operation to await.
+   * @param label The operation name used in timeout errors.
+   * @param timeoutMs The operation timeout in milliseconds.
+   * @returns The operation result before the deadline.
+   */
   private async withTimeout<T>(promise: Promise<T>, label: string, timeoutMs: number): Promise<T> {
     let timeout: ReturnType<typeof setTimeout> | undefined;
     try {

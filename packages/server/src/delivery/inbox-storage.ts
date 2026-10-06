@@ -467,11 +467,23 @@ const Values = Object.freeze({
       nanos: (ms - seconds * 1_000) * 1_000_000,
     });
   },
+
+  /**
+   * Converts a legacy Date or copies a precise inbox receive timestamp.
+   * @param value The receive instant supplied by a caller.
+   * @returns A detached Protobuf timestamp.
+   */
   receiveTime(value: Date | Timestamp): Timestamp {
     return value instanceof Date
       ? Values.timestamp(value.getTime())
       : clone(TimestampSchema, value);
   },
+
+  /**
+   * Validates the Date or Protobuf timestamp range for an inbox receive time.
+   * @param value The receive instant to inspect.
+   * @returns Whether the instant can be persisted without loss.
+   */
   validReceiveTime(value: Date | Timestamp): boolean {
     if (value instanceof Date) return Number.isFinite(value.getTime());
     return (

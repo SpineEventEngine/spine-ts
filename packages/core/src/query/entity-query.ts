@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { Time } from "../time.js";
+import { Time } from "../time/index.js";
 import {
   clone,
   create,

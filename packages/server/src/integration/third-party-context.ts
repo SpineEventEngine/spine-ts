@@ -37,9 +37,16 @@ import { ServerEnvironment } from "../server/server-environment.js";
  */
 export class ThirdPartyContext {
   readonly #context: BoundedContext;
+
   readonly #multitenant: boolean;
+
   #closed = false;
 
+  /**
+   * Stores the integration context and its tenant policy.
+   * @param context The bounded context that receives imported Events.
+   * @param multitenant Whether importing actors must include a tenant.
+   */
   private constructor(context: BoundedContext, multitenant: boolean) {
     this.#context = context;
     this.#multitenant = multitenant;

@@ -34,13 +34,21 @@ const projectionLabels = ["UPDATE_SUBSCRIBER"] as const;
  */
 export class LocalProjectionInbox implements ProjectionInbox {
   readonly #contextName: string;
+
   readonly #targets = new Map<string, ProjectionInboxTarget>();
+
   readonly #endpoints = new Map<string, readonly DeliveryEndpoint[]>();
+
   readonly #readiness: DeliveryReadiness;
+
   readonly #keepTenant: (tenantId: TenantId) => Promise<void>;
+
   readonly #inFlightHandoffs = new Map<string, Promise<InboxMessage>>();
+
   readonly #inFlightMessageIds = new Set<string>();
+
   readonly #acknowledgedMessageIds = new Set<string>();
+
   #nextVersion = 0n;
 
   /**

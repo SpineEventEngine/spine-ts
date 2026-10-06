@@ -118,11 +118,11 @@ export interface ManagedServerApplicationOptions {
    *
    * Builds one complete local application server in a child process.
    *
-   * The framework owns the returned `Server` for the managed child lifetime.
+   * The framework manages the returned `Server` for the child lifetime.
    * Every assembled Bounded Context must use its actual
    * `InMemorySubscriptionRegistry`: managed mode rejects persistent and custom
    * registries, then closes the assembled server before the child can report
-   * READY. This prevents child-local durable subscription ownership.
+   * READY. This prevents durable subscriptions in a child-local registry.
    *
    * @param options Supplies the child-only loopback listener address.
    * @returns The assembled local application server.
@@ -195,10 +195,10 @@ export const ManagedServerApplication: Readonly<{
   /**
    *
    * Starts a managed parent and complete-replica children without taking
-   * process-signal ownership.
+   * process-signal handling.
    *
    * The caller closes the returned handle. This is for an embedding host that
-   * already owns `SIGINT` and `SIGTERM` handling.
+   * already handles `SIGINT` and `SIGTERM`.
    *
    * @param options Configures the managed application replicas.
    * @returns The started managed application handle.
@@ -215,15 +215,35 @@ export const ManagedServerApplication: Readonly<{
    */
   run(options: ManagedServerApplicationOptions): Promise<ManagedServerApplicationHandle>;
 }> = Object.freeze({
+  /**
+   * Validates replica count and port, then starts the parent coordinator or child application.
+   *
+   * @param options The replica count, listener, child module, and assembly callback.
+   * @returns The started application handle.
+   */
   async start(options: ManagedServerApplicationOptions): Promise<ManagedServerApplicationHandle> {
     return ManagedServerValues.start(options, false);
   },
+
+  /**
+   * Starts managed replicas and installs process signal handling.
+   *
+   * @param options The replica count, listener, and child assembly settings.
+   * @returns The started application handle.
+   */
   async run(options: ManagedServerApplicationOptions): Promise<ManagedServerApplicationHandle> {
     return ManagedServerValues.start(options, true);
   },
 });
 
 const ManagedServerValues = Object.freeze({
+  /**
+   * Validates replica count and port, then starts the parent coordinator or child application.
+   *
+   * @param options The replica count, listener, child module, and assembly callback.
+   * @param manageProcessSignals Whether the parent installs SIGINT and SIGTERM handlers.
+   * @returns The started application handle.
+   */
   async start(
     options: ManagedServerApplicationOptions,
     manageProcessSignals: boolean,
@@ -235,6 +255,13 @@ const ManagedServerValues = Object.freeze({
     if (process.env[childMarker] === "true") return ManagedServerValues.child(options);
     return ManagedServerValues.parent(options, manageProcessSignals);
   },
+
+  /**
+   * Creates a child server, checks volatile registries, synchronizes, and participates in parent IPC.
+   *
+   * @param options The child server assembly and synchronization settings.
+   * @returns The active child application handle.
+   */
   async child(options: ManagedServerApplicationOptions): Promise<ManagedServerApplicationHandle> {
     const server = await options.createServer({ host: "127.0.0.1", port: 0 });
     try {
@@ -252,7 +279,7 @@ const ManagedServerValues = Object.freeze({
       throw error;
     }
     // Node may emit an IPC EPIPE after a parent has already disappeared. The
-    // disconnect handler below owns shutdown; this listener prevents that
+    // disconnect handler below handles shutdown; this listener prevents that
     // transport detail from becoming an unhandled child-process exception.
     const containIpcError = () => undefined;
     process.on("error", containIpcError);
@@ -359,12 +386,26 @@ const ManagedServerValues = Object.freeze({
       close,
     };
   },
+
+  /**
+   * Starts a coordinator for the configured complete-replica cohort.
+   *
+   * @param options The parent cohort and listener settings.
+   * @param manageProcessSignals Whether the parent installs SIGINT and SIGTERM handlers.
+   * @returns The started parent cohort handle.
+   */
   parent(
     options: ManagedServerApplicationOptions,
     manageProcessSignals: boolean,
   ): Promise<ManagedServerApplicationHandle> {
     return new ManagedServerCoordinator({ ...options, manageProcessSignals }).start();
   },
+
+  /**
+   * Starts child shutdown after an IPC close or disconnect event and logs failure.
+   *
+   * @param close The child shutdown callback.
+   */
   closeFromEvent(close: () => Promise<void>): void {
     // spine-log-boundary: server.managed_replica_child_close
     void close().catch(() => {
@@ -374,6 +415,12 @@ const ManagedServerValues = Object.freeze({
       });
     });
   },
+
+  /**
+   * Rejects child servers without exclusively in-memory subscription registries.
+   *
+   * @param server The assembled child server to inspect.
+   */
   requireVolatileRegistries(server: RunningServer): void {
     const registries =
       runningServerAccess.subscriptionRegistries(server) ?? managedTestRegistries.get(server);
@@ -385,6 +432,13 @@ const ManagedServerValues = Object.freeze({
         "Managed application replicas require an in-memory Stand subscription registry.",
       );
   },
+
+  /**
+   * Sends a child lifecycle notification over the connected parent IPC channel.
+   *
+   * @param message The child lifecycle notification to send.
+   * @returns Completion after the parent IPC channel acknowledges the send.
+   */
   send(message: {
     readonly type:
       "ready" | "synchronizing" | "draining" | "closed" | "close-failed" | "subscription-installed";
@@ -429,9 +483,26 @@ interface ReplicaCloseAttempt {
   readonly outcome: Deferred<undefined>;
 }
 
+/**
+ * Carries a promise and callbacks that settle it from a later lifecycle event.
+ *
+ * @typeParam Value The eventual promise result.
+ */
 interface Deferred<Value> {
   readonly promise: Promise<Value>;
+
+  /**
+   * Completes the deferred promise with its result.
+   *
+   * @param value The eventual result supplied to the deferred promise.
+   */
   resolve(value: Value): void;
+
+  /**
+   * Rejects the deferred promise with the supplied reason.
+   *
+   * @param reason The deferred rejection reason.
+   */
   reject(reason: unknown): void;
 }
 
@@ -525,18 +596,31 @@ type ManagedServerCoordinatorOptions = Omit<ManagedServerApplicationOptions, "po
  */
 export class ManagedServerCoordinator {
   readonly #slots: SlotRecord[];
+
   readonly #restart: Required<ManagedServerRestartOptions>;
+
   readonly #options: ManagedServerCoordinatorOptions;
+
   readonly #dependencies: ManagedServerCoordinatorDependencies;
+
   #closing = false;
+
   #starts = 0;
+
   #ready: Promise<void> | undefined;
+
   #resolveReady: (() => void) | undefined;
+
   #close: Promise<void> | undefined;
+
   readonly #retired = new Set<ReplicaRecord>();
+
   readonly #retireTerminations = new Map<ReplicaRecord, Promise<void>>();
+
   readonly #memberListeners = new Set<() => void>();
+
   #onSignal: (() => void) | undefined;
+
   #nodeCoordinator: NodeCoordinator | undefined;
 
   /**
@@ -606,6 +690,11 @@ export class ManagedServerCoordinator {
     return handle;
   }
 
+  /**
+   * Starts a child for an available slot while respecting the concurrent-start limit.
+   *
+   * @param slot The replica slot to start or update.
+   */
   #start(slot: SlotRecord): void {
     if (
       this.#closing ||
@@ -662,6 +751,13 @@ export class ManagedServerCoordinator {
     });
   }
 
+  /**
+   * Processes a matching child lifecycle notification and updates readiness or shutdown state.
+   *
+   * @param slot The replica slot to start or update.
+   * @param replica The child incarnation associated with the event.
+   * @param message The untrusted child IPC notification.
+   */
   #onMessage(slot: SlotRecord, replica: ReplicaRecord, message: unknown): void {
     const closeResult = ManagedServerCoordinatorValues.closeResultMessage(
       message,
@@ -720,6 +816,12 @@ export class ManagedServerCoordinator {
     this.#drainStarts();
   }
 
+  /**
+   * Retires an exited incarnation and schedules replacement after an unexpected exit.
+   *
+   * @param slot The replica slot to start or update.
+   * @param replica The child incarnation associated with the event.
+   */
   #onExit(slot: SlotRecord, replica: ReplicaRecord): void {
     if (slot.replica !== replica || replica.terminal) return;
     replica.terminal = true;
@@ -752,6 +854,12 @@ export class ManagedServerCoordinator {
     this.#drainStarts();
   }
 
+  /**
+   * Retires a child after a process error and starts bounded termination.
+   *
+   * @param slot The replica slot to start or update.
+   * @param replica The child incarnation associated with the event.
+   */
   #onError(slot: SlotRecord, replica: ReplicaRecord): void {
     if (slot.replica !== replica || replica.terminal) return;
     // A ChildProcess error can precede exit while the OS process still lives.
@@ -760,6 +868,11 @@ export class ManagedServerCoordinator {
     this.#terminateUnexpected(replica);
   }
 
+  /**
+   * Schedules exponential replacement delay capped by the configured maximum.
+   *
+   * @param slot The replica slot to start or update.
+   */
   #scheduleReplacement(slot: SlotRecord): void {
     slot.failures++;
     const delay = Math.min(
@@ -780,6 +893,10 @@ export class ManagedServerCoordinator {
     });
   }
 
+  /**
+   * Fills available concurrent-start capacity with unscheduled empty slots.
+   *
+   */
   #drainStarts(): void {
     for (const slot of this.#slots) {
       if (this.#starts >= this.#restart.concurrentStarts) return;
@@ -834,21 +951,44 @@ export class ManagedServerCoordinator {
     return close;
   }
 
+  /**
+   * Closes the current replica through the bounded child shutdown procedure.
+   *
+   * @param replica The child incarnation associated with the event.
+   * @returns Completion after child shutdown.
+   */
   #closeReplica(replica: ReplicaRecord | undefined): Promise<void> {
     return ManagedServerCoordinatorValues.close(replica, this.#dependencies.clock);
   }
 
+  /**
+   * Terminates a retired replica and removes it from the pending set.
+   *
+   * @param replica The child incarnation associated with the event.
+   * @returns Completion after the retired process exits.
+   */
   async #closeRetired(replica: ReplicaRecord): Promise<void> {
     replica.expectedExit = true;
     await this.#terminateRetired(replica);
     this.#retired.delete(replica);
   }
 
+  /**
+   * Records a failed child for bounded background termination.
+   *
+   * @param replica The child incarnation associated with the event.
+   */
   #terminateUnexpected(replica: ReplicaRecord): void {
     this.#retired.add(replica);
     void this.#terminateRetired(replica);
   }
 
+  /**
+   * Reuses or starts bounded termination for one retired incarnation.
+   *
+   * @param replica The child incarnation associated with the event.
+   * @returns The shared termination attempt for this child.
+   */
   #terminateRetired(replica: ReplicaRecord): Promise<void> {
     const prior = this.#retireTerminations.get(replica);
     if (prior !== undefined) return prior;
@@ -899,7 +1039,7 @@ export class ManagedServerCoordinator {
   /**
    * Records an exact native subscription whose activation started for a member.
    *
-   * @param member Supplies the member that owns the child subscription.
+   * @param member Identifies the member whose child subscription is activating.
    * @param subscription Supplies the activating native subscription.
    */
   onChildSubscriptionActivated(member: ReadyCoordinatorMember, subscription: Subscription): void {
@@ -912,7 +1052,7 @@ export class ManagedServerCoordinator {
   /**
    * Clears a pending child-installation wait after cancellation.
    *
-   * @param member Supplies the member that owns the cancelled subscription.
+   * @param member Identifies the member whose child subscription was cancelled.
    * @param subscription Supplies the cancelled native subscription.
    */
   onChildSubscriptionCancelled(member: ReadyCoordinatorMember, subscription: Subscription): void {
@@ -943,16 +1083,34 @@ export class ManagedServerCoordinator {
         replica.child.send({ type: "activate" }, () => undefined);
   }
 
+  /**
+   * Finds the current replica only when both slot and incarnation match.
+   *
+   * @param member The member slot and incarnation to resolve.
+   * @returns The matching current replica, if any.
+   */
   #replica(member: ReadyCoordinatorMember): ReplicaRecord | undefined {
     const replica = this.#slots[member.slot]?.replica;
     return replica?.incarnation === member.incarnation ? replica : undefined;
   }
 
+  /**
+   * Rejects pending subscription installation waits after a child exits.
+   *
+   * @param replica The child incarnation associated with the event.
+   * @param error The error reported to pending subscription waits.
+   */
   #clearSubscriptionWaiters(replica: ReplicaRecord, error: Error): void {
     for (const waiter of replica.subscriptionWaiters.values()) waiter.reject(error);
     replica.subscriptionWaiters.clear();
   }
 
+  /**
+   * Completes and removes the pending installation wait for a subscription ID.
+   *
+   * @param replica The child incarnation associated with the event.
+   * @param id The installed subscription identifier.
+   */
   #settleSubscriptionWaiter(replica: ReplicaRecord, id: string): void {
     const waiter = replica.subscriptionWaiters.get(id);
     if (waiter === undefined) return;
@@ -960,6 +1118,12 @@ export class ManagedServerCoordinator {
     waiter.resolve(undefined);
   }
 
+  /**
+   * Collects active child facts eligible for routing or relay synchronization.
+   *
+   * @param includeDraining Whether synchronizing and draining replicas may participate in relay membership.
+   * @returns The eligible child members with endpoint and process ID.
+   */
   #members(includeDraining: boolean): readonly ReadyCoordinatorMember[] {
     return this.#slots.flatMap((slot) => {
       const replica = slot.replica;
@@ -1013,10 +1177,18 @@ export class ManagedServerCoordinator {
     return this.#nodeCoordinator?.baseUrl;
   }
 
+  /**
+   * Calls listeners after the available child membership changes.
+   *
+   */
   #notifyReadyMembers(): void {
     for (const listener of this.#memberListeners) listener();
   }
 
+  /**
+   * Registers managed shutdown handlers for SIGINT and SIGTERM once.
+   *
+   */
   #installSignalHandlers(): void {
     if (this.#onSignal !== undefined) return;
     this.#onSignal = () => {
@@ -1036,6 +1208,10 @@ export class ManagedServerCoordinator {
     process.on("SIGTERM", this.#onSignal);
   }
 
+  /**
+   * Unregisters managed shutdown handlers when the coordinator closes.
+   *
+   */
   #removeSignalHandlers(): void {
     if (this.#onSignal === undefined) return;
     process.off("SIGINT", this.#onSignal);
@@ -1059,12 +1235,38 @@ type ReadyMember = ReadyCoordinatorMember;
  * @internal
  */
 export const managedServerCoordinatorAccess: Readonly<{
+  /**
+   * Returns currently ready members for private coordinator inspection.
+   *
+   * @param coordinator The managed coordinator to inspect.
+   * @returns The currently ready coordinator members.
+   */
   readyMembers(coordinator: ManagedServerCoordinator): readonly ReadyMember[];
+
+  /**
+   * Returns the private coordinator endpoint when available.
+   *
+   * @param coordinator The managed coordinator to inspect.
+   * @returns The loopback endpoint when the coordinator is open.
+   */
   coordinatorEndpoint(coordinator: ManagedServerCoordinator): string | undefined;
 }> = Object.freeze({
+  /**
+   * Returns currently ready members for private coordinator inspection.
+   *
+   * @param coordinator The managed coordinator to inspect.
+   * @returns The currently ready coordinator members.
+   */
   readyMembers(coordinator: ManagedServerCoordinator): readonly ReadyMember[] {
     return coordinator.readyMembers();
   },
+
+  /**
+   * Returns the private coordinator endpoint when available.
+   *
+   * @param coordinator The managed coordinator to inspect.
+   * @returns The loopback endpoint when the coordinator is open.
+   */
   coordinatorEndpoint(coordinator: ManagedServerCoordinator): string | undefined {
     return coordinator.coordinatorEndpoint();
   },
@@ -1077,19 +1279,59 @@ export const managedServerCoordinatorAccess: Readonly<{
  * @internal
  */
 export const managedServerApplicationAccess: Readonly<{
+  /**
+   * Returns currently ready members for private coordinator inspection.
+   *
+   * @param handle The application handle to inspect.
+   * @returns The currently ready coordinator members.
+   */
   readyMembers(handle: ManagedServerApplicationHandle): readonly ReadyMember[];
+
+  /**
+   * Returns the private coordinator endpoint when available.
+   *
+   * @param handle The application handle to inspect.
+   * @returns The loopback endpoint when the coordinator is open.
+   */
   coordinatorEndpoint(handle: ManagedServerApplicationHandle): string | undefined;
+
+  /**
+   * Associates in-memory registries with an assembled test server.
+   *
+   * @param server The assembled child server to inspect.
+   * @param registries The registries supplied by a test server.
+   */
   installRegistriesForTest(
     server: RunningServer,
     registries: readonly InMemorySubscriptionRegistry[],
   ): void;
 }> = Object.freeze({
+  /**
+   * Returns currently ready members for private coordinator inspection.
+   *
+   * @param handle The application handle to inspect.
+   * @returns The currently ready coordinator members.
+   */
   readyMembers(handle: ManagedServerApplicationHandle): readonly ReadyMember[] {
     return handleMembers.get(handle)?.readyMembers() ?? [];
   },
+
+  /**
+   * Returns the private coordinator endpoint when available.
+   *
+   * @param handle The application handle to inspect.
+   * @returns The loopback endpoint when the coordinator is open.
+   */
   coordinatorEndpoint(handle: ManagedServerApplicationHandle): string | undefined {
     return handleMembers.get(handle)?.coordinatorEndpoint();
   },
+
+  /**
+   * Associates in-memory registries with an assembled test server.
+   *
+   * @param server The assembled child server to inspect.
+   * @param registries The registries supplied by a test server.
+   */
   installRegistriesForTest(
     server: RunningServer,
     registries: readonly InMemorySubscriptionRegistry[],
@@ -1099,6 +1341,12 @@ export const managedServerApplicationAccess: Readonly<{
 });
 
 const ManagedServerCoordinatorValues = Object.freeze({
+  /**
+   * Creates a promise with separately accessible resolve and reject callbacks.
+   *
+   * @typeParam Value The eventual result carried by the deferred promise.
+   * @returns The promise and its settlement callbacks.
+   */
   deferred<Value>(): Deferred<Value> {
     let resolve!: (value: Value) => void;
     let reject!: (reason: unknown) => void;
@@ -1108,6 +1356,13 @@ const ManagedServerCoordinatorValues = Object.freeze({
     });
     return { promise, resolve, reject };
   },
+
+  /**
+   * Checks that the front-facing listener port is a safe integer from zero through 65535.
+   *
+   * @param value The candidate front-facing listener port.
+   * @returns The validated listener port.
+   */
   coordinatorPort(value: number): number {
     if (!Number.isSafeInteger(value) || value < 0 || value > 65_535)
       throw new Error(
@@ -1135,6 +1390,13 @@ const ManagedServerCoordinatorValues = Object.freeze({
       }),
     openCoordinator: (options) => NodeCoordinator.open(options),
   } satisfies ManagedServerCoordinatorDependencies,
+
+  /**
+   * Validates restart delays and concurrent-start bounds after applying defaults.
+   *
+   * @param options The requested process count and restart settings.
+   * @returns The validated restart policy with defaults applied.
+   */
   restart(options: ManagedServerCoordinatorOptions): Required<ManagedServerRestartOptions> {
     const restart = {
       initialDelayMs: options.restart?.initialDelayMs ?? initialRestartDelayMs,
@@ -1152,6 +1414,15 @@ const ManagedServerCoordinatorValues = Object.freeze({
       throw new Error("Managed server restart concurrentStarts must not exceed processCount.");
     return restart;
   },
+
+  /**
+   * Checks a READY notification against the expected slot, incarnation, and loopback endpoint.
+   *
+   * @param message The candidate child IPC notification.
+   * @param slot The expected replica slot.
+   * @param incarnation The expected child incarnation token.
+   * @returns Whether the message is a valid READY notification.
+   */
   readyMessage(
     message: unknown,
     slot: number,
@@ -1167,6 +1438,15 @@ const ManagedServerCoordinatorValues = Object.freeze({
       canonicalLoopbackEndpoint(candidate.endpoint) !== undefined
     );
   },
+
+  /**
+   * Checks a SYNCHRONIZING notification against the expected child and endpoint.
+   *
+   * @param message The candidate child IPC notification.
+   * @param slot The expected replica slot.
+   * @param incarnation The expected child incarnation token.
+   * @returns Whether the message is a valid SYNCHRONIZING notification.
+   */
   synchronizingMessage(
     message: unknown,
     slot: number,
@@ -1182,6 +1462,15 @@ const ManagedServerCoordinatorValues = Object.freeze({
       canonicalLoopbackEndpoint(candidate.endpoint) !== undefined
     );
   },
+
+  /**
+   * Checks a subscription-installed notification for the expected child and nonblank ID.
+   *
+   * @param message The candidate child IPC notification.
+   * @param slot The expected replica slot.
+   * @param incarnation The expected child incarnation token.
+   * @returns Whether the message is a matching subscription notification.
+   */
   subscriptionInstalledMessage(
     message: unknown,
     slot: number,
@@ -1197,6 +1486,15 @@ const ManagedServerCoordinatorValues = Object.freeze({
       candidate.subscriptionId.length > 0
     );
   },
+
+  /**
+   * Checks a DRAINING notification against the expected slot and incarnation.
+   *
+   * @param message The candidate child IPC notification.
+   * @param slot The expected replica slot.
+   * @param incarnation The expected child incarnation token.
+   * @returns Whether the message is a matching DRAINING notification.
+   */
   drainingMessage(
     message: unknown,
     slot: number,
@@ -1214,6 +1512,15 @@ const ManagedServerCoordinatorValues = Object.freeze({
       candidate.incarnation === incarnation
     );
   },
+
+  /**
+   * Matches a CLOSED or CLOSE-FAILED notification from the expected child.
+   *
+   * @param message The candidate child IPC notification.
+   * @param slot The expected replica slot.
+   * @param incarnation The expected child incarnation token.
+   * @returns The close outcome for a matching notification, or undefined.
+   */
   closeResultMessage(
     message: unknown,
     slot: number,
@@ -1229,6 +1536,14 @@ const ManagedServerCoordinatorValues = Object.freeze({
       return undefined;
     return candidate.type;
   },
+
+  /**
+   * Closes a child after bounded graceful shutdown and signal escalation.
+   *
+   * @param replica The replica to close, if still present.
+   * @param clock The clock and timer adapter for bounded waits.
+   * @returns Completion after the child exits or a shutdown error is reported.
+   */
   async close(
     replica: ReplicaRecord | undefined,
     clock: ManagedServerCoordinatorDependencies["clock"],
@@ -1269,6 +1584,16 @@ const ManagedServerCoordinatorValues = Object.freeze({
       if (replica.closeAttempt === closeAttempt) replica.closeAttempt = undefined;
     }
   },
+
+  /**
+   * Waits for child exit, then escalates through SIGTERM and SIGKILL within bounded intervals.
+   *
+   * @param child The child process to terminate.
+   * @param clock The clock and timer adapter for bounded waits.
+   * @param knownExit An existing promise for child exit, when available.
+   * @param allowGrace Whether to wait for graceful exit before signaling.
+   * @returns Completion after child exit or failure to terminate.
+   */
   async terminate(
     child: ChildProcess,
     clock: ManagedServerCoordinatorDependencies["clock"],
@@ -1291,6 +1616,15 @@ const ManagedServerCoordinatorValues = Object.freeze({
     if (await ManagedServerCoordinatorValues.within(exited, closeKillMs, clock)) return;
     throw new Error("Managed child did not exit after SIGKILL.");
   },
+
+  /**
+   * Checks whether a promise settles before the supplied timer fires.
+   *
+   * @param promise The asynchronous operation to await.
+   * @param delay The maximum wait in milliseconds.
+   * @param clock The clock and timer adapter for bounded waits.
+   * @returns Whether the promise settled within the delay.
+   */
   within(
     promise: Promise<unknown>,
     delay: number,

@@ -116,6 +116,12 @@ export interface GkeNodeDiscoveryOptions {
 }
 
 const systemScheduler: NodeScheduler = {
+  /**
+   * Schedules one unref'ed discovery tick on the Node event loop.
+   * @param delayMs Delay before the tick in milliseconds.
+   * @param onTick The callback to invoke.
+   * @returns A cancellation function for the timer.
+   */
   schedule(delayMs, onTick) {
     const timer = setTimeout(onTick, delayMs);
     timer.unref();
@@ -132,23 +138,41 @@ const maximumRefreshes = 2;
  */
 export class GkeNodeDiscovery implements NodeDiscovery {
   readonly #serviceName: string;
+
   readonly #port: number;
+
   readonly #scheme: "http" | "https";
+
   readonly #refreshIntervalMs: number;
+
   readonly #resolver: GkeDnsResolver;
+
   readonly #scheduler: NodeScheduler;
+
   readonly #now: () => number;
+
   readonly #logger: ILogLayer | undefined;
+
   #cancel: (() => void) | undefined;
+
   #expiryCancel: (() => void) | undefined;
+
   readonly #controllers = new Set<AbortController>();
+
   #watcher: ((nodes: readonly ApplicationNode[]) => void) | undefined;
+
   readonly #refreshes = new Set<Promise<void>>();
+
   #validUntilMs: number | undefined;
+
   #expired = false;
+
   #empty = false;
+
   #closed = false;
+
   #closing: Promise<void> | undefined;
+
   #epoch = 0;
 
   /**

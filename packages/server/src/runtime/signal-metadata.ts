@@ -117,7 +117,7 @@ export interface SignalMetadataOptions {
   // prettier-ignore
 
   /**
-   * Supplies timestamps; defaults to shared {@link Time}. Legacy `Clock` values remain accepted.
+   * Supplies timestamps; defaults to shared `Time` from `@spine-event-engine/core/time`. Legacy `Clock` values remain accepted.
    */
   readonly clock?: Clock | TimeProvider;
 }
@@ -457,6 +457,7 @@ export class SignalMetadata {
       typeUrl: typeUrl ?? "",
     });
   }
+
   #actorContext(input: ActorContextInput): ActorContext | undefined {
     return input.actor === undefined && input.tenantId === undefined
       ? undefined
@@ -499,6 +500,11 @@ export class SignalMetadata {
  * Validates values shared by clock metadata.
  */
 const SignalValues = Object.freeze({
+  /**
+   * Validates a finite Date from a legacy clock adapter.
+   * @param value The clock reading to validate.
+   * @returns The accepted Date instance.
+   */
   time(value: Date): Date {
     if (!Number.isFinite(value.getTime()))
       throw new TypeError("Signal metadata timestamps require a finite Date instance.");

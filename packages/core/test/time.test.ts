@@ -21,7 +21,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { Time } from "../src/time.js";
+import { Time } from "../src/time/index.js";
 import { Time as BarrelTime } from "../src/index.js";
 
 afterEach(() => {
@@ -87,7 +87,7 @@ describe("Time", () => {
   it("imports in a dependency-free release checkout", () => {
     const directory = mkdtempSync(join(tmpdir(), "spine-time-"));
     try {
-      copyFileSync(new URL("../src/time.ts", import.meta.url), join(directory, "time.ts"));
+      copyFileSync(new URL("../src/time/index.ts", import.meta.url), join(directory, "time.ts"));
       const result = spawnSync(
         process.execPath,
         [

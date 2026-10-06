@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import process from "node:process";
 import test from "node:test";
 
-import { Time } from "../../../packages/core/dist/time.js";
+import { Time } from "../../../packages/core/dist/time/index.js";
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const compose = join(root, "deploy", "compose.yaml");
 const client = join(root, "..", "message-board", "deploy", "compose", "rpc-client.mjs");

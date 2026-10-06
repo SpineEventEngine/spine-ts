@@ -77,7 +77,7 @@ const DeliveryValues = Object.freeze({
   },
 
   /**
-   * Counts bytes in a UTF-8 text value.
+   * Calculates the encoded UTF-8 byte length used by wire limits.
    *
    * @param value Supplies the text value.
    * @returns The UTF-8 byte count.
@@ -87,8 +87,9 @@ const DeliveryValues = Object.freeze({
   },
 
   /**
-   * Freezes an object before returning it.
-   * @typeParam Value Describes the object type.
+   * Returns the same object after preventing changes to its direct properties.
+   *
+   * @typeParam Value The object type preserved by the shallow freeze.
    * @param value Supplies the object to freeze.
    * @returns The frozen object.
    */
@@ -128,6 +129,12 @@ const DeliveryValues = Object.freeze({
 });
 
 const DeliveryTargetIds = Object.freeze({
+  /**
+   * Checks known Protobuf target identifier encodings before delivery serialization.
+   *
+   * @param typeUrl The typeUrl value used by this operation.
+   * @param value The serialized target identifier to validate.
+   */
   validate(typeUrl: string, value: Uint8Array): void {
     switch (typeUrl) {
       case "type.googleapis.com/google.protobuf.StringValue":
@@ -145,22 +152,132 @@ const DeliveryTargetIds = Object.freeze({
 });
 
 type DeliveryMessageCodecApi = Readonly<{
+  /**
+   * Encodes one bounded, single-shard inbox batch.
+   *
+   * @param messages Supplies the messages to encode.
+   * @returns The encoded messages, their IDs, and their common shard.
+   */
   encodeBatch(messages: readonly InboxMessage[]): {
     readonly ids: readonly string[];
     readonly shard: WireShardIndex;
     readonly messages: WireInboxMessage[];
   };
+
+  /**
+   * Encodes an inbox message for the delivery server.
+   *
+   * @param message Supplies the message to encode.
+   * @returns The validated wire message.
+   */
   encode(message: InboxMessage): WireInboxMessage;
+
+  /**
+   * Decodes an inbox message and confirms its expected shard.
+   *
+   * @param message Supplies the wire message.
+   * @param expectedShard Identifies the requested shard.
+   * @returns The detached immutable inbox message.
+   */
   decode(message: WireInboxMessage, expectedShard: ShardIndex): InboxMessage;
+
+  /**
+   * Validates the wire identifiers and requested shard before decoding the payload.
+   * @param message The wire inbox record.
+   * @param expectedShard The shard requested by the caller.
+   * @returns Validated identifiers and shard.
+   */
+  validatedParts(
+    message: WireInboxMessage,
+    expectedShard: ShardIndex,
+  ): {
+    readonly id: NonNullable<WireInboxMessage["id"]>;
+    readonly inboxId: NonNullable<WireInboxMessage["inboxId"]>;
+    readonly entityId: Any;
+    readonly signalId: NonNullable<WireInboxMessage["signalId"]>;
+    readonly whenReceived: NonNullable<WireInboxMessage["whenReceived"]>;
+    readonly shard: ShardIndex;
+  };
+
+  /**
+   * Validates and returns an inbox message identifier.
+   *
+   * @param id Supplies the identifier to encode.
+   * @returns The identifier value.
+   */
   encodeId(id: InboxMessageId): string;
+
+  /**
+   * Copies an inbox message for later exact-snapshot checks.
+   *
+   * @param value Supplies the message to copy.
+   * @returns A detached immutable message.
+   */
   snapshot(value: InboxMessage): InboxMessage;
+
+  /**
+   * Parses an inbox target identifier.
+   *
+   * @param inbox Supplies the inbox identifier.
+   * @returns The type URL and serialized target ID.
+   */
   target(inbox: InboxMessage["inboxId"]): { typeUrl: string; value: Uint8Array };
+
+  /**
+   * Decodes an inbox target identifier while preserving plain framework IDs.
+   *
+   * @param typeUrl Identifies the wire entity-ID message.
+   * @param value Contains the serialized entity-ID message.
+   * @returns The framework target identifier.
+   */
   decodeTarget(typeUrl: string, value: Uint8Array): Any;
+
+  /**
+   * Encodes a delivered signal payload.
+   *
+   * @param signal Supplies the optional serialized signal.
+   * @returns The wire payload union.
+   */
   payload(signal: InboxMessage["signal"]): WireInboxMessage["payload"];
+
+  /**
+   * Encodes an inbox label.
+   *
+   * @param value Supplies the label.
+   * @returns The wire enum value.
+   */
   label(value: InboxMessage["label"]): InboxLabel;
+
+  /**
+   * Encodes an inbox status.
+   *
+   * @param value Supplies the status.
+   * @returns The wire enum value.
+   */
   status(value: InboxMessage["status"]): InboxMessageStatus;
+
+  /**
+   * Decodes a delivered signal payload.
+   *
+   * @param message Supplies the wire message.
+   * @returns The immutable serialized signal.
+   */
   decodePayload(message: WireInboxMessage): NonNullable<InboxMessage["signal"]>;
+
+  /**
+   * Decodes an inbox label.
+   *
+   * @param value Supplies the wire enum value.
+   * @returns The domain label.
+   */
   decodeLabel(value: InboxLabel): InboxMessage["label"];
+
+  /**
+   * Decodes an inbox status.
+   *
+   * @param value Supplies the wire enum value.
+   * @returns The domain status.
+   */
   decodeStatus(value: InboxMessageStatus): InboxMessage["status"];
 }>;
 
@@ -253,6 +370,34 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
    * @returns The detached immutable inbox message.
    */
   decode(message: WireInboxMessage, expectedShard: ShardIndex): InboxMessage {
+    const { id, inboxId, entityId, signalId, whenReceived, shard } =
+      DeliveryMessageCodec.validatedParts(message, expectedShard);
+    const keepUntil =
+      message.keepUntil === undefined ? undefined : DeliveryShardCodec.date(message.keepUntil);
+    if (!Number.isSafeInteger(message.version) || message.version < 0)
+      throw DeliveryRequestCodec.protocol();
+    const targetId = DeliveryMessageCodec.decodeTarget(entityId.typeUrl, entityId.value);
+    return DeliveryValues.freeze({
+      id: DeliveryValues.freeze({ value: id.uuid, shard }),
+      inboxId: DeliveryValues.freeze({ targetId, targetTypeUrl: inboxId.typeUrl }),
+      signalId: signalId.value,
+      signal: DeliveryMessageCodec.decodePayload(message),
+      label: DeliveryMessageCodec.decodeLabel(message.label),
+      status: DeliveryMessageCodec.decodeStatus(message.status),
+      shard,
+      whenReceived: create(TimestampSchema, DeliveryRequestCodec.timestamp(whenReceived)),
+      version: BigInt(message.version),
+      ...(keepUntil === undefined ? {} : { keepUntil }),
+    });
+  },
+
+  /**
+   * Validates the wire identifiers and requested shard before decoding the payload.
+   * @param message The wire inbox record.
+   * @param expectedShard The shard requested by the caller.
+   * @returns Validated identifiers and shard.
+   */
+  validatedParts(message: WireInboxMessage, expectedShard: ShardIndex) {
     const id = message.id;
     const inboxId = message.inboxId;
     const entityId = inboxId?.entityId?.id;
@@ -272,26 +417,14 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
     const shard = DeliveryShardCodec.decode(id.index);
     if (shard.index !== expectedShard.index || shard.ofTotal !== expectedShard.ofTotal)
       throw DeliveryRequestCodec.protocol();
-    const keepUntil =
-      message.keepUntil === undefined ? undefined : DeliveryShardCodec.date(message.keepUntil);
-    if (!Number.isSafeInteger(message.version) || message.version < 0)
-      throw DeliveryRequestCodec.protocol();
-    const targetId = DeliveryMessageCodec.decodeTarget(entityId.typeUrl, entityId.value);
-    return DeliveryValues.freeze({
-      id: DeliveryValues.freeze({ value: id.uuid, shard }),
-      inboxId: DeliveryValues.freeze({
-        targetId,
-        targetTypeUrl: inboxId.typeUrl,
-      }),
-      signalId: message.signalId.value,
-      signal: DeliveryMessageCodec.decodePayload(message),
-      label: DeliveryMessageCodec.decodeLabel(message.label),
-      status: DeliveryMessageCodec.decodeStatus(message.status),
+    return {
+      id,
+      inboxId,
+      entityId,
+      signalId: message.signalId,
+      whenReceived: message.whenReceived,
       shard,
-      whenReceived: create(TimestampSchema, DeliveryRequestCodec.timestamp(message.whenReceived)),
-      version: BigInt(message.version),
-      ...(keepUntil === undefined ? {} : { keepUntil }),
-    });
+    };
   },
 
   /**
@@ -503,16 +636,66 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
 });
 
 type DeliveryShardCodecApi = Readonly<{
+  /**
+   * Decodes an administrative shard observation.
+   *
+   * @param value Supplies the wire observation.
+   * @returns The immutable remote observation.
+   */
   decodeObservation(value: ShardInfo): RemoteShardObservation;
+
+  /**
+   * Decodes an administrative shard update.
+   *
+   * @param value Supplies the wire update.
+   * @returns The immutable remote observation.
+   */
   decodeUpdate(value: ShardInfoUpdate): RemoteShardObservation;
+
+  /**
+   * Encodes a shard index.
+   *
+   * @param value Supplies the shard index.
+   * @returns The wire shard index.
+   */
   encode(value: ShardIndex): WireShardIndex;
+
+  /**
+   * Copies a shard index.
+   *
+   * @param value Supplies the shard index.
+   * @returns The detached shard index.
+   */
   snapshot(value: ShardIndex): ShardIndex;
+
+  /**
+   * Encodes a delivery worker identifier.
+   *
+   * @param value Supplies the worker identifier.
+   * @returns The wire worker identifier.
+   */
   encodeWorker(value: DeliveryWorkerId): WorkerId;
+
+  /**
+   * Decodes a successful exclusive pickup.
+   *
+   * @param value Supplies the pickup response.
+   * @param expectedShard Identifies the requested shard.
+   * @param expectedWorker Identifies the requesting worker.
+   * @returns The immutable exclusive session.
+   */
   decodePicked(
     value: ShardPickedUp,
     expectedShard: ShardIndex,
     expectedWorker: DeliveryWorkerId,
   ): RemoteShardSession;
+
+  /**
+   * Validates an already-picked response.
+   *
+   * @param value Supplies the response fields.
+   * @param expectedShard Identifies the requested shard.
+   */
   validatePicked(
     value: {
       shard?: { index: number; ofTotal: number } | undefined;
@@ -521,10 +704,45 @@ type DeliveryShardCodecApi = Readonly<{
     },
     expectedShard: ShardIndex,
   ): void;
+
+  /**
+   * Decodes an expired exclusive session.
+   *
+   * @param value Supplies the expired-session response.
+   * @returns The immutable released session.
+   */
   decodeReleased(value: ExpiredSession): ReleasedShardSession;
+
+  /**
+   * Converts a protocol timestamp to a Date, truncating nanos to milliseconds.
+   *
+   * @param value Supplies the timestamp fields.
+   * @returns The decoded date.
+   */
   date(value: { seconds: bigint; nanos: number }): Date;
+
+  /**
+   * Decodes a shard status.
+   *
+   * @param value Supplies the wire status.
+   * @returns The remote observation status.
+   */
   status(value: ShardStatus): RemoteShardObservation["status"];
+
+  /**
+   * Decodes a shard index.
+   *
+   * @param value Supplies the wire shard index.
+   * @returns The validated shard index.
+   */
   decode(value: { index: number; ofTotal: number }): ShardIndex;
+
+  /**
+   * Decodes a worker identifier.
+   *
+   * @param value Supplies the wire worker identifier.
+   * @returns The immutable worker identifier.
+   */
   decodeWorker(value: { nodeId?: { value: string } | undefined; value: string }): DeliveryWorkerId;
 }>;
 
@@ -699,7 +917,7 @@ const DeliveryShardCodec: DeliveryShardCodecApi = Object.freeze({
   },
 
   /**
-   * Decodes a protocol timestamp.
+   * Converts a protocol timestamp to a Date, truncating nanos to milliseconds.
    *
    * @param value Supplies the timestamp fields.
    * @returns The decoded date.
@@ -763,24 +981,116 @@ const DeliveryShardCodec: DeliveryShardCodecApi = Object.freeze({
 });
 
 type DeliveryRequestCodecApi = Readonly<{
+  /**
+   * Encodes an inactivity duration.
+   *
+   * @param value Supplies milliseconds.
+   * @returns The protocol duration fields.
+   */
   duration(value: number): { seconds: bigint; nanos: number };
+
+  /**
+   * Encodes a Date at millisecond precision or preserves Protobuf Timestamp nanos.
+   *
+   * @param value Supplies a Date or occurrence Timestamp.
+   * @returns The protocol timestamp fields.
+   */
   timestamp(value: Date | Timestamp): { seconds: bigint; nanos: number };
+
+  /**
+   * Creates a protocol-validation error.
+   *
+   * @returns The protocol error.
+   */
   protocol(): DeliveryProtocolError;
+
+  /**
+   * Creates Connect call options.
+   *
+   * @param signal Supplies the optional cancellation signal.
+   * @param timeoutMs Supplies the validated timeout.
+   * @returns The call options.
+   */
   callOptions(
     signal: AbortSignal | undefined,
     timeoutMs?: number,
   ): { readonly timeoutMs?: number; readonly signal?: AbortSignal };
+
+  /**
+   * Validates a page size.
+   *
+   * @param value Supplies the page size.
+   * @returns The validated page size.
+   */
   pageSize(value: number): number;
+
+  /**
+   * Validates an integer in an inclusive range.
+   *
+   * @param value Supplies the number to validate.
+   * @param minimum Defines the inclusive lower bound.
+   * @param maximum Defines the inclusive upper bound.
+   * @param name Names the value in validation errors.
+   * @returns The validated value.
+   */
   bounded(value: number, minimum: number, maximum: number, name: string): number;
+
+  /**
+   * Normalizes client options to bounded immutable values.
+   *
+   * @param options Supplies the optional client settings.
+   * @returns The normalized settings.
+   */
   normalize(options: DeliveryClientOptions): DeliveryClientOptions;
+
+  /**
+   * Validates a delivery service base URL.
+   *
+   * @param value Supplies the URL.
+   */
   baseUrl(value: string): void;
+
+  /**
+   * Rejects an oversized RPC request.
+   *
+   * @param schema Supplies the message schema.
+   * @param value Supplies the message value.
+   */
   requestBytes(schema: Parameters<typeof toBinary>[0], value: Parameters<typeof toBinary>[1]): void;
+
+  /**
+   * Rejects an oversized RPC response when it can be re-encoded.
+   *
+   * @param schema Supplies the message schema.
+   * @param value Supplies the message value.
+   */
   responseBytes(
     schema: Parameters<typeof toBinary>[0],
     value: Parameters<typeof toBinary>[1],
   ): void;
+
+  /**
+   * Validates read retry count.
+   *
+   * @param value Supplies the retry count.
+   * @returns The validated count.
+   */
   retries(value: number): number;
+
+  /**
+   * Validates retry backoff milliseconds.
+   *
+   * @param value Supplies the backoff.
+   * @returns The validated backoff.
+   */
   backoff(value: number): number;
+
+  /**
+   * Validates RPC timeout milliseconds.
+   *
+   * @param value Supplies the timeout.
+   * @returns The validated timeout.
+   */
   timeout(value: number): number;
 }>;
 
@@ -804,9 +1114,9 @@ const DeliveryRequestCodec: DeliveryRequestCodecApi = Object.freeze({
   },
 
   /**
-   * Encodes a date timestamp.
+   * Encodes a Date at millisecond precision or preserves Protobuf Timestamp nanos.
    *
-   * @param value Supplies the date.
+   * @param value Supplies a Date or occurrence Timestamp.
    * @returns The protocol timestamp fields.
    */
   timestamp(value: Date | Timestamp): { seconds: bigint; nanos: number } {

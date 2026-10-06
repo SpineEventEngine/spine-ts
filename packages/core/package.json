@@ -19,8 +19,8 @@
       "default": "./dist/index.js"
     },
     "./time": {
-      "types": "./dist/time.d.ts",
-      "default": "./dist/time.js"
+      "types": "./dist/time/index.d.ts",
+      "default": "./dist/time/index.js"
     },
     "./spi/subscription-lifecycle": {
       "types": "./dist/spi/subscription-lifecycle.d.ts",

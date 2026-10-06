@@ -39,10 +39,15 @@ export class DatastoreTenantCatalog implements TenantCatalog {
     string,
     { readonly boundary: TenantBoundaryValue; readonly expiresAt: number }
   >();
+
   readonly #converter: NamespaceAssignments;
+
   readonly #now: () => number;
+
   readonly #earlyTenantTtlMs: number;
+
   readonly #maxEarlyTenants: number;
+
   #open = true;
 
   /**
@@ -125,6 +130,10 @@ export class DatastoreTenantCatalog implements TenantCatalog {
     });
   }
 
+  /**
+   * Stores a tenant namespace until native Datastore metadata becomes visible.
+   * @param boundary The tenant admitted for early reads.
+   */
   private keepNow(boundary: TenantBoundaryValue): void {
     this.requireOpen();
     if (boundary.single || boundary.tenantId === undefined)
@@ -153,10 +162,16 @@ export class DatastoreTenantCatalog implements TenantCatalog {
     return Promise.resolve();
   }
 
+  /**
+   * Rejects catalog operations after closure.
+   */
   private requireOpen(): void {
     if (!this.#open) throw new Error("Datastore tenant catalog is closed.");
   }
 
+  /**
+   * Removes early tenant admissions after their configured TTL.
+   */
   private purgeExpired(): void {
     const now = this.#now();
     for (const [namespace, admission] of this.#kept) {

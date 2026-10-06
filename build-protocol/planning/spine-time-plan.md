@@ -7,7 +7,7 @@ exposed. No human decisions required. Follow D-0124 and spine-time-task.md.
 
 ## Shared contract
 
-One browser-safe packages/core/src/time.ts implementation, core/time subpath,
+One browser-safe packages/core/src/time/index.ts implementation, core/time subpath,
 re-export same module from core barrel. No generated schema dependency in leaf.
 Time.currentTime returns configured-provider canonical Timestamp; systemTime
 uses shared system provider; currentTimeZone returns IANA string;

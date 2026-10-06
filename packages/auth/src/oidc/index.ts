@@ -57,26 +57,47 @@ const RFC7636_VERIFIER = /^[A-Za-z0-9\-._~]{43,128}$/;
  */
 export class OidcFlow {
   readonly #authorizationEndpoint: URL;
+
   readonly #callbackUri: string;
+
   readonly #clientId: string;
+
   readonly #scopes: readonly string[];
+
   readonly #allowedPostLoginRedirects: ReadonlySet<string>;
+
   readonly #provider: OidcVerifiedIdentityProvider;
+
   readonly #providerIssuer: string;
+
   readonly #identityMapping: IdentityMapping;
+
   readonly #sessionIssuer: ApplicationSessionIssuer;
+
   readonly #clock: OidcFlowClock;
+
   readonly #random: OidcFlowRandom;
+
   readonly #transactionTtlMilliseconds: number;
+
   readonly #grantTtlMilliseconds: number;
+
   readonly #maxTransactions: number;
+
   readonly #maxGrants: number;
+
   readonly #collisionAttempts: number;
+
   readonly #operationTimeoutMilliseconds: number;
+
   readonly #maxAuthorizationUrlLength: number;
+
   readonly #transactions = new Map<string, Transaction>();
+
   readonly #grants = new Map<string, Grant>();
+
   readonly #callbacks = new Set<AbortController>();
+
   #closed = false;
 
   /**
@@ -84,60 +105,26 @@ export class OidcFlow {
    * @param options The trusted provider, callback, transaction, grant, and session settings.
    */
   constructor(options: OidcFlowOptions) {
-    this.#authorizationEndpoint = OidcFlowValues.strictHttpsUrl(
-      options.authorizationEndpoint,
-      "authorizationEndpoint",
-    );
-    OidcFlowValues.strictHttpsUrl(options.callbackUri, "callbackUri");
+    const settings = OidcFlowValues.settings(options);
+    this.#authorizationEndpoint = settings.authorizationEndpoint;
     this.#callbackUri = options.callbackUri;
-    this.#clientId = OidcFlowValues.nonEmpty(options.clientId, "clientId");
-    this.#scopes = OidcFlowValues.validScopes(options.scopes);
-    this.#allowedPostLoginRedirects = OidcFlowValues.validRedirects(
-      options.allowedPostLoginRedirects,
-    );
-    validateProvider(options.provider);
-    OidcFlowValues.validateFunction(
-      (options.identityMapping as unknown as Record<string, unknown>).resolve,
-      "identityMapping.resolve",
-    );
-    OidcFlowValues.validateFunction(
-      (options.sessionIssuer as unknown as Record<string, unknown>).issue,
-      "sessionIssuer.issue",
-    );
+    this.#clientId = settings.clientId;
+    this.#scopes = settings.scopes;
+    this.#allowedPostLoginRedirects = settings.redirects;
     this.#provider = options.provider;
     this.#providerIssuer = options.provider.issuer;
     this.#identityMapping = options.identityMapping;
     this.#sessionIssuer = options.sessionIssuer;
     this.#clock = options.clock ?? { now: () => Time.currentTimeMillis() };
     this.#random = options.randomBytes ?? nodeRandomBytes;
-    this.#transactionTtlMilliseconds = OidcFlowValues.positiveSafeInteger(
-      options.transactionTtlMilliseconds ?? DEFAULT_TRANSACTION_TTL,
-      "transactionTtlMilliseconds",
-    );
-    this.#grantTtlMilliseconds = OidcFlowValues.positiveSafeInteger(
-      options.grantTtlMilliseconds ?? DEFAULT_GRANT_TTL,
-      "grantTtlMilliseconds",
-    );
-    this.#maxTransactions = OidcFlowValues.positiveSafeInteger(
-      options.maxTransactions ?? DEFAULT_CAPACITY,
-      "maxTransactions",
-    );
-    this.#maxGrants = OidcFlowValues.positiveSafeInteger(
-      options.maxGrants ?? DEFAULT_CAPACITY,
-      "maxGrants",
-    );
-    this.#collisionAttempts = OidcFlowValues.positiveSafeInteger(
-      options.collisionAttempts ?? DEFAULT_COLLISION_ATTEMPTS,
-      "collisionAttempts",
-    );
-    this.#operationTimeoutMilliseconds = OidcFlowValues.positiveSafeInteger(
-      options.operationTimeoutMilliseconds ?? DEFAULT_TIMEOUT,
-      "operationTimeoutMilliseconds",
-    );
-    this.#maxAuthorizationUrlLength = OidcFlowValues.positiveSafeInteger(
-      options.maxAuthorizationUrlLength ?? DEFAULT_MAX_URL,
-      "maxAuthorizationUrlLength",
-    );
+    const limits = OidcFlowValues.limits(options);
+    this.#transactionTtlMilliseconds = limits.transactionTtlMilliseconds;
+    this.#grantTtlMilliseconds = limits.grantTtlMilliseconds;
+    this.#maxTransactions = limits.maxTransactions;
+    this.#maxGrants = limits.maxGrants;
+    this.#collisionAttempts = limits.collisionAttempts;
+    this.#operationTimeoutMilliseconds = limits.operationTimeoutMilliseconds;
+    this.#maxAuthorizationUrlLength = limits.maxAuthorizationUrlLength;
   }
 
   /**
@@ -410,6 +397,12 @@ export class OidcFlow {
     }
   }
 
+  /**
+   * Runs one provider callback under the configured timeout and shutdown signal.
+   * @typeParam T The successful callback result.
+   * @param operation The callback to run with a cancellation signal.
+   * @returns The callback result, or undefined after timeout or closure.
+   */
   async #runBounded<T>(operation: (signal: AbortSignal) => Promise<T>): Promise<T | undefined> {
     const controller = new AbortController();
     this.#callbacks.add(controller);
@@ -555,6 +548,75 @@ type ValidCallbackInputSnapshot =
     };
 
 const OidcFlowValues = Object.freeze({
+  /**
+   * Validates trusted OIDC endpoints, client identity, callbacks, and redirects.
+   * @param options The flow configuration to validate.
+   * @returns Validated endpoint and scope settings.
+   */
+  settings(options: OidcFlowOptions) {
+    const authorizationEndpoint = OidcFlowValues.strictHttpsUrl(
+      options.authorizationEndpoint,
+      "authorizationEndpoint",
+    );
+    OidcFlowValues.strictHttpsUrl(options.callbackUri, "callbackUri");
+    const clientId = OidcFlowValues.nonEmpty(options.clientId, "clientId");
+    const scopes = OidcFlowValues.validScopes(options.scopes);
+    const redirects = OidcFlowValues.validRedirects(options.allowedPostLoginRedirects);
+    validateProvider(options.provider);
+    OidcFlowValues.validateFunction(
+      (options.identityMapping as unknown as Record<string, unknown>).resolve,
+      "identityMapping.resolve",
+    );
+    OidcFlowValues.validateFunction(
+      (options.sessionIssuer as unknown as Record<string, unknown>).issue,
+      "sessionIssuer.issue",
+    );
+    return { authorizationEndpoint, clientId, scopes, redirects };
+  },
+
+  /**
+   * Validates finite capacities and deadlines for one OIDC flow.
+   * @param options The flow configuration to validate.
+   * @returns Positive transaction, grant, retry, and URL limits.
+   */
+  limits(options: OidcFlowOptions) {
+    return {
+      transactionTtlMilliseconds: OidcFlowValues.positiveSafeInteger(
+        options.transactionTtlMilliseconds ?? DEFAULT_TRANSACTION_TTL,
+        "transactionTtlMilliseconds",
+      ),
+      grantTtlMilliseconds: OidcFlowValues.positiveSafeInteger(
+        options.grantTtlMilliseconds ?? DEFAULT_GRANT_TTL,
+        "grantTtlMilliseconds",
+      ),
+      maxTransactions: OidcFlowValues.positiveSafeInteger(
+        options.maxTransactions ?? DEFAULT_CAPACITY,
+        "maxTransactions",
+      ),
+      maxGrants: OidcFlowValues.positiveSafeInteger(
+        options.maxGrants ?? DEFAULT_CAPACITY,
+        "maxGrants",
+      ),
+      collisionAttempts: OidcFlowValues.positiveSafeInteger(
+        options.collisionAttempts ?? DEFAULT_COLLISION_ATTEMPTS,
+        "collisionAttempts",
+      ),
+      operationTimeoutMilliseconds: OidcFlowValues.positiveSafeInteger(
+        options.operationTimeoutMilliseconds ?? DEFAULT_TIMEOUT,
+        "operationTimeoutMilliseconds",
+      ),
+      maxAuthorizationUrlLength: OidcFlowValues.positiveSafeInteger(
+        options.maxAuthorizationUrlLength ?? DEFAULT_MAX_URL,
+        "maxAuthorizationUrlLength",
+      ),
+    };
+  },
+
+  /**
+   * Creates a rejected authorization start result.
+   * @param reason The rejection reason.
+   * @returns The rejected start outcome.
+   */
   rejected(
     reason:
       "invalid-input" | "capacity-exceeded" | "entropy-exhausted" | "clock-failure" | "closed",
@@ -562,6 +624,11 @@ const OidcFlowValues = Object.freeze({
     return Object.freeze({ kind: "rejected", reason });
   },
 
+  /**
+   * Creates a rejected provider callback result.
+   * @param reason The rejection reason.
+   * @returns The rejected callback outcome.
+   */
   callbackRejected(
     reason:
       | "invalid-input"
@@ -579,10 +646,20 @@ const OidcFlowValues = Object.freeze({
     return Object.freeze({ kind: "rejected", reason });
   },
 
+  /**
+   * Creates a rejected application-session exchange result.
+   * @returns The rejected exchange outcome.
+   */
   exchangeRejected(): OidcFlowExchangeResult {
     return Object.freeze({ kind: "rejected" });
   },
 
+  /**
+   * Validates and parses a strict HTTPS endpoint.
+   * @param value The HTTPS endpoint URL to validate.
+   * @param name The endpoint option named in validation errors.
+   * @returns The parsed HTTPS URL.
+   */
   strictHttpsUrl(value: string, name: string): URL {
     const url = OidcFlowValues.parseUrl(value, name);
     if (url.protocol !== "https:" || url.username !== "" || url.password !== "" || url.hash !== "")
@@ -590,6 +667,12 @@ const OidcFlowValues = Object.freeze({
     return url;
   },
 
+  /**
+   * Parses a callback or redirect URL under the flow policy.
+   * @param value The callback or redirect URL to parse.
+   * @param name The callback or redirect URL option named in validation errors.
+   * @returns The parsed URL.
+   */
   parseUrl(value: string, name: string): URL {
     if (typeof value !== "string" || value.length === 0 || value.length > 4_096)
       throw new TypeError(`${name} must be a bounded non-empty URL`);
@@ -600,6 +683,11 @@ const OidcFlowValues = Object.freeze({
     }
   },
 
+  /**
+   * Checks scope count, format, and uniqueness.
+   * @param scopes The requested OAuth scope list.
+   * @returns The validated scope list.
+   */
   validScopes(scopes: unknown): readonly string[] {
     if (!Array.isArray(scopes) || scopes.length === 0 || scopes.length > 64)
       throw new TypeError("scopes must be a non-empty bounded list");
@@ -613,6 +701,11 @@ const OidcFlowValues = Object.freeze({
     return Object.freeze(copy);
   },
 
+  /**
+   * Validates the allowed post-login redirect set.
+   * @param redirects The configured post-login redirect URLs.
+   * @returns The validated redirect set.
+   */
   validRedirects(redirects: unknown): ReadonlySet<string> {
     if (!Array.isArray(redirects) || redirects.length === 0 || redirects.length > 1_000)
       throw new TypeError("allowedPostLoginRedirects must be a non-empty bounded list");
@@ -627,6 +720,12 @@ const OidcFlowValues = Object.freeze({
     return new Set(copy);
   },
 
+  /**
+   * Checks a start request against allowed redirects and scope bounds.
+   * @param input The caller or provider input to validate.
+   * @param redirects The configured post-login redirect URLs.
+   * @returns Whether the start request is valid.
+   */
   validStartInput(
     input: { readonly browserCodeChallenge: unknown; readonly postLoginRedirect: unknown },
     redirects: ReadonlySet<string>,
@@ -647,6 +746,11 @@ const OidcFlowValues = Object.freeze({
     }
   },
 
+  /**
+   * Copies a validated start request for transaction retention.
+   * @param input The caller or provider input to validate.
+   * @returns The detached start request, or undefined when invalid.
+   */
   snapshotStartInput(
     input: unknown,
   ): { readonly browserCodeChallenge: unknown; readonly postLoginRedirect: unknown } | undefined {
@@ -661,6 +765,11 @@ const OidcFlowValues = Object.freeze({
     }
   },
 
+  /**
+   * Copies the returned state from a provider callback.
+   * @param input The caller or provider input to validate.
+   * @returns The copied state, or undefined when invalid.
+   */
   snapshotCallbackState(input: unknown): string | undefined {
     try {
       if (!OidcFlowValues.plainRecord(input)) return undefined;
@@ -671,6 +780,11 @@ const OidcFlowValues = Object.freeze({
     }
   },
 
+  /**
+   * Copies and validates the complete provider callback.
+   * @param input The caller or provider input to validate.
+   * @returns The copied callback, or undefined when invalid.
+   */
   snapshotCallbackInput(input: unknown): CallbackInputSnapshot | undefined {
     try {
       if (!OidcFlowValues.plainRecord(input)) return undefined;
@@ -684,6 +798,11 @@ const OidcFlowValues = Object.freeze({
     }
   },
 
+  /**
+   * Checks callback state, code, issuer, and provider error fields.
+   * @param input The caller or provider input to validate.
+   * @returns Whether the callback fields are valid.
+   */
   validCallbackInput(input: CallbackInputSnapshot): input is ValidCallbackInputSnapshot {
     const codeValid = typeof input.code === "string" && OidcFlowValues.boundedNonEmpty(input.code);
     const errorValid =
@@ -697,10 +816,20 @@ const OidcFlowValues = Object.freeze({
     );
   },
 
+  /**
+   * Checks whether an application grant string is well formed.
+   * @param value The application grant string to validate.
+   * @returns Whether the grant is valid.
+   */
   validGrant(value: unknown): value is string {
     return typeof value === "string" && base64Url32.test(value);
   },
 
+  /**
+   * Copies a validated application-grant exchange request.
+   * @param input The caller or provider input to validate.
+   * @returns The copied exchange input, or undefined when invalid.
+   */
   snapshotGrantExchangeInput(input: unknown): { readonly grant: unknown } | undefined {
     try {
       if (!OidcFlowValues.plainRecord(input)) return undefined;
@@ -710,6 +839,11 @@ const OidcFlowValues = Object.freeze({
     }
   },
 
+  /**
+   * Copies a browser PKCE verifier from a start request.
+   * @param input The caller or provider input to validate.
+   * @returns The copied PKCE verifier, or undefined when invalid.
+   */
   snapshotBrowserCodeVerifier(input: unknown): unknown {
     try {
       if (!OidcFlowValues.plainRecord(input)) return undefined;
@@ -719,10 +853,21 @@ const OidcFlowValues = Object.freeze({
     }
   },
 
+  /**
+   * Checks an RFC 7636 browser PKCE verifier.
+   * @param value The browser PKCE verifier to validate.
+   * @returns Whether the verifier satisfies RFC 7636.
+   */
   validBrowserCodeVerifier(value: unknown): value is string {
     return typeof value === "string" && RFC7636_VERIFIER.test(value);
   },
 
+  /**
+   * Checks a verified external identity against the expected issuer.
+   * @param identity The verified external identity.
+   * @param issuer The issuer supplied to this operation.
+   * @returns Whether identity and issuer fields are valid.
+   */
   validExternalIdentity(identity: unknown, issuer: string): ExternalIdentity | undefined {
     try {
       if (!OidcFlowValues.plainRecord(identity)) return undefined;
@@ -743,6 +888,12 @@ const OidcFlowValues = Object.freeze({
     }
   },
 
+  /**
+   * Copies the external identity accepted for application mapping.
+   * @param identity The verified external identity.
+   * @param expected The expected issuer or identity context.
+   * @returns The detached external identity, or undefined when invalid.
+   */
   snapshotResolvedIdentity(
     identity: unknown,
     expected: ExternalIdentity,
@@ -801,6 +952,12 @@ const OidcFlowValues = Object.freeze({
     }
   },
 
+  /**
+   * Copies an identity attribute record under size and token limits.
+   * @param value The identity attributes or claims to copy.
+   * @param rejectTokens Whether token-like attribute names are forbidden.
+   * @returns The copied attributes, or undefined when bounds fail.
+   */
   copyBoundedRecord(
     value: unknown,
     rejectTokens: boolean,
@@ -829,6 +986,11 @@ const OidcFlowValues = Object.freeze({
     return Object.freeze(copy);
   },
 
+  /**
+   * Checks the mapped application principal and its attributes.
+   * @param principal The mapped application principal.
+   * @returns Whether the principal satisfies application bounds.
+   */
   validPrincipal(principal: unknown): principal is AuthenticatedPrincipal {
     const candidate = principal as AuthenticatedPrincipal;
     if (
@@ -850,6 +1012,11 @@ const OidcFlowValues = Object.freeze({
     });
   },
 
+  /**
+   * Checks the session issuer response and expiry.
+   * @param issue The application session issuer result.
+   * @returns Whether the issued session is valid.
+   */
   validSessionIssue(issue: unknown): issue is ApplicationSessionIssue {
     if (!OidcFlowValues.plainRecord(issue)) return false;
     const credential = issue.credential;
@@ -864,6 +1031,11 @@ const OidcFlowValues = Object.freeze({
     );
   },
 
+  /**
+   * Copies an accepted session issue result.
+   * @param issue The application session issuer result.
+   * @returns The copied session issue, or undefined when invalid.
+   */
   snapshotSessionIssue(
     issue: unknown,
   ): { readonly credential: RequestCredential; readonly session: ResolvedSession } | undefined {
@@ -899,6 +1071,11 @@ const OidcFlowValues = Object.freeze({
     }
   },
 
+  /**
+   * Checks a session expiry against the Protobuf timestamp range.
+   * @param value The session Timestamp message to validate.
+   * @returns Whether the expiry is representable.
+   */
   validSessionTimestamp(value: unknown): value is Timestamp {
     if (!OidcFlowValues.plainRecord(value)) return false;
     return (
@@ -912,6 +1089,11 @@ const OidcFlowValues = Object.freeze({
     );
   },
 
+  /**
+   * Copies a resolved session and its principal.
+   * @param session The resolved session to copy.
+   * @returns The detached resolved session.
+   */
   copyResolvedSession(session: ResolvedSession): ResolvedSession {
     const attributes = session.principal.attributes;
     const principal = Object.freeze({
@@ -927,20 +1109,40 @@ const OidcFlowValues = Object.freeze({
     });
   },
 
+  /**
+   * Checks a bounded non-empty string value.
+   * @param value The string to check for length and content.
+   * @returns The bounded string, or undefined when invalid.
+   */
   boundedNonEmpty(value: unknown): value is string {
     return typeof value === "string" && value.length > 0 && value.length <= 4_096;
   },
 
+  /**
+   * Checks whether a value is a plain record.
+   * @param value The unknown value to test for plain-record shape.
+   * @returns Whether the value is a plain record.
+   */
   plainRecord(value: unknown): value is Readonly<Record<string, unknown>> {
     if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
     const prototype = Reflect.getPrototypeOf(value);
     return prototype === Object.prototype || prototype === null;
   },
 
+  /**
+   * Checks whether an attribute name is reserved for token claims.
+   * @param name The identity attribute name to check.
+   * @returns Whether the name is reserved for token claims.
+   */
   tokenLikeClaim(name: string): boolean {
     return /(^|[_-])(access[_-]?token|refresh[_-]?token|id[_-]?token|token)([_-]|$)/iu.test(name);
   },
 
+  /**
+   * Checks a candidate URL against strict HTTPS rules.
+   * @param value The URL string to check for strict HTTPS form.
+   * @returns Whether the candidate is a strict HTTPS URL.
+   */
   isStrictHttpsUrl(value: string): boolean {
     try {
       OidcFlowValues.strictHttpsUrl(value, "issuer");
@@ -950,12 +1152,22 @@ const OidcFlowValues = Object.freeze({
     }
   },
 
+  /**
+   * Validates a non-empty named option.
+   * @param value The option string to validate.
+   * @param name The string option named in validation errors.
+   * @returns The validated non-empty value.
+   */
   nonEmpty(value: string, name: string): string {
     if (typeof value !== "string" || value.length === 0 || value.length > 4_096)
       throw new TypeError(`${name} must be a bounded non-empty string`);
     return value;
   },
 
+  /**
+   * Validates the trusted provider contract and issuer.
+   * @param provider The configured identity provider.
+   */
   validateProvider(provider: unknown): asserts provider is OidcVerifiedIdentityProvider {
     if (!OidcFlowValues.plainRecord(provider)) throw new TypeError("provider is required");
     if (typeof provider.issuer !== "string") throw new TypeError("provider.issuer is required");
@@ -966,16 +1178,32 @@ const OidcFlowValues = Object.freeze({
     );
   },
 
+  /**
+   * Validates a callable integration hook.
+   * @param value The integration callback to validate.
+   * @param name The callback option named in validation errors.
+   */
   validateFunction(value: unknown, name: string): void {
     if (typeof value !== "function") throw new TypeError(`${name} must be a function`);
   },
 
+  /**
+   * Validates a positive safe integer option.
+   * @param value The positive integer option to validate.
+   * @param name The integer option named in validation errors.
+   * @returns The validated positive safe integer.
+   */
   positiveSafeInteger(value: number, name: string): number {
     if (!Number.isSafeInteger(value) || value <= 0)
       throw new TypeError(`${name} must be a positive safe integer`);
     return value;
   },
 
+  /**
+   * Checks whether epoch milliseconds fit the supported timestamp range.
+   * @param value The Unix epoch milliseconds to check against Protobuf bounds.
+   * @returns Whether the timestamp is representable.
+   */
   validTimestamp(value: number): boolean {
     return (
       Number.isSafeInteger(value) &&
@@ -984,16 +1212,33 @@ const OidcFlowValues = Object.freeze({
     );
   },
 
+  /**
+   * Calculates a safe expiry deadline from a clock reading and TTL.
+   * @param now The current Unix epoch time in milliseconds.
+   * @param ttl The permitted lifetime in milliseconds.
+   * @returns The safe expiry time, or undefined if it overflows.
+   */
   expiryAt(now: number, ttl: number): number | undefined {
     const value = now + ttl;
     return OidcFlowValues.validTimestamp(value) ? value : undefined;
   },
 
+  /**
+   * Creates a URL-safe SHA-256 challenge from PKCE material.
+   * @param value The ASCII PKCE verifier material to hash.
+   * @returns The URL-safe SHA-256 digest.
+   */
   sha256Base64Url(value: string): string {
     // Node's synchronous hash keeps start() atomic and avoids retaining the verifier buffer.
     return createHash("sha256").update(value, "ascii").digest("base64url");
   },
 
+  /**
+   * Compares secret strings without content-dependent early exit.
+   * @param left The first secret value.
+   * @param right The second secret value.
+   * @returns Whether the secret strings are equal.
+   */
   constantTimeEquals(left: string, right: string): boolean {
     const leftBytes = Buffer.from(left, "ascii");
     const rightBytes = Buffer.from(right, "ascii");

@@ -1,4 +1,4 @@
-import { Time } from "../packages/core/src/time.ts";
+import { Time } from "../packages/core/src/time/index.ts";
 
 const template = `/*
  * Copyright {year}, CodeMatters. All rights reserved.

@@ -1,0 +1,30 @@
+[
+  {
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "unchanged": true
+  },
+  {
+    "file": "packages/server/src/delivery/inbox-records.ts",
+    "unchanged": true
+  },
+  {
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "unchanged": true
+  },
+  {
+    "file": "examples/orders/src/load-runner.ts",
+    "unchanged": true
+  },
+  {
+    "file": "examples/projects/src/load-runner.ts",
+    "unchanged": true
+  },
+  {
+    "file": "packages/client-web/src/client/client.ts",
+    "unchanged": true
+  },
+  {
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "unchanged": true
+  }
+]
