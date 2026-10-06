@@ -12,23 +12,19 @@
  * the License.
  */
 
+import { create } from "@bufbuild/protobuf";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Time } from "@spine-event-engine/core/time";
-import type { Clock } from "@spine-event-engine/auth";
+import { expect, it } from "vitest";
 
-/**
- *
- * Supplies the current wall-clock timestamp for Message Board Gateway decisions.
- */
-export class SystemClock implements Clock {
-  // prettier-ignore
+import { SystemClock } from "../src/system-clock.js";
 
-  /**
-   *
-   * Returns the current wall-clock time.
-   *
-   * @returns The current time as a Protobuf timestamp.
-   */
-  now(): ReturnType<Clock["now"]> {
-    return Time.currentTime();
+it("uses the shared precise Time provider for Message Board gateway context", () => {
+  const timestamp = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 123_456_000 });
+  const previous = Time.setProvider({ currentTime: () => timestamp });
+  try {
+    expect(new SystemClock().now()).toEqual(timestamp);
+  } finally {
+    Time.setProvider(previous);
   }
-}
+});

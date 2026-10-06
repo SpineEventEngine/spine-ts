@@ -13,6 +13,8 @@
  */
 
 import { create } from "@bufbuild/protobuf";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { Time } from "@spine-event-engine/core";
 import { VersionSchema } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
 import {
@@ -72,6 +74,26 @@ function createSingularState(overrides: Partial<ProjectRecordState> = {}): Proje
 }
 
 describe("entity transactions", () => {
+  it("uses the shared precise instant for a changed Entity version", () => {
+    const instant = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 123_456_000 });
+    const previousProvider = Time.setProvider({ currentTime: () => instant });
+    try {
+      const version = create(VersionSchema, { number: 3 });
+      const transaction = createEntityTransaction({
+        schema: ProjectOverviewStateSchema,
+        previous: createProjectOverviewState(),
+        version: { previous: version, draft: version },
+      });
+      transaction.update((draft) => void (draft.name = "Ready"));
+      const result = transaction.commit();
+      expect(result.status).toBe("accepted");
+      if (result.status !== "accepted") throw new Error("Expected an accepted commit.");
+      expect(result.version.committed.timestamp).toEqual(instant);
+    } finally {
+      Time.setProvider(previousProvider);
+    }
+  });
+
   it("advances Spine Version once for a state change and preserves it for a no-op", () => {
     const version = create(VersionSchema, { number: 3 });
     const changed = createEntityTransaction({

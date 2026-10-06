@@ -14,7 +14,7 @@
 
 import { create, toBinary, type Message } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
+import { AnyMessages, Time, TypeUrls } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   BoundedContextNameSchema,
@@ -146,13 +146,9 @@ export class ThirdPartyContext {
     if (isUser) {
       if (this.#multitenant)
         throw new Error("Multitenant ThirdPartyContext requires ActorContext.");
-      const now = Date.now();
       return create(ActorContextSchema, {
         actor,
-        timestamp: create(TimestampSchema, {
-          seconds: BigInt(Math.floor(now / 1_000)),
-          nanos: (now % 1_000) * 1_000_000,
-        }),
+        timestamp: Time.currentTime(),
       });
     }
     const hasTenant = actor.tenantId?.kind.case !== undefined;

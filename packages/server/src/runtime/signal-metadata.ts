@@ -24,7 +24,7 @@ import {
   TimestampSchema,
   type Timestamp,
 } from "@bufbuild/protobuf/wkt";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyMessages, Time, type TimeProvider } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   type ActorContext,
@@ -73,7 +73,7 @@ export class SystemClock implements Clock {
    * @returns Current system time.
    */
   now(): Date {
-    return new Date();
+    return new Date(Time.currentTimeMillis());
   }
 }
 
@@ -109,9 +109,9 @@ export interface SignalMetadataOptions {
   // prettier-ignore
 
   /**
-   * Supplies timestamps; defaults to {@link SystemClock}.
+   * Supplies timestamps; defaults to shared {@link Time}. Legacy `Clock` values remain accepted.
    */
-  readonly clock?: Clock;
+  readonly clock?: Clock | TimeProvider;
 }
 
 /**
@@ -174,7 +174,7 @@ export interface EventContextInput {
  * Creates immutable metadata for commands and events.
  */
 export class SignalMetadata {
-  readonly #clock: Clock;
+  readonly #clock: Clock | TimeProvider | undefined;
 
   /**
    * Creates a metadata factory.
@@ -182,7 +182,7 @@ export class SignalMetadata {
    * @param options Optional clock.
    */
   constructor(options: SignalMetadataOptions = {}) {
-    this.#clock = options.clock ?? new SystemClock();
+    this.#clock = options.clock;
   }
 
   /**
@@ -206,10 +206,15 @@ export class SignalMetadata {
   /**
    * Creates a Protobuf timestamp from a finite date.
    *
-   * @param value Date to convert; defaults to the configured clock.
+   * @param value Date to convert; omitted to read the configured clock or shared Time.
    * @returns Protobuf timestamp.
    */
-  timestamp(value: Date = this.#clock.now()): Timestamp {
+  timestamp(value?: Date): Timestamp {
+    if (value === undefined) {
+      if (this.#clock === undefined) return Time.currentTime();
+      if ("currentTime" in this.#clock) return this.#clock.currentTime();
+      value = this.#clock.now();
+    }
     const date = SignalValues.time(value);
     const milliseconds = date.getTime();
     const seconds = Math.floor(milliseconds / 1_000);

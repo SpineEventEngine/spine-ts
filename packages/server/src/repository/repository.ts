@@ -27,7 +27,6 @@ import {
   Int32ValueSchema,
   Int64ValueSchema,
   StringValueSchema,
-  TimestampSchema,
   type Any,
   type Timestamp,
 } from "@bufbuild/protobuf/wkt";
@@ -40,6 +39,7 @@ import {
   AnyMessages,
   Identifiers,
   StringifierRegistry,
+  Time,
 } from "@spine-event-engine/core";
 import {
   CommandContextSchema,
@@ -5412,11 +5412,7 @@ const RepositorySignals = {
    * @returns Timestamp derived from the current clock.
    */
   executionTimestamp(): Timestamp {
-    const milliseconds = Date.now();
-    return create(TimestampSchema, {
-      seconds: BigInt(Math.floor(milliseconds / 1_000)),
-      nanos: (milliseconds % 1_000) * 1_000_000,
-    });
+    return Time.currentTime();
   },
 };
 

@@ -17,8 +17,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { StringValueSchema } from "@bufbuild/protobuf/wkt";
-import { TypeRegistry } from "@spine-event-engine/core";
+import { StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { Time, TypeRegistry } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   type ActorContext,
@@ -150,6 +150,11 @@ describe("Wave 13 ThirdPartyContext", () => {
       .buildAsync();
     const context = await DirectSourceThirdPartyContext.singleTenant("DirectSourceTimestampSource");
     const before = Date.now();
+    const precise = create(TimestampSchema, {
+      seconds: BigInt(Math.floor(before / 1_000)),
+      nanos: (before % 1_000) * 1_000_000 + 456_000,
+    });
+    const previousProvider = Time.setProvider({ currentTime: () => precise });
 
     try {
       await context.emittedEvent(
@@ -162,12 +167,14 @@ describe("Wave 13 ThirdPartyContext", () => {
         eventContext?.origin.case === "importContext" ? eventContext.origin.value : undefined;
       expect(actorContext?.timestamp).toEqual(eventContext?.timestamp);
       const timestamp = eventContext?.timestamp;
+      expect(timestamp).toEqual(precise);
       expect(timestamp?.seconds).toBeGreaterThan(0n);
       const millis =
         Number(timestamp?.seconds ?? 0n) * 1_000 + Math.floor((timestamp?.nanos ?? 0) / 1_000_000);
       expect(millis).toBeGreaterThanOrEqual(before);
       expect(millis).toBeLessThanOrEqual(Date.now());
     } finally {
+      Time.setProvider(previousProvider);
       await Promise.all([receiver.close(), context.close()]);
       await resetDirectSourceServerEnvironment();
     }

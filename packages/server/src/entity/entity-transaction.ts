@@ -13,7 +13,7 @@
  */
 
 import { clone, create, fromBinary, toBinary, type MessageShape } from "@bufbuild/protobuf";
-import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { Time } from "@spine-event-engine/core/time";
 import {
   ConstraintViolationSchema,
   VersionSchema,
@@ -619,13 +619,9 @@ export class EntityTransaction<Schema extends DescriptorMessageSchema> {
     if (!this.#changed(next, producedEvents)) {
       return clone(VersionSchema, version);
     }
-    const milliseconds = Date.now();
     return create(VersionSchema, {
       number: version.number + 1,
-      timestamp: create(TimestampSchema, {
-        seconds: BigInt(Math.floor(milliseconds / 1_000)),
-        nanos: (milliseconds % 1_000) * 1_000_000,
-      }),
+      timestamp: Time.currentTime(),
     });
   }
 

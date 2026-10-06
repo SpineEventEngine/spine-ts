@@ -14,10 +14,10 @@
 
 import { clone, create, toBinary, type Message, type MessageShape } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { TimestampSchema, type Any } from "@bufbuild/protobuf/wkt";
+import { type Any } from "@bufbuild/protobuf/wkt";
 import { createClient, type Interceptor, type Transport } from "@connectrpc/connect";
 import { createConnectTransport, createGrpcWebTransport } from "@connectrpc/connect-web";
-import { SignalEnvelopes, AnyMessages } from "@spine-event-engine/core";
+import { SignalEnvelopes, AnyMessages, Time } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   CommandContextSchema,
@@ -659,7 +659,7 @@ class Request implements ClientRequest {
       ...(this.#tenant === undefined ? {} : { tenantId: clone(TenantIdSchema, this.#tenant) }),
       zoneId: clone(ZoneIdSchema, this.#zoneId),
       actor: create(UserIdSchema, { value: this.#actor }),
-      timestamp: create(TimestampSchema, { seconds: BigInt(Math.floor(Date.now() / 1_000)) }),
+      timestamp: Time.currentTime(),
     });
   }
 }
@@ -1325,7 +1325,7 @@ const BrowserClientValues = Object.freeze({
   },
 
   DEFAULT_SUBSCRIPTION_SCHEDULER: {
-    now: () => Date.now(),
+    now: () => Math.floor(Time.monotonicTime()),
     wait: (delayMs: number, signal: AbortSignal) =>
       new Promise<void>((resolve, reject) => {
         if (signal.aborted) {

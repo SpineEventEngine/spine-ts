@@ -20,7 +20,7 @@ import {
   StringValueSchema,
   TimestampSchema,
 } from "@bufbuild/protobuf/wkt";
-import { TypeUrls, AnyMessages } from "@spine-event-engine/core";
+import { TypeUrls, AnyMessages, Time } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   CommandContextSchema,
@@ -41,6 +41,18 @@ import { AssignReviewTaskSchema } from "../../test-fixtures/generated/handler-re
 import { ReviewTaskAssignedSchema } from "../../test-fixtures/generated/handler-registry/events_pb.js";
 
 describe("SignalMetadata", () => {
+  it("retains provider nanoseconds for generated signal timestamps", () => {
+    const instant = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 123_456_000 });
+    const previous = Time.setProvider({ currentTime: () => instant });
+    try {
+      const metadata = new SignalMetadata();
+      expect(metadata.timestamp()).toEqual(instant);
+      expect(metadata.commandContext().actorContext).toBeUndefined();
+    } finally {
+      Time.setProvider(previous);
+    }
+  });
+
   it("creates fresh ids, timestamps, and actor/tenant command contexts", () => {
     const metadata = new SignalMetadata({
       clock: new FixedClock(new Date("2026-07-09T10:11:12.345Z")),
