@@ -6,7 +6,6 @@ import { dirname, join } from "node:path";
 import process from "node:process";
 import test from "node:test";
 
-import { Time } from "../../../packages/core/dist/time/index.js";
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const compose = join(root, "deploy", "compose.yaml");
 const client = join(root, "..", "message-board", "deploy", "compose", "rpc-client.mjs");
@@ -17,9 +16,9 @@ test(
   "runs two application nodes behind one Gateway and shuts them down",
   { timeout: 90_000 },
   () => {
-    cleanupDeadlineAt = Time.currentTimeMillis() + 88_000;
+    cleanupDeadlineAt = Date.now() + 88_000;
     operationDeadlineAt = cleanupDeadlineAt - 15_000;
-    const project = `t0111-${Time.currentTimeMillis()}`;
+    const project = `t0111-${Date.now()}`;
     try {
       composeRun(project, ["up", "--detach"]);
       waitFor(project, [
@@ -157,6 +156,6 @@ function clientRun(project, runId) {
 function remaining(cleanup = false) {
   return Math.max(
     1,
-    (cleanup ? cleanupDeadlineAt : operationDeadlineAt) - Time.currentTimeMillis(),
+    (cleanup ? cleanupDeadlineAt : operationDeadlineAt) - Date.now(),
   );
 }

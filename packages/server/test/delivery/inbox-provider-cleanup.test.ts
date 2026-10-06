@@ -12,7 +12,6 @@
  * the License.
  */
 
-import { Time } from "@spine-event-engine/core/time";
 import { create } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
@@ -64,7 +63,7 @@ describe.skipIf(!providerEnabled(inboxProvider, "mysql", mysqlUrl !== undefined)
 
     it("deletes only the exact delivered snapshot under the current leased session", async () => {
       const context = {
-        name: `t0191_mysql_${String(Time.currentTimeMillis())}`,
+        name: `t0191_mysql_${String(Date.now())}`,
         multitenant: false,
       } as const;
       await expect(removeExact(factory, context)).resolves.toBeUndefined();
@@ -72,7 +71,7 @@ describe.skipIf(!providerEnabled(inboxProvider, "mysql", mysqlUrl !== undefined)
 
     it("preserves a physically present row for a stale owner across independently opened factories", async () => {
       const context = {
-        name: `t0191_mysql_two_owner_${String(Time.currentTimeMillis())}`,
+        name: `t0191_mysql_two_owner_${String(Date.now())}`,
         multitenant: false,
       } as const;
       await expect(
@@ -108,7 +107,7 @@ describe.skipIf(!providerEnabled(inboxProvider, "postgresql", postgresqlUrl !== 
 
     it("deletes only the exact delivered snapshot under the current leased session", async () => {
       const context = {
-        name: `t0230_postgresql_${String(Time.currentTimeMillis())}`,
+        name: `t0230_postgresql_${String(Date.now())}`,
         multitenant: false,
       } as const;
       await expect(removeExact(factory, context)).resolves.toBeUndefined();
@@ -116,7 +115,7 @@ describe.skipIf(!providerEnabled(inboxProvider, "postgresql", postgresqlUrl !== 
 
     it("preserves a stale delivered row across independently opened factories", async () => {
       const context = {
-        name: `t0230_postgresql_two_factory_${String(Time.currentTimeMillis())}`,
+        name: `t0230_postgresql_two_factory_${String(Date.now())}`,
         multitenant: false,
       } as const;
       await expect(removeAcrossFactories(factory, secondFactory, context)).resolves.toBeUndefined();
@@ -135,7 +134,7 @@ describe.skipIf(!providerEnabled(inboxProvider, "datastore", datastoreHost !== u
         .setStringifierRegistry(stringifiers)
         .build();
       const context = {
-        name: `t0191_datastore_${String(Time.currentTimeMillis())}`,
+        name: `t0191_datastore_${String(Date.now())}`,
         multitenant: false,
       } as const;
       try {
@@ -157,7 +156,7 @@ describe.skipIf(!providerEnabled(inboxProvider, "datastore", datastoreHost !== u
         .setStringifierRegistry(stringifiers)
         .build();
       const context = {
-        name: `t0191_datastore_two_owner_${String(Time.currentTimeMillis())}`,
+        name: `t0191_datastore_two_owner_${String(Date.now())}`,
         multitenant: false,
       } as const;
       try {
@@ -178,7 +177,7 @@ async function removeExact(
   factory: Parameters<typeof open>[0],
   context: { readonly name: string; readonly multitenant: false },
 ): Promise<void> {
-  let now = Time.currentTimeMillis() + 7_200_000;
+  let now = Date.now() + 7_200_000;
   const inbox = open(factory, context, () => new Date(now));
   const registry = new ShardedWorkRegistry({
     context,
@@ -188,7 +187,7 @@ async function removeExact(
   });
   const worker = (node: string) =>
     create(WorkerIdSchema, { nodeId: { value: node }, value: "worker" });
-  const seed = `${context.name}-${String(Time.currentTimeMillis())}`;
+  const seed = `${context.name}-${String(Date.now())}`;
   const session = await registry.pickUp(ShardIndex.single(), worker("current"));
   if (session === undefined) throw new Error("Expected current provider session.");
   const message = createMessage(`${seed}-provider`, "exact", 1n);
@@ -240,7 +239,7 @@ async function removeAcrossFactories(
   context: { readonly name: string; readonly multitenant: false },
   count?: (message: Parameters<Inbox["removeDelivered"]>[0]) => Promise<number>,
 ): Promise<void> {
-  let now = Time.currentTimeMillis() + 7_200_000;
+  let now = Date.now() + 7_200_000;
   const firstInbox = open(firstFactory, context, () => new Date(now));
   const secondInbox = open(secondFactory, context, () => new Date(now));
   const firstRegistry = new ShardedWorkRegistry({

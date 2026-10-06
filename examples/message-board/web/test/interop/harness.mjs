@@ -7,7 +7,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
-import { Time } from "@spine-event-engine/core/time";
 import { fromBinary } from "../../../../../packages/proto/node_modules/@bufbuild/protobuf/dist/esm/index.js";
 import {
   connectNodeAdapter,
@@ -425,8 +424,8 @@ export function close(server) {
   );
 }
 async function ready(container) {
-  const deadline = Time.currentTimeMillis() + 5_000;
-  while (Time.currentTimeMillis() < deadline) {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
     const { stdout } = await run("docker", ["inspect", "-f", "{{.State.Running}}", container]);
     if (stdout.trim() !== "true") {
       const { stderr } = await run("docker", ["logs", container]);

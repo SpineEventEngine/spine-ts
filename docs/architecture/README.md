@@ -703,7 +703,7 @@ policy through `SignalMetadata`. Repository-produced commands/events
 share one policy for command/event IDs, timestamps, actor/tenant command
 context, event origin chains, primitive producer IDs, and validated int32
 version metadata. IDs are generated through Node secure UUIDs; tests use fixed
-source envelopes and `Clock` rather than mutating process-global state. This seam is still metadata-only: end-user
+source envelopes and a `TimeProvider` rather than mutating process-global state. This seam is still metadata-only: end-user
 handlers continue to accept generated domain messages instead of framework
 `Event` envelopes, manual transaction controls are
 not introduced, and the seam does not discover handlers, load generated

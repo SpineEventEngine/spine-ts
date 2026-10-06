@@ -257,7 +257,7 @@ describe("LocalProjectionInbox", () => {
       label: "UPDATE_SUBSCRIBER",
       status: "TO_DELIVER",
       shard: ShardIndex.single(),
-      whenReceived: new Date("2026-07-08T09:00:00.000Z"),
+      whenReceived: timestampFromDate(new Date("2026-07-08T09:00:00.000Z")),
       version: 1n,
     });
 
@@ -647,7 +647,7 @@ describe("LocalProjectionInbox", () => {
       label: "HANDLE_COMMAND",
       status: "TO_DELIVER",
       shard,
-      whenReceived: new Date("2026-07-08T09:00:00.000Z"),
+      whenReceived: timestampFromDate(new Date("2026-07-08T09:00:00.000Z")),
       version: 1n,
     });
     await delivery.inbox.receive({
@@ -660,7 +660,7 @@ describe("LocalProjectionInbox", () => {
       label: "UPDATE_SUBSCRIBER",
       status: "TO_DELIVER",
       shard,
-      whenReceived: new Date("2026-07-08T09:00:01.000Z"),
+      whenReceived: timestampFromDate(new Date("2026-07-08T09:00:01.000Z")),
       version: 2n,
     });
 

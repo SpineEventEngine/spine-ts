@@ -12,7 +12,6 @@
  * the License.
  */
 
-import { Time } from "@spine-event-engine/core/time";
 import { Code, ConnectError, createClient } from "@connectrpc/connect";
 import { compressionGzip, createGrpcTransport } from "@connectrpc/connect-node";
 import { clone, create, type Message } from "@bufbuild/protobuf";
@@ -5415,8 +5414,8 @@ function delay(milliseconds: number): Promise<void> {
 }
 
 async function waitForStoredEvents(eventStore: EventStore, count: number) {
-  const deadline = Time.currentTimeMillis() + 500;
-  while (Time.currentTimeMillis() < deadline) {
+  const deadline = Date.now() + 500;
+  while (Date.now() < deadline) {
     const events = await eventStore.read();
     if (events.length >= count) {
       return events;

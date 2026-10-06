@@ -12,7 +12,6 @@
  * the License.
  */
 
-import { Time } from "@spine-event-engine/core/time";
 import { create } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { createClient } from "@connectrpc/connect";
@@ -199,8 +198,8 @@ async function readEventually(
   id: string,
   actorContext: ReturnType<typeof metadata.actorContext>,
 ) {
-  const deadline = Time.currentTimeMillis() + 5_000;
-  while (Time.currentTimeMillis() < deadline) {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
     const response = await queries.read(createQuery(id, actorContext));
     if (response.response?.status?.status.case === "ok" && response.message.length > 0)
       return response;
@@ -211,7 +210,7 @@ async function readEventually(
 
 function createQuery(id: string, actorContext: ReturnType<typeof metadata.actorContext>) {
   return create(QuerySchema, {
-    id: create(QueryIdSchema, { value: `query-${id}-${String(Time.currentTimeMillis())}` }),
+    id: create(QueryIdSchema, { value: `query-${id}-${String(Date.now())}` }),
     target: create(TargetSchema, {
       type: TypeUrls.derive(ProjectSummarySchema),
       criterion: {

@@ -1,5 +1,3 @@
-import { Time } from "../packages/core/src/time/index.ts";
-
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -169,16 +167,16 @@ async function assertPackageVersion(target, fetchResponse) {
  * @returns Nothing after the exact version is publicly readable.
  */
 async function waitForPackageVersion(target, fetchResponse, wait, visibilityTimeoutMs) {
-  const deadline = Time.currentTimeMillis() + visibilityTimeoutMs;
+  const deadline = Date.now() + visibilityTimeoutMs;
   while (true) {
-    const remaining = deadline - Time.currentTimeMillis();
+    const remaining = deadline - Date.now();
     if (remaining <= 0)
       throw new Error(
         `${target.name}@${target.version} did not become publicly readable on npm within ${visibilityTimeoutMs}ms`,
       );
     const record = await readPackageRecord(target.name, fetchResponse, Math.min(10_000, remaining));
     if (record !== undefined && target.version in record.versions) return;
-    const delay = Math.min(packageVisibilityPollIntervalMs, deadline - Time.currentTimeMillis());
+    const delay = Math.min(packageVisibilityPollIntervalMs, deadline - Date.now());
     if (delay > 0) await wait(delay);
   }
 }

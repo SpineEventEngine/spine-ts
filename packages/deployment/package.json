@@ -35,7 +35,6 @@
     "loglayer": "9.4.0"
   },
   "devDependencies": {
-    "@spine-event-engine/core": "workspace:*",
     "@spine-event-engine/storage-datastore": "workspace:*",
     "@spine-event-engine/storage-mysql": "workspace:*",
     "mysql2": "3.23.1"

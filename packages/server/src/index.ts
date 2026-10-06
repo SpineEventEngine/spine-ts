@@ -123,7 +123,6 @@ export {
   type InboxMessage,
   type InboxMessageId,
   type InboxMessageInput,
-  type InboxMessageSnapshotInput,
   type InboxReadContinuation,
   type InboxReadOptions,
   type InboxWriteResult,
@@ -193,13 +192,10 @@ export {
 
 export {
   type ActorContextInput,
-  type Clock,
   type CommandContextInput,
-  FixedClock,
   type EventContextInput,
   SignalMetadata,
   type SignalMetadataOptions,
-  SystemClock,
 } from "./runtime/signal-metadata.js";
 
 export {

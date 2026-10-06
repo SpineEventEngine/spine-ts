@@ -15,6 +15,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { create, toBinary } from "@bufbuild/protobuf";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
+import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { EventSchema } from "@spine-event-engine/proto";
 import { Identifiers } from "@spine-event-engine/core";
 import type { WorkerId } from "@spine-event-engine/proto/delivery";
@@ -1132,7 +1133,7 @@ class RealDeliveryFixture {
       label: "UPDATE_SUBSCRIBER",
       status: "TO_DELIVER",
       shard,
-      whenReceived: new Date("2026-07-23T12:00:00.000Z"),
+      whenReceived: timestampFromDate(new Date("2026-07-23T12:00:00.000Z")),
       version,
       signal: create(AnySchema, {
         typeUrl: "type.spine.io/spine.core.Event",

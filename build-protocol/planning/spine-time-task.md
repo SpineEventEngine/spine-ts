@@ -2,11 +2,11 @@
 
 ## Objective and scope
 
-Introduce the Spine TS equivalent of Spine JVM Time and use it everywhere Spine TS asks for time. Complete and verify this task independently of Agent support. It changes the shared framework and its existing consumers; it does not introduce Agents, AI adapters, conversations or Agent history.
+Introduce the Spine TS equivalent of Spine JVM Time and use it wherever Spine TS framework or application runtime code asks for time. Complete and verify this task independently of Agent support. It changes the shared framework and its existing consumers; it does not introduce Agents, AI adapters, conversations or Agent history.
 
 Reference implementation: [Spine JVM Time.java](https://github.com/SpineEventEngine/base-libraries/blob/master/base/src/main/java/io/spine/base/Time.java), including IncrementalNanos and the provider/test-provider behavior. Read the current reference implementation and its tests before implementing the TS equivalent.
 
-Assessed TS baseline: `881931d0f504ac728fbe5706567105e204246420`, package version `2.0.0-snapshot.20`. Recheck the target revision before implementation. This document defines required API behavior, migration and acceptance; internal implementation choices belong to the implementing agent.
+Implementation baseline: `52fb932f25ab1dc1b8617169d9502bccebcef21e`, package version `2.0.0-snapshot.21`. This document defines required API behavior, migration and acceptance; internal implementation choices belong to the implementing agent.
 
 ## 1. Shared Time API
 
@@ -14,7 +14,7 @@ Provide a shared, synchronous `Time.currentTime(): Timestamp` API using the cano
 
 Select the shared package/export location according to existing framework conventions. Every supported runtime, including server and browser clients, must be able to use it without acquiring a server-only dependency. Do not create a separate clock for each subsystem.
 
-Only the Time provider may access platform clocks directly. Existing clock-injection points delegate to the shared Time/provider contract. Tests can install or supply a controlled provider and restore the previous/default provider without leaking changes into other tests. Preserve supported test isolation and concurrency behavior.
+Within framework and application runtime code other than TSX, only the Time provider may access platform clocks directly. TSX files must not use Time and use platform clocks instead. Existing clock-injection points delegate to the shared Time/provider contract. Tests can install or supply a controlled provider and restore the previous/default provider without leaking changes into other tests. Preserve supported test isolation and concurrency behavior.
 
 Provide any monotonic time operations needed by current elapsed-time measurements through Time as well. Do not replace monotonic duration measurement with wall-clock subtraction. Document the units and purpose of each operation. Scheduling a timer is distinct from reading the current time: platform timer scheduling remains allowed, while all time reads used to schedule or check work go through Time.
 
@@ -28,9 +28,9 @@ Use the shared Time facility for every newly created framework occurrence timest
 
 The JVM utility's documented scope is one JVM. Document the corresponding TS execution scope, including worker/process behavior. Do not claim global uniqueness across independent processes, process restarts or backward wall-clock adjustment from this implementation alone. Verify the behavior required by supported framework execution/deployment paths. Resolve demonstrated gaps in the shared time/execution contract; do not introduce repository sequences or history-position counters.
 
-## 3. Use Time everywhere
+## 3. Use Time throughout runtime code
 
-Inventory and migrate all first-party current-time acquisition throughout the repository, including:
+Inventory and migrate current-time acquisition in first-party framework and application runtime code, including:
 
 - Signal timestamps, Entity versions and repository metadata.
 - Client and server paths, including browser clients.
@@ -39,15 +39,18 @@ Inventory and migrate all first-party current-time acquisition throughout the re
 - Authentication, credential expiry and refresh decisions.
 - Diagnostics and any identifier generation that asks for current time.
 - Storage providers and transport/integration adapters.
-- BlackBox, other test support, tests, examples, scripts and benchmarks wherever they obtain time.
+- BlackBox and other framework test-support APIs when they create or process runtime signals.
+- Application code in examples. Tests may use Time to control or verify runtime behavior.
 
-Find direct platform reads and indirect defaults, including Date.now, zero-argument new Date, performance.now, process.hrtime, dependency timestamp/clock helpers, aliases and callbacks that read a clock. Do not limit the migration to occurrence timestamps or the server package.
+Find direct platform reads and indirect defaults, including Date.now, zero-argument new Date, performance.now, process.hrtime, dependency timestamp/clock helpers, aliases and callbacks that read a clock. Do not limit the runtime migration to occurrence timestamps or the server package.
 
 Parsing a supplied date, constructing a Date from a supplied timestamp, cloning a date or converting between representations does not obtain the current time. Preserve those operations where appropriate. Third-party SDK internals are not rewritten; all first-party adapters and clock callbacks supplied to them use Time.
 
 At the assessed baseline, EntityTransaction.#commitVersion and Repository.executionTimestamp still construct millisecond-only timestamps directly. Other direct reads occur in delivery, subscriptions, clients, authentication and BlackBox. These are starting points for the inventory, not an exhaustive migration list.
 
-Add a repository check that rejects time-acquisition bypasses outside the Time provider. Cover imported helpers, aliases and default clock callbacks as appropriate to the repository's lint/static-check infrastructure. Allow conversions of supplied values. Do not satisfy the check by spreading suppressions or broad exception lists across consumers.
+Build, release, code-generation, smoke-test, test-runner, benchmark and other non-runtime development scripts must not depend on Time. They use platform clocks for their tooling work. This includes build-local-images.mjs. All TSX files are also excluded from Time use, including runtime UI components and TSX tests. They use platform clocks directly. Classify other scripts by their purpose; an application runtime script remains runtime code.
+
+Add a repository check that rejects time-acquisition bypasses in runtime code outside the Time provider. Cover imported helpers, aliases and default clock callbacks as appropriate to the repository's lint/static-check infrastructure. Verify the runtime/tooling and TSX boundaries with tests. Reject Time imports in non-runtime scripts and TSX. Allow supplied-value conversions and platform clocks in those excluded sources. Do not hide runtime consumers behind broad exceptions.
 
 ## 4. Preserve timestamp precision
 
@@ -70,7 +73,7 @@ Required evidence:
 5. Test providers do not leak across supported concurrent test/runtime scopes.
 6. Timestamp distinction survives round trips, ordering and query boundaries in every supported storage provider and applicable transport codec.
 7. Framework signal tests observe Time-generated timestamps through normal public entry points.
-8. Packages, clients, examples, tests and other first-party time consumers pass the bypass check. No production default callback reads a platform clock outside Time.
+8. Framework and application runtime sources other than TSX pass the bypass check; their default callbacks read time through Time. Non-runtime scripts and all TSX files have no Time dependency and may read platform clocks. Tests verify these boundaries.
 9. Supported process/worker/restart and clock-adjustment assumptions are documented and tested where required by framework behavior. No broader uniqueness guarantee is asserted without evidence.
 10. Existing repository-required type, lint, test, packaging and runtime checks pass for the changed shared surface.
 
@@ -82,11 +85,16 @@ Task 2: Agent entities depends on the completed Time task. Agent implementation 
 
 ## Human-Imposed Requirements Ledger
 
+- Non-runtime build/development scripts and all TSX files must not use Time; retain platform clocks in those sources.
 - Backward compatibility is not a requirement. Remove Date compatibility for occurrence-time contracts and obsolete Clock facades; update callers instead of preserving legacy overloads.
-- Implement Task 1 only: JVM-like shared Time and its adoption everywhere first-party code reads time; Agent work is separate.
+- Implement Task 1 only: JVM-like shared Time and its adoption throughout framework and application runtime time reads; Agent work is separate.
 - Follow JVM IncrementalNanos and provider behavior; preserve full occurrence timestamp precision and do not add repository history counters.
 - Preserve existing Entity and database transaction semantics; no transaction redesign is authorized.
 - Supply documented TypeScript APIs, domain-correct test fixtures, meaningful behavior tests and the repository verification/review gates.
 - Work from freshly fetched official origin/master in an isolated feature worktree; never use a codex-prefixed branch. Push each feature commit immediately. No PR or master changes without explicit human direction.
 - Use the existing roles with explicit permitted model/reasoning profiles; children do not delegate. Keep user progress current and preserve unrelated work.
 - Avoid unnecessary possession terminology and unexplained wording in code, documentation and messages.
+
+## Scope corrections
+
+Do not introduce Time merely to replace `new Date()` with a Date constructed from milliseconds. Preserve full Timestamp precision for occurrence values through storage and comparison. TSX and non-runtime scripts use platform clocks. Keep the existing generation-ID algorithms. In particular, `scripts/generate-spine-proto-artifacts.mjs` must retain its UUID format; changing it to a content hash is outside this task. Remove changes and tests introduced solely for that unrelated algorithm change.

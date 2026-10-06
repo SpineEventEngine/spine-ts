@@ -12,8 +12,8 @@
  * the License.
  */
 
-import { Time } from "@spine-event-engine/core/time";
 import { create } from "@bufbuild/protobuf";
+import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import {
   PostMessageSchema,
   type PostMessage,
@@ -272,7 +272,7 @@ class BoardPost {
       author: create(UserIdSchema, { value: this.actor }),
       username,
       text,
-      postedAt: Time.currentTime(),
+      postedAt: timestampFromDate(new Date()),
     });
   }
 }

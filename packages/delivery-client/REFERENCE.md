@@ -36,10 +36,9 @@ the mutation.
 boundary cannot continue without loss, it throws `DeliveryPagingError`.
 Protocol-invalid data throws `DeliveryProtocolError`.
 Inbox read results expose `whenReceived` as a Protobuf `Timestamp` with seconds
-and nanoseconds. Single and batch write or removal inputs, plus
-`readPage({ sinceWhen })`, accept a legacy `Date` or a `Timestamp`: a `Date`
-anchor carries only millisecond precision, while a `Timestamp` anchor preserves
-submillisecond precision for continuation and exact snapshot comparison.
+and nanoseconds. Single and batch writes and removals, plus `readPage({ sinceWhen })`, require a
+Protobuf `Timestamp`. Its seconds and nanoseconds preserve exact receipt and
+continuation precision.
 
 ## Observation and topology
 

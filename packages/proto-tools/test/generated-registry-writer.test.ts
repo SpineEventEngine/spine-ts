@@ -12,7 +12,6 @@
  * the License.
  */
 
-import { Time } from "@spine-event-engine/core/time";
 import {
   constants,
   existsSync,
@@ -790,10 +789,7 @@ describe("generated registry writer", () => {
 
   it("rejects symlinked repo roots", () => {
     const repoRoot = createRepoFixture("packages/demo/generated/\n");
-    const linkedRepoRoot = join(
-      tempRoot(),
-      `spine-repo-root-link-${String(Time.currentTimeMillis())}`,
-    );
+    const linkedRepoRoot = join(tempRoot(), `spine-repo-root-link-${String(Date.now())}`);
     const generatedRoot = join(linkedRepoRoot, "packages/demo/generated");
     const outputFile = join(generatedRoot, "handler/generated-handler-registry.ts");
 
@@ -810,10 +806,7 @@ describe("generated registry writer", () => {
 
   it("rejects repo roots reached through a symlinked ancestor", () => {
     const repoRoot = createRepoFixture("packages/demo/generated/\n");
-    const linkedAncestor = join(
-      tempRoot(),
-      `spine-ancestor-link-${String(Time.currentTimeMillis())}`,
-    );
+    const linkedAncestor = join(tempRoot(), `spine-ancestor-link-${String(Date.now())}`);
     const linkedRepoRoot = join(linkedAncestor, basename(repoRoot));
     const generatedRoot = join(linkedRepoRoot, "packages/demo/generated");
     const outputFile = join(generatedRoot, "handler/generated-handler-registry.ts");

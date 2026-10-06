@@ -12,7 +12,6 @@
  * the License.
  */
 
-import { Time } from "@spine-event-engine/core/time";
 import { create, type Message, type MessageShape } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import type { Any } from "@bufbuild/protobuf/wkt";
@@ -429,8 +428,8 @@ async function awaitProjectWorkflowStates(
     projectStatus: "scheduled",
   },
 ): Promise<void> {
-  const deadline = Time.currentTimeMillis() + 1_000;
-  while (Time.currentTimeMillis() < deadline) {
+  const deadline = Date.now() + 1_000;
+  while (Date.now() < deadline) {
     const [
       projectState,
       planningState,

@@ -6,7 +6,6 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { startTopology } from "../harness.mjs";
 
-import { Time } from "@spine-event-engine/core/time";
 const here = dirname(fileURLToPath(import.meta.url));
 
 export async function runBrowserAcceptance({
@@ -212,8 +211,8 @@ export async function settleTopology(
   topology,
   { timeoutMilliseconds = 5_000, delayMilliseconds = 20 } = {},
 ) {
-  const deadline = Time.currentTimeMillis() + timeoutMilliseconds;
-  while (Time.currentTimeMillis() < deadline) {
+  const deadline = Date.now() + timeoutMilliseconds;
+  while (Date.now() < deadline) {
     if (topology.bindingCount() === 0 && topology.counters().activeStreams === 0) return;
     await delay(delayMilliseconds);
   }

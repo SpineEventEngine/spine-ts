@@ -16,7 +16,6 @@ import type {
   InboxMessage,
   InboxMessageId,
   InboxMessageInput,
-  InboxMessageSnapshotInput,
   InboxReadOptions,
   InboxWriteResult,
 } from "./inbox.js";
@@ -93,7 +92,7 @@ export interface DeliveryInbox {
    * @returns The delivered row, or `undefined` when durable acknowledgement failed.
    */
   markDelivered(
-    message: InboxMessageSnapshotInput,
+    message: InboxMessage,
     options?: DeliveryOperationOptions,
   ): Promise<InboxMessage | undefined>;
 
@@ -106,7 +105,7 @@ export interface DeliveryInbox {
    * @returns Whether the adapter removed the exact pending snapshot.
    */
   removeDuplicate(
-    message: InboxMessageSnapshotInput,
+    message: InboxMessage,
     session: DeliveryWorkSession,
     options?: DeliveryOperationOptions,
   ): Promise<boolean>;
@@ -127,7 +126,7 @@ export interface DeliveryInbox {
    * @returns Whether the adapter completed its supported removal operation.
    */
   removeDelivered?(
-    message: InboxMessageSnapshotInput,
+    message: InboxMessage,
     session: DeliveryWorkSession,
     options?: DeliveryOperationOptions,
   ): Promise<boolean>;

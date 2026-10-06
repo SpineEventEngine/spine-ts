@@ -6,7 +6,6 @@ import { dirname, join } from "node:path";
 import process from "node:process";
 import test from "node:test";
 
-import { Time } from "../../../../packages/core/dist/time/index.js";
 const root = dirname(fileURLToPath(import.meta.url));
 const standalone = join(root, "standalone.compose.yaml");
 const combined = join(root, "combined.compose.yaml");
@@ -282,5 +281,5 @@ function cleanup(project, compose) {
 }
 
 function projectName() {
-  return `spine-t0096-${String(process.pid)}-${String(Time.currentTimeMillis())}`;
+  return `spine-t0096-${String(process.pid)}-${String(Date.now())}`;
 }

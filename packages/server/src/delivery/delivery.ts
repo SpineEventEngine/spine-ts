@@ -924,13 +924,7 @@ function snapshot(message: InboxMessage): InboxMessage {
     inboxId: Object.freeze({ ...message.inboxId }),
     ...(message.signal === undefined ? {} : { signal: clone(AnySchema, message.signal) }),
     shard: new ShardIndex(message.shard.index, message.shard.ofTotal),
-    whenReceived:
-      message.whenReceived instanceof Date
-        ? create(TimestampSchema, {
-            seconds: BigInt(Math.floor(message.whenReceived.getTime() / 1_000)),
-            nanos: (((message.whenReceived.getTime() % 1_000) + 1_000) % 1_000) * 1_000_000,
-          })
-        : clone(TimestampSchema, message.whenReceived),
+    whenReceived: clone(TimestampSchema, message.whenReceived),
     ...(message.keepUntil === undefined ? {} : { keepUntil: new Date(message.keepUntil) }),
   });
 }

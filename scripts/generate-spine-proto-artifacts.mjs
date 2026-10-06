@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { join, relative, resolve, sep } from "node:path";
-import { generationIdForContents } from "../packages/proto-tools/src/generation/generation-reuse.mjs";
 import { generatedTypeScript } from "./generated-source-policy.mjs";
 
 function files(root, suffix) {
@@ -94,7 +94,19 @@ export function writeSpineProtoArtifacts(repoRoot, generatedRoot, manifestOutput
     dependencies: [...config.dependencies].sort(),
     moduleExport: config.moduleExport,
   };
-  const generationId = generationIdForContents(manifest, generatedRoot);
+  let generationId = randomUUID();
+  try {
+    const previous = JSON.parse(readFileSync(manifestOutput, "utf8"));
+    const { generationId: previousId, ...previousContents } = previous;
+    if (
+      typeof previousId === "string" &&
+      previous.formatVersion === 2 &&
+      JSON.stringify(previousContents) === JSON.stringify(manifest)
+    )
+      generationId = previousId;
+  } catch {
+    // First publication has no committed generation ID to reuse.
+  }
   writeFileSync(
     join(generatedRoot, ".spine-proto-generation.json"),
     `${JSON.stringify({ generationId })}\n`,

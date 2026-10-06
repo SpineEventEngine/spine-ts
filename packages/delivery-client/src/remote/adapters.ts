@@ -26,7 +26,6 @@ import type {
   InboxMessage,
   InboxMessageId,
   InboxMessageInput,
-  InboxMessageSnapshotInput,
   InboxReadOptions,
   InboxWriteResult,
 } from "@spine-event-engine/server";
@@ -183,7 +182,7 @@ export class RemoteInbox implements DeliveryInbox {
    * row is absent or no longer matches.
    */
   async markDelivered(
-    message: InboxMessageSnapshotInput,
+    message: InboxMessage,
     options?: DeliveryOperationOptions,
   ): Promise<InboxMessage | undefined> {
     const current = await this.client.findOne(message.id, options);
@@ -210,7 +209,7 @@ export class RemoteInbox implements DeliveryInbox {
    * @returns Whether the snapshot matched when read and the removal request completed.
    */
   async removeDelivered(
-    message: InboxMessageSnapshotInput,
+    message: InboxMessage,
     session: DeliveryWorkSession,
     options?: DeliveryOperationOptions,
   ): Promise<boolean> {
@@ -239,7 +238,7 @@ export class RemoteInbox implements DeliveryInbox {
    * @returns Whether the snapshot matched when read and the removal request completed.
    */
   async removeDuplicate(
-    message: InboxMessageSnapshotInput,
+    message: InboxMessage,
     session: DeliveryWorkSession,
     options?: DeliveryOperationOptions,
   ): Promise<boolean> {
@@ -559,28 +558,11 @@ const RemoteValues = Object.freeze({
    * @param value Supplies the received-time continuation.
    * @returns The preceding instant as a precise timestamp.
    */
-  pageAnchor(value: Date | Timestamp): Timestamp {
-    const timestamp = RemoteValues.timestamp(value);
-    if (timestamp.seconds === -62_135_596_800n && timestamp.nanos === 0)
-      throw new DeliveryPagingError();
-    return timestamp.nanos === 0
-      ? create(TimestampSchema, { seconds: timestamp.seconds - 1n, nanos: 999_999_999 })
-      : create(TimestampSchema, { seconds: timestamp.seconds, nanos: timestamp.nanos - 1 });
-  },
-
-  /**
-   * Converts a legacy Date to a Protobuf timestamp while preserving an existing timestamp.
-   * @param value The supplied receive time.
-   * @returns The Protobuf receive time.
-   */
-  timestamp(value: Date | Timestamp): Timestamp {
-    if (!(value instanceof Date)) return value;
-    const millis = value.getTime();
-    const seconds = Math.floor(millis / 1_000);
-    return create(TimestampSchema, {
-      seconds: BigInt(seconds),
-      nanos: (millis - seconds * 1_000) * 1_000_000,
-    });
+  pageAnchor(value: Timestamp): Timestamp {
+    if (value.seconds === -62_135_596_800n && value.nanos === 0) throw new DeliveryPagingError();
+    return value.nanos === 0
+      ? create(TimestampSchema, { seconds: value.seconds - 1n, nanos: 999_999_999 })
+      : create(TimestampSchema, { seconds: value.seconds, nanos: value.nanos - 1 });
   },
 
   /**
@@ -589,10 +571,8 @@ const RemoteValues = Object.freeze({
    * @param right The second receive time.
    * @returns Whether both instants have equal seconds and nanoseconds.
    */
-  sameTime(left: Date | Timestamp, right: Date | Timestamp): boolean {
-    const first = RemoteValues.timestamp(left);
-    const second = RemoteValues.timestamp(right);
-    return first.seconds === second.seconds && first.nanos === second.nanos;
+  sameTime(left: Timestamp, right: Timestamp): boolean {
+    return left.seconds === right.seconds && left.nanos === right.nanos;
   },
 
   /**
@@ -642,7 +622,7 @@ const RemoteValues = Object.freeze({
    * @param right Supplies the second message.
    * @returns Whether all compared fields match.
    */
-  sameMessage(left: InboxMessageSnapshotInput, right: InboxMessageSnapshotInput): boolean {
+  sameMessage(left: InboxMessage, right: InboxMessage): boolean {
     return (
       left.id.value === right.id.value &&
       RemoteValues.sameShard(left.id.shard, right.id.shard) &&

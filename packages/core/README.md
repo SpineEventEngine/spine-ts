@@ -45,7 +45,8 @@ For the detailed contract and integration notes, see
 
 Use `Time.currentTime()` when a message needs the current instant. It returns a
 Protobuf `Timestamp` with seconds and nanoseconds. The call is synchronous and
-works in Node and browsers.
+works in Node and browsers. Use it in framework and application runtime code.
+TSX files and non-runtime build/development scripts use platform clocks.
 
 ```ts
 import { Time } from "@spine-event-engine/core/time";

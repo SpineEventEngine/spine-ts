@@ -12,7 +12,6 @@
  * the License.
  */
 
-import { Time } from "@spine-event-engine/core/time";
 import {
   chmodSync,
   existsSync,
@@ -2366,8 +2365,8 @@ describe("spine proto model tooling", () => {
         manifest,
         completed,
       ]);
-      const deadline = Time.currentTimeMillis() + 1_000;
-      while (!existsSync(ready) && Time.currentTimeMillis() < deadline) {
+      const deadline = Date.now() + 1_000;
+      while (!existsSync(ready) && Date.now() < deadline) {
         // Let the writer establish a deterministic pre-commit boundary.
       }
       expect(existsSync(ready)).toBe(true);

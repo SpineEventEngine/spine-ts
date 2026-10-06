@@ -23,11 +23,7 @@ import {
   TimestampSchema,
 } from "@bufbuild/protobuf/wkt";
 
-import type {
-  InboxMessage,
-  InboxMessageId,
-  InboxMessageSnapshotInput,
-} from "@spine-event-engine/server";
+import type { InboxMessage, InboxMessageId } from "@spine-event-engine/server";
 import { ShardIndex } from "@spine-event-engine/server";
 import { CommandSchema, EventSchema } from "@spine-event-engine/proto";
 import {
@@ -74,7 +70,7 @@ const DeliveryValues = Object.freeze({
    * Validates the signal identity and version of an inbox write.
    * @param message The inbox write input to validate.
    */
-  validateSignalVersion(message: InboxMessageSnapshotInput): void {
+  validateSignalVersion(message: InboxMessage): void {
     if (typeof message.signalId !== "string" || !DeliveryValues.hasText(message.signalId))
       throw new TypeError("Delivery inbox signal ID is invalid.");
     if (
@@ -177,7 +173,7 @@ type DeliveryMessageCodecApi = Readonly<{
    * @param messages Supplies the messages to encode.
    * @returns The encoded messages, their IDs, and their common shard.
    */
-  encodeBatch(messages: readonly InboxMessageSnapshotInput[]): {
+  encodeBatch(messages: readonly InboxMessage[]): {
     readonly ids: readonly string[];
     readonly shard: WireShardIndex;
     readonly messages: WireInboxMessage[];
@@ -189,7 +185,7 @@ type DeliveryMessageCodecApi = Readonly<{
    * @param message Supplies the message to encode.
    * @returns The validated wire message.
    */
-  encode(message: InboxMessageSnapshotInput): WireInboxMessage;
+  encode(message: InboxMessage): WireInboxMessage;
 
   /**
    * Decodes an inbox message and confirms its expected shard.
@@ -232,7 +228,7 @@ type DeliveryMessageCodecApi = Readonly<{
    * @param value Supplies the message to copy.
    * @returns A detached immutable message.
    */
-  snapshot(value: InboxMessageSnapshotInput): InboxMessage;
+  snapshot(value: InboxMessage): InboxMessage;
 
   /**
    * Parses an inbox target identifier.
@@ -312,7 +308,7 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
    * @param messages Supplies the messages to encode.
    * @returns The encoded messages, their IDs, and their common shard.
    */
-  encodeBatch(messages: readonly InboxMessageSnapshotInput[]): {
+  encodeBatch(messages: readonly InboxMessage[]): {
     readonly ids: readonly string[];
     readonly shard: WireShardIndex;
     readonly messages: WireInboxMessage[];
@@ -343,7 +339,7 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
    * @param message Supplies the message to encode.
    * @returns The validated wire message.
    */
-  encode(message: InboxMessageSnapshotInput): WireInboxMessage {
+  encode(message: InboxMessage): WireInboxMessage {
     const id = DeliveryMessageCodec.encodeId(message.id);
     const shard = DeliveryShardCodec.encode(message.id.shard);
     if (
@@ -354,9 +350,7 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
     const target = DeliveryMessageCodec.target(message.inboxId);
     const whenReceived = DeliveryRequestCodec.timestamp(message.whenReceived);
     const keepUntil =
-      message.keepUntil === undefined
-        ? undefined
-        : DeliveryRequestCodec.timestamp(message.keepUntil);
+      message.keepUntil === undefined ? undefined : DeliveryRequestCodec.expiry(message.keepUntil);
     DeliveryValues.validateSignalVersion(message);
     return create(InboxMessageSchema, {
       id: create(InboxMessageIdSchema, { uuid: id, index: shard }),
@@ -457,7 +451,7 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
    * @param value Supplies the message to copy.
    * @returns A detached immutable message.
    */
-  snapshot(value: InboxMessageSnapshotInput): InboxMessage {
+  snapshot(value: InboxMessage): InboxMessage {
     return DeliveryValues.freeze({
       id: DeliveryValues.freeze({
         value: value.id.value,
@@ -1002,12 +996,19 @@ type DeliveryRequestCodecApi = Readonly<{
   duration(value: number): { seconds: bigint; nanos: number };
 
   /**
-   * Encodes a Date at millisecond precision or preserves Protobuf Timestamp nanos.
+   * Validates and preserves Protobuf Timestamp nanos.
    *
-   * @param value Supplies a Date or occurrence Timestamp.
+   * @param value Supplies an occurrence Timestamp.
    * @returns The protocol timestamp fields.
    */
-  timestamp(value: Date | Timestamp): { seconds: bigint; nanos: number };
+  timestamp(value: Timestamp): { seconds: bigint; nanos: number };
+
+  /**
+   * Converts a Date retention deadline to Protobuf timestamp fields.
+   * @param value Supplies the retention deadline.
+   * @returns The protocol timestamp fields at millisecond precision.
+   */
+  expiry(value: Date): { seconds: bigint; nanos: number };
 
   /**
    * Creates a protocol-validation error.
@@ -1126,25 +1127,30 @@ const DeliveryRequestCodec: DeliveryRequestCodecApi = Object.freeze({
   },
 
   /**
-   * Encodes a Date at millisecond precision or preserves Protobuf Timestamp nanos.
+   * Validates and preserves Protobuf Timestamp nanos.
    *
-   * @param value Supplies a Date or occurrence Timestamp.
+   * @param value Supplies an occurrence Timestamp.
    * @returns The protocol timestamp fields.
    */
-  timestamp(value: Date | Timestamp): { seconds: bigint; nanos: number } {
-    if (!(value instanceof Date)) {
-      if (
-        (value as unknown as { $typeName?: string } | null)?.$typeName !==
-          TimestampSchema.typeName ||
-        value.seconds < -62_135_596_800n ||
-        value.seconds > 253_402_300_799n ||
-        !Number.isInteger(value.nanos) ||
-        value.nanos < 0 ||
-        value.nanos >= 1_000_000_000
-      )
-        throw new TypeError("Delivery inbox timestamp is invalid.");
-      return { seconds: value.seconds, nanos: value.nanos };
-    }
+  timestamp(value: Timestamp): { seconds: bigint; nanos: number } {
+    if (
+      (value as unknown as { $typeName?: string } | null)?.$typeName !== TimestampSchema.typeName ||
+      value.seconds < -62_135_596_800n ||
+      value.seconds > 253_402_300_799n ||
+      !Number.isInteger(value.nanos) ||
+      value.nanos < 0 ||
+      value.nanos >= 1_000_000_000
+    )
+      throw new TypeError("Delivery inbox timestamp is invalid.");
+    return { seconds: value.seconds, nanos: value.nanos };
+  },
+
+  /**
+   * Converts a finite Date retention deadline to Protobuf timestamp fields.
+   * @param value Supplies the retention deadline.
+   * @returns The protocol timestamp fields at millisecond precision.
+   */
+  expiry(value: Date): { seconds: bigint; nanos: number } {
     if (Number.isNaN(value.getTime())) throw new TypeError("Delivery inbox timestamp is invalid.");
     const millis = value.getTime();
     return {

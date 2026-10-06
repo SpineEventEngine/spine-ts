@@ -27,11 +27,7 @@ import { describe, expect, it } from "vitest";
 import { Delivery, type DeliveryEndpointMessage } from "../../src/delivery/delivery.js";
 import { DeliveryMonitor } from "../../src/delivery/delivery-monitor.js";
 import type { DeliveryInbox, DeliveryOperationOptions } from "../../src/delivery/delivery-ports.js";
-import {
-  Inbox,
-  type InboxMessageSnapshotInput,
-  type InboxReadOptions,
-} from "../../src/delivery/inbox.js";
+import { Inbox, type InboxMessage, type InboxReadOptions } from "../../src/delivery/inbox.js";
 import { InboxStorage } from "../../src/delivery/inbox-storage.js";
 import { commitFenced } from "../../src/repository/commit-fence.js";
 import { ShardIndex } from "../../src/index.js";
@@ -93,7 +89,7 @@ describe("Delivery direct worker", () => {
     const retained = ["retained-a", "retained-b"].map((id) => ({
       ...message(id, id, shard),
       status: "DELIVERED" as const,
-      keepUntil: new Date(Time.currentTimeMillis() + 60_000),
+      keepUntil: new Date(Date.now() + 60_000),
     }));
     const pending = ["a", "b", "c"].map((id) => message(id, id, shard));
     const pages = [[...retained], pending.slice(0, 2), pending.slice(2), [...retained], []];
@@ -117,7 +113,7 @@ describe("Delivery direct worker", () => {
     const retained = {
       ...message("retained", "target", shard),
       status: "DELIVERED" as const,
-      keepUntil: new Date(Time.currentTimeMillis() + 60_000),
+      keepUntil: new Date(Date.now() + 60_000),
     };
     const duplicate = { ...message("duplicate", "target", shard), signalId: retained.signalId };
     const pages = [[retained, duplicate], []];
@@ -151,7 +147,7 @@ describe("Delivery direct worker", () => {
     "uses the inbox clock for retained identity and cleanup at offset $offset",
     async ({ offset, expectedDelivery, expectedRemoval }) => {
       const shard = ShardIndex.single();
-      const boundary = Time.currentTimeMillis();
+      const boundary = Date.now();
       const retained = {
         ...message("retained", "target", shard),
         status: "DELIVERED" as const,
@@ -187,7 +183,7 @@ describe("Delivery direct worker", () => {
     const future = {
       ...message("future", "target", shard),
       status: "DELIVERED" as const,
-      keepUntil: new Date(Time.currentTimeMillis() + 60_000),
+      keepUntil: new Date(Date.now() + 60_000),
     };
     let checks = 0;
     let removals = 0;
@@ -218,7 +214,7 @@ describe("Delivery direct worker", () => {
     const shard = ShardIndex.single();
     const expired = {
       ...message("expired", "target", shard),
-      keepUntil: new Date(Time.currentTimeMillis() - 60_000),
+      keepUntil: new Date(Date.now() - 60_000),
       status: "DELIVERED" as const,
     };
     const pending = { ...message("pending", "target", shard), signalId: expired.signalId };
@@ -1284,11 +1280,11 @@ function createDelivery(config: {
     read: async (_shard, options) => config.read?.(options) ?? [...rows],
     readMessage: async () => undefined,
     markDelivered: async (row) => {
-      const snapshot = readSnapshot(row);
+      const snapshot = row;
       return config.mark?.(snapshot) ?? snapshot;
     },
     removeDuplicate: async (row) => {
-      const snapshot = readSnapshot(row);
+      const snapshot = row;
       if (config.removeDuplicate !== undefined) return config.removeDuplicate(snapshot);
       remove(rows, snapshot);
       return true;
@@ -1296,8 +1292,7 @@ function createDelivery(config: {
     ...(config.remove === undefined
       ? {}
       : {
-          removeDelivered: async (row: InboxMessageSnapshotInput) =>
-            config.remove!(readSnapshot(row)),
+          removeDelivered: async (row: InboxMessage) => config.remove!(row),
         }),
   };
   if (config.now !== undefined) {
@@ -1322,11 +1317,6 @@ function createDelivery(config: {
     },
   });
 }
-function readSnapshot(value: InboxMessageSnapshotInput): DeliveryEndpointMessage {
-  return value.whenReceived instanceof Date
-    ? { ...value, whenReceived: timestampFromDate(value.whenReceived) }
-    : (value as DeliveryEndpointMessage);
-}
 function localRegistry(shard: ShardIndex) {
   return {
     sessionKind: "LEASED" as const,
@@ -1344,8 +1334,8 @@ function session(shard: ShardIndex) {
     kind: "LEASED" as const,
     shard,
     worker: workerId("node", "restart"),
-    pickedUpAt: new Date(Time.currentTimeMillis()),
-    expiresAt: new Date(Time.currentTimeMillis() + 60_000),
+    pickedUpAt: new Date(),
+    expiresAt: new Date(Date.now() + 60_000),
   };
 }
 function message(
@@ -1361,7 +1351,7 @@ function message(
     label,
     status: "TO_DELIVER",
     shard,
-    whenReceived: timestampFromDate(new Date(Time.currentTimeMillis())),
+    whenReceived: Time.currentTime(),
     version: 1n,
   };
 }

@@ -359,10 +359,10 @@ describe("direct InboxMessage storage", () => {
     for (const offset of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1])
       await expect(storage.read(message.shard, { offset })).rejects.toThrow("offset");
     for (const after of [
-      { messageId: " ", whenReceived: new Date(0), version: 0n },
-      { messageId: "message", whenReceived: new Date(Number.NaN), version: 0n },
-      { messageId: "message", whenReceived: new Date(0), version: -1n },
-      { messageId: "message", whenReceived: new Date(0), version: 0 as never },
+      { messageId: " ", whenReceived: create(TimestampSchema), version: 0n },
+      { messageId: "message", whenReceived: create(TimestampSchema, { nanos: -1 }), version: 0n },
+      { messageId: "message", whenReceived: create(TimestampSchema), version: -1n },
+      { messageId: "message", whenReceived: create(TimestampSchema), version: 0 as never },
     ])
       await expect(storage.read(message.shard, { after })).rejects.toThrow("continuation");
     await expect(storage.read({} as never)).rejects.toThrow("shard");

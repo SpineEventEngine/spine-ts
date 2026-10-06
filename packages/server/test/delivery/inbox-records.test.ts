@@ -34,16 +34,6 @@ describe("InboxRecords", () => {
     expect(restored.whenReceived.nanos).toBe(instant.nanos);
   });
 
-  it("normalizes a legacy Date write input to a Timestamp read output", () => {
-    const wire = InboxRecords.write({
-      ...createMessage("legacy-date", "signal", 1n),
-      whenReceived: new Date(1_234),
-    });
-    const restored = InboxRecords.read(wire);
-    expect(restored.whenReceived.seconds).toBe(1n);
-    expect(restored.whenReceived.nanos).toBe(234_000_000);
-  });
-
   it("round-trips one generated direct Inbox record without sharing caller snapshots", () => {
     const source = createMessage("message", "signal", 1n);
     const restored = InboxRecords.read(InboxRecords.write(source));

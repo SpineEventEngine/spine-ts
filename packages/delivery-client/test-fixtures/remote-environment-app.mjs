@@ -125,7 +125,7 @@ process.on("message", async (frame) => {
       label: "HANDLE_COMMAND",
       status: "TO_DELIVER",
       shard: ShardIndex.single(),
-      whenReceived: new Date(Time.currentTimeMillis()),
+      whenReceived: Time.currentTime(),
       version: 1n,
     });
     process.send({ type: "result", id: frame.id });

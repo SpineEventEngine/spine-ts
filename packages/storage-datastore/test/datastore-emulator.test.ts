@@ -12,7 +12,6 @@
  * the License.
  */
 
-import { Time } from "@spine-event-engine/core/time";
 import { create, fromBinary, ScalarType, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Datastore } from "@google-cloud/datastore";
@@ -630,7 +629,7 @@ function projectEvent(id: string, version: number) {
 }
 
 function unique(part: string): string {
-  return `T0135${part}${String(Time.currentTimeMillis())}${Math.random().toString(36).slice(2)}`;
+  return `T0135${part}${String(Date.now())}${Math.random().toString(36).slice(2)}`;
 }
 
 function tenant(value: string) {

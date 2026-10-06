@@ -157,6 +157,83 @@ export function findTimeBypasses(source, fileName = "fixture.ts") {
   return findings;
 }
 
+/**
+ * Returns whether authored source uses Time or platform clocks.
+ *
+ * @param {string} path Repository-relative source path.
+ * @returns {"runtime" | "platform" | "test"} Clock policy for the file.
+ */
+export function timeReadPolicy(path) {
+  if (/\.tsx$/u.test(path)) return "platform";
+  if (path.startsWith("scripts/")) return "platform";
+  if (/^examples\/[^/]+\/src\/load-runner\.ts$/u.test(path)) return "platform";
+  if (path.endsWith("/entity-delivery-benchmark.test.ts")) return "platform";
+  if (path.startsWith("packages/delivery-client/test-fixtures/") && path.endsWith(".mjs"))
+    return "runtime";
+  if (path === "packages/testing/test/black-box.contract.mjs") return "test";
+  if (path.endsWith(".mjs")) return "platform";
+  if (/^(?:packages|examples)\/.+\/src\/.*\.ts$/u.test(path)) return "runtime";
+  return "test";
+}
+
+/**
+ * Finds Time imports in files reserved for platform clocks.
+ *
+ * @param {string} source File contents.
+ * @param {string} [fileName] Filename used for parser mode.
+ * @returns {readonly string[]} Time import locations.
+ */
+export function findTimeImports(source, fileName = "fixture.ts") {
+  const file = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true);
+  const findings = [];
+  const coreNamespaces = new Set();
+  const isCore = (specifier) =>
+    /(?:^@spine-event-engine\/core(?:\/time)?$|\/core\/(?:src|dist)\/time\/index\.[cm]?[jt]s$)/u.test(
+      specifier,
+    );
+  const visit = (node) => {
+    if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
+      const specifier = node.moduleSpecifier.text;
+      const imports = node.importClause?.namedBindings;
+      const namedTime =
+        imports &&
+        ts.isNamedImports(imports) &&
+        imports.elements.some((item) => (item.propertyName ?? item.name).text === "Time");
+      if (imports && ts.isNamespaceImport(imports) && isCore(specifier))
+        coreNamespaces.add(imports.name.text);
+      if (
+        !node.importClause?.isTypeOnly &&
+        ((namedTime && isCore(specifier)) || specifier === "@spine-event-engine/core/time")
+      ) {
+        const at = file.getLineAndCharacterOfPosition(node.getStart(file));
+        findings.push(`${String(at.line + 1)}:${String(at.character + 1)} ${node.getText(file)}`);
+      }
+    } else if (
+      ts.isPropertyAccessExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      coreNamespaces.has(node.expression.text) &&
+      node.name.text === "Time"
+    ) {
+      const at = file.getLineAndCharacterOfPosition(node.getStart(file));
+      findings.push(`${String(at.line + 1)}:${String(at.character + 1)} ${node.getText(file)}`);
+    } else if (
+      ts.isCallExpression(node) &&
+      (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+        (ts.isIdentifier(node.expression) && node.expression.text === "require")) &&
+      node.arguments.length === 1 &&
+      ts.isStringLiteral(node.arguments[0]) &&
+      node.arguments[0].text.endsWith("/time") &&
+      isCore(node.arguments[0].text)
+    ) {
+      const at = file.getLineAndCharacterOfPosition(node.getStart(file));
+      findings.push(`${String(at.line + 1)}:${String(at.character + 1)} ${node.getText(file)}`);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return findings;
+}
+
 const scriptPath = fileURLToPath(import.meta.url);
 if (process.argv[1] && resolve(process.argv[1]) === scriptPath) {
   const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -178,7 +255,15 @@ if (process.argv[1] && resolve(process.argv[1]) === scriptPath) {
       path === "packages/core/src/time/index.ts"
     )
       continue;
-    for (const finding of findTimeBypasses(readFileSync(resolve(root, path), "utf8"), path)) {
+    const policy = timeReadPolicy(path);
+    const source = readFileSync(resolve(root, path), "utf8");
+    const issues =
+      policy === "runtime"
+        ? findTimeBypasses(source, path)
+        : policy === "platform"
+          ? findTimeImports(source, path)
+          : [];
+    for (const finding of issues) {
       findings.push(`${path}:${finding}`);
     }
   }
@@ -186,6 +271,6 @@ if (process.argv[1] && resolve(process.argv[1]) === scriptPath) {
     process.stderr.write(`${findings.join("\n")}\n`);
     process.exitCode = 1;
   } else {
-    process.stdout.write("First-party time reads use Time.\n");
+    process.stdout.write("Runtime time reads use Time; tooling and TSX use platform clocks.\n");
   }
 }

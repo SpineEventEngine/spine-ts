@@ -1,5 +1,6 @@
 // Exercises Message Board RPCs from inside a Compose network during live checks.
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, createClient } from "@connectrpc/connect";
 import { createGrpcWebTransport } from "@connectrpc/connect-web";
 import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
@@ -35,7 +36,6 @@ import { UserIdSchema as BoardUserIdSchema } from "@spine-event-engine/example-m
 import { Buffer } from "node:buffer";
 import process from "node:process";
 
-import { Time } from "@spine-event-engine/core/time";
 const target = required("TARGET");
 const origin = required("ORIGIN");
 const mode = required("MODE");
@@ -229,7 +229,7 @@ async function post(suffix, text) {
           author: create(BoardUserIdSchema, { value: "ada" }),
           username: "Ada",
           text,
-          postedAt: Time.currentTime(),
+          postedAt: timestampFromDate(new Date()),
         }),
       ),
     }),

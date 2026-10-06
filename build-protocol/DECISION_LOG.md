@@ -6005,27 +6005,25 @@ The real 1,000-recipient benchmark must meet the under-one-second target;
 the design alone is not evidence of that result. See
 [the approved plan](tasks/fix-publication-provenance/entity-save-delivery-plan.md).
 
-## D-0124: Shared Spine Time For Every Time Read
+## D-0124: Shared Spine Time For Runtime Time Reads
 
-Status: Accepted; revising occurrence APIs to remove backward-compatibility paths
+Status: Accepted; revising runtime scope and removing backward-compatibility paths
 
 Date: 2026-10-06
 
-Introduce the Spine JVM-equivalent Time utility and route every first-party
-request for time through it, including runtime timestamps, deadlines, retries,
-authentication, diagnostics, scripts, examples and tests. Only the provider may
-read platform clocks. Preserve monotonic elapsed measurement and timestamp
-precision. Follow IncrementalNanos behavior without repository ordering counters.
-Use controlled providers for tests. Parsing or converting supplied time values
-is not current-time acquisition. Agent work is a separate subsequent task.
+Introduce the Spine JVM-equivalent Time utility for framework and application
+runtime time reads, including occurrence timestamps, deadlines, retries,
+authentication and runtime diagnostics. Preserve monotonic elapsed measurement
+and occurrence precision. Follow IncrementalNanos without repository ordering
+counters. Use controlled TimeProvider values for tests.
 
-Keep the shared Time leaf usable by the existing dependency-free publication
-trial as well as normal installed packages. The trial imports release scripts
-from a clean checkout without installing dependencies. Time therefore uses the
-canonical Timestamp type without requiring its Protobuf runtime to load the
-clock. Do not introduce another script clock or an installation step in the
-publication trial to satisfy this migration.
+Occurrence APIs use Timestamp; no legacy Date input unions or obsolete Clock
+facades are required. Build, release, code-generation, test-runner, benchmark and
+other non-runtime development scripts and all TSX files use platform clocks and
+must not import Time. Explicit supplied-value conversion is not current-time acquisition.
+Do not introduce millisecond-to-Date wrappers solely to use Time. Preserve the
+existing Proto generation-ID algorithm and format; changing them is outside this
+task. Agent work remains a separate task.
 
-The implementation plan and evidence are in
-[the Time task](planning/spine-time-task.md) and
-[its work log](planning/spine-time-worklog.md).
+See [the Time task](planning/spine-time-task.md) and
+[its status](planning/spine-time-worklog.md).

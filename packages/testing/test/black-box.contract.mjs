@@ -729,8 +729,8 @@ function state(id, name, priority = 1) {
   return create(ProjectOverviewSchema, { id, name, priority });
 }
 async function emitUntil(pending, emit) {
-  const deadline = Time.currentTimeMillis() + 2_000;
-  while (Time.currentTimeMillis() < deadline) {
+  const deadline = Date.now() + 2_000;
+  while (Date.now() < deadline) {
     await emit();
     const attempted = await Promise.race([
       pending.then((value) => ({ value })),

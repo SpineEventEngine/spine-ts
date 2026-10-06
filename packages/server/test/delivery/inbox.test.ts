@@ -13,7 +13,12 @@
  */
 
 import { create } from "@bufbuild/protobuf";
-import { AnySchema, Int32ValueSchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
+import {
+  AnySchema,
+  Int32ValueSchema,
+  StringValueSchema,
+  TimestampSchema,
+} from "@bufbuild/protobuf/wkt";
 import { AnyMessages, Identifiers } from "@spine-event-engine/core";
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
@@ -26,46 +31,46 @@ import { ShardedWorkRegistry } from "../../src/delivery/sharded-work-registry.js
 import { createMessage } from "./inbox-message-fixture.js";
 
 describe("Inbox", () => {
-  it("returns Timestamp precision after accepting a legacy Date receive time", async () => {
+  it("preserves microsecond receipt precision across write and reads", async () => {
     const inbox = new Inbox(
       new InboxStorage({
-        context: { name: "DateReceiveOutput", multitenant: false },
+        context: { name: "PreciseReceiveOutput", multitenant: false },
         storageFactory: new InMemoryStorageFactory(),
       }),
     );
     const receipt = await inbox.receive({
-      ...createMessage("legacy-date", "signal", 1n),
-      whenReceived: new Date(1_234),
+      ...createMessage("precise", "signal", 1n),
+      whenReceived: create(TimestampSchema, { seconds: 1n, nanos: 234_001_000 }),
     });
     expect(receipt.message.whenReceived.seconds).toBe(1n);
-    expect(receipt.message.whenReceived.nanos).toBe(234_000_000);
+    expect(receipt.message.whenReceived.nanos).toBe(234_001_000);
 
     const page = await inbox.read(ShardIndex.single());
     expect(page[0]?.whenReceived.seconds).toBe(1n);
-    expect(page[0]?.whenReceived.nanos).toBe(234_000_000);
+    expect(page[0]?.whenReceived.nanos).toBe(234_001_000);
     const direct = await inbox.readMessage(receipt.message.id);
     expect(direct?.whenReceived.seconds).toBe(1n);
-    expect(direct?.whenReceived.nanos).toBe(234_000_000);
+    expect(direct?.whenReceived.nanos).toBe(234_001_000);
   });
 
-  it("accepts legacy Date snapshots for acknowledgement and exact removals", async () => {
+  it("matches precise Timestamp snapshots for acknowledgement and exact removals", async () => {
     const factory = new InMemoryStorageFactory();
-    const context = { name: "DateSnapshotMutations", multitenant: false } as const;
+    const context = { name: "PreciseSnapshotMutations", multitenant: false } as const;
     const inbox = new Inbox(new InboxStorage({ context, storageFactory: factory }));
     const registry = new ShardedWorkRegistry({ context, storageFactory: factory });
     const shard = ShardIndex.single();
     const deliveredInput = {
-      ...createMessage("delivered-date", "delivered-signal", 1n),
-      whenReceived: new Date(1_234),
+      ...createMessage("delivered", "delivered-signal", 1n),
+      whenReceived: create(TimestampSchema, { seconds: 1n, nanos: 234_001_000 }),
     };
     const duplicateInput = {
-      ...createMessage("duplicate-date", "duplicate-signal", 2n),
-      whenReceived: new Date(1_235),
+      ...createMessage("duplicate", "duplicate-signal", 2n),
+      whenReceived: create(TimestampSchema, { seconds: 1n, nanos: 235_999_000 }),
     };
     await inbox.storage.write(deliveredInput);
     await inbox.storage.write(duplicateInput);
     const delivered = await inbox.markDelivered(deliveredInput);
-    expect(delivered?.whenReceived.nanos).toBe(234_000_000);
+    expect(delivered?.whenReceived.nanos).toBe(234_001_000);
     const session = required(
       await registry.pickUp(
         shard,

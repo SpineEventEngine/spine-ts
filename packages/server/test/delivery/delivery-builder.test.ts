@@ -17,7 +17,7 @@ import { Time } from "@spine-event-engine/core/time";
 
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { create } from "@bufbuild/protobuf";
-import { AnySchema, timestampFromDate } from "@bufbuild/protobuf/wkt";
+import { AnySchema } from "@bufbuild/protobuf/wkt";
 import { TenantIdSchema } from "@spine-event-engine/proto";
 import { Identifiers } from "@spine-event-engine/core";
 import { UserIdSchema } from "@spine-event-engine/proto";
@@ -30,8 +30,6 @@ import {
   DeliveryMonitor,
   FailedPickUp,
   FailedReception,
-  type InboxMessage,
-  type InboxMessageSnapshotInput,
   ShardIndex,
   ShardedWorkRegistry,
   UniformAcrossAllShards,
@@ -83,7 +81,7 @@ describe("DeliveryMonitor delivery", () => {
         readMessage: async () => undefined,
         markDelivered: async (value) => {
           acknowledgements += 1;
-          return readSnapshot(value);
+          return value;
         },
         removeDuplicate: async () => true,
       })
@@ -345,7 +343,7 @@ describe("DeliveryMonitor delivery", () => {
           },
           read: async () => (reads++ === 0 ? [message("pending", "target", shard)] : []),
           readMessage: async () => undefined,
-          markDelivered: async (value) => readSnapshot(value),
+          markDelivered: async (value) => value,
           removeDuplicate: async () => true,
         })
         .withWorkRegistry(registry(shard))
@@ -368,8 +366,7 @@ describe("DeliveryMonitor delivery", () => {
         },
         read: async () => (reads++ === 0 ? [pending] : []),
         readMessage: async () => undefined,
-        markDelivered: async (value) =>
-          acknowledgements++ === 0 ? undefined : readSnapshot(value),
+        markDelivered: async (value) => (acknowledgements++ === 0 ? undefined : value),
         removeDuplicate: async () => true,
       })
       .withWorkRegistry(registry(shard))
@@ -392,7 +389,7 @@ describe("DeliveryMonitor delivery", () => {
         },
         read: async () => [pending],
         readMessage: async () => undefined,
-        markDelivered: async (value) => readSnapshot(value),
+        markDelivered: async (value) => value,
         removeDuplicate: async () => true,
       },
       workRegistry: registry(shard),
@@ -468,7 +465,7 @@ describe("DeliveryMonitor delivery", () => {
         },
         read: async () => (reads++ === 0 ? [pending] : []),
         readMessage: async () => undefined,
-        markDelivered: async (value) => readSnapshot(value),
+        markDelivered: async (value) => value,
         removeDuplicate: async () => true,
       },
       workRegistry: {
@@ -504,7 +501,7 @@ describe("DeliveryMonitor delivery", () => {
         readMessage: async () => undefined,
         markDelivered: async (value) => {
           if (value.signalId === "first") throw new Error("acknowledgement failed");
-          return readSnapshot(value);
+          return value;
         },
         removeDuplicate: async () => true,
       })
@@ -616,11 +613,6 @@ function message(signalId: string, targetId: string, shard: ShardIndex) {
     whenReceived: Time.currentTime(),
     version: 1n,
   };
-}
-function readSnapshot(value: InboxMessageSnapshotInput): InboxMessage {
-  return value.whenReceived instanceof Date
-    ? { ...value, whenReceived: timestampFromDate(value.whenReceived) }
-    : (value as InboxMessage);
 }
 function registry(shard: ShardIndex) {
   const session = leasedSession(shard);

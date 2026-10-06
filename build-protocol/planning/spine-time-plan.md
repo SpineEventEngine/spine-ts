@@ -20,10 +20,12 @@ System clock offsets increment 1000 nanos, reset on underlying millisecond
 change and wrap after1000 calls per reference. Scope is module/JS realm, not a
 distributed uniqueness claim. Test Timestamp bounds and normalized negative epochs.
 
-Node24 prebuild scripts import the same erasable TypeScript leaf; compiled
-framework execution uses compiled entry. Do not mix provider-mutating source
-and dist instances in one graph. Keep sequential provider mutation within
-isolated test files; no AsyncLocalStorage clock subsystem.
+Build, release, generation, test-runner and other non-runtime development scripts
+use platform clocks and must not import Time. All TSX files have the same exclusion. The checker distinguishes runtime
+sources from tooling by purpose, including development drivers under examples.
+Tests may use Time as the subject or to control framework runtime behavior.
+Keep sequential provider mutation within isolated tests; no AsyncLocalStorage
+clock subsystem.
 
 Use TimeProvider for signal/browser time injection. Remove the obsolete Date-based
 Clock facade and Date compatibility branches. Signal occurrence and Inbox APIs
@@ -38,10 +40,10 @@ No new wire fields/database schema, Time wrapper Date, counters or Agent code.
 
 ## Sequential slices under one implementation context
 
-A. Time leaf, exports and TDD contract tests, browser/bootstrap proof.
+A. Time leaf, exports and TDD contract tests, browser proof.
 B. Runtime occurrence creation and TimeProvider injection.
 C. Precise inbox receipt, pagination and transport/store tests.
-D. Every remaining time read in packages, scripts, tests, examples; AST bypass gate.
+D. Remaining framework/application runtime reads; AST gate with a tested tooling boundary.
 E. Focused preflight, concern-specific review, correction batch, one converged
 release verification plus provider precision evidence, version-only commit,
 immediate feature-branch pushes. No PR creation or merge.

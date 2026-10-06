@@ -12,7 +12,6 @@
  * the License.
  */
 
-import { Time } from "@spine-event-engine/core/time";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -21,6 +20,7 @@ import { pathToFileURL } from "node:url";
 import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { StringValueSchema, type Any } from "@bufbuild/protobuf/wkt";
+import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { Identifiers, TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
@@ -3155,7 +3155,7 @@ async function persistDescriptorRow(input: {
     signal: input.signal,
     shard: input.shard,
     status: "TO_DELIVER",
-    whenReceived: new Date("2026-08-04T12:00:00.000Z"),
+    whenReceived: timestampFromDate(new Date("2026-08-04T12:00:00.000Z")),
     version: 1n,
   });
   if (written.outcome !== "WRITTEN") {
@@ -3179,8 +3179,8 @@ async function waitForCondition(
   predicate: () => boolean | Promise<boolean>,
   label: string,
 ): Promise<void> {
-  const deadline = Time.currentTimeMillis() + 500;
-  while (Time.currentTimeMillis() < deadline) {
+  const deadline = Date.now() + 500;
+  while (Date.now() < deadline) {
     if (await predicate()) {
       return;
     }

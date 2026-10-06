@@ -4262,7 +4262,7 @@ function message(ready: DeliveryReady, signalId: string) {
     label: ready.label,
     status: "TO_DELIVER" as const,
     shard: ready.shard,
-    whenReceived: new Date(Time.currentTimeMillis()),
+    whenReceived: Time.currentTime(),
     version: 1n,
     signal: create(AnySchema, {
       typeUrl: "type.spine.io/spine.core.Event",

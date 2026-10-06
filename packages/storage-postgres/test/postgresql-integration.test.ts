@@ -12,7 +12,6 @@
  * the License.
  */
 
-import { Time } from "@spine-event-engine/core/time";
 import { create, fromBinary, type Message, ScalarType } from "@bufbuild/protobuf";
 import { StringValueSchema, TimestampSchema, type StringValue } from "@bufbuild/protobuf/wkt";
 import {
@@ -49,7 +48,7 @@ const url = requireUrl("SPINE_TS_POSTGRESQL_URL");
 const tenantAUrl = requireUrl("SPINE_TS_POSTGRESQL_TENANT_A_URL");
 const tenantBUrl = requireUrl("SPINE_TS_POSTGRESQL_TENANT_B_URL");
 const expectedMajor = process.env.SPINE_TS_POSTGRESQL_EXPECTED_MAJOR;
-const run = `${String(Time.currentTimeMillis())}_${String(process.pid)}`;
+const run = `${String(Date.now())}_${String(process.pid)}`;
 
 interface SingleContext {
   readonly name: string;

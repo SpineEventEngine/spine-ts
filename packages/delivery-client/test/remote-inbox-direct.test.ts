@@ -12,7 +12,6 @@
  * the License.
  */
 
-import { Time } from "@spine-event-engine/core/time";
 import { describe, expect, it, vi } from "vitest";
 import { ShardIndex } from "@spine-event-engine/server";
 import { create } from "@bufbuild/protobuf";
@@ -138,36 +137,6 @@ describe("RemoteInbox direct behavior", () => {
     expect(client.writeOne).not.toHaveBeenCalled();
   });
 
-  it("accepts legacy Date snapshots for remote acknowledgement and removals", async () => {
-    const client = new Client();
-    const inbox = new RemoteInbox(client as never);
-    const pending = domainMessage("legacy-date");
-    const dateInput = { ...pending, whenReceived: new Date(1_000) };
-    const delivered = { ...pending, status: "DELIVERED" as const };
-    client.findOne
-      .mockResolvedValueOnce(pending)
-      .mockResolvedValueOnce(delivered)
-      .mockResolvedValueOnce(pending);
-
-    await expect(inbox.markDelivered(dateInput)).resolves.toMatchObject({
-      whenReceived: pending.whenReceived,
-      status: "DELIVERED",
-    });
-    await expect(
-      inbox.removeDelivered(
-        { ...dateInput, status: "DELIVERED" },
-        {
-          kind: "EXCLUSIVE",
-          shard: pending.shard,
-        },
-      ),
-    ).resolves.toBe(true);
-    await expect(
-      inbox.removeDuplicate(dateInput, { kind: "EXCLUSIVE", shard: pending.shard }),
-    ).resolves.toBe(true);
-    expect(client.removeOne).toHaveBeenCalledTimes(2);
-  });
-
   it("continues a bounded page from an exact cursor and forwards remote read bounds", async () => {
     const client = new Client();
     const inbox = new RemoteInbox(client as never);
@@ -205,7 +174,7 @@ describe("RemoteInbox direct behavior", () => {
       inbox.read(ShardIndex.single(), {
         after: {
           messageId: second.id.value,
-          whenReceived: new Date(-62_135_596_800_000),
+          whenReceived: create(TimestampSchema, { seconds: -62_135_596_800n }),
           version: 0n,
         },
       }),
@@ -312,9 +281,9 @@ describe("RemoteInbox direct behavior", () => {
     const retained = {
       ...domainMessage("retained"),
       status: "DELIVERED" as const,
-      keepUntil: new Date(Time.currentTimeMillis() + 60_000),
+      keepUntil: new Date(Date.now() + 60_000),
     };
-    const expired = { ...retained, keepUntil: new Date(Time.currentTimeMillis() - 1) };
+    const expired = { ...retained, keepUntil: new Date(Date.now() - 1) };
 
     await expect(inbox.removeDelivered(retained, {} as never)).resolves.toBe(false);
     client.findOne.mockResolvedValueOnce(expired);

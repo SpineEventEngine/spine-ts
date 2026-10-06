@@ -12,7 +12,6 @@
  * the License.
  */
 
-import { Time } from "@spine-event-engine/core/time";
 import { Code, ConnectError, createRouterTransport } from "@connectrpc/connect";
 import { describe, expect, it, vi } from "vitest";
 
@@ -35,7 +34,7 @@ describe("in-memory delivery core response loss", () => {
     const inbox = new RemoteInbox(client);
     const retained = {
       ...domainMessage("retained"),
-      keepUntil: new Date(Time.currentTimeMillis() + 60_000),
+      keepUntil: new Date(Date.now() + 60_000),
     };
     const duplicate = {
       ...domainMessage("duplicate"),
@@ -74,15 +73,13 @@ describe("in-memory delivery core response loss", () => {
     const inbox = new RemoteInbox(client);
     const expired = {
       ...domainMessage("expired"),
-      keepUntil: new Date(Time.currentTimeMillis() - 60_000),
+      keepUntil: new Date(Date.now() - 60_000),
     };
     const pending = { ...domainMessage("pending"), signalId: expired.signalId };
     await client.writeOne(expired);
     await expect(inbox.markDelivered(expired)).resolves.toMatchObject({ status: "DELIVERED" });
     await client.writeOne(pending);
-    expect((await client.findOne(expired.id))?.keepUntil?.getTime()).toBeLessThan(
-      Time.currentTimeMillis(),
-    );
+    expect((await client.findOne(expired.id))?.keepUntil?.getTime()).toBeLessThan(Date.now());
     const shard = ShardIndex.single();
     const session = { kind: "EXCLUSIVE" as const, shard };
     const onMessage = vi.fn();
@@ -118,7 +115,7 @@ describe("in-memory delivery core response loss", () => {
       ...domainMessage("expired-cursor"),
       signalId: "expired-cursor",
       whenReceived: timestampFromDate(new Date(2_000)),
-      keepUntil: new Date(Time.currentTimeMillis() - 60_000),
+      keepUntil: new Date(Date.now() - 60_000),
     };
     const later = {
       ...domainMessage("later"),
@@ -161,7 +158,7 @@ describe("in-memory delivery core response loss", () => {
     const first = {
       ...domainMessage("retained-first"),
       signalId: "retained-first",
-      keepUntil: new Date(Time.currentTimeMillis() + 60_000),
+      keepUntil: new Date(Date.now() + 60_000),
     };
     await client.writeOne(first);
     for (const index of [1, 2, 3]) {
@@ -169,7 +166,7 @@ describe("in-memory delivery core response loss", () => {
         ...domainMessage(`expired-${String(index)}`),
         signalId: `expired-${String(index)}`,
         whenReceived: timestampFromDate(new Date((index + 1) * 1_000)),
-        keepUntil: new Date(Time.currentTimeMillis() - 60_000),
+        keepUntil: new Date(Date.now() - 60_000),
       };
       await client.writeOne(expired);
       await inbox.markDelivered(expired);
@@ -216,7 +213,7 @@ describe("in-memory delivery core response loss", () => {
         ...domainMessage(`initial-expired-${String(index)}`),
         signalId: `initial-expired-${String(index)}`,
         whenReceived: timestampFromDate(new Date(index * 1_000)),
-        keepUntil: new Date(Time.currentTimeMillis() - 60_000),
+        keepUntil: new Date(Date.now() - 60_000),
       };
       await client.writeOne(expired);
       await inbox.markDelivered(expired);
@@ -260,7 +257,7 @@ describe("in-memory delivery core response loss", () => {
     const first = {
       ...domainMessage("first-duplicate-source"),
       signalId: "shared-signal",
-      keepUntil: new Date(Time.currentTimeMillis() + 60_000),
+      keepUntil: new Date(Date.now() + 60_000),
     };
     const duplicate = {
       ...domainMessage("duplicate-cursor"),

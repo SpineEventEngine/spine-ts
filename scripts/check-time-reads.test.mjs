@@ -14,7 +14,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { findTimeBypasses } from "./check-time-reads.mjs";
+import { findTimeBypasses, findTimeImports, timeReadPolicy } from "./check-time-reads.mjs";
 
 describe("time read bypass check", () => {
   it("finds direct and aliased wall or monotonic clock reads", () => {
@@ -83,5 +83,39 @@ describe("time read bypass check", () => {
       setTimeout(callback, 10);
     `;
     expect(findTimeBypasses(source)).toEqual([]);
+  });
+
+  it("reserves Time for runtime TypeScript and spawned application fixtures", () => {
+    expect(timeReadPolicy("packages/server/src/delivery/inbox.ts")).toBe("runtime");
+    expect(timeReadPolicy("examples/message-board/app/src/system-clock.ts")).toBe("runtime");
+    expect(timeReadPolicy("examples/message-board/web/src/relative-time.ts")).toBe("runtime");
+    expect(timeReadPolicy("packages/delivery-client/test-fixtures/multi-machine-app.mjs")).toBe(
+      "runtime",
+    );
+    for (const path of [
+      "examples/message-board/web/src/post-form.tsx",
+      "examples/orders/src/load-runner.ts",
+      "scripts/release-get.mjs",
+      "examples/message-board/deploy/container/build-local-images.mjs",
+      "examples/message-board/web/test/interop/harness.mjs",
+      "packages/server/test/repository/entity-delivery-benchmark.test.ts",
+    ])
+      expect(timeReadPolicy(path)).toBe("platform");
+    expect(timeReadPolicy("packages/core/test/time.test.ts")).toBe("test");
+  });
+
+  it("rejects Time imports in tooling and TSX without flagging fixture text", () => {
+    const source = `
+      // import { Time } from "@spine-event-engine/core/time";
+      const fixture = 'import { Time } from "@spine-event-engine/core/time"';
+      import { Time as SharedClock } from "@spine-event-engine/core/time";
+      import { Time } from "@spine-event-engine/core";
+      import { Time as SourceClock } from "../packages/core/src/time/index.ts";
+      import * as Core from "@spine-event-engine/core";
+      Core.Time.currentTime();
+      import("@spine-event-engine/core/time");
+      require("@spine-event-engine/core/time");
+    `;
+    expect(findTimeImports(source)).toHaveLength(6);
   });
 });

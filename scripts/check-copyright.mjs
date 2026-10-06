@@ -12,7 +12,6 @@
  * the License.
  */
 
-import { Time } from "../packages/core/src/time/index.ts";
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
@@ -114,7 +113,7 @@ export function checkCopyright({
   files,
   readFile,
   readManifest,
-  year = new Date(Time.currentTimeMillis()).getFullYear(),
+  year = new Date().getFullYear(),
   ...options
 }) {
   const manifest = readManifest();

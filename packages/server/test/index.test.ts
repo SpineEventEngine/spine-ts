@@ -13,6 +13,7 @@
  */
 
 import type { Message } from "@bufbuild/protobuf";
+import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import type { TimeProvider } from "@spine-event-engine/core/time";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, expectTypeOf, it } from "vitest";
@@ -36,8 +37,6 @@ import {
   type EventRegistrationReadinessLookup,
   type EventRegistrationReactorMetadata,
   type EventRegistrationSubscriberMetadata,
-  FixedClock,
-  type Clock,
   Environment,
   EnvironmentType,
   ServerEnvironment,
@@ -63,7 +62,8 @@ import {
   AbstractEventSubscriber,
   Inbox,
   type InboxMessage,
-  type InboxMessageSnapshotInput,
+  type InboxMessageInput,
+  type InboxReadContinuation,
   InboxStorage,
   type PrimitiveId,
   Repository,
@@ -91,7 +91,6 @@ import {
   SignalMetadata,
   type SignalMetadataOptions,
   SingleProcessServerRuntime,
-  SystemClock,
 } from "../src/index.js";
 import {
   type CreateProject,
@@ -174,7 +173,6 @@ describe("@spine-event-engine/server", () => {
         "EventRouting",
         "FailedPickUp",
         "FailedReception",
-        "FixedClock",
         "HandlerMetadataError",
         "HandlerMetadataRegistry",
         "HandlerMetadataRegistryError",
@@ -207,7 +205,6 @@ describe("@spine-event-engine/server", () => {
         "StandStateTypeError",
         "StorageSubscriptionRegistry",
         "StateUpdateRouting",
-        "SystemClock",
         "ThirdPartyContext",
         "TransactionalEntity",
         "TransactionalEntityScopeError",
@@ -245,11 +242,13 @@ describe("@spine-event-engine/server", () => {
     expectTypeOf<StandSubscription>().toExtend<{ readonly closed: boolean }>();
     expectTypeOf<StandUpdate>().toExtend<{ readonly typeUrl: string; readonly id: unknown }>();
     expectTypeOf<InboxMessage>().not.toHaveProperty("claim");
+    expectTypeOf<InboxMessageInput["whenReceived"]>().toEqualTypeOf<Timestamp>();
+    expectTypeOf<InboxReadContinuation["whenReceived"]>().toEqualTypeOf<Timestamp>();
     expectTypeOf<Inbox>().not.toHaveProperty("claim");
     expectTypeOf<Inbox>().not.toHaveProperty("unclaim");
     expectTypeOf<DeliveryInbox["removeDelivered"]>().toEqualTypeOf<
       | ((
-          message: InboxMessageSnapshotInput,
+          message: InboxMessage,
           session: DeliveryWorkSession,
           options?: DeliveryOperationOptions,
         ) => Promise<boolean>)
@@ -265,8 +264,6 @@ describe("@spine-event-engine/server", () => {
     expect(new StandStateTypeError("Unknown", "read")).toBeInstanceOf(StandStateTypeError);
     expect(new SingleProcessServerRuntime()).toBeInstanceOf(SingleProcessServerRuntime);
     expect(new SignalMetadata()).toBeInstanceOf(SignalMetadata);
-    expect(new FixedClock(new Date(0))).toBeInstanceOf(FixedClock);
-    expect(new SystemClock()).toBeInstanceOf(SystemClock);
     expect(new GeneratedRegistryDiscovery()).toBeInstanceOf(GeneratedRegistryDiscovery);
     expect(new HandlerRegistryIngestor()).toBeInstanceOf(HandlerRegistryIngestor);
     expect(
@@ -300,9 +297,8 @@ describe("@spine-event-engine/server", () => {
     expectTypeOf<SignalIntakeFailureCode>().toEqualTypeOf<
       "RUNTIME_NOT_ACCEPTING" | "MALFORMED_ENVELOPE" | "UNSUPPORTED_SIGNAL_KIND"
     >();
-    expectTypeOf<SignalMetadataOptions>().toExtend<{
-      readonly clock?: Clock | TimeProvider | undefined;
-    }>();
+    expectTypeOf<SignalMetadataOptions["timeProvider"]>().toEqualTypeOf<TimeProvider | undefined>();
+    expectTypeOf<SignalMetadata["timestamp"]>().toEqualTypeOf<() => Timestamp>();
     const rejectsIdSource = () => {
       // @ts-expect-error Public metadata options do not accept injected ID sources.
       new SignalMetadata({ ids: () => "fixed" });

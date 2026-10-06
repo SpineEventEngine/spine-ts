@@ -12,7 +12,6 @@
  * the License.
  */
 
-import { Time } from "@spine-event-engine/core/time";
 import { create, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, timestampFromDate, type Any } from "@bufbuild/protobuf/wkt";
 import { Identifiers } from "@spine-event-engine/core";
@@ -610,7 +609,7 @@ describe("LocalEntityInbox", () => {
       label: "HANDLE_COMMAND",
       status: "TO_DELIVER",
       shard: ShardIndex.single(),
-      whenReceived: new Date("2026-07-08T09:00:00.000Z"),
+      whenReceived: timestampFromDate(new Date("2026-07-08T09:00:00.000Z")),
       version: 1n,
     });
     await delivery.inbox.receive({
@@ -620,7 +619,7 @@ describe("LocalEntityInbox", () => {
       label: "REACT_UPON_EVENT",
       status: "TO_DELIVER",
       shard: ShardIndex.single(),
-      whenReceived: new Date("2026-07-08T09:00:01.000Z"),
+      whenReceived: timestampFromDate(new Date("2026-07-08T09:00:01.000Z")),
       version: 2n,
     });
 
@@ -731,7 +730,7 @@ describe("LocalEntityInbox", () => {
     });
     const inbox = new LocalEntityInbox("Tasks");
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
-    const keepUntil = new Date(Time.currentTimeMillis() + 30_000);
+    const keepUntil = new Date(Date.now() + 30_000);
 
     inbox.register({
       targetTypeUrl,
@@ -1104,7 +1103,7 @@ describe("LocalEntityInbox", () => {
       label: "HANDLE_COMMAND",
       status: "TO_DELIVER",
       shard,
-      whenReceived: new Date("2026-07-08T09:00:00.000Z"),
+      whenReceived: timestampFromDate(new Date("2026-07-08T09:00:00.000Z")),
       version: 1n,
     });
 
@@ -1183,7 +1182,7 @@ describe("LocalEntityInbox", () => {
       label: "UPDATE_SUBSCRIBER",
       status: "TO_DELIVER",
       shard,
-      whenReceived: new Date("2026-07-08T09:00:00.000Z"),
+      whenReceived: timestampFromDate(new Date("2026-07-08T09:00:00.000Z")),
       version: 1n,
     });
     await delivery.inbox.receive({
@@ -1196,7 +1195,7 @@ describe("LocalEntityInbox", () => {
       label: "HANDLE_COMMAND",
       status: "TO_DELIVER",
       shard,
-      whenReceived: new Date("2026-07-08T09:00:01.000Z"),
+      whenReceived: timestampFromDate(new Date("2026-07-08T09:00:01.000Z")),
       version: 2n,
     });
 

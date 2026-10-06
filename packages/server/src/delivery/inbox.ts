@@ -14,9 +14,8 @@
 
 import { randomUUID } from "node:crypto";
 
-import { clone, toBinary } from "@bufbuild/protobuf";
+import { clone, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, StringValueSchema, type Any, type Timestamp } from "@bufbuild/protobuf/wkt";
-import { fromBinary } from "@bufbuild/protobuf";
 
 import type { InboxStorage } from "./inbox-storage.js";
 import type { DeliveryOperationOptions, DeliveryWorkSession } from "./delivery-ports.js";
@@ -67,8 +66,11 @@ export class Inbox {
       label: this.#readInput(messageInput, "label", "Inbox delivery label") as DeliveryLabel,
       status: this.#readInput(messageInput, "status", "Inbox delivery status") as DeliveryStatus,
       shard,
-      whenReceived: this.#readInput(messageInput, "whenReceived", "Inbox receive time") as
-        Date | Timestamp,
+      whenReceived: this.#readInput(
+        messageInput,
+        "whenReceived",
+        "Inbox receive time",
+      ) as Timestamp,
       version: this.#readInput(messageInput, "version", "Inbox version") as bigint,
       ...(signal === undefined ? {} : { signal }),
       ...(keepUntil === undefined ? {} : { keepUntil }),
@@ -108,7 +110,7 @@ export class Inbox {
    * not pending, or no longer matches the snapshot. Matching delivered rows return
    * idempotently so concurrent workers converge without re-dispatching.
    */
-  markDelivered(message: InboxMessageSnapshotInput): Promise<InboxMessage | undefined> {
+  markDelivered(message: InboxMessage): Promise<InboxMessage | undefined> {
     return this.storage.markDelivered(message);
   }
 
@@ -121,7 +123,7 @@ export class Inbox {
    * @returns Whether storage atomically removed the exact pending snapshot.
    */
   removeDuplicate(
-    message: InboxMessageSnapshotInput,
+    message: InboxMessage,
     session: DeliveryWorkSession,
     options?: DeliveryOperationOptions,
   ): Promise<boolean> {
@@ -138,7 +140,7 @@ export class Inbox {
    * @returns Whether the provider atomically removed the exact durable row.
    */
   removeDelivered(
-    message: InboxMessageSnapshotInput,
+    message: InboxMessage,
     session: DeliveryWorkSession,
     options?: DeliveryOperationOptions,
   ): Promise<boolean> {
@@ -305,7 +307,7 @@ export interface InboxMessage {
   readonly shard: ShardIndex;
 
   /**
-   * Durable receive time normalized to a full-precision Timestamp on reads.
+   * Durable receive time with full Protobuf Timestamp precision.
    */
   readonly whenReceived: Timestamp;
 
@@ -357,9 +359,9 @@ export interface InboxMessageInput {
   readonly shard: ShardIndex;
 
   /**
-   * Durable receive time. Legacy Date input is normalized at the storage boundary.
+   * Durable receive time at nanosecond precision.
    */
-  readonly whenReceived: Date | Timestamp;
+  readonly whenReceived: Timestamp;
 
   /**
    * Ordering tie-breaker for equal receive times.
@@ -370,17 +372,6 @@ export interface InboxMessageInput {
    * Optional deduplication retention deadline.
    */
   readonly keepUntil?: Date;
-}
-
-/**
- * Exact inbox snapshot supplied to writes, acknowledgements, and removals. A legacy Date receive
- * time remains accepted at these input boundaries; read results use `InboxMessage` instead.
- */
-export interface InboxMessageSnapshotInput extends InboxMessageInput {
-  /**
-   * Durable identity of the row to write or compare.
-   */
-  readonly id: InboxMessageId;
 }
 
 /**
@@ -422,9 +413,9 @@ export interface InboxReadContinuation {
   readonly messageId: string;
 
   /**
-   * Receive time from the last row of the previous page. Legacy Date input is accepted.
+   * Precise receive time from the last row of the previous page.
    */
-  readonly whenReceived: Date | Timestamp;
+  readonly whenReceived: Timestamp;
 
   /**
    * Version from the last row of the previous page.

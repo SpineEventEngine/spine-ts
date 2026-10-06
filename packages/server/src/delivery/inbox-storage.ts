@@ -29,7 +29,6 @@ import {
   InboxMessageError,
   type DeliveryStatus,
   type InboxMessage,
-  type InboxMessageSnapshotInput,
   type InboxMessageId,
   type InboxReadOptions,
   type InboxWriteResult,
@@ -138,7 +137,7 @@ export class InboxStorage {
    * @param message Supplies the message to persist.
    * @returns Whether the row was written or matched an existing duplicate.
    */
-  async write(message: InboxMessageSnapshotInput): Promise<InboxWriteResult> {
+  async write(message: InboxMessage): Promise<InboxWriteResult> {
     const record = InboxRecords.write(message);
     const id = Values.wireId(record);
     const storage = this.#storage();
@@ -163,7 +162,7 @@ export class InboxStorage {
    * @param message Supplies the expected pending snapshot.
    * @returns The delivered row, or `undefined` when the snapshot no longer matches.
    */
-  async markDelivered(message: InboxMessageSnapshotInput): Promise<InboxMessage | undefined> {
+  async markDelivered(message: InboxMessage): Promise<InboxMessage | undefined> {
     const expected = InboxRecords.write(message);
     const id = Values.wireId(expected);
     const storage = this.#storage();
@@ -199,7 +198,7 @@ export class InboxStorage {
    * @returns Whether the provider atomically removed the exact durable row.
    */
   async removeDelivered(
-    message: InboxMessageSnapshotInput,
+    message: InboxMessage,
     session: DeliveryWorkSession,
     options?: import("./delivery-ports.js").DeliveryOperationOptions,
   ): Promise<boolean> {
@@ -220,7 +219,7 @@ export class InboxStorage {
    * @returns Whether the provider atomically removed the exact pending snapshot.
    */
   async removeDuplicate(
-    message: InboxMessageSnapshotInput,
+    message: InboxMessage,
     session: DeliveryWorkSession,
     options?: import("./delivery-ports.js").DeliveryOperationOptions,
   ): Promise<boolean> {
@@ -229,7 +228,7 @@ export class InboxStorage {
   }
 
   async #remove(
-    message: InboxMessageSnapshotInput,
+    message: InboxMessage,
     session: DeliveryWorkSession,
     options?: import("./delivery-ports.js").DeliveryOperationOptions,
   ): Promise<boolean> {
@@ -258,12 +257,12 @@ export class InboxStorage {
       !options?.signal?.aborted && (deadline === undefined || Values.now(this.#now) < deadline);
   }
 
-  #matchesSession(message: InboxMessageSnapshotInput, session: DeliveryWorkSession): boolean {
+  #matchesSession(message: InboxMessage, session: DeliveryWorkSession): boolean {
     return session.kind === "LEASED" && session.shard.key() === message.shard.key();
   }
 
   async #removeCurrent(
-    message: InboxMessageSnapshotInput,
+    message: InboxMessage,
     session: Extract<DeliveryWorkSession, { readonly kind: "LEASED" }>,
     options: import("./delivery-ports.js").DeliveryOperationOptions | undefined,
     isActive: () => boolean,
@@ -470,23 +469,20 @@ const Values = Object.freeze({
   },
 
   /**
-   * Converts a legacy Date or copies a precise inbox receive timestamp.
+   * Copies a precise inbox receive timestamp.
    * @param value The receive instant supplied by a caller.
    * @returns A detached Protobuf timestamp.
    */
-  receiveTime(value: Date | Timestamp): Timestamp {
-    return value instanceof Date
-      ? Values.timestamp(value.getTime())
-      : clone(TimestampSchema, value);
+  receiveTime(value: Timestamp): Timestamp {
+    return clone(TimestampSchema, value);
   },
 
   /**
-   * Validates the Date or Protobuf timestamp range for an inbox receive time.
+   * Validates the Protobuf timestamp range for an inbox receive time.
    * @param value The receive instant to inspect.
    * @returns Whether the instant can be persisted without loss.
    */
-  validReceiveTime(value: Date | Timestamp): boolean {
-    if (value instanceof Date) return Number.isFinite(value.getTime());
+  validReceiveTime(value: Timestamp): boolean {
     return (
       (value as unknown as { $typeName?: string } | null)?.$typeName === TimestampSchema.typeName &&
       value.seconds >= -62_135_596_800n &&

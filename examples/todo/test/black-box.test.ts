@@ -232,7 +232,7 @@ describe("@spine-event-engine/example-todo", () => {
 
   it("rejects a remote command when its client call never settles", async () => {
     const timeoutMs = 20;
-    const startedAt = Time.currentTimeMillis();
+    const startedAt = Date.now();
     const failure = await postRemoteCommand(
       {
         post: () => new Promise<never>(() => undefined),
@@ -246,7 +246,7 @@ describe("@spine-event-engine/example-todo", () => {
     expect((failure as Error).message).toBe(
       `Timed out waiting for controlled hanging command after ${String(timeoutMs)}ms.`,
     );
-    expect(Time.currentTimeMillis() - startedAt).toBeLessThan(500);
+    expect(Date.now() - startedAt).toBeLessThan(500);
   });
 
   it("handles an early subscription read rejection while lifecycle cleanup completes", async () => {
@@ -937,7 +937,7 @@ describe("@spine-event-engine/example-todo", () => {
       label: "UPDATE_SUBSCRIBER",
       status: "TO_DELIVER",
       shard: delivery.strategy.shardFor(targetId, targetTypeUrl),
-      whenReceived: new Date(Time.currentTimeMillis()),
+      whenReceived: Time.currentTime(),
       version: 1n,
     });
 
@@ -2386,7 +2386,7 @@ async function establishAssignmentRejectionSubscriptionReadiness(
   unpack: (update: SubscriptionUpdate) => AssignmentRejectionMessage,
   timeoutMs = 500,
 ): Promise<void> {
-  const deadline = Time.currentTimeMillis() + timeoutMs;
+  const deadline = Date.now() + timeoutMs;
   const read = () =>
     subscription.next().then((result): SubscriptionUpdate | undefined => {
       if (result.done) throw new Error("Rejection subscription ended during readiness.");
@@ -2454,7 +2454,7 @@ async function establishAssignmentRejectionSubscriptionReadiness(
       }
       pendingRead = read();
     }
-    if (Time.currentTimeMillis() >= deadline) break;
+    if (Date.now() >= deadline) break;
   }
 
   for (let attempt = 1; attempt <= 8; attempt++) {
@@ -2493,7 +2493,7 @@ async function establishRejectionSubscriptionReadiness(
   subscription: { readonly next: () => Promise<RejectionEvent | undefined> },
   timeoutMs = 500,
 ): Promise<void> {
-  const deadline = Time.currentTimeMillis() + timeoutMs;
+  const deadline = Date.now() + timeoutMs;
   const probes = new Map<string, string>();
   const firstRead = subscription.next().then<RejectionReadOutcome, RejectionReadOutcome>(
     (update) => ({ case: "received", update }),
@@ -2686,7 +2686,7 @@ function nextEventLoopTurn(): Promise<void> {
 }
 
 function remainingMs(deadline: number): number {
-  const remaining = deadline - Time.currentTimeMillis();
+  const remaining = deadline - Date.now();
   if (remaining <= 0) {
     throw new Error("Rejection subscription readiness deadline expired.");
   }
@@ -2753,12 +2753,12 @@ async function readRemoteEventually(
   timeoutMs = 500,
   intervalMs = 5,
 ): Promise<QueryResponse> {
-  const deadline = Time.currentTimeMillis() + timeoutMs;
+  const deadline = Date.now() + timeoutMs;
   let attempts = 0;
   let response: QueryResponse | undefined;
 
-  while (Time.currentTimeMillis() < deadline) {
-    const remainingMs = Math.max(1, deadline - Time.currentTimeMillis());
+  while (Date.now() < deadline) {
+    const remainingMs = Math.max(1, deadline - Date.now());
     response = await withTimeout(
       client.read(query),
       `remote query ${sanitizeDiagnostic(query.id?.value ?? "<missing>")} response`,
@@ -2768,7 +2768,7 @@ async function readRemoteEventually(
     if (onAccept(response)) {
       return response;
     }
-    await delay(Math.min(intervalMs, Math.max(0, deadline - Time.currentTimeMillis())));
+    await delay(Math.min(intervalMs, Math.max(0, deadline - Date.now())));
   }
 
   throw remoteReadTimeout(query, response, timeoutMs, attempts);

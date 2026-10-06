@@ -23,7 +23,10 @@ result, and metadata types.
 Import `Time` from `@spine-event-engine/core/time` or the core root. Both entry
 points expose the same object and configured provider. The dedicated entry
 point needs no generated Spine model modules and works in browsers and Node.
-All operations are synchronous.
+All operations are synchronous. Framework and application runtime sources use
+Time, except TSX files. TSX and non-runtime build, release, generation and
+test-runner scripts use platform clocks and must not import Time. Tests may use
+Time to exercise or control framework runtime behavior.
 
 | Operation                  | Result and purpose                                                                                          |
 | -------------------------- | ----------------------------------------------------------------------------------------------------------- |
@@ -62,8 +65,8 @@ instance must not replace its provider concurrently. Separate workers have
 separate module state. Install the provider before starting work, and await all
 work that uses it before replacing or restoring it. Monotonic readings from
 different providers may use different origins and must not be compared.
-Use existing per-consumer clock inputs when independent consumers need different
-clocks within one runtime.
+Supply separate `TimeProvider` values through component configuration when
+independent consumers need different timestamps within one runtime.
 
 ```ts
 import { create } from "@bufbuild/protobuf";

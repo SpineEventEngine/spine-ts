@@ -14,6 +14,7 @@
 
 import { create, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, Int32ValueSchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
+import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { access } from "node:fs/promises";
 import { Identifiers, StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
 import {
@@ -160,7 +161,7 @@ function message() {
     label: "HANDLE_COMMAND" as const,
     status: "TO_DELIVER" as const,
     shard: new ShardIndex(0, 1),
-    whenReceived: new Date(1_000),
+    whenReceived: timestampFromDate(new Date(1_000)),
     version: 1n,
   };
 }

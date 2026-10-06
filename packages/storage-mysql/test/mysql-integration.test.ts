@@ -12,7 +12,6 @@
  * the License.
  */
 
-import { Time } from "@spine-event-engine/core/time";
 import { create, fromBinary, ScalarType, toBinary } from "@bufbuild/protobuf";
 import {
   AnySchema,
@@ -110,7 +109,7 @@ live("MySQL-family record layout", () => {
       ],
     });
     const context = {
-      name: `precise_time_${String(Time.currentTimeMillis())}`,
+      name: `precise_time_${String(Date.now())}`,
       multitenant: false,
     } as const;
     const storage = factory.createRecordStorage(context, spec, new StorageGroup(context.name));
@@ -156,14 +155,14 @@ live("MySQL-family record layout", () => {
       ],
     });
     const storage = factory.createRecordStorage(
-      { name: `t0134_records_${String(Time.currentTimeMillis())}`, multitenant: false },
+      { name: `t0134_records_${String(Date.now())}`, multitenant: false },
       spec,
-      new StorageGroup(`t0134_records_${String(Time.currentTimeMillis())}`),
+      new StorageGroup(`t0134_records_${String(Date.now())}`),
     );
     const otherGroup = factory.createRecordStorage(
-      { name: `t0134_records_${String(Time.currentTimeMillis())}`, multitenant: false },
+      { name: `t0134_records_${String(Date.now())}`, multitenant: false },
       spec,
-      new StorageGroup(`t0190_other_${String(Time.currentTimeMillis())}`),
+      new StorageGroup(`t0190_other_${String(Date.now())}`),
     );
     await storage.writeAll([
       create(StringValueSchema, { value: "b" }),
@@ -203,9 +202,9 @@ live("MySQL-family record layout", () => {
         new RecordColumn("value", ColumnTypes.scalar(ScalarType.STRING), (record) => record.value),
       ],
     });
-    const group = new StorageGroup(`repository_reads_${String(Time.currentTimeMillis())}`);
+    const group = new StorageGroup(`repository_reads_${String(Date.now())}`);
     const storage = factory.createRecordStorage(
-      { name: `repository_reads_${String(Time.currentTimeMillis())}`, multitenant: false },
+      { name: `repository_reads_${String(Date.now())}`, multitenant: false },
       spec,
       group,
     );
@@ -265,9 +264,9 @@ live("MySQL-family record layout", () => {
         new RecordColumn("value", ColumnTypes.scalar(ScalarType.STRING), (record) => record.value),
       ],
     });
-    const group = new StorageGroup(`repository_collation_${String(Time.currentTimeMillis())}`);
+    const group = new StorageGroup(`repository_collation_${String(Date.now())}`);
     const storage = factory.createRecordStorage(
-      { name: `repository_collation_${String(Time.currentTimeMillis())}`, multitenant: false },
+      { name: `repository_collation_${String(Date.now())}`, multitenant: false },
       spec,
       group,
     );
@@ -323,7 +322,7 @@ live("MySQL-family record layout", () => {
   it("rolls back or retains the exact immutable Entity prefix at each injected boundary", async () => {
     if (url === undefined) throw new Error("SPINE_TS_MYSQL_URL is required.");
     const context = {
-      name: `t0134_commit_${String(Time.currentTimeMillis())}`,
+      name: `t0134_commit_${String(Date.now())}`,
       multitenant: false,
     } as const;
     const input = entityInput(context);
@@ -356,7 +355,7 @@ live("MySQL-family record layout", () => {
       expect(engines).toHaveLength(actualTables.length);
       expect(engines.every((table) => table.engine.toLowerCase() === engine)).toBe(true);
 
-      const run = String(Time.currentTimeMillis());
+      const run = String(Date.now());
       for (const [index, tableName] of actualTables.entries()) {
         const id = `boundary-${run}-${String(index)}`;
         const trigger = `t0134_fail_${run}_${String(index)}`;
@@ -404,7 +403,7 @@ live("MySQL-family record layout", () => {
 
   it("rejects closed, cross-source, and identifier-less Entity commits", async () => {
     const context = {
-      name: `t0134_commit_errors_${String(Time.currentTimeMillis())}`,
+      name: `t0134_commit_errors_${String(Date.now())}`,
       multitenant: false,
     } as const;
     const input = entityInput(context);
@@ -438,7 +437,7 @@ live("MySQL-family record layout", () => {
 
   it("rejects immutable histories that are disabled for the Entity family", async () => {
     const context = {
-      name: `t0134_disabled_${String(Time.currentTimeMillis())}`,
+      name: `t0134_disabled_${String(Date.now())}`,
       multitenant: false,
     } as const;
     const input = entityInput(context, false, false);
@@ -458,7 +457,7 @@ live("MySQL-family record layout", () => {
   it("serializes nontransactional commits with and without optional immutable families", async () => {
     if (url === undefined) throw new Error("SPINE_TS_MYSQL_URL is required.");
     const context = {
-      name: `t0134_nontransactional_${String(Time.currentTimeMillis())}`,
+      name: `t0134_nontransactional_${String(Date.now())}`,
       multitenant: false,
     } as const;
     const input = entityInput(context);
@@ -494,7 +493,7 @@ live("MySQL-family record layout", () => {
   it("atomically compares records from two handles on the configured engine", async () => {
     if (url === undefined) throw new Error("SPINE_TS_MYSQL_URL is required.");
     const context = {
-      name: `t0134_cas_${String(Time.currentTimeMillis())}`,
+      name: `t0134_cas_${String(Date.now())}`,
       multitenant: false,
     } as const;
     const spec = new RecordSpec<string, StringValue>({
@@ -509,7 +508,7 @@ live("MySQL-family record layout", () => {
         ),
       ],
     });
-    const group = new StorageGroup(`t0134_cas_${String(Time.currentTimeMillis())}`);
+    const group = new StorageGroup(`t0134_cas_${String(Date.now())}`);
     const first = factory.createRecordStorage(context, spec, group);
     const second = factory.createRecordStorage(context, spec, group);
     const pool = createPool(url);
@@ -555,7 +554,7 @@ live("MySQL-family record layout", () => {
   it("serializes InnoDB Entity commits from separate handles", async () => {
     if (url === undefined) throw new Error("SPINE_TS_MYSQL_URL is required.");
     const context = {
-      name: `t0134_concurrent_${String(Time.currentTimeMillis())}`,
+      name: `t0134_concurrent_${String(Date.now())}`,
       multitenant: false,
     } as const;
     const input = entityInput(context);
@@ -580,13 +579,13 @@ live("MySQL-family record layout", () => {
 
   it("replays an identical Entity commit without replacing current state", async () => {
     const context = {
-      name: `t0134_replay_${String(Time.currentTimeMillis())}`,
+      name: `t0134_replay_${String(Date.now())}`,
       multitenant: false,
     } as const;
     const input = entityInput(context);
     const commits = EntityCommitStorageFactories.create(factory, input);
     const pool = createPool(url ?? "");
-    const id = `replay-${String(Time.currentTimeMillis())}`;
+    const id = `replay-${String(Date.now())}`;
     try {
       const same = mutation(context, input, id);
       await expect(commits.commit(same)).resolves.toBeUndefined();
@@ -607,7 +606,7 @@ tenantLive("MySQL normalized-plan tenant containment", () => {
     }
     const tenantA = tenant("a");
     const tenantB = tenant("b");
-    const group = new StorageGroup(`t0190_group_${String(Time.currentTimeMillis())}`);
+    const group = new StorageGroup(`t0190_group_${String(Date.now())}`);
     const factory = await MysqlStorageFactory.newBuilder()
       .setTenantOptions([
         { tenantId: tenantA, options: { url: tenantAUrl } },

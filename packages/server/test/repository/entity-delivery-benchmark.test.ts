@@ -15,7 +15,6 @@
 import { create } from "@bufbuild/protobuf";
 import { StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { AnyMessages } from "@spine-event-engine/core";
-import { Time } from "@spine-event-engine/core/time";
 import {
   EventContextSchema,
   EventIdSchema,
@@ -76,7 +75,7 @@ async function startCpuProfile(
     session.disconnect();
     throw error;
   }
-  const profileOrigin = Time.monotonicTime();
+  const profileOrigin = performance.now();
   return async (start, end) => {
     try {
       const { profile } = await session.post("Profiler.stop");
@@ -156,11 +155,11 @@ async function measure(count: number, label: string): Promise<number> {
         ? undefined
         : await startCpuProfile(label);
     let elapsed = 0;
-    const start = Time.monotonicTime();
+    const start = performance.now();
     try {
       await context.eventBus().post(event);
     } finally {
-      const end = Time.monotonicTime();
+      const end = performance.now();
       elapsed = end - start;
       if (stopCpuProfile) await stopCpuProfile(start, end);
     }

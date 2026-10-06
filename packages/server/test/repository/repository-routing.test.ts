@@ -139,7 +139,6 @@ import {
   standEntityStorageDescriptor,
 } from "../../src/entity/entity-storage-descriptor.js";
 import { standAccess } from "../../src/stand/stand.js";
-import { SystemClock } from "../../src/runtime/signal-metadata.js";
 import {
   repositoryAccess,
   repositoryReadAccess,
@@ -8061,7 +8060,7 @@ describe("repository signal routing", () => {
       label: "REACT_UPON_EVENT",
       status: "TO_DELIVER",
       shard: ShardIndex.single(),
-      whenReceived: new Date("2026-07-08T09:00:00.000Z"),
+      whenReceived: timestampFromDate(new Date("2026-07-08T09:00:00.000Z")),
       version: 1n,
     });
 
@@ -9872,9 +9871,9 @@ describe("repository signal routing", () => {
   it("uses each lifecycle envelope timestamp for its payload under an advancing clock", async () => {
     const changes: SpineEvent[] = [];
     let clockTick = 0;
-    const clock = vi
-      .spyOn(SystemClock.prototype, "now")
-      .mockImplementation(() => new Date(1_000 + clockTick++));
+    const previous = Time.setProvider({
+      currentTime: () => create(TimestampSchema, { seconds: 1n, nanos: clockTick++ * 1_000 }),
+    });
     const context = BoundedContext.singleTenant("Tasks")
       .add(createExecutingRepository())
       .addEventDispatcher({
@@ -9908,8 +9907,8 @@ describe("repository signal routing", () => {
       const archived = AnyMessages.unpack(changes[0]?.message as never, EntityArchivedSchema);
       expect(archived?.when).toEqual(changes[0]?.context?.timestamp);
     } finally {
-      clock.mockRestore();
       await context.close();
+      Time.setProvider(previous);
     }
   });
 
@@ -14306,7 +14305,7 @@ async function storeEntityInboxCommand(
     label: "HANDLE_COMMAND",
     status: "TO_DELIVER",
     shard: ShardIndex.single(),
-    whenReceived,
+    whenReceived: timestampFromDate(whenReceived),
     version,
   });
 
@@ -14339,7 +14338,7 @@ async function storePmInboxEvent(
     label: overrides.label ?? "REACT_UPON_EVENT",
     status: "TO_DELIVER",
     shard: ShardIndex.single(),
-    whenReceived,
+    whenReceived: timestampFromDate(whenReceived),
     version,
   });
 
@@ -14546,9 +14545,9 @@ function delay(ms: number): Promise<"pending"> {
 }
 
 async function waitForCondition(predicate: () => boolean): Promise<void> {
-  const deadline = Time.currentTimeMillis() + 500;
+  const deadline = Date.now() + 500;
 
-  while (Time.currentTimeMillis() < deadline) {
+  while (Date.now() < deadline) {
     if (predicate()) {
       return;
     }
@@ -14563,8 +14562,8 @@ async function waitForProjectOverviewState(
   id: string,
   tenantId?: string,
 ): Promise<ProjectOverviewState | undefined> {
-  const deadline = Time.currentTimeMillis() + 500;
-  while (Time.currentTimeMillis() < deadline) {
+  const deadline = Date.now() + 500;
+  while (Date.now() < deadline) {
     const state = await context
       .stand()
       .read(
@@ -14584,8 +14583,8 @@ async function waitForStoredEvents(
   eventStore: EventStore,
   count: number,
 ): Promise<readonly SpineEvent[]> {
-  const deadline = Time.currentTimeMillis() + 500;
-  while (Time.currentTimeMillis() < deadline) {
+  const deadline = Date.now() + 500;
+  while (Date.now() < deadline) {
     const events = await eventStore.read();
     if (events.length >= count) {
       return events;

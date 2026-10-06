@@ -823,10 +823,9 @@ lost renewal can prevent stale finalization but cannot undo a callback already
 run. The package exposes no general raw worker callback API.
 
 Inbox reads return `InboxMessage` with a full-precision Protobuf `Timestamp` in
-`whenReceived`. `InboxMessageInput` accepts a legacy `Date` for new receipts;
-`InboxMessageSnapshotInput` adds the row ID for writes, acknowledgements, and
-exact removals and also accepts `Date`. Storage normalizes these inputs before
-returning an `InboxMessage`.
+`whenReceived`. `InboxMessageInput` requires a precise `Timestamp` for new
+receipts. Writes, acknowledgements, and exact removals use an `InboxMessage`
+with the same Timestamp contract.
 
 Shard ownership is the only delivery exclusion mechanism and excludes
 concurrent delivery within that shard. Pending and delivered `InboxMessage`

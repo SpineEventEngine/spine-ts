@@ -42,7 +42,6 @@ import {
   type DeliveryLabel,
   type DeliveryStatus,
   type InboxMessage,
-  type InboxMessageSnapshotInput,
 } from "./inbox.js";
 import { ShardIndex } from "./shard-index.js";
 
@@ -70,7 +69,7 @@ export const InboxRecords: Readonly<{
    * @param message The domain inbox message to persist.
    * @returns A generated inbox record suitable for durable storage.
    */
-  write(message: InboxMessageSnapshotInput): WireInboxMessage;
+  write(message: InboxMessage): WireInboxMessage;
 }> = Object.freeze({
   /**
    * Decodes a durable inbox record and verifies its embedded identifier when requested.
@@ -89,7 +88,7 @@ export const InboxRecords: Readonly<{
    * @param message The domain inbox message to persist.
    * @returns A generated inbox record suitable for durable storage.
    */
-  write(message: InboxMessageSnapshotInput): WireInboxMessage {
+  write(message: InboxMessage): WireInboxMessage {
     return Values.write(message);
   },
 });
@@ -154,7 +153,7 @@ const Values = Object.freeze({
    * @param input The domain inbox message to validate and encode.
    * @returns A generated inbox record suitable for durable storage.
    */
-  write(input: InboxMessageSnapshotInput): WireInboxMessage {
+  write(input: InboxMessage): WireInboxMessage {
     const message = Values.input(input);
     Values.target(message.inboxId.targetId, InboxMessageError);
     Values.payloadForLabel(message.label, message.signal, InboxMessageError);
@@ -275,7 +274,7 @@ const Values = Object.freeze({
    * @param value The candidate domain inbox message.
    * @returns The validated domain inbox message.
    */
-  input(value: InboxMessageSnapshotInput): InboxMessageSnapshotInput {
+  input(value: InboxMessage): InboxMessage {
     Values.validateIdentity(value);
     const inbox = value.inboxId;
     if (
@@ -306,7 +305,7 @@ const Values = Object.freeze({
    * Validates the inbox identity and its matching shard before encoding.
    * @param value The inbox write input whose identity is checked.
    */
-  validateIdentity(value: InboxMessageSnapshotInput): void {
+  validateIdentity(value: InboxMessage): void {
     const id = value.id;
     const shard = value.shard;
     if (
@@ -444,25 +443,22 @@ const Values = Object.freeze({
   },
 
   /**
-   * Copies an occurrence Timestamp without reducing nanos, or converts a millisecond Date.
+   * Copies an occurrence Timestamp without reducing nanos.
    *
-   * @param value The occurrence Date or Protobuf Timestamp.
-   * @returns A cloned occurrence Timestamp; Date input has millisecond precision.
+   * @param value The occurrence Protobuf Timestamp.
+   * @returns A cloned occurrence Timestamp.
    */
-  receiveTime(value: Date | Timestamp): Timestamp {
-    return value instanceof Date
-      ? Values.timestamp(value.getTime())
-      : clone(TimestampSchema, value);
+  receiveTime(value: Timestamp): Timestamp {
+    return clone(TimestampSchema, value);
   },
 
   /**
-   * Checks finite Date input or valid Protobuf Timestamp fields without reducing nanosecond precision.
+   * Checks valid Protobuf Timestamp fields without reducing nanosecond precision.
    *
-   * @param value The candidate occurrence Date or Protobuf Timestamp.
-   * @returns Whether the Date or Protobuf Timestamp is in its valid range.
+   * @param value The candidate occurrence Protobuf Timestamp.
+   * @returns Whether the Protobuf Timestamp is in its valid range.
    */
-  validReceiveTime(value: Date | Timestamp): boolean {
-    if (value instanceof Date) return Number.isFinite(value.getTime());
+  validReceiveTime(value: Timestamp): boolean {
     return (
       (value as unknown as { $typeName?: string } | null)?.$typeName === TimestampSchema.typeName &&
       value.seconds >= -62_135_596_800n &&

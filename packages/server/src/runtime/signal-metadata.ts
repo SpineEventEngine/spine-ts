@@ -21,7 +21,6 @@ import {
   Int64ValueSchema,
   StringValueSchema,
   type Any,
-  TimestampSchema,
   type Timestamp,
 } from "@bufbuild/protobuf/wkt";
 import { AnyMessages, Time, type TimeProvider } from "@spine-event-engine/core";
@@ -48,79 +47,15 @@ import {
 } from "@spine-event-engine/proto";
 
 /**
- * Supplies the current wall-clock time for signal metadata.
- */
-export interface Clock {
-  // prettier-ignore
-
-  /**
-   * Returns the current wall-clock time.
-   *
-   * @returns Current time as a `Date`.
-   */
-  now(): Date;
-}
-
-/**
- * Supplies system wall-clock time.
- */
-export class SystemClock implements Clock, TimeProvider {
-  // prettier-ignore
-
-  /**
-   * Returns the current system time.
-   *
-   * @returns Current system time.
-   */
-  now(): Date {
-    return new Date(Time.currentTimeMillis());
-  }
-
-  /**
-   * Reads the shared precise Time provider for new signal occurrences.
-   * @returns Current UTC timestamp including nanoseconds.
-   */
-  currentTime(): Timestamp {
-    return Time.currentTime();
-  }
-}
-
-/**
- * Supplies a fixed wall-clock time for deterministic work.
- */
-export class FixedClock implements Clock {
-  readonly #value: number;
-
-  /**
-   * Creates a clock fixed at one time.
-   *
-   * @param value Finite time to return from `now()`.
-   */
-  constructor(value: Date) {
-    this.#value = SignalValues.time(value).getTime();
-  }
-
-  /**
-   * Returns a fresh date at the configured time.
-   *
-   * @returns Fixed time.
-   */
-  now(): Date {
-    return new Date(this.#value);
-  }
-}
-
-/**
- * Configures the clock used to create signal metadata.
+ * Configures the time provider used to create signal metadata.
  */
 export interface SignalMetadataOptions {
   // prettier-ignore
 
   /**
-   * Supplies timestamps; defaults to shared `Time` from `@spine-event-engine/core/time`.
-   * Legacy `Clock` values remain accepted.
+   * Supplies precise timestamps; defaults to shared `Time` from `@spine-event-engine/core/time`.
    */
-  readonly clock?: Clock | TimeProvider;
+  readonly timeProvider?: TimeProvider;
 }
 
 /**
@@ -183,15 +118,15 @@ export interface EventContextInput {
  * Creates immutable metadata for commands and events.
  */
 export class SignalMetadata {
-  readonly #clock: Clock | TimeProvider | undefined;
+  readonly #timeProvider: TimeProvider | undefined;
 
   /**
    * Creates a metadata factory.
    *
-   * @param options Optional clock.
+   * @param options Optional precise time provider.
    */
   constructor(options: SignalMetadataOptions = {}) {
-    this.#clock = options.clock;
+    this.#timeProvider = options.timeProvider;
   }
 
   /**
@@ -213,26 +148,12 @@ export class SignalMetadata {
   }
 
   /**
-   * Creates a Protobuf timestamp from a finite date.
+   * Reads a precise Protobuf occurrence timestamp.
    *
-   * @param value Date to convert; omitted to read the configured clock or shared Time.
    * @returns Protobuf timestamp.
    */
-  timestamp(value?: Date): Timestamp {
-    if (value === undefined) {
-      if (this.#clock === undefined) return Time.currentTime();
-      if ("currentTime" in this.#clock) return this.#clock.currentTime();
-      value = this.#clock.now();
-    }
-    const date = SignalValues.time(value);
-    const milliseconds = date.getTime();
-    const seconds = Math.floor(milliseconds / 1_000);
-    const nanos = (milliseconds - seconds * 1_000) * 1_000_000;
-
-    return create(TimestampSchema, {
-      seconds: BigInt(seconds),
-      nanos,
-    });
+  timestamp(): Timestamp {
+    return this.#timeProvider?.currentTime() ?? Time.currentTime();
   }
 
   /**
@@ -496,19 +417,3 @@ export class SignalMetadata {
     return event.id;
   }
 }
-
-/**
- * Validates values shared by clock metadata.
- */
-const SignalValues = Object.freeze({
-  /**
-   * Validates a finite Date from a legacy clock adapter.
-   * @param value The clock reading to validate.
-   * @returns The accepted Date instance.
-   */
-  time(value: Date): Date {
-    if (!Number.isFinite(value.getTime()))
-      throw new TypeError("Signal metadata timestamps require a finite Date instance.");
-    return value;
-  },
-});

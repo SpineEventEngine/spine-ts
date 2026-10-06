@@ -13,7 +13,7 @@
  */
 
 import { create } from "@bufbuild/protobuf";
-import { AnySchema, EmptySchema } from "@bufbuild/protobuf/wkt";
+import { AnySchema, EmptySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, type Transport } from "@connectrpc/connect";
 import { ShardIndex } from "@spine-event-engine/server";
 import {
@@ -403,25 +403,20 @@ describe("DeliveryClient RPC and lifecycle", () => {
     expect(fake.unary).toHaveBeenCalledTimes(1);
   });
 
-  it("accepts legacy Date receive times in a write batch", async () => {
+  it("preserves precise Timestamp receipts in write and removal batches", async () => {
     const fake = transport();
     const client = DeliveryClient.usingTransport(fake.transport);
+    const snapshot = {
+      ...domainMessage("precise-batch"),
+      whenReceived: create(TimestampSchema, { seconds: 1n, nanos: 234_567_000 }),
+    };
     fake.reply(create(EmptySchema));
-    await expect(
-      client.writeMany([{ ...domainMessage("legacy-date"), whenReceived: new Date(1_234) }]),
-    ).resolves.toBeUndefined();
-    expect(fake.unary).toHaveBeenCalledTimes(1);
-  });
-
-  it("accepts legacy Date snapshots in single and batch removal calls", async () => {
-    const fake = transport();
-    const client = DeliveryClient.usingTransport(fake.transport);
-    const snapshot = { ...domainMessage("legacy-remove"), whenReceived: new Date(1_234) };
+    await expect(client.writeMany([snapshot])).resolves.toBeUndefined();
     fake.reply(create(EmptySchema));
     await expect(client.removeOne(snapshot)).resolves.toBeUndefined();
     fake.reply(create(EmptySchema));
     await expect(client.removeMany([snapshot])).resolves.toBeUndefined();
-    expect(fake.unary).toHaveBeenCalledTimes(2);
+    expect(fake.unary).toHaveBeenCalledTimes(3);
   });
 
   it("writes and removes ordered same-shard batches with exactly one RPC", async () => {
@@ -557,7 +552,7 @@ describe("DeliveryClient RPC and lifecycle", () => {
       { ...value, inboxId: { ...value.inboxId, targetId: create(AnySchema) } },
       { ...value, label: "UNKNOWN" as never },
       { ...value, status: "UNKNOWN" as never },
-      { ...value, whenReceived: new Date("invalid") },
+      { ...value, whenReceived: create(TimestampSchema, { nanos: -1 }) },
       { ...value, version: -1n },
     ];
     for (const message of invalid)
@@ -576,7 +571,10 @@ describe("DeliveryClient RPC and lifecycle", () => {
     await expect(client.newestPending(ShardIndex.single())).resolves.toBeUndefined();
     fake.reply(create(PageOfMessagesSchema));
     await expect(
-      client.readPage(ShardIndex.single(), { sinceWhen: new Date(-1), pageSize: 1 }),
+      client.readPage(ShardIndex.single(), {
+        sinceWhen: create(TimestampSchema, { seconds: -1n, nanos: 999_000_000 }),
+        pageSize: 1,
+      }),
     ).resolves.toEqual([]);
     expect(fake.unary).toHaveBeenLastCalledWith(
       expect.objectContaining({ name: "FindManyInShard" }),

@@ -9,7 +9,6 @@ import process from "node:process";
 import test from "node:test";
 import { URL } from "node:url";
 
-import { Time } from "../../../../packages/core/dist/time/index.js";
 const containerRoot = new URL(".", import.meta.url);
 const datastoreEmulator = "google/cloud-sdk:578.0.0-emulators";
 
@@ -183,7 +182,7 @@ test("MessageBoard commands share one artifact and required compiled modules imp
 });
 
 test("runtime commands keep Node as PID 1 and stop cleanly", () => {
-  const suffix = `${String(process.pid)}-${String(Time.currentTimeMillis())}`;
+  const suffix = `${String(process.pid)}-${String(Date.now())}`;
   const network = `spine-t0095-${suffix}`;
   const emulator = `spine-t0095-emulator-${suffix}`;
   const owned = [emulator];
@@ -339,12 +338,12 @@ function startRuntimeMatrix({ messageBoard, network, owned, signal, suffix }) {
     "spine-ts/standalone-gateway:local",
   ]);
   waitForLog(gateway, /MessageBoard gateway ready/u);
-  const activationStarted = Time.currentTimeMillis();
+  const activationStarted = Date.now();
   try {
     exerciseRegistry(network, "http://gateway:18082", "http://localhost:18082", messageBoard);
   } catch (error) {
     throw new Error(
-      `Browser subscription activation failed after ${String(Time.currentTimeMillis() - activationStarted)}ms.\n` +
+      `Browser subscription activation failed after ${String(Date.now() - activationStarted)}ms.\n` +
         `Coordinator (${application}) logs:\n${containerLogs(application)}\n` +
         `Gateway (${gateway}) logs:\n${containerLogs(gateway)}`,
       { cause: error },

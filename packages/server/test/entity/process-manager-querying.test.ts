@@ -1185,7 +1185,7 @@ describe("Process Manager querying", () => {
       label: "HANDLE_COMMAND",
       status: "TO_DELIVER",
       shard: ShardIndex.single(),
-      whenReceived: new Date(Time.currentTimeMillis()),
+      whenReceived: Time.currentTime(),
       version: 1n,
     });
     const restarted = buildContexts();
