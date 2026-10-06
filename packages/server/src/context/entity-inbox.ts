@@ -226,11 +226,10 @@ export class LocalEntityInbox implements EntityInbox {
     if (followUps.length > 0) await Promise.all(followUps);
     await this.#keepDeliveryTenant(deliveryTenantId);
     const rows = this.#claimRows(inputs, deliveryTenantId);
-    const whenReceived = Time.currentTime();
     const failures: unknown[] = [];
 
     try {
-      await this.#writeRows(delivery, rows, whenReceived, deliveryTenantId, failures);
+      await this.#writeRows(delivery, rows, deliveryTenantId, failures);
       await this.#drainRows(delivery, rows, deliveryTenantId, failures);
       if (failures.length > 0) {
         throw failures[0];
@@ -250,7 +249,6 @@ export class LocalEntityInbox implements EntityInbox {
   async #writeRows(
     delivery: Delivery,
     rows: readonly BatchRow[],
-    whenReceived: Timestamp,
     deliveryTenantId: TenantId | undefined,
     failures: unknown[],
   ): Promise<void> {
@@ -262,7 +260,7 @@ export class LocalEntityInbox implements EntityInbox {
         row.owner.written = await this.#writeInboxRow(
           delivery,
           row.input,
-          whenReceived,
+          Time.currentTime(),
           deliveryTenantId,
         );
         this.#trackMessage(row.owner.written.message);

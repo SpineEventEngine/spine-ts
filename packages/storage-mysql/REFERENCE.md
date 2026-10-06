@@ -88,8 +88,10 @@ revision. Proto fields without `(column)` exist only inside the authoritative
 never altered. A mismatched type, nullability, primary key, unique constraint,
 or extra column is rejected. Ordinary message columns use the same configured
 reversible stringifier for writes and query operands. `Timestamp` uses epoch
-nanoseconds and `Version` uses its number. Floating-point record columns are
-not supported by Spine JVM JDBC and are rejected here.
+nanoseconds in signed 64-bit `BIGINT` columns. Indexed timestamp values must
+fit that range (approximately 1677–2262 UTC); Protobuf's wider `Timestamp`
+range does not expand the SQL range. `Version` uses its number. Floating-point
+record columns are not supported by Spine JVM JDBC and are rejected here.
 
 Queries execute ID filters, ANDed column filters, materialized-column sorts,
 keyset continuations, offsets, and limits in MySQL. Before executing, MySQL

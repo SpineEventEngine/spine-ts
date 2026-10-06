@@ -39,6 +39,9 @@ Time to exercise or control framework runtime behavior.
 Use complete timestamps for occurrence order and storage boundaries. Use epoch
 milliseconds for APIs that require that representation, and monotonic readings
 for elapsed durations. Timer scheduling still uses ordinary platform timers.
+Storage providers retain their existing date ranges: SQL timestamp indexes use
+signed 64-bit epoch nanoseconds, approximately years 1677–2262. The Protobuf
+Timestamp range does not expand those database columns.
 
 The system provider follows Spine JVM `IncrementalNanos`: its first reading of
 a millisecond has no added offset; further readings add 1,000 nanoseconds each,

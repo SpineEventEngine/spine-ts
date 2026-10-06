@@ -19,13 +19,132 @@ import { InboxService, ShardService } from "@spine-event-engine/proto/delivery-s
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { create } from "@bufbuild/protobuf";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
+import { AnyMessages, Time } from "@spine-event-engine/core";
+import {
+  ActorContextSchema,
+  CommandContextSchema,
+  CommandIdSchema,
+  CommandSchema,
+  UserIdSchema,
+} from "@spine-event-engine/proto";
+import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { DeliveryBuilder, ShardIndex, type InboxMessage } from "@spine-event-engine/server";
+import { LocalEntityInbox } from "../../server/src/context/entity-inbox.js";
+import { Delivery } from "../../server/src/delivery/delivery.js";
+import { CreateTaskSchema } from "../../../examples/todo/generated/spine/examples/todo/task_commands_pb.js";
+import {
+  TaskIdSchema,
+  TaskListIdSchema,
+} from "../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
+import { TaskSchema } from "../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 import { InMemoryDelivery } from "@spine-event-engine/delivery-server";
 import { DeliveryClient, DeliveryOutcomeUnknownError, RemoteWorkRegistry } from "../src/index.js";
 import { RemoteInbox } from "../src/remote/adapters.js";
 import { domainMessage } from "./shared-fixtures.js";
 
 describe("in-memory delivery core response loss", () => {
+  it("drains a public Entity Inbox batch across remote pages with distinct receipt instants", async () => {
+    const previous = Time.setProvider({
+      currentTime: (() => {
+        let nanos = 0;
+        return () => ({
+          $typeName: "google.protobuf.Timestamp" as const,
+          seconds: 1_700_000_000n,
+          nanos: (nanos += 1_000),
+        });
+      })(),
+    });
+    try {
+      const core = InMemoryDelivery.create();
+      const client = DeliveryClient.usingTransport(
+        createRouterTransport((router) => router.service(InboxService, core.inbox)),
+        { pageSize: 2 },
+      );
+      const readPage = vi.spyOn(client, "readPage");
+      const remoteInbox = new RemoteInbox(client);
+      const shard = ShardIndex.single();
+      const session = { kind: "EXCLUSIVE" as const, shard };
+      const delivery = new Delivery({
+        context: { name: "BatchRemotePage", multitenant: false },
+        storageFactory: new InMemoryStorageFactory(),
+        inbox: remoteInbox,
+        workRegistry: {
+          sessionKind: "EXCLUSIVE",
+          pickUp: () => Promise.resolve(session),
+          validateOwnership: () => Promise.resolve(session),
+          release: () => Promise.resolve(true),
+        },
+        pageSize: 2,
+      });
+      const entityInbox = new LocalEntityInbox("BatchRemotePage");
+      const targetTypeUrl = TaskSchema.typeName;
+      const replayed: string[] = [];
+      let paged: readonly InboxMessage[] | undefined;
+      entityInbox.register({
+        targetTypeUrl,
+        labels: ["HANDLE_COMMAND"],
+        async replay(message) {
+          paged ??= await remoteInbox.read(shard, { limit: 3 });
+          replayed.push(message.signalId);
+        },
+      });
+      const inputs = ["first", "second", "third"].map((target) => ({
+        inboxId: {
+          targetId: AnyMessages.pack(TaskIdSchema, create(TaskIdSchema, { value: target })),
+          targetTypeUrl,
+        },
+        signalId: `command-${target}`,
+        signal: AnyMessages.pack(
+          CommandSchema,
+          create(CommandSchema, {
+            id: create(CommandIdSchema, { uuid: `command-${target}` }),
+            context: create(CommandContextSchema, {
+              actorContext: create(ActorContextSchema, {
+                actor: create(UserIdSchema, { value: "batch-test-user" }),
+              }),
+            }),
+            message: AnyMessages.pack(
+              CreateTaskSchema,
+              create(CreateTaskSchema, {
+                id: create(TaskIdSchema, { value: target }),
+                taskListId: create(TaskListIdSchema, { value: "batch-list" }),
+                title: `Task ${target}`,
+              }),
+            ),
+          }),
+        ),
+        label: "HANDLE_COMMAND" as const,
+        status: "TO_DELIVER" as const,
+      }));
+
+      const messages = await entityInbox.receiveAll(delivery, inputs);
+
+      expect(messages).toHaveLength(3);
+      expect(
+        new Set(
+          messages.map(
+            ({ whenReceived }) => String(whenReceived.seconds) + ":" + String(whenReceived.nanos),
+          ),
+        ).size,
+      ).toBe(3);
+      expect(replayed).toEqual(inputs.map(({ signalId }) => signalId));
+      expect(paged?.map(({ signalId }) => signalId)).toEqual(
+        inputs.map(({ signalId }) => signalId),
+      );
+      expect(
+        readPage.mock.calls.some(
+          ([readShard, options]) =>
+            readShard.key() === shard.key() &&
+            options?.pageSize === 3 &&
+            options.sinceWhen !== undefined,
+        ),
+      ).toBe(true);
+      await expect(remoteInbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toEqual([]);
+    } finally {
+      Time.setProvider(previous);
+    }
+  });
+
   it("removes a retained duplicate through shared delivery policy and the remote adapter", async () => {
     const core = InMemoryDelivery.create();
     const client = DeliveryClient.usingTransport(

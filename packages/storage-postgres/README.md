@@ -73,10 +73,12 @@ text collation. Collation ordering can differ from JavaScript ordering, so
 applications should choose and document their database collation deliberately.
 
 `google.protobuf.Timestamp` columns are epoch nanoseconds in `BIGINT`, and
-`spine.core.Version` columns are numeric `INT`. Generated names use the JVM
-physical-name renderer: ASCII unquoted spelling folds to lowercase, names are
-limited to 63 UTF-8 bytes, and case-folded or byte-limit collisions are rejected
-before the database is accessed.
+`spine.core.Version` columns are numeric `INT`. Indexed timestamp values must
+fit signed 64-bit epoch nanoseconds (approximately 1677–2262 UTC); the broader
+Protobuf `Timestamp` range does not extend this SQL column range. Generated
+names use the JVM physical-name renderer: ASCII unquoted spelling folds to
+lowercase; names are limited to 63 UTF-8 bytes, and case-folded or byte-limit
+collisions are rejected before the database is accessed.
 
 ## Live integration checks
 
