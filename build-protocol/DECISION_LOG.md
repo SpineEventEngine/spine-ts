@@ -6007,7 +6007,7 @@ the design alone is not evidence of that result. See
 
 ## D-0124: Shared Spine Time For Every Time Read
 
-Status: Accepted human requirement; implementation in progress
+Status: Accepted; implemented and locally verified, hosted CI pending
 
 Date: 2026-10-06
 
