@@ -13,7 +13,7 @@
  */
 
 import { clone, create } from "@bufbuild/protobuf";
-import { AnySchema } from "@bufbuild/protobuf/wkt";
+import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { randomUUID } from "node:crypto";
 import { TenantIdSchema } from "@spine-event-engine/proto";
 import { WorkerIdSchema, type WorkerId } from "@spine-event-engine/proto/delivery";
@@ -923,7 +923,14 @@ function snapshot(message: InboxMessage): InboxMessage {
     inboxId: Object.freeze({ ...message.inboxId }),
     ...(message.signal === undefined ? {} : { signal: clone(AnySchema, message.signal) }),
     shard: new ShardIndex(message.shard.index, message.shard.ofTotal),
-    whenReceived: new Date(message.whenReceived),
+    whenReceived:
+      message.whenReceived instanceof Date
+        ? create(TimestampSchema, {
+            seconds: BigInt(Math.floor(message.whenReceived.getTime() / 1_000)),
+            nanos:
+              (message.whenReceived.getTime() % 1_000 + 1_000) % 1_000 * 1_000_000,
+          })
+        : clone(TimestampSchema, message.whenReceived),
     ...(message.keepUntil === undefined ? {} : { keepUntil: new Date(message.keepUntil) }),
   });
 }

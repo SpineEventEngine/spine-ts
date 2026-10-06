@@ -15,7 +15,7 @@
 import { randomUUID } from "node:crypto";
 
 import { clone, toBinary } from "@bufbuild/protobuf";
-import { AnySchema, StringValueSchema, type Any } from "@bufbuild/protobuf/wkt";
+import { AnySchema, StringValueSchema, type Any, type Timestamp } from "@bufbuild/protobuf/wkt";
 import { fromBinary } from "@bufbuild/protobuf";
 
 import type { InboxStorage } from "./inbox-storage.js";
@@ -67,7 +67,9 @@ export class Inbox {
       label: this.#readInput(messageInput, "label", "Inbox delivery label") as DeliveryLabel,
       status: this.#readInput(messageInput, "status", "Inbox delivery status") as DeliveryStatus,
       shard,
-      whenReceived: this.#readInput(messageInput, "whenReceived", "Inbox receive time") as Date,
+      whenReceived: this.#readInput(messageInput, "whenReceived", "Inbox receive time") as
+        | Date
+        | Timestamp,
       version: this.#readInput(messageInput, "version", "Inbox version") as bigint,
       ...(signal === undefined ? {} : { signal }),
       ...(keepUntil === undefined ? {} : { keepUntil }),
@@ -304,9 +306,9 @@ export interface InboxMessage {
   readonly shard: ShardIndex;
 
   /**
-   * Durable receive time.
+   * Durable receive time. Reads from storage return a full-precision Timestamp.
    */
-  readonly whenReceived: Date;
+  readonly whenReceived: Date | Timestamp;
 
   /**
    * Ordering tie-breaker for equal receive times.
@@ -356,9 +358,9 @@ export interface InboxMessageInput {
   readonly shard: ShardIndex;
 
   /**
-   * Durable receive time.
+   * Durable receive time. Legacy Date input is normalized at the storage boundary.
    */
-  readonly whenReceived: Date;
+  readonly whenReceived: Date | Timestamp;
 
   /**
    * Ordering tie-breaker for equal receive times.
@@ -410,9 +412,9 @@ export interface InboxReadContinuation {
   readonly messageId: string;
 
   /**
-   * Receive time from the last row of the previous page.
+   * Receive time from the last row of the previous page. Legacy Date input is accepted.
    */
-  readonly whenReceived: Date;
+  readonly whenReceived: Date | Timestamp;
 
   /**
    * Version from the last row of the previous page.

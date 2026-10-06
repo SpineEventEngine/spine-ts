@@ -13,6 +13,7 @@
  */
 
 import type { Message } from "@bufbuild/protobuf";
+import type { TimeProvider } from "@spine-event-engine/core/time";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { CommandSchema } from "@spine-event-engine/proto";
@@ -36,6 +37,7 @@ import {
   type EventRegistrationReactorMetadata,
   type EventRegistrationSubscriberMetadata,
   FixedClock,
+  type Clock,
   Environment,
   EnvironmentType,
   ServerEnvironment,
@@ -298,7 +300,7 @@ describe("@spine-event-engine/server", () => {
       "RUNTIME_NOT_ACCEPTING" | "MALFORMED_ENVELOPE" | "UNSUPPORTED_SIGNAL_KIND"
     >();
     expectTypeOf<SignalMetadataOptions>().toExtend<{
-      readonly clock?: SystemClock | FixedClock | undefined;
+      readonly clock?: Clock | TimeProvider | undefined;
     }>();
     const rejectsIdSource = () => {
       // @ts-expect-error Public metadata options do not accept injected ID sources.

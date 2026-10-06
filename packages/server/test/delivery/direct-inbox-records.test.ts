@@ -35,6 +35,26 @@ import { createMessage } from "./inbox-message-fixture.js";
 import { tenant } from "../tenant-fixture.js";
 
 describe("direct InboxMessage storage", () => {
+  it("preserves microsecond order across an Inbox page anchor", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Precise", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const firstTime = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 123_456_000 });
+    const secondTime = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 123_457_000 });
+    const first = { ...createMessage("first", "signal-1", 1n), whenReceived: firstTime };
+    const second = { ...createMessage("second", "signal-2", 1n), whenReceived: secondTime };
+    await storage.write(first);
+    await storage.write(second);
+    const page = await storage.read(first.shard, { limit: 1 });
+    expect(page[0]?.whenReceived).toEqual(firstTime);
+    await expect(
+      storage.read(first.shard, {
+        after: { messageId: first.id.value, whenReceived: page[0]!.whenReceived, version: 1n },
+      }),
+    ).resolves.toMatchObject([{ id: { value: "second" }, whenReceived: secondTime }]);
+  });
+
   it("has no per-message exclusion or separate duplicate persistence", async () => {
     const [storage, mapper] = await Promise.all([
       readFile(new URL("../../src/delivery/inbox-storage.ts", import.meta.url), "utf8"),

@@ -19,6 +19,8 @@ import {
   Int64ValueSchema,
   StringValueSchema,
   type Any,
+  type Timestamp,
+  TimestampSchema,
 } from "@bufbuild/protobuf/wkt";
 
 import type { InboxMessage, InboxMessageId } from "@spine-event-engine/server";
@@ -286,7 +288,7 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
       label: DeliveryMessageCodec.decodeLabel(message.label),
       status: DeliveryMessageCodec.decodeStatus(message.status),
       shard,
-      whenReceived: DeliveryShardCodec.date(message.whenReceived),
+      whenReceived: create(TimestampSchema, DeliveryRequestCodec.timestamp(message.whenReceived)),
       version: BigInt(message.version),
       ...(keepUntil === undefined ? {} : { keepUntil }),
     });
@@ -339,7 +341,7 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
       label: value.label,
       status: value.status,
       shard: DeliveryShardCodec.snapshot(value.shard),
-      whenReceived: new Date(value.whenReceived.getTime()),
+      whenReceived: create(TimestampSchema, DeliveryRequestCodec.timestamp(value.whenReceived)),
       version: value.version,
       ...(value.keepUntil === undefined ? {} : { keepUntil: new Date(value.keepUntil.getTime()) }),
     });
@@ -762,7 +764,7 @@ const DeliveryShardCodec: DeliveryShardCodecApi = Object.freeze({
 
 type DeliveryRequestCodecApi = Readonly<{
   duration(value: number): { seconds: bigint; nanos: number };
-  timestamp(value: Date): { seconds: bigint; nanos: number };
+  timestamp(value: Date | Timestamp): { seconds: bigint; nanos: number };
   protocol(): DeliveryProtocolError;
   callOptions(
     signal: AbortSignal | undefined,
@@ -807,8 +809,20 @@ const DeliveryRequestCodec: DeliveryRequestCodecApi = Object.freeze({
    * @param value Supplies the date.
    * @returns The protocol timestamp fields.
    */
-  timestamp(value: Date): { seconds: bigint; nanos: number } {
-    if (!(value instanceof Date) || Number.isNaN(value.getTime()))
+  timestamp(value: Date | Timestamp): { seconds: bigint; nanos: number } {
+    if (!(value instanceof Date)) {
+      if (
+        value?.$typeName !== TimestampSchema.typeName ||
+        value.seconds < -62_135_596_800n ||
+        value.seconds > 253_402_300_799n ||
+        !Number.isInteger(value.nanos) ||
+        value.nanos < 0 ||
+        value.nanos >= 1_000_000_000
+      )
+        throw new TypeError("Delivery inbox timestamp is invalid.");
+      return { seconds: value.seconds, nanos: value.nanos };
+    }
+    if (Number.isNaN(value.getTime()))
       throw new TypeError("Delivery inbox timestamp is invalid.");
     const millis = value.getTime();
     return {

@@ -13,6 +13,8 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { create } from "@bufbuild/protobuf";
+import { type Timestamp, TimestampSchema } from "@bufbuild/protobuf/wkt";
 
 import type {
   DeliveryInbox,
@@ -119,7 +121,8 @@ export class RemoteInbox implements DeliveryInbox {
     const prior = page.at(-2);
     if (
       page.length === pageSize &&
-      (last === undefined || prior?.whenReceived.getTime() === last.whenReceived.getTime())
+      (last === undefined ||
+        (prior !== undefined && RemoteValues.sameTime(prior.whenReceived, last.whenReceived)))
     )
       throw new DeliveryPagingError();
     return {
@@ -549,15 +552,34 @@ const RemoteValues = Object.freeze({
   },
 
   /**
-   * Returns the millisecond before a page anchor for exclusive paging.
+   * Returns the nanosecond before a page anchor for exclusive paging.
    *
    * @param value Supplies the received-time continuation.
-   * @returns The preceding millisecond as a new Date.
+   * @returns The preceding instant as a precise timestamp.
    */
-  pageAnchor(value: Date): Date {
-    const milliseconds = value.getTime();
-    if (milliseconds <= -62_135_596_800_000) throw new DeliveryPagingError();
-    return new Date(milliseconds - 1);
+  pageAnchor(value: Date | Timestamp): Timestamp {
+    const timestamp = RemoteValues.timestamp(value);
+    if (timestamp.seconds === -62_135_596_800n && timestamp.nanos === 0)
+      throw new DeliveryPagingError();
+    return timestamp.nanos === 0
+      ? create(TimestampSchema, { seconds: timestamp.seconds - 1n, nanos: 999_999_999 })
+      : create(TimestampSchema, { seconds: timestamp.seconds, nanos: timestamp.nanos - 1 });
+  },
+
+  timestamp(value: Date | Timestamp): Timestamp {
+    if (!(value instanceof Date)) return value;
+    const millis = value.getTime();
+    const seconds = Math.floor(millis / 1_000);
+    return create(TimestampSchema, {
+      seconds: BigInt(seconds),
+      nanos: (millis - seconds * 1_000) * 1_000_000,
+    });
+  },
+
+  sameTime(left: Date | Timestamp, right: Date | Timestamp): boolean {
+    const first = RemoteValues.timestamp(left);
+    const second = RemoteValues.timestamp(right);
+    return first.seconds === second.seconds && first.nanos === second.nanos;
   },
 
   /**
@@ -593,7 +615,7 @@ const RemoteValues = Object.freeze({
     const exact = page.findIndex(
       (message) =>
         message.id.value === after.messageId &&
-        message.whenReceived.getTime() === after.whenReceived.getTime() &&
+        RemoteValues.sameTime(message.whenReceived, after.whenReceived) &&
         message.version === after.version,
     );
     if (exact < 0) throw new DeliveryPagingError();
@@ -619,7 +641,7 @@ const RemoteValues = Object.freeze({
       left.label === right.label &&
       left.status === right.status &&
       left.version === right.version &&
-      left.whenReceived.getTime() === right.whenReceived.getTime() &&
+      RemoteValues.sameTime(left.whenReceived, right.whenReceived) &&
       RemoteValues.sameDate(left.keepUntil, right.keepUntil)
     );
   },

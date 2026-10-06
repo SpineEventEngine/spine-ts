@@ -64,7 +64,7 @@ export interface Clock {
 /**
  * Supplies system wall-clock time.
  */
-export class SystemClock implements Clock {
+export class SystemClock implements Clock, TimeProvider {
   // prettier-ignore
 
   /**
@@ -74,6 +74,14 @@ export class SystemClock implements Clock {
    */
   now(): Date {
     return new Date(Time.currentTimeMillis());
+  }
+
+  /**
+   * Reads the shared precise Time provider for new signal occurrences.
+   * @returns Current UTC timestamp including nanoseconds.
+   */
+  currentTime(): Timestamp {
+    return Time.currentTime();
   }
 }
 

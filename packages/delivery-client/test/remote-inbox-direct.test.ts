@@ -14,6 +14,8 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { ShardIndex } from "@spine-event-engine/server";
+import { create } from "@bufbuild/protobuf";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 
 import { DeliveryPagingError, DeliveryProtocolError } from "../src/client/types.js";
 import type { DeliveryClient } from "../src/client/client.js";
@@ -32,6 +34,32 @@ class Client {
 }
 
 describe("RemoteInbox direct behavior", () => {
+  it("continues after a microsecond-precise remote Inbox cursor", async () => {
+    const client = new Client();
+    const inbox = new RemoteInbox(client as never);
+    const first = {
+      ...domainMessage("first"),
+      whenReceived: create(TimestampSchema, { seconds: 1n, nanos: 123_456_000 }),
+    };
+    const second = {
+      ...domainMessage("second"),
+      whenReceived: create(TimestampSchema, { seconds: 1n, nanos: 123_457_000 }),
+    };
+    client.readPage.mockResolvedValueOnce([first, second]);
+    await expect(
+      inbox.read(ShardIndex.single(), {
+        after: { messageId: first.id.value, whenReceived: first.whenReceived, version: first.version },
+        limit: 1,
+      }),
+    ).resolves.toEqual([second]);
+    expect(client.readPage).toHaveBeenCalledWith(
+      ShardIndex.single(),
+      expect.objectContaining({
+        sinceWhen: create(TimestampSchema, { seconds: 1n, nanos: 123_455_999 }),
+      }),
+    );
+  });
+
   it("writes, reads filtered pages, rejects broken continuations, and delegates exact reads", async () => {
     const client = new Client();
     const inbox = new RemoteInbox(client as never);

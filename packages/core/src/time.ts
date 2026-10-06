@@ -18,6 +18,7 @@ import { type Timestamp, TimestampSchema } from "@bufbuild/protobuf/wkt";
 /**
  * Supplies UTC time to framework code. Optional operations use the system clock when omitted.
  * Provider replacement is intended for tests and affects this module instance within one JS realm.
+ * @internal
  */
 export interface TimeProvider {
   /**
@@ -50,7 +51,7 @@ interface MonotonicClock {
   now(): number;
 }
 
-const systemProvider: TimeProvider = {
+const systemProvider: Required<TimeProvider> = {
   /**
    * Reads the system wall clock with the JVM-style microsecond increment.
    * @returns Current UTC timestamp.
@@ -116,7 +117,7 @@ export const Time = {
    * @returns IANA time zone identifier.
    */
   currentTimeZone(): string {
-    return (provider.currentZone ?? systemProvider.currentZone)?.() ?? "UTC";
+    return provider.currentZone?.call(provider) ?? systemProvider.currentZone();
   },
 
   /**
@@ -134,7 +135,7 @@ export const Time = {
    * @returns Monotonic milliseconds from an arbitrary local origin.
    */
   monotonicTime(): number {
-    return (provider.monotonicTime ?? systemProvider.monotonicTime)?.() ?? 0;
+    return provider.monotonicTime?.call(provider) ?? systemProvider.monotonicTime();
   },
 
   /**
@@ -142,6 +143,7 @@ export const Time = {
    * returned provider in a `finally` block to avoid affecting later work.
    * @param next Provider to install.
    * @returns Previously configured provider.
+   * @internal
    */
   setProvider(next: TimeProvider): TimeProvider {
     if (next === null || typeof next?.currentTime !== "function") {
@@ -154,6 +156,7 @@ export const Time = {
 
   /**
    * Restores the shared system provider after a test.
+   * @internal
    */
   resetProvider(): void {
     provider = systemProvider;

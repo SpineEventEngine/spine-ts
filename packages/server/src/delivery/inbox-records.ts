@@ -20,6 +20,7 @@ import {
   StringValueSchema,
   TimestampSchema,
   type Any,
+  type Timestamp,
 } from "@bufbuild/protobuf/wkt";
 import { CommandSchema, EventSchema } from "@spine-event-engine/proto";
 import {
@@ -142,7 +143,7 @@ const Values = Object.freeze({
       payload,
       label: Values.label(message.label),
       status: Values.status(message.status),
-      whenReceived: Values.timestamp(message.whenReceived.getTime()),
+      whenReceived: Values.receiveTime(message.whenReceived),
       version: Number(message.version),
       ...(message.keepUntil === undefined
         ? {}
@@ -171,6 +172,7 @@ const Values = Object.freeze({
       typeof inbox.typeUrl !== "string" ||
       inbox.typeUrl.trim().length === 0 ||
       record.whenReceived === undefined ||
+      !Values.validReceiveTime(record.whenReceived) ||
       !Number.isSafeInteger(record.version) ||
       record.version < 0
     )
@@ -191,7 +193,7 @@ const Values = Object.freeze({
       label: Values.readLabel(record.label),
       status: Values.readStatus(record.status),
       shard,
-      whenReceived: Values.date(record.whenReceived, "Inbox receive time"),
+      whenReceived: clone(TimestampSchema, record.whenReceived),
       version: BigInt(record.version),
       ...(record.keepUntil === undefined
         ? {}
@@ -218,8 +220,7 @@ const Values = Object.freeze({
       inbox.targetTypeUrl.trim().length === 0 ||
       typeof value.signalId !== "string" ||
       value.signalId.trim().length === 0 ||
-      !(value.whenReceived instanceof Date) ||
-      !Number.isFinite(value.whenReceived.getTime()) ||
+      !Values.validReceiveTime(value.whenReceived) ||
       typeof value.version !== "bigint" ||
       value.version < 0n ||
       value.version > BigInt(0x7fffffff)
@@ -306,6 +307,22 @@ const Values = Object.freeze({
       seconds: BigInt(seconds),
       nanos: (ms - seconds * 1_000) * 1_000_000,
     });
+  },
+  receiveTime(value: Date | Timestamp): Timestamp {
+    return value instanceof Date
+      ? Values.timestamp(value.getTime())
+      : clone(TimestampSchema, value);
+  },
+  validReceiveTime(value: Date | Timestamp): boolean {
+    if (value instanceof Date) return Number.isFinite(value.getTime());
+    return (
+      value?.$typeName === TimestampSchema.typeName &&
+      value.seconds >= -62_135_596_800n &&
+      value.seconds <= 253_402_300_799n &&
+      Number.isInteger(value.nanos) &&
+      value.nanos >= 0 &&
+      value.nanos < 1_000_000_000
+    );
   },
   date(value: { readonly seconds: bigint; readonly nanos: number }, label: string): Date {
     const ms = Number(value.seconds) * 1000 + Math.floor(value.nanos / 1_000_000);

@@ -18,6 +18,7 @@ import {
   Int32ValueSchema,
   Int64ValueSchema,
   StringValueSchema,
+  TimestampSchema,
 } from "@bufbuild/protobuf/wkt";
 import { ShardIndex } from "@spine-event-engine/server";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
@@ -41,6 +42,16 @@ import { DeliveryMessageCodec } from "../src/wire/codec.js";
 import { domainMessage, message, stringTarget, transport } from "./shared-fixtures.js";
 
 describe("delivery codec and immutable snapshots", () => {
+  it("preserves microsecond receive time through delivery wire encoding", () => {
+    const whenReceived = create(TimestampSchema, { seconds: 1n, nanos: 123_456_000 });
+    const source = { ...domainMessage(), whenReceived };
+    const wire = DeliveryMessageCodec.encode(source);
+    expect(wire.whenReceived).toEqual(whenReceived);
+    expect(DeliveryMessageCodec.decode(wire, ShardIndex.single()).whenReceived).toEqual(
+      whenReceived,
+    );
+  });
+
   it("opens a remote inbox without retained removal state", () => {
     const client = DeliveryClient.usingTransport(transport().transport);
 
@@ -87,16 +98,17 @@ describe("delivery codec and immutable snapshots", () => {
     );
   });
 
-  it("isolates decoded mutable dates and payload bytes from later caller mutation", () => {
+  it("isolates decoded receive timestamps and payload bytes from later caller mutation", () => {
     const wire = message("command");
     const first = DeliveryMessageCodec.decode(wire, ShardIndex.single());
     const second = DeliveryMessageCodec.decode(wire, ShardIndex.single());
     const expectedPayload = Array.from(second.signal?.value ?? []);
 
-    first.whenReceived.setTime(9_999);
+    if (first.whenReceived instanceof Date) throw new Error("Expected a precise timestamp.");
+    first.whenReceived.nanos = 999_000_000;
     first.signal?.value.fill(7);
 
-    expect(second.whenReceived.getTime()).toBe(1_000);
+    expect(second.whenReceived).toEqual(create(TimestampSchema, { seconds: 1n }));
     expect(Array.from(second.signal?.value ?? [])).toEqual(expectedPayload);
   });
 

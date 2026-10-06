@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import type { TenantId } from "@spine-event-engine/proto";
 
 import { Delivery } from "../delivery/delivery.js";
@@ -138,7 +139,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
       label: input.label,
       status: input.status,
       shard: input.shard,
-      whenReceived: new Date(),
+      whenReceived: Time.currentTime(),
       version: this.#takeVersion(),
       ...(input.signal === undefined ? {} : { signal: input.signal }),
       ...(input.keepUntil === undefined ? {} : { keepUntil: input.keepUntil }),

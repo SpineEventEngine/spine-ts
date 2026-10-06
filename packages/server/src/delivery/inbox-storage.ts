@@ -13,7 +13,7 @@
  */
 
 import { clone, create, toBinary } from "@bufbuild/protobuf";
-import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import { TenantIdSchema } from "@spine-event-engine/proto";
 import type {
   InboxMessage as WireInboxMessage,
@@ -437,8 +437,7 @@ const Values = Object.freeze({
     if (
       typeof value.messageId !== "string" ||
       value.messageId.trim().length === 0 ||
-      !(value.whenReceived instanceof Date) ||
-      !Number.isFinite(value.whenReceived.getTime()) ||
+      !Values.validReceiveTime(value.whenReceived) ||
       typeof value.version !== "bigint" ||
       value.version < 0n ||
       value.version > BigInt(0x7fffffff)
@@ -446,7 +445,7 @@ const Values = Object.freeze({
       throw new InboxMessageError("Inbox read continuation is invalid.");
     return {
       values: [
-        { field: "when_received", value: Values.timestamp(value.whenReceived.getTime()) },
+        { field: "when_received", value: Values.receiveTime(value.whenReceived) },
         { field: "version", value: Number(value.version) },
         { field: "message_id", value: value.messageId },
       ],
@@ -466,6 +465,20 @@ const Values = Object.freeze({
       seconds: BigInt(seconds),
       nanos: (ms - seconds * 1_000) * 1_000_000,
     });
+  },
+  receiveTime(value: Date | Timestamp): Timestamp {
+    return value instanceof Date ? Values.timestamp(value.getTime()) : clone(TimestampSchema, value);
+  },
+  validReceiveTime(value: Date | Timestamp): boolean {
+    if (value instanceof Date) return Number.isFinite(value.getTime());
+    return (
+      value?.$typeName === TimestampSchema.typeName &&
+      value.seconds >= -62_135_596_800n &&
+      value.seconds <= 253_402_300_799n &&
+      Number.isInteger(value.nanos) &&
+      value.nanos >= 0 &&
+      value.nanos < 1_000_000_000
+    );
   },
 
   /**

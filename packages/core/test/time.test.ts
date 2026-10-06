@@ -80,4 +80,17 @@ describe("Time", () => {
     Time.setProvider({ currentTime: () => create(TimestampSchema), monotonicTime: () => 42 });
     expect(Time.monotonicTime()).toBe(42);
   });
+
+  it("invokes optional provider methods with their instance context", () => {
+    class StatefulProvider {
+      readonly zone = "Pacific/Auckland";
+      readonly tick = 12.5;
+      currentTime() { return create(TimestampSchema); }
+      currentZone() { return this.zone; }
+      monotonicTime() { return this.tick; }
+    }
+    Time.setProvider(new StatefulProvider());
+    expect(Time.currentTimeZone()).toBe("Pacific/Auckland");
+    expect(Time.monotonicTime()).toBe(12.5);
+  });
 });

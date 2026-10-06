@@ -17,6 +17,7 @@ import { StringValueSchema, TimestampSchema, type StringValue } from "@bufbuild/
 import {
   EventIdSchema,
   EventSchema,
+  type Event,
   TenantIdSchema,
   VersionSchema,
 } from "@spine-event-engine/proto";
@@ -29,7 +30,13 @@ import {
   EntityCommitStorageFactories,
   type EntityStorageInput,
 } from "@spine-event-engine/storage/provider";
-import { Identifiers, StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
+import {
+  AnyMessages,
+  Identifiers,
+  StringifierRegistry,
+  TypeRegistry,
+} from "@spine-event-engine/core";
+import { ProjectCreatedSchema } from "../../core/test-fixtures/generated/project_events_pb.js";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -87,6 +94,58 @@ describe("PostgreSQL live storage acceptance", () => {
       await expect(storage.compareAndSet("a", value("a"), value("updated"))).resolves.toBe(true);
       await expect(storage.compareAndSet("a", value("a"), value("other"))).resolves.toBe(false);
       await expect(storage.read("a")).resolves.toEqual(value("updated"));
+    } finally {
+      storage.close();
+    }
+  });
+
+  it("preserves microsecond timestamp ordering and a page boundary in live PostgreSQL", async () => {
+    const first = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 123_001_000 });
+    const middle = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 123_500_000 });
+    const last = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 123_999_000 });
+    const eventAt = (id: string, timestamp: typeof first) =>
+      create(EventSchema, {
+        id: create(EventIdSchema, { value: id }),
+        context: { timestamp },
+        message: AnyMessages.pack(
+          ProjectCreatedSchema,
+          create(ProjectCreatedSchema, {
+            memberId: [`member-${id}`],
+          }),
+        ),
+      });
+    const events = [
+      eventAt("z-first", first),
+      eventAt("m-middle", middle),
+      eventAt("a-last", last),
+    ];
+    const spec = new RecordSpec<string, Event>({
+      recordType: EventSchema,
+      idKind: "string",
+      extractId: (record) => record.id?.value ?? "",
+      columns: [
+        new RecordColumn(
+          "received",
+          ColumnTypes.message(TimestampSchema),
+          (record) => record.context?.timestamp,
+        ),
+      ],
+    });
+    const storage = factory.createRecordStorage(
+      context("precise_time"),
+      spec,
+      group("precise_time"),
+    );
+    try {
+      await storage.writeAll([...events].reverse());
+      await expect(storage.read("z-first")).resolves.toEqual(events[0]);
+      await expect(storage.query({ sort: [{ field: "received" }] })).resolves.toEqual([...events]);
+      await expect(
+        storage.query({
+          sort: [{ field: "received" }],
+          after: { id: "z-first", values: [{ field: "received", value: first }] },
+        }),
+      ).resolves.toEqual(events.slice(1));
     } finally {
       storage.close();
     }

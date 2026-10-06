@@ -9381,8 +9381,7 @@ const InboxHandoff = {
   ): Promise<void> {
     const route = await repository.routeCommand(command);
     const commandId = RepositorySignals.requireCommandId(command);
-    const whenReceived = new Date();
-    const keepUntil = new Date(whenReceived.getTime() + inboxDedupMs);
+    const keepUntil = new Date(Time.currentTimeMillis() + inboxDedupMs);
     const deliveryTenantId = RepositoryTenants.requireCommandTenant(runtime.context, command);
     const delivery = new Delivery({
       context: RepositoryTenants.entityInboxDeliveryContext(runtime.context, deliveryTenantId),
@@ -9423,8 +9422,7 @@ const InboxHandoff = {
     entityId: unknown,
   ): Promise<void> {
     const eventId = RepositorySignals.requireEventId(event);
-    const whenReceived = new Date();
-    const keepUntil = new Date(whenReceived.getTime() + inboxDedupMs);
+    const keepUntil = new Date(Time.currentTimeMillis() + inboxDedupMs);
     const deliveryTenantId = RepositoryTenants.requireProjectionTenant(runtime.context, event);
     const delivery = new Delivery({
       context: RepositoryTenants.projectionDeliveryContext(runtime.context, deliveryTenantId),
@@ -9465,8 +9463,7 @@ const InboxHandoff = {
     entityId: unknown,
   ): Promise<void> {
     const eventId = RepositorySignals.requireEventId(event);
-    const whenReceived = new Date();
-    const keepUntil = new Date(whenReceived.getTime() + inboxDedupMs);
+    const keepUntil = new Date(Time.currentTimeMillis() + inboxDedupMs);
     const deliveryTenantId = RepositoryTenants.requirePmEventTenant(runtime.context, event);
     const delivery = new Delivery({
       context: RepositoryTenants.entityInboxDeliveryContext(runtime.context, deliveryTenantId),
@@ -9497,8 +9494,7 @@ const InboxHandoff = {
     entityIds: readonly unknown[],
   ): Promise<void> {
     const eventId = RepositorySignals.requireEventId(event);
-    const whenReceived = new Date();
-    const keepUntil = new Date(whenReceived.getTime() + inboxDedupMs);
+    const keepUntil = new Date(Time.currentTimeMillis() + inboxDedupMs);
     const deliveryTenantId = RepositoryTenants.requirePmEventTenant(runtime.context, event);
     const delivery = new Delivery({
       context: RepositoryTenants.entityInboxDeliveryContext(runtime.context, deliveryTenantId),

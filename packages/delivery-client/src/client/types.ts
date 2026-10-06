@@ -323,7 +323,7 @@ export interface DeliveryReadPageOptions extends DeliveryFindOneOptions {
   /**
    * Continues a timestamp-ordered page after this received time.
    */
-  readonly sinceWhen?: Date;
+  readonly sinceWhen?: Date | import("@bufbuild/protobuf/wkt").Timestamp;
 
   /**
    * Limits messages requested for this page.

@@ -16,7 +16,7 @@
 /* eslint-disable @typescript-eslint/require-await */
 
 import { create, toBinary } from "@bufbuild/protobuf";
-import { AnySchema } from "@bufbuild/protobuf/wkt";
+import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Identifiers } from "@spine-event-engine/core";
 import { EventSchema } from "@spine-event-engine/proto";
 import { WorkerIdSchema, type WorkerId } from "@spine-event-engine/proto/delivery";
@@ -32,6 +32,15 @@ import { commitFenced } from "../../src/repository/commit-fence.js";
 import { ShardIndex } from "../../src/index.js";
 
 describe("Delivery direct worker", () => {
+  it("preserves microsecond receive time in a retained delivery failure", async () => {
+    const shard = ShardIndex.single();
+    const whenReceived = create(TimestampSchema, { seconds: 1n, nanos: 123_456_000 });
+    const row = { ...message("precise", "target", shard), whenReceived };
+    const delivery = createDelivery({ rows: [row], mark: async () => undefined });
+    const run = await delivery.drain(shard, { onMessage: () => { throw new Error("failed"); } });
+    expect(run.failures[0]?.message.whenReceived).toEqual(whenReceived);
+  });
+
   it("deduplicates pending identities in one raw page without inbox admission", async () => {
     const shard = ShardIndex.single();
     const first = message("same-signal", "target", shard);
@@ -923,6 +932,8 @@ describe("Delivery direct worker", () => {
         throw new Error("failed");
       },
     });
+    if (!(row.whenReceived instanceof Date)) throw new Error("Expected legacy Date input.");
+    const receivedMillis = row.whenReceived.getTime();
     const mutable = row as unknown as {
       id: { value: string };
       inboxId: { targetId: string };
@@ -943,7 +954,12 @@ describe("Delivery direct worker", () => {
       inboxId: { targetId: Identifiers.pack("string", "target") },
     });
     expect(fact.shard).toMatchObject({ index: 0, ofTotal: 1 });
-    expect(fact.whenReceived.getTime()).not.toBe(20_000);
+    expect(fact.whenReceived).toEqual(
+      create(TimestampSchema, {
+        seconds: BigInt(Math.floor(receivedMillis / 1_000)),
+        nanos: (receivedMillis % 1_000) * 1_000_000,
+      }),
+    );
     expect(fact.keepUntil?.getTime()).toBe(10_000);
     expect(fact.signal?.value[0]).toBe(1);
     expect(() => {

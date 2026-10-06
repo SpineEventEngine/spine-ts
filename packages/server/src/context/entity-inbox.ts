@@ -13,6 +13,8 @@
  */
 
 import { AsyncLocalStorage } from "node:async_hooks";
+import type { Timestamp } from "@bufbuild/protobuf/wkt";
+import { Time } from "@spine-event-engine/core/time";
 
 import type { TenantId } from "@spine-event-engine/proto";
 import { TenantBoundary } from "@spine-event-engine/storage/provider";
@@ -181,7 +183,7 @@ export class LocalEntityInbox implements EntityInbox {
   ): Promise<InboxMessage> {
     await this.#followUpFor(input, deliveryTenantId);
     await this.#keepDeliveryTenant(deliveryTenantId);
-    const written = await this.#writeInboxRow(delivery, input, new Date(), deliveryTenantId);
+    const written = await this.#writeInboxRow(delivery, input, Time.currentTime(), deliveryTenantId);
     this.#trackMessage(written.message);
     try {
       await written.handoff.complete(() =>
@@ -206,7 +208,7 @@ export class LocalEntityInbox implements EntityInbox {
     if (followUps.length > 0) await Promise.all(followUps);
     await this.#keepDeliveryTenant(deliveryTenantId);
     const rows = this.#claimRows(inputs, deliveryTenantId);
-    const whenReceived = new Date();
+    const whenReceived = Time.currentTime();
     const failures: unknown[] = [];
 
     try {
@@ -230,7 +232,7 @@ export class LocalEntityInbox implements EntityInbox {
   async #writeRows(
     delivery: Delivery,
     rows: readonly BatchRow[],
-    whenReceived: Date,
+    whenReceived: Timestamp,
     deliveryTenantId: TenantId | undefined,
     failures: unknown[],
   ): Promise<void> {
@@ -290,7 +292,7 @@ export class LocalEntityInbox implements EntityInbox {
   async #writeInboxRow(
     delivery: Delivery,
     input: RoutedEntityInput,
-    whenReceived: Date,
+    whenReceived: Timestamp,
     deliveryTenantId?: TenantId,
   ): Promise<InboxWrite> {
     const written = await delivery.inbox.receive({

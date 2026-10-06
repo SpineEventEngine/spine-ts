@@ -36,7 +36,7 @@ import {
 } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
 
-import { FixedClock, SignalMetadata } from "../../src/runtime/signal-metadata.js";
+import { FixedClock, SignalMetadata, SystemClock } from "../../src/runtime/signal-metadata.js";
 import { AssignReviewTaskSchema } from "../../test-fixtures/generated/handler-registry/commands_pb.js";
 import { ReviewTaskAssignedSchema } from "../../test-fixtures/generated/handler-registry/events_pb.js";
 
@@ -48,6 +48,16 @@ describe("SignalMetadata", () => {
       const metadata = new SignalMetadata();
       expect(metadata.timestamp()).toEqual(instant);
       expect(metadata.commandContext().actorContext).toBeUndefined();
+    } finally {
+      Time.setProvider(previous);
+    }
+  });
+
+  it("retains provider nanoseconds through the explicit SystemClock adapter", () => {
+    const instant = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 123_456_000 });
+    const previous = Time.setProvider({ currentTime: () => instant });
+    try {
+      expect(new SignalMetadata({ clock: new SystemClock() }).timestamp()).toEqual(instant);
     } finally {
       Time.setProvider(previous);
     }
