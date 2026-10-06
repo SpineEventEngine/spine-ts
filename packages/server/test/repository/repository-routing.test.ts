@@ -8256,6 +8256,11 @@ describe("repository signal routing", () => {
         return receiveAll.call(this, delivery, inputs, tenantId);
       });
     const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    let receiptTick = 0;
+    const previousTime = Time.setProvider({
+      currentTime: () =>
+        create(TimestampSchema, { seconds: 1_700_000_000n, nanos: receiptTick++ * 1_000 }),
+    });
     try {
       const dispatched = dispatcher.dispatch(event);
       await firstEntered;
@@ -8281,7 +8286,11 @@ describe("repository signal routing", () => {
       releaseFirst();
       handoff.mockRestore();
       warning.mockRestore();
-      await context.close();
+      try {
+        await context.close();
+      } finally {
+        Time.setProvider(previousTime);
+      }
     }
   });
 
