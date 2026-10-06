@@ -6004,3 +6004,21 @@ adapters change together, without a compatibility shim for previous snapshots.
 The real 1,000-recipient benchmark must meet the under-one-second target;
 the design alone is not evidence of that result. See
 [the approved plan](tasks/fix-publication-provenance/entity-save-delivery-plan.md).
+
+## D-0124: Shared Spine Time For Every Time Read
+
+Status: Accepted human requirement; implementation in progress
+
+Date: 2026-10-06
+
+Introduce the Spine JVM-equivalent Time utility and route every first-party
+request for time through it, including runtime timestamps, deadlines, retries,
+authentication, diagnostics, scripts, examples and tests. Only the provider may
+read platform clocks. Preserve monotonic elapsed measurement and timestamp
+precision. Follow IncrementalNanos behavior without repository ordering counters.
+Use controlled providers for tests. Parsing or converting supplied time values
+is not current-time acquisition. Agent work is a separate subsequent task.
+
+The implementation plan and evidence are in
+[the Time task](planning/spine-time-task.md) and
+[its work log](planning/spine-time-worklog.md).

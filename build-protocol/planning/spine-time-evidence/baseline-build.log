@@ -1,0 +1,9 @@
+$ pnpm proto:generate && pnpm typecheck:build:generated
+$ node scripts/proto-workflow.mjs generate
+Verified 50 Spine proto source file checksums.
+Authored Proto style checks passed.
+Example Proto quality checks passed.
+Rejection source naming checks passed.
+Verified 55 frozen descriptor files against normalized digest 0844be5a0c588717932dc09da4d3fdc62c945a4f82be9bbb4e4d3d4814e42c3b.
+$ node scripts/clean-build-outputs.mjs && tsc -b && pnpm --dir packages/proto-tools run copy:runtime && node scripts/normalize-generated-declarations.mjs
+$ node scripts/copy-runtime-modules.mjs

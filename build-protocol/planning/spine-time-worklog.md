@@ -1,0 +1,13 @@
+# Spine Time execution
+
+Task: introduce the JVM-like shared Time API and use it everywhere first-party code asks for time. No Agent work. Human requirements: follow JVM IncrementalNanos, every time read through Time, no repository history counter, preserve precision. Source task is spine-time-task.md. Baseline freshly fetched official origin/master 52fb932f2, snapshot.21; branch spine-time in attached managed worktree. Primary master stays untouched. Desktop supports explicit required model/reasoning profiles; Standard speed, no Fast. Skills applied: using-git-worktrees and test-driven-development, with existing user workflow authorization for isolation. Estimate 2–4 hours, subject to evidence.
+
+High-risk milestone: shared public API, framework-wide clocks and serialized timestamp precision. Acceptance: current/system/provider/time-zone parity, microsecond increment/reset behavior, monotonic durations, migrated consumers including scripts/tests/examples, precision proofs for supported stores/transports, bypass static check, focused and release verification, specialist review, version-only commit and pushed feature branch. No PR creation authorized. Reuse current commit and Entity semantics.
+
+Architecture dispatch: existing requirements_splitter, gpt-6-astra/high, explicit fields, fork none, no subagent spawning, read-only public API/package/test-provider/time precision analysis. Expected return concise contract and ordered implementation slices, actual questions only. Existing production writer will be implementer gpt-6-sol/medium; first architecture result accepted before dispatch. Metadata: immutable configured profile available, independent runtime telemetry may not be exposed. Reviewer assignments to be recorded before dispatch.
+
+Initial inventory on prior baseline found about 200 direct read lines. SQL timestamp columns already store epoch nanos; Datastore has Timestamp Date subclass preserving seconds/nanos. Recheck all current paths; no schema migration presumed. No product questions currently established.
+
+Baseline setup: pnpm frozen install passed; normal first-build missing-bin warnings resolved by compilation. pnpm typecheck:build passed. Focused baseline tests: 5 files, 72 tests passed (signal metadata, Entity transaction, Postgres/MySQL/Datastore mappings). Evidence logs in spine-time-evidence. Generation refreshed manifest/generation IDs; those changes come from baseline generation, not authored Proto edits. Do not hand-edit generated output.
+
+Preliminary architecture: browser-safe leaf packages/core/src/time.ts, core/time subpath and core barrel; Node24 prebuild scripts use same source through type stripping. No product questions found. Final architecture contract pending.
