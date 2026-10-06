@@ -6007,7 +6007,7 @@ the design alone is not evidence of that result. See
 
 ## D-0124: Shared Spine Time For Runtime Time Reads
 
-Status: Accepted; revising runtime scope and removing backward-compatibility paths
+Status: Implemented; three independent review rounds and final release verification complete
 
 Date: 2026-10-06
 
