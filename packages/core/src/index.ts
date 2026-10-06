@@ -82,6 +82,8 @@ import {
   type ValidationError,
 } from "@spine-event-engine/proto";
 
+export { Time, type TimeProvider } from "./time.js";
+
 export {
   EntityColumn,
   type EntityColumnDefinition,

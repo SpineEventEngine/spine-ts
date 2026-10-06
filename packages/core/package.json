@@ -18,6 +18,10 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./time": {
+      "types": "./dist/time.d.ts",
+      "default": "./dist/time.js"
+    },
     "./spi/subscription-lifecycle": {
       "types": "./dist/spi/subscription-lifecycle.d.ts",
       "default": "./dist/spi/subscription-lifecycle.js"

@@ -79,3 +79,13 @@ Required evidence:
 Deliver the documented shared Time API/provider implementation, its framework-wide adoption, precision fixes, automated bypass check and passing tests. Include package exports and examples appropriate to the existing framework; do not add an Agent example to prove this task.
 
 Task 2: Agent entities depends on the completed Time task. Agent implementation uses the exported Time API and its test provider for interaction timestamps, deadlines and history ordering. It does not repeat this migration or introduce another clock. Time can be implemented, reviewed and accepted before any Agent work is delivered.
+
+## Human-Imposed Requirements Ledger
+
+- Implement Task 1 only: JVM-like shared Time and its adoption everywhere first-party code reads time; Agent work is separate.
+- Follow JVM IncrementalNanos and provider behavior; preserve full occurrence timestamp precision and do not add repository history counters.
+- Preserve existing Entity and database transaction semantics; no transaction redesign is authorized.
+- Supply documented TypeScript APIs, domain-correct test fixtures, meaningful behavior tests and the repository verification/review gates.
+- Work from freshly fetched official origin/master in an isolated feature worktree; never use a codex-prefixed branch. Push each feature commit immediately. No PR or master changes without explicit human direction.
+- Use the existing roles with explicit permitted model/reasoning profiles; children do not delegate. Keep user progress current and preserve unrelated work.
+- Avoid unnecessary possession terminology and unexplained wording in code, documentation and messages.
