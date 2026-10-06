@@ -12,11 +12,35 @@
  * the License.
  */
 
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { delimiter, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { findTimeBypasses, findTimeImports, timeReadPolicy } from "./check-time-reads.mjs";
 
 describe("time read bypass check", () => {
+  it("runs the repository check without a working ripgrep executable", () => {
+    const directory = mkdtempSync(join(tmpdir(), "spine-time-path-"));
+    try {
+      writeFileSync(join(directory, "rg"), "#!/bin/sh\nexit 127\n", { mode: 0o755 });
+      const result = spawnSync(
+        process.execPath,
+        [fileURLToPath(new URL("check-time-reads.mjs", import.meta.url))],
+        {
+          env: { ...process.env, PATH: directory + delimiter + (process.env.PATH ?? "") },
+          encoding: "utf8",
+        },
+      );
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout).toContain("Runtime time reads use Time");
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it("finds direct and aliased wall or monotonic clock reads", () => {
     const source = `
       const D = Date;

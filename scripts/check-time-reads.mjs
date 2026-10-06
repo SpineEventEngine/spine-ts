@@ -13,7 +13,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
@@ -240,15 +240,27 @@ const scriptPath = fileURLToPath(import.meta.url);
 if (process.argv[1] && resolve(process.argv[1]) === scriptPath) {
   const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
   const files = execFileSync(
-    "rg",
-    ["--files", "packages", "examples", "scripts", "compatibility-tests", "interop"],
+    "git",
+    [
+      "ls-files",
+      "--cached",
+      "--others",
+      "--exclude-standard",
+      "-z",
+      "--",
+      "packages",
+      "examples",
+      "scripts",
+      "compatibility-tests",
+      "interop",
+    ],
     {
       cwd: root,
       encoding: "utf8",
     },
   )
-    .trim()
-    .split("\n");
+    .split("\0")
+    .filter((path) => path.length > 0 && existsSync(resolve(root, path)));
   const findings = [];
   for (const path of files) {
     if (
