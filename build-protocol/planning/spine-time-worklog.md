@@ -9,3 +9,7 @@ Three new independent reviewers ran sequentially with no inherited conversation 
 `pnpm verify:release` passes: 312 files and 5,242 tests passed; one opt-in benchmark skipped. Coverage: 93.28% statements, 90.03% branches, 93.13% functions, 94.49% lines. Live Datastore indexed-order/pagination checks passed, including the 1,001,000-nanosecond boundary. Earlier PostgreSQL 16/18, MySQL 8.4 and MariaDB 11.4 precision checks passed; their storage representations are unchanged.
 
 All implementation and review work is complete. Feature commits are pushed to official origin. No PR or merge was requested; hosted CI requires a human-created PR. Raw execution logs remain outside the repository.
+
+The changed-file explanation exposed two obsolete assertions in the separate Node image-contract test that required forbidden Time imports. They were removed; the image build/packaging contract remains tested. This test-only correction does not change the release-verified runtime.
+
+PR audit correction (micro): reproduced the release audit failure for transitive `source-map-js` 1.2.1. Select patched 1.2.2 through the existing workspace override policy, preserve the audit threshold, and verify frozen installation, both audits, release verification, and archive preparation. This is a dependency correction; runtime and public contracts are unchanged. Systematic-debugging skill applies. Existing specialist review dispositions remain applicable; dependency acceptance is established by the audit and release checks.

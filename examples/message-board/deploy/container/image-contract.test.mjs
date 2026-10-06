@@ -14,9 +14,6 @@ const datastoreEmulator = "google/cloud-sdk:578.0.0-emulators";
 
 test("local image builds regenerate application output before packing it", () => {
   const builder = readFileSync(new URL("build-local-images.mjs", containerRoot), "utf8");
-  assert.match(builder, /packages\/core\/src\/time\.ts/u);
-  const rpcClient = readFileSync(new URL("../compose/rpc-client.mjs", import.meta.url), "utf8");
-  assert.match(rpcClient, /@spine-event-engine\/core\/time/u);
   assert.match(builder, /phase\("build Message Board application"\)/u);
   assert.match(builder, /\["typecheck:build"\]/u);
   assert.ok(
