@@ -138,6 +138,36 @@ describe("RemoteInbox direct behavior", () => {
     expect(client.writeOne).not.toHaveBeenCalled();
   });
 
+  it("accepts legacy Date snapshots for remote acknowledgement and removals", async () => {
+    const client = new Client();
+    const inbox = new RemoteInbox(client as never);
+    const pending = domainMessage("legacy-date");
+    const dateInput = { ...pending, whenReceived: new Date(1_000) };
+    const delivered = { ...pending, status: "DELIVERED" as const };
+    client.findOne
+      .mockResolvedValueOnce(pending)
+      .mockResolvedValueOnce(delivered)
+      .mockResolvedValueOnce(pending);
+
+    await expect(inbox.markDelivered(dateInput)).resolves.toMatchObject({
+      whenReceived: pending.whenReceived,
+      status: "DELIVERED",
+    });
+    await expect(
+      inbox.removeDelivered(
+        { ...dateInput, status: "DELIVERED" },
+        {
+          kind: "EXCLUSIVE",
+          shard: pending.shard,
+        },
+      ),
+    ).resolves.toBe(true);
+    await expect(
+      inbox.removeDuplicate(dateInput, { kind: "EXCLUSIVE", shard: pending.shard }),
+    ).resolves.toBe(true);
+    expect(client.removeOne).toHaveBeenCalledTimes(2);
+  });
+
   it("continues a bounded page from an exact cursor and forwards remote read bounds", async () => {
     const client = new Client();
     const inbox = new RemoteInbox(client as never);

@@ -23,7 +23,11 @@ import {
   TimestampSchema,
 } from "@bufbuild/protobuf/wkt";
 
-import type { InboxMessage, InboxMessageId, InboxMessageInput } from "@spine-event-engine/server";
+import type {
+  InboxMessage,
+  InboxMessageId,
+  InboxMessageSnapshotInput,
+} from "@spine-event-engine/server";
 import { ShardIndex } from "@spine-event-engine/server";
 import { CommandSchema, EventSchema } from "@spine-event-engine/proto";
 import {
@@ -70,7 +74,7 @@ const DeliveryValues = Object.freeze({
    * Validates the signal identity and version of an inbox write.
    * @param message The inbox write input to validate.
    */
-  validateSignalVersion(message: InboxMessageInput & Pick<InboxMessage, "id">): void {
+  validateSignalVersion(message: InboxMessageSnapshotInput): void {
     if (typeof message.signalId !== "string" || !DeliveryValues.hasText(message.signalId))
       throw new TypeError("Delivery inbox signal ID is invalid.");
     if (
@@ -173,7 +177,7 @@ type DeliveryMessageCodecApi = Readonly<{
    * @param messages Supplies the messages to encode.
    * @returns The encoded messages, their IDs, and their common shard.
    */
-  encodeBatch(messages: readonly (InboxMessageInput & Pick<InboxMessage, "id">)[]): {
+  encodeBatch(messages: readonly InboxMessageSnapshotInput[]): {
     readonly ids: readonly string[];
     readonly shard: WireShardIndex;
     readonly messages: WireInboxMessage[];
@@ -185,7 +189,7 @@ type DeliveryMessageCodecApi = Readonly<{
    * @param message Supplies the message to encode.
    * @returns The validated wire message.
    */
-  encode(message: InboxMessageInput & Pick<InboxMessage, "id">): WireInboxMessage;
+  encode(message: InboxMessageSnapshotInput): WireInboxMessage;
 
   /**
    * Decodes an inbox message and confirms its expected shard.
@@ -228,7 +232,7 @@ type DeliveryMessageCodecApi = Readonly<{
    * @param value Supplies the message to copy.
    * @returns A detached immutable message.
    */
-  snapshot(value: InboxMessageInput & Pick<InboxMessage, "id">): InboxMessage;
+  snapshot(value: InboxMessageSnapshotInput): InboxMessage;
 
   /**
    * Parses an inbox target identifier.
@@ -308,7 +312,7 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
    * @param messages Supplies the messages to encode.
    * @returns The encoded messages, their IDs, and their common shard.
    */
-  encodeBatch(messages: readonly (InboxMessageInput & Pick<InboxMessage, "id">)[]): {
+  encodeBatch(messages: readonly InboxMessageSnapshotInput[]): {
     readonly ids: readonly string[];
     readonly shard: WireShardIndex;
     readonly messages: WireInboxMessage[];
@@ -339,7 +343,7 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
    * @param message Supplies the message to encode.
    * @returns The validated wire message.
    */
-  encode(message: InboxMessageInput & Pick<InboxMessage, "id">): WireInboxMessage {
+  encode(message: InboxMessageSnapshotInput): WireInboxMessage {
     const id = DeliveryMessageCodec.encodeId(message.id);
     const shard = DeliveryShardCodec.encode(message.id.shard);
     if (
@@ -453,7 +457,7 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
    * @param value Supplies the message to copy.
    * @returns A detached immutable message.
    */
-  snapshot(value: InboxMessageInput & Pick<InboxMessage, "id">): InboxMessage {
+  snapshot(value: InboxMessageSnapshotInput): InboxMessage {
     return DeliveryValues.freeze({
       id: DeliveryValues.freeze({
         value: value.id.value,

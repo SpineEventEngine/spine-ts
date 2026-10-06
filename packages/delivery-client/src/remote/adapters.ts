@@ -26,6 +26,7 @@ import type {
   InboxMessage,
   InboxMessageId,
   InboxMessageInput,
+  InboxMessageSnapshotInput,
   InboxReadOptions,
   InboxWriteResult,
 } from "@spine-event-engine/server";
@@ -182,7 +183,7 @@ export class RemoteInbox implements DeliveryInbox {
    * row is absent or no longer matches.
    */
   async markDelivered(
-    message: InboxMessage,
+    message: InboxMessageSnapshotInput,
     options?: DeliveryOperationOptions,
   ): Promise<InboxMessage | undefined> {
     const current = await this.client.findOne(message.id, options);
@@ -209,7 +210,7 @@ export class RemoteInbox implements DeliveryInbox {
    * @returns Whether the snapshot matched when read and the removal request completed.
    */
   async removeDelivered(
-    message: InboxMessage,
+    message: InboxMessageSnapshotInput,
     session: DeliveryWorkSession,
     options?: DeliveryOperationOptions,
   ): Promise<boolean> {
@@ -238,7 +239,7 @@ export class RemoteInbox implements DeliveryInbox {
    * @returns Whether the snapshot matched when read and the removal request completed.
    */
   async removeDuplicate(
-    message: InboxMessage,
+    message: InboxMessageSnapshotInput,
     session: DeliveryWorkSession,
     options?: DeliveryOperationOptions,
   ): Promise<boolean> {
@@ -641,7 +642,7 @@ const RemoteValues = Object.freeze({
    * @param right Supplies the second message.
    * @returns Whether all compared fields match.
    */
-  sameMessage(left: InboxMessage, right: InboxMessage): boolean {
+  sameMessage(left: InboxMessageSnapshotInput, right: InboxMessageSnapshotInput): boolean {
     return (
       left.id.value === right.id.value &&
       RemoteValues.sameShard(left.id.shard, right.id.shard) &&

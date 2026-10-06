@@ -123,6 +123,7 @@ export {
   type InboxMessage,
   type InboxMessageId,
   type InboxMessageInput,
+  type InboxMessageSnapshotInput,
   type InboxReadContinuation,
   type InboxReadOptions,
   type InboxWriteResult,

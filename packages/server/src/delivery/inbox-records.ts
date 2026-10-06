@@ -42,7 +42,7 @@ import {
   type DeliveryLabel,
   type DeliveryStatus,
   type InboxMessage,
-  type InboxMessageInput,
+  type InboxMessageSnapshotInput,
 } from "./inbox.js";
 import { ShardIndex } from "./shard-index.js";
 
@@ -70,7 +70,7 @@ export const InboxRecords: Readonly<{
    * @param message The domain inbox message to persist.
    * @returns A generated inbox record suitable for durable storage.
    */
-  write(message: InboxMessageInput & Pick<InboxMessage, "id">): WireInboxMessage;
+  write(message: InboxMessageSnapshotInput): WireInboxMessage;
 }> = Object.freeze({
   /**
    * Decodes a durable inbox record and verifies its embedded identifier when requested.
@@ -89,7 +89,7 @@ export const InboxRecords: Readonly<{
    * @param message The domain inbox message to persist.
    * @returns A generated inbox record suitable for durable storage.
    */
-  write(message: InboxMessageInput & Pick<InboxMessage, "id">): WireInboxMessage {
+  write(message: InboxMessageSnapshotInput): WireInboxMessage {
     return Values.write(message);
   },
 });
@@ -154,7 +154,7 @@ const Values = Object.freeze({
    * @param input The domain inbox message to validate and encode.
    * @returns A generated inbox record suitable for durable storage.
    */
-  write(input: InboxMessageInput & Pick<InboxMessage, "id">): WireInboxMessage {
+  write(input: InboxMessageSnapshotInput): WireInboxMessage {
     const message = Values.input(input);
     Values.target(message.inboxId.targetId, InboxMessageError);
     Values.payloadForLabel(message.label, message.signal, InboxMessageError);
@@ -275,9 +275,7 @@ const Values = Object.freeze({
    * @param value The candidate domain inbox message.
    * @returns The validated domain inbox message.
    */
-  input(
-    value: InboxMessageInput & Pick<InboxMessage, "id">,
-  ): InboxMessageInput & Pick<InboxMessage, "id"> {
+  input(value: InboxMessageSnapshotInput): InboxMessageSnapshotInput {
     Values.validateIdentity(value);
     const inbox = value.inboxId;
     if (
@@ -308,7 +306,7 @@ const Values = Object.freeze({
    * Validates the inbox identity and its matching shard before encoding.
    * @param value The inbox write input whose identity is checked.
    */
-  validateIdentity(value: InboxMessageInput & Pick<InboxMessage, "id">): void {
+  validateIdentity(value: InboxMessageSnapshotInput): void {
     const id = value.id;
     const shard = value.shard;
     if (

@@ -1,0 +1,3 @@
+Scoped findings are resolved. I found no remaining actionable documentation mismatch in the corrected options summaries, BlackBox method and iterator summaries, `sinceWhen` precision guidance, or provider-lifetime docs. The examples and references agree that Inbox reads return `Timestamp` values, while supported write inputs and page anchors accept `Date` or `Timestamp`.
+
+The recorded focused run passed 606 tests across 21 files; the work log also records a 55-test Inbox/client API run and documentation checks. Those checks are relevant to the changed behavior, but I did not rerun them. Full release verification remains pending, so this re-review does not establish release readiness.

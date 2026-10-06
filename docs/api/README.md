@@ -607,6 +607,7 @@ Durable-delivery exports include the `Delivery` interface created by the builder
 `DeliveryResult`, `DeliveryRunOptions`, `DeliveryStrategy`, `DeliverySupervisor`,
 `UniformAcrossAllShards`, `DeliveryStorageCorruptionError`, `Inbox`, `InboxId`,
 `InboxMessage`, `InboxMessageError`, `InboxMessageId`, `InboxMessageInput`,
+`InboxMessageSnapshotInput`,
 `InboxReadContinuation`, `InboxReadOptions`, `InboxWriteResult`, `InboxStorage`,
 `InboxStorageOptions`, `DeliveryLabel`, `DeliveryStatus`, `ShardIndex`,
 `ShardSession`, `ShardedWorkRegistry`, and `ShardedWorkRegistryOptions`.

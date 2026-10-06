@@ -1,0 +1,34 @@
+$ tsc --noEmit -p tsconfig.eslint.json
+packages/delivery-client/test/client-rpc-lifecycle.test.ts(421,35): error TS2379: Argument of type '{ whenReceived: Date; id: InboxMessageId; inboxId: InboxId; signalId: string; signal?: Any; label: DeliveryLabel; status: DeliveryStatus; shard: ShardIndex; version: bigint; keepUntil?: Date; }' is not assignable to parameter of type 'InboxMessage' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'whenReceived' are incompatible.
+    Type 'Date' is not assignable to type 'Timestamp'.
+      Property '$typeName' is missing in type 'Date' but required in type 'Message<"google.protobuf.Timestamp">'.
+packages/delivery-client/test/client-rpc-lifecycle.test.ts(423,37): error TS2375: Type '{ whenReceived: Date; id: InboxMessageId; inboxId: InboxId; signalId: string; signal?: Any; label: DeliveryLabel; status: DeliveryStatus; shard: ShardIndex; version: bigint; keepUntil?: Date; }' is not assignable to type 'InboxMessage' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'whenReceived' are incompatible.
+    Type 'Date' is not assignable to type 'Timestamp'.
+      Property '$typeName' is missing in type 'Date' but required in type 'Message<"google.protobuf.Timestamp">'.
+packages/delivery-client/test/remote-inbox-direct.test.ts(152,38): error TS2379: Argument of type '{ whenReceived: Date; id: InboxMessageId; inboxId: InboxId; signalId: string; signal?: Any; label: DeliveryLabel; status: DeliveryStatus; shard: ShardIndex; version: bigint; keepUntil?: Date; }' is not assignable to parameter of type 'InboxMessage' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'whenReceived' are incompatible.
+    Type 'Date' is not assignable to type 'Timestamp'.
+      Property '$typeName' is missing in type 'Date' but required in type 'Message<"google.protobuf.Timestamp">'.
+packages/delivery-client/test/remote-inbox-direct.test.ts(157,29): error TS2379: Argument of type '{ status: "DELIVERED"; whenReceived: Date; id: InboxMessageId; inboxId: InboxId; signalId: string; signal?: Any; label: DeliveryLabel; shard: ShardIndex; version: bigint; keepUntil?: Date; }' is not assignable to parameter of type 'InboxMessage' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'whenReceived' are incompatible.
+    Type 'Date' is not assignable to type 'Timestamp'.
+      Property '$typeName' is missing in type 'Date' but required in type 'Message<"google.protobuf.Timestamp">'.
+packages/delivery-client/test/remote-inbox-direct.test.ts(163,29): error TS2379: Argument of type '{ whenReceived: Date; id: InboxMessageId; inboxId: InboxId; signalId: string; signal?: Any; label: DeliveryLabel; status: DeliveryStatus; shard: ShardIndex; version: bigint; keepUntil?: Date; }' is not assignable to parameter of type 'InboxMessage' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'whenReceived' are incompatible.
+    Type 'Date' is not assignable to type 'Timestamp'.
+      Property '$typeName' is missing in type 'Date' but required in type 'Message<"google.protobuf.Timestamp">'.
+packages/server/test/delivery/inbox.test.ts(67,49): error TS2379: Argument of type '{ whenReceived: Date; id: InboxMessageId; inboxId: InboxId; signalId: string; signal?: Any; label: DeliveryLabel; status: DeliveryStatus; shard: ShardIndex; version: bigint; keepUntil?: Date; }' is not assignable to parameter of type 'InboxMessage' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'whenReceived' are incompatible.
+    Type 'Date' is not assignable to type 'Timestamp'.
+      Property '$typeName' is missing in type 'Date' but required in type 'Message<"google.protobuf.Timestamp">'.
+packages/server/test/delivery/inbox.test.ts(77,29): error TS2379: Argument of type '{ status: "DELIVERED"; whenReceived: Date; id: InboxMessageId; inboxId: InboxId; signalId: string; signal?: Any; label: DeliveryLabel; shard: ShardIndex; version: bigint; keepUntil?: Date; }' is not assignable to parameter of type 'InboxMessage' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'whenReceived' are incompatible.
+    Type 'Date' is not assignable to type 'Timestamp'.
+      Property '$typeName' is missing in type 'Date' but required in type 'Message<"google.protobuf.Timestamp">'.
+packages/server/test/delivery/inbox.test.ts(79,40): error TS2379: Argument of type '{ whenReceived: Date; id: InboxMessageId; inboxId: InboxId; signalId: string; signal?: Any; label: DeliveryLabel; status: DeliveryStatus; shard: ShardIndex; version: bigint; keepUntil?: Date; }' is not assignable to parameter of type 'InboxMessage' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'whenReceived' are incompatible.
+    Type 'Date' is not assignable to type 'Timestamp'.
+      Property '$typeName' is missing in type 'Date' but required in type 'Message<"google.protobuf.Timestamp">'.
+[ELIFECYCLE] Command failed with exit code 2.

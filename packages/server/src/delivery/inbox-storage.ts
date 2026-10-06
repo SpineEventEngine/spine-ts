@@ -29,7 +29,7 @@ import {
   InboxMessageError,
   type DeliveryStatus,
   type InboxMessage,
-  type InboxMessageInput,
+  type InboxMessageSnapshotInput,
   type InboxMessageId,
   type InboxReadOptions,
   type InboxWriteResult,
@@ -138,7 +138,7 @@ export class InboxStorage {
    * @param message Supplies the message to persist.
    * @returns Whether the row was written or matched an existing duplicate.
    */
-  async write(message: InboxMessageInput & Pick<InboxMessage, "id">): Promise<InboxWriteResult> {
+  async write(message: InboxMessageSnapshotInput): Promise<InboxWriteResult> {
     const record = InboxRecords.write(message);
     const id = Values.wireId(record);
     const storage = this.#storage();
@@ -163,7 +163,7 @@ export class InboxStorage {
    * @param message Supplies the expected pending snapshot.
    * @returns The delivered row, or `undefined` when the snapshot no longer matches.
    */
-  async markDelivered(message: InboxMessage): Promise<InboxMessage | undefined> {
+  async markDelivered(message: InboxMessageSnapshotInput): Promise<InboxMessage | undefined> {
     const expected = InboxRecords.write(message);
     const id = Values.wireId(expected);
     const storage = this.#storage();
@@ -199,7 +199,7 @@ export class InboxStorage {
    * @returns Whether the provider atomically removed the exact durable row.
    */
   async removeDelivered(
-    message: InboxMessage,
+    message: InboxMessageSnapshotInput,
     session: DeliveryWorkSession,
     options?: import("./delivery-ports.js").DeliveryOperationOptions,
   ): Promise<boolean> {
@@ -220,7 +220,7 @@ export class InboxStorage {
    * @returns Whether the provider atomically removed the exact pending snapshot.
    */
   async removeDuplicate(
-    message: InboxMessage,
+    message: InboxMessageSnapshotInput,
     session: DeliveryWorkSession,
     options?: import("./delivery-ports.js").DeliveryOperationOptions,
   ): Promise<boolean> {
@@ -229,7 +229,7 @@ export class InboxStorage {
   }
 
   async #remove(
-    message: InboxMessage,
+    message: InboxMessageSnapshotInput,
     session: DeliveryWorkSession,
     options?: import("./delivery-ports.js").DeliveryOperationOptions,
   ): Promise<boolean> {
@@ -258,12 +258,12 @@ export class InboxStorage {
       !options?.signal?.aborted && (deadline === undefined || Values.now(this.#now) < deadline);
   }
 
-  #matchesSession(message: InboxMessage, session: DeliveryWorkSession): boolean {
+  #matchesSession(message: InboxMessageSnapshotInput, session: DeliveryWorkSession): boolean {
     return session.kind === "LEASED" && session.shard.key() === message.shard.key();
   }
 
   async #removeCurrent(
-    message: InboxMessage,
+    message: InboxMessageSnapshotInput,
     session: Extract<DeliveryWorkSession, { readonly kind: "LEASED" }>,
     options: import("./delivery-ports.js").DeliveryOperationOptions | undefined,
     isActive: () => boolean,

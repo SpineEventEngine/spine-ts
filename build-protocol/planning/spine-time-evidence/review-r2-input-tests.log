@@ -1,0 +1,48 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/spine-time/spine-ts
+      Coverage enabled with v8
+
+{"severity":"WARN","timestamp":"2026-10-06T13:48:20.940Z","message":"Stand subscription registry is not persistent.","contextName":"ManagedProjects","operation":"stand.registry","reasonCode":"volatile"}
+{"severity":"WARN","timestamp":"2026-10-06T13:48:20.944Z","message":"Stand subscription registry is not persistent.","contextName":"ExternalProjects","operation":"stand.registry","reasonCode":"volatile"}
+{"severity":"WARN","timestamp":"2026-10-06T13:48:20.955Z","message":"Stand subscription registry is not persistent.","contextName":"ManagedProjects","operation":"stand.registry","reasonCode":"volatile"}
+{"severity":"WARN","timestamp":"2026-10-06T13:48:20.956Z","message":"Stand subscription registry is not persistent.","contextName":"ExternalProjects","operation":"stand.registry","reasonCode":"volatile"}
+{"severity":"WARN","timestamp":"2026-10-06T13:48:20.974Z","message":"Stand subscription registry is not persistent.","contextName":"ManagedProjects","operation":"stand.registry","reasonCode":"volatile"}
+{"severity":"WARN","timestamp":"2026-10-06T13:48:20.976Z","message":"Stand subscription registry is not persistent.","contextName":"ExternalProjects","operation":"stand.registry","reasonCode":"volatile"}
+{"severity":"WARN","timestamp":"2026-10-06T13:48:20.985Z","message":"Stand subscription registry is not persistent.","contextName":"ManagedProjects","operation":"stand.registry","reasonCode":"volatile"}
+{"severity":"WARN","timestamp":"2026-10-06T13:48:20.986Z","message":"Stand subscription registry is not persistent.","contextName":"ExternalProjects","operation":"stand.registry","reasonCode":"volatile"}
+{"severity":"WARN","timestamp":"2026-10-06T13:48:21.553Z","message":"Stand subscription registry is not persistent.","contextName":"ManagedProjects","operation":"stand.registry","reasonCode":"volatile"}
+{"severity":"WARN","timestamp":"2026-10-06T13:48:21.554Z","message":"Stand subscription registry is not persistent.","contextName":"ExternalProjects","operation":"stand.registry","reasonCode":"volatile"}
+{"severity":"WARN","timestamp":"2026-10-06T13:48:21.554Z","message":"Stand subscription registry is not persistent.","contextName":"ManagedProjects","operation":"stand.registry","reasonCode":"volatile"}
+{"severity":"WARN","timestamp":"2026-10-06T13:48:21.555Z","message":"Stand subscription registry is not persistent.","contextName":"ExternalProjects","operation":"stand.registry","reasonCode":"volatile"}
+{"severity":"WARN","timestamp":"2026-10-06T13:48:22.240Z","message":"Stand subscription registry is not persistent.","contextName":"ManagedProjects","operation":"stand.registry","reasonCode":"volatile"}
+{"severity":"WARN","timestamp":"2026-10-06T13:48:22.241Z","message":"Stand subscription registry is not persistent.","contextName":"ExternalProjects","operation":"stand.registry","reasonCode":"volatile"}
+{"severity":"WARN","timestamp":"2026-10-06T13:48:22.241Z","message":"Stand subscription registry is not persistent.","contextName":"ManagedProjects","operation":"stand.registry","reasonCode":"volatile"}
+{"severity":"WARN","timestamp":"2026-10-06T13:48:22.241Z","message":"Stand subscription registry is not persistent.","contextName":"ExternalProjects","operation":"stand.registry","reasonCode":"volatile"}
+
+ Test Files  31 passed (31)
+      Tests  424 passed (424)
+   Start at  14:48:18
+   Duration  10.06s (transform 9.98s, setup 0ms, import 22.97s, tests 19.35s, environment 2ms)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s
+-------------------|---------|----------|---------|---------|-------------------
+All files          |    94.1 |     92.1 |   98.39 |   95.33 |
+ ...ent/src/client |    96.6 |    95.32 |   96.22 |   97.83 |
+  client.ts        |    96.6 |    95.32 |   96.22 |   97.83 | 461,631-632,700
+ ...ent/src/remote |   93.16 |       94 |   97.36 |   95.83 |
+  adapters.ts      |   93.16 |       94 |   97.36 |   95.83 | ...23,414-417,456
+ ...lient/src/wire |   90.77 |    90.08 |     100 |   91.09 |
+  codec.ts         |   90.77 |    90.08 |     100 |   91.09 | ...1145,1255,1273
+ ...r/src/delivery |   96.15 |     90.9 |     100 |   97.22 |
+  inbox-storage.ts |   96.69 |    92.24 |     100 |   98.19 | 427,519
+  inbox.ts         |   94.28 |    81.25 |     100 |   93.93 | 150,160
+-------------------|---------|----------|---------|---------|-------------------
+
+=============================== Coverage summary ===============================
+Statements   : 94.1% ( 686/729 )
+Branches     : 92.1% ( 572/621 )
+Functions    : 98.39% ( 184/187 )
+Lines        : 95.33% ( 633/664 )
+================================================================================

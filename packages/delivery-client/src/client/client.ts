@@ -17,7 +17,11 @@ import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, createClient, type Transport } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
 
-import type { InboxMessage, InboxMessageId, InboxMessageInput } from "@spine-event-engine/server";
+import type {
+  InboxMessage,
+  InboxMessageId,
+  InboxMessageSnapshotInput,
+} from "@spine-event-engine/server";
 import { ShardIndex } from "@spine-event-engine/server";
 import {
   InboxService,
@@ -342,7 +346,7 @@ export class DeliveryClient {
    * @returns A promise that completes after the delivery server accepts the message.
    */
   async writeOne(
-    message: InboxMessageInput & Pick<InboxMessage, "id">,
+    message: InboxMessageSnapshotInput,
     options: DeliveryMutationOptions = {},
   ): Promise<void> {
     const wire = DeliveryMessageCodec.encode(message);
@@ -359,7 +363,10 @@ export class DeliveryClient {
    * @param options Bounds or cancels the mutation.
    * @returns A promise that completes after the delivery server removes the message.
    */
-  async removeOne(message: InboxMessage, options: DeliveryMutationOptions = {}): Promise<void> {
+  async removeOne(
+    message: InboxMessageSnapshotInput,
+    options: DeliveryMutationOptions = {},
+  ): Promise<void> {
     const wire = DeliveryMessageCodec.encode(message);
     const request = create(RemoveMessageSchema, { message: wire });
     DeliveryRequestCodec.requestBytes(RemoveMessageSchema, request);
@@ -375,7 +382,7 @@ export class DeliveryClient {
    * @returns A promise that completes after the delivery server accepts the batch.
    */
   async writeMany(
-    messages: readonly (InboxMessageInput & Pick<InboxMessage, "id">)[],
+    messages: readonly InboxMessageSnapshotInput[],
     options: DeliveryMutationOptions = {},
   ): Promise<void> {
     const batch = DeliveryMessageCodec.encodeBatch(messages);
@@ -393,7 +400,7 @@ export class DeliveryClient {
    * @returns A promise that completes after the delivery server removes the batch.
    */
   async removeMany(
-    messages: readonly InboxMessage[],
+    messages: readonly InboxMessageSnapshotInput[],
     options: DeliveryMutationOptions = {},
   ): Promise<void> {
     const batch = DeliveryMessageCodec.encodeBatch(messages);

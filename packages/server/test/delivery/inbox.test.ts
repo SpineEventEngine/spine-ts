@@ -48,6 +48,37 @@ describe("Inbox", () => {
     expect(direct?.whenReceived.nanos).toBe(234_000_000);
   });
 
+  it("accepts legacy Date snapshots for acknowledgement and exact removals", async () => {
+    const factory = new InMemoryStorageFactory();
+    const context = { name: "DateSnapshotMutations", multitenant: false } as const;
+    const inbox = new Inbox(new InboxStorage({ context, storageFactory: factory }));
+    const registry = new ShardedWorkRegistry({ context, storageFactory: factory });
+    const shard = ShardIndex.single();
+    const deliveredInput = {
+      ...createMessage("delivered-date", "delivered-signal", 1n),
+      whenReceived: new Date(1_234),
+    };
+    const duplicateInput = {
+      ...createMessage("duplicate-date", "duplicate-signal", 2n),
+      whenReceived: new Date(1_235),
+    };
+    await inbox.storage.write(deliveredInput);
+    await inbox.storage.write(duplicateInput);
+    const delivered = await inbox.markDelivered(deliveredInput);
+    expect(delivered?.whenReceived.nanos).toBe(234_000_000);
+    const session = required(
+      await registry.pickUp(
+        shard,
+        create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" }),
+      ),
+      "session",
+    );
+    await expect(
+      inbox.removeDelivered({ ...deliveredInput, status: "DELIVERED" }, session),
+    ).resolves.toBe(true);
+    await expect(inbox.removeDuplicate(duplicateInput, session)).resolves.toBe(true);
+  });
+
   it("forwards duplicate-removal cancellation to direct storage", async () => {
     const factory = new InMemoryStorageFactory();
     const context = { name: "T0227-duplicate", multitenant: false } as const;

@@ -413,6 +413,17 @@ describe("DeliveryClient RPC and lifecycle", () => {
     expect(fake.unary).toHaveBeenCalledTimes(1);
   });
 
+  it("accepts legacy Date snapshots in single and batch removal calls", async () => {
+    const fake = transport();
+    const client = DeliveryClient.usingTransport(fake.transport);
+    const snapshot = { ...domainMessage("legacy-remove"), whenReceived: new Date(1_234) };
+    fake.reply(create(EmptySchema));
+    await expect(client.removeOne(snapshot)).resolves.toBeUndefined();
+    fake.reply(create(EmptySchema));
+    await expect(client.removeMany([snapshot])).resolves.toBeUndefined();
+    expect(fake.unary).toHaveBeenCalledTimes(2);
+  });
+
   it("writes and removes ordered same-shard batches with exactly one RPC", async () => {
     const fake = transport();
     const client = DeliveryClient.usingTransport(fake.transport, { readRetries: 5 });

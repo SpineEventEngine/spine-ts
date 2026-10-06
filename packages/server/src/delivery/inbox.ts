@@ -108,7 +108,7 @@ export class Inbox {
    * not pending, or no longer matches the snapshot. Matching delivered rows return
    * idempotently so concurrent workers converge without re-dispatching.
    */
-  markDelivered(message: InboxMessage): Promise<InboxMessage | undefined> {
+  markDelivered(message: InboxMessageSnapshotInput): Promise<InboxMessage | undefined> {
     return this.storage.markDelivered(message);
   }
 
@@ -121,7 +121,7 @@ export class Inbox {
    * @returns Whether storage atomically removed the exact pending snapshot.
    */
   removeDuplicate(
-    message: InboxMessage,
+    message: InboxMessageSnapshotInput,
     session: DeliveryWorkSession,
     options?: DeliveryOperationOptions,
   ): Promise<boolean> {
@@ -138,7 +138,7 @@ export class Inbox {
    * @returns Whether the provider atomically removed the exact durable row.
    */
   removeDelivered(
-    message: InboxMessage,
+    message: InboxMessageSnapshotInput,
     session: DeliveryWorkSession,
     options?: DeliveryOperationOptions,
   ): Promise<boolean> {
@@ -370,6 +370,17 @@ export interface InboxMessageInput {
    * Optional deduplication retention deadline.
    */
   readonly keepUntil?: Date;
+}
+
+/**
+ * Exact inbox snapshot supplied to writes, acknowledgements, and removals. A legacy Date receive
+ * time remains accepted at these input boundaries; read results use `InboxMessage` instead.
+ */
+export interface InboxMessageSnapshotInput extends InboxMessageInput {
+  /**
+   * Durable identity of the row to write or compare.
+   */
+  readonly id: InboxMessageId;
 }
 
 /**

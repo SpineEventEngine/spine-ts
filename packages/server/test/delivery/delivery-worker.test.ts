@@ -27,7 +27,11 @@ import { describe, expect, it } from "vitest";
 import { Delivery, type DeliveryEndpointMessage } from "../../src/delivery/delivery.js";
 import { DeliveryMonitor } from "../../src/delivery/delivery-monitor.js";
 import type { DeliveryInbox, DeliveryOperationOptions } from "../../src/delivery/delivery-ports.js";
-import { Inbox, type InboxReadOptions } from "../../src/delivery/inbox.js";
+import {
+  Inbox,
+  type InboxMessageSnapshotInput,
+  type InboxReadOptions,
+} from "../../src/delivery/inbox.js";
 import { InboxStorage } from "../../src/delivery/inbox-storage.js";
 import { commitFenced } from "../../src/repository/commit-fence.js";
 import { ShardIndex } from "../../src/index.js";
@@ -1279,15 +1283,22 @@ function createDelivery(config: {
     },
     read: async (_shard, options) => config.read?.(options) ?? [...rows],
     readMessage: async () => undefined,
-    markDelivered: async (row) => config.mark?.(row) ?? row,
+    markDelivered: async (row) => {
+      const snapshot = readSnapshot(row);
+      return config.mark?.(snapshot) ?? snapshot;
+    },
     removeDuplicate: async (row) => {
-      if (config.removeDuplicate !== undefined) return config.removeDuplicate(row);
-      remove(rows, row);
+      const snapshot = readSnapshot(row);
+      if (config.removeDuplicate !== undefined) return config.removeDuplicate(snapshot);
+      remove(rows, snapshot);
       return true;
     },
     ...(config.remove === undefined
       ? {}
-      : { removeDelivered: async (row: DeliveryEndpointMessage) => config.remove!(row) }),
+      : {
+          removeDelivered: async (row: InboxMessageSnapshotInput) =>
+            config.remove!(readSnapshot(row)),
+        }),
   };
   if (config.now !== undefined) {
     // Keep fake message operations while exercising the concrete local storage clock path.
@@ -1310,6 +1321,11 @@ function createDelivery(config: {
         config.registry?.release(current as ReturnType<typeof session>, operation) ?? true,
     },
   });
+}
+function readSnapshot(value: InboxMessageSnapshotInput): DeliveryEndpointMessage {
+  return value.whenReceived instanceof Date
+    ? { ...value, whenReceived: timestampFromDate(value.whenReceived) }
+    : (value as DeliveryEndpointMessage);
 }
 function localRegistry(shard: ShardIndex) {
   return {

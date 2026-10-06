@@ -822,6 +822,12 @@ updates, and process-manager reactions. Callbacks are at-least-once/replay-safe:
 lost renewal can prevent stale finalization but cannot undo a callback already
 run. The package exposes no general raw worker callback API.
 
+Inbox reads return `InboxMessage` with a full-precision Protobuf `Timestamp` in
+`whenReceived`. `InboxMessageInput` accepts a legacy `Date` for new receipts;
+`InboxMessageSnapshotInput` adds the row ID for writes, acknowledgements, and
+exact removals and also accepts `Date`. Storage normalizes these inputs before
+returning an `InboxMessage`.
+
 Shard ownership is the only delivery exclusion mechanism and excludes
 concurrent delivery within that shard. Pending and delivered `InboxMessage`
 rows are direct records; a delivered row is the deduplication fact. A handler

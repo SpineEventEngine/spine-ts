@@ -63,6 +63,7 @@ import {
   AbstractEventSubscriber,
   Inbox,
   type InboxMessage,
+  type InboxMessageSnapshotInput,
   InboxStorage,
   type PrimitiveId,
   Repository,
@@ -248,7 +249,7 @@ describe("@spine-event-engine/server", () => {
     expectTypeOf<Inbox>().not.toHaveProperty("unclaim");
     expectTypeOf<DeliveryInbox["removeDelivered"]>().toEqualTypeOf<
       | ((
-          message: InboxMessage,
+          message: InboxMessageSnapshotInput,
           session: DeliveryWorkSession,
           options?: DeliveryOperationOptions,
         ) => Promise<boolean>)
