@@ -14,7 +14,15 @@ evidence of completed work and are not current operating instructions. Every
 future `master` merge triggers NPM publication and therefore carries a new
 common workspace version under D-0115.
 
-Current approved work: [Process Manager queries across contexts](planning/cross-context-queries.md)
+Current approved work: [Signal-driven Agent entities](planning/agent-entities.md),
+on `agent-entities`, based on official master `658da1cdd`. The Time prerequisite
+is merged. Implement the accepted AI facade, mandatory indexed history, durable
+signal-triggered execution, Vercel/Ax integration, MCP and BlackBox support.
+History uses full occurrence timestamps and existing category/record IDs for
+ties. General physical Entity deletion is a separate deferred task and does not
+block this work. Implementation and verification are in progress.
+
+Previous completed work: [Process Manager queries across contexts](planning/cross-context-queries.md)
 on `cross-context-queries`, based on official master `2324311be8`. Preserve the
 current effective tenant, reject duplicate Entity registrations and incompatible
 query destinations, and drain handlers before closing queried contexts. The
