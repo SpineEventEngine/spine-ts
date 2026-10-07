@@ -5,7 +5,8 @@
 High-risk runtime/public-contract task authorized on 7 October 2026. Base:
 `658da1cdddcb8fd40f9205b1c200abc3a58dd62e` (snapshot.22). Feature branch:
 `agent-entities`; worktree: native managed `agent-readiness/spine-ts`.
-Implementation is starting. Physical Entity deletion is explicitly deferred.
+Adapter composition is verified; Agent family implementation is next. Physical
+Entity deletion is explicitly deferred.
 
 The approved specification is `AGENT_ENTITIES_API_TASK_2026-10-02.md` and its
 `AGENT_HISTORY_PROPOSAL.md` appendix in the user's
@@ -377,3 +378,80 @@ release inventory, API entries and example namespace checks require updates.
 Final inventories must match actual added packages and fixtures. New npm packages
 follow the existing human first-publication procedure after implementation is
 otherwise ready; no publication or PR creation is authorized now.
+
+Milestone 0 preflight: mature Ax 25.0.0 / ai 7.0.128 compose successfully through
+real-library protocol tests; all/prod dependency audits pass. Initial coverage
+shortfalls returned to the same implementer before review. Strict vendor
+checking fails in provider-utils/ai declarations with exactOptionalPropertyTypes;
+the selected and adjacent ai versions fail the same vendor declaration checks.
+Read-only Luna/medium probes established that direct `@ai-sdk/provider@4.0.22`
+model interfaces pass with skipLibCheck false. Accept a narrow adapter-only
+third-party declaration exception; authored source and tests retain strict flags
+and receive separate tooling checks. Public factory types must use provider
+interfaces without exposing ai/Ax declarations. The root compiler flags remain
+unchanged. Diagnostic logs remain outside the repository.
+
+Milestone 0 dispatch/acceptance: implementer gpt-6-sol/medium and read-only
+compatibility scanning gpt-6-luna/medium were explicitly configured. Runtime
+metadata beyond configured roles is unavailable. Parent reran 23 protocol tests:
+all pass; coverage statements 96.87%, branches 92.64%, functions 95%, lines 97.5%.
+Root tooling initially lacked generated package declarations in this worktree.
+Generation/build and the repeated complete source/test tooling check now pass.
+Scoped lint, cleanup, TSDoc, formatting, audience and whitespace checks pass.
+Copyright checking identified four new files missing the standard header; return
+that deterministic correction with the review batch. First-generation metadata
+churn was discarded after verifying the only changes were generationId fields;
+existing IDs and formats remain unchanged.
+
+Milestone 0 review wave will use the existing style_maintainability_reviewer,
+typescript_api_docs_reviewer and performance_reliability_reviewer roles with
+explicit gpt-6-sol/medium, and documentation_reviewer with explicit
+gpt-6-luna/medium. Each receives only the internal adapter proof and its affected
+contracts/claims, without prior reviewer findings. No child delegation. Security
+is deferred to the required final release review; this slice introduces no
+application registration or credential handling. Full verify:release is selected
+for the complete task because shared runtime/build/storage behavior changes;
+focused mechanical checks apply to this intermediate compatibility proof.
+
+Milestone 0 review wave: explicit profiles match the planned roles; actual runtime
+self-introspection is unavailable. Style and TypeScript/API reviewers identified
+parameterless tool-schema handling, duplicate tool-call identity mapping,
+provider finish-reason preservation and assistant text/tool-call preservation.
+Documentation review requires a stated README audience and runnable first step.
+These are accepted P2 corrections, together with the deterministic copyright
+headers. Runtime review reproduced P1 malformed JSON skipping usage/correction and P2
+cancellation during reservation reaching the provider. The complete accepted
+batch went to the same implementer, explicitly Sol/medium, for regressions and
+fixes. The read-only Luna/medium scan context is preparing exact generation/test
+commands and family-switch locations for the next slice; no architecture repeat.
+
+Milestone 0 correction verification: parent reran 34 tests and all pass; coverage
+96.55% statements, 90% branches, 95% functions, 97.87% lines. Complete workspace
+tooling, scoped lint, cleanup, TSDoc, copyright, audience and formatting checks
+pass. Focused second-wave style and TypeScript/API reviews closed their findings;
+runtime closed its original findings and identified tool-call-only output marked
+`stop` being converted to empty text after SDK parsing fails. Return this final
+bounded correction to the same implementer with a protocol regression. No third
+complete review wave; the deterministic fix must explicitly reject or preserve
+that response. Documentation corrections were checked directly; no broad prose
+review reopened.
+
+Foundation preparation: explicit Luna/medium read-only scan found that the current
+server-blackbox-tests model target has no handler-discovery TS project and uses
+a literal registry. The Agent parity fixture must wire actual generator discovery
+and exercise its emitted registry. Commands and exact family guard locations are
+in temporary working notes, not new repository evidence files.
+
+Milestone 0 accepted: the final protocol regression explicitly rejects empty SDK
+parse-error output after recording usage. Parent reran all 35 tests and package
+tooling: pass. Coverage is 97.41% statements, 91.11% branches, 95% functions and
+97.87% lines. All accepted findings are closed. No public adapter factory or
+complete Agent runtime is claimed by this checkpoint. Full release verification
+remains scheduled after the complete feature converges.
+
+Next dispatch: existing implementer role, explicit gpt-6-sol/medium, for the Agent
+family/generated registry/repository/BlackBox foundation. The adapter implementer
+remains available for later integration questions and corrections, with no
+concurrent production edits. New assignment receives the frozen architecture and
+exact requirements rather than repeating deep planning. Runtime metadata beyond
+configured profiles remains unavailable.
