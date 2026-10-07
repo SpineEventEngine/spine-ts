@@ -16,6 +16,10 @@ import { create } from "@bufbuild/protobuf";
 import type { Any } from "@bufbuild/protobuf/wkt";
 import { AnyMessages } from "@spine-event-engine/core";
 import type { Event } from "@spine-event-engine/proto";
+// prettier-ignore
+import {
+  CommandDispatchedToHandlerSchema,
+} from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
 import {
   BoundedContext,
   EventRouting,
@@ -24,6 +28,7 @@ import {
   Repository,
 } from "@spine-event-engine/server";
 import { BlackBox } from "@spine-event-engine/testing";
+import { readAgentHistory } from "@spine-event-engine/server/testing";
 import { describe, expect, it } from "vitest";
 
 import { generatedHandlerRegistry } from "../dist/generated/handler/generated-handler-registry.js";
@@ -206,16 +211,15 @@ describe("support reply Agent", () => {
 
   it("runs matching Event reactions before Command production in one draft", async () => {
     const agent = create(SupportReplyAgentIdSchema, { ticketNumber: "T-43" });
+    const repository = new Repository({
+      entityType: SupportReplyAgent,
+      schema: SupportReplyAgentStateSchema,
+      handlers: agentHandlers,
+      events: [SupportReplyDraftedSchema],
+      eventRouting: EventRouting.create().route(SupportTicketUpdatedSchema, () => [agent]),
+    });
     const context = BoundedContext.singleTenant("Support reply event")
-      .add(
-        new Repository({
-          entityType: SupportReplyAgent,
-          schema: SupportReplyAgentStateSchema,
-          handlers: agentHandlers,
-          events: [SupportReplyDraftedSchema],
-          eventRouting: EventRouting.create().route(SupportTicketUpdatedSchema, () => [agent]),
-        }),
-      )
+      .add(repository)
       .addCommandDispatcher({
         messageSchemas: () => [ReviewSupportReplySchema],
         dispatch: () => Promise.resolve(),
@@ -253,6 +257,13 @@ describe("support reply Agent", () => {
       expect(
         AnyMessages.unpack(requiredMessage(commands[0]), ReviewSupportReplySchema)?.agent,
       ).toEqual(agent);
+      const audit = await readAgentHistory(
+        repository,
+        agent,
+        { kind: "system" },
+        { count: 10, maxBytes: 1_048_576 },
+      );
+      expect(audit.entries.some((entry) => entry.item.case === "systemEvent")).toBe(true);
     } finally {
       await blackBox.close();
     }
@@ -295,6 +306,56 @@ describe("support reply Agent", () => {
       expect(AnyMessages.unpack(requiredMessage(events[0]), SupportReplyDraftedSchema)?.reply).toBe(
         "Answer: Where is my order?",
       );
+    } finally {
+      await blackBox.close();
+    }
+  });
+
+  it("retains original emitted Event envelopes in mandatory repository history", async () => {
+    const agent = create(SupportReplyAgentIdSchema, { ticketNumber: "T-history" });
+    const repository = new Repository({
+      entityType: SupportReplyAgent,
+      schema: SupportReplyAgentStateSchema,
+      handlers: agentHandlers,
+      events: [SupportReplyDraftedSchema],
+    });
+    const context = BoundedContext.singleTenant("Support history").add(repository).build();
+    const blackBox = await BlackBox.from(context);
+    try {
+      const result = await blackBox
+        .asGuest()
+        .post(
+          DraftSupportReplySchema,
+          create(DraftSupportReplySchema, { agent, question: "Where is my order?" }),
+        );
+      expect(result.kind).toBe("ok");
+      const published = await blackBox.eventually(
+        () => blackBox.assertEvents(),
+        (events) => events.length === 1,
+      );
+      const history = await readAgentHistory(
+        repository,
+        agent,
+        { kind: "domain" },
+        { count: 10, maxBytes: 1_048_576 },
+      );
+      expect(history.entries).toHaveLength(1);
+      expect(history.entries[0]?.item).toEqual({ case: "domainEvent", value: published[0] });
+      const audit = await readAgentHistory(
+        repository,
+        agent,
+        { kind: "system" },
+        { count: 10, maxBytes: 1_048_576 },
+      );
+      expect(audit.entries).toHaveLength(1);
+      const dispatch = audit.entries[0]?.item;
+      expect(dispatch?.case).toBe("systemEvent");
+      if (dispatch?.case !== "systemEvent")
+        throw new Error("Expected the System dispatch envelope.");
+      expect(
+        AnyMessages.unpack(requiredMessage(dispatch.value), CommandDispatchedToHandlerSchema)
+          ?.payload?.id,
+      ).toBeDefined();
     } finally {
       await blackBox.close();
     }

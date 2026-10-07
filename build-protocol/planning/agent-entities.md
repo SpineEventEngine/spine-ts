@@ -730,3 +730,180 @@ scope predicates and original values, reject conflicting immutable IDs, and
 never allocate a history position. Any provider key-length limit must follow
 its actual index capacity, without truncation or prefix-order scans. The writer
 must establish that the concrete schema supports the complete ordering index.
+
+Facade/release checkpoint `62c281d08` pushed to official origin. Continue with the
+same adapter implementer, explicitly configured `gpt-6-sol` / `medium`; original
+dispatch fields were explicit and runtime introspection remains unavailable.
+Packet: production generation/decision integration in ai-vercel-ax, with narrow
+AI adapter SPI changes coordinated before coding. No server/storage edits,
+subagents, commits or pushes. First return the concrete request/budget/tool SPI
+outline; implement after the parent checks its fit with durable runtime work.
+
+Dispatch server history binding to the existing implementer role with explicit
+`gpt-6-sol` / `medium`, fresh context and no subagents. Scope is server history
+methods, cursor binding, repository integration and BlackBox fixtures/tests;
+provider contracts are already accepted. The persistent provider writer and
+adapter writer have disjoint production paths. The server writer must coordinate
+Proto generation and shared builds. Estimate 1–2 hours including focused checks;
+durable completion integration remains a subsequent slice.
+
+The parent coordinated direct server→ai and adapter→ai/core/proto/protobuf
+manifest dependencies and TS project references. Install succeeded with existing
+release-age policy. A fresh package/artifact/release-policy run passed 86 tests
+across five files. PostgreSQL, MySQL and Datastore live history conformance and
+reopening checks passed in implementation; edge cases and mechanical preflight
+continue before independent review. No full release-readiness claim.
+
+Adapter SPI coordination preserves one runtime-assigned attempt ticket per
+physical request. Journal actual rendered content before dispatch, reserve full
+response credit durably, tally received bytes synchronously, then await a fenced
+journal/admission barrier. Unknown receipt/usage stays distinct from zero.
+Connection creates an inert request gate, not a charged model attempt. Runtime
+selects tool policy and assigns call identity; definitive Proto/application
+admission stays in the runtime callback, including decision mapping.
+
+Parent micro integration adds AI TypeDoc entry points, audience/snippet inventories
+and exact provider-export expectations. The provider inventory test passes. The
+expanded onboarding test correctly reports missing AI package install/first-use
+content; production adapter documentation will supply that before acceptance.
+No checker is disabled. Final TypeDoc declaration inventories wait for the
+completed public runtime surface.
+
+Both full and production dependency audits passed before provider-fixture packages
+were added. The parent then installed OpenAI 4.0.84 and OpenRouter 3.1.0 as adapter
+dev dependencies for actual constructor tests. Registry metadata confirms OpenAI
+4.0.84 meets the 24-hour release-age policy and uses provider 4.0.22. No policy
+exception or paid request is involved; repeat audits after dependencies converge.
+
+A demonstrated serialized-contract gap requires one narrow architecture follow-up:
+GenerationResponse cannot represent requested tool calls before a final answer,
+and the outcome enum has no nonterminal tool-request result. Dispatch the existing
+requirements_splitter role explicitly as gpt-6-astra/high, fresh context, read-only
+and no subagents. Scope is only this material response/audit contract correction
+and safe diagnostic allocation; do not reopen the frozen implementation design.
+
+The narrow architecture follow-up is accepted. Parent verified explicit
+requirements_splitter gpt-6-astra/high dispatch and configured-role evidence;
+actual runtime metadata is not exposed. Add AI_OUTCOME_TOOL_REQUESTED=6 and
+ordered ModelToolCall proposals on GenerationResponse. These preserve raw provider
+correlation/name/argument text, including rejected proposals, separately from
+validated authorized ToolRequest. Finish the physical attempt before any tool
+execution; this outcome never admits application output or terminates the logical
+operation. Reject it in decision/tool/operation-failure contexts. Include proposal
+metadata in byte accounting and response digest.
+
+AiToolInvocation carries the requesting ticket. Runtime verifies the recorded
+proposal and persists its association to a runtime tool-call ID before dispatch;
+reject duplicate/forged correlation and reuse the association during recovery.
+The SPI recordFailure callback records a fenced safe diagnostic only, without
+terminalizing the operation, finishing an attempt or releasing reservations.
+Diagnostics precede attempt completion; terminal operation recording stays in
+the runtime. The same adapter implementer (explicit Sol/medium) implements this
+small public Proto/SPI correction and its deterministic tests, then resumes the
+production packet. Parent coordinates generation with the other writers.
+
+Server history preflight is ready: build, BlackBox typecheck, 331 focused server
+checks, seven compiled BlackBox checks and scoped mechanics pass. Binder coverage
+is 95.06% statements, 91.25% branches, 100% functions and 98.68% lines. The complete
+review wave will cover reliability, public TypeScript contracts, maintainability
+and documentation, using existing roles with explicit Sol/medium or Luna/medium
+as applicable. First reliability assignment: gpt-6-sol/medium, fresh context,
+read-only, no subagents. Collect the wave before returning fixes to the existing
+server implementer. Durable source dedup, saved-read integration and atomic final
+completion remain explicit subsequent work, not claims of this history slice.
+
+Server reliability review returned one cursor-allocation bound finding and a
+continuing-page journal replay test gap. Await the full concern wave before fixes.
+Next server TypeScript/API review: existing role, explicit gpt-6-sol/medium,
+fresh context, read-only/no subagents. Review only the history public/test seams
+and changed declarations; production durable execution remains separately pending.
+
+Persistent history preflight frozen: 13 live provider tests and nine helper/CI
+inventory tests pass; affected storage build, scoped lint/format and Proto checks
+pass. Five new production modules have 97.97% statement, 92.75% branch, 100%
+function and 99.55% line coverage; each exceeds 90% branches. Canonical global
+cleanup/TSDoc residuals belong only to concurrent AI/adapter work. Minimal docs
+were added in touched Datastore factory declarations; two documented generic
+callback interfaces have local prefer-function-type exceptions after reproducing
+the conflicting alias checks. No global rule change.
+
+Persistent-history review wave covers relevant reliability, TypeScript/provider
+contracts, maintainability and documentation. First reliability dispatch is the
+existing reviewer role, explicit gpt-6-sol/medium, fresh read-only context and no
+subagents. Review only this provider slice and its integration test inventory;
+collect the whole wave before returning findings to its existing implementer.
+
+Server TypeScript/API review returned no confirmed blocking findings; explicit
+Sol/medium role and runtime metadata limitation recorded. Continue server style
+review with existing style_maintainability_reviewer, explicit Sol/medium, fresh
+read-only context and no subagents. Parent reran 14 storage-helper/CI-inventory/API
+inventory tests successfully; live persistent rerun is underway.
+
+Server style review returned duplicate testing access and stale audit-method
+TSDoc findings. Persistent reliability returned unusable PostgreSQL index-state
+admission and closed-factory handle creation findings. Parent will assess the
+complete waves before fixes. Explicit configured Sol/medium profiles verified;
+actual runtime metadata unavailable. Next independent assignments: documentation
+reviewer gpt-6-luna/medium for server history claims, and TypeScript/API reviewer
+gpt-6-sol/medium for persistent provider contracts. Both fresh/read-only, no
+subagents. Parent independently reran all 13 live history and 338 server/BlackBox
+tests successfully; those passes do not dismiss review findings.
+
+Server history complete review wave accepted under explicit configured profiles;
+runtime introspection remains unavailable. Return one correction batch to the
+same Sol/medium implementer: bound cursor parsing before allocation using valid
+scope/key constraints; test nonempty saved-page continuation without a live read;
+keep only standalone readAgentHistory testing access; document required Agent
+audit append; explain independent count/byte page ceilings. Estimated 0.5–1 hour
+including focused checks and substantive reliability follow-up. Parent verifies
+deterministic API/comment edits; no repeated complete wave for those corrections.
+
+Persistent TypeScript/API review is clean, configured Sol/medium verified. Next
+style and documentation concerns use existing roles explicitly Sol/medium and
+Luna/medium, fresh read-only contexts and no subagents. Collect those results with
+the existing reliability findings before returning one provider correction batch.
+
+Parent prepares the already planned testing→ai dependency/reference for the
+scripted backend. Decision audit review found provider rounding absent from saved
+responses: the adapter writer will preserve a documented DecisionRounding message
+with wrapper-presence precision counts on DecisionResponse; zero and missing stay
+distinct. This completes recorded-result semantics without changing admission.
+Parent coordinates generation; no SDK type enters the public facade.
+
+Parent package preflight found one stale exact boundary inventory (37 other
+checks passed). Add ai/ai-vercel-ax and the accepted adapter/runtime SPI subpaths;
+preserve exact inventory and cycle enforcement. No rule relaxation.
+
+Persistent provider complete wave accepted: TypeScript and documentation clean;
+reliability requires PostgreSQL valid/ready index state and closed-factory
+rejection; style requires one MySQL key-capacity declaration and table-scoped
+full native-index assertions. Return this combined batch to the same Sol/medium
+implementer, with regression/live checks and substantive reliability follow-up.
+Explicit dispatch profiles verified; runtime introspection unavailable. Estimate
+0.5–1 hour for corrections and validation; no new architecture.
+
+Parent package-boundary correction rerun passed all 38 checks. Shared Proto
+generation initially stopped at authored-source checksum validation; update the
+specific approved content.proto entry before regeneration, without changing
+upstream provenance or suppressing the gate.
+
+Server correction preflight passes 332 focused tests, seven BlackBox tests,
+build/typecheck and scoped mechanics; binder coverage 95.45/91.66/100/98.78.
+Focused reliability follow-up uses same existing reviewer, explicit configured
+Sol/medium, to close cursor-bound/replay findings. Parent checks removed duplicate
+export and corrected documentation directly. Storage lifecycle regression was
+reproduced red then green in all three providers; remaining corrections continue.
+
+Parent API comparison requires the production adapter retain approved public
+capabilities option and VercelAx/VercelDecision.capabilities namespace, rather than
+unrequested profile/profiles names. Internal profile types may remain descriptive.
+
+Server reliability follow-up closed both findings. Parent direct source check
+found the audit TSDoc correction attached to the Aggregate method instead of the
+Agent/PM method; moved that comment to the correct method and restored Aggregate
+wording. This is documentation-only, with no runtime change or new review wave.
+
+Server history accepted: parent reran all 339 focused server/BlackBox checks;
+format/diff checks pass and follow-up reliability is closed. Verification skill
+read; checkpoint only server history plus its exact ai dependency/lock entry.
+The full Agent feature remains in progress.

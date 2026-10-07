@@ -8386,12 +8386,10 @@ describe("repository signal routing", () => {
     expect(SplitRouteProcessManager.completedIds).toEqual(["pm-one", "pm-two"]);
   });
 
-  it("requires retained Event history for an Agent guard across repository reconstruction", async () => {
+  it("guards repeated Agent dispatch in one running repository without optional PM history", async () => {
     GuardedSupportAgent.reactions = 0;
     const agent = create(SupportReplyAgentIdSchema, { ticketNumber: "T-guard" });
-    expect(() => createGuardedSupportAgentRepository(agent, false)).toThrow(
-      "Agent doubleDispatchGuard requires processManagerEventHistory.",
-    );
+    expect(() => createGuardedSupportAgentRepository(agent, false)).not.toThrow();
 
     const factory = new InMemoryStorageFactory();
     const event = SignalEnvelopes.event({
@@ -8402,19 +8400,18 @@ describe("repository signal routing", () => {
         version: create(VersionSchema, { number: 1 }),
       }),
     });
-    for (let run = 0; run < 2; run += 1) {
-      const repository = createGuardedSupportAgentRepository(agent, true);
-      const context = BoundedContext.singleTenant("SupportGuard")
-        .add(repository)
-        .withStorageFactory(factory)
-        .build();
-      try {
-        const dispatcher = repositoryAccess.eventDispatcher(repository);
-        if (dispatcher === undefined) throw new Error("Expected Agent Event dispatcher.");
-        await dispatcher.dispatch(event);
-      } finally {
-        await context.close();
-      }
+    const repository = createGuardedSupportAgentRepository(agent, false);
+    const context = BoundedContext.singleTenant("SupportGuard")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    try {
+      const dispatcher = repositoryAccess.eventDispatcher(repository);
+      if (dispatcher === undefined) throw new Error("Expected Agent Event dispatcher.");
+      await dispatcher.dispatch(event);
+      await dispatcher.dispatch(event);
+    } finally {
+      await context.close();
     }
     expect(GuardedSupportAgent.reactions).toBe(1);
   });

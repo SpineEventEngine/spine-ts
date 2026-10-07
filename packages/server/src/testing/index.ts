@@ -15,6 +15,25 @@
 import { ServerEnvironmentLifecycle } from "../server/server-environment.js";
 import { boundedContextAccess, type BoundedContext } from "../context/bounded-context.js";
 import type { Command, Event } from "@spine-event-engine/proto";
+import type { TenantId } from "@spine-event-engine/proto";
+import type {
+  AgentHistoryOrderKey,
+  AgentHistoryPage,
+  AgentHistoryView,
+} from "@spine-event-engine/storage/provider";
+import { repositoryAccess, type RepositoryView } from "../repository/repository.js";
+
+type AgentHistoryReader = (
+  repository: RepositoryView,
+  entityId: unknown,
+  view: AgentHistoryView,
+  read: {
+    readonly count: number;
+    readonly maxBytes: number;
+    readonly after?: AgentHistoryOrderKey;
+  },
+  tenantId?: TenantId,
+) => Promise<AgentHistoryPage>;
 
 export {
   unpackExternalEvent,
@@ -26,7 +45,9 @@ export {
 /**
  * Provides deterministic server-environment cleanup for package tests.
  */
-export const ServerTests: { readonly resetEnvironment: () => Promise<void> } = Object.freeze({
+export const ServerTests: {
+  readonly resetEnvironment: () => Promise<void>;
+} = Object.freeze({
   // prettier-ignore
 
   /**
@@ -71,3 +92,17 @@ export function observeProducedSignals(
 ): { readonly close: () => void } {
   return boundedContextAccess.observeProducedSignals(context, observer);
 }
+
+/**
+ * Reads a repository's Agent audit records during a BlackBox test.
+ *
+ * This observation does not construct an application Entity or publish System Events.
+ * @param repository Registered Agent repository in the running test context.
+ * @param entityId Typed Agent identifier.
+ * @param view Indexed history category to observe.
+ * @param read Requested count, byte budget, and complete continuation key.
+ * @param tenantId Complete tenant identifier for a multitenant test.
+ * @returns Provider-backed audit entries and continuation status.
+ */
+export const readAgentHistory: AgentHistoryReader = (repository, entityId, view, read, tenantId) =>
+  repositoryAccess.agentHistory(repository, entityId, view, read, tenantId);

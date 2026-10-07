@@ -84,6 +84,14 @@ import type {
 } from "@spine-event-engine/storage/provider";
 import type { EntityCommitStorage } from "@spine-event-engine/storage/provider";
 import { EntityCommitStorageFactories } from "@spine-event-engine/storage/provider";
+import {
+  AgentHistoryStorageFactories,
+  type AgentHistoryOrderKey,
+  type AgentHistoryPage,
+  type AgentHistoryStorage,
+  type AgentHistoryView,
+} from "@spine-event-engine/storage/provider";
+import { AgentHistoryEntrySchema } from "@spine-event-engine/proto/agent";
 
 import { CommandValidationError } from "../bus/command-errors.js";
 import { SignalPublisher } from "../runtime/signal-publisher.js";
@@ -106,6 +114,7 @@ import type { EventDispatcher } from "../bus/event-dispatcher.js";
 import { EventDispatcherOriginSchemas } from "../bus/event-dispatcher-origin-schemas.js";
 import { Delivery } from "../delivery/delivery.js";
 import { commitFenced } from "./commit-fence.js";
+import { AgentHistoryReads } from "../agent/agent-history.js";
 import { InboxTargets, type InboxMessage, type InboxMessageInput } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
 import {
@@ -1235,6 +1244,27 @@ export interface RepositoryAccess {
   producedEventSchemas(repository: RepositoryView): readonly MessageSchema[];
 
   /**
+   * Reads retained Agent history for the package's testing observation seam.
+   * @param repository Registered Agent repository.
+   * @param entityId Typed Agent identifier.
+   * @param view Indexed category.
+   * @param read Requested count, byte budget, and complete continuation key.
+   * @param tenantId Complete tenant identity when required.
+   * @returns Retained entries and continuation status.
+   */
+  agentHistory(
+    repository: RepositoryView,
+    entityId: unknown,
+    view: AgentHistoryView,
+    read: {
+      readonly count: number;
+      readonly maxBytes: number;
+      readonly after?: AgentHistoryOrderKey;
+    },
+    tenantId?: TenantId,
+  ): Promise<AgentHistoryPage>;
+
+  /**
    * Returns the repository command dispatcher when it has command routing.
    *
    * @param repository The repository to inspect.
@@ -1370,6 +1400,44 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
     }
 
     return schemas;
+  },
+
+  /**
+   * Opens a scoped provider read without restoring an application Entity.
+   * @param repository Registered Agent repository.
+   * @param entityId Typed Agent identifier.
+   * @param view Indexed category.
+   * @param read Requested count, byte budget, and complete continuation key.
+   * @param tenantId Complete tenant identity when required.
+   * @returns Retained entries and continuation status.
+   */
+  async agentHistory(
+    repository: RepositoryView,
+    entityId: unknown,
+    view: AgentHistoryView,
+    read: {
+      readonly count: number;
+      readonly maxBytes: number;
+      readonly after?: AgentHistoryOrderKey;
+    },
+    tenantId?: TenantId,
+  ): Promise<AgentHistoryPage> {
+    if (repository.entityFamily !== "agent")
+      throw new TypeError("Agent history requires an Agent repository.");
+    const runtime = repositoryRuntimes.get(repository);
+    if (runtime === undefined) throw new Error("Agent history requires an active repository.");
+    const context = RepositoryTenants.storageContextForTenant(runtime.context, tenantId);
+    const input = RepositoryStorage.entityStorageInput(repository, context);
+    const history = AgentHistoryStorageFactories.create(runtime.storageFactory, {
+      context,
+      stateType: repository.stateSchema.typeName,
+      id: { key: input.id.key },
+    });
+    try {
+      return await history.read({ entityId, view, ...read });
+    } finally {
+      history.close();
+    }
   },
 
   /**
@@ -2051,6 +2119,7 @@ interface LoadedRepositoryEntity {
   readonly current: EntityRecord | undefined;
   readonly entity: object;
   readonly events: EntityEventHistoryPort<unknown>;
+  readonly agentHistory?: AgentHistoryStorage<unknown>;
   readonly storageInput: EntityStorageInput<unknown, Message>;
 }
 
@@ -3409,7 +3478,7 @@ class ProjectionEventExecution {
       stored,
       mode === "rebuild" && stored?.deleted === true,
     );
-    const { commits, events, storageInput } = RepositoryEntities.bindStorage(
+    const { commits, events, agentHistory, storageInput } = RepositoryEntities.bindStorage(
       this.#repository,
       this.#runtime,
       options.tenantId,
@@ -3421,6 +3490,7 @@ class ProjectionEventExecution {
       stored,
       commits,
       events,
+      agentHistory,
       storageInput,
       this.#repository.stateSchema,
       entityId,
@@ -3564,7 +3634,7 @@ class ProcessManagerExecutionSupport {
       options,
     );
     const entity = RepositoryEntities.instantiate(this.#repository, entityId, stored, false);
-    const { commits, events, storageInput } = RepositoryEntities.bindStorage(
+    const { commits, events, agentHistory, storageInput } = RepositoryEntities.bindStorage(
       this.#repository,
       this.#runtime,
       options.tenantId,
@@ -3576,6 +3646,7 @@ class ProcessManagerExecutionSupport {
       stored,
       commits,
       events,
+      agentHistory,
       storageInput,
       this.#repository.stateSchema,
       entityId,
@@ -3588,17 +3659,20 @@ class ProcessManagerExecutionSupport {
    * @param loaded Process Manager and commit storage.
    * @param options Stand tenant selection.
    * @param events Produced or diagnostic Events to retain when configured.
+   * @param emitted Domain Events emitted by an Agent, excluding the source Event.
    * @returns `true` after a successful commit or unchanged no-op.
    */
   async commit(
     loaded: LoadedRepositoryEntity,
     options: { readonly tenantId?: TenantId },
     events: readonly Event[],
+    emitted: readonly Event[] = events,
   ): Promise<boolean> {
     const version = RepositoryEntities.repositoryVersion(loaded.entity);
     const priorNumber = loaded.current?.version?.number ?? 0;
     if (version.number === priorNumber) {
       await this.#appendUnchangedDiagnostics(loaded, events);
+      await this.#appendAgentEvents(loaded, emitted);
       return true;
     }
     const entityId = (loaded.entity as { readonly id: unknown }).id;
@@ -3612,8 +3686,36 @@ class ProcessManagerExecutionSupport {
       this.#repository.metadata,
     );
     await this.#storeProcessManagerRecord(loaded, entityId, events, deferred);
+    await this.#appendAgentEvents(loaded, emitted);
     this.#notifyProcessManager(deferred, events);
     return true;
+  }
+
+  /**
+   * Stores original envelopes emitted by an Agent under its repository.
+   * @param loaded Restored Agent with history storage.
+   * @param events Emitted domain Event envelopes.
+   * @returns Completion after every append.
+   */
+  async #appendAgentEvents(
+    loaded: LoadedRepositoryEntity,
+    events: readonly Event[],
+  ): Promise<void> {
+    if (this.#repository.entityFamily !== "agent") return;
+    const history = loaded.agentHistory;
+    if (history === undefined) throw new Error("Agent history storage is required.");
+    const id = (loaded.entity as { readonly id: unknown }).id;
+    for (const event of events) {
+      if (event.context?.timestamp === undefined)
+        throw new Error("Agent emitted Event requires its original timestamp.");
+      await history.append(
+        id,
+        create(AgentHistoryEntrySchema, {
+          occurredAt: event.context.timestamp,
+          item: { case: "domainEvent", value: clone(EventSchema, event) },
+        }),
+      );
+    }
   }
 
   /**
@@ -3758,7 +3860,7 @@ class ProcessManagerCommandExecution {
       this.#command,
     );
     const loaded = await this.#support.load(intake.route.entityId, tenantOptions);
-    this.#publishDispatch(intake.route.entityId);
+    await this.#publishDispatch(loaded, intake.route.entityId);
     try {
       const produced = await this.#invoke(
         loaded.entity,
@@ -3781,12 +3883,36 @@ class ProcessManagerCommandExecution {
   }
 
   /**
-   * Publishes a best-effort Command dispatch diagnostic.
+   * Persists required Agent dispatch history before the handler runs.
+   * Process Manager diagnostic publication remains best effort.
    *
-   * @param entityId Target Process Manager identifier.
+   * @param loaded Entity with mandatory Agent history when applicable.
+   * @param entityId Target Process Manager or Agent identifier.
+   * @returns Completion after the Agent audit append and publication.
    */
-  #publishDispatch(entityId: unknown): void {
-    HandlerDispatchPublisher.command(this.#runtime, this.#repository, this.#command, entityId);
+  async #publishDispatch(loaded: LoadedRepositoryEntity, entityId: unknown): Promise<void> {
+    if (this.#repository.entityFamily !== "agent") {
+      HandlerDispatchPublisher.command(this.#runtime, this.#repository, this.#command, entityId);
+      return;
+    }
+    const history = loaded.agentHistory;
+    if (history === undefined) throw new Error("Agent history storage is required.");
+    const event = HandlerDispatchPublisher.commandEvent(
+      this.#runtime,
+      this.#repository,
+      this.#command,
+      entityId,
+    );
+    if (event.context?.timestamp === undefined)
+      throw new Error("Agent System Event requires its original timestamp.");
+    await history.append(
+      entityId,
+      create(AgentHistoryEntrySchema, {
+        occurredAt: event.context.timestamp,
+        item: { case: "systemEvent", value: event },
+      }),
+    );
+    HandlerDispatchPublisher.publishCommand(this.#runtime, event);
   }
 
   /**
@@ -4263,11 +4389,11 @@ class ProcessManagerEventExecution {
       RepositoryEntities.priorVersion(loaded.current),
     );
     const commands = this.#bindProducedCommands(produced.commands);
-    const diagnostics = [
-      DispatchGuards.guardedJournalEvent(this.#repository, this.#event, entityId),
-      ...events,
-    ];
-    const committed = await this.#support.commit(loaded, tenantOptions, diagnostics);
+    const diagnostics =
+      this.#repository.entityFamily === "agent"
+        ? events
+        : [DispatchGuards.guardedJournalEvent(this.#repository, this.#event, entityId), ...events];
+    const committed = await this.#support.commit(loaded, tenantOptions, diagnostics, events);
     if (!committed) return;
     this.#publishChangedState(loaded, entityId);
     this.#postEvents(events);
@@ -4393,8 +4519,20 @@ class ProcessManagerEventExecution {
     events: unknown[],
     commands: unknown[],
   ): Promise<void> {
-    if (intake.reactors.length > 0)
-      HandlerDispatchPublisher.reactor(this.#runtime, this.#repository, this.#event, entityId);
+    if (intake.reactors.length > 0) {
+      if (this.#repository.entityFamily === "agent") {
+        const diagnostic = HandlerDispatchPublisher.reactorEvent(
+          this.#runtime,
+          this.#repository,
+          this.#event,
+          entityId,
+        );
+        await AgentHistoryReads.appendSystem(entity, diagnostic);
+        HandlerDispatchPublisher.publishReactor(this.#runtime, diagnostic);
+      } else {
+        HandlerDispatchPublisher.reactor(this.#runtime, this.#repository, this.#event, entityId);
+      }
+    }
     await this.#invokeHandlersInto(entity, intake.reactors, intake.message, context, events);
     await this.#invokeHandlersInto(entity, intake.commanders, intake.message, context, commands);
   }
@@ -4589,6 +4727,7 @@ interface RepositoryEntityStorage<I, S extends Message> {
   readonly states: EntityStateHistoryPort<I, S>;
   readonly events: EntityEventHistoryPort<I>;
   readonly commits: EntityCommitStorage;
+  readonly agentHistory?: AgentHistoryStorage<I>;
 
   /**
    * Closes the Entity history and commit storage handles.
@@ -5111,6 +5250,7 @@ const RepositoryEntities = {
   ): {
     readonly commits: EntityCommitStorage;
     readonly events: EntityEventHistoryPort<unknown>;
+    readonly agentHistory?: AgentHistoryStorage<unknown>;
     readonly storageInput: EntityStorageInput<unknown, Message>;
   } {
     const storageInput = RepositoryStorage.entityStorageInput(
@@ -5123,7 +5263,41 @@ const RepositoryEntities = {
       storageInput,
     );
     RepositoryHistoryInternals.bindEntityHistory(entity, storage, entityId, repository.stateSchema);
-    return { commits: storage.commits, events: storage.events, storageInput };
+    if (repository.entityFamily === "agent")
+      this.bindAgentHistory(entity, entityId, storageInput, storage.agentHistory);
+    return {
+      commits: storage.commits,
+      events: storage.events,
+      ...(storage.agentHistory === undefined ? {} : { agentHistory: storage.agentHistory }),
+      storageInput,
+    };
+  },
+
+  /**
+   * Attaches the indexed history port to one restored Agent.
+   *
+   * @param entity Restored Agent instance.
+   * @param entityId Typed Agent identifier.
+   * @param input Entity storage scope.
+   * @param history Mandatory Agent history port.
+   */
+  bindAgentHistory(
+    entity: object,
+    entityId: unknown,
+    input: EntityStorageInput<unknown, Message>,
+    history: AgentHistoryStorage<unknown> | undefined,
+  ): void {
+    if (history === undefined) throw new Error("Agent history storage is required.");
+    AgentHistoryReads.bind(entity, {
+      storage: history,
+      entityId,
+      scope: {
+        context: input.context.name,
+        tenant: JSON.stringify(input.context.tenantId ?? null),
+        repository: input.sourceType.typeName,
+        entity: input.id.key(entityId),
+      },
+    });
   },
 
   /**
@@ -5169,6 +5343,7 @@ const RepositoryEntities = {
    * @param stored Prior Stand snapshot, when present.
    * @param commits Durable commit storage.
    * @param events Durable diagnostic Event history.
+   * @param agentHistory Mandatory Agent history when this is an Agent.
    * @param storageInput Entity storage specification.
    * @param schema Entity state schema.
    * @param entityId Entity identifier.
@@ -5186,6 +5361,7 @@ const RepositoryEntities = {
       | undefined,
     commits: EntityCommitStorage,
     events: EntityEventHistoryPort<unknown>,
+    agentHistory: AgentHistoryStorage<unknown> | undefined,
     storageInput: EntityStorageInput<unknown, Message>,
     schema: DescriptorMessageSchema,
     entityId: unknown,
@@ -5193,6 +5369,7 @@ const RepositoryEntities = {
     return Object.freeze({
       commits,
       events,
+      ...(agentHistory === undefined ? {} : { agentHistory }),
       current:
         stored === undefined
           ? undefined
@@ -5813,21 +5990,46 @@ class HandlerDispatchPublishing {
     entityId: unknown,
   ): void {
     try {
-      const context = runtime.signalMetadata.eventContext({
-        origin: runtime.signalMetadata.originFromCommand(command),
-      });
-      const event = create(EventSchema, {
-        id: runtime.signalMetadata.eventId(),
-        message: AnyMessages.pack(
-          EntityLog.CommandDispatchedToHandlerSchema,
-          this.#message(repository, command, entityId, context.timestamp),
-        ),
-        context,
-      });
-      this.#post(runtime, EntityLog.CommandDispatchedToHandlerSchema, event);
+      this.publishCommand(runtime, this.commandEvent(runtime, repository, command, entityId));
     } catch (error) {
       runtime.publisher.reportFailure("event", create(EventSchema), error);
     }
+  }
+
+  /**
+   * Builds the genuine Command dispatch diagnostic before its publication.
+   * @param runtime Context signal metadata.
+   * @param repository Receiving repository.
+   * @param command Source Command.
+   * @param entityId Target Entity identifier.
+   * @returns Original System Event envelope.
+   */
+  commandEvent(
+    runtime: RepositoryRuntime,
+    repository: RepositoryView,
+    command: Command,
+    entityId: unknown,
+  ): Event {
+    const context = runtime.signalMetadata.eventContext({
+      origin: runtime.signalMetadata.originFromCommand(command),
+    });
+    return create(EventSchema, {
+      id: runtime.signalMetadata.eventId(),
+      message: AnyMessages.pack(
+        EntityLog.CommandDispatchedToHandlerSchema,
+        this.#message(repository, command, entityId, context.timestamp),
+      ),
+      context,
+    });
+  }
+
+  /**
+   * Sends the exact System envelope already retained for an Agent.
+   * @param runtime Context publication services.
+   * @param event Original System Event envelope.
+   */
+  publishCommand(runtime: RepositoryRuntime, event: Event): void {
+    this.#post(runtime, EntityLog.CommandDispatchedToHandlerSchema, event);
   }
 
   /**
@@ -5874,6 +6076,48 @@ class HandlerDispatchPublishing {
       entityId,
       EntityLog.EventDispatchedToReactorSchema,
     );
+  }
+
+  /**
+   * Builds the genuine Event-to-reactor diagnostic with its original envelope.
+   * @param runtime Context signal metadata.
+   * @param repository Receiving repository.
+   * @param source Source Event.
+   * @param entityId Target Entity identifier.
+   * @returns Original System Event envelope.
+   */
+  reactorEvent(
+    runtime: RepositoryRuntime,
+    repository: RepositoryView,
+    source: Event,
+    entityId: unknown,
+  ): Event {
+    const context = runtime.signalMetadata.eventContext({
+      origin: runtime.signalMetadata.originFromEvent(source),
+    });
+    return create(EventSchema, {
+      id: runtime.signalMetadata.eventId(),
+      message: AnyMessages.pack(
+        EntityLog.EventDispatchedToReactorSchema,
+        this.#eventMessage(
+          EntityLog.EventDispatchedToReactorSchema,
+          repository,
+          source,
+          entityId,
+          context.timestamp,
+        ) as EntityLog.EventDispatchedToReactor,
+      ),
+      context,
+    });
+  }
+
+  /**
+   * Publishes the same Event-to-reactor diagnostic retained by Agent history.
+   * @param runtime Context publication services.
+   * @param event Original System Event envelope.
+   */
+  publishReactor(runtime: RepositoryRuntime, event: Event): void {
+    this.#post(runtime, EntityLog.EventDispatchedToReactorSchema, event);
   }
 
   /**
@@ -7920,24 +8164,38 @@ const RepositoryStorage = {
    * @typeParam S Generated Entity state type.
    * @param factory Provider storage factory.
    * @param input Entity storage location and schema.
+   * @param agent Whether to open mandatory Agent history.
    * @returns Storage ports closed together by one handle.
    */
   openEntityStorage<I, S extends Message>(
     factory: StorageFactory,
     input: EntityStorageInput<I, S>,
+    agent = false,
   ): RepositoryEntityStorage<I, S> {
     const candidate = factory as StorageFactory & Partial<EntityStorageFactory>;
-    if (candidate.createEntityStorage === undefined) {
-      throw new Error(
-        "StorageFactory does not provide the required atomic Entity commit storage seam.",
-      );
-    }
+    if (candidate.createEntityStorage === undefined)
+      throw new Error("StorageFactory does not provide required atomic Entity commit storage.");
     const entity = candidate.createEntityStorage(input);
     const commits = EntityCommitStorageFactories.create(factory, input);
+    let agentHistory: AgentHistoryStorage<I> | undefined;
+    try {
+      if (agent)
+        agentHistory = AgentHistoryStorageFactories.create(factory, {
+          context: input.context,
+          stateType: input.sourceType.typeName,
+          id: { key: input.id.key },
+        });
+    } catch (error) {
+      commits.close();
+      entity.close();
+      throw error;
+    }
     return {
       ...entity,
       commits,
+      ...(agentHistory === undefined ? {} : { agentHistory }),
       close: () => {
+        agentHistory?.close();
         commits.close();
         entity.close();
       },
@@ -7961,7 +8219,11 @@ const RepositoryStorage = {
   ): RepositoryEntityStorage<I, S> {
     const key = JSON.stringify({ context: input.context, state: input.sourceType.typeName });
     let handles = repositoryEntityHandles.get(repository);
-    const handle = RepositoryStorage.openEntityStorage(factory, input);
+    const handle = RepositoryStorage.openEntityStorage(
+      factory,
+      input,
+      repository.entityFamily === "agent",
+    );
     if (handles === undefined) {
       handles = new Map();
       repositoryEntityHandles.set(repository, handles);
@@ -8029,11 +8291,10 @@ const RepositoryStorage = {
     }
     if (
       depth !== undefined &&
-      (family === "process-manager" || family === "agent") &&
+      family === "process-manager" &&
       options.processManagerEventHistory !== true
     ) {
-      const familyName = family === "agent" ? "Agent" : "Process Manager";
-      throw new Error(`${familyName} doubleDispatchGuard requires processManagerEventHistory.`);
+      throw new Error("Process Manager doubleDispatchGuard requires processManagerEventHistory.");
     }
     return {
       stateHistory: options.stateHistory ?? false,
@@ -8562,25 +8823,49 @@ const DispatchGuards = {
     dispatch: () => Promise<void>,
   ): Promise<void> {
     if (guard.completed.has(eventId)) return;
-    const storage = RepositoryStorage.openEntityStorage(
-      runtime.storageFactory,
-      RepositoryStorage.entityStorageInput(
-        repository,
-        RepositoryTenants.storageContextForEvent(runtime.context, event),
-      ),
-    );
-    let persisted: readonly Event[];
-    try {
-      persisted = await storage.events.backward(entityId, depth);
-    } finally {
-      storage.close();
+    if (repository.entityFamily === "agent") {
+      await dispatch();
+      DispatchGuards.rememberGuardCompletion(guard, eventId, depth);
+      return;
     }
-    if (persisted.some((candidate) => candidate.id?.value === journalEventId)) {
+    if (await this.wasDispatched(repository, runtime, event, entityId, journalEventId, depth)) {
       DispatchGuards.rememberGuardCompletion(guard, eventId, depth);
       return;
     }
     await dispatch();
     DispatchGuards.rememberGuardCompletion(guard, eventId, depth);
+  },
+
+  /**
+   * Finds an already dispatched Process Manager Event in retained diagnostic history.
+   *
+   * @param repository Process Manager repository.
+   * @param runtime Repository storage runtime.
+   * @param event Incoming Event envelope.
+   * @param entityId Target Process Manager identifier.
+   * @param journalEventId Target-specific diagnostic identifier.
+   * @param depth Maximum retained history read.
+   * @returns Whether the Event was already dispatched.
+   */
+  async wasDispatched(
+    repository: RepositoryView,
+    runtime: RepositoryRuntime,
+    event: Event,
+    entityId: unknown,
+    journalEventId: string,
+    depth: number,
+  ): Promise<boolean> {
+    const input = RepositoryStorage.entityStorageInput(
+      repository,
+      RepositoryTenants.storageContextForEvent(runtime.context, event),
+    );
+    const storage = RepositoryStorage.openEntityStorage(runtime.storageFactory, input);
+    try {
+      const persisted = await storage.events.backward(entityId, depth);
+      return persisted.some((candidate) => candidate.id?.value === journalEventId);
+    } finally {
+      storage.close();
+    }
   },
 
   /**

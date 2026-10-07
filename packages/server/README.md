@@ -140,7 +140,22 @@ An Agent uses a Proto `ENTITY` state and a generated handler registry.
 `undefined`, and `@Command` returns native Commands under the existing Process
 Manager signal contract. Agents reject `@Subscribe` and Entity-state Apply
 handlers. Matching Event reactors run before commanders against one draft and
-commit one Version. Agents do not execute AI or persist conversation history.
+commit one Version. AI invocation and conversation recording connect in the
+durable execution slice.
+
+An Agent can read its repository history through protected `fullHistory`,
+`conversationHistory`, `systemEventHistory`, and `domainEventHistory` methods.
+Pass a positive `pageSize`; `conversationHistory` also requires a `ConversationId`.
+Pages run newest first and return an opaque `nextCursor` when older entries
+remain. Cursors are bound to the context, tenant, repository, Agent ID, read
+method, and conversation. Ordering uses full timestamp precision, then
+conversation/System/domain category, then the existing record ID in unsigned
+UTF-8 order. A page contains at most `pageSize` entries and may contain fewer
+when the independent 1 MiB serialized-byte limit is reached; its cursor resumes
+the remaining older entries. If the first entry exceeds the byte limit, the
+read fails explicitly. Agent history is retained through archive and
+logical deletion. System dispatch audit and emitted domain Events use their
+original Event envelopes in repository history.
 
 Declare the Agent ID and state in Proto, with `option (entity).kind = ENTITY;`
 on the state. The [support reply fixture](../server-blackbox-tests/proto/spine/server/testing/support_agent_states.proto)

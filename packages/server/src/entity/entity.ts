@@ -46,6 +46,10 @@ import {
 } from "@spine-event-engine/proto";
 import type { Query } from "@spine-event-engine/proto/client";
 import type { EntityEventStorage, EntityStateHistoryStorage } from "@spine-event-engine/storage";
+import type { ConversationHistoryRead, HistoryPage, HistoryRead } from "@spine-event-engine/ai";
+import type { AgentHistoryEntry, ConversationRecord } from "@spine-event-engine/proto/agent";
+
+import { AgentHistoryReads } from "../agent/agent-history.js";
 
 import {
   describeEntityMetadata,
@@ -1455,6 +1459,44 @@ export abstract class Agent<Id, Schema extends DescriptorMessageSchema> extends 
     query: EntityQueryDescription<QuerySchema, QueryId>,
   ): Readonly<EntityQueryRead<QuerySchema>> {
     return EntityQueryReads.select(this, query);
+  }
+
+  /**
+   * Reads every recorded Agent occurrence, newest first.
+   * @param request Page size and continuation from this method.
+   * @returns Complete Proto history entries and continuation.
+   */
+  protected fullHistory(request: HistoryRead): Promise<HistoryPage<AgentHistoryEntry>> {
+    return AgentHistoryReads.full(this, request);
+  }
+
+  /**
+   * Reads one explicitly identified conversation, newest first.
+   * @param request Conversation ID, page size and continuation from this method.
+   * @returns Recorded exchanges and continuation.
+   */
+  protected conversationHistory(
+    request: ConversationHistoryRead,
+  ): Promise<HistoryPage<ConversationRecord>> {
+    return AgentHistoryReads.conversation(this, request);
+  }
+
+  /**
+   * Reads framework System Event envelopes for this Agent, newest first.
+   * @param request Page size and continuation from this method.
+   * @returns Original System Event envelopes and continuation.
+   */
+  protected systemEventHistory(request: HistoryRead): Promise<HistoryPage<Event>> {
+    return AgentHistoryReads.system(this, request);
+  }
+
+  /**
+   * Reads domain Event envelopes emitted by this Agent, newest first.
+   * @param request Page size and continuation from this method.
+   * @returns Original emitted Event envelopes and continuation.
+   */
+  protected domainEventHistory(request: HistoryRead): Promise<HistoryPage<Event>> {
+    return AgentHistoryReads.domain(this, request);
   }
 }
 
