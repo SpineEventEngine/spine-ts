@@ -25,7 +25,7 @@ onto the preceding response. `delay()` queues a pause and returns a gate whose
 
 Each admitted physical request crosses `beginAttempt`, `reserveTransport`, and
 `finishAttempt` or the runtime's failure path. Typed generation output still
-passes through the runtime candidate parser, Proto constraints, and application
+passes through the runtime response parser, Proto constraints, and application
 validation; decision answers pass through the runtime decision admission.
 `requests()` gives immutable per-request snapshots with capability name, Agent
 call name, one-based attempt, prepared input ProtoJSON, correction target and

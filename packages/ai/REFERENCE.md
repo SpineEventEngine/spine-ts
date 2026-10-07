@@ -55,13 +55,13 @@ Native schema mode requires a supported descriptor and provider profile; it does
 not silently fall back to text prompting. Prompt-and-validate mode supplies the
 model-facing representation and checks the resulting text locally.
 
-Both paths parse and validate the candidate against the declared output message.
+Both paths parse and validate the model response against the declared output message.
 A versioned `validation.check(value, input)` then applies a pure application rule.
 Return concrete issues with a code, field path, and safe message. A field path can
 be empty for an issue affecting the whole result. The callback receives the same
 input facts as the operation; it must not fetch new data or perform side effects.
 
-A failed candidate may lead to a corrective request within the existing request,
+A response that fails validation may lead to a corrective request within the existing request,
 time and byte limits. The correction includes the actual detected issues, and the
 runtime retains that request as another attempt. It cannot describe an alleged
 hallucination that no validation rule detected. Refusal, cancellation, exhausted

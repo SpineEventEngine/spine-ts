@@ -72,9 +72,9 @@ initial Entity Version and stores the Entity changes, mandatory histories, model
 preferences and original outgoing signals in one provider operation. This includes
 handlers that change no state or produce only a Command.
 
-Pending queries read one candidate per Agent instance from an index. A page
+Pending queries read one pending invocation per Agent instance from an index. A page
 carries its original time cutoff and the provider-observed continuation, so the
-caller can continue even when another execution claims a returned candidate.
+caller can continue even when another execution claims a returned invocation.
 These internal pages are separate from application history pages. Eligibility
 and claim expiry use Spine `Time`; original Inbox order determines which signal
 runs next within an instance.

@@ -2082,3 +2082,12 @@ output-schema branches have wrong/missing/valid/error/unsupported and changed-
 prepared-request tests. Source frozen. Commit this correction batch and push
 immediately, then run verify:release once; fullglobal coverage and publication
 trial are still outstanding. This is not final CI or task completion.
+
+Correction commit8562f175d pushed successfully. GitHub Security run37704043930
+passes for that exactSHA. Full release reached readiness after build,TypeScript,
+lint,format,API/snippets,Proto and dependency gates, then stopped on six forbidden
+reader-document uses of candidate. Parent replaces them with model response or
+pending invocation according to meaning; no policy waiver/runtimechange. Return
+to mandatory cheap preflight including direct readiness before rerunning release.
+Fullcoverage has not run yet; no passing release claim. This deterministic prose
+correction does not reopen specialist review lanes.

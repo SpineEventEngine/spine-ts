@@ -541,7 +541,7 @@ Application posts DraftSupportReply
   -> asynchronous execution: the Agent handles the saved Command
        -> synchronous: construct typed input from the supplied ticket facts
        -> asynchronous: await the model and retain the request and response
-       -> synchronous: validate the candidate and update the Entity draft
+       -> synchronous: validate the model response and update the Entity draft
        -> asynchronous storage: save the Entity state and emitted domain Event
   -> asynchronous delivery: the Projection receives the domain Event
   -> asynchronous query: the support person reads the proposed reply
