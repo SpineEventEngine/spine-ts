@@ -870,7 +870,7 @@ describe("npm publication recovery", () => {
     expect(reads.every(({ limit }) => limit <= 3)).toBe(true);
   });
 
-  it("publishes and confirms all 19 public packages in dependency order", async () => {
+  it("publishes and confirms all 21 public packages in dependency order", async () => {
     const root = new URL("..", import.meta.url).pathname;
     const model = expectedReleaseModel(readReleaseManifests(root));
     const entries = model.packages.map((entry) => ({
@@ -903,7 +903,9 @@ describe("npm publication recovery", () => {
       windowMs: 1_000,
     });
     expect(calls).toEqual(entries.map(({ name }) => name));
-    expect(report.packages).toHaveLength(19);
+    expect(report.packages).toHaveLength(21);
+    expect(report.packages.map(({ name }) => name)).toContain("@spine-event-engine/ai");
+    expect(report.packages.map(({ name }) => name)).toContain("@spine-event-engine/ai-vercel-ax");
     expect(report.packages.every(({ status }) => status === "published")).toBe(true);
     for (const entry of entries)
       for (const dependency of entry.dependencies)

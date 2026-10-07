@@ -193,7 +193,7 @@ describe("package metadata", () => {
   it("declares Apache-2.0 for every framework package without classifying examples as publishable", () => {
     const frameworkPackages = productionPackagePaths(repoRoot);
 
-    expect(frameworkPackages).toHaveLength(19);
+    expect(frameworkPackages).toHaveLength(21);
     expect(
       frameworkPackages.every((path) => readJson(`${path}/package.json`).license === "Apache-2.0"),
     ).toBe(true);
@@ -212,7 +212,7 @@ describe("package metadata", () => {
       access: "public",
     };
 
-    expect(frameworkPackages).toHaveLength(19);
+    expect(frameworkPackages).toHaveLength(21);
     for (const packagePath of frameworkPackages) {
       const packageJson = readJson(`${packagePath}/package.json`);
 
@@ -259,6 +259,8 @@ describe("package metadata", () => {
       "examples/orders",
       "examples/projects",
       "examples/todo",
+      "packages/ai",
+      "packages/ai-vercel-ax",
       "packages/auth",
       "packages/client-node",
       "packages/client-react",
@@ -468,6 +470,10 @@ describe("package metadata", () => {
       ".": {
         types: "./dist/src/index.d.ts",
         default: "./dist/src/index.js",
+      },
+      "./agent": {
+        types: "./dist/src/agent/index.d.ts",
+        default: "./dist/src/agent/index.js",
       },
       "./auth": {
         types: "./dist/src/auth/index.d.ts",

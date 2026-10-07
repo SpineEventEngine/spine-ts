@@ -6,9 +6,8 @@ High-risk runtime/public-contract task authorized on 7 October 2026. Base:
 `658da1cdddcb8fd40f9205b1c200abc3a58dd62e` (snapshot.22). Feature branch:
 `agent-entities`; worktree: native managed `agent-readiness/spine-ts`.
 Adapter composition, the bounded transport and Agent family foundation are
-verified. Shared/memory history is accepted; facade corrections and persistent
-history integration are underway. Physical Entity
-deletion is explicitly deferred.
+verified. The AI facade and shared/memory history are accepted; persistent history
+integration is underway. Physical Entity deletion is explicitly deferred.
 
 The approved specification is `AGENT_ENTITIES_API_TASK_2026-10-02.md` and its
 `AGENT_HISTORY_PROPOSAL.md` appendix in the user's
@@ -667,82 +666,67 @@ and timer overflow. Follow up substantive reliability and style concerns with
 the same explicitly configured Sol/medium reviewers, then parent reruns focused
 checks before checkpointing. No public adapter/runtime integration claim.
 
-Transport accepted: reliability and style follow-ups close every accepted finding;
-explicit Sol/medium profiles confirmed, runtime introspection unavailable. Parent
-reran69bridge/guard tests and adapter package types: pass. Commit/push only two
-private transport files plus this ledger. Production connection installation and
-durable callbacks remain later integration work.
+### Accepted transport, facade and memory history
 
-Facade/history review outcomes received so far: types and reliability confirm
-exact64bit repeated/wrapper admission, integer schema, mutable default references
-and promptmode unsupported-output defects; storage conformance needs equal-time
-UTF8/prefix pagination. Documentation confirms premature integration claims.
-The alleged missing storage/provider exports are rejected: provider.ts reexports
-internal/entity-history.ts, which exports the new contracts; docs reviewer
-corrected the report. Retain complete-wave sequencing before corrections.
+Transport reliability and style follow-ups closed all accepted findings. The
+parent reran 69 bridge/guard tests and adapter package types successfully.
+Checkpoint `2fb9959d8` was pushed to official `origin/agent-entities`. Production
+connection installation and durable callbacks remain integration work.
 
-Transport checkpoint2fb9959d8 pushed to official origin/agent-entities. Facade and
-shared/memory history complete review wave collected; explicit configured model
-fields verified for every role, runtime introspection unavailable. Return separate
-complete batches to existing Sol/medium writers.
+The complete facade/history review wave used the configured TypeScript/API,
+reliability, style and documentation roles with explicit model and reasoning
+fields. Runtime introspection was unavailable. Findings went back to the existing
+implementers as complete batches.
 
-Facade accepted corrections: exact repeated/wrapper64bit admission and valid
-repeated wrappers; native integer schema; frozen nested defaults; fail unsupported
-output before request in both modes; domain-correct capability/mapping fixtures;
-semantic public TSDoc; accurate currently implemented docs. Also resolve narrow
-P3 comment corrections and recursive-schema diagnostic guard because the accepted
-contract requires field-specific unsupported-feature errors. Small README example
-can use the corrected domain fixtures. No new Any support is required.
+Facade corrections cover exact singular/repeated 64-bit and wrapper admission,
+integer schema types, frozen model defaults, unsupported-output checks in both
+modes, recursive-schema diagnostics, domain-correct application fixtures and
+public TSDoc. Root scalar wrappers fail before dispatch; nested wrappers and
+Empty output are covered. Substantive follow-ups closed the contract findings;
+the parent checked the last fixture/comment corrections and reran all 38 tests
+and the package build successfully. Focused coverage is 95.75% statements,
+90.64% branches, 96.77% functions and 97.00% lines. Tooling types, lint, cleanup,
+TSDoc, copyright and formatting checks passed. Documentation describes the facade
+boundary accurately; complete runtime documentation follows integration.
 
-History accepted corrections: provider conformance tests full UTF8/prefix and
-Timestamp edge order through pagination, exact all-category content preservation
-and filtered identities; describe handle capability checks accurately. Keep the
-large unrelated-data check as functional scoping evidence, not proof of an index.
-Memory indexed path has source-review evidence; persistent packet must assert
-actual query/index paths. Reject nonexistent provider export defect (reviewer
-corrected report). Sorted-array insertion cost is recorded as process-local
-provider characteristic, not a requirement for a new data structure. Resolve the
-duplicate comment if present. Review fixes take an estimated0.5–1hour including
-focused regression checks and affected follow-ups; work continues.
+History corrections cover complete UTF-8/prefix and Timestamp-edge ordering
+through pagination, exact content for all categories and filtered identity checks.
+The reliability follow-up closed the substantive findings. The parent reran all
+60 tests and inspected the content assertions and capability wording. Focused
+coverage is 97.75% statements, 92.48% branches, 100% functions and 99.1% lines;
+types, lint, formatting, cleanup and TSDoc passed. The alleged missing provider
+exports were rejected and the reviewer corrected the report. The unrelated-data
+test demonstrates scoping, not an index; source review confirms memory indexes.
+Sorted-array insertion remains an in-process provider characteristic. Public
+Protos and shared/memory history were pushed as checkpoint `f798e7666`.
 
-Independent mechanical release-inventory packet: reuse transport implementer
-context explicitly configured Sol/medium, with scripts/package-artifacts.mjs,
-scripts/release-policy.mjs, their affected release/artifact tests and narrow
-docs/release-publishing.md counts/list only. Add the two approved AI packages to
-exact publication inventory; no version changes, manifests, lock, TypeDoc, runtime,
-network publication, credentials or workflow edits. Estimate0.25–0.5hour including
-focused script tests and docs checks. Facade writer has shared Proto/build window;
-this independent script packet must avoid it. Review relevant release-policy and
-documentation behavior after preflight; other concerns disposition with packet.
+### Release inventory and persistent history
 
-History correction preflight:60tests pass, five-source coverage97.75/92.48/100/99.1;
-types/lint/format/cleanup/TSDoc pass. Follow up substantive conformance with the
-same explicit Sol/medium reliability reviewer. Its UTF8 finding duplicates the
-type lane; no provider API changed, so parent validates duplicate closure rather
-than reopening that entire lane. Exact-content assertions/style and narrow docs
-wording corrections are directly checkable; parent checks those plus fresh tests.
-The persistent-provider query/index proof remains explicitly in its next packet.
+The release inventory includes 21 public packages and 29 manifest paths. The
+trial diagnostic derives its package count from the inventory. Exact tests and
+the trusted-publisher list include both AI packages; no publication behavior,
+versions, credentials or workflows changed. The parent reran 96 tests
+successfully. The independent reliability review, explicitly Sol/medium, found
+no defects in paths, names, dependency order or the documentation list. Style
+is N/A for mechanical list/count edits; TypeScript/API is N/A for no signature
+changes, with facade contracts reviewed separately. Documentation counts were
+compared directly. Final security review remains at feature readiness. Commit
+this packet with the facade so every inventory entry has a package.
 
-Release inventory packet includes package-count diagnostic in release-trial.mjs
-using existing inventorylength, plus affected package-metadata test expectations
-for the approved proto/agent export. No publication behavior, versions or manifests
-changed. Focused83release/artifacttests and2inventory checks pass; transient
-generationdirectories and Protoexport expectation failures require classification
-before acceptance.
+Persistent history is assigned to the existing implementer, explicitly
+Sol/medium, with no subagents. Scope: shared record layout and PostgreSQL,
+MySQL and Datastore implementations, indexes, conformance and narrow docs.
+Estimated duration is 1.5–3 hours including live tests and review corrections.
+Disposable local PostgreSQL, MySQL and Datastore emulator services are running.
+No server, AI or physical-deletion changes belong to this packet.
 
-Shared/memory history accepted: same explicit Sol/medium reliability follow-up
-closed substantive findings; parent independently reran60tests and checked exact
-entry assertions plus capability wording. Duplicate type/style concerns are
-closed by those concrete checks; no production API changed during correction.
-Public Agent Protos and curated exports had no independent review findings and
-are unchanged. Checkpoint those dependencies with storage; facade and support
-fixture corrections stay separate and uncommitted. No finalrelease claim.
-
-Release inventory preflight96tests passed including corrected Protoexport metadata
-expectation; transient generationdirectories gone. Counts are21public/29release
-paths; diagnostic derives count; runbooklist matches. No publication/build run.
-Review the small releasepolicy change with explicit existing reliability role
-Sol/medium. Style is N/A for mechanical list/count edits, TypeScript/API is N/A
-for no declared signature changes (AI public contracts separatelyreviewed), and
-documentation counts/list are deterministically compared with exactinventory.
-Final security stays at wholefeature readiness.
+AgentHistoryEntry lacks the Agent scope needed by RecordSpec. The approved
+internal AgentHistoryRecord wrapper stores canonical state type and Agent key
+alongside the original entry. Category, conversation and ordering columns derive
+from that entry. A constant agent_history storage group permits declared
+Datastore indexes. Reuse provider record lifecycle and immutable-write seams.
+A fixed-width scope digest may be physical index metadata only: retain exact
+scope predicates and original values, reject conflicting immutable IDs, and
+never allocate a history position. Any provider key-length limit must follow
+its actual index capacity, without truncation or prefix-order scans. The writer
+must establish that the concrete schema supports the complete ordering index.

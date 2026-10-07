@@ -3,6 +3,7 @@
   "references": [
     { "path": "./packages/proto-tools" },
     { "path": "./packages/proto" },
+    { "path": "./packages/ai" },
     { "path": "./packages/deployment" },
     { "path": "./packages/deployment-gce" },
     { "path": "./packages/deployment-gke" },
