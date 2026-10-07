@@ -27,7 +27,6 @@ import {
   Int32ValueSchema,
   Int64ValueSchema,
   StringValueSchema,
-  TimestampSchema,
   type Any,
   type Timestamp,
 } from "@bufbuild/protobuf/wkt";
@@ -40,6 +39,7 @@ import {
   AnyMessages,
   Identifiers,
   StringifierRegistry,
+  Time,
 } from "@spine-event-engine/core";
 import {
   CommandContextSchema,
@@ -5412,11 +5412,7 @@ const RepositorySignals = {
    * @returns Timestamp derived from the current clock.
    */
   executionTimestamp(): Timestamp {
-    const milliseconds = Date.now();
-    return create(TimestampSchema, {
-      seconds: BigInt(Math.floor(milliseconds / 1_000)),
-      nanos: (milliseconds % 1_000) * 1_000_000,
-    });
+    return Time.currentTime();
   },
 };
 
@@ -9385,8 +9381,7 @@ const InboxHandoff = {
   ): Promise<void> {
     const route = await repository.routeCommand(command);
     const commandId = RepositorySignals.requireCommandId(command);
-    const whenReceived = new Date();
-    const keepUntil = new Date(whenReceived.getTime() + inboxDedupMs);
+    const keepUntil = new Date(Time.currentTimeMillis() + inboxDedupMs);
     const deliveryTenantId = RepositoryTenants.requireCommandTenant(runtime.context, command);
     const delivery = new Delivery({
       context: RepositoryTenants.entityInboxDeliveryContext(runtime.context, deliveryTenantId),
@@ -9427,8 +9422,7 @@ const InboxHandoff = {
     entityId: unknown,
   ): Promise<void> {
     const eventId = RepositorySignals.requireEventId(event);
-    const whenReceived = new Date();
-    const keepUntil = new Date(whenReceived.getTime() + inboxDedupMs);
+    const keepUntil = new Date(Time.currentTimeMillis() + inboxDedupMs);
     const deliveryTenantId = RepositoryTenants.requireProjectionTenant(runtime.context, event);
     const delivery = new Delivery({
       context: RepositoryTenants.projectionDeliveryContext(runtime.context, deliveryTenantId),
@@ -9469,8 +9463,7 @@ const InboxHandoff = {
     entityId: unknown,
   ): Promise<void> {
     const eventId = RepositorySignals.requireEventId(event);
-    const whenReceived = new Date();
-    const keepUntil = new Date(whenReceived.getTime() + inboxDedupMs);
+    const keepUntil = new Date(Time.currentTimeMillis() + inboxDedupMs);
     const deliveryTenantId = RepositoryTenants.requirePmEventTenant(runtime.context, event);
     const delivery = new Delivery({
       context: RepositoryTenants.entityInboxDeliveryContext(runtime.context, deliveryTenantId),
@@ -9501,8 +9494,7 @@ const InboxHandoff = {
     entityIds: readonly unknown[],
   ): Promise<void> {
     const eventId = RepositorySignals.requireEventId(event);
-    const whenReceived = new Date();
-    const keepUntil = new Date(whenReceived.getTime() + inboxDedupMs);
+    const keepUntil = new Date(Time.currentTimeMillis() + inboxDedupMs);
     const deliveryTenantId = RepositoryTenants.requirePmEventTenant(runtime.context, event);
     const delivery = new Delivery({
       context: RepositoryTenants.entityInboxDeliveryContext(runtime.context, deliveryTenantId),

@@ -21,7 +21,13 @@ test(
     const project = `t0111-${Date.now()}`;
     try {
       composeRun(project, ["up", "--detach"]);
-      waitFor(project, ["datastore", "delivery", "application-node-1", "application-node-2", "gateway"]);
+      waitFor(project, [
+        "datastore",
+        "delivery",
+        "application-node-1",
+        "application-node-2",
+        "gateway",
+      ]);
       assert.match(clientRun(project, "first"), /full-ok/u);
       assert.match(clientRun(project, "second"), /full-ok/u);
       composeRun(project, ["kill", "--signal", "SIGTERM", "gateway"]);
@@ -148,5 +154,8 @@ function clientRun(project, runId) {
 }
 
 function remaining(cleanup = false) {
-  return Math.max(1, (cleanup ? cleanupDeadlineAt : operationDeadlineAt) - Date.now());
+  return Math.max(
+    1,
+    (cleanup ? cleanupDeadlineAt : operationDeadlineAt) - Date.now(),
+  );
 }

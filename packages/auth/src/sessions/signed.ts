@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { create } from "@bufbuild/protobuf";
 import {
   KeyObject,
@@ -147,7 +148,7 @@ export interface SignedSessionsOptions {
   readonly revocation?: SignedTokenRevocation;
 
   /**
-   * Unix-millisecond clock; defaults to `Date.now`.
+   * Unix-millisecond clock; defaults to `Time.currentTimeMillis`.
    */
   readonly clock?: SignedSessionClock;
 
@@ -306,19 +307,33 @@ interface Claims {
  */
 export class SignedSessions implements SessionResolver {
   readonly #issuer: string;
+
   readonly #audience: string;
+
   readonly #clock: SignedSessionClock;
+
   readonly #random: SignedSessionRandom;
+
   readonly #ttl: number;
+
   readonly #skew: number;
+
   readonly #maxToken: number;
+
   readonly #maxKeys: number;
+
   readonly #maxId: number;
+
   readonly #maxAttributes: number;
+
   readonly #maxAttributeChars: number;
+
   #active: ActiveSigningKey | undefined;
+
   #keys = new Map<string, VerificationKey>();
+
   #revocation: SignedTokenRevocation | undefined;
+
   #closed = false;
 
   /**
@@ -326,42 +341,26 @@ export class SignedSessions implements SessionResolver {
    * @param options The issuer, key ring, limits, clock, entropy, and revocation settings.
    */
   constructor(options: SignedSessionsOptions) {
-    this.#issuer = SignedSessionValues.boundedString(options.issuer, "issuer");
-    this.#audience = SignedSessionValues.boundedString(options.audience, "audience");
-    this.#ttl = SignedSessionValues.positive(options.ttlSeconds ?? 28_800, "ttlSeconds");
-    this.#skew = SignedSessionValues.nonnegative(
-      options.clockSkewSeconds ?? 60,
-      "clockSkewSeconds",
-    );
-    this.#maxToken = SignedSessionValues.positive(
-      options.maxTokenCharacters ?? 8_192,
-      "maxTokenCharacters",
-    );
-    this.#maxKeys = SignedSessionValues.positive(options.maxKeys ?? 16, "maxKeys");
-    this.#maxId = SignedSessionValues.positive(
-      options.maxPrincipalIdCharacters ?? 256,
-      "maxPrincipalIdCharacters",
-    );
-    this.#maxAttributes = SignedSessionValues.nonnegative(
-      options.maxAttributes ?? 32,
-      "maxAttributes",
-    );
-    this.#maxAttributeChars = SignedSessionValues.nonnegative(
-      options.maxAttributeCharacters ?? 4_096,
-      "maxAttributeCharacters",
-    );
-    this.#clock = options.clock ?? { now: Date.now };
+    const settings = SignedSessionValues.settings(options);
+    this.#issuer = settings.issuer;
+    this.#audience = settings.audience;
+    this.#ttl = settings.ttl;
+    this.#skew = settings.skew;
+    this.#maxToken = settings.maxToken;
+    this.#maxKeys = settings.maxKeys;
+    this.#maxId = settings.maxId;
+    this.#maxAttributes = settings.maxAttributes;
+    this.#maxAttributeChars = settings.maxAttributeChars;
+    this.#clock = options.clock ?? { now: () => Time.currentTimeMillis() };
     this.#random = options.randomBytes ?? nodeRandomBytes;
     this.#revocation = options.revocation;
-    if ((options.retiredKeys?.length ?? 0) + 1 > this.#maxKeys) throw new Error("maxKeys exceeded");
-    const retainedUntil =
-      options.retiredKeys === undefined || options.retiredKeys.length === 0
-        ? undefined
-        : SignedSessionValues.retentionDeadline(
-            SignedSessionValues.clockValue(this.#clock),
-            this.#ttl,
-            this.#skew,
-          );
+    const retainedUntil = SignedSessionValues.retiredRetention(
+      options,
+      this.#maxKeys,
+      this.#clock,
+      this.#ttl,
+      this.#skew,
+    );
     this.#active = SignedSessionValues.signing(options.activeKey);
     this.#keys.set(this.#active.kid, { publicKey: this.#active.publicKey });
     for (const key of options.retiredKeys ?? []) {
@@ -595,6 +594,7 @@ export class SignedSessions implements SessionResolver {
       this.#maxAttributeChars,
     );
   }
+
   #token(claims: Claims): string {
     const active = this.#active;
     if (active === undefined) throw new Error("SignedSessions is closed");
@@ -608,6 +608,7 @@ export class SignedSessions implements SessionResolver {
     if (signature.byteLength !== 64) throw new Error("invalid ES256 signature");
     return `${input}.${Buffer.from(signature).toString("base64url")}`;
   }
+
   #jti(): string | undefined {
     let bytes: Uint8Array | undefined;
     try {
@@ -620,6 +621,7 @@ export class SignedSessions implements SessionResolver {
       bytes?.fill(0);
     }
   }
+
   #now(): number | { readonly kind: "closed" | "failure" } {
     try {
       const value = this.#clock.now();
@@ -631,13 +633,16 @@ export class SignedSessions implements SessionResolver {
       return { kind: "failure" };
     }
   }
+
   #isClosed(): boolean {
     return this.#closed;
   }
+
   #sweep(now: number): void {
     for (const [kid, key] of this.#keys)
       if (key.expiresAt !== undefined && now > key.expiresAt) this.#keys.delete(kid);
   }
+
   #parse(
     value: string,
   ): { kid: string; input: string; signature: Buffer; claims: unknown } | undefined {
@@ -680,14 +685,81 @@ export class SignedSessions implements SessionResolver {
  * Validates, serializes, and constructs finite signed-session values.
  */
 const SignedSessionValues = Object.freeze({
+  /**
+   * Validates the issuer, audience, and finite token limits before key installation.
+   * @param options The signed-session configuration.
+   * @returns Copied and bounded settings for a signed session.
+   */
+  settings(options: SignedSessionsOptions) {
+    return {
+      issuer: SignedSessionValues.boundedString(options.issuer, "issuer"),
+      audience: SignedSessionValues.boundedString(options.audience, "audience"),
+      ttl: SignedSessionValues.positive(options.ttlSeconds ?? 28_800, "ttlSeconds"),
+      skew: SignedSessionValues.nonnegative(options.clockSkewSeconds ?? 60, "clockSkewSeconds"),
+      maxToken: SignedSessionValues.positive(
+        options.maxTokenCharacters ?? 8_192,
+        "maxTokenCharacters",
+      ),
+      maxKeys: SignedSessionValues.positive(options.maxKeys ?? 16, "maxKeys"),
+      maxId: SignedSessionValues.positive(
+        options.maxPrincipalIdCharacters ?? 256,
+        "maxPrincipalIdCharacters",
+      ),
+      maxAttributes: SignedSessionValues.nonnegative(options.maxAttributes ?? 32, "maxAttributes"),
+      maxAttributeChars: SignedSessionValues.nonnegative(
+        options.maxAttributeCharacters ?? 4_096,
+        "maxAttributeCharacters",
+      ),
+    };
+  },
+
+  /**
+   * Checks retired-key capacity and computes their shared retention deadline.
+   * @param options The configured retired keys.
+   * @param maxKeys The maximum ring size including the active key.
+   * @param clock The effective session clock.
+   * @param ttl The token lifetime in seconds.
+   * @param skew The accepted clock skew in seconds.
+   * @returns The retention deadline, or no deadline when no retired keys exist.
+   */
+  retiredRetention(
+    options: SignedSessionsOptions,
+    maxKeys: number,
+    clock: SignedSessionClock,
+    ttl: number,
+    skew: number,
+  ): number | undefined {
+    if ((options.retiredKeys?.length ?? 0) + 1 > maxKeys) throw new Error("maxKeys exceeded");
+    return options.retiredKeys === undefined || options.retiredKeys.length === 0
+      ? undefined
+      : SignedSessionValues.retentionDeadline(SignedSessionValues.clockValue(clock), ttl, skew);
+  },
+
+  /**
+   * Creates a rejected token-issue result.
+   * @param reason The reason for rejecting the operation.
+   * @returns The rejected issue outcome.
+   */
   rejected(reason: IssueRejectionReason): SignedSessionIssueResult {
     return { kind: "rejected", reason };
   },
+
+  /**
+   * Creates a rejected key-rotation result.
+   * @param reason The reason for rejecting the operation.
+   * @returns The rejected rotation outcome.
+   */
   rotation(
     reason: "closed" | "clock-failure" | "invalid-key" | "duplicate-key" | "key-capacity-exceeded",
   ): SignedSessionRotationResult {
     return { kind: "rejected", reason };
   },
+
+  /**
+   * Copies and validates a P-256 private signing key.
+   * @param key The key material to copy and validate.
+   * @returns The copied private and public key pair.
+   */
   signing(key: SignedSessionSigningKey) {
     const kid = SignedSessionValues.boundedString(key.kid, "kid");
     if (
@@ -706,6 +778,12 @@ const SignedSessionValues = Object.freeze({
     const publicKey = createPublicKey(privateKey);
     return { kid, privateKey, publicKey };
   },
+
+  /**
+   * Copies and validates a P-256 public verification key.
+   * @param key The key material to copy and validate.
+   * @returns The copied public verification key.
+   */
   verification(key: SignedSessionVerificationKey) {
     const kid = SignedSessionValues.boundedString(key.kid, "kid");
     if (
@@ -721,35 +799,86 @@ const SignedSessionValues = Object.freeze({
       der.fill(0);
     }
   },
+
+  /**
+   * Validates a positive safe integer limit.
+   * @param value The positive integer limit to validate.
+   * @param name The named setting in a validation error.
+   * @returns The validated positive limit.
+   */
   positive(value: number, name: string): number {
     if (!Number.isSafeInteger(value) || value <= 0)
       throw new Error(`${name} must be a positive safe integer`);
     return value;
   },
+
+  /**
+   * Validates a non-negative safe integer limit.
+   * @param value The non-negative integer limit to validate.
+   * @param name The named setting in a validation error.
+   * @returns The validated non-negative limit.
+   */
   nonnegative(value: number, name: string): number {
     if (!Number.isSafeInteger(value) || value < 0)
       throw new Error(`${name} must be a non-negative safe integer`);
     return value;
   },
+
+  /**
+   * Validates a non-empty bounded key or identity string.
+   * @param value The signing key or identity string to validate.
+   * @param name The named setting in a validation error.
+   * @returns The validated string.
+   */
   boundedString(value: string, name: string): string {
     if (typeof value !== "string" || value.length === 0 || value.length > 256)
       throw new Error(`${name} must be a non-empty string of at most 256 characters`);
     return value;
   },
+
+  /**
+   * Checks the signing-key identifier length.
+   * @param value The signing-key identifier to check.
+   * @returns Whether the key identifier length is valid.
+   */
   validKid(value: string): boolean {
     return value.length > 0 && value.length <= 256;
   },
+
+  /**
+   * Checks the URL-safe base64 alphabet and length.
+   * @param value The encoded string to check for URL-safe base64.
+   * @returns Whether the string is URL-safe base64.
+   */
   base64url(value: string): boolean {
     return value.length > 0 && /^[A-Za-z0-9_-]+$/.test(value) && value.length % 4 !== 1;
   },
+
+  /**
+   * Encodes a JSON value as URL-safe base64.
+   * @param value The JSON value to encode.
+   * @returns The encoded JSON string.
+   */
   encode(value: unknown): string {
     return Buffer.from(JSON.stringify(value)).toString("base64url");
   },
+
+  /**
+   * Decodes bounded URL-safe base64 JSON.
+   * @param value The URL-safe base64 JSON string to decode.
+   * @returns The decoded JSON value.
+   */
   json(value: string): unknown {
     const decoded = Buffer.from(value, "base64url");
     if (decoded.byteLength > 16_384) throw new Error();
     return JSON.parse(decoded.toString("utf8"));
   },
+
+  /**
+   * Checks whether a value is a plain object.
+   * @param value The unknown value to test for plain-record shape.
+   * @returns Whether the value is a plain record.
+   */
   plain(value: unknown): value is Record<string, unknown> {
     return (
       typeof value === "object" &&
@@ -757,6 +886,15 @@ const SignedSessionValues = Object.freeze({
       Object.getPrototypeOf(value) === Object.prototype
     );
   },
+
+  /**
+   * Copies a principal under identifier and attribute bounds.
+   * @param value The principal data to copy under configured bounds.
+   * @param maxId The maximum principal identifier length.
+   * @param maxAttributes The maximum attribute count.
+   * @param maxChars The maximum combined attribute characters.
+   * @returns The immutable principal, or undefined when bounds fail.
+   */
   principalCopy(
     value: AuthenticatedPrincipal,
     maxId: number,
@@ -783,6 +921,20 @@ const SignedSessionValues = Object.freeze({
       attributes: Object.freeze(Object.fromEntries(entries)),
     });
   },
+
+  /**
+   * Validates signed token claims, time limits, and principal bounds.
+   * @param value The decoded signed-token claims to validate.
+   * @param issuer The required token issuer.
+   * @param audience The required token audience.
+   * @param ttl The maximum token lifetime in seconds.
+   * @param skew The accepted clock skew in seconds.
+   * @param now The current epoch milliseconds.
+   * @param maxId The maximum principal identifier length.
+   * @param maxAttributes The maximum attribute count.
+   * @param maxChars The maximum combined attribute characters.
+   * @returns Validated claims, or undefined when verification fails.
+   */
   validClaims(
     value: unknown,
     issuer: string,
@@ -839,9 +991,22 @@ const SignedSessionValues = Object.freeze({
       ...(principal.attributes === undefined ? {} : { attributes: principal.attributes }),
     };
   },
+
+  /**
+   * Creates a Protobuf timestamp from epoch seconds.
+   * @param seconds The timestamp seconds.
+   * @returns The Protobuf timestamp.
+   */
   timestamp(seconds: number): Timestamp {
     return create(TimestampSchema, { seconds: BigInt(seconds) });
   },
+
+  /**
+   * Creates a resolved session with a detached principal.
+   * @param principal The principal to copy.
+   * @param seconds The timestamp seconds.
+   * @returns The detached resolved session.
+   */
   session(principal: AuthenticatedPrincipal, seconds: number): ResolvedSession {
     const copied = SignedSessionValues.principalCopy(
       principal,
@@ -855,15 +1020,31 @@ const SignedSessionValues = Object.freeze({
       expiresAt: SignedSessionValues.timestamp(seconds),
     });
   },
+
+  /**
+   * Checks whether epoch milliseconds fit a Protobuf timestamp.
+   * @param milliseconds The candidate epoch milliseconds.
+   * @returns Whether the instant is representable.
+   */
   timeValid(milliseconds: number): boolean {
     const seconds = Math.floor(milliseconds / 1000);
     return seconds >= -62_135_596_800 && seconds <= 253_402_300_799;
   },
 
+  /**
+   * Checks a token identifier against expected random encoding.
+   * @param value The token identifier to check.
+   * @returns Whether the token identifier has the expected shape.
+   */
   validJti(value: string): boolean {
     return value.length === 22 && SignedSessionValues.base64url(value);
   },
 
+  /**
+   * Reads a safe signed-session clock value.
+   * @param clock The configured millisecond clock.
+   * @returns The validated epoch milliseconds.
+   */
   clockValue(clock: SignedSessionClock): number {
     const value = clock.now();
     if (!Number.isSafeInteger(value) || !SignedSessionValues.timeValid(value))
@@ -871,6 +1052,13 @@ const SignedSessionValues = Object.freeze({
     return value;
   },
 
+  /**
+   * Calculates when a retired signing key may be removed.
+   * @param now The current epoch milliseconds.
+   * @param ttl The maximum token lifetime in seconds.
+   * @param skew The accepted clock skew in seconds.
+   * @returns The safe retired-key deadline.
+   */
   retentionDeadline(now: number, ttl: number, skew: number): number {
     const seconds = ttl + skew;
     const milliseconds = seconds * 1_000;

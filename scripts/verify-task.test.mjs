@@ -82,6 +82,7 @@ describe("verify-task", () => {
     expect(taskGateCommands(recordOnly)).not.toContain("proto:generate");
     expect(taskGateCommands(recordOnly)).not.toContain("docs:check:generated");
     expect(taskGateCommands(recordOnly)).toContain("docs:audience:check");
+    expect(taskGateCommands(recordOnly)).toContain("check:time-reads");
   });
 
   it("fails closed for package source and shared tooling changes", () => {

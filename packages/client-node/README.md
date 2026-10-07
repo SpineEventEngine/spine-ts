@@ -45,8 +45,8 @@ Create one client for the component that manages the connection. A client from
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { Client } from "@spine-event-engine/client-node";
+import { Time } from "@spine-event-engine/core/time";
 import { PostMessageSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/commands_pb.js";
 import {
   BoardIdSchema,
@@ -64,7 +64,7 @@ const result = await request.post(
     author: create(UserIdSchema, { value: "alice" }),
     username: "Alice",
     text: "Hello, Message Board.",
-    postedAt: timestampFromDate(new Date()),
+    postedAt: Time.currentTime(),
   }),
 );
 if (result.kind !== "ok") throw new Error(`Message was not accepted: ${result.kind}`);

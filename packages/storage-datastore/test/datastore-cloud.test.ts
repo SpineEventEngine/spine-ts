@@ -38,7 +38,9 @@ describe.skipIf(!cloudTestEnabled)("Datastore cloud smoke", () => {
           extractId: (record) => record.value,
         }),
       );
-    const record = create(StringValueSchema, { value: `cloud-${String(Date.now())}` });
+    const record = create(StringValueSchema, {
+      value: `cloud-${String(Date.now())}`,
+    });
     try {
       await storage.write(record);
       await expect(storage.read(record.value)).resolves.toEqual(record);

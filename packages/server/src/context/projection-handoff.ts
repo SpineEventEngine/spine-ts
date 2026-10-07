@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import type { TenantId } from "@spine-event-engine/proto";
 
 import { Delivery } from "../delivery/delivery.js";
@@ -33,13 +34,21 @@ const projectionLabels = ["UPDATE_SUBSCRIBER"] as const;
  */
 export class LocalProjectionInbox implements ProjectionInbox {
   readonly #contextName: string;
+
   readonly #targets = new Map<string, ProjectionInboxTarget>();
+
   readonly #endpoints = new Map<string, readonly DeliveryEndpoint[]>();
+
   readonly #readiness: DeliveryReadiness;
+
   readonly #keepTenant: (tenantId: TenantId) => Promise<void>;
+
   readonly #inFlightHandoffs = new Map<string, Promise<InboxMessage>>();
+
   readonly #inFlightMessageIds = new Set<string>();
+
   readonly #acknowledgedMessageIds = new Set<string>();
+
   #nextVersion = 0n;
 
   /**
@@ -138,7 +147,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
       label: input.label,
       status: input.status,
       shard: input.shard,
-      whenReceived: new Date(),
+      whenReceived: Time.currentTime(),
       version: this.#takeVersion(),
       ...(input.signal === undefined ? {} : { signal: input.signal }),
       ...(input.keepUntil === undefined ? {} : { keepUntil: input.keepUntil }),

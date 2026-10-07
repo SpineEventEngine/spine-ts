@@ -1,9 +1,10 @@
-# Core Protobuf tools for Spine TS
+# Core tools for Spine TS
 
 `@spine-event-engine/core` provides the small Protobuf utilities shared by a
 Spine TS application. Use it when application code needs to validate a message,
 pack it into `google.protobuf.Any`, create a command or event envelope, or look
-up a generated message schema by its Spine type URL.
+up a generated message schema by its Spine type URL. It also supplies the shared
+`Time` API used by the framework and its applications.
 
 This is an experimental snapshot package. Use Node 24 or newer and generated
 Spine message schemas.
@@ -40,12 +41,40 @@ call. The To-Do `TaskEvent` token groups task events; its authored
 For the detailed contract and integration notes, see
 [REFERENCE documentation for agents](REFERENCE.md).
 
+## Read the current time
+
+Use `Time.currentTime()` when a message needs the current instant. It returns a
+Protobuf `Timestamp` with seconds and nanoseconds. The call is synchronous and
+works in Node and browsers. Use it in framework and application runtime code.
+TSX files and non-runtime build/development scripts use platform clocks.
+
+```ts
+import { Time } from "@spine-event-engine/core/time";
+
+const occurredAt = Time.currentTime();
+console.log(occurredAt.seconds, occurredAt.nanos);
+```
+
+Keep the complete timestamp when storing or comparing occurrences. The system
+provider adds microsecond increments to readings within one millisecond;
+converting those readings to `Date` would lose that distinction.
+
+`Time.currentTimeMillis()` returns integer milliseconds since the Unix epoch
+for APIs that require that unit. `Time.monotonicTime()` returns milliseconds
+from a local origin for measuring elapsed time. Subtract two monotonic readings
+to measure a duration; do not use them as calendar dates.
+
+The core root also exports `Time`; both imports use the same provider. See the
+[Time reference](REFERENCE.md#time) for provider replacement in tests and the
+scope of timestamp ordering.
+
 ## 💡 Why use it?
 
 - ✅ Reads validation rules directly from generated Protobuf schemas.
 - ✅ Packs and unpacks `google.protobuf.Any` with Spine type URLs.
 - ✅ Builds registries that understand framework and application messages.
 - ✅ Creates the common envelopes used by commands, events, and rejections.
+- ✅ Supplies one time API for Node, browser, framework and application code.
 
 ## 🚀 Build it in this workspace
 

@@ -14,10 +14,10 @@
 
 import { clone, create, toBinary, type Message, type MessageShape } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { TimestampSchema, type Any } from "@bufbuild/protobuf/wkt";
+import { type Any } from "@bufbuild/protobuf/wkt";
 import { createClient, type Interceptor, type Transport } from "@connectrpc/connect";
 import { createConnectTransport, createGrpcWebTransport } from "@connectrpc/connect-web";
-import { SignalEnvelopes, AnyMessages } from "@spine-event-engine/core";
+import { SignalEnvelopes, AnyMessages, Time } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   CommandContextSchema,
@@ -114,7 +114,7 @@ export interface ClientOptions {
   readonly zoneId?: string | ZoneId;
 
   /**
-   * Configures runtime behavior for created subscriptions.
+   * Sets runtime behavior for created subscriptions.
    */
   readonly subscriptions?: SubscriptionRuntimeOptions;
 
@@ -148,7 +148,7 @@ export interface SubscriptionRuntimeOptions {
   readonly lifecycleBufferCapacity?: number;
 
   /**
-   * Configures bounded reconnect retries.
+   * Sets bounded reconnect retries.
    */
   readonly retryPolicy?: SubscriptionRetryPolicy;
 
@@ -357,7 +357,7 @@ export type SubscriptionLifecycle =
     }>;
 
 /**
- * Returns fresh application-owned request metadata synchronously for one outbound call.
+ * Returns fresh application-provided request metadata synchronously for one outbound call.
  * @returns Returns headers for the outbound call.
  */
 export type OnRequestMetadata = () => HeadersInit;
@@ -391,7 +391,7 @@ export interface ClientTransport {
   readonly transport: Transport;
 
   /**
-   * Closes a platform transport owned by this client after work settles.
+   * Closes the supplied platform transport after work settles.
    */
   close?(): void;
 }
@@ -457,8 +457,11 @@ class SubscriptionStreamEndedError extends ClientProtocolError {}
  */
 export class Client {
   readonly #owner: ClientOwner;
+
   readonly #tenant: TenantId | undefined;
+
   readonly #zoneId: ZoneId;
+
   readonly #subscriptions: RequiredSubscriptionRuntimeOptions;
 
   /**
@@ -548,7 +551,7 @@ export class Client {
 }
 
 /**
- * Immutable actor scope for one client lifecycle owner.
+ * Immutable actor scope for one client lifecycle.
  */
 export interface ClientRequest {
   // prettier-ignore
@@ -559,6 +562,7 @@ export interface ClientRequest {
    * @param message Supplies the command message.
    * @param options Supplies cancellation options.
    * @returns Returns the validated command outcome.
+   * @typeParam Schema The domain schema that determines the accepted message shape.
    */
   post<Schema extends GenMessage<Message>>(
     schema: Schema,
@@ -575,7 +579,7 @@ export interface ClientRequest {
   send(query: Query | { build(): Query }, options?: ClientOperationOptions): Promise<QueryResponse>;
 
   /**
-   * Creates an inactive topic subscription owned by this client lifecycle.
+   * Creates an inactive topic subscription registered for client cleanup.
    * @param topic Supplies the subscription topic.
    * @param options Supplies the subscription kind and recovery options.
    * @returns Returns the inactive subscription.
@@ -583,13 +587,29 @@ export interface ClientRequest {
   createSubscription(topic: Topic, options: CreateSubscriptionOptions): Promise<Subscription>;
 }
 
+/**
+ * Keeps an actor and fixed tenant and zone settings for fresh request contexts.
+ */
 class Request implements ClientRequest {
   readonly #owner: ClientOwner;
+
   readonly #tenant: TenantId | undefined;
+
   readonly #zoneId: ZoneId;
+
   readonly #subscriptions: RequiredSubscriptionRuntimeOptions;
+
   readonly #actor: string;
 
+  /**
+   * Captures the selected actor and immutable request settings.
+   *
+   * @param owner The client lifecycle coordinator for this scope.
+   * @param selectedTenant The tenant copied into fresh actor contexts when present.
+   * @param selectedZoneId The zone copied into fresh actor contexts.
+   * @param subscriptions The validated queue and retry settings.
+   * @param actor The actor identifier recorded in signal contexts.
+   */
   constructor(
     owner: ClientOwner,
     selectedTenant: TenantId | undefined,
@@ -604,6 +624,15 @@ class Request implements ClientRequest {
     this.#actor = actor;
   }
 
+  /**
+   * Posts a command with a fresh actor context and validates the acknowledged command ID.
+   *
+   * @typeParam Schema The domain schema that determines the accepted message shape.
+   * @param schema The domain message schema used to encode the payload.
+   * @param message The domain payload to post.
+   * @param options The optional signal that cancels the command request.
+   * @returns The acknowledged application outcome.
+   */
   async post<Schema extends GenMessage<Message>>(
     schema: Schema,
     message: MessageShape<Schema>,
@@ -624,8 +653,24 @@ class Request implements ClientRequest {
     });
   }
 
+  /**
+   * Reads a cloned query after replacing its context with this actor scope.
+   *
+   * @param queryOrBuilder The query message or builder to clone.
+   * @param options The optional signal that cancels the query request.
+   * @returns The response to the contextualized query.
+   */
   async send(
-    queryOrBuilder: Query | { build(): Query },
+    queryOrBuilder:
+      | Query
+      | {
+          /**
+           * Builds the query message used for this read.
+           *
+           * @returns The query to contextualize before sending.
+           */
+          build(): Query;
+        },
     options: ClientOperationOptions = {},
   ): Promise<QueryResponse> {
     return this.#owner.run(options.signal, async (signal) => {
@@ -636,6 +681,13 @@ class Request implements ClientRequest {
     });
   }
 
+  /**
+   * Validates the subscription kind and creates an inactive, client-managed topic stream.
+   *
+   * @param topic The requested topic with its target.
+   * @param options The subscription kind, recovery query, and optional cancellation signal.
+   * @returns The inactive tracked subscription.
+   */
   async createSubscription(
     topic: Topic,
     options: CreateSubscriptionOptions,
@@ -654,25 +706,45 @@ class Request implements ClientRequest {
     );
   }
 
+  /**
+   * Creates an actor context with the selected tenant, zone, and current occurrence time.
+   *
+   * @returns A fresh actor context with the current occurrence Time.
+   */
   #context(): ActorContext {
     return create(ActorContextSchema, {
       ...(this.#tenant === undefined ? {} : { tenantId: clone(TenantIdSchema, this.#tenant) }),
       zoneId: clone(ZoneIdSchema, this.#zoneId),
       actor: create(UserIdSchema, { value: this.#actor }),
-      timestamp: create(TimestampSchema, { seconds: BigInt(Math.floor(Date.now() / 1_000)) }),
+      timestamp: Time.currentTime(),
     });
   }
 }
 
+/**
+ * Coordinates operation cancellation, subscriptions, and transport closure for one client.
+ */
 class ClientOwner {
   readonly transport: Transport;
+
   readonly #source: ClientTransport;
+
   readonly #onReauthenticateBeforeReconnect: ((signal: AbortSignal) => Promise<void>) | undefined;
+
   readonly #controllers = new Set<AbortController>();
+
   readonly #subscriptions = new Set<TopicSubscription>();
+
   #closed = false;
+
   #close: Promise<void> | undefined;
 
+  /**
+   * Captures the transport and optional reconnect credential refresh callback.
+   *
+   * @param source The transport source used for RPC calls.
+   * @param onReauthenticateBeforeReconnect The optional credential refresh callback used during reconnect.
+   */
   constructor(
     source: ClientTransport,
     onReauthenticateBeforeReconnect: ((signal: AbortSignal) => Promise<void>) | undefined,
@@ -681,6 +753,14 @@ class ClientOwner {
     this.#onReauthenticateBeforeReconnect = onReauthenticateBeforeReconnect;
     this.transport = source.transport;
   }
+
+  /**
+   * Executes credential refresh within the remaining retry budget and propagates cancellation.
+   *
+   * @param signal The abort signal for this operation.
+   * @param remainingMs The retry budget still available for credential refresh.
+   * @returns Completion after credential refresh within the retry budget.
+   */
   async onReauthenticateBeforeReconnect(signal: AbortSignal, remainingMs: number): Promise<void> {
     this.assertOpen();
     const callback = this.#onReauthenticateBeforeReconnect;
@@ -714,6 +794,15 @@ class ClientOwner {
       void pending.catch(() => undefined);
     }
   }
+
+  /**
+   * Executes one request under both caller cancellation and client closure.
+   *
+   * @typeParam Result The result type returned by the guarded request.
+   * @param signal The abort signal for this operation.
+   * @param work The operation invoked with a client-managed abort signal.
+   * @returns The operation result if the client remains open.
+   */
   async run<Result>(
     signal: AbortSignal | undefined,
     work: (signal: AbortSignal) => Promise<Result>,
@@ -735,19 +824,47 @@ class ClientOwner {
       signal?.removeEventListener("abort", abort);
     }
   }
+
+  /**
+   * Returns a single cleanup promise across concurrent client close calls.
+   *
+   * @returns Completion after cleanup settles.
+   */
   async close(): Promise<void> {
     return (this.#close ??= this.closeOwned());
   }
+
+  /**
+   * Registers an active logical subscription while the client remains open.
+   *
+   * @param subscription The accepted wire or logical subscription to clean up.
+   */
   add(subscription: TopicSubscription): void {
     this.assertOpen();
     this.#subscriptions.add(subscription);
   }
+
+  /**
+   * Removes a subscription after its terminal cleanup.
+   *
+   * @param subscription The accepted wire or logical subscription to clean up.
+   */
   remove(subscription: TopicSubscription): void {
     this.#subscriptions.delete(subscription);
   }
+
+  /**
+   * Rejects new work after client closure begins.
+   */
   assertOpen(): void {
     if (this.#closed) throw new ClientProtocolError("client is closing.");
   }
+
+  /**
+   * Stops active requests, cancels subscriptions, then closes the transport.
+   *
+   * @returns Completion after resources close or a cleanup failure.
+   */
   async closeOwned(): Promise<void> {
     this.#closed = true;
     for (const controller of this.#controllers) controller.abort();
@@ -774,9 +891,14 @@ class ClientOwner {
   }
 }
 
+/**
+ * Coordinates one logical topic stream across connection generations and retries.
+ */
 class TopicSubscription implements Subscription {
   readonly #owner: ClientOwner;
+
   readonly #topic: Topic;
+
   readonly #signal: AbortSignal;
 
   /**
@@ -788,21 +910,44 @@ class TopicSubscription implements Subscription {
    * Validated bounded-queue, retry, and scheduler settings.
    */
   readonly #runtime: RequiredSubscriptionRuntimeOptions;
+
   readonly #updates: BoundedChannel<SubscriptionDelivery>;
+
   readonly #lifecycle: BoundedChannel<SubscriptionLifecycle>;
+
   readonly #controller = new AbortController();
+
   #wire: WireSubscription | undefined;
+
   #cancelled = false;
+
   #generation = 0;
+
   #terminal = false;
+
   #wireCleanup: Readonly<{ wire: WireSubscription; promise: Promise<void> }> | undefined;
+
   #activation: Promise<void> | undefined;
+
   #cancellation: Promise<void> | undefined;
+
   #streamIterator: AsyncIterator<SubscriptionUpdate> | undefined;
+
   #retryAttempt = 0;
+
   #retryStartedAt: number | undefined;
+
   #connectedAt: number | undefined;
 
+  /**
+   * Creates bounded update and lifecycle queues and registers the inactive stream.
+   *
+   * @param owner The client lifecycle coordinator for this scope.
+   * @param topic The requested topic with its target.
+   * @param signal The abort signal for this operation.
+   * @param options The validated subscription kind and recovery query.
+   * @param runtime The validated queue and recovery settings.
+   */
   constructor(
     owner: ClientOwner,
     topic: Topic,
@@ -827,23 +972,51 @@ class TopicSubscription implements Subscription {
     owner.add(this);
   }
 
+  /**
+   * Exposes the single-consumer update queue for live and recovered values.
+   *
+   * @returns An iterable of live updates and authoritative recovery values.
+   */
   get updates(): AsyncIterable<SubscriptionDelivery> {
     return this.#updates;
   }
+
+  /**
+   * Exposes lifecycle transitions independently from update delivery.
+   *
+   * @returns An iterable of lifecycle notices for this subscription.
+   */
   get lifecycle(): AsyncIterable<SubscriptionLifecycle> {
     return this.#lifecycle;
   }
 
+  /**
+   * Starts one remote activation and shares its result with concurrent callers.
+   *
+   * @param options The optional signal that cancels activation.
+   * @returns Completion after remote activation.
+   */
   async activate(options: ClientOperationOptions = {}): Promise<void> {
     this.#owner.assertOpen();
     if (this.#cancelled) throw new ClientProtocolError("subscription is cancelled.");
     await (this.#activation ??= this.#activateOwned(options.signal));
   }
 
+  /**
+   * Returns cancellation and prevents further update delivery.
+   *
+   * @returns Completion after remote cleanup.
+   */
   cancel(): Promise<void> {
     return (this.#cancellation ??= this.#cancelOwned());
   }
 
+  /**
+   * Subscribes and starts streaming while fencing responses from cancelled generations.
+   *
+   * @param signal The abort signal for this operation.
+   * @returns Completion when the wire stream activates or a failure propagates.
+   */
   async #activateOwned(signal: AbortSignal | undefined): Promise<void> {
     if (signal?.aborted) throw signal.reason;
     if (this.#signal.aborted) throw this.#signal.reason;
@@ -915,6 +1088,11 @@ class TopicSubscription implements Subscription {
     }
   }
 
+  /**
+   * Clears updates, closes lifecycle, aborts work, and cancels the accepted wire once.
+   *
+   * @returns Completion after local and remote cancellation.
+   */
   async #cancelOwned(): Promise<void> {
     this.#cancelled = true;
     this.#generation++;
@@ -929,6 +1107,14 @@ class TopicSubscription implements Subscription {
     }
   }
 
+  /**
+   * Validates streamed updates and either delivers them, retries, or terminates the stream.
+   *
+   * @param updates The active wire update iterator.
+   * @param subscription The accepted wire or logical subscription to clean up.
+   * @param generation The connection generation used to fence late results.
+   * @returns Completion when streaming or recovery terminates.
+   */
   async consumeUpdates(
     updates: AsyncIterator<SubscriptionUpdate>,
     subscription: WireSubscription,
@@ -991,6 +1177,12 @@ class TopicSubscription implements Subscription {
     }
   }
 
+  /**
+   * Accepts transport and unexpected stream-end errors for bounded recovery.
+   *
+   * @param error The failure to propagate or classify.
+   * @returns Whether the failure permits another connection attempt.
+   */
   #retryable(error: unknown): boolean {
     return (
       error instanceof SubscriptionStreamEndedError ||
@@ -998,6 +1190,11 @@ class TopicSubscription implements Subscription {
     );
   }
 
+  /**
+   * Restores the retry episode after a stable connection and checks attempt and time limits.
+   *
+   * @returns Whether the recovery episode still has attempts and time.
+   */
   #canRetry(): boolean {
     const now = this.#runtime.scheduler.now();
     const connectedAt = this.#connectedAt;
@@ -1010,6 +1207,11 @@ class TopicSubscription implements Subscription {
     return this.#retryAttempt < this.#runtime.retryPolicy.maxAttempts && !this.#elapsed();
   }
 
+  /**
+   * Checks whether the current recovery episode exhausted its time budget.
+   *
+   * @returns Whether the recovery deadline has elapsed.
+   */
   #elapsed(): boolean {
     return (
       this.#runtime.scheduler.now() - (this.#retryStartedAt ?? 0) >=
@@ -1017,6 +1219,13 @@ class TopicSubscription implements Subscription {
     );
   }
 
+  /**
+   * Retries with bounded delays, refreshes credentials, and resynchronizes entity state.
+   *
+   * @param error The failure to propagate or classify.
+   * @param previousWire The prior accepted wire to cancel before retry.
+   * @returns Completion after reconnection or terminal failure.
+   */
   async #recover(error: unknown, previousWire: WireSubscription | undefined): Promise<void> {
     let failure = error;
     let wire: WireSubscription | undefined = previousWire;
@@ -1098,6 +1307,11 @@ class TopicSubscription implements Subscription {
     }
   }
 
+  /**
+   * Calculates the remaining credential refresh budget for this recovery episode.
+   *
+   * @returns Positive milliseconds left for credential refresh.
+   */
   #remainingRetryMs(): number {
     const elapsed = this.#runtime.scheduler.now() - (this.#retryStartedAt ?? 0);
     const remaining = this.#runtime.retryPolicy.maxElapsedMs - elapsed;
@@ -1106,6 +1320,12 @@ class TopicSubscription implements Subscription {
     return remaining;
   }
 
+  /**
+   * Reads authoritative entity state before resumed updates can enter the queue.
+   *
+   * @param generation The connection generation used to fence late results.
+   * @returns Completion after authoritative state enters the update queue.
+   */
   async #resynchronize(generation: number): Promise<void> {
     let query: Query;
     try {
@@ -1141,6 +1361,11 @@ class TopicSubscription implements Subscription {
     );
   }
 
+  /**
+   * Cancels the accepted wire and unregisters a terminally failed stream.
+   *
+   * @returns Completion after wire cancellation and deregistration.
+   */
   async #cancelAfterFailure(): Promise<void> {
     this.#cancelled = true;
     try {
@@ -1150,16 +1375,33 @@ class TopicSubscription implements Subscription {
     }
   }
 
+  /**
+   * Rejects an update when the bounded delivery queue overflows.
+   *
+   * @param value The live update or authoritative recovery delivery.
+   * @param bytes The serialized byte charge for this update.
+   */
   #pushUpdate(value: SubscriptionDelivery, bytes: number): void {
     const error = this.#updates.push(value, bytes);
     if (error !== undefined) throw error;
   }
 
+  /**
+   * Rejects a lifecycle notice when its bounded queue overflows.
+   *
+   * @param value The lifecycle transition to announce.
+   */
   #pushLifecycle(value: SubscriptionLifecycle): void {
     const error = this.#lifecycle.push(value);
     if (error !== undefined) throw error;
   }
 
+  /**
+   * Publishes one terminal failure, preserving overflow as a queue error.
+   *
+   * @param error The failure to propagate or classify.
+   * @param generation The connection generation used to fence late results.
+   */
   #failStreams(error: unknown, generation: number): void {
     const terminalError = error instanceof Error ? error : new Error(String(error));
     this.#updates.fail(terminalError);
@@ -1177,12 +1419,23 @@ class TopicSubscription implements Subscription {
     });
   }
 
+  /**
+   * Adds a terminal lifecycle notice without replacing admitted notices.
+   *
+   * @param value The final closed or failed lifecycle transition.
+   */
   #finishLifecycle(value: SubscriptionLifecycle): void {
     if (this.#terminal && value.state === "closed") return;
     this.#terminal = true;
     this.#lifecycle.finish(value);
   }
 
+  /**
+   * Returns the remote cancellation promise for the current accepted wire.
+   *
+   * @param subscription The accepted wire or logical subscription to clean up.
+   * @returns The shared remote cancellation promise for this wire.
+   */
   #cancelWireOnce(subscription: WireSubscription): Promise<void> {
     if (this.#wireCleanup?.wire === subscription) return this.#wireCleanup.promise;
     const promise = ClientTerminalValues.cancelWire(this.#owner.transport, subscription);
@@ -1190,6 +1443,11 @@ class TopicSubscription implements Subscription {
     return promise;
   }
 
+  /**
+   * Calls iterator return with a bounded wait so local termination can proceed.
+   *
+   * @returns Completion after bounded iterator disposal.
+   */
   async #disposeLateIterator(): Promise<void> {
     const iterator = this.#streamIterator;
     if (iterator === undefined) return;
@@ -1215,6 +1473,15 @@ class TopicSubscription implements Subscription {
 const CLEANUP_TIMEOUT_MS = 1_000;
 
 const ClientTerminalValues = Object.freeze({
+  /**
+   * Completes an operation when it completes or its local abort signal fires.
+   *
+   * @typeParam Value The value type carried through reading or delivery.
+   * @param pending The unresolved operation raced against cancellation.
+   * @param signal The abort signal for this operation.
+   * @param onTerminal The cleanup callback if cancellation wins.
+   * @returns The operation result unless local cancellation settles first.
+   */
   raceTerminal<Value>(
     pending: Promise<Value>,
     signal: AbortSignal,
@@ -1240,6 +1507,12 @@ const ClientTerminalValues = Object.freeze({
       });
   },
 
+  /**
+   * Converts an abort reason into a stable Error for terminal propagation.
+   *
+   * @param signal The abort signal for this operation.
+   * @returns An Error preserving a usable abort reason.
+   */
   abortError(signal: AbortSignal): Error {
     const reason: unknown = signal.reason;
     if (reason instanceof Error) return reason;
@@ -1251,6 +1524,9 @@ const ClientTerminalValues = Object.freeze({
 
   /**
    * Cancels a wire accepted after its local subscription has already terminated.
+   *
+   * @param pending The unresolved operation raced against cancellation.
+   * @param transport The Connect transport used for remote cancellation.
    */
   cancelLateSubscription(pending: Promise<WireSubscription>, transport: Transport): void {
     void pending
@@ -1258,6 +1534,13 @@ const ClientTerminalValues = Object.freeze({
       .catch(() => undefined);
   },
 
+  /**
+   * Sends remote cancellation with a bounded cleanup deadline.
+   *
+   * @param transport The Connect transport used for remote cancellation.
+   * @param subscription The accepted wire or logical subscription to clean up.
+   * @returns Completion after bounded remote cancellation.
+   */
   async cancelWire(transport: Transport, subscription: WireSubscription): Promise<void> {
     const controller = new AbortController();
     let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -1279,6 +1562,9 @@ const ClientTerminalValues = Object.freeze({
   },
 });
 
+/**
+ * Holds validated subscription queue limits, retry policy, and scheduler.
+ */
 interface RequiredSubscriptionRuntimeOptions {
   readonly updateCapacity: number;
   readonly updateByteCapacity: number;
@@ -1291,6 +1577,12 @@ interface RequiredSubscriptionRuntimeOptions {
  * Builds browser-client request, subscription, and immutable wire values.
  */
 const BrowserClientValues = Object.freeze({
+  /**
+   * Applies validated queue limits, retry policy, and scheduler defaults.
+   *
+   * @param options The optional queue capacities, retry policy, and scheduler.
+   * @returns Validated queue limits, retry policy, and scheduler.
+   */
   subscriptionRuntimeOptions(
     options: SubscriptionRuntimeOptions | undefined,
   ): RequiredSubscriptionRuntimeOptions {
@@ -1318,6 +1610,13 @@ const BrowserClientValues = Object.freeze({
   DEFAULT_RETRY_POLICY: {
     maxAttempts: 5,
     maxElapsedMs: 30_000,
+
+    /**
+     * Calculates a capped exponential delay with bounded random jitter.
+     *
+     * @param attempt The retry attempt starting at one.
+     * @returns A positive retry delay in milliseconds.
+     */
     delayMs(attempt: number): number {
       const bounded = Math.min(5_000, 250 * 2 ** Math.max(0, attempt - 1));
       return Math.min(5_000, Math.max(1, Math.round(bounded * (0.8 + Math.random() * 0.4))));
@@ -1325,7 +1624,7 @@ const BrowserClientValues = Object.freeze({
   },
 
   DEFAULT_SUBSCRIPTION_SCHEDULER: {
-    now: () => Date.now(),
+    now: () => Math.floor(Time.monotonicTime()),
     wait: (delayMs: number, signal: AbortSignal) =>
       new Promise<void>((resolve, reject) => {
         if (signal.aborted) {
@@ -1344,6 +1643,12 @@ const BrowserClientValues = Object.freeze({
       }),
   },
 
+  /**
+   * Checks retry counts, elapsed budget, and each produced delay.
+   *
+   * @param policy The supplied retry policy, if configured.
+   * @returns A policy whose attempt limits and sampled delays are valid.
+   */
   retryPolicy(policy: SubscriptionRetryPolicy | undefined): SubscriptionRetryPolicy {
     const resolved = policy ?? BrowserClientValues.DEFAULT_RETRY_POLICY;
     if (!Number.isSafeInteger(resolved.maxAttempts) || resolved.maxAttempts <= 0)
@@ -1364,6 +1669,12 @@ const BrowserClientValues = Object.freeze({
     return resolved;
   },
 
+  /**
+   * Checks that a scheduler supplies a valid monotonic time and abortable wait.
+   *
+   * @param scheduler The supplied monotonic scheduler, if configured.
+   * @returns A scheduler with valid time and wait functions.
+   */
   scheduler(scheduler: SubscriptionScheduler | undefined): SubscriptionScheduler {
     const resolved = scheduler ?? BrowserClientValues.DEFAULT_SUBSCRIPTION_SCHEDULER;
     if (typeof resolved.now !== "function" || typeof resolved.wait !== "function")
@@ -1376,6 +1687,14 @@ const BrowserClientValues = Object.freeze({
     return resolved;
   },
 
+  /**
+   * Returns a default and rejects invalid queue capacity values.
+   *
+   * @param value The configured capacity when present.
+   * @param fallback The default value used when none was supplied.
+   * @param name The queue label or option name used in errors.
+   * @returns A positive safe integer capacity.
+   */
   positiveSubscriptionOption(value: number | undefined, fallback: number, name: string): number {
     const resolved = value ?? fallback;
     if (!Number.isSafeInteger(resolved) || resolved <= 0)
@@ -1383,6 +1702,12 @@ const BrowserClientValues = Object.freeze({
     return resolved;
   },
 
+  /**
+   * Validates an explicit event or entity kind and a query for entity recovery.
+   *
+   * @param options The candidate subscription kind and recovery query.
+   * @returns Options with an explicit kind and valid recovery query contract.
+   */
   validateSubscriptionOptions(options: unknown): CreateSubscriptionOptions {
     if (
       options === null ||
@@ -1401,23 +1726,50 @@ const BrowserClientValues = Object.freeze({
     return options as EntitySubscriptionOptions;
   },
 
+  /**
+   * Buffers one consumer stream within count and optional byte limits.
+   *
+   * @typeParam Value The value type carried through reading or delivery.
+   */
   BoundedChannel: class BoundedChannel<Value> implements AsyncIterable<Value> {
     readonly #name: string;
+
     readonly #capacity: number;
+
     readonly #byteCapacity: number | undefined;
+
     readonly #values: Readonly<{ value: Value; bytes: number }>[] = [];
+
     #bytes = 0;
+
     #consumer = false;
+
     #closed = false;
+
     #error: Error | undefined;
+
     #pending: PromiseWithResolvers<IteratorResult<Value>> | undefined;
 
+    /**
+     * Sets the count and optional byte bounds for a single consumer queue.
+     *
+     * @param name The queue label or option name used in errors.
+     * @param capacity The maximum count of buffered values.
+     * @param byteCapacity The optional maximum buffered byte count.
+     */
     constructor(name: string, capacity: number, byteCapacity?: number) {
       this.#name = name;
       this.#capacity = capacity;
       this.#byteCapacity = byteCapacity;
     }
 
+    /**
+     * Admits a value or reports a closed stream or capacity overflow.
+     *
+     * @param value The value offered to the bounded queue.
+     * @param bytes The serialized byte charge for this update.
+     * @returns A protocol error when admission fails, otherwise undefined.
+     */
     push(value: Value, bytes = 0): ClientProtocolError | undefined {
       if (this.#closed || this.#error !== undefined)
         return new ClientProtocolError(`${this.#name} stream is closed.`);
@@ -1438,7 +1790,7 @@ const BrowserClientValues = Object.freeze({
     }
 
     /**
-     * Ends after already accepted values have been consumed.
+     * Closes iteration after already admitted values have been consumed.
      */
     close(): void {
       this.#closed = true;
@@ -1449,7 +1801,7 @@ const BrowserClientValues = Object.freeze({
     }
 
     /**
-     * Discards buffered values for explicit local cancellation.
+     * Clears admitted values and ends iteration after explicit cancellation.
      */
     discard(): void {
       this.#closed = true;
@@ -1462,8 +1814,10 @@ const BrowserClientValues = Object.freeze({
     }
 
     /**
-     * Appends one terminal notice after the configured non-terminal capacity, then ends.
+     * Adds one terminal notice after admitted nonterminal values.
      * The terminal slot is bounded and never displaces an admitted lifecycle notice.
+     *
+     * @param value The terminal lifecycle notice reserved after queued notices.
      */
     finish(value: Value): void {
       if (this.#error !== undefined) return;
@@ -1476,6 +1830,11 @@ const BrowserClientValues = Object.freeze({
       this.#values.push({ value, bytes: 0 });
     }
 
+    /**
+     * Rejects the pending consumer and discards queued values after a terminal error.
+     *
+     * @param error The failure to propagate or classify.
+     */
     fail(error: Error): void {
       if (this.#error !== undefined) return;
       this.#error = error;
@@ -1484,6 +1843,11 @@ const BrowserClientValues = Object.freeze({
       this.#pending = undefined;
     }
 
+    /**
+     * Exposes the queue to a single iterator consumer.
+     *
+     * @returns An iterator that reads values from this queue.
+     */
     [Symbol.asyncIterator](): AsyncIterator<Value> {
       if (this.#consumer)
         throw new ClientProtocolError(`${this.#name} stream has a single consumer.`);
@@ -1491,6 +1855,11 @@ const BrowserClientValues = Object.freeze({
       return { next: () => this.next() };
     }
 
+    /**
+     * Reads one queued value, waits for a value, or reports closure or failure.
+     *
+     * @returns The next queued value or terminal iterator result.
+     */
     next(): Promise<IteratorResult<Value>> {
       if (this.#error !== undefined) return Promise.reject(this.#error);
       const entry = this.#values.shift();
@@ -1508,12 +1877,24 @@ const BrowserClientValues = Object.freeze({
     }
   },
 
+  /**
+   * Returns a cloned live update before exposing it to consumers.
+   *
+   * @param delivery The cloned update or recovery value to freeze.
+   * @returns A frozen live update delivery.
+   */
   freezeDelivery(
     delivery: Extract<SubscriptionDelivery, { readonly kind: "update" }>,
   ): SubscriptionDelivery {
     return Object.freeze({ ...delivery, update: BrowserClientValues.deepFreeze(delivery.update) });
   },
 
+  /**
+   * Returns an authoritative response before exposing it to consumers.
+   *
+   * @param delivery The cloned update or recovery value to freeze.
+   * @returns A frozen authoritative recovery delivery.
+   */
   freezeResynchronization(
     delivery: Extract<SubscriptionDelivery, { readonly kind: "resynchronization" }>,
   ): SubscriptionDelivery {
@@ -1523,16 +1904,36 @@ const BrowserClientValues = Object.freeze({
     });
   },
 
+  /**
+   * Returns the input after freezing nested message objects while leaving typed array views intact.
+   *
+   * @typeParam Value The value type carried through reading or delivery.
+   * @param value The message value whose nested objects are frozen.
+   * @returns The original value with nested message objects frozen.
+   */
   deepFreeze<Value>(value: Value): Value {
     if (value === null || typeof value !== "object" || ArrayBuffer.isView(value)) return value;
     for (const child of Object.values(value)) BrowserClientValues.deepFreeze(child);
     return Object.freeze(value);
   },
 
+  /**
+   * Wraps a Connect transport for the client constructor.
+   *
+   * @param transport The Connect transport used for remote cancellation.
+   * @returns The client transport wrapper.
+   */
   browserSource(transport: Transport): ClientTransport {
     return { transport };
   },
 
+  /**
+   * Sets the base URL, credentials, and per-call metadata interceptor.
+   *
+   * @param baseUrl The service endpoint URL.
+   * @param options The browser credentials and per-request metadata callback.
+   * @returns Transport settings with credentials and request metadata.
+   */
   browserTransportOptions(
     baseUrl: string,
     options: BrowserClientOptions,
@@ -1549,12 +1950,24 @@ const BrowserClientValues = Object.freeze({
     };
   },
 
+  /**
+   * Returns Fetch with the configured browser credential mode.
+   *
+   * @param credentials The configured Fetch credential mode.
+   * @returns Fetch configured with the selected credential mode.
+   */
   credentialedFetch(credentials: unknown): typeof globalThis.fetch {
     if (credentials !== "omit" && credentials !== "same-origin" && credentials !== "include")
       throw new TypeError("Browser Fetch credentials must be omit, same-origin, or include.");
     return (input, init) => globalThis.fetch(input, { ...init, credentials });
   },
 
+  /**
+   * Adds fresh application headers to each outbound transport call.
+   *
+   * @param onRequestMetadata The callback supplying fresh headers per request.
+   * @returns An interceptor that applies fresh headers to each request.
+   */
   requestMetadata(onRequestMetadata: OnRequestMetadata): Interceptor {
     return (next) => async (request) => {
       const metadata = new Headers(onRequestMetadata());
@@ -1563,12 +1976,26 @@ const BrowserClientValues = Object.freeze({
     };
   },
 
+  /**
+   * Copies a topic and applies the current actor context.
+   *
+   * @param topic The requested topic with its target.
+   * @param context The actor context applied to the cloned topic.
+   * @returns A separate topic with this actor context.
+   */
   cloneTopic(topic: Topic, context: ActorContext): Topic {
     const prepared = structuredClone(topic);
     prepared.context = context;
     return prepared;
   },
 
+  /**
+   * Checks the accepted topic, identifier, and optional server context rewrite.
+   *
+   * @param subscription The accepted wire or logical subscription to clean up.
+   * @param expectedTopic The requested topic used to validate the server response.
+   * @param allowRewrittenContext Whether a server-rewritten context is accepted.
+   */
   validateSubscription(
     subscription: WireSubscription | undefined,
     expectedTopic: Topic,
@@ -1583,6 +2010,14 @@ const BrowserClientValues = Object.freeze({
       throw new ClientProtocolError("subscription topic does not match the requested topic.");
   },
 
+  /**
+   * Compares topic targets and, when required, their actor contexts.
+   *
+   * @param left The first value to compare.
+   * @param right The second value to compare.
+   * @param ignoreContext Whether actor context is excluded from comparison.
+   * @returns Whether topics match under the selected context rule.
+   */
   sameTopic(left: Topic, right: Topic, ignoreContext = false): boolean {
     if (ignoreContext) {
       left = { ...left, context: undefined };
@@ -1593,6 +2028,13 @@ const BrowserClientValues = Object.freeze({
     return a.length === b.length && a.every((value, index) => value === b[index]);
   },
 
+  /**
+   * Compares query and subscription targets by their serialized identifiers.
+   *
+   * @param left The first value to compare.
+   * @param right The second value to compare.
+   * @returns Whether query and topic targets identify the same subject.
+   */
   sameTarget(left: Query["target"], right: Topic["target"]): boolean {
     if (left === undefined || right === undefined) return left === right;
     const a = toBinary(TargetSchema, left);
@@ -1600,6 +2042,12 @@ const BrowserClientValues = Object.freeze({
     return a.length === b.length && a.every((value, index) => value === b[index]);
   },
 
+  /**
+   * Validates and clones a selected tenant identifier.
+   *
+   * @param value The optional tenant string or message to validate.
+   * @returns A cloned tenant identifier or undefined.
+   */
   tenant(value: string | TenantId | undefined): TenantId | undefined {
     if (value === undefined) return undefined;
     if (typeof value !== "string") {
@@ -1611,16 +2059,28 @@ const BrowserClientValues = Object.freeze({
     return create(TenantIdSchema, { kind: { case: "value", value } });
   },
 
+  /**
+   * Validates the zone or uses the current configured time zone.
+   *
+   * @param value The optional zone string or message to validate.
+   * @returns A cloned zone identifier.
+   */
   zoneId(value: string | ZoneId | undefined): ZoneId {
     if (typeof value !== "string" && value !== undefined) {
       if (value.value.length === 0) throw new TypeError("Client zoneId must not be empty.");
       return clone(ZoneIdSchema, value);
     }
-    const zone = value ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const zone = value ?? Time.currentTimeZone();
     if (zone.length === 0) throw new TypeError("Client zoneId must not be empty.");
     return create(ZoneIdSchema, { value: zone });
   },
 
+  /**
+   * Maps a wire command status to a validated application outcome.
+   *
+   * @param status The wire command status to interpret.
+   * @returns The mapped application command outcome.
+   */
   outcome(status: Status["status"] | undefined): ClientOutcome {
     if (status?.case === "ok") return Object.freeze({ kind: "ok" as const });
     if (status?.case === "error")
@@ -1636,6 +2096,12 @@ const BrowserClientValues = Object.freeze({
     throw new ClientProtocolError("response status is missing or invalid.");
   },
 
+  /**
+   * Rejects an acknowledgement with a missing or mismatched command ID.
+   *
+   * @param packed The acknowledgement identifier packed in Any.
+   * @param id The posted command identifier expected in the acknowledgement.
+   */
   validateAckId(packed: Any | undefined, id: string): void {
     const commandId =
       packed === undefined ? undefined : AnyMessages.unpack(packed, CommandIdSchema);
@@ -1645,15 +2111,53 @@ const BrowserClientValues = Object.freeze({
       );
   },
 
+  /**
+   * Copies a Protobuf message before returning it to callers.
+   *
+   * @param message The domain payload to post.
+   * @returns A separate message value for the caller.
+   */
   cloneMessage(message: Message): Message {
     return structuredClone(message);
   },
 });
 
+/**
+ * Buffers one consumer stream within count and optional byte limits.
+ *
+ * @typeParam Value The value type carried through reading or delivery.
+ */
 interface BoundedChannel<Value> extends AsyncIterable<Value> {
+  /**
+   * Admits a value or reports a closed stream or capacity overflow.
+   *
+   * @param value The value offered to the bounded queue.
+   * @param bytes The serialized byte charge for this update.
+   * @returns A protocol error when admission fails, otherwise undefined.
+   */
   push(value: Value, bytes?: number): ClientProtocolError | undefined;
+
+  /**
+   * Closes iteration after already admitted values have been consumed.
+   */
   close(): void;
+
+  /**
+   * Clears admitted values and ends iteration after explicit cancellation.
+   */
   discard(): void;
+
+  /**
+   * Adds one terminal notice after admitted nonterminal values.
+   *
+   * @param value The terminal lifecycle notice reserved after queued notices.
+   */
   finish(value: Value): void;
+
+  /**
+   * Rejects the pending consumer and discards queued values after a terminal error.
+   *
+   * @param error The failure to propagate or classify.
+   */
   fail(error: Error): void;
 }

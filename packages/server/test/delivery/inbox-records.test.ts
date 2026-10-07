@@ -14,7 +14,7 @@
 
 import { describe, expect, it } from "vitest";
 import { create } from "@bufbuild/protobuf";
-import { AnySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
+import { AnySchema, StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Int32ValueSchema } from "@bufbuild/protobuf/wkt";
 import { AnyMessages, Identifiers } from "@spine-event-engine/core";
 import { UserIdSchema } from "@spine-event-engine/proto";
@@ -24,6 +24,16 @@ import { DeliveryStorageCorruptionError, InboxMessageError, ShardIndex } from ".
 import { createMessage } from "./inbox-message-fixture.js";
 
 describe("InboxRecords", () => {
+  it("preserves microsecond receive time through a durable Inbox record", () => {
+    const instant = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 123_456_000 });
+    const message = { ...createMessage("precise", "signal", 1n), whenReceived: instant };
+    const wire = InboxRecords.write(message);
+    expect(wire.whenReceived).toEqual(instant);
+    const restored = InboxRecords.read(wire);
+    expect(restored.whenReceived.seconds).toBe(instant.seconds);
+    expect(restored.whenReceived.nanos).toBe(instant.nanos);
+  });
+
   it("round-trips one generated direct Inbox record without sharing caller snapshots", () => {
     const source = createMessage("message", "signal", 1n);
     const restored = InboxRecords.read(InboxRecords.write(source));

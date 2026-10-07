@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { clone, create } from "@bufbuild/protobuf";
 import { TenantIdSchema } from "@spine-event-engine/proto";
 import {
@@ -61,9 +62,13 @@ export class ShardedWorkRegistry {
    * Identifies the renewable leased session model.
    */
   readonly sessionKind = "LEASED" as const;
+
   readonly #context: StorageContext;
+
   readonly #factory: StorageFactory;
+
   readonly #lease: number;
+
   readonly #now: () => Date;
 
   /**
@@ -75,7 +80,7 @@ export class ShardedWorkRegistry {
     this.#context = copy(options.context);
     this.#factory = options.storageFactory;
     this.#lease = DeliveryLeases.requireMs("ShardedWorkRegistry", options.leaseMs ?? leaseDefault);
-    this.#now = options.now ?? (() => new Date());
+    this.#now = options.now ?? (() => new Date(Time.currentTimeMillis()));
     configs.set(this, {
       context: this.#context,
       storageFactory: this.#factory,
@@ -169,6 +174,7 @@ export class ShardedWorkRegistry {
    * @param read Reads the next pending shard contents.
    * @param deliver Delivers one pending value under the current session.
    * @returns A promise that settles after release or ownership loss.
+   * @typeParam T The pending value type delivered from the shard.
    */
   async drainUntilEmpty<T>(
     shard: ShardIndex,
@@ -194,6 +200,7 @@ export class ShardedWorkRegistry {
       if (current !== undefined) await this.release(current);
     }
   }
+
   async #update(expected: ShardSession): Promise<ShardSession | undefined> {
     const storage = this.#storage();
     try {
@@ -221,6 +228,7 @@ export class ShardedWorkRegistry {
       storage.close();
     }
   }
+
   #storage(): RecordStorage<WireShardIndex, ShardSessionRecord> {
     return this.#factory.createRecordStorage(context(this.#context), shardSessionRecordSpec);
   }

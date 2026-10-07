@@ -20,7 +20,7 @@ import {
   StringValueSchema,
   TimestampSchema,
 } from "@bufbuild/protobuf/wkt";
-import { TypeUrls, AnyMessages } from "@spine-event-engine/core";
+import { TypeUrls, AnyMessages, Time } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   CommandContextSchema,
@@ -36,14 +36,33 @@ import {
 } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
 
-import { FixedClock, SignalMetadata } from "../../src/runtime/signal-metadata.js";
+import { SignalMetadata } from "../../src/runtime/signal-metadata.js";
 import { AssignReviewTaskSchema } from "../../test-fixtures/generated/handler-registry/commands_pb.js";
 import { ReviewTaskAssignedSchema } from "../../test-fixtures/generated/handler-registry/events_pb.js";
 
 describe("SignalMetadata", () => {
+  it("retains provider nanoseconds for generated signal timestamps", () => {
+    const instant = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 123_456_000 });
+    const previous = Time.setProvider({ currentTime: () => instant });
+    try {
+      const metadata = new SignalMetadata();
+      expect(metadata.timestamp()).toEqual(instant);
+      expect(metadata.commandContext().actorContext).toBeUndefined();
+    } finally {
+      Time.setProvider(previous);
+    }
+  });
+
+  it("retains provider nanoseconds through explicit TimeProvider injection", () => {
+    const instant = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 123_456_000 });
+    expect(
+      new SignalMetadata({ timeProvider: { currentTime: () => instant } }).timestamp(),
+    ).toEqual(instant);
+  });
+
   it("creates fresh ids, timestamps, and actor/tenant command contexts", () => {
     const metadata = new SignalMetadata({
-      clock: new FixedClock(new Date("2026-07-09T10:11:12.345Z")),
+      timeProvider: { currentTime: () => timestampFor(new Date("2026-07-09T10:11:12.345Z")) },
     });
 
     expect(metadata.commandId().uuid).toMatch(UUID_PATTERN);
@@ -76,7 +95,7 @@ describe("SignalMetadata", () => {
   it("creates follow-up event and command metadata from source signals", () => {
     const timestamp = new Date("2026-07-09T11:12:13.456Z");
     const metadata = new SignalMetadata({
-      clock: new FixedClock(timestamp),
+      timeProvider: { currentTime: () => timestampFor(timestamp) },
     });
     const actorContext = create(ActorContextSchema, {
       actor: create(UserIdSchema, { value: "user-1" }),
@@ -181,23 +200,6 @@ describe("SignalMetadata", () => {
     expect(event.id).toEqual(create(EventIdSchema, { value: "existing-event-id" }));
   });
 
-  it("normalizes pre-epoch timestamps with floor-style seconds and nanos", () => {
-    const metadata = new SignalMetadata();
-
-    expect(metadata.timestamp(new Date(-1))).toEqual(
-      create(TimestampSchema, {
-        seconds: -1n,
-        nanos: 999_000_000,
-      }),
-    );
-    expect(metadata.timestamp(new Date(-1_234))).toEqual(
-      create(TimestampSchema, {
-        seconds: -2n,
-        nanos: 766_000_000,
-      }),
-    );
-  });
-
   it("rejects non-finite, non-integer, and out-of-range version numbers", () => {
     const metadata = new SignalMetadata();
 
@@ -208,7 +210,7 @@ describe("SignalMetadata", () => {
 
   it("creates only requested optional context and producer metadata", () => {
     const metadata = new SignalMetadata({
-      clock: new FixedClock(new Date("2026-07-09T12:00:00.000Z")),
+      timeProvider: { currentTime: () => timestampFor(new Date("2026-07-09T12:00:00.000Z")) },
     });
     const actorContext = create(ActorContextSchema, {
       actor: create(UserIdSchema, { value: "user-explicit" }),
@@ -359,10 +361,6 @@ describe("SignalMetadata", () => {
         grandOrigin,
       }),
     );
-  });
-
-  it("rejects invalid fixed clock dates", () => {
-    expect(() => new FixedClock(new Date(Number.NaN))).toThrow(/finite Date/i);
   });
 
   it("clones nested actor-context inputs before returning them", () => {

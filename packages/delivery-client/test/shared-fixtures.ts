@@ -13,7 +13,7 @@
  */
 
 import { create, toBinary, type Message } from "@bufbuild/protobuf";
-import { AnySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
+import { AnySchema, StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import type { Transport } from "@connectrpc/connect";
 import { type InboxMessage, ShardIndex } from "@spine-event-engine/server";
 import { CommandSchema, EventSchema } from "@spine-event-engine/proto";
@@ -265,7 +265,7 @@ export function domainMessage(id = "message-1"): InboxMessage {
     label: "HANDLE_COMMAND" as const,
     status: "TO_DELIVER" as const,
     shard: ShardIndex.single(),
-    whenReceived: new Date(1_000),
+    whenReceived: create(TimestampSchema, { seconds: 1n }),
     version: 2n,
   });
 }

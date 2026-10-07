@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { create } from "@bufbuild/protobuf";
 import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import { randomBytes as nodeRandomBytes } from "node:crypto";
@@ -176,11 +177,17 @@ export interface OpaqueSessionLogoutResult {
  */
 export class OpaqueSessions implements SessionResolver {
   private readonly records = new Map<string, SessionRecord>();
+
   private readonly clock: OpaqueSessionClock;
+
   private readonly random: OpaqueSessionRandom;
+
   private readonly ttlMilliseconds: number;
+
   private readonly maxSessions: number;
+
   private readonly collisionAttempts: number;
+
   private closed = false;
 
   /**
@@ -188,7 +195,7 @@ export class OpaqueSessions implements SessionResolver {
    * @param options The optional clock, entropy, lifetime, and capacity settings.
    */
   constructor(options: OpaqueSessionsOptions = {}) {
-    this.clock = options.clock ?? { now: Date.now };
+    this.clock = options.clock ?? { now: () => Time.currentTimeMillis() };
     this.random = options.randomBytes ?? nodeRandomBytes;
     this.ttlMilliseconds = OpaqueSessionValues.positiveSafeInteger(
       options.ttlMilliseconds ?? 8 * 60 * 60 * 1_000,
@@ -317,10 +324,20 @@ export class OpaqueSessions implements SessionResolver {
     return Promise.resolve();
   }
 
+  /**
+   * Checks whether the session store has been closed.
+   * @returns Whether further session operations must be rejected.
+   */
   private isClosed(): boolean {
     return this.closed;
   }
 
+  /**
+   * Creates a bounded session record for an authenticated principal.
+   * @param principal The identity to store in the session.
+   * @param now The validated issuance time in milliseconds.
+   * @returns The record, or undefined if expiry cannot be represented.
+   */
   private record(principal: AuthenticatedPrincipal, now: number): SessionRecord | undefined {
     const expiresAt = now + this.ttlMilliseconds;
     if (!Number.isSafeInteger(expiresAt) || !OpaqueSessionValues.timestampValid(expiresAt)) {
@@ -330,6 +347,10 @@ export class OpaqueSessions implements SessionResolver {
     return { principal: OpaqueSessionValues.copyPrincipal(principal), expiresAt };
   }
 
+  /**
+   * Creates an unused opaque credential identifier within the retry limit.
+   * @returns The identifier, or undefined after entropy failures or collisions.
+   */
   private nextId(): string | undefined {
     for (let attempt = 0; attempt < this.collisionAttempts; attempt += 1) {
       let bytes: Uint8Array;
@@ -349,6 +370,12 @@ export class OpaqueSessions implements SessionResolver {
     return undefined;
   }
 
+  /**
+   * Returns a live session record and removes it when expired.
+   * @param id The opaque credential identifier.
+   * @param now The validated lookup time in milliseconds.
+   * @returns The live record, or undefined if absent or expired.
+   */
   private live(id: string, now: number): SessionRecord | undefined {
     const record = this.records.get(id);
     if (record === undefined) return undefined;
@@ -357,14 +384,28 @@ export class OpaqueSessions implements SessionResolver {
     return undefined;
   }
 
+  /**
+   * Removes every session that has expired by the supplied time.
+   * @param now The validated sweep time in milliseconds.
+   */
   private sweepExpired(now: number): void {
     for (const [id, record] of this.records) if (this.expired(record, now)) this.records.delete(id);
   }
 
+  /**
+   * Compares a session expiry with the current millisecond reading.
+   * @param record The session record to inspect.
+   * @param now The validated current time.
+   * @returns Whether the record has expired.
+   */
   private expired(record: SessionRecord, now: number): boolean {
     return now >= record.expiresAt;
   }
 
+  /**
+   * Reads a safe clock value and closes the store on clock failure.
+   * @returns Current epoch milliseconds, or undefined after failure.
+   */
   private now(): number | undefined {
     try {
       const value = this.clock.now();
@@ -377,6 +418,9 @@ export class OpaqueSessions implements SessionResolver {
     }
   }
 
+  /**
+   * Closes the store and clears session records after a clock fault.
+   */
   private failClosed(): void {
     this.closed = true;
     this.records.clear();
@@ -392,16 +436,32 @@ interface SessionRecord {
  * Validates opaque-session values and creates immutable credential data.
  */
 const OpaqueSessionValues = Object.freeze({
+  /**
+   * Validates a positive safe integer for a session limit.
+   * @param value The candidate limit.
+   * @param name The option named in an error.
+   * @returns The accepted limit.
+   */
   positiveSafeInteger(value: number, name: string): number {
     if (!Number.isSafeInteger(value) || value <= 0)
       throw new Error(`${name} must be a positive safe integer`);
     return value;
   },
 
+  /**
+   * Wraps an opaque identifier in an immutable cookie credential.
+   * @param value The opaque identifier.
+   * @returns The cookie credential.
+   */
   credential(value: string): CookieCredential {
     return Object.freeze({ kind: "cookie" as const, value });
   },
 
+  /**
+   * Copies a principal and freezes its attributes before retention.
+   * @param principal The authenticated identity to copy.
+   * @returns An immutable principal snapshot.
+   */
   copyPrincipal(principal: AuthenticatedPrincipal): AuthenticatedPrincipal {
     if (typeof principal.id !== "string") throw new Error("principal.id must be a string");
     const attributes =
@@ -411,6 +471,11 @@ const OpaqueSessionValues = Object.freeze({
     );
   },
 
+  /**
+   * Builds a detached resolved session from a retained record.
+   * @param record The live session record.
+   * @returns The resolved principal and precise expiry.
+   */
   resolved(record: SessionRecord): ResolvedSession {
     return Object.freeze({
       principal: OpaqueSessionValues.copyPrincipal(record.principal),
@@ -418,6 +483,11 @@ const OpaqueSessionValues = Object.freeze({
     });
   },
 
+  /**
+   * Converts epoch milliseconds to a Protobuf expiry timestamp.
+   * @param milliseconds The expiry time to encode.
+   * @returns The normalized Protobuf timestamp.
+   */
   timestamp(milliseconds: number): Timestamp {
     const seconds = Math.floor(milliseconds / 1_000);
     return create(TimestampSchema, {
@@ -426,6 +496,11 @@ const OpaqueSessionValues = Object.freeze({
     });
   },
 
+  /**
+   * Checks whether epoch milliseconds fit the Protobuf timestamp range.
+   * @param milliseconds The candidate expiry time.
+   * @returns Whether it fits the supported range.
+   */
   timestampValid(milliseconds: number): boolean {
     const seconds = Math.floor(milliseconds / 1_000);
     return seconds >= -62_135_596_800 && seconds <= 253_402_300_799;

@@ -12,8 +12,9 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { clone, create, toBinary } from "@bufbuild/protobuf";
-import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import { TenantIdSchema } from "@spine-event-engine/proto";
 import type {
   InboxMessage as WireInboxMessage,
@@ -53,7 +54,7 @@ export const InboxStorageClock: Readonly<{ read(storage: InboxStorage): Date }> 
    */
   read(storage: InboxStorage): Date {
     const clock = storageClocks.get(storage);
-    return clock === undefined ? new Date() : new Date(Values.now(clock));
+    return clock === undefined ? new Date(Time.currentTimeMillis()) : new Date(Values.now(clock));
   },
 });
 
@@ -75,7 +76,7 @@ export class InboxStorage {
   constructor(options: InboxStorageOptions) {
     this.#context = Values.snapshotContext(options.context);
     this.#storageFactory = options.storageFactory;
-    this.#now = options.now ?? (() => new Date());
+    this.#now = options.now ?? (() => new Date(Time.currentTimeMillis()));
     storageClocks.set(this, this.#now);
     Object.freeze(this);
   }
@@ -437,8 +438,7 @@ const Values = Object.freeze({
     if (
       typeof value.messageId !== "string" ||
       value.messageId.trim().length === 0 ||
-      !(value.whenReceived instanceof Date) ||
-      !Number.isFinite(value.whenReceived.getTime()) ||
+      !Values.validReceiveTime(value.whenReceived) ||
       typeof value.version !== "bigint" ||
       value.version < 0n ||
       value.version > BigInt(0x7fffffff)
@@ -446,7 +446,7 @@ const Values = Object.freeze({
       throw new InboxMessageError("Inbox read continuation is invalid.");
     return {
       values: [
-        { field: "when_received", value: Values.timestamp(value.whenReceived.getTime()) },
+        { field: "when_received", value: Values.receiveTime(value.whenReceived) },
         { field: "version", value: Number(value.version) },
         { field: "message_id", value: value.messageId },
       ],
@@ -466,6 +466,31 @@ const Values = Object.freeze({
       seconds: BigInt(seconds),
       nanos: (ms - seconds * 1_000) * 1_000_000,
     });
+  },
+
+  /**
+   * Copies a precise inbox receive timestamp.
+   * @param value The receive instant supplied by a caller.
+   * @returns A detached Protobuf timestamp.
+   */
+  receiveTime(value: Timestamp): Timestamp {
+    return clone(TimestampSchema, value);
+  },
+
+  /**
+   * Validates the Protobuf timestamp range for an inbox receive time.
+   * @param value The receive instant to inspect.
+   * @returns Whether the instant can be persisted without loss.
+   */
+  validReceiveTime(value: Timestamp): boolean {
+    return (
+      (value as unknown as { $typeName?: string } | null)?.$typeName === TimestampSchema.typeName &&
+      value.seconds >= -62_135_596_800n &&
+      value.seconds <= 253_402_300_799n &&
+      Number.isInteger(value.nanos) &&
+      value.nanos >= 0 &&
+      value.nanos < 1_000_000_000
+    );
   },
 
   /**

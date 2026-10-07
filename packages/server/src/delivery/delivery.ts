@@ -12,8 +12,9 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { clone, create } from "@bufbuild/protobuf";
-import { AnySchema } from "@bufbuild/protobuf/wkt";
+import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { randomUUID } from "node:crypto";
 import { TenantIdSchema } from "@spine-event-engine/proto";
 import { WorkerIdSchema, type WorkerId } from "@spine-event-engine/proto/delivery";
@@ -731,7 +732,7 @@ class DeliveryDrain {
   #retentionTime(): Date {
     return this.input.inbox instanceof Inbox
       ? InboxStorageClock.read(this.input.inbox.storage)
-      : new Date();
+      : new Date(Time.currentTimeMillis());
   }
 
   /**
@@ -923,7 +924,7 @@ function snapshot(message: InboxMessage): InboxMessage {
     inboxId: Object.freeze({ ...message.inboxId }),
     ...(message.signal === undefined ? {} : { signal: clone(AnySchema, message.signal) }),
     shard: new ShardIndex(message.shard.index, message.shard.ofTotal),
-    whenReceived: new Date(message.whenReceived),
+    whenReceived: clone(TimestampSchema, message.whenReceived),
     ...(message.keepUntil === undefined ? {} : { keepUntil: new Date(message.keepUntil) }),
   });
 }

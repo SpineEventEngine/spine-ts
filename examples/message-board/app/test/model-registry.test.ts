@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { create, type MessageShape } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import {
@@ -540,8 +541,8 @@ async function waitForStoredEvents(
   eventStore: EventStore,
   count: number,
 ): Promise<Awaited<ReturnType<EventStore["read"]>>> {
-  const deadline = Date.now() + 500;
-  while (Date.now() < deadline) {
+  const deadline = Time.currentTimeMillis() + 500;
+  while (Time.currentTimeMillis() < deadline) {
     const events = await eventStore.read();
     if (events.length >= count) return events;
     await new Promise((resolve) => setTimeout(resolve, 5));
@@ -550,8 +551,8 @@ async function waitForStoredEvents(
 }
 
 async function waitForAnnouncement(context: BoundedContext, id: BoardId) {
-  const deadline = Date.now() + 1_000;
-  while (Date.now() < deadline) {
+  const deadline = Time.currentTimeMillis() + 1_000;
+  while (Time.currentTimeMillis() < deadline) {
     const record = await context.stand().readVersioned(AnnouncementBoardViewSchema, id);
     if (record !== undefined) return record;
     await new Promise((resolve) => setTimeout(resolve, 5));

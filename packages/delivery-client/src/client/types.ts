@@ -13,6 +13,7 @@
  */
 
 import { ShardIndex } from "@spine-event-engine/server";
+import type { Timestamp } from "@bufbuild/protobuf/wkt";
 
 /**
  * Stable public worker identity represented by the frozen `WorkerId` wire type.
@@ -321,9 +322,9 @@ export interface DeliveryReadPageOptions extends DeliveryFindOneOptions {
   // prettier-ignore
 
   /**
-   * Continues a timestamp-ordered page after this received time.
+   * Continues a timestamp-ordered page after this precise received time.
    */
-  readonly sinceWhen?: Date;
+  readonly sinceWhen?: Timestamp;
 
   /**
    * Limits messages requested for this page.

@@ -14,9 +14,8 @@
 
 import { randomUUID } from "node:crypto";
 
-import { clone, toBinary } from "@bufbuild/protobuf";
-import { AnySchema, StringValueSchema, type Any } from "@bufbuild/protobuf/wkt";
-import { fromBinary } from "@bufbuild/protobuf";
+import { clone, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { AnySchema, StringValueSchema, type Any, type Timestamp } from "@bufbuild/protobuf/wkt";
 
 import type { InboxStorage } from "./inbox-storage.js";
 import type { DeliveryOperationOptions, DeliveryWorkSession } from "./delivery-ports.js";
@@ -67,7 +66,11 @@ export class Inbox {
       label: this.#readInput(messageInput, "label", "Inbox delivery label") as DeliveryLabel,
       status: this.#readInput(messageInput, "status", "Inbox delivery status") as DeliveryStatus,
       shard,
-      whenReceived: this.#readInput(messageInput, "whenReceived", "Inbox receive time") as Date,
+      whenReceived: this.#readInput(
+        messageInput,
+        "whenReceived",
+        "Inbox receive time",
+      ) as Timestamp,
       version: this.#readInput(messageInput, "version", "Inbox version") as bigint,
       ...(signal === undefined ? {} : { signal }),
       ...(keepUntil === undefined ? {} : { keepUntil }),
@@ -304,9 +307,9 @@ export interface InboxMessage {
   readonly shard: ShardIndex;
 
   /**
-   * Durable receive time.
+   * Durable receive time with full Protobuf Timestamp precision.
    */
-  readonly whenReceived: Date;
+  readonly whenReceived: Timestamp;
 
   /**
    * Ordering tie-breaker for equal receive times.
@@ -356,9 +359,9 @@ export interface InboxMessageInput {
   readonly shard: ShardIndex;
 
   /**
-   * Durable receive time.
+   * Durable receive time at nanosecond precision.
    */
-  readonly whenReceived: Date;
+  readonly whenReceived: Timestamp;
 
   /**
    * Ordering tie-breaker for equal receive times.
@@ -410,9 +413,9 @@ export interface InboxReadContinuation {
   readonly messageId: string;
 
   /**
-   * Receive time from the last row of the previous page.
+   * Precise receive time from the last row of the previous page.
    */
-  readonly whenReceived: Date;
+  readonly whenReceived: Timestamp;
 
   /**
    * Version from the last row of the previous page.

@@ -15,7 +15,7 @@
 import { create, toBinary, type Message } from "@bufbuild/protobuf";
 import { FieldMaskSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import type { Interceptor, Transport, UnaryRequest, UnaryResponse } from "@connectrpc/connect";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyMessages, Time } from "@spine-event-engine/core";
 import {
   AckSchema,
   ActorContextSchema,
@@ -75,6 +75,29 @@ vi.mock("@connectrpc/connect-web", () => ({
 }));
 
 describe("Client", () => {
+  it("stamps browser query context with the shared precise time", async () => {
+    const instant = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 123_456_000 });
+    const previousProvider = Time.setProvider({
+      currentTime: () => instant,
+      currentZone: () => "Pacific/Auckland",
+    });
+    let context: Query["context"];
+    const client = Client.usingTransport({
+      transport: unaryTransport((_method, input) => {
+        context = (input as Query).context;
+        return create(QueryResponseSchema);
+      }),
+    });
+    try {
+      await client.asGuest().send(create(QuerySchema));
+      expect(context?.timestamp).toEqual(instant);
+      expect(context?.zoneId?.value).toBe("Pacific/Auckland");
+    } finally {
+      await client.close();
+      Time.setProvider(previousProvider);
+    }
+  });
+
   it("requires explicit subscription kind and option validation without evaluating entity queries", async () => {
     const client = Client.usingTransport(source());
     const request = client.asGuest();
@@ -221,51 +244,59 @@ describe("Client", () => {
   });
 
   it("reclaims exactly one encoded delivery after dequeue and freezes delivery copies", async () => {
-    const now = BigInt(Math.floor(Date.now() / 1_000));
-    const topic = create(TopicSchema, {
-      context: create(ActorContextSchema, {
-        actor: create(UserIdSchema, { value: "guest" }),
-        zoneId: create(ZoneIdSchema, { value: "UTC" }),
-        timestamp: create(TimestampSchema, { seconds: now }),
-      }),
-    });
-    const encodedDeliveryBytes = toBinary(
-      SubscriptionUpdateSchema,
-      create(SubscriptionUpdateSchema, {
-        subscription: create(SubscriptionSchema, {
-          id: create(SubscriptionIdSchema, { value: "updates" }),
-          topic,
+    const now = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 123_456_000 });
+    const previousProvider = Time.setProvider({ currentTime: () => now });
+    try {
+      const topic = create(TopicSchema, {
+        context: create(ActorContextSchema, {
+          actor: create(UserIdSchema, { value: "guest" }),
+          zoneId: create(ZoneIdSchema, { value: "UTC" }),
+          timestamp: now,
         }),
-      }),
-    ).byteLength;
-    let releaseSecond: (() => void) | undefined;
-    const client = Client.usingTransport(
-      {
-        transport: updateTransport(
-          2,
-          () => new Promise<void>((resolve) => (releaseSecond = resolve)),
-        ),
-      },
-      {
-        zoneId: "UTC",
-        subscriptions: { updateBufferCapacity: 2, updateBufferByteCapacity: encodedDeliveryBytes },
-      },
-    );
-    const subscription = await client
-      .asGuest()
-      .createSubscription(create(TopicSchema), eventSubscription);
-    const updates = subscription.updates[Symbol.asyncIterator]();
-    await subscription.activate();
-    const first = await updates.next();
-    expect(first.done).toBe(false);
-    if (!first.done && first.value.kind === "update") {
-      expect(Object.isFrozen(first.value)).toBe(true);
-      expect(Object.isFrozen(first.value.update)).toBe(true);
+      });
+      const encodedDeliveryBytes = toBinary(
+        SubscriptionUpdateSchema,
+        create(SubscriptionUpdateSchema, {
+          subscription: create(SubscriptionSchema, {
+            id: create(SubscriptionIdSchema, { value: "updates" }),
+            topic,
+          }),
+        }),
+      ).byteLength;
+      let releaseSecond: (() => void) | undefined;
+      const client = Client.usingTransport(
+        {
+          transport: updateTransport(
+            2,
+            () => new Promise<void>((resolve) => (releaseSecond = resolve)),
+          ),
+        },
+        {
+          zoneId: "UTC",
+          subscriptions: {
+            updateBufferCapacity: 2,
+            updateBufferByteCapacity: encodedDeliveryBytes,
+          },
+        },
+      );
+      const subscription = await client
+        .asGuest()
+        .createSubscription(create(TopicSchema), eventSubscription);
+      const updates = subscription.updates[Symbol.asyncIterator]();
+      await subscription.activate();
+      const first = await updates.next();
+      expect(first.done).toBe(false);
+      if (!first.done && first.value.kind === "update") {
+        expect(Object.isFrozen(first.value)).toBe(true);
+        expect(Object.isFrozen(first.value.update)).toBe(true);
+      }
+      releaseSecond?.();
+      await expect(updates.next()).resolves.toMatchObject({ done: false });
+      await subscription.cancel();
+      await client.close();
+    } finally {
+      Time.setProvider(previousProvider);
     }
-    releaseSecond?.();
-    await expect(updates.next()).resolves.toMatchObject({ done: false });
-    await subscription.cancel();
-    await client.close();
   });
 
   it("retries unexpected wire EOF once before emitting one terminal failure", async () => {

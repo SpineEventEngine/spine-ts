@@ -15,6 +15,8 @@
 import { create, ScalarType } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Datastore } from "@google-cloud/datastore";
+import { entity } from "@google-cloud/datastore/build/src/entity.js";
+import { google } from "@google-cloud/datastore/build/protos/protos.js";
 import { StringifierRegistry } from "@spine-event-engine/core";
 import { UserIdSchema, VersionSchema } from "@spine-event-engine/proto";
 import { OrderBy_DirectionSchema } from "@spine-event-engine/proto/generated/spine/client/query_pb.js";
@@ -25,6 +27,46 @@ import { DatastoreColumnMapping } from "../src/datastore/column-mapping.js";
 import { DatastoreIdColumn } from "../src/datastore/id-column.js";
 
 describe("Spine JVM Datastore value mappings", () => {
+  it("serializes boundary receipts to exact Datastore timestamp nanos", () => {
+    const mapping = new DatastoreColumnMapping();
+    const examples = [
+      0, 7, 1_000, 999_000, 1_000_000, 1_001_000, 1_002_000, 123_001_000, 123_999_000, 999_999_000,
+      999_999_999,
+    ];
+    for (const nanos of examples) {
+      const timestamp = ColumnMappings.value(
+        mapping,
+        ColumnTypes.message(TimestampSchema),
+        create(TimestampSchema, { seconds: 42n, nanos }),
+      ) as Date;
+      const value = entity.encodeValue(timestamp, "received");
+      const serialized = google.datastore.v1.Value.decode(
+        google.datastore.v1.Value.encode(value as unknown as google.datastore.v1.IValue).finish(),
+      );
+      expect(serialized.timestampValue?.nanos).toBe(nanos);
+      const fallbackValue = google.datastore.v1.Value.fromObject(value);
+      expect(fallbackValue.timestampValue?.nanos).toBe(nanos);
+      const fallbackJson = JSON.parse(JSON.stringify(fallbackValue)) as {
+        timestampValue?: { nanos?: unknown };
+      };
+      expect(fallbackJson.timestampValue?.nanos).toBe(nanos);
+    }
+  });
+
+  it("normalizes all Time-style microsecond positions within a second", () => {
+    const mapping = new DatastoreColumnMapping();
+    const timestamp = create(TimestampSchema, { seconds: 42n });
+    for (let microsecond = 0; microsecond < 1_000_000; microsecond += 1) {
+      timestamp.nanos = microsecond * 1_000;
+      const value = ColumnMappings.value(
+        mapping,
+        ColumnTypes.message(TimestampSchema),
+        timestamp,
+      ) as Date;
+      expect(Math.trunc(value.getMilliseconds() * 1_000_000)).toBe(timestamp.nanos);
+    }
+  });
+
   it("uses reversible stringifier text for message and primitive key names", () => {
     const user = create(UserIdSchema, { value: "user-42" });
 

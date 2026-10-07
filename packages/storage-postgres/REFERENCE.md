@@ -53,10 +53,12 @@ ordering; and finite limits. They do not support normalized offsets:
 `RecordQuery.offset` is the separate provider-side pagination feature.
 
 `Timestamp` values are stored as epoch nanoseconds in `BIGINT`; `Version` is
-stored as numeric `INT`. The JVM-compatible physical-name renderer folds plain,
-non-reserved ASCII identifiers only. Reserved and quoted-required names preserve
-their spelling; all names reject NUL, unsafe values, 63-byte overflow, and
-collisions before DDL, DML, or catalog inspection.
+stored as numeric `INT`. Indexed timestamp values must fit signed 64-bit epoch
+nanoseconds (approximately 1677–2262 UTC); Protobuf's wider `Timestamp` range
+does not expand this SQL range. The JVM-compatible physical-name renderer folds
+plain, non-reserved ASCII identifiers only. Reserved and quoted-required names
+preserve their spelling; all names reject NUL, unsafe values, 63-byte overflow,
+and collisions before DDL, DML, or catalog inspection.
 
 ## Lifecycle and errors
 

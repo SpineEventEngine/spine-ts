@@ -22,10 +22,12 @@ import {
 import {
   EventIdSchema,
   EventSchema,
+  type Event,
   TenantIdSchema,
   VersionSchema,
 } from "@spine-event-engine/proto";
-import { StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
+import { AnyMessages, StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
+import { ProjectCreatedSchema } from "../../core/test-fixtures/generated/project_events_pb.js";
 import {
   EntityRecordSchema,
   type EntityRecord,
@@ -72,6 +74,71 @@ live("MySQL-family record layout", () => {
   });
   afterAll(() => {
     factory.close();
+  });
+
+  it("preserves microsecond timestamp ordering and a page boundary in live MySQL", async () => {
+    const first = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 123_001_000 });
+    const middle = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 123_500_000 });
+    const last = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 123_999_000 });
+    const eventAt = (id: string, timestamp: typeof first) =>
+      create(EventSchema, {
+        id: create(EventIdSchema, { value: id }),
+        context: { timestamp },
+        message: AnyMessages.pack(
+          ProjectCreatedSchema,
+          create(ProjectCreatedSchema, {
+            memberId: [`member-${id}`],
+          }),
+        ),
+      });
+    const events = [
+      eventAt("z-first", first),
+      eventAt("m-middle", middle),
+      eventAt("a-last", last),
+    ];
+    const spec = new RecordSpec<string, Event>({
+      recordType: EventSchema,
+      idKind: "string",
+      extractId: (record) => record.id?.value ?? "",
+      columns: [
+        new RecordColumn(
+          "received",
+          ColumnTypes.message(TimestampSchema),
+          (record) => record.context?.timestamp,
+        ),
+      ],
+    });
+    const context = {
+      name: `precise_time_${String(Date.now())}`,
+      multitenant: false,
+    } as const;
+    const storage = factory.createRecordStorage(context, spec, new StorageGroup(context.name));
+    const firstEvent = events[0];
+    if (firstEvent === undefined) throw new Error("Expected the first precision event.");
+    try {
+      await storage.writeAll([...events].reverse());
+      const stored = await storage.read("z-first");
+      expect(stored?.context?.timestamp).toEqual(first);
+      expect(stored === undefined ? undefined : toBinary(EventSchema, stored)).toEqual(
+        toBinary(EventSchema, firstEvent),
+      );
+      const ordered = await storage.query({ sort: [{ field: "received" }] });
+      expect(ordered.map((event) => event.id?.value)).toEqual(
+        events.map((event) => event.id?.value),
+      );
+      expect(ordered.map((event) => event.context?.timestamp)).toEqual([first, middle, last]);
+      expect(ordered.map((event) => toBinary(EventSchema, event))).toEqual(
+        events.map((event) => toBinary(EventSchema, event)),
+      );
+      const continued = await storage.query({
+        sort: [{ field: "received" }],
+        after: { id: "z-first", values: [{ field: "received", value: first }] },
+      });
+      expect(continued.map((event) => event.id?.value)).toEqual(["m-middle", "a-last"]);
+      expect(continued.map((event) => event.context?.timestamp)).toEqual([middle, last]);
+    } finally {
+      storage.close();
+    }
   });
 
   it("creates a one-table family with native columns and SQL query behavior", async () => {
@@ -254,7 +321,10 @@ live("MySQL-family record layout", () => {
 
   it("rolls back or retains the exact immutable Entity prefix at each injected boundary", async () => {
     if (url === undefined) throw new Error("SPINE_TS_MYSQL_URL is required.");
-    const context = { name: `t0134_commit_${String(Date.now())}`, multitenant: false } as const;
+    const context = {
+      name: `t0134_commit_${String(Date.now())}`,
+      multitenant: false,
+    } as const;
     const input = entityInput(context);
     const commits = EntityCommitStorageFactories.create(factory, input);
     const eventStore = new EventStore(context, factory);
@@ -366,7 +436,10 @@ live("MySQL-family record layout", () => {
   });
 
   it("rejects immutable histories that are disabled for the Entity family", async () => {
-    const context = { name: `t0134_disabled_${String(Date.now())}`, multitenant: false } as const;
+    const context = {
+      name: `t0134_disabled_${String(Date.now())}`,
+      multitenant: false,
+    } as const;
     const input = entityInput(context, false, false);
     const commits = EntityCommitStorageFactories.create(factory, input);
     try {
@@ -419,7 +492,10 @@ live("MySQL-family record layout", () => {
 
   it("atomically compares records from two handles on the configured engine", async () => {
     if (url === undefined) throw new Error("SPINE_TS_MYSQL_URL is required.");
-    const context = { name: `t0134_cas_${String(Date.now())}`, multitenant: false } as const;
+    const context = {
+      name: `t0134_cas_${String(Date.now())}`,
+      multitenant: false,
+    } as const;
     const spec = new RecordSpec<string, StringValue>({
       recordType: StringValueSchema,
       idKind: "string",
@@ -477,7 +553,10 @@ live("MySQL-family record layout", () => {
 
   it("serializes InnoDB Entity commits from separate handles", async () => {
     if (url === undefined) throw new Error("SPINE_TS_MYSQL_URL is required.");
-    const context = { name: `t0134_concurrent_${String(Date.now())}`, multitenant: false } as const;
+    const context = {
+      name: `t0134_concurrent_${String(Date.now())}`,
+      multitenant: false,
+    } as const;
     const input = entityInput(context);
     const first = EntityCommitStorageFactories.create(factory, input);
     const second = EntityCommitStorageFactories.create(factory, input);
@@ -499,7 +578,10 @@ live("MySQL-family record layout", () => {
   });
 
   it("replays an identical Entity commit without replacing current state", async () => {
-    const context = { name: `t0134_replay_${String(Date.now())}`, multitenant: false } as const;
+    const context = {
+      name: `t0134_replay_${String(Date.now())}`,
+      multitenant: false,
+    } as const;
     const input = entityInput(context);
     const commits = EntityCommitStorageFactories.create(factory, input);
     const pool = createPool(url ?? "");

@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import {
   type ApplicationNode,
   type LeasedNodeRegistry,
@@ -28,11 +29,11 @@ export class GceRegistryReader implements NodeSnapshotReader {
    * Creates a reader using an injected clock for deterministic expiry evaluation.
    *
    * @param registry Supplies the leased registry to read.
-   * @param now Supplies the current epoch time used for exact expiry filtering; defaults to `Date.now`.
+   * @param now Supplies the current epoch time used for exact expiry filtering; defaults to `Time.currentTimeMillis`.
    */
   constructor(
     private readonly registry: LeasedNodeRegistry,
-    private readonly now: () => number = Date.now,
+    private readonly now: () => number = () => Time.currentTimeMillis(),
   ) {}
 
   /**

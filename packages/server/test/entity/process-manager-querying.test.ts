@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { create, type MessageShape } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import {
@@ -1184,7 +1185,7 @@ describe("Process Manager querying", () => {
       label: "HANDLE_COMMAND",
       status: "TO_DELIVER",
       shard: ShardIndex.single(),
-      whenReceived: new Date(),
+      whenReceived: Time.currentTime(),
       version: 1n,
     });
     const restarted = buildContexts();

@@ -35,6 +35,30 @@ import { createMessage } from "./inbox-message-fixture.js";
 import { tenant } from "../tenant-fixture.js";
 
 describe("direct InboxMessage storage", () => {
+  it("preserves microsecond order across an Inbox page anchor", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Precise", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const firstTime = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 123_456_000 });
+    const secondTime = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 123_457_000 });
+    const first = { ...createMessage("first", "signal-1", 1n), whenReceived: firstTime };
+    const second = { ...createMessage("second", "signal-2", 1n), whenReceived: secondTime };
+    await storage.write(first);
+    await storage.write(second);
+    const page = await storage.read(first.shard, { limit: 1 });
+    expect(page[0]?.whenReceived).toEqual(firstTime);
+    expect(page[0]?.whenReceived.seconds).toBe(firstTime.seconds);
+    expect(page[0]?.whenReceived.nanos).toBe(firstTime.nanos);
+    const pageEntry = page[0];
+    if (pageEntry === undefined) throw new Error("Expected the first inbox page entry.");
+    await expect(
+      storage.read(first.shard, {
+        after: { messageId: first.id.value, whenReceived: pageEntry.whenReceived, version: 1n },
+      }),
+    ).resolves.toMatchObject([{ id: { value: "second" }, whenReceived: secondTime }]);
+  });
+
   it("has no per-message exclusion or separate duplicate persistence", async () => {
     const [storage, mapper] = await Promise.all([
       readFile(new URL("../../src/delivery/inbox-storage.ts", import.meta.url), "utf8"),
@@ -335,10 +359,10 @@ describe("direct InboxMessage storage", () => {
     for (const offset of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1])
       await expect(storage.read(message.shard, { offset })).rejects.toThrow("offset");
     for (const after of [
-      { messageId: " ", whenReceived: new Date(0), version: 0n },
-      { messageId: "message", whenReceived: new Date(Number.NaN), version: 0n },
-      { messageId: "message", whenReceived: new Date(0), version: -1n },
-      { messageId: "message", whenReceived: new Date(0), version: 0 as never },
+      { messageId: " ", whenReceived: create(TimestampSchema), version: 0n },
+      { messageId: "message", whenReceived: create(TimestampSchema, { nanos: -1 }), version: 0n },
+      { messageId: "message", whenReceived: create(TimestampSchema), version: -1n },
+      { messageId: "message", whenReceived: create(TimestampSchema), version: 0 as never },
     ])
       await expect(storage.read(message.shard, { after })).rejects.toThrow("continuation");
     await expect(storage.read({} as never)).rejects.toThrow("shard");

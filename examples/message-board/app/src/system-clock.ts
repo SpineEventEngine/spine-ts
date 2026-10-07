@@ -12,8 +12,7 @@
  * the License.
  */
 
-import { create } from "@bufbuild/protobuf";
-import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { Time } from "@spine-event-engine/core/time";
 import type { Clock } from "@spine-event-engine/auth";
 
 /**
@@ -30,10 +29,6 @@ export class SystemClock implements Clock {
    * @returns The current time as a Protobuf timestamp.
    */
   now(): ReturnType<Clock["now"]> {
-    const milliseconds = Date.now();
-    return create(TimestampSchema, {
-      seconds: BigInt(Math.floor(milliseconds / 1_000)),
-      nanos: (milliseconds % 1_000) * 1_000_000,
-    });
+    return Time.currentTime();
   }
 }

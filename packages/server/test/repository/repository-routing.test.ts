@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { clone, create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import {
@@ -23,6 +24,7 @@ import {
   Int64ValueSchema,
   StringValueSchema,
   TimestampSchema,
+  timestampFromDate,
 } from "@bufbuild/protobuf/wkt";
 import {
   TypeUrls,
@@ -137,7 +139,6 @@ import {
   standEntityStorageDescriptor,
 } from "../../src/entity/entity-storage-descriptor.js";
 import { standAccess } from "../../src/stand/stand.js";
-import { SystemClock } from "../../src/runtime/signal-metadata.js";
 import {
   repositoryAccess,
   repositoryReadAccess,
@@ -7636,7 +7637,7 @@ describe("repository signal routing", () => {
         label: "HANDLE_COMMAND",
         status: "DELIVERED",
         shard: ShardIndex.single(),
-        whenReceived: new Date("2026-07-08T09:02:30.000Z"),
+        whenReceived: timestampFromDate(new Date("2026-07-08T09:02:30.000Z")),
         version: 1n,
       }),
     ).rejects.toThrow("Entity Inbox replay requires a bound repository runtime.");
@@ -8059,7 +8060,7 @@ describe("repository signal routing", () => {
       label: "REACT_UPON_EVENT",
       status: "TO_DELIVER",
       shard: ShardIndex.single(),
-      whenReceived: new Date("2026-07-08T09:00:00.000Z"),
+      whenReceived: timestampFromDate(new Date("2026-07-08T09:00:00.000Z")),
       version: 1n,
     });
 
@@ -8255,6 +8256,11 @@ describe("repository signal routing", () => {
         return receiveAll.call(this, delivery, inputs, tenantId);
       });
     const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    let receiptTick = 0;
+    const previousTime = Time.setProvider({
+      currentTime: () =>
+        create(TimestampSchema, { seconds: 1_700_000_000n, nanos: receiptTick++ * 1_000 }),
+    });
     try {
       const dispatched = dispatcher.dispatch(event);
       await firstEntered;
@@ -8280,7 +8286,11 @@ describe("repository signal routing", () => {
       releaseFirst();
       handoff.mockRestore();
       warning.mockRestore();
-      await context.close();
+      try {
+        await context.close();
+      } finally {
+        Time.setProvider(previousTime);
+      }
     }
   });
 
@@ -9870,9 +9880,9 @@ describe("repository signal routing", () => {
   it("uses each lifecycle envelope timestamp for its payload under an advancing clock", async () => {
     const changes: SpineEvent[] = [];
     let clockTick = 0;
-    const clock = vi
-      .spyOn(SystemClock.prototype, "now")
-      .mockImplementation(() => new Date(1_000 + clockTick++));
+    const previous = Time.setProvider({
+      currentTime: () => create(TimestampSchema, { seconds: 1n, nanos: clockTick++ * 1_000 }),
+    });
     const context = BoundedContext.singleTenant("Tasks")
       .add(createExecutingRepository())
       .addEventDispatcher({
@@ -9906,8 +9916,8 @@ describe("repository signal routing", () => {
       const archived = AnyMessages.unpack(changes[0]?.message as never, EntityArchivedSchema);
       expect(archived?.when).toEqual(changes[0]?.context?.timestamp);
     } finally {
-      clock.mockRestore();
       await context.close();
+      Time.setProvider(previous);
     }
   });
 
@@ -14304,7 +14314,7 @@ async function storeEntityInboxCommand(
     label: "HANDLE_COMMAND",
     status: "TO_DELIVER",
     shard: ShardIndex.single(),
-    whenReceived,
+    whenReceived: timestampFromDate(whenReceived),
     version,
   });
 
@@ -14337,7 +14347,7 @@ async function storePmInboxEvent(
     label: overrides.label ?? "REACT_UPON_EVENT",
     status: "TO_DELIVER",
     shard: ShardIndex.single(),
-    whenReceived,
+    whenReceived: timestampFromDate(whenReceived),
     version,
   });
 

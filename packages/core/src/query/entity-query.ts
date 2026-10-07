@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "../time/index.js";
 import {
   clone,
   create,
@@ -1396,7 +1397,7 @@ const EntityQueryWire = Object.freeze({
    * @returns New query ID string.
    */
   nextId(): string {
-    return `query-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    return `query-${Time.currentTimeMillis().toString(36)}-${Math.random().toString(36).slice(2)}`;
   },
 
   /**

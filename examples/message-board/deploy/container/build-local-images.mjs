@@ -45,7 +45,7 @@ const targets = [
 ];
 const targetPlans = {
   "simple-delivery-server": {
-    packages: ["packages/proto", "packages/delivery-server"],
+    packages: ["packages/proto", "packages/core", "packages/delivery-server"],
     build() {
       phase("generate Delivery Protobuf artifacts");
       run("pnpm", ["proto:generate"]);

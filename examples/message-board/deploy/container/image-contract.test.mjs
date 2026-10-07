@@ -30,6 +30,7 @@ test("the Delivery-only image target prepares only Delivery runtime artifacts", 
   );
 
   assert.match(plan, /packages\/delivery-server/u);
+  assert.match(plan, /packages\/core/u);
   assert.match(plan, /pnpm", \["exec", "tsc", "-b", "packages\/delivery-server"\]/u);
   assert.doesNotMatch(plan, /examples\/message-board\/web/u);
   assert.doesNotMatch(plan, /\["typecheck:build"\]/u);

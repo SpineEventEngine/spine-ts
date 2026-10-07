@@ -15,8 +15,87 @@ transport semantic tags.
 Import from `@spine-event-engine/core`. The package exports `Validate`,
 `ValidationException`, `RejectionThrowable`, `AnyMessages`, `SignalEnvelopes`,
 `TypeUrls`, `TypeRegistry`, `spineCoreRegistry`, `Identifiers`, `Stringifiers`,
-`StringifierRegistry`, the `Stringifier` contract, and their exported input,
+`StringifierRegistry`, the `Stringifier` contract, `Time`, and their exported input,
 result, and metadata types.
+
+## Time
+
+Import `Time` from `@spine-event-engine/core/time` or the core root. Both entry
+points expose the same object and configured provider. The dedicated entry
+point needs no generated Spine model modules and works in browsers and Node.
+All operations are synchronous. Framework and application runtime sources use
+Time, except TSX files. TSX and non-runtime build, release, generation and
+test-runner scripts use platform clocks and must not import Time. Tests may use
+Time to exercise or control framework runtime behavior.
+
+| Operation                  | Result and purpose                                                                                          |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `Time.currentTime()`       | Configured provider's Protobuf `Timestamp`, including seconds and nanoseconds.                              |
+| `Time.systemTime()`        | System provider's timestamp, bypassing provider replacement.                                                |
+| `Time.currentTimeZone()`   | Configured provider's IANA zone identifier, or the runtime's zone when the provider omits it.               |
+| `Time.currentTimeMillis()` | Configured current time as integer epoch milliseconds; discards submillisecond precision.                   |
+| `Time.monotonicTime()`     | Elapsed milliseconds from an arbitrary local origin; the system provider uses the platform monotonic clock. |
+
+Use complete timestamps for occurrence order and storage boundaries. Use epoch
+milliseconds for APIs that require that representation, and monotonic readings
+for elapsed durations. Timer scheduling still uses ordinary platform timers.
+Storage providers retain their existing date ranges: SQL timestamp indexes use
+signed 64-bit epoch nanoseconds, approximately years 1677–2262. The Protobuf
+Timestamp range does not expand those database columns.
+
+The system provider follows Spine JVM `IncrementalNanos`: its first reading of
+a millisecond has no added offset; further readings add 1,000 nanoseconds each,
+through 999,000 nanoseconds. The next reading in that same millisecond wraps to
+zero. A changed millisecond resets the offset, including when the system clock
+moves backward. `currentTime()` with the system provider and `systemTime()`
+share that sequence.
+
+This behavior is local to one loaded Time module. It does not establish unique
+or increasing timestamps across separate workers, processes, duplicate package
+installations, restarts or backward clock adjustments. Preserve the supplied
+timestamp when copying a message instead of reading Time again.
+
+### Controlled time in tests
+
+The `TimeProvider` contract requires `currentTime(): Timestamp`. It can also
+supply `currentZone(): string` and `monotonicTime(): number`; omitted operations
+use the system provider. Provider controls are internal test support.
+
+`Time.setProvider(provider)` returns the previous provider. Restore it in
+`finally`; `Time.resetProvider()` restores the system provider. Replacement
+affects every consumer of that module instance, so tests that share the
+instance must not replace its provider concurrently. Separate workers have
+separate module state. Install the provider before starting work, and await all
+work that uses it before replacing or restoring it. Monotonic readings from
+different providers may use different origins and must not be compared.
+Supply separate `TimeProvider` values through component configuration when
+independent consumers need different timestamps within one runtime.
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
+import { Time, type TimeProvider } from "@spine-event-engine/core/time";
+
+const provider: TimeProvider = {
+  /**
+   * Returns the instant used by this test.
+   * @returns A timestamp with the test's seconds and nanoseconds.
+   */
+  currentTime(): Timestamp {
+    return create(TimestampSchema, { seconds: 1_800_000_000n, nanos: 123_456_000 });
+  },
+};
+const previous = Time.setProvider(provider);
+try {
+  const occurredAt = Time.currentTime();
+  console.log(occurredAt.nanos); // 123456000
+} finally {
+  Time.setProvider(previous);
+}
+```
+
+Freezing `currentTime()` does not freeze the default monotonic clock. Supply
+`monotonicTime()` as well when a duration test needs controlled readings.
 
 Descriptor-backed `EntityColumn` and `EntityQuery` behavior is canonical in
 core. The generated `GeneratedEntityColumns` helper is intentionally excluded

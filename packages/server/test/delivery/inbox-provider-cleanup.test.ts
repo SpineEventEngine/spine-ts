@@ -62,7 +62,10 @@ describe.skipIf(!providerEnabled(inboxProvider, "mysql", mysqlUrl !== undefined)
     });
 
     it("deletes only the exact delivered snapshot under the current leased session", async () => {
-      const context = { name: `t0191_mysql_${String(Date.now())}`, multitenant: false } as const;
+      const context = {
+        name: `t0191_mysql_${String(Date.now())}`,
+        multitenant: false,
+      } as const;
       await expect(removeExact(factory, context)).resolves.toBeUndefined();
     });
 

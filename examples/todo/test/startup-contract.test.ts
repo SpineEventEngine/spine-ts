@@ -64,6 +64,9 @@ describe("example executable commands", () => {
 
 describe("MessageBoard app manifest", () => {
   it("keeps exact runtime versions and starts already-built local output", async () => {
+    const rootManifest = JSON.parse(await readFile("package.json", "utf8")) as {
+      readonly version: string;
+    };
     const manifest = JSON.parse(
       await readFile("examples/message-board/app/package.json", "utf8"),
     ) as {
@@ -73,13 +76,15 @@ describe("MessageBoard app manifest", () => {
     };
 
     expect(manifest.dependencies["@spine-event-engine/example-message-board-model"]).toBe(
-      "2.0.0-snapshot.21",
+      rootManifest.version,
     );
     expect(manifest.dependencies["@connectrpc/connect-node"]).toBe("2.1.2");
-    expect(manifest.dependencies["@spine-event-engine/core"]).toBe("2.0.0-snapshot.21");
-    expect(manifest.dependencies["@spine-event-engine/proto"]).toBe("2.0.0-snapshot.21");
-    expect(manifest.dependencies["@spine-event-engine/server"]).toBe("2.0.0-snapshot.21");
-    expect(manifest.devDependencies?.["@spine-event-engine/proto-tools"]).toBe("2.0.0-snapshot.21");
+    expect(manifest.dependencies["@spine-event-engine/core"]).toBe(rootManifest.version);
+    expect(manifest.dependencies["@spine-event-engine/proto"]).toBe(rootManifest.version);
+    expect(manifest.dependencies["@spine-event-engine/server"]).toBe(rootManifest.version);
+    expect(manifest.devDependencies?.["@spine-event-engine/proto-tools"]).toBe(
+      rootManifest.version,
+    );
     expect(manifest.scripts.start).toBe("node dist/src/local-application-server.js");
   });
 

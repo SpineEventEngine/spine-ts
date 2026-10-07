@@ -13,7 +13,7 @@
  */
 
 import { create, toBinary } from "@bufbuild/protobuf";
-import { AnySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
+import { AnySchema, StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { AnyMessages } from "@spine-event-engine/core";
 import { EventSchema } from "@spine-event-engine/proto";
 
@@ -46,7 +46,10 @@ export function createMessage(
     label: "UPDATE_SUBSCRIBER" as const,
     status: "TO_DELIVER" as const,
     shard: ShardIndex.single(),
-    whenReceived,
+    whenReceived: create(TimestampSchema, {
+      seconds: BigInt(Math.floor(whenReceived.getTime() / 1_000)),
+      nanos: (((whenReceived.getTime() % 1_000) + 1_000) % 1_000) * 1_000_000,
+    }),
     version,
   });
 }

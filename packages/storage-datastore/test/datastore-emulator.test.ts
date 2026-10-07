@@ -15,7 +15,7 @@
 import { create, fromBinary, ScalarType, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Datastore } from "@google-cloud/datastore";
-import { EventIdSchema, EventSchema, TenantIdSchema } from "@spine-event-engine/proto";
+import { EventIdSchema, EventSchema, TenantIdSchema, type Event } from "@spine-event-engine/proto";
 import { StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
 import {
   EntityRecordSchema,
@@ -41,6 +41,67 @@ const emulatorHost = process.env.DATASTORE_EMULATOR_HOST;
 const projectId = process.env.DATASTORE_PROJECT_ID ?? "spine-t0135-emulator";
 
 describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
+  it("preserves microsecond timestamp ordering and a page boundary in live Datastore", async () => {
+    const first = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 1_000_000 });
+    const middle = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 1_001_000 });
+    const last = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 1_002_000 });
+    const eventAt = (id: string, timestamp: typeof first) => {
+      const event = projectEvent(id, 1);
+      if (event.context === undefined) throw new Error("Expected event context.");
+      event.context.timestamp = timestamp;
+      return event;
+    };
+    const events = [
+      eventAt("z-first", first),
+      eventAt("m-middle", middle),
+      eventAt("a-last", last),
+    ];
+    const spec = new RecordSpec<string, Event>({
+      recordType: EventSchema,
+      idKind: "string",
+      extractId: (record) => record.id?.value ?? "",
+      columns: [
+        new RecordColumn(
+          "received",
+          ColumnTypes.message(TimestampSchema),
+          (record) => record.context?.timestamp,
+        ),
+      ],
+    });
+    const name = unique("precise_time");
+    const storage = DatastoreStorageFactory.newBuilder()
+      .setClient(datastore())
+      .organizeRecords(EventSchema, { kind: unique("PreciseTime") })
+      .build()
+      .createRecordStorage({ name, multitenant: false }, spec);
+    const firstEvent = events[0];
+    if (firstEvent === undefined) throw new Error("Expected the first precision event.");
+    try {
+      await storage.writeAll([...events].reverse());
+      const stored = await storage.read("z-first");
+      expect(stored?.context?.timestamp).toEqual(first);
+      expect(stored === undefined ? undefined : toBinary(EventSchema, stored)).toEqual(
+        toBinary(EventSchema, firstEvent),
+      );
+      const ordered = await storage.query({ sort: [{ field: "received" }] });
+      expect(ordered.map((event) => event.id?.value)).toEqual(
+        events.map((event) => event.id?.value),
+      );
+      expect(ordered.map((event) => event.context?.timestamp)).toEqual([first, middle, last]);
+      expect(ordered.map((event) => toBinary(EventSchema, event))).toEqual(
+        events.map((event) => toBinary(EventSchema, event)),
+      );
+      const continued = await storage.query({
+        sort: [{ field: "received" }],
+        after: { id: "z-first", values: [{ field: "received", value: first }] },
+      });
+      expect(continued.map((event) => event.id?.value)).toEqual(["m-middle", "a-last"]);
+      expect(continued.map((event) => event.context?.timestamp)).toEqual([middle, last]);
+    } finally {
+      storage.close();
+    }
+  });
+
   it("persists flat records with native columns, provider queries, pages, CAS, and finite scans", async () => {
     const client = datastore();
     const name = unique("records");

@@ -20,6 +20,7 @@ import { pathToFileURL } from "node:url";
 import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { StringValueSchema, type Any } from "@bufbuild/protobuf/wkt";
+import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { Identifiers, TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
@@ -3154,7 +3155,7 @@ async function persistDescriptorRow(input: {
     signal: input.signal,
     shard: input.shard,
     status: "TO_DELIVER",
-    whenReceived: new Date("2026-08-04T12:00:00.000Z"),
+    whenReceived: timestampFromDate(new Date("2026-08-04T12:00:00.000Z")),
     version: 1n,
   });
   if (written.outcome !== "WRITTEN") {

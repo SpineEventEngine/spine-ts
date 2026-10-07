@@ -83,6 +83,7 @@ export function taskGateCommands(classification) {
     "lint:cleanup",
     "lint:tsdoc",
     "lint:copyright",
+    "check:time-reads",
     "check:logging-containment",
     "format:check",
     "docs:audience:check",

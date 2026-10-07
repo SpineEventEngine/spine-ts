@@ -12,9 +12,9 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { clone, create, type Message, type MessageShape } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import {
   Client as NodeClient,
   type ClientKernel,
@@ -118,6 +118,7 @@ export interface BlackBoxScope extends ClientRequest {
    * @param schema The schema of the event message.
    * @param message The event message to post.
    * @returns A promise that resolves after the event is posted.
+   * @typeParam Schema The domain schema that determines the accepted message shape.
    */
   postEvent<Schema extends GenMessage<Message>>(
     schema: Schema,
@@ -130,6 +131,7 @@ export interface BlackBoxScope extends ClientRequest {
    * @param schema The schema of the external event message.
    * @param message The external event message.
    * @returns A promise that resolves after external event admission.
+   * @typeParam Schema The domain schema that determines the accepted message shape.
    */
   postExternalEvent<Schema extends GenMessage<Message>>(
     schema: Schema,
@@ -137,20 +139,78 @@ export interface BlackBoxScope extends ClientRequest {
   ): Promise<void>;
 }
 
+/**
+ * Provides lifecycle and signal operations to the scoped test facade.
+ */
 interface BlackBoxInternal {
+  /**
+   * Rejects test operations after cleanup begins.
+   */
   assertOpen(): void;
+
+  /**
+   * Posts a direct domain event with this test actor and occurrence time.
+   *
+   * @typeParam Schema The domain schema that determines the accepted message shape.
+   * @param actor The actor identifier recorded in signal contexts.
+   * @param schema The domain message schema used to encode the payload.
+   * @param message The domain payload to post.
+   * @returns Completion after the direct event is posted.
+   */
   postEvent<Schema extends GenMessage<Message>>(
     actor: string,
     schema: Schema,
     message: MessageShape<Schema>,
   ): Promise<void>;
+
+  /**
+   * Posts an external event through the test context intake path.
+   *
+   * @typeParam Schema The domain schema that determines the accepted message shape.
+   * @param actor The actor identifier recorded in signal contexts.
+   * @param schema The domain message schema used to encode the payload.
+   * @param message The domain payload to post.
+   * @returns Completion after external event admission.
+   */
   postExternalEvent<Schema extends GenMessage<Message>>(
     actor: string,
     schema: Schema,
     message: MessageShape<Schema>,
   ): Promise<void>;
-  track<Handle extends { cancel(): Promise<void> }>(handle: Handle): Handle;
-  onRelease(handle: { cancel(): Promise<void> }): void;
+
+  /**
+   * Registers a cancelable handle for BlackBox cleanup.
+   *
+   * @typeParam Handle The cancelable handle type retained when tracking it.
+   * @param handle The cancelable handle to track.
+   * @returns The registered cancelable handle.
+   */
+  track<
+    Handle extends {
+      /**
+       * Cancels this handle during BlackBox cleanup.
+       *
+       * @returns Completion after cancellation.
+       */
+      cancel(): Promise<void>;
+    },
+  >(
+    handle: Handle,
+  ): Handle;
+
+  /**
+   * Removes a completed handle from cleanup tracking.
+   *
+   * @param handle The cancelable handle to track.
+   */
+  onRelease(handle: {
+    /**
+     * Cancels this handle during BlackBox cleanup.
+     *
+     * @returns Completion after cancellation.
+     */
+    cancel(): Promise<void>;
+  }): void;
 }
 
 /**
@@ -158,20 +218,42 @@ interface BlackBoxInternal {
  */
 export class BlackBox {
   readonly #context: BoundedContext;
+
   readonly #server: RunningServer;
+
   readonly #client: ClientKernel;
+
   readonly #tenant: TenantId | undefined;
+
   readonly #zoneId: ZoneId;
+
   readonly #timeoutMs: number;
+
   readonly #intervalMs: number;
+
   readonly #waits = new AbortController();
+
   readonly #subscriptions = new Set<{ cancel(): Promise<void> }>();
+
   readonly #commands: Command[] = [];
+
   readonly #events: Event[] = [];
+
   readonly #observation: { readonly close: () => void };
+
   #admitting = true;
+
   #closing: Promise<void> | undefined;
 
+  /**
+   * Captures the server, client, test options, and produced-signal observation.
+   *
+   * @param context The bounded context under test.
+   * @param server The started local server.
+   * @param client The client connected to that server.
+   * @param options The validated tenant, zone, and wait settings.
+   * @param observation The optional produced-signal observer.
+   */
   private constructor(
     context: BoundedContext,
     server: RunningServer,
@@ -282,6 +364,7 @@ export class BlackBox {
    * @param accept The predicate that accepts a produced value.
    * @param options Optional wait limits for this operation.
    * @returns The first accepted value.
+   * @typeParam Value The value type carried through reading or delivery.
    */
   async eventually<Value>(
     read: () => Value | Promise<Value>,
@@ -297,18 +380,21 @@ export class BlackBox {
       options.intervalMs ?? this.#intervalMs,
       "intervalMs",
     );
-    const deadline = Date.now() + timeoutMs;
+    const deadline = Time.monotonicTime() + timeoutMs;
     for (;;) {
       const value = await read();
       this.#assertOpen();
       if (accept(value)) return value;
-      if (Date.now() >= deadline) throw new BlackBoxTimeoutError(timeoutMs);
-      await BlackBoxClock.wait(Math.min(intervalMs, deadline - Date.now()), this.#waits.signal);
+      if (Time.monotonicTime() >= deadline) throw new BlackBoxTimeoutError(timeoutMs);
+      await BlackBoxClock.wait(
+        Math.min(intervalMs, deadline - Time.monotonicTime()),
+        this.#waits.signal,
+      );
     }
   }
 
   /**
-   * Stops admission, cancels owned subscriptions, and closes the client and server once.
+   * Stops admission, cancels registered subscriptions, and closes the client and server once.
    *
    * @returns A shared promise that resolves after cleanup completes.
    */
@@ -317,10 +403,22 @@ export class BlackBox {
     return this.#closing;
   }
 
+  /**
+   * Rejects calls once BlackBox cleanup has begun.
+   */
   #assertOpen(): void {
     if (!this.#admitting) throw new BlackBoxClosedError();
   }
 
+  /**
+   * Posts a direct event with a controlled occurrence timestamp and actor context.
+   *
+   * @typeParam Schema The domain schema that determines the accepted message shape.
+   * @param actor The actor identifier recorded in signal contexts.
+   * @param schema The domain message schema used to encode the payload.
+   * @param message The domain payload to post.
+   * @returns Completion after the event bus accepts the direct event.
+   */
   async #postEvent<Schema extends GenMessage<Message>>(
     actor: string,
     schema: Schema,
@@ -339,6 +437,15 @@ export class BlackBox {
     );
   }
 
+  /**
+   * Admits an external event with controlled occurrence time through server intake.
+   *
+   * @typeParam Schema The domain schema that determines the accepted message shape.
+   * @param actor The actor identifier recorded in signal contexts.
+   * @param schema The domain message schema used to encode the payload.
+   * @param message The domain payload to post.
+   * @returns Completion after server intake accepts the external event.
+   */
   async #postExternalEvent<Schema extends GenMessage<Message>>(
     actor: string,
     schema: Schema,
@@ -358,16 +465,33 @@ export class BlackBox {
     );
   }
 
+  /**
+   * Registers a cancelable subscription for session cleanup.
+   *
+   * @typeParam Handle The cancelable handle type retained when tracking it.
+   * @param handle The cancelable handle to track.
+   * @returns The same handle registered for cleanup.
+   */
   #track<Handle extends { cancel(): Promise<void> }>(handle: Handle): Handle {
     this.#assertOpen();
     this.#subscriptions.add(handle);
     return handle;
   }
 
+  /**
+   * Removes a completed subscription from session cleanup.
+   *
+   * @param handle The cancelable handle to track.
+   */
   #release(handle: { cancel(): Promise<void> }): void {
     this.#subscriptions.delete(handle);
   }
 
+  /**
+   * Creates a test actor context with cloned tenant and zone and controlled occurrence time.
+   *
+   * @param actor The actor identifier recorded in signal contexts.
+   */
   #actorContext(actor: string) {
     return create(ActorContextSchema, {
       ...(this.#tenant === undefined ? {} : { tenantId: clone(TenantIdSchema, this.#tenant) }),
@@ -377,6 +501,11 @@ export class BlackBox {
     });
   }
 
+  /**
+   * Stops admission and waits, cancels subscriptions, and closes the client and server.
+   *
+   * @returns Completion after all cleanup settles, or an aggregate of failures.
+   */
   private async closeOnce(): Promise<void> {
     this.#admitting = false;
     this.#waits.abort(new BlackBoxClosedError());
@@ -409,14 +538,20 @@ const BlackBoxAccess = (() => {
     // prettier-ignore
 
     /**
-     * Associates internal operations with a BlackBox.
+     * Stores private lifecycle operations for the corresponding BlackBox instance.
+     *
+     * @param blackBox The BlackBox instance associated with these internals.
+     * @param internals The private operations for that instance.
      */
     set(blackBox: BlackBox, internals: BlackBoxInternal): void {
       values.set(blackBox, internals);
     },
 
     /**
-     * Obtains the internal operations for a BlackBox.
+     * Returns private lifecycle operations or rejects an unregistered instance.
+     *
+     * @param blackBox The BlackBox instance associated with these internals.
+     * @returns The private operations registered for this instance.
      */
     get(blackBox: BlackBox): BlackBoxInternal {
       const internals = values.get(blackBox);
@@ -436,14 +571,14 @@ export interface BlackBoxTestAccess {
    * Creates a BlackBox with supplied closeable resources.
    *
    * @param resources The test client, server, and optional subscriptions.
-   * @returns A BlackBox that owns the supplied resources.
+   * @returns A BlackBox configured with the supplied resources.
    */
   create(resources: BlackBoxTestResources): BlackBox;
 
   /**
    * Returns a generic subscription-like handle for lifecycle regression tests.
    *
-   * @param blackBox The BlackBox that owns the handle.
+   * @param blackBox The BlackBox tracking the handle.
    * @param handle The cancelable async handle to track.
    * @returns The tracked handle.
    */
@@ -471,7 +606,7 @@ export const BlackBoxTestAccess: BlackBoxTestAccess = Object.freeze({
    * Creates a BlackBox with supplied closeable resources.
    *
    * @param resources The test client, server, and optional subscriptions.
-   * @returns A BlackBox that owns the supplied resources.
+   * @returns A BlackBox configured with the supplied resources.
    */
   create(resources: BlackBoxTestResources): BlackBox {
     const blackBox = BlackBoxLifecycle.instantiate(
@@ -489,7 +624,7 @@ export const BlackBoxTestAccess: BlackBoxTestAccess = Object.freeze({
   /**
    * Returns a generic subscription-like handle for lifecycle regression tests.
    *
-   * @param blackBox The BlackBox that owns the handle.
+   * @param blackBox The BlackBox tracking the handle.
    * @param handle The cancelable async handle to track.
    * @returns The tracked handle.
    */
@@ -520,13 +655,19 @@ export const BlackBoxTestAccess: BlackBoxTestAccess = Object.freeze({
 });
 
 /**
- * Constructs BlackBox instances and compensates for failed startup.
+ * Creates BlackBox instances and compensates for failed startup.
  */
 const BlackBoxLifecycle = Object.freeze({
   // prettier-ignore
 
   /**
    * Opens the server and client before constructing a BlackBox.
+   *
+   * @param context The bounded context used to start the test server.
+   * @param options The validated tenant, zone, and wait settings.
+   * @param start The operation that starts the test server.
+   * @param connect The operation that connects a client to the started server.
+   * @returns The started BlackBox or a startup cleanup failure.
    */
   async open(
     context: BoundedContext,
@@ -556,7 +697,14 @@ const BlackBoxLifecycle = Object.freeze({
   },
 
   /**
-   * Instantiates a BlackBox through its deliberately private constructor.
+   * Creates a BlackBox through its deliberately private constructor.
+   *
+   * @param context The bounded context under test.
+   * @param server The started local server.
+   * @param client The client connected to that server.
+   * @param options The validated tenant, zone, and wait settings.
+   * @param observation The optional produced-signal observer.
+   * @returns A BlackBox containing the supplied resources.
    */
   instantiate(
     context: BoundedContext,
@@ -639,17 +787,38 @@ export interface BlackBoxTestStartup {
   readonly connect: (server: { close(): Promise<void> }) => { close(): Promise<void> };
 }
 
+/**
+ * Keeps an actor and fixed tenant and zone settings for fresh request contexts.
+ */
 class Request implements BlackBoxScope {
   readonly #internals: BlackBoxInternal;
+
   readonly #request: ClientRequest;
+
   readonly #actor: string;
 
+  /**
+   * Captures the selected actor and immutable request settings.
+   *
+   * @param blackBox The BlackBox instance associated with these internals.
+   * @param request The scoped client request used for public operations.
+   * @param actor The actor identifier recorded in signal contexts.
+   */
   constructor(blackBox: BlackBox, request: ClientRequest, actor: string) {
     this.#internals = BlackBoxAccess.get(blackBox);
     this.#request = request;
     this.#actor = actor;
   }
 
+  /**
+   * Posts a command with a fresh actor context and validates the acknowledged command ID.
+   *
+   * @typeParam Schema The domain schema that determines the accepted message shape.
+   * @param schema The domain message schema used to encode the payload.
+   * @param message The domain payload to post.
+   * @param options The optional signal that cancels the command request.
+   * @returns The acknowledged application outcome.
+   */
   post<Schema extends GenMessage<Message>>(
     schema: Schema,
     message: MessageShape<Schema>,
@@ -659,6 +828,14 @@ class Request implements BlackBoxScope {
     return this.#request.post(schema, message, options);
   }
 
+  /**
+   * Posts a domain Event through the BlackBox context for this actor.
+   *
+   * @typeParam Schema The domain schema that determines the accepted message shape.
+   * @param schema The domain message schema used to encode the payload.
+   * @param message The domain payload to post.
+   * @returns Completion after the direct event is posted.
+   */
   postEvent<Schema extends GenMessage<Message>>(
     schema: Schema,
     message: MessageShape<Schema>,
@@ -666,6 +843,14 @@ class Request implements BlackBoxScope {
     return this.#internals.postEvent(this.#actor, schema, message);
   }
 
+  /**
+   * Posts an external domain Event through the BlackBox context for this actor.
+   *
+   * @typeParam Schema The domain schema that determines the accepted message shape.
+   * @param schema The domain message schema used to encode the payload.
+   * @param message The domain payload to post.
+   * @returns Completion after external event admission.
+   */
   postExternalEvent<Schema extends GenMessage<Message>>(
     schema: Schema,
     message: MessageShape<Schema>,
@@ -673,11 +858,37 @@ class Request implements BlackBoxScope {
     return this.#internals.postExternalEvent(this.#actor, schema, message);
   }
 
-  send(query: Query | { build(): Query }, options?: ClientOperationOptions) {
+  /**
+   * Reads through the scoped client after confirming the BlackBox remains open.
+   *
+   * @param query The query message or builder to read.
+   * @param options The cancellation settings for this read.
+   * @returns The query response from the scoped client.
+   */
+  send(
+    query:
+      | Query
+      | {
+          /**
+           * Builds the query forwarded to the scoped client.
+           *
+           * @returns The query to read.
+           */
+          build(): Query;
+        },
+    options?: ClientOperationOptions,
+  ) {
     this.#internals.assertOpen();
     return this.#request.send(query, options);
   }
 
+  /**
+   * Validates the subscription kind and creates an inactive, client-managed topic stream.
+   *
+   * @param topic The requested topic with its target.
+   * @param options The subscription kind, recovery query, and optional cancellation signal.
+   * @returns The inactive tracked subscription.
+   */
   async createSubscription(
     topic: Topic,
     options: CreateSubscriptionOptions,
@@ -691,29 +902,62 @@ class Request implements BlackBoxScope {
   }
 }
 
+/**
+ * Tracks stream completion and cancellation for BlackBox cleanup.
+ */
 class TrackedSubscription implements Subscription {
   readonly #handle: Subscription;
+
   readonly #onRelease: () => void;
+
   #released = false;
+
   #cancellation: Promise<void> | undefined;
 
+  /**
+   * Wraps a subscription and registers its release callback.
+   *
+   * @param handle The cancelable handle to track.
+   * @param onRelease The callback removing a completed handle from cleanup tracking.
+   */
   constructor(handle: Subscription, onRelease: () => void) {
     this.#handle = handle;
     this.#onRelease = onRelease;
   }
 
+  /**
+   * Wraps live updates so terminal iteration releases cleanup tracking.
+   *
+   * @returns An iterable of live updates and authoritative recovery values.
+   */
   get updates(): AsyncIterable<import("@spine-event-engine/client-node").SubscriptionDelivery> {
     return this.trackStream(this.#handle.updates);
   }
 
+  /**
+   * Wraps lifecycle notices so terminal iteration releases cleanup tracking.
+   *
+   * @returns An iterable of lifecycle notices for this subscription.
+   */
   get lifecycle(): AsyncIterable<import("@spine-event-engine/client-node").SubscriptionLifecycle> {
     return this.trackStream(this.#handle.lifecycle);
   }
 
+  /**
+   * Sends activation to the underlying subscription.
+   *
+   * @param options The optional signal that cancels activation.
+   * @returns Completion after remote activation.
+   */
   activate(options?: ClientOperationOptions): Promise<void> {
     return this.#handle.activate(options);
   }
 
+  /**
+   * Cancels the underlying subscription once and releases cleanup tracking.
+   *
+   * @returns Completion after remote cleanup.
+   */
   async cancel(): Promise<void> {
     try {
       this.#cancellation ??= this.#handle.cancel();
@@ -723,12 +967,24 @@ class TrackedSubscription implements Subscription {
     }
   }
 
+  /**
+   * Removes cleanup tracking when iteration ends, fails, or returns early.
+   *
+   * @typeParam Value The update or lifecycle value yielded by the tracked stream.
+   * @param source The subscription stream whose terminal iteration releases tracking.
+   * @returns An iterable that releases tracking on terminal iteration.
+   */
   private trackStream<Value>(source: AsyncIterable<Value>): AsyncIterable<Value> {
     const onRelease = () => {
       this.release();
     };
     const onCancel = () => this.cancel();
     return {
+      /**
+       * Returns an iterator that releases subscription tracking when it terminates.
+       *
+       * @returns An iterator that releases tracking when it terminates.
+       */
       [Symbol.asyncIterator](): AsyncIterator<Value> {
         const iterator = source[Symbol.asyncIterator]();
         return {
@@ -765,6 +1021,9 @@ class TrackedSubscription implements Subscription {
     };
   }
 
+  /**
+   * Executes the release callback at most once.
+   */
   private release(): void {
     if (this.#released) return;
     this.#released = true;
@@ -772,14 +1031,44 @@ class TrackedSubscription implements Subscription {
   }
 }
 
-class Tracked<Handle extends { cancel(): Promise<void> }> {
+/**
+ * Wraps a cancelable test handle and tracks its completion.
+ *
+ * @typeParam Handle The cancelable handle type retained when tracking it.
+ */
+class Tracked<
+  Handle extends {
+    /**
+     * Cancels the wrapped test handle during cleanup.
+     *
+     * @returns Completion after cancellation.
+     */
+    cancel(): Promise<void>;
+  },
+> {
   readonly #handle: Handle;
+
   readonly #onRelease: () => void;
+
   #cancellation: Promise<void> | undefined;
+
+  /**
+   * Captures the handle and callback that removes it from cleanup tracking.
+   *
+   * @param handle The cancelable handle to track.
+   * @param onRelease The callback removing a completed handle from cleanup tracking.
+   */
   constructor(handle: Handle, onRelease: () => void) {
     this.#handle = handle;
     this.#onRelease = onRelease;
   }
+
+  /**
+   * Activates a subscription-like test handle or rejects an unsupported handle.
+   *
+   * @param arguments_ The arguments forwarded to the wrapped activation.
+   * @returns Completion after remote activation.
+   */
   async activate(...arguments_: []): Promise<void> {
     const subscription = this.#handle as Handle & { activate?: () => Promise<void> };
     if (subscription.activate === undefined) {
@@ -787,6 +1076,12 @@ class Tracked<Handle extends { cancel(): Promise<void> }> {
     }
     await subscription.activate(...arguments_);
   }
+
+  /**
+   * Removes a tracked handle when iteration ends or fails.
+   *
+   * @returns An iterator that releases tracking when it terminates.
+   */
   [Symbol.asyncIterator](): AsyncIterator<unknown> {
     const iterator = (this.#handle as Handle & AsyncIterable<unknown>)[Symbol.asyncIterator]();
     return {
@@ -821,6 +1116,12 @@ class Tracked<Handle extends { cancel(): Promise<void> }> {
       },
     };
   }
+
+  /**
+   * Cancels the wrapped handle once and releases it even after failure.
+   *
+   * @returns Completion after remote cleanup.
+   */
   async cancel(): Promise<void> {
     try {
       this.#cancellation ??= this.#handle.cancel();
@@ -831,6 +1132,9 @@ class Tracked<Handle extends { cancel(): Promise<void> }> {
   }
 }
 
+/**
+ * Holds validated tenant, zone, timeout, and polling settings for a BlackBox.
+ */
 interface NormalizedBlackBoxOptions {
   readonly tenant: TenantId | undefined;
   readonly zoneId: ZoneId;
@@ -846,6 +1150,10 @@ const BlackBoxOptionsValues = Object.freeze({
 
   /**
    * Normalizes options for one context.
+   *
+   * @param context The bounded context whose tenant mode is validated.
+   * @param options The requested tenant and wait settings.
+   * @returns Validated immutable test settings.
    */
   normalize(
     context: BoundedContext | BoundedContextBuilder,
@@ -867,7 +1175,10 @@ const BlackBoxOptionsValues = Object.freeze({
   },
 
   /**
-   * Clones an optional tenant message.
+   * Returns a separate tenant message when a tenant was selected.
+   *
+   * @param value The optional tenant message to clone.
+   * @returns A clone of the tenant or undefined.
    */
   cloneTenant(value: TenantId | undefined): TenantId | undefined {
     return value === undefined ? undefined : clone(TenantIdSchema, value);
@@ -875,6 +1186,8 @@ const BlackBoxOptionsValues = Object.freeze({
 
   /**
    * Creates default normalized options for internal test seams.
+   *
+   * @returns Immutable tenant, zone, and wait defaults for test seams.
    */
   defaults(): NormalizedBlackBoxOptions {
     return Object.freeze({
@@ -887,6 +1200,9 @@ const BlackBoxOptionsValues = Object.freeze({
 
   /**
    * Converts a tenant option to its message form.
+   *
+   * @param value The optional tenant string or identifier to validate and clone.
+   * @returns A cloned tenant identifier or undefined.
    */
   tenant(value: string | TenantId | undefined): TenantId | undefined {
     if (value === undefined) return undefined;
@@ -901,19 +1217,26 @@ const BlackBoxOptionsValues = Object.freeze({
 
   /**
    * Converts a zone option to its message form.
+   *
+   * @param value The optional zone string or identifier; omitted values use current Time.
+   * @returns A cloned zone identifier.
    */
   zoneId(value: string | ZoneId | undefined): ZoneId {
     if (typeof value !== "string" && value !== undefined) {
       if (value.value.length === 0) throw new TypeError("BlackBox zoneId must not be empty.");
       return clone(ZoneIdSchema, value);
     }
-    const zone = value ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const zone = value ?? Time.currentTimeZone();
     if (zone.length === 0) throw new TypeError("BlackBox zoneId must not be empty.");
     return create(ZoneIdSchema, { value: zone });
   },
 
   /**
    * Validates a positive whole-number duration.
+   *
+   * @param value The configured wait duration in milliseconds.
+   * @param name The duration option named in validation errors.
+   * @returns The validated positive integer.
    */
   positiveInteger(value: number, name: "timeoutMs" | "intervalMs"): number {
     if (!Number.isInteger(value) || value <= 0)
@@ -929,14 +1252,20 @@ const BlackBoxClock = Object.freeze({
   // prettier-ignore
 
   /**
-   * Creates the current Protobuf timestamp.
+   * Returns the configured occurrence Time for posted events and actor contexts.
+   *
+   * @returns The current controlled Protobuf timestamp.
    */
   timestamp() {
-    return create(TimestampSchema, { seconds: BigInt(Math.floor(Date.now() / 1_000)) });
+    return Time.currentTime();
   },
 
   /**
    * Waits for a delay or rejects when the supplied signal aborts.
+   *
+   * @param milliseconds The timer delay in milliseconds.
+   * @param signal The abort signal for this operation.
+   * @returns Completion when the timer expires unless aborted.
    */
   wait(milliseconds: number, signal: AbortSignal): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -961,6 +1290,9 @@ const BlackBoxFailures = Object.freeze({
 
   /**
    * Returns reasons from rejected promises.
+   *
+   * @param results The settled cleanup operation results.
+   * @returns Failure reasons in their settled result order.
    */
   rejected(results: readonly PromiseSettledResult<unknown>[]): unknown[] {
     const failures: unknown[] = [];

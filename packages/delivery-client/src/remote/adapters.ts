@@ -12,7 +12,10 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { randomUUID } from "node:crypto";
+import { create } from "@bufbuild/protobuf";
+import { type Timestamp, TimestampSchema } from "@bufbuild/protobuf/wkt";
 
 import type {
   DeliveryInbox,
@@ -119,7 +122,8 @@ export class RemoteInbox implements DeliveryInbox {
     const prior = page.at(-2);
     if (
       page.length === pageSize &&
-      (last === undefined || prior?.whenReceived.getTime() === last.whenReceived.getTime())
+      (last === undefined ||
+        (prior !== undefined && RemoteValues.sameTime(prior.whenReceived, last.whenReceived)))
     )
       throw new DeliveryPagingError();
     return {
@@ -213,7 +217,7 @@ export class RemoteInbox implements DeliveryInbox {
       return false;
     if (
       message.status !== "DELIVERED" ||
-      (message.keepUntil !== undefined && message.keepUntil.getTime() > Date.now())
+      (message.keepUntil !== undefined && message.keepUntil.getTime() > Time.currentTimeMillis())
     )
       return false;
     const current = await this.client.findOne(message.id, options);
@@ -549,15 +553,26 @@ const RemoteValues = Object.freeze({
   },
 
   /**
-   * Returns the millisecond before a page anchor for exclusive paging.
+   * Returns the nanosecond before a page anchor for exclusive paging.
    *
    * @param value Supplies the received-time continuation.
-   * @returns The preceding millisecond as a new Date.
+   * @returns The preceding instant as a precise timestamp.
    */
-  pageAnchor(value: Date): Date {
-    const milliseconds = value.getTime();
-    if (milliseconds <= -62_135_596_800_000) throw new DeliveryPagingError();
-    return new Date(milliseconds - 1);
+  pageAnchor(value: Timestamp): Timestamp {
+    if (value.seconds === -62_135_596_800n && value.nanos === 0) throw new DeliveryPagingError();
+    return value.nanos === 0
+      ? create(TimestampSchema, { seconds: value.seconds - 1n, nanos: 999_999_999 })
+      : create(TimestampSchema, { seconds: value.seconds, nanos: value.nanos - 1 });
+  },
+
+  /**
+   * Compares two receive times at nanosecond precision.
+   * @param left The first receive time.
+   * @param right The second receive time.
+   * @returns Whether both instants have equal seconds and nanoseconds.
+   */
+  sameTime(left: Timestamp, right: Timestamp): boolean {
+    return left.seconds === right.seconds && left.nanos === right.nanos;
   },
 
   /**
@@ -593,7 +608,7 @@ const RemoteValues = Object.freeze({
     const exact = page.findIndex(
       (message) =>
         message.id.value === after.messageId &&
-        message.whenReceived.getTime() === after.whenReceived.getTime() &&
+        RemoteValues.sameTime(message.whenReceived, after.whenReceived) &&
         message.version === after.version,
     );
     if (exact < 0) throw new DeliveryPagingError();
@@ -619,7 +634,7 @@ const RemoteValues = Object.freeze({
       left.label === right.label &&
       left.status === right.status &&
       left.version === right.version &&
-      left.whenReceived.getTime() === right.whenReceived.getTime() &&
+      RemoteValues.sameTime(left.whenReceived, right.whenReceived) &&
       RemoteValues.sameDate(left.keepUntil, right.keepUntil)
     );
   },

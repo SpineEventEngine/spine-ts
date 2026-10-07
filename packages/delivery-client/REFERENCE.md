@@ -35,6 +35,10 @@ the mutation.
 `readPage` uses the frozen timestamp-only continuation. If a full timestamp
 boundary cannot continue without loss, it throws `DeliveryPagingError`.
 Protocol-invalid data throws `DeliveryProtocolError`.
+Inbox read results expose `whenReceived` as a Protobuf `Timestamp` with seconds
+and nanoseconds. Single and batch writes and removals, plus `readPage({ sinceWhen })`, require a
+Protobuf `Timestamp`. Its seconds and nanoseconds preserve exact receipt and
+continuation precision.
 
 ## Observation and topology
 

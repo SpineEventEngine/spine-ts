@@ -123,6 +123,10 @@ numbers, enums, bytes, messages, `Timestamp`, and `Version`. Spine JVM JDBC
 does not support `float` or `double` record columns, so this adapter rejects
 them too.
 
+Indexed `Timestamp` columns store epoch nanoseconds in signed 64-bit `BIGINT`.
+Values must fit that range (approximately 1677–2262 UTC); Protobuf's wider
+`Timestamp` range does not expand the SQL range.
+
 MyISAM and Aria limit the byte length of an indexed key. Their `VARCHAR(512)`
 ID column therefore needs a one-byte binary collation, such as `latin1_bin`,
 and every ID must be representable in that character set. The normal InnoDB

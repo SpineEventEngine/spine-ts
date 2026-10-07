@@ -81,7 +81,7 @@ registrar waits for the admitted promise to settle before deletion.
 ## Discovery
 
 `GceRegistryReader.read(signal)` reads the full live registry snapshot at its
-injected clock time, which defaults to `Date.now`. `GceNodeDiscovery` manages one
+injected clock time, which defaults to `Time.currentTimeMillis`. `GceNodeDiscovery` manages one
 `LeasedNodeRegistry`, wraps that reader in `ScheduledNodeDiscovery`, and is the
 Gateway-facing `NodeDiscovery`. Its production scheduler is optional and
 unref'ed; expired rows are filtered immediately, so scale-to-zero produces an

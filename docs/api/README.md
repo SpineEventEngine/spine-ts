@@ -972,14 +972,14 @@ pending. Same-runtime reentrant `enqueue()` and `close()` calls from active work
 are rejected with `state: "running-work"` to avoid queue self-deadlocks. This
 runtime manages one in-process work queue. It does not start network listeners
 or child processes, persist work, or perform message dispatch.
-Runtime metadata exports include `SignalMetadata`, `Clock`,
-`SystemClock`, `FixedClock`, `SignalMetadataOptions`, `ActorContextInput`,
+Runtime metadata exports include `SignalMetadata`,
+`SignalMetadataOptions`, `ActorContextInput`,
 `CommandContextInput`, and `EventContextInput`. `SignalMetadata` creates
 generated command IDs, event IDs, timestamps, actor/tenant command context,
 source-command/source-event origin chains, primitive (`string | number |
 boolean`) producer IDs, and validated int32 `Version` metadata through one
-implementation. Generated IDs use Node secure UUIDs; tests can supply a fixed
-`Clock` and source envelopes. This API prepares signal metadata; it does not
+implementation. Generated IDs use Node secure UUIDs; tests can supply a
+`TimeProvider` and source envelopes. This API prepares signal metadata; it does not
 discover or invoke handlers, deliver messages, or save them.
 Existing Command and Event envelopes retain their supplied IDs without UUID-format
 validation; the UUID guarantee applies to newly generated IDs, not to decoding,

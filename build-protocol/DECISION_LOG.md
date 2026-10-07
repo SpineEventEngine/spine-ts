@@ -6004,3 +6004,26 @@ adapters change together, without a compatibility shim for previous snapshots.
 The real 1,000-recipient benchmark must meet the under-one-second target;
 the design alone is not evidence of that result. See
 [the approved plan](tasks/fix-publication-provenance/entity-save-delivery-plan.md).
+
+## D-0124: Shared Spine Time For Runtime Time Reads
+
+Status: Implemented; three independent review rounds and final release verification complete
+
+Date: 2026-10-06
+
+Introduce the Spine JVM-equivalent Time utility for framework and application
+runtime time reads, including occurrence timestamps, deadlines, retries,
+authentication and runtime diagnostics. Preserve monotonic elapsed measurement
+and occurrence precision. Follow IncrementalNanos without repository ordering
+counters. Use controlled TimeProvider values for tests.
+
+Occurrence APIs use Timestamp; no legacy Date input unions or obsolete Clock
+facades are required. Build, release, code-generation, test-runner, benchmark and
+other non-runtime development scripts and all TSX files use platform clocks and
+must not import Time. Explicit supplied-value conversion is not current-time acquisition.
+Do not introduce millisecond-to-Date wrappers solely to use Time. Preserve the
+existing Proto generation-ID algorithm and format; changing them is outside this
+task. Agent work remains a separate task.
+
+See [the Time task](planning/spine-time-task.md) and
+[its status](planning/spine-time-worklog.md).

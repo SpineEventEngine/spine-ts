@@ -82,18 +82,35 @@ export type {
  */
 export class DeliveryClient {
   readonly #inbox: ReturnType<typeof createClient<typeof InboxService>>;
+
   readonly #shards: ReturnType<typeof createClient<typeof ShardService>>;
+
   readonly #admin: ReturnType<typeof createClient<typeof AdminService>>;
+
   readonly #pageSize: number;
+
   readonly #readRetries: number;
+
   readonly #retryBackoffMs: number;
+
   readonly #observationReconnects: number;
+
   readonly #observationReconnectBackoffMs: number;
+
   readonly #observationBufferSize: number;
+
   readonly #activeReads = new Set<AbortController>();
+
   readonly #onCloseOwnedTransport: (() => void) | undefined;
+
   #closed = false;
 
+  /**
+   * Creates a client with bounded delivery RPCs and a transport-close callback.
+   * @param transport The Connect transport used for delivery RPCs.
+   * @param options The validated page, retry, timeout, and observation settings.
+   * @param onCloseOwnedTransport Closes the HTTP/2 transport created by this client, when present.
+   */
   private constructor(
     transport: Transport,
     options: DeliveryClientOptions,
@@ -523,6 +540,13 @@ export class DeliveryClient {
     this.#onCloseOwnedTransport?.();
   }
 
+  /**
+   * Runs a bounded read with configured retries and linked cancellation.
+   * @typeParam T The read response type returned by the supplied operation.
+   * @param options The timeout and cancellation settings for this read.
+   * @param operation The read RPC to invoke on each permitted attempt.
+   * @returns The accepted read response.
+   */
   async #read<T>(
     options: DeliveryFindOneOptions,
     operation: (signal: AbortSignal, timeoutMs: number) => Promise<T>,
@@ -554,6 +578,15 @@ export class DeliveryClient {
     }
   }
 
+  /**
+   * Runs one mutation attempt and reports uncertain remote outcomes for reconciliation.
+   * @typeParam T The mutation RPC response type.
+   * @param operation The mutation named in an uncertain-outcome error.
+   * @param reconciliation Identifiers needed to inspect the remote result.
+   * @param options The timeout and cancellation settings for this mutation.
+   * @param invoke The single remote RPC attempt.
+   * @returns The mutation response when its outcome is known.
+   */
   async #mutation<T>(
     operation: DeliveryOutcomeUnknownError["operation"],
     reconciliation: readonly string[] | readonly ShardIndex[] | "ALL_SHARDS",

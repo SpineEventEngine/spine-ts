@@ -1,3 +1,5 @@
+import { Time } from "@spine-event-engine/core/time";
+
 import { create, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { RemoteDelivery } from "@spine-event-engine/delivery-client";
@@ -123,7 +125,7 @@ process.on("message", async (frame) => {
       label: "HANDLE_COMMAND",
       status: "TO_DELIVER",
       shard: ShardIndex.single(),
-      whenReceived: new Date(),
+      whenReceived: Time.currentTime(),
       version: 1n,
     });
     process.send({ type: "result", id: frame.id });

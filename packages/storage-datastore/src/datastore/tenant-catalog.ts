@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { Datastore } from "@google-cloud/datastore";
 import {
   TenantBoundary,
@@ -38,10 +39,15 @@ export class DatastoreTenantCatalog implements TenantCatalog {
     string,
     { readonly boundary: TenantBoundaryValue; readonly expiresAt: number }
   >();
+
   readonly #converter: NamespaceAssignments;
+
   readonly #now: () => number;
+
   readonly #earlyTenantTtlMs: number;
+
   readonly #maxEarlyTenants: number;
+
   #open = true;
 
   /**
@@ -58,7 +64,7 @@ export class DatastoreTenantCatalog implements TenantCatalog {
   ) {
     this.#converter =
       converter instanceof NamespaceAssignments ? converter : new NamespaceAssignments(converter);
-    this.#now = options.now ?? Date.now;
+    this.#now = options.now ?? (() => Time.currentTimeMillis());
     this.#earlyTenantTtlMs = options.earlyTenantTtlMs ?? earlyTenantTtlMs;
     this.#maxEarlyTenants = options.maxEarlyTenants ?? maxEarlyTenants;
     if (!Number.isFinite(this.#earlyTenantTtlMs) || this.#earlyTenantTtlMs <= 0)
@@ -124,6 +130,10 @@ export class DatastoreTenantCatalog implements TenantCatalog {
     });
   }
 
+  /**
+   * Stores a tenant namespace until native Datastore metadata becomes visible.
+   * @param boundary The tenant admitted for early reads.
+   */
   private keepNow(boundary: TenantBoundaryValue): void {
     this.requireOpen();
     if (boundary.single || boundary.tenantId === undefined)
@@ -152,10 +162,16 @@ export class DatastoreTenantCatalog implements TenantCatalog {
     return Promise.resolve();
   }
 
+  /**
+   * Rejects catalog operations after closure.
+   */
   private requireOpen(): void {
     if (!this.#open) throw new Error("Datastore tenant catalog is closed.");
   }
 
+  /**
+   * Removes early tenant admissions after their configured TTL.
+   */
   private purgeExpired(): void {
     const now = this.#now();
     for (const [namespace, admission] of this.#kept) {

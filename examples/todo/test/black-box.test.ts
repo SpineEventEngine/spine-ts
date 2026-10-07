@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { create, type MessageShape } from "@bufbuild/protobuf";
 import { type Any } from "@bufbuild/protobuf/wkt";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
@@ -936,7 +937,7 @@ describe("@spine-event-engine/example-todo", () => {
       label: "UPDATE_SUBSCRIBER",
       status: "TO_DELIVER",
       shard: delivery.strategy.shardFor(targetId, targetTypeUrl),
-      whenReceived: new Date(),
+      whenReceived: Time.currentTime(),
       version: 1n,
     });
 

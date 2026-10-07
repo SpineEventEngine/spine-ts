@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { Time } from "@spine-event-engine/core/time";
 import { InMemoryStorageFactory, type StorageContext } from "@spine-event-engine/storage";
 import { create, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
@@ -4261,7 +4262,7 @@ function message(ready: DeliveryReady, signalId: string) {
     label: ready.label,
     status: "TO_DELIVER" as const,
     shard: ready.shard,
-    whenReceived: new Date(),
+    whenReceived: Time.currentTime(),
     version: 1n,
     signal: create(AnySchema, {
       typeUrl: "type.spine.io/spine.core.Event",

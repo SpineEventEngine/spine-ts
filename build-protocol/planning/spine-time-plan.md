@@ -1,0 +1,53 @@
+# Spine Time implementation plan
+
+Baseline: official origin/master 52fb932f25ab1dc1b8617169d9502bccebcef21e.
+Architecture pass: requirements_splitter, explicitly gpt-6-astra/high, read-only,
+no child delegation. Configured profile confirmed; separate runtime metadata not
+exposed. No human decisions required. Follow D-0124 and spine-time-task.md.
+
+## Shared contract
+
+One browser-safe packages/core/src/time/index.ts implementation, core/time subpath,
+re-export same module from core barrel. No generated schema dependency in leaf.
+Time.currentTime returns configured-provider canonical Timestamp; systemTime
+uses shared system provider; currentTimeZone returns IANA string;
+currentTimeMillis returns integer epoch milliseconds; monotonicTime returns
+monotonic elapsed milliseconds from local origin. JVM-style provider interface
+currentTime plus optional currentZone/monotonicTime fallback to system.
+setProvider returns previous provider for try/finally restoration; resetProvider
+restores default. Provider controls are documented internal testing surfaces.
+System clock offsets increment 1000 nanos, reset on underlying millisecond
+change and wrap after1000 calls per reference. Scope is module/JS realm, not a
+distributed uniqueness claim. Test Timestamp bounds and normalized negative epochs.
+
+Build, release, generation, test-runner and other non-runtime development scripts
+use platform clocks and must not import Time. All TSX files have the same exclusion. The checker distinguishes runtime
+sources from tooling by purpose, including development drivers under examples.
+Tests may use Time as the subject or to control framework runtime behavior.
+Keep sequential provider mutation within isolated tests; no AsyncLocalStorage
+clock subsystem.
+
+Use TimeProvider for signal/browser time injection. Remove the obsolete Date-based
+Clock facade and Date compatibility branches. Signal occurrence and Inbox APIs
+accept canonical Timestamp values; update all first-party callers and tests.
+Explicit conversion of supplied values at an actual external boundary remains
+separate from reading or representing occurrence time.
+
+SQL columns already epoch nanos: preserve them. Test Datastore SDK precise
+encoding and use full protobuf payload for occurrence decoding. Inbox whenReceived
+and pagination anchors must carry Timestamp on both input and output. Lease/expiry fields may retain documented millisecond contracts.
+No new wire fields/database schema, Time wrapper Date, counters or Agent code.
+
+## Sequential slices under one implementation context
+
+A. Time leaf, exports and TDD contract tests, browser proof.
+B. Runtime occurrence creation and TimeProvider injection.
+C. Precise inbox receipt, pagination and transport/store tests.
+D. Remaining framework/application runtime reads; AST gate with a tested tooling boundary.
+E. Focused preflight, concern-specific review, correction batch, one converged
+release verification plus provider precision evidence, version-only commit,
+immediate feature-branch pushes. No PR creation or merge.
+
+Only the implementer writes production files. Orchestrator maintains task logs,
+executes independent read-only checks and coordinates reviews. Do not rebuild or
+clean outputs concurrently with implementer tests.

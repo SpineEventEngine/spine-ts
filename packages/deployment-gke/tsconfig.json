@@ -9,5 +9,5 @@
     "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
   },
   "include": ["src"],
-  "references": [{ "path": "../deployment" }]
+  "references": [{ "path": "../core" }, { "path": "../deployment" }]
 }

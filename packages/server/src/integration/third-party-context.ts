@@ -14,7 +14,7 @@
 
 import { create, toBinary, type Message } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
+import { AnyMessages, Time, TypeUrls } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   BoundedContextNameSchema,
@@ -37,9 +37,16 @@ import { ServerEnvironment } from "../server/server-environment.js";
  */
 export class ThirdPartyContext {
   readonly #context: BoundedContext;
+
   readonly #multitenant: boolean;
+
   #closed = false;
 
+  /**
+   * Stores the integration context and its tenant policy.
+   * @param context The bounded context that receives imported Events.
+   * @param multitenant Whether importing actors must include a tenant.
+   */
   private constructor(context: BoundedContext, multitenant: boolean) {
     this.#context = context;
     this.#multitenant = multitenant;
@@ -146,13 +153,9 @@ export class ThirdPartyContext {
     if (isUser) {
       if (this.#multitenant)
         throw new Error("Multitenant ThirdPartyContext requires ActorContext.");
-      const now = Date.now();
       return create(ActorContextSchema, {
         actor,
-        timestamp: create(TimestampSchema, {
-          seconds: BigInt(Math.floor(now / 1_000)),
-          nanos: (now % 1_000) * 1_000_000,
-        }),
+        timestamp: Time.currentTime(),
       });
     }
     const hasTenant = actor.tenantId?.kind.case !== undefined;

@@ -13,9 +13,17 @@
  */
 
 import { create, toBinary } from "@bufbuild/protobuf";
-import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
-import { Identifiers } from "@spine-event-engine/core";
-import { CommandSchema, EventSchema } from "@spine-event-engine/proto";
+import { AnySchema, timestampFromDate, type Any } from "@bufbuild/protobuf/wkt";
+import { AnyMessages, Identifiers } from "@spine-event-engine/core";
+import { Time } from "@spine-event-engine/core/time";
+import {
+  ActorContextSchema,
+  CommandContextSchema,
+  CommandIdSchema,
+  CommandSchema,
+  EventSchema,
+  UserIdSchema,
+} from "@spine-event-engine/proto";
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { runInNewContext } from "node:vm";
@@ -28,11 +36,92 @@ import { ShardIndex, type InboxMessage } from "../../src/index.js";
 import { DeliveryReadiness } from "../../src/context/local-inbox-handoff.js";
 import { LocalEntityInbox } from "../../src/context/entity-inbox.js";
 import { tenant } from "../tenant-fixture.js";
+import { CreateTaskSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_commands_pb.js";
+import {
+  TaskIdSchema,
+  TaskListIdSchema,
+} from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
+import { TaskSchema } from "../../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 
 type ReceiveInput = Parameters<LocalEntityInbox["receive"]>[1];
 const processManagerLabels = ["HANDLE_COMMAND", "REACT_UPON_EVENT"] as const;
 
 describe("LocalEntityInbox", () => {
+  it("drains a batch with a distinct precise receipt instant for every recipient", async () => {
+    const previous = Time.setProvider({
+      currentTime: (() => {
+        let nanos = 0;
+        return () => ({
+          $typeName: "google.protobuf.Timestamp" as const,
+          seconds: 1_700_000_000n,
+          nanos: (nanos += 1_000),
+        });
+      })(),
+    });
+    try {
+      const shard = ShardIndex.single();
+      const delivery = new Delivery({
+        context: { name: "BatchReceipt", multitenant: false },
+        storageFactory: new InMemoryStorageFactory(),
+        pageSize: 2,
+      });
+      const entityInbox = new LocalEntityInbox("BatchReceipt");
+      const targetTypeUrl = TaskSchema.typeName;
+      const replayed: string[] = [];
+      entityInbox.register({
+        targetTypeUrl,
+        labels: ["HANDLE_COMMAND"],
+        replay(message) {
+          replayed.push(message.signalId);
+          return Promise.resolve(undefined);
+        },
+      });
+      const inputs = ["first", "second", "third"].map((target) => ({
+        inboxId: {
+          targetId: AnyMessages.pack(TaskIdSchema, create(TaskIdSchema, { value: target })),
+          targetTypeUrl,
+        },
+        signalId: `command-${target}`,
+        signal: AnyMessages.pack(
+          CommandSchema,
+          create(CommandSchema, {
+            id: create(CommandIdSchema, { uuid: `command-${target}` }),
+            context: create(CommandContextSchema, {
+              actorContext: create(ActorContextSchema, {
+                actor: create(UserIdSchema, { value: "batch-test-user" }),
+              }),
+            }),
+            message: AnyMessages.pack(
+              CreateTaskSchema,
+              create(CreateTaskSchema, {
+                id: create(TaskIdSchema, { value: target }),
+                taskListId: create(TaskListIdSchema, { value: "batch-list" }),
+                title: `Task ${target}`,
+              }),
+            ),
+          }),
+        ),
+        label: "HANDLE_COMMAND" as const,
+        status: "TO_DELIVER" as const,
+      }));
+
+      const messages = await entityInbox.receiveAll(delivery, inputs);
+
+      expect(messages).toHaveLength(3);
+      expect(
+        new Set(
+          messages.map(
+            ({ whenReceived }) => String(whenReceived.seconds) + ":" + String(whenReceived.nanos),
+          ),
+        ).size,
+      ).toBe(3);
+      expect(replayed).toEqual(inputs.map(({ signalId }) => signalId));
+      await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toEqual([]);
+    } finally {
+      Time.setProvider(previous);
+    }
+  });
+
   it("exposes the shared entity inbox for Aggregate command labels", () => {
     const inbox = new LocalEntityInbox("Tasks");
     const targetTypeUrl = "type.example.dev/Tasks.Aggregate";
@@ -609,7 +698,7 @@ describe("LocalEntityInbox", () => {
       label: "HANDLE_COMMAND",
       status: "TO_DELIVER",
       shard: ShardIndex.single(),
-      whenReceived: new Date("2026-07-08T09:00:00.000Z"),
+      whenReceived: timestampFromDate(new Date("2026-07-08T09:00:00.000Z")),
       version: 1n,
     });
     await delivery.inbox.receive({
@@ -619,7 +708,7 @@ describe("LocalEntityInbox", () => {
       label: "REACT_UPON_EVENT",
       status: "TO_DELIVER",
       shard: ShardIndex.single(),
-      whenReceived: new Date("2026-07-08T09:00:01.000Z"),
+      whenReceived: timestampFromDate(new Date("2026-07-08T09:00:01.000Z")),
       version: 2n,
     });
 
@@ -1103,7 +1192,7 @@ describe("LocalEntityInbox", () => {
       label: "HANDLE_COMMAND",
       status: "TO_DELIVER",
       shard,
-      whenReceived: new Date("2026-07-08T09:00:00.000Z"),
+      whenReceived: timestampFromDate(new Date("2026-07-08T09:00:00.000Z")),
       version: 1n,
     });
 
@@ -1182,7 +1271,7 @@ describe("LocalEntityInbox", () => {
       label: "UPDATE_SUBSCRIBER",
       status: "TO_DELIVER",
       shard,
-      whenReceived: new Date("2026-07-08T09:00:00.000Z"),
+      whenReceived: timestampFromDate(new Date("2026-07-08T09:00:00.000Z")),
       version: 1n,
     });
     await delivery.inbox.receive({
@@ -1195,7 +1284,7 @@ describe("LocalEntityInbox", () => {
       label: "HANDLE_COMMAND",
       status: "TO_DELIVER",
       shard,
-      whenReceived: new Date("2026-07-08T09:00:01.000Z"),
+      whenReceived: timestampFromDate(new Date("2026-07-08T09:00:01.000Z")),
       version: 2n,
     });
 
@@ -1677,7 +1766,7 @@ function writtenResult(
       ...input,
       shard: ShardIndex.single(),
       id: { value: `row-${String(version)}`, shard: ShardIndex.single() },
-      whenReceived: new Date("2026-07-12T09:00:00.000Z"),
+      whenReceived: timestampFromDate(new Date("2026-07-12T09:00:00.000Z")),
       version,
     },
   };

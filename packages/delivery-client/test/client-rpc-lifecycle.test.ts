@@ -13,7 +13,7 @@
  */
 
 import { create } from "@bufbuild/protobuf";
-import { AnySchema, EmptySchema } from "@bufbuild/protobuf/wkt";
+import { AnySchema, EmptySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, type Transport } from "@connectrpc/connect";
 import { ShardIndex } from "@spine-event-engine/server";
 import {
@@ -107,6 +107,8 @@ describe("DeliveryClient RPC and lifecycle", () => {
 
     const command = await client.findOne(id);
     expect(command).toMatchObject({ label: "HANDLE_COMMAND", status: "TO_DELIVER", version: 2n });
+    expect(command?.whenReceived.seconds).toBe(1n);
+    expect(command?.whenReceived.nanos).toBe(0);
     expect(command?.signal?.typeUrl).toBe("type.spine.io/spine.core.Command");
     expect(Object.isFrozen(command)).toBe(true);
     expect(Object.isFrozen(command?.id)).toBe(true);
@@ -124,6 +126,8 @@ describe("DeliveryClient RPC and lifecycle", () => {
     const client = DeliveryClient.usingTransport(fake.transport, { pageSize: 2 });
 
     const page = await client.readPage(ShardIndex.single());
+    expect(page[0]?.whenReceived.seconds).toBe(1n);
+    expect(page[0]?.whenReceived.nanos).toBe(0);
 
     expect(fake.unary).toHaveBeenLastCalledWith(
       expect.objectContaining({ name: "FindManyInShard" }),
@@ -399,6 +403,22 @@ describe("DeliveryClient RPC and lifecycle", () => {
     expect(fake.unary).toHaveBeenCalledTimes(1);
   });
 
+  it("preserves precise Timestamp receipts in write and removal batches", async () => {
+    const fake = transport();
+    const client = DeliveryClient.usingTransport(fake.transport);
+    const snapshot = {
+      ...domainMessage("precise-batch"),
+      whenReceived: create(TimestampSchema, { seconds: 1n, nanos: 234_567_000 }),
+    };
+    fake.reply(create(EmptySchema));
+    await expect(client.writeMany([snapshot])).resolves.toBeUndefined();
+    fake.reply(create(EmptySchema));
+    await expect(client.removeOne(snapshot)).resolves.toBeUndefined();
+    fake.reply(create(EmptySchema));
+    await expect(client.removeMany([snapshot])).resolves.toBeUndefined();
+    expect(fake.unary).toHaveBeenCalledTimes(3);
+  });
+
   it("writes and removes ordered same-shard batches with exactly one RPC", async () => {
     const fake = transport();
     const client = DeliveryClient.usingTransport(fake.transport, { readRetries: 5 });
@@ -532,7 +552,7 @@ describe("DeliveryClient RPC and lifecycle", () => {
       { ...value, inboxId: { ...value.inboxId, targetId: create(AnySchema) } },
       { ...value, label: "UNKNOWN" as never },
       { ...value, status: "UNKNOWN" as never },
-      { ...value, whenReceived: new Date("invalid") },
+      { ...value, whenReceived: create(TimestampSchema, { nanos: -1 }) },
       { ...value, version: -1n },
     ];
     for (const message of invalid)
@@ -551,7 +571,10 @@ describe("DeliveryClient RPC and lifecycle", () => {
     await expect(client.newestPending(ShardIndex.single())).resolves.toBeUndefined();
     fake.reply(create(PageOfMessagesSchema));
     await expect(
-      client.readPage(ShardIndex.single(), { sinceWhen: new Date(-1), pageSize: 1 }),
+      client.readPage(ShardIndex.single(), {
+        sinceWhen: create(TimestampSchema, { seconds: -1n, nanos: 999_000_000 }),
+        pageSize: 1,
+      }),
     ).resolves.toEqual([]);
     expect(fake.unary).toHaveBeenLastCalledWith(
       expect.objectContaining({ name: "FindManyInShard" }),
