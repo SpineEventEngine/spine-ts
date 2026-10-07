@@ -2,6 +2,8 @@ import { existsSync, readFileSync } from "node:fs";
 
 const entries = [
   ".",
+  "packages/ai",
+  "packages/ai-vercel-ax",
   "packages/auth",
   "packages/client-node",
   "packages/client-react",

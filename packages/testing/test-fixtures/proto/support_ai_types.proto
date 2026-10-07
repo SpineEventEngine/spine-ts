@@ -11,13 +11,19 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+syntax = "proto3";
 
-export {
-  BlackBox,
-  BlackBoxClosedError,
-  BlackBoxTimeoutError,
-  type BlackBoxOptions,
-  type BlackBoxScope,
-} from "./black-box/black-box.js";
-export { AiTestBackend } from "./ai-test/ai-test-backend.js";
-export type { AiTestGate, AiTestRequest, AiTestResponses } from "./ai-test/ai-test-backend.js";
+package spine_ts.testing.support;
+
+// Facts supplied to a model drafting a support reply.
+message SupportReplyFacts {
+  string ticket_number = 1;
+  string question = 2;
+  uint64 ticket_revision = 3;
+}
+
+// Model proposal for a support reply before a human review decision.
+message ProposedSupportReply {
+  string reply = 1;
+  uint64 knowledge_revision = 2;
+}

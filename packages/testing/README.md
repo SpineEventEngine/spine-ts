@@ -21,6 +21,24 @@ pnpm add -D @spine-event-engine/testing@snapshot
   user.
 - ✅ Runs on an ephemeral local server with predictable cleanup.
 - ✅ Waits for genuinely asynchronous results with bounded polling.
+- ✅ Scripts registered AI deployments without network or provider credentials.
+
+## Script a model dependency
+
+`AiTestBackend` registers through the same `AiRegistry.register()` route as a
+provider adapter. Queue responses for a factory-created `AiModel` before posting
+the Agent signal through `BlackBox`. A typed `respondWith()` value is serialized
+to ProtoJSON and passes through the runtime's normal parse, Protobuf, and
+application validation. `respondWithText()` exercises invalid candidates;
+`respondWithDecision()` supplies non-generative answers. The backend records only
+physical requests that cross the runtime's reservation barrier. `requests()`
+returns immutable observations of the named call, input, correction issues, and
+permitted tool names. `assertSatisfied()` reports unused scripts and unexpected
+requests. A release gate from `delay()` pauses a response without sleeping.
+
+The scripted backend still requires the application Agent context and durable
+runtime to execute; it does not call Agent methods or simulate repository state.
+See [REFERENCE.md](REFERENCE.md) for its exact queue and failure behavior.
 
 ## ✅ Run one command through a BlackBox
 

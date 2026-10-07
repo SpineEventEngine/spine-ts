@@ -15,5 +15,18 @@
 /**
  * Factory for registrations created by an optional provider adapter.
  */
-export { createBackendRegistration } from "../internal/registration.js";
+export { backendDefinition, createBackendRegistration } from "../internal/registration.js";
+export { deriveOutputSchema } from "../internal/schema.js";
 export type { AiBackendDefinition, AiBackendRegistration } from "../internal/registration.js";
+export type {
+  AiAttemptRequest,
+  AiAttemptResponse,
+  AiAttemptTicket,
+  AiAttemptCompletion,
+  AiCandidateAdmission,
+  AiToolInvocation,
+  AiExecutionControl,
+  AiBackendExecution,
+  AiBackendOutcome,
+} from "../internal/execution.js";
+export { assertAiOutcomeContext } from "../internal/execution.js";

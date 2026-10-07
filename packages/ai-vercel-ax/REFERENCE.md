@@ -1,58 +1,17 @@
 # Vercel and Ax adapter reference
 
-Audience: implementers of the Spine AI facade and production adapter.
+Audience: application developers registering provider models, and implementers connecting the Spine Agent runtime.
 
-`src/adapter/bridge.ts` is an internal compatibility seam. `src/index.ts` deliberately
-publishes no adapter factory yet. The approved public factories are
-`VercelAx.model()` and `VercelDecision.model()`; they require the facade SPI and
-will be added in a later milestone. Do not import the bridge from an Agent.
+`VercelAx.model()` registers an OpenAI Responses generation backend with `VercelAx.capabilities.openAIResponses()`. `VercelDecision.model()` registers an OpenRouter Jev decision backend with `VercelDecision.capabilities.openRouterJev()`. Both factories accept a semantic `ModelRef`, trusted identity and authorization callbacks, and a connection callback that constructs a published Vercel provider model using the supplied operation-scoped `fetch`. The connection returns that model and the same credential-free identity that the runtime authorized. Registration and connection do not dispatch a model request.
 
-The proof currently uses published `@ax-llm/ax@25.0.0` and `ai@7.0.128`.
-They satisfied this repository's 24-hour release-age policy on 7 October 2026. `ai@7.0.128` pins its provider, utility, and gateway
-dependencies to mature versions. The AI SDK and Ax declarations produce errors under
-the repository's TypeScript 6 `exactOptionalPropertyTypes` setting. This package's
-build and tooling configurations therefore set `skipLibCheck: true`; the root
-tooling check excludes this package and invokes its separate source-and-test
-check. All other strict flags remain active for authored code. A separate
-`skipLibCheck: false` fixture compiles the public `@ai-sdk/provider` interfaces
-directly, including V3/V4 generation models and the V4 decision model. Future
-public factories should accept those provider interfaces rather than export
-types from `ai` or Ax.
+The generation path uses Ax to render requests, correct invalid output within the model-request allowance, and continue after recorded tool proposals. Direct Vercel provider streams carry native descriptor-derived JSON schemas or prompt-and-validate instructions. The adapter preserves bounded raw output, ordered provider tool proposals, actual model identity when reported, token usage with absent counts distinct from zero, and safe failure categories. It journals each physical attempt before tool authorization or a second model request. A runtime denial ends with `TOOL_FAILED`; an unresolved tool write ends with `TOOL_OUTCOME_UNKNOWN`. Neither becomes a fabricated tool result.
 
-The deterministic protocol tests use real Ax generation and Vercel
-`MockLanguageModelV3`. They establish:
+The decision path uses the pinned non-generative OpenRouter Jev protocol with SDK retries disabled. It forwards declared probability and score precision to definitive runtime admission and records that precision in `DecisionResponse`, including explicit zero versus absence. It does not use Ax chat correction for decisions.
 
-- Ax's native JSON schema reaches the Vercel model as a strict JSON response
-  format, including the required field.
-- An invalid candidate produces an Ax correction and another counted Vercel
-  request. Malformed JSON reaches Ax for correction with actual provider usage
-  recorded even if correction is exhausted or usage persistence fails. A request
-  limit blocks that correction before transport.
-- Ax functions execute after a Vercel tool call, and the tool result reaches the
-  next Vercel request. The Vercel tool declaration has no executor. Text parts
-  and structured MCP facts survive replay; unsupported media is rejected.
-- An in-flight abort reaches the provider model.
-- Cancellation during an asynchronous attempt reservation prevents provider
-  dispatch after that reservation completes.
-- Repeated tool call identities are rejected before dispatch; assistant text
-  accompanying a tool call survives continuation. Parameterless Ax functions
-  receive an empty object input schema.
-- Non-success provider finish statuses, including a parseable response cut off
-  by length, cannot be reported to Ax as a successful stop.
-- A tool-call-only response that the SDK cannot expose through object generation
-  is rejected after recording usage; it cannot become an empty Ax success.
-- Provider token counts reach the usage callback; absent counts remain absent.
-  The bridge rejects Ax cost and latency queries that it cannot substantiate.
-- An asynchronous attempt reservation is awaited before provider dispatch, and
-  its rejection prevents transport. Usage recording is awaited before output
-  returns; a recording failure rejects the operation. Invalid preflight input
-  and an already aborted signal do not consume a request attempt.
+The adapter guards each provider fetch by the authorized route, existing attempt ticket, durable reservation barrier, deadline, cancellation, execution fence, materialized input-byte limit, and received output-byte limit. The guarded fetch counts response bytes after the platform fetch has decoded transfer and content encoding; the count includes protocol framing and error response bodies. It reads one platform chunk at a time, so a chunk that crosses the limit may already have arrived before it is discarded. Parsed model text and tool input have a separate retained-output bound. The Spine runtime supplies authenticated selection, durable journal and budget callbacks, definitive Proto/application validation, tool policy and intent handling, and recovery. Direct use of a factory outside that runtime does not provide those guarantees. MCP protocol-client registration is a separate runtime integration; this package does not directly execute raw MCP tools.
 
-The bridge rejects service-wide options it cannot apply and disables Vercel retries with `maxRetries: 0`. It advertises only
-native structured output and text prompt support. It does not provide a complete
-Agent adapter. In particular, streamed byte bounds, Proto validation, durable
-attempt/audit records, tool authorization and persistence, authenticated model
-selection, result reuse, unknown write outcomes, and decision models remain
-future work. `generateText` buffers provider output in this proof; production
-byte limits require a controlled reception path. The request counter is
-operation-local and must be backed by the persisted invocation budget later.
+The built-in capability descriptors identify the tested provider protocol, schema or decision-output mode, guarded-fetch revision, ticket cancellation/deadline behavior, and one-call-per-ticket retry contract. The factories reject incomplete or changed descriptors. A custom provider model must route its exact Responses or Decisions request through the supplied scoped `fetch`, honor the published model interface, and avoid separate SDK retries; the descriptor alone cannot verify a custom model's internal network behavior.
+
+The credential-free protocol tests use the pinned `@ax-llm/ax@25.0.0`, `ai@7.0.128`, `@ai-sdk/openai@4.0.84`, and `@openrouter/ai-sdk-provider@3.1.0`. They exercise actual SDK request shapes against local fetch fixtures, correction and tool continuation, invalid and truncated output, usage, cancellation, byte limits, journal barriers, and no-retry decisions. Run `pnpm exec vitest run packages/ai-vercel-ax/test` from the repository root.
+
+The published AI SDK and Ax declarations produce errors under TypeScript 6 with `exactOptionalPropertyTypes`. Only this optional adapter's source-and-test tooling compilation uses `skipLibCheck: true`; authored code keeps the repository's other strict checks. The public model boundary uses direct `@ai-sdk/provider` V3/V4 interfaces, whose separate strict type fixture compiles with `skipLibCheck: false`.

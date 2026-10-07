@@ -16,6 +16,7 @@ import type { MessageSchema } from "@spine-event-engine/core";
 import type { ModelRef } from "@spine-event-engine/proto/agent";
 import type { AiConnectionIdentity, AiControl, AiModelDefinition, AiScope } from "./contracts.js";
 import { modelRefKey, nonblank } from "./model.js";
+import type { AiBackendExecution, AiBackendOutcome, AiExecutionControl } from "./execution.js";
 
 const aiBackendBrand: unique symbol = Symbol("SpineAiBackend");
 const backendDefinitions = new WeakMap<object, AiBackendDefinition>();
@@ -101,10 +102,17 @@ export interface AiBackendDefinition {
   connect(
     scope: AiScope,
     expectedIdentity: AiConnectionIdentity,
-    control: AiControl,
+    control: AiExecutionControl,
   ):
     | { readonly model: unknown; readonly identity: AiConnectionIdentity }
     | Promise<{ readonly model: unknown; readonly identity: AiConnectionIdentity }>;
+
+  /**
+   * Executes one selected capability through fenced runtime controls.
+   * @param request Authenticated connection, typed capability, and runtime controls.
+   * @returns Admitted output or safe operational failure.
+   */
+  execute(request: AiBackendExecution): Promise<AiBackendOutcome>;
 }
 
 /**
@@ -119,7 +127,7 @@ export const createBackendRegistration = (
   const kind: unknown = definition.kind;
   if (kind !== "generation" && kind !== "decision")
     throw new TypeError("backend kind is unsupported");
-  for (const name of ["supports", "resolveIdentity", "authorizeUse", "connect"] as const)
+  for (const name of ["supports", "resolveIdentity", "authorizeUse", "connect", "execute"] as const)
     if (typeof definition[name] !== "function") throw new TypeError(`${name} callback is required`);
   const ref = Object.freeze({
     ...definition.ref,

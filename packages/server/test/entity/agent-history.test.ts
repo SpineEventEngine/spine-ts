@@ -345,7 +345,9 @@ describe("Agent history binding", () => {
     });
     const first = await agent.readFull({ pageSize: 1 });
     expect(first.nextCursor?.value.length).toBeGreaterThan(500_000);
-    expect(await agent.readFull({ pageSize: 1, cursor: first.nextCursor })).toEqual({ items: [] });
+    const cursor = first.nextCursor;
+    if (cursor === undefined) throw new Error("Expected a continuation cursor.");
+    expect(await agent.readFull({ pageSize: 1, cursor })).toEqual({ items: [] });
   });
 
   it("continues equal-time category ties and isolates explicit conversations", async () => {

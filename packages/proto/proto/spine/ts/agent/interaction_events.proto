@@ -149,7 +149,7 @@ message AgentModelAttemptFinished {
     (validate) = true
   ];
 
-  // Provider and local result status.
+  // Provider and local result status; TOOL_REQUESTED closes this attempt, not its operation.
   AiOutcome outcome = 3 [(required) = true];
 
   // Received content identity, absent if no response was received.
@@ -209,7 +209,7 @@ message AgentAiOperationFailed {
     (validate) = true
   ];
 
-  // Safe failure category.
+  // Safe terminal failure category; TOOL_REQUESTED is invalid here.
   AiOutcome outcome = 2 [(required) = true];
 
   // Diagnostic reference containing no credential or raw exception.

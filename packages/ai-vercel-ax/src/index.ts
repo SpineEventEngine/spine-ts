@@ -13,9 +13,13 @@
  */
 
 /**
- * Optional Vercel/Ax adapter package entry point.
- *
- * The compatibility bridge remains internal until the Spine AI registration
- * contract is available.
+ * Optional Vercel provider registrations for Spine Agent capabilities.
  */
-export {};
+export { VercelAx, VercelDecision } from "./adapter/factory.js";
+export type {
+  VercelConnectControl,
+  VercelConnection,
+  VercelModelOptions,
+  VercelProviderCapabilities,
+  VercelDecisionModel,
+} from "./adapter/factory.js";

@@ -296,6 +296,10 @@ enum AiOutcome {
 
   // A dispatched external action has an unknown outcome.
   AI_OUTCOME_UNKNOWN = 5;
+
+  // A complete generation response proposed external tool calls without admitting application output.
+  // This closes only the physical attempt; the logical operation remains active.
+  AI_OUTCOME_TOOL_REQUESTED = 6;
 }
 
 // Safe operational failure category for an Agent model operation.

@@ -68,10 +68,25 @@ const serviceBase = {
 /**
  * Prepared native request after all bridge-local validation.
  */
-interface PreparedRequest {
+export interface PreparedRequest {
+  /**
+   * Instructions rendered by Ax for this request.
+   */
   readonly instructions: string;
+
+  /**
+   * Prompt turns and tool continuations rendered by Ax.
+   */
   readonly messages: ModelMessage[];
+
+  /**
+   * Tools advertised to the provider for this request.
+   */
   readonly tools: ToolSet;
+
+  /**
+   * Native structured output requested by Ax.
+   */
   readonly output: ReturnType<typeof Output.object>;
 }
 
@@ -97,12 +112,45 @@ export interface AxRequestControl {
    * @returns Completion of the caller's usage-recording barrier.
    */
   readonly onUsage?: (tokens: { totalTokens: number }) => void | Promise<void>;
+
+  /**
+   * Required only when the production controlled-stream factory is used.
+   */
+  readonly onChat?: AxControlledRequestControl["onChat"];
+}
+
+/**
+ * Requires every production Ax request to use a caller-controlled transport.
+ */
+export interface AxControlledRequestControl extends AxRequestControl {
+  /**
+   * Sends one prepared native request through the guarded provider stream.
+   * @param model Selected authenticated Vercel model.
+   * @param prepared Actual Ax prompt, schema, and tools.
+   * @param signal Operation cancellation signal.
+   * @returns One bounded response for Ax correction or continuation.
+   */
+  readonly onChat: (
+    model: LanguageModel,
+    prepared: PreparedRequest,
+    signal?: AbortSignal,
+  ) => Promise<AxChatResponse>;
 }
 
 /**
  * Builds one bounded Ax-to-Vercel compatibility service.
  */
 export const AxVercelBridge = {
+  /**
+   * Creates a service whose every physical request uses controlled streaming.
+   * @param model Authenticated Vercel generation model.
+   * @param control Required guarded streaming delegate and request limit.
+   * @returns Ax service with no generateText fallback.
+   */
+  createControlled(model: LanguageModel, control: AxControlledRequestControl): AxAIService {
+    return AxVercelBridge.create(model, control);
+  },
+
   /**
    * Creates an Ax chat service that delegates requests to one Vercel model.
    * @param model Authenticated Vercel generation model.
@@ -128,6 +176,7 @@ export const AxVercelBridge = {
         attempts += 1;
         await control.onAttempt?.(attempts);
         if (options?.abortSignal?.aborted) throw new Error("Request aborted");
+        if (control.onChat) return control.onChat(model, prepared, options?.abortSignal);
         return AxVercelBridge.chat(model, prepared, control.onUsage, options?.abortSignal);
       },
     } satisfies AxAIService;

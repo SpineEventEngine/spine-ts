@@ -13,6 +13,10 @@ const root = resolve(import.meta.dirname, "..");
 export const documentedTypeScriptPaths = [
   "README.md",
   "REFERENCE.md",
+  "packages/ai/README.md",
+  "packages/ai/REFERENCE.md",
+  "packages/ai-vercel-ax/README.md",
+  "packages/ai-vercel-ax/REFERENCE.md",
   "packages/core/README.md",
   "packages/core/REFERENCE.md",
   "packages/proto/README.md",

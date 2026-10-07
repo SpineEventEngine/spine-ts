@@ -12,18 +12,51 @@
  * the License.
  */
 
-/**
- * Curated Agent message contracts and descriptors.
- */
-export {
-  required,
-  min,
-  max,
-  pattern,
-  range,
-  validate,
-  choice,
+import {
+  required as generatedRequired,
+  min as generatedMin,
+  max as generatedMax,
+  pattern as generatedPattern,
+  range as generatedRange,
+  validate as generatedValidate,
+  choice as generatedChoice,
 } from "../../generated/spine/options_pb.js";
+
+/**
+ * Requires a field value according to Spine validation rules.
+ */
+export const required: typeof generatedRequired = generatedRequired;
+
+/**
+ * Sets the lower numeric boundary.
+ */
+export const min: typeof generatedMin = generatedMin;
+
+/**
+ * Sets the upper numeric boundary.
+ */
+export const max: typeof generatedMax = generatedMax;
+
+/**
+ * Constrains a string field with the configured validation pattern.
+ */
+export const pattern: typeof generatedPattern = generatedPattern;
+
+/**
+ * Constrains a numeric field to the specified bounded range.
+ */
+export const range: typeof generatedRange = generatedRange;
+
+/**
+ * Enables validation of the nested message value.
+ */
+export const validate: typeof generatedValidate = generatedValidate;
+
+/**
+ * Configures selection rules for the annotated oneof.
+ */
+export const choice: typeof generatedChoice = generatedChoice;
+
 export type {
   ModelName,
   ModelRevision,
@@ -56,6 +89,7 @@ export type {
   AiUsage,
   AiConnectionIdentity,
 } from "../../generated/spine/ts/agent/model_pb.js";
+
 export {
   file_spine_ts_agent_model,
   ModelNameSchema,
@@ -97,9 +131,11 @@ export {
   AiFailureCode,
   AiFailureCodeSchema,
 } from "../../generated/spine/ts/agent/model_pb.js";
+
 export type {
   GenerationRequest,
   GenerationResponse,
+  ModelToolCall,
   DecisionChoice,
   DecisionQuestionId,
   DecisionAlternativeKey,
@@ -108,14 +144,17 @@ export type {
   DecisionProbability,
   DecisionAnswer,
   DecisionDistribution,
+  DecisionRounding,
   DecisionResponse,
   ToolRequest,
   ToolResponse,
 } from "../../generated/spine/ts/agent/content_pb.js";
+
 export {
   file_spine_ts_agent_content,
   GenerationRequestSchema,
   GenerationResponseSchema,
+  ModelToolCallSchema,
   DecisionChoiceSchema,
   DecisionQuestionIdSchema,
   DecisionAlternativeKeySchema,
@@ -124,6 +163,7 @@ export {
   DecisionProbabilitySchema,
   DecisionAnswerSchema,
   DecisionDistributionSchema,
+  DecisionRoundingSchema,
   DecisionResponseSchema,
   ToolRequestSchema,
   ToolResponseSchema,
@@ -132,12 +172,14 @@ export {
   ToolEffect,
   ToolEffectSchema,
 } from "../../generated/spine/ts/agent/content_pb.js";
+
 export type {
   ConversationRecordId,
   AgentHistoryCursor,
   ConversationRecord,
   AgentHistoryEntry,
 } from "../../generated/spine/ts/agent/history_pb.js";
+
 export {
   file_spine_ts_agent_history,
   ConversationRecordIdSchema,
@@ -145,6 +187,7 @@ export {
   ConversationRecordSchema,
   AgentHistoryEntrySchema,
 } from "../../generated/spine/ts/agent/history_pb.js";
+
 export type {
   AgentOperationRef,
   AgentAiOperationStarted,
@@ -157,6 +200,7 @@ export type {
   AgentModelSelectionChanged,
   AgentInvocationTerminated,
 } from "../../generated/spine/ts/agent/interaction_events_pb.js";
+
 export {
   file_spine_ts_agent_interaction_events,
   AgentOperationRefSchema,

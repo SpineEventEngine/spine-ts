@@ -13,6 +13,9 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { create, fromBinary, fromJson, toBinary, toJson } from "@bufbuild/protobuf";
+import { AnyMessages } from "@spine-event-engine/core";
+import { assertAiOutcomeContext } from "../src/spi/adapter.js";
 import {
   ProposedSupportReplySchema,
   SupportTicketFactsSchema,
@@ -22,7 +25,11 @@ import {
   ModelRef,
   ModelRefSchema,
   GenerationResponseSchema,
+  ModelToolCallSchema,
+  AiOutcome,
+  AiUsageSchema,
   DecisionRequestSchema,
+  DecisionRoundingSchema,
   DecisionResponseSchema,
   ToolRequestSchema,
   ToolResponseSchema,
@@ -86,5 +93,114 @@ describe("public SDK-free facade inventory", () => {
       AgentInvocationTerminatedSchema,
     ];
     expect(schemas.every((schema) => schema.typeName.startsWith("spine.ts.agent."))).toBe(true);
+  });
+
+  it("round-trips ordered model proposals without treating them as authorized calls", () => {
+    const proposal = (providerCallId: string, toolName: string, argumentsJson: string) =>
+      create(ModelToolCallSchema, { providerCallId, toolName, argumentsJson });
+    const response = create(GenerationResponseSchema, {
+      rawOutput: "I need a lookup.",
+      outcome: AiOutcome.TOOL_REQUESTED,
+      usage: create(AiUsageSchema, { inputTokens: { value: 0n } }),
+      toolCalls: [proposal("same", "lookup", '{"ticket":'), proposal("same", "", "")],
+    });
+    for (const restored of [
+      fromBinary(GenerationResponseSchema, toBinary(GenerationResponseSchema, response)),
+      fromJson(GenerationResponseSchema, toJson(GenerationResponseSchema, response)),
+    ]) {
+      expect(restored.rawOutput).toBe("I need a lookup.");
+      expect(
+        restored.toolCalls.map(({ providerCallId, toolName, argumentsJson }) => [
+          providerCallId,
+          toolName,
+          argumentsJson,
+        ]),
+      ).toEqual([
+        ["same", "lookup", '{"ticket":'],
+        ["same", "", ""],
+      ]);
+      expect(restored.usage?.inputTokens?.value).toBe(0n);
+      expect(restored.usage?.outputTokens).toBeUndefined();
+    }
+  });
+
+  it("round-trips absent, zero and nonzero decision precision", () => {
+    for (const [rounding, expected] of [
+      [undefined, undefined],
+      [
+        create(DecisionRoundingSchema, { probabilityDecimals: 0 }),
+        { probabilityDecimals: 0, scoreDecimals: undefined },
+      ],
+      [
+        create(DecisionRoundingSchema, { probabilityDecimals: 2, scoreDecimals: 2 }),
+        { probabilityDecimals: 2, scoreDecimals: 2 },
+      ],
+    ] as const) {
+      const response = create(DecisionResponseSchema, {
+        outcome: AiOutcome.ADMITTED,
+        ...(rounding ? { rounding } : {}),
+      });
+      const restored = fromBinary(
+        DecisionResponseSchema,
+        toBinary(DecisionResponseSchema, response),
+      );
+      if (expected === undefined) expect(restored.rounding).toBeUndefined();
+      else expect(restored.rounding?.probabilityDecimals).toBe(expected.probabilityDecimals);
+      expect(restored.rounding?.probabilityDecimals).toBe(expected?.probabilityDecimals);
+      expect(restored.rounding?.scoreDecimals).toBe(expected?.scoreDecimals);
+    }
+  });
+
+  it("rejects nonterminal outcomes outside generation and contradictory generation output", () => {
+    const proposal = create(ModelToolCallSchema, {
+      providerCallId: "call-1",
+      toolName: "lookup",
+      argumentsJson: "{}",
+    });
+    const continued = create(GenerationResponseSchema, {
+      outcome: AiOutcome.TOOL_REQUESTED,
+      toolCalls: [proposal],
+    });
+    expect(() => {
+      assertAiOutcomeContext(continued);
+    }).not.toThrow();
+    expect(() => {
+      assertAiOutcomeContext(
+        create(GenerationResponseSchema, {
+          outcome: AiOutcome.TOOL_REQUESTED,
+        }),
+      );
+    }).toThrow("requires proposals");
+    expect(() => {
+      assertAiOutcomeContext(
+        create(GenerationResponseSchema, {
+          outcome: AiOutcome.ADMITTED,
+          toolCalls: [proposal],
+          admittedOutput: AnyMessages.pack(
+            ProposedSupportReplySchema,
+            create(ProposedSupportReplySchema, { replyText: "Hello" }),
+          ),
+        }),
+      );
+    }).toThrow("without outstanding proposals");
+    expect(() => {
+      assertAiOutcomeContext(create(GenerationResponseSchema, {
+        outcome: AiOutcome.INVALID_OUTPUT,
+        admittedOutput: AnyMessages.pack(ProposedSupportReplySchema,
+          create(ProposedSupportReplySchema, { replyText: "Hello" })),
+      }));
+    }).toThrow("Only ADMITTED");
+    expect(() => {
+      assertAiOutcomeContext(create(DecisionResponseSchema, { outcome: AiOutcome.FAILED }));
+    }).not.toThrow();
+    for (const content of [
+      create(DecisionResponseSchema, { outcome: AiOutcome.TOOL_REQUESTED }),
+      create(ToolResponseSchema, { outcome: AiOutcome.TOOL_REQUESTED }),
+      create(AgentToolCallFinishedSchema, { outcome: AiOutcome.TOOL_REQUESTED }),
+      create(AgentAiOperationFailedSchema, { outcome: AiOutcome.TOOL_REQUESTED }),
+    ])
+      expect(() => {
+        assertAiOutcomeContext(content);
+      }).toThrow("only a generation response");
   });
 });

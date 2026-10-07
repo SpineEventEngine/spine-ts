@@ -61,6 +61,9 @@ function deployment(name: string) {
     resolveIdentity: () => ({ provider: "local", account: "test", endpoint: "local", model: name }),
     authorizeUse: () => true,
     connect: (_scope, identity) => ({ model: {}, identity }),
+    execute: async () => {
+      throw new Error("unused backend");
+    },
   });
 }
 
@@ -157,6 +160,9 @@ describe("application AI registry", () => {
         }),
         authorizeUse: () => true,
         connect: (_scope, identity) => ({ model: {}, identity }),
+        execute: async () => {
+          throw new Error("unused backend");
+        },
       }),
     );
     expect(() =>
@@ -214,6 +220,9 @@ describe("application AI registry", () => {
       resolveIdentity: () => ({ provider: "p", account: "a", endpoint: "e", model: "m" }),
       authorizeUse: () => true,
       connect: (_scope: never, identity: never) => ({ model: {}, identity }),
+      execute: async () => {
+        throw new Error("unused backend");
+      },
     };
     expect(() => createBackendRegistration({ ...config, kind: "other" as never })).toThrow("kind");
     expect(() => createBackendRegistration({ ...config, supports: undefined } as never)).toThrow(

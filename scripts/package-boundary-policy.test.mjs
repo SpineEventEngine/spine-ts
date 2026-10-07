@@ -122,7 +122,7 @@ it("keeps the native server root free of compiler and browser-auth runtime depen
   expect(nativeServerRootDependencyProblems(repoRoot)).toEqual([]);
 });
 
-it("declares the final named SPI and browser surfaces in an acyclic 18-package graph", () => {
+it("declares the final named SPI and browser surfaces in an acyclic framework package graph", () => {
   expect(finalPublicSurfaceProblems(repoRoot)).toEqual([]);
 });
 

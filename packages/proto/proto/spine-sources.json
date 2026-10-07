@@ -440,7 +440,7 @@
     },
     {
       "localPath": "packages/proto/proto/spine/ts/agent/content.proto",
-      "sha256": "768ab07aa62bb850925d3360117a3ac2a742e5071bd07455d796390df02df884"
+      "sha256": "acf80d57fb9250d17608d160735169673ec7e539e72cb0e9524a6c9d395d83b2"
     },
     {
       "localPath": "packages/proto/proto/spine/ts/agent/history.proto",
@@ -448,11 +448,11 @@
     },
     {
       "localPath": "packages/proto/proto/spine/ts/agent/interaction_events.proto",
-      "sha256": "d91a69ee99918897a586fe67274de9b7dfeb00ab14933f2c881c2a6eea991dd4"
+      "sha256": "bae8382a66d3e68ea516cac51ad013c543bc7cc07b3c1d668172ceb4fbc1167b"
     },
     {
       "localPath": "packages/proto/proto/spine/ts/agent/model.proto",
-      "sha256": "08876f6815a814c2871652752012732a1d85203016949ab2fe9eb5d5c87a447d"
+      "sha256": "20227135bff1cc23bf3d57d1ede031390ff6fc257299fe3b2716765fca34f47f"
     }
   ]
 }

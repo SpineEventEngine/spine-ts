@@ -469,7 +469,7 @@ export interface AgentAi {
     model: AiModel<I, O>,
     request: {
       /**
-       * Stable invocation name used to identify this call.
+       * Invocation name used to identify this call.
        */
       readonly call: string;
 

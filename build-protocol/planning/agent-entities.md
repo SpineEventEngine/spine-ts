@@ -6,8 +6,9 @@ High-risk runtime/public-contract task authorized on 7 October 2026. Base:
 `658da1cdddcb8fd40f9205b1c200abc3a58dd62e` (snapshot.22). Feature branch:
 `agent-entities`; worktree: native managed `agent-readiness/spine-ts`.
 Adapter composition, the bounded transport and Agent family foundation are
-verified. The AI facade and shared/memory history are accepted; persistent history
-integration is underway. Physical Entity deletion is explicitly deferred.
+verified. The AI facade, repository history binding and all history providers are
+accepted. Durable execution, scripted testing and production adapters are in
+progress. Physical Entity deletion is explicitly deferred.
 
 The approved specification is `AGENT_ENTITIES_API_TASK_2026-10-02.md` and its
 `AGENT_HISTORY_PROPOSAL.md` appendix in the user's
@@ -930,3 +931,223 @@ Persistent reliability follow-up closed both production findings. Parent reran
 single MySQL capacity declaration. Added the isolated catalog-test superuser
 prerequisite to PostgreSQL live-test docs. All four review concerns closed for
 this slice; save provider checkpoint before durable execution storage work.
+
+Persistent history checkpoint 51590d335 committed; immediate origin push started.
+Proceed durable execution storage with same existing implementer, explicit
+Sol/medium, per /tmp/agent-execution-storage-packet.md and frozen architecture.
+Estimate 2–3 hours including provider conformance, mechanics and focused review.
+First send concrete internal Proto/port shape for parent and server coordination;
+no new architecture or public worker API. Storage/provider files and new internal
+server/agent Protos only; parent coordinates shared generated outputs. Server
+writer currently implements testing backend and adapter writer retains AI SPI.
+
+MCP dependency verification: published @ai-sdk/mcp2.0.69/provider4.0.24 are under
+24 hours old and cannot be selected under repository policy. Pin mature2.0.67
+(published5October) instead: registry metadata confirms it uses the already
+selected provider4.0.22/provider-utils5.0.54. No release-age exception. Parent
+installs the optional adapter dependency and inspects that exact version before
+MCP implementation; source boundaries and protocol tests remain mandatory.
+
+Execution-store outline corrected before code: distinct execution scope, whole
+invocation bounds, full per-kind identity, fresh Time after native lock acquisition,
+per-instance head/current preferences, eligible indexed pending scans, and fenced
+journal/history mutation. Approved revised shape with same-token lease renewal,
+terminal/no-output head release and per-growth payload bounds. These implement
+existing frozen invariants, without a new public worker/transaction API or history
+counter. Server coordinates concrete registry binding fields with provider writer.
+
+Both dependency audits passed after mature MCP installation. Runtime Time,
+production-dependency and logging-containment checks pass. Release-readiness
+reported only stale adapter-reference wording; adapter writer rewrites it to the
+actual exported production API. Adapter focused coverage remains below threshold;
+meaningful failure-path tests and corrections continue before review.
+
+Execution Proto intake corrected before generation: no proto3 optional; documented
+closed Agent-only handler roles; exact capability/revision/failure/input evidence;
+typed generation/decision request-response alternatives and authorized tool
+correlation; mutable counters separate from immutable execution-start facts.
+Parent registers only the new authored descriptor checksum and runs canonical
+generation/build. No upstream source or public deletion contract changes.
+
+Scripted backend preflight frozen: ten tests pass, new-module coverage exceeds90%
+across all categories, isolated types/lint/format pass. Removed filler wording and
+kept backend execution private to registration. Complete focused review wave uses
+existing reliability, TypeScript/API, style and documentation concerns with fresh
+read-only contexts, explicit Sol/medium (technical) and Luna/medium (docs), no
+subagents. First reliability dispatch explicitly Sol/medium. Runtime metadata is
+not exposed; verify configured profiles and collect the wave before one fix batch.
+Storage now directly depends on core for Time; install/lock sync and its focused
+typecheck pass. Persistent execution implementation continues concurrently.
+
+Scripted reliability review returned queue/gate concurrency, incomplete-request
+assertion and oversized-byte accounting findings. Parent global tooling typecheck
+also found six scripted fixture diagnostics and one prior history cursor narrowing
+error; include mechanical corrections in the same batch. Continue fresh existing
+TypeScript/API reviewer, explicit gpt-6-sol/medium, no memory/read-only/no children.
+Configured reliability profile verified; runtime metadata unavailable. No changes
+accepted until the complete concern wave and corrections finish.
+
+Scripted TypeScript/API review is clean; configured explicit Sol/medium verified,
+actual runtime metadata unavailable. Next fresh style_maintainability_reviewer,
+explicit gpt-6-sol/medium, read-only/no memory/no children. Documentation concern
+follows separately. Parent also coordinates existing conditional Entity completion
+seams: compare original Version inside the same native execution transaction,
+without changing ordinary Entity commit semantics. This was already frozen scope.
+
+Production adapter preflight frozen:145 tests pass, coverage94.84/90.13/94.28/97.30
+(statements/branches/functions/lines), package build/tooling/lint/format/snippets/
+copyright pass. Global cleanup/TSDoc residuals are in concurrent storage drafts.
+Complete focused review wave covers adapter transport/generation/decisions, AI SPI
+and additive response Protos. First existing reliability reviewer explicitly
+Sol/medium, fresh context/no memory/read-only/no children. Return accepted findings
+as one batch to the existing implementer; MCP remains subsequent work.
+
+Scripted style review returned one normal-registry selection coverage finding;
+configured Sol/medium verified, actual runtime metadata unavailable. Final concern:
+existing documentation_reviewer explicitly gpt-6-luna/medium, fresh read-only
+context/no memory/no children. Collect its result before returning all findings.
+
+Scripted complete review wave accepted under explicit configured profiles;
+metadata introspection unavailable. Docs finding duplicates pending assertion.
+Return one correction batch to same existing implementer Sol/medium: reserve gated
+responses per dispatch; pending-request satisfaction; actual received bytes for
+oversized responses; normal registry selection test; seven parent tooling errors.
+Require concurrent gate/cancellation regressions, targeted coverage/mechanics and
+substantive reliability follow-up. No unchanged-lane re-review.
+
+Production adapter reliability returned four deadline/cancellation findings:
+generation expiry before gate admission, in-flight decision deadline classification,
+late stream cleanup and never-resolving stream deadline. Existing reviewer profile
+Sol/medium confirmed. Continue fresh TypeScript/API reviewer explicitly Sol/medium,
+read-only/no memory/no children. Collect complete wave before adapter correction.
+
+Parent expands exact API documentation inventory for AI roots/SPI, Agent Proto,
+scripted testing exports and execution storage port; full generated TypeDoc check
+waits for runtime convergence. Focused inventory/onboarding/boundary checks running.
+
+Parent independent adapter rerun145/145 passes; expanded API/package/docs tests
+35/35 pass after including the newly exported internal execution record helper.
+These passes do not close review findings. Full generated TypeDoc inventory check
+is running independently for integration feedback; no release-profile claim.
+
+Production adapter TypeScript/API review adds incomplete capability-profile
+contract enforcement to pending correction batch; explicit configured Sol/medium
+verified, runtime metadata unavailable. Continue existing style reviewer explicitly
+Sol/medium, fresh/no memory/read-only/no children. Parent TypeDoc rendering succeeded
+but new module-name inventory lookup was wrong; correct against actual renderer
+module names rather than weakening exact-export checks.
+
+Scripted correction preflight passes20 affected tests, coverage97.76/92.90/96.29/
+97.63, project build/global tooling/scopedlint/format/Proto style. Same existing
+reliability reviewer configured explicit Sol/medium follows up three substantive
+findings; parent directly checks registry selection and typing/doc corrections.
+
+Production adapter style review is clean beyond existing findings; configured
+Sol/medium confirmed, runtime metadata unavailable. Final documentation concern:
+existing reviewer explicitly gpt-6-luna/medium, fresh/no memory/read-only/no children.
+
+Scripted reliability follow-up closed all three findings; explicit configured
+Sol/medium confirmed, runtime metadata unavailable. Parent reruns affected20tests
+and global tooling before durable runtime assignment. Scripted checkpoint waits
+for its shared AI SPI dependency's adapter review corrections; no partial commit
+of an unaccepted contract.
+
+Production adapter complete concern wave accepted. Docs adds actual OpenRouter
+Jev setup and precise crossing-chunk memory qualification. Return combined batch
+to same existing implementer configured explicit Sol/medium: four deadline/late
+stream findings, versioned capability descriptor checks, two narrow docs omissions.
+Require new failure regressions and focused mechanics/coverage; re-review only
+reliability and contract changes. No MCP start before this correction converges.
+
+Parent scripted rerun20/20 and global tooling passed. All scripted concerns closed.
+Continue same existing server implementer explicitly gpt-6-sol/medium on approved
+/tmp/agent-server-execution-packet.md against the available provider port. Scope
+server runtime/Inbox/repository/context and real BlackBox tests; no provider edits.
+No new architecture: frozen accepted-execution invariants govern implementation.
+Bounded first checkpoint is memory durable handoff/runner plus named result/read
+journal and mandatory audit; persistent conformance follows provider readiness.
+Estimate3–5hours for runtime integration/tests/reviews; scope remains fullfeature.
+Serialize local lease renewal and journal mutations so exact record-image checks
+do not conflict with the runtime's renewal timer. Physical deletion stays deferred.
+
+Parent TypeDoc integration found direct generated Agent Proto reexports disappear
+because generated sources are excluded from the public reference. Match existing
+curated Proto-root pattern with documented type/value declarations, preserving
+names and descriptor identities. Proto/AI builds and scopedlint/format pass.
+Document AI-authored APIs in AI module and reexported messages in exact curated
+Agent Proto inventory; source-export inventories remain exact for both. An
+experimental TypeDoc source-path override conflicted with composite rootDir and
+was never saved. Full check resumes after provider declaration rebuild.
+
+Production adapter corrections frozen:153 focusedtests pass, coverage94.88/90.52/
+94.14/97.18, scoped build/tooling/lint/format/snippets pass. Existing reliability
+reviewer follows up four findings with explicit configured Sol/medium, then same
+TypeScript/API reviewer checks capability profile corrections and curated Proto
+documentation declarations. No new complete review wave for unchanged concerns.
+
+Runtime integration exposed internal Inbox version width mismatch: existing Inbox
+versions are bigint but drafted execution Proto int32. Correct internal field to
+uint64 and20digit ordering with range validation before admission; preserve exact
+existing Inbox order, no history counter. Parent coordinates canonical generation.
+
+Adapter reliability follow-up confirms original reproductions fixed but returns
+three residual deadline findings: expiry between check/gate admission, platform
+setTimeout overflow, and decision wait using control rather than ticket deadline.
+Continue same existing TS/API reviewer explicit Sol/medium on versioned profiles
+and curated Proto docs aliases; collect follow-up batch before corrections.
+
+Demonstrated Datastore pending-query blocker: expiry inequality requires first
+sort by expiry, incompatible with drafted Inbox-only global discovery order.
+Provider source frozen briefly after memory/PG/MySQL checkpoint. Narrow existing
+requirements_splitter dispatch explicitly gpt-6-astra/high, fresh/no memory/no
+children/read-only, to decide indexed eligibility pagination and bounded progress.
+No history API/counter or public worker change. Server implementation continues.
+
+Adapter residual deadline corrections frozen:159tests pass, coverage94.78/90.16/
+94.79/97.13, scopedmechanicspass. Same existing reliability reviewer explicit
+Sol/medium follows up only three remaining findings; contractprofile alreadyclosed.
+
+Parent Proto documentation correction refined to preserve direct enum/message
+reexports and existing namespaces. TypeDoc includes only the authored Agent
+contracts' generated sources; other generated sources remain excluded. Seven
+validation options retain narrow documented declarations. Consumer compile/runtime
+fixture checks enum-member type/value syntax and the curated Agent entrypoint.
+All exact AI/Proto inventories now pass the rendering stage. Remaining check was a
+false substring match: RecordIdSchema inside ConversationRecordIdSchema. Match
+complete identifiers, preserving prohibition on the original internal symbol.
+
+Parent API rendering/inventory check passes after exact identifier matching and
+narrow Agent generated-doc inclusion. Consumer enum typecheck passes with explicit
+Node test types;40 entrypoint/docs/boundary tests pass. Final same existing TS/API
+reviewer explicit Sol/medium checks preservation of direct enum reexports and
+curated documentation-only changes; no new runtime architecture. Adapter reliability
+follow-up2 closed all remaining findings under explicit Sol/medium profile.
+
+Narrow pending-index architecture decision accepted; explicit Astra/high dispatch
+confirmed, independent metadata unavailable. Discover one per-instance head via
+full eligibleAt+scope, stamp readiness/promotion with provider Time, preserve it
+behind existing work, use claim expiry while leased. Fixed strict-asOf sweeps and
+provider-returned observed cursors advance across bounded scheduler turns; original
+Inbox order remains authoritative within each instance. Add internal head pending/
+pendingOrder/eligibleAt fields and bounded native successor query, no historycounter.
+Datastore successor reads must use native transaction query, never its existing
+outside-transaction queryProviderPage. Verify compatible transactional-query mode
+before intake. Task's existing disposable Datastore service uses Firestore emulator
+in datastore-mode (not the legacy Datastore emulator); prove capability with actual
+transactional queries. Same storage implementer resumes explicit Sol/medium; server
+writer consumes corrected paging contract. Required fairness/lease/provider tests
+listed in architecture packet, no skipped-emulator conformance claim.
+
+Production adapter and scripted-backend checkpoint accepted: fresh combined run
+passes176tests. All four applicable review concerns closed; explicit configured
+Sol/medium technical and Luna/medium documentation profiles confirmed, runtime
+self-introspection unavailable. Full release verification remains deferred until
+runtime/MCP convergence.
+
+Saved output recovery exposed an existing EventBus append-before-dispatch gap:
+normal duplicate rejection prevents retry after successful handoff but failed
+execution acknowledgement, while EventStore presence does not prove all target
+Inbox handoffs. Existing requirements_splitter function dispatched as fresh
+agent_output_acceptance_architecture, explicit gpt-6-astra/high, to design only
+internal acceptance/retry semantics and source-grounded regressions. No public
+publisher API or context/repository event-copy reconciliation is authorized.

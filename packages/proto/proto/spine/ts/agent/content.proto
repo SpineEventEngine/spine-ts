@@ -50,15 +50,28 @@ message GenerationRequest {
   ];
 }
 
+// One model-proposed external call before tool policy and argument validation.
+// Received content is not evidence of authorization or dispatch.
+message ModelToolCall {
+  // Exact provider correlation ID; blank or duplicate IDs remain recorded but cannot be dispatched.
+  string provider_call_id = 1;
+
+  // Exact model-facing name, including unsupported or blank names.
+  string tool_name = 2;
+
+  // Exact received argument text, including malformed JSON or empty text.
+  string arguments_json = 3;
+}
+
 // Provider generation content, admitted or rejected after local validation.
 message GenerationResponse {
-  // Exact received text candidate, including malformed output when available.
+  // Exact received assistant text, including text accompanying tool proposals.
   string raw_output = 1;
 
-  // Outcome after provider and local validation.
+  // Outcome after provider and local validation; TOOL_REQUESTED is nonterminal.
   AiOutcome outcome = 2 [(required) = true];
 
-  // Typed admitted result; absent for every non-admitted outcome.
+  // Typed admitted result; absent when any tool proposal remains outstanding.
   google.protobuf.Any admitted_output = 3 [(validate) = true];
 
   // Provider token counts when known.
@@ -72,6 +85,10 @@ message GenerationResponse {
 
   // Concrete provider model identity when the provider reports it.
   AiProviderModelName actual_model = 7 [(validate) = true];
+
+  // Received model proposals in order, including malformed or denied proposals.
+  // Presence does not imply authorization or execution.
+  repeated ModelToolCall tool_calls = 8 [(validate) = true];
 }
 
 // Application-assigned identity of one non-generative question.
@@ -206,12 +223,21 @@ message DecisionDistribution {
   ];
 }
 
+// Provider-declared decimal precision used to assess decision answers.
+message DecisionRounding {
+  // Decimal places for reported probabilities; absent means unspecified.
+  google.protobuf.UInt32Value probability_decimals = 1;
+
+  // Decimal places for reported scores; absent means unspecified.
+  google.protobuf.UInt32Value score_decimals = 2;
+}
+
 // Provider decision content and validation outcome.
 message DecisionResponse {
   // Answers received from the backend, including invalid answers.
   repeated DecisionAnswer answers = 1 [(validate) = true];
 
-  // Outcome after local answer and mapped Proto validation.
+  // Outcome after local answer and mapped Proto validation; TOOL_REQUESTED is invalid here.
   AiOutcome outcome = 2 [(required) = true];
 
   // Typed admitted mapped result when validation succeeds.
@@ -222,6 +248,9 @@ message DecisionResponse {
 
   // Safe diagnostic reference for a failed outcome.
   AiDiagnosticId diagnostic_id = 5 [(validate) = true];
+
+  // Provider-declared precision applied during answer admission.
+  DecisionRounding rounding = 6 [(validate) = true];
 }
 
 // Actual authorized external tool request.
@@ -271,7 +300,7 @@ message ToolResponse {
     (validate) = true
   ];
 
-  // Tool or transport outcome.
+  // Tool or transport outcome; TOOL_REQUESTED is invalid here.
   AiOutcome outcome = 2 [(required) = true];
 
   // Supported text returned by the tool, when available.

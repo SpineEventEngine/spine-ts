@@ -896,3 +896,34 @@ describe("Ax-to-Vercel bridge", () => {
     expect(usage).toEqual([5]);
   });
 });
+
+describe("controlled Ax bridge dispatch", () => {
+  it("uses the required controlled chat delegate for each Ax request", async () => {
+    const model = new MockLanguageModelV3({
+      doGenerate: () => Promise.reject(new Error("uncontrolled generateText used")),
+    });
+    const seen: string[] = [];
+    const service = AxVercelBridge.createControlled(model, {
+      maxRequests: 1,
+      onChat: (_model, prepared) => {
+        seen.push(prepared.instructions);
+        return Promise.resolve({ results: [{ index: 0,
+          content: '{"reply":"controlled"}', finishReason: "stop" }] });
+      },
+    });
+    const generator = new AxGen<{ ticket: string }, { reply: string }>(
+      "ticket: string -> reply: string",
+    );
+    const result = await generator.forward(
+      service,
+      { ticket: "T-9" },
+      {
+        structuredOutputMode: "native",
+        maxRetries: 0,
+      },
+    );
+    expect(result.reply).toBe("controlled");
+    expect(seen).toHaveLength(1);
+    expect(model.doGenerateCalls).toHaveLength(0);
+  });
+});
