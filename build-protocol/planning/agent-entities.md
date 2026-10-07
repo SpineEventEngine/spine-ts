@@ -602,3 +602,80 @@ concerns are closed for this slice; full feature/release coverage remains pendin
 Commit/push this checkpoint, then continue shared/memory Agent history storage
 with the same explicit Sol/medium implementation context. Facade validation is an
 independent active slice; its draft coverage and mechanics are not yet accepted.
+
+Foundation checkpoint 260135e9e pushed to official origin/agent-entities. Next
+bounded storage packet stays in packages/storage only: provider port, complete
+ordering key, memory indexes and reusable provider conformance. Dispatch the same
+existing implementer with its explicit gpt-6-sol/medium profile; no child agents.
+Facade implementer retains all ai/public Proto edits. Public history/content
+message shapes are generated and settled; import them through proto/agent.
+Persistent adapters follow review of this shared contract/memory slice. Do not
+claim Agent invocation/history integration before the later server binding exists.
+
+Independent transport slice: existing implementer role, explicit gpt-6-sol/medium,
+for new internal bounded-fetch modules/tests in ai-vercel-ax only. This implements
+the already accepted pre-parser transport decision; it does not change the facade,
+public connection contract, existing Ax proof or other writers' files. No new
+dependencies or shared build changes. Parent coordinates builds and keeps the
+facade implementer responsible for later adapter integration. This independent
+bounded stream uses the available fourth execution slot.
+
+Transport preflight: two new private adapter files, 22 focused tests pass;
+coverage 98.22% statements, 92.07% branches, 93.1% functions, 100% lines. Scoped
+types, ESLint and formatting pass; concurrent facade/storage cleanup diagnostics
+are outside this frozen packet. Review with the existing reliability and style
+roles, each explicitly gpt-6-sol/medium in fresh contexts. Public TypeScript/API
+review is N/A here because no public export, factory or declaration boundary
+changes; documentation review is N/A because no user-facing prose changes and
+internal TSDoc is in the style scope. Security remains final release-readiness.
+No durable/runtime integration claim is made by the controlled callback tests.
+
+Transport review wave complete: both explicitly configured Sol/medium reviewers
+returned confirmed findings. Configured profiles verified; runtime introspection
+unavailable. Combined corrections: forbid zero output credit dispatch; cancel
+pending body materialization; snapshot approved URL and accepted scalar ticket
+values; classify internal failures by private type/code, sanitize external errors,
+and preserve cancellation versus deadline through streams; reschedule timer
+chunks for deadlines beyond Node's timer range. Parent independently reproduced
+mutable-ticket credit bypass and long-deadline immediate cancellation. Return the
+complete batch to the same implementation context; focused regressions and scoped
+checks precede substantive reliability/style follow-up. Work continues.
+
+Facade preflight received: 31 tests pass, focused coverage 95.78/90.63/96.62/97.12.
+Types, lint, cleanup, TSDoc, copyright, format and Buf pass; parent diff/status
+check found and removed three filler adjectives and roadmap wording before
+review. Review wave uses existing TypeScript/API, reliability and style roles
+explicitly gpt-6-sol/medium, documentation explicitly gpt-6-luna/medium, fresh
+contexts without memory. All four concerns apply to these public contracts,
+validation and user prose. Review only ai/public Proto changes against 260135e9e;
+exclude transport/storage. Final security remains at full integration.
+
+Shared/memory history preflight received: 6 suites/60 tests, new-source coverage
+97.48/90.83/100/98.98; storage/tooling types, lint/format and deterministic docs
+checks pass. Review existing reliability, style and TypeScript/API roles explicitly
+gpt-6-sol/medium; documentation role explicitly gpt-6-luna/medium, fresh contexts
+without memory. All four apply to provider contracts, persistence and changed
+README/reference claims. Scope packages/storage only against 260135e9e; public
+Proto dependencies are facade review scope. Persistent adapters/server binding
+remain later work. Final security review stays at release readiness.
+
+Transport correction preflight received: 34 focused and 69 combined bridge/guard
+tests pass; coverage97.02/92.45/94.28/98.3; types/lint/format/cleanup/TSDoc pass.
+All accepted findings have targeted regressions, including mutable ticket credit
+and timer overflow. Follow up substantive reliability and style concerns with
+the same explicitly configured Sol/medium reviewers, then parent reruns focused
+checks before checkpointing. No public adapter/runtime integration claim.
+
+Transport accepted: reliability and style follow-ups close every accepted finding;
+explicit Sol/medium profiles confirmed, runtime introspection unavailable. Parent
+reran69bridge/guard tests and adapter package types: pass. Commit/push only two
+private transport files plus this ledger. Production connection installation and
+durable callbacks remain later integration work.
+
+Facade/history review outcomes received so far: types and reliability confirm
+exact64bit repeated/wrapper admission, integer schema, mutable default references
+and promptmode unsupported-output defects; storage conformance needs equal-time
+UTF8/prefix pagination. Documentation confirms premature integration claims.
+The alleged missing storage/provider exports are rejected: provider.ts reexports
+internal/entity-history.ts, which exports the new contracts; docs reviewer
+corrected the report. Retain complete-wave sequencing before corrections.
