@@ -19,6 +19,30 @@ history and Entity commit contracts, query values, tenant boundaries/catalogs,
 and delivery-cleanup handles. The storage root intentionally does not export
 these provider seams; application code uses its root storage contracts instead.
 
+The provider entry point also exports `AgentHistoryStorage`,
+`AgentHistoryStorageFactories`, `AgentHistoryKeys`, and
+`AgentHistoryConformance`. Calling `AgentHistoryStorageFactories.create()` to
+open a handle fails if the supplied factory has not registered the capability.
+This check runs on explicit handle creation; repository creation does not call
+this capability in the current runtime. Agent history's append-only entries
+retain the original conversation record or Event envelope,
+ID, and occurrence time. The full, conversation, System, and domain views use
+separate indexes. Conversation reads require a `ConversationId`. The complete
+order is occurrence seconds and nanoseconds descending, then conversation,
+System, domain, then unsigned UTF-8 record ID ascending. `AgentHistoryKeys`
+derives a sortable index value from that order; it is not a record identity.
+
+Provider reads use an optional complete ordering-key boundary and positive
+count and byte limits. The byte limit counts the sum of serialized
+`AgentHistoryEntry` wrapper lengths, excluding provider framing. A page reports
+whether older entries remain; if the first entry exceeds the byte limit, the
+read rejects. Limits never remove stored entries. Identical repeated appends
+are accepted, while different content with the same category and record ID
+is rejected. `AgentHistoryConformance` runs reusable view, order, paging,
+scope, and retention checks for adapter implementations. The memory provider
+retains entries across handles sharing a backend during the process lifetime;
+it does not provide restart durability.
+
 ## Record storage
 
 `StorageFactory.createRecordStorage(context, spec, group?)` returns an

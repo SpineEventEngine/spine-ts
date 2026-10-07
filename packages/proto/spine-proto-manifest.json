@@ -51,6 +51,10 @@
     "spine/system/server/entity_type.proto",
     "spine/time/time.proto",
     "spine/time_options.proto",
+    "spine/ts/agent/content.proto",
+    "spine/ts/agent/history.proto",
+    "spine/ts/agent/interaction_events.proto",
+    "spine/ts/agent/model.proto",
     "spine/ui/language.proto",
     "spine/validation/validation_error.proto"
   ],
@@ -103,10 +107,14 @@
     "spine/system/server/entity_type.proto": "generated/spine/system/server/entity_type_pb.js",
     "spine/time/time.proto": "generated/spine/time/time_pb.js",
     "spine/time_options.proto": "generated/spine/time_options_pb.js",
+    "spine/ts/agent/content.proto": "generated/spine/ts/agent/content_pb.js",
+    "spine/ts/agent/history.proto": "generated/spine/ts/agent/history_pb.js",
+    "spine/ts/agent/interaction_events.proto": "generated/spine/ts/agent/interaction_events_pb.js",
+    "spine/ts/agent/model.proto": "generated/spine/ts/agent/model_pb.js",
     "spine/ui/language.proto": "generated/spine/ui/language_pb.js",
     "spine/validation/validation_error.proto": "generated/spine/validation/validation_error_pb.js"
   },
   "dependencies": [],
   "moduleExport": "spineProtoModule",
-  "generationId": "91c5aa56-b9dc-411b-b107-58366b721202"
+  "generationId": "707f7f39-a21e-463e-be93-02b63ab4cb1c"
 }

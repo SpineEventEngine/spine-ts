@@ -32,6 +32,20 @@ export {
   type EntityStorageConformance,
 } from "../entity/history-conformance.js";
 export type { EntityIdCodec, EntityStorageInput } from "../memory/in-memory-entity-history.js";
+export {
+  AgentHistoryKeys,
+  type AgentHistoryOrderKey,
+  type AgentHistoryView,
+  type AgentHistoryStorageInput,
+  type AgentHistoryRead,
+  type AgentHistoryPage,
+  type AgentHistoryStorage,
+} from "../entity/agent-history.js";
+export { AgentHistoryStorageFactories, type AgentHistoryStorageFactory } from "./agent-history.js";
+export {
+  AgentHistoryConformance,
+  type AgentHistoryConformanceAdapter,
+} from "../entity/agent-history-conformance.js";
 export type {
   EntityCommitInput,
   EntityCommitStorage,

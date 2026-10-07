@@ -5,6 +5,12 @@ includes an in-memory implementation for local development and tests. Use it
 when an application needs a small record store, or when an adapter needs to
 implement the same storage contract for a durable provider.
 
+Agent history uses a separate provider contract. The in-memory factory offers
+indexed, append-only Agent history during the process lifetime. Adapter authors
+can use the provider-only history port and conformance checks described in the
+[reference](REFERENCE.md#provider-spi); the storage root does not expose an
+application history service.
+
 This is an experimental snapshot package. Use Node 24 or newer and generated
 Protobuf record schemas before configuring storage.
 

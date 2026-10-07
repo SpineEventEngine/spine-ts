@@ -1,0 +1,341 @@
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+
+syntax = "proto3";
+
+package spine.ts.agent;
+
+import "google/protobuf/empty.proto";
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.io";
+
+// Name of an authenticated deployment registered by the application.
+message ModelName {
+  // Nonblank deployment name.
+  string value = 1 [(required) = true];
+}
+
+// Revision of a deployment's model, endpoint and capability configuration.
+message ModelRevision {
+  // Nonblank application-assigned revision.
+  string value = 1 [(required) = true];
+}
+
+// Credential-free reference to a configured deployment.
+message ModelRef {
+  // Deployment name in the application registry.
+  ModelName name = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Exact immutable configuration revision.
+  ModelRevision revision = 2 [
+    (required) = true,
+    (validate) = true
+  ];
+}
+
+// Kind of operation a deployment supports.
+enum AiModelKind {
+  // Unspecified kinds are invalid in preferences and executed operations.
+  AI_MODEL_KIND_UNSPECIFIED = 0;
+
+  // Generates a structured candidate from instructions and input.
+  GENERATION = 1;
+
+  // Evaluates typed questions without a generated chat response.
+  DECISION = 2;
+}
+
+// Effective execution path fixed when a capability is accepted.
+enum AiExecutionMode {
+  AI_EXECUTION_MODE_UNSPECIFIED = 0;
+  GENERATION_NATIVE_SCHEMA = 1;
+  GENERATION_PROMPT_VALIDATE = 2;
+  DECISION_DIRECT = 3;
+}
+
+// Deployment preference applied to later signals for one Agent instance.
+message ModelPreference {
+  // Capability kind affected by this preference.
+  AiModelKind kind = 1 [(required) = true];
+
+  // Exactly one explicit selection or inheritance instruction is required.
+  oneof selection {
+    option (choice).required = true;
+
+    // Deployment to use after authorization and commit.
+    ModelRef model = 2 [(validate) = true];
+
+    // Removes this kind's instance override.
+    google.protobuf.Empty inherit_repository_default = 3;
+  }
+}
+
+// Identifies one conversation that may span several signals and operations.
+message ConversationId {
+  // Application-assigned identifier scoped to the Agent instance.
+  string value = 1 [(required) = true];
+}
+
+// Identifies one logical model operation including corrective attempts.
+message AiOperationId {
+  // Identifier assigned when the operation begins.
+  string value = 1 [(required) = true];
+}
+
+// Identifies one physical provider request within an operation.
+message AiAttemptId {
+  // Identifier assigned to the physical request.
+  string value = 1 [(required) = true];
+}
+
+// Identifies exact serialized interaction content without retaining it in audit.
+message AiContentDigest {
+  // Exactly 64 lowercase hexadecimal characters of SHA-256.
+  string value = 1 [
+    (required) = true,
+    (pattern).regex = "^[0-9a-f]{64}$"
+  ];
+}
+
+// Identifies one logical tool call and its recovery record.
+message AiToolCallId {
+  // Spine-assigned ID, distinct from an MCP request ID.
+  string value = 1 [(required) = true];
+}
+
+// Name of one typed application capability, distinct from a deployment.
+message AiCapabilityName {
+  string value = 1 [(required) = true];
+}
+
+// Revision of a typed application capability.
+message AiCapabilityRevision {
+  string value = 1 [(required) = true];
+}
+
+// Revision of a pure application validation rule.
+message AiValidationRevision {
+  string value = 1 [(required) = true];
+}
+
+// Revision of a pure decision-to-Proto mapping.
+message AiMappingRevision {
+  string value = 1 [(required) = true];
+}
+
+// Safe reference to diagnostic information retained outside public events.
+message AiDiagnosticId {
+  string value = 1 [(required) = true];
+}
+
+// Identity of one configured MCP server.
+message McpServerId {
+  string value = 1 [(required) = true];
+}
+
+// Exact name of one expressly permitted MCP tool.
+message McpToolName {
+  string value = 1 [(required) = true];
+}
+
+// Number of physical provider requests permitted for one operation.
+message AiModelRequestLimit {
+  uint32 value = 1 [(min).value = "1"];
+}
+
+// Number of external tool calls permitted for one operation; zero disables tools.
+message AiToolCallLimit {
+  uint32 value = 1;
+}
+
+// Maximum elapsed milliseconds for one operation.
+message AiDeadlineMillis {
+  uint64 value = 1 [(min).value = "1"];
+}
+
+// Maximum bytes in one materialized provider request.
+message AiInputByteLimit {
+  uint64 value = 1 [(min).value = "1"];
+}
+
+// Maximum received bytes before provider parsing.
+message AiOutputByteLimit {
+  uint64 value = 1 [(min).value = "1"];
+}
+
+// Generation-only maximum output tokens.
+message AiOutputTokenLimit {
+  uint64 value = 1 [(min).value = "1"];
+}
+
+// Provider-reported token count; known zero remains distinct from absence.
+message AiTokenCount {
+  uint64 value = 1;
+}
+
+// Effective bounds for one model operation.
+message AiOperationLimits {
+  // Maximum physical provider requests including corrections.
+  AiModelRequestLimit model_requests = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Maximum external tool calls; zero disables tools.
+  AiToolCallLimit tool_calls = 2 [(validate) = true];
+
+  // Maximum elapsed milliseconds.
+  AiDeadlineMillis deadline_ms = 3 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Maximum materialized request bytes.
+  AiInputByteLimit max_input_bytes = 4 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Maximum received response bytes.
+  AiOutputByteLimit max_output_bytes = 5 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Generation-only output token limit; absent for decisions.
+  AiOutputTokenLimit max_output_tokens = 6 [(validate) = true];
+}
+
+// Provider-reported counts; absent fields mean unknown rather than zero.
+message AiUsage {
+  // Input tokens when supplied by the provider.
+  AiTokenCount input_tokens = 1 [(validate) = true];
+
+  // Output tokens when supplied by the provider.
+  AiTokenCount output_tokens = 2 [(validate) = true];
+}
+
+// Provider or local service identifier, not an application deployment name.
+message AiProviderName {
+  string value = 1 [(required) = true];
+}
+
+// Verified provider account or local execution identity.
+message AiAccountIdentity {
+  string value = 1 [(required) = true];
+}
+
+// Credential-free canonical endpoint identity.
+message AiEndpointIdentity {
+  string value = 1 [(required) = true];
+}
+
+// Concrete provider model name, independent of application deployment names.
+message AiProviderModelName {
+  string value = 1 [(required) = true];
+}
+
+// Non-secret identity established for an authenticated model connection.
+message AiConnectionIdentity {
+  // Provider or local service identifier.
+  AiProviderName provider = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Verified account or local execution identity.
+  AiAccountIdentity account = 2 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Credential-free canonical endpoint identity.
+  AiEndpointIdentity endpoint = 3 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Concrete provider model name.
+  AiProviderModelName model = 4 [
+    (required) = true,
+    (validate) = true
+  ];
+}
+
+// Safe category for a model or tool outcome.
+enum AiOutcome {
+  // No outcome was recorded.
+  AI_OUTCOME_UNSPECIFIED = 0;
+
+  // Validated result was admitted.
+  AI_OUTCOME_ADMITTED = 1;
+
+  // Received content failed validation.
+  AI_OUTCOME_INVALID_OUTPUT = 2;
+
+  // Provider refused the request.
+  AI_OUTCOME_REFUSED = 3;
+
+  // Operational failure has a safe diagnostic.
+  AI_OUTCOME_FAILED = 4;
+
+  // A dispatched external action has an unknown outcome.
+  AI_OUTCOME_UNKNOWN = 5;
+}
+
+// Safe operational failure category for an Agent model operation.
+enum AiFailureCode {
+  // No failure category was supplied.
+  AI_FAILURE_CODE_UNSPECIFIED = 0;
+
+  // Typed input or application facts were invalid.
+  INVALID_INPUT = 1;
+
+  // Deployment cannot support the declared capability.
+  UNSUPPORTED_CAPABILITY = 2;
+
+  // Authenticated connection is unavailable.
+  AUTHENTICATION_REQUIRED = 3;
+
+  // Provider rejected the request rate.
+  RATE_LIMITED = 4;
+
+  // Provider or tool is temporarily unavailable.
+  UNAVAILABLE = 5;
+
+  // Provider refused an otherwise valid request.
+  REFUSED = 6;
+
+  // Received candidate could not be admitted.
+  INVALID_OUTPUT = 7;
+
+  // Physical, tool, time or byte budget was exhausted.
+  BUDGET_EXCEEDED = 8;
+
+  // External tool failed without an admitted result.
+  TOOL_FAILED = 9;
+
+  // A dispatched write tool has an unresolved outcome.
+  TOOL_OUTCOME_UNKNOWN = 10;
+
+  // Invocation was cancelled before completion.
+  CANCELLED = 11;
+
+  // Accepted absolute deadline expired.
+  DEADLINE_EXCEEDED = 12;
+}

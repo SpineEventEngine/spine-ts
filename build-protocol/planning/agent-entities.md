@@ -5,8 +5,9 @@
 High-risk runtime/public-contract task authorized on 7 October 2026. Base:
 `658da1cdddcb8fd40f9205b1c200abc3a58dd62e` (snapshot.22). Feature branch:
 `agent-entities`; worktree: native managed `agent-readiness/spine-ts`.
-Adapter composition and the Agent family foundation are verified. AI facade
-validation is underway; dedicated history storage follows. Physical Entity
+Adapter composition, the bounded transport and Agent family foundation are
+verified. Shared/memory history is accepted; facade corrections and persistent
+history integration are underway. Physical Entity
 deletion is explicitly deferred.
 
 The approved specification is `AGENT_ENTITIES_API_TASK_2026-10-02.md` and its
@@ -679,3 +680,69 @@ UTF8/prefix pagination. Documentation confirms premature integration claims.
 The alleged missing storage/provider exports are rejected: provider.ts reexports
 internal/entity-history.ts, which exports the new contracts; docs reviewer
 corrected the report. Retain complete-wave sequencing before corrections.
+
+Transport checkpoint2fb9959d8 pushed to official origin/agent-entities. Facade and
+shared/memory history complete review wave collected; explicit configured model
+fields verified for every role, runtime introspection unavailable. Return separate
+complete batches to existing Sol/medium writers.
+
+Facade accepted corrections: exact repeated/wrapper64bit admission and valid
+repeated wrappers; native integer schema; frozen nested defaults; fail unsupported
+output before request in both modes; domain-correct capability/mapping fixtures;
+semantic public TSDoc; accurate currently implemented docs. Also resolve narrow
+P3 comment corrections and recursive-schema diagnostic guard because the accepted
+contract requires field-specific unsupported-feature errors. Small README example
+can use the corrected domain fixtures. No new Any support is required.
+
+History accepted corrections: provider conformance tests full UTF8/prefix and
+Timestamp edge order through pagination, exact all-category content preservation
+and filtered identities; describe handle capability checks accurately. Keep the
+large unrelated-data check as functional scoping evidence, not proof of an index.
+Memory indexed path has source-review evidence; persistent packet must assert
+actual query/index paths. Reject nonexistent provider export defect (reviewer
+corrected report). Sorted-array insertion cost is recorded as process-local
+provider characteristic, not a requirement for a new data structure. Resolve the
+duplicate comment if present. Review fixes take an estimated0.5–1hour including
+focused regression checks and affected follow-ups; work continues.
+
+Independent mechanical release-inventory packet: reuse transport implementer
+context explicitly configured Sol/medium, with scripts/package-artifacts.mjs,
+scripts/release-policy.mjs, their affected release/artifact tests and narrow
+docs/release-publishing.md counts/list only. Add the two approved AI packages to
+exact publication inventory; no version changes, manifests, lock, TypeDoc, runtime,
+network publication, credentials or workflow edits. Estimate0.25–0.5hour including
+focused script tests and docs checks. Facade writer has shared Proto/build window;
+this independent script packet must avoid it. Review relevant release-policy and
+documentation behavior after preflight; other concerns disposition with packet.
+
+History correction preflight:60tests pass, five-source coverage97.75/92.48/100/99.1;
+types/lint/format/cleanup/TSDoc pass. Follow up substantive conformance with the
+same explicit Sol/medium reliability reviewer. Its UTF8 finding duplicates the
+type lane; no provider API changed, so parent validates duplicate closure rather
+than reopening that entire lane. Exact-content assertions/style and narrow docs
+wording corrections are directly checkable; parent checks those plus fresh tests.
+The persistent-provider query/index proof remains explicitly in its next packet.
+
+Release inventory packet includes package-count diagnostic in release-trial.mjs
+using existing inventorylength, plus affected package-metadata test expectations
+for the approved proto/agent export. No publication behavior, versions or manifests
+changed. Focused83release/artifacttests and2inventory checks pass; transient
+generationdirectories and Protoexport expectation failures require classification
+before acceptance.
+
+Shared/memory history accepted: same explicit Sol/medium reliability follow-up
+closed substantive findings; parent independently reran60tests and checked exact
+entry assertions plus capability wording. Duplicate type/style concerns are
+closed by those concrete checks; no production API changed during correction.
+Public Agent Protos and curated exports had no independent review findings and
+are unchanged. Checkpoint those dependencies with storage; facade and support
+fixture corrections stay separate and uncommitted. No finalrelease claim.
+
+Release inventory preflight96tests passed including corrected Protoexport metadata
+expectation; transient generationdirectories gone. Counts are21public/29release
+paths; diagnostic derives count; runbooklist matches. No publication/build run.
+Review the small releasepolicy change with explicit existing reliability role
+Sol/medium. Style is N/A for mechanical list/count edits, TypeScript/API is N/A
+for no declared signature changes (AI public contracts separatelyreviewed), and
+documentation counts/list are deterministically compared with exactinventory.
+Final security stays at wholefeature readiness.
