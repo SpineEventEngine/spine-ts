@@ -25,7 +25,7 @@
     "REFERENCE.md"
   ],
   "scripts": {
-    "test:postgresql": "node scripts/postgresql.mjs && SPINE_TS_INBOX_PROVIDER=postgresql pnpm exec vitest --root ../.. --config vitest.infrastructure.config.ts run packages/storage-postgres/test/postgresql-integration.test.ts packages/server/test/delivery/inbox-provider-cleanup.test.ts",
+    "test:postgresql": "node scripts/postgresql.mjs && SPINE_TS_INBOX_PROVIDER=postgresql pnpm exec vitest --root ../.. --config vitest.infrastructure.config.ts run packages/storage-postgres/test/postgresql-integration.test.ts packages/storage-postgres/test/postgres-agent-history.test.ts packages/server/test/delivery/inbox-provider-cleanup.test.ts",
     "test:postgresql:16": "SPINE_TS_POSTGRESQL_EXPECTED_MAJOR=16 pnpm test:postgresql",
     "test:postgresql:18": "SPINE_TS_POSTGRESQL_EXPECTED_MAJOR=18 pnpm test:postgresql"
   },

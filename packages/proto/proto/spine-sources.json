@@ -435,6 +435,10 @@
       "sha256": "7c300d215a1757c17b7bd1a89cebb4825df28a58fcc119f2aa6d5535d7520073"
     },
     {
+      "localPath": "packages/proto/proto/spine/server/agent/history_record.proto",
+      "sha256": "24ed282bc0cd901a3b38748ea7b516e972a87b2a7f69db99a2b094458d48e38a"
+    },
+    {
       "localPath": "packages/proto/proto/spine/ts/agent/content.proto",
       "sha256": "768ab07aa62bb850925d3360117a3ac2a742e5071bd07455d796390df02df884"
     },

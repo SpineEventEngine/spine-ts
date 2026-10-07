@@ -124,6 +124,20 @@ truncate behavior. Timestamp comparisons include seconds and nanoseconds.
 Long maintenance can commit several bounded chunks, so a later failure leaves
 earlier chunks durable and the caller retries the same idempotent operation.
 
+The provider-only Agent history handle uses the fixed `spine_agent_history`
+kind in each complete tenant namespace. Each row retains the original complete
+`AgentHistoryEntry` and full state type and Agent key. SHA-256 digests provide
+bounded physical IDs and indexed scope/conversation keys; every decoded row is
+checked against the complete requested scope and conversation. A digest
+collision fails the read. `index.yaml` declares three complete composite
+indexes for scope plus full order, scope plus category plus full order, and
+scope plus conversation digest plus full order. The order value encodes full
+Timestamp seconds/nanoseconds, category, and unsigned UTF-8 record ID. Values
+longer than Datastore's 1,500-byte indexed-string limit reject before append;
+original scope strings remain unindexed in the payload. Reads use native pages
+of at most 128 rows and sum serialized entry bytes. A fetched chunk can be
+larger than the returned byte budget.
+
 The factory has one tenant catalog. It reads native `__namespace__` metadata,
 converts only namespaces recognized by its `NamespaceConverter`, and keeps an early
 in-memory cache for newly admitted tenants. `keep()` stores no `TenantId` row or

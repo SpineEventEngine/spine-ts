@@ -24,15 +24,18 @@ import {
   type StorageGroup,
 } from "@spine-event-engine/storage";
 import { TenantBoundary, type TenantCatalog } from "@spine-event-engine/storage/provider";
+import { AgentHistoryRecords } from "@spine-event-engine/storage/provider";
 import {
   DeliveryCleanupStorageFactories,
   EntityCommitStorageFactories,
+  AgentHistoryStorageFactories,
 } from "@spine-event-engine/storage/provider";
 import { Pool, type PoolConfig, type PoolClient } from "pg";
 
 import { PostgresStorageConfigurationError, PostgresStorageConnectionError } from "./errors.js";
 import { PostgresRecordStorage, type PostgresRecordLifecycle } from "./record-storage.js";
 import { PostgresEntityStorage } from "./entity-history.js";
+import { PostgresAgentHistory, AgentHistoryHash } from "./agent-history.js";
 import { PostgresEntityCommitStorage } from "./entity-commit.js";
 import { PostgresDeliveryCleanupStorage } from "./delivery-cleanup.js";
 import { PostgresTableResolver } from "./table-resolver.js";
@@ -320,6 +323,19 @@ export class PostgresStorageFactory extends StorageFactory {
     });
     DeliveryCleanupStorageFactories.register(this, {
       createDeliveryCleanupStorage: () => this.createDeliveryCleanupStorage(),
+    });
+    AgentHistoryStorageFactories.register(this, {
+      createAgentHistoryStorage: (input) => {
+        if (!this.isOpen()) throw new Error("StorageFactory is closed.");
+        return new PostgresAgentHistory(
+          input,
+          this.createPostgresRecordStorage(
+            input.context,
+            AgentHistoryRecords.spec((value) => AgentHistoryHash.value(value)),
+            AgentHistoryRecords.group,
+          ),
+        );
+      },
     });
   }
 

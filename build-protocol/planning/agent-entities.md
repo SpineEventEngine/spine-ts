@@ -907,3 +907,26 @@ Server history accepted: parent reran all 339 focused server/BlackBox checks;
 format/diff checks pass and follow-up reliability is closed. Verification skill
 read; checkpoint only server history plus its exact ai dependency/lock entry.
 The full Agent feature remains in progress.
+
+Server history checkpoint 9b0c62792 pushed. Continue same existing server
+implementer, explicit Sol/medium, on scripted testing backend from task9.2 while
+persistent storage corrections finish. Testing source/exports/docs only; adapter
+writer retains AI SPI. Estimate 0.5–1 hour including focused behavior tests and
+mechanics. Domain testing still enters through BlackBox; this dependency scripts
+external responses using normal admission and audit callbacks. Full runtime work
+follows the execution-store contract. Parent requested the necessary named-call
+metadata on the SDK-free backend request; no application API redesign.
+
+Persistent provider corrections frozen: 18 live tests pass, affected build and
+scoped mechanics pass; new-module coverage 98.38/93.57/100/100, each branch≥90%.
+PG invalid-index regression uses only a disposable schema/index and requires the
+existing integration test database superuser; no production catalog mutation.
+Follow up substantive persistence findings with same existing Sol/medium
+reliability reviewer. Parent directly checks centralized MySQL capacity and
+resolved-table complete-index assertions. No unchanged-lane re-review.
+
+Persistent reliability follow-up closed both production findings. Parent reran
+18 live tests successfully and inspected exact index-table predicates/columns and
+single MySQL capacity declaration. Added the isolated catalog-test superuser
+prerequisite to PostgreSQL live-test docs. All four review concerns closed for
+this slice; save provider checkpoint before durable execution storage work.

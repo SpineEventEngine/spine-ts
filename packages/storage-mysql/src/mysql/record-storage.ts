@@ -112,6 +112,90 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
   }
 
   /**
+   * Reads a bounded package-local native history page.
+   * @param sql Parameterized SQL assembled by the Agent history provider.
+   * @param values Bound scope, view, boundary, and limit values.
+   * @returns Decoded original record envelopes.
+   */
+  async historyPage(sql: string, values: readonly unknown[]): Promise<readonly R[]> {
+    return this.using(async (connection) => {
+      const [rows] = await connection.query<PayloadRow[]>(sql, [...values]);
+      try {
+        return rows.map((row) => fromBinary(this.recordSpec.recordType, row.bytes));
+      } catch (error) {
+        throw mysqlError(MysqlStorageDataError, "Stored MySQL history data is invalid.", error);
+      }
+    });
+  }
+
+  /**
+   * Creates one required complete Agent history index when absent.
+   * @param name Fixed provider index name.
+   * @param columns Fixed complete index columns.
+   * @returns Completion after the native index definition is checked.
+   */
+  async ensureHistoryIndex(name: string, columns: readonly string[]): Promise<void> {
+    await this.using(async (connection) => {
+      const existing = await this.historyIndex(connection, name);
+      if (existing.length !== 0) {
+        this.assertHistoryIndex(existing, columns);
+        return;
+      }
+      if (!/^[a-z_]+$/u.test(name) || columns.some((column) => !/^[a-z_]+$/u.test(column)))
+        throw new MysqlStorageSchemaError("MySQL Agent history index name is invalid.");
+      const quoted = columns.map((column) => `\`${column}\``).join(", ");
+      try {
+        await connection.query(`CREATE INDEX \`${name}\` ON \`${this.tableName}\` (${quoted})`);
+      } catch (error) {
+        if ((error as { code?: string }).code !== "ER_DUP_KEYNAME") throw error;
+      }
+      this.assertHistoryIndex(await this.historyIndex(connection, name), columns);
+    });
+  }
+
+  /**
+   * Reads complete physical index metadata for one fixed history index.
+   * @param connection Active MySQL connection.
+   * @param name Fixed required index name.
+   * @returns Ordered native index components.
+   */
+  private async historyIndex(
+    connection: import("mysql2/promise").PoolConnection,
+    name: string,
+  ): Promise<readonly IndexRow[]> {
+    const [rows] = await connection.query<IndexRow[]>(
+      "SELECT index_name AS index_name, non_unique AS non_unique, " +
+        "column_name AS column_name, seq_in_index AS seq_in_index, " +
+        "sub_part AS sub_part, collation AS collation, index_type AS index_type " +
+        "FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name=? " +
+        "AND index_name=? ORDER BY seq_in_index",
+      [this.tableName, name],
+    );
+    return rows;
+  }
+
+  /**
+   * Rejects prefixes, wrong order, or a different native index.
+   * @param rows Ordered native index components.
+   * @param columns Required complete index columns.
+   */
+  private assertHistoryIndex(rows: readonly IndexRow[], columns: readonly string[]): void {
+    if (
+      rows.length !== columns.length ||
+      rows.some(
+        (row, index) =>
+          row.column_name !== columns[index] ||
+          row.seq_in_index !== index + 1 ||
+          row.sub_part !== null ||
+          row.non_unique !== 1 ||
+          row.collation !== "A" ||
+          row.index_type !== "BTREE",
+      )
+    )
+      throw new MysqlStorageSchemaError("MySQL Agent history index is incompatible.");
+  }
+
+  /**
    * Creates a MySQL record-family storage handle.
    *
    * @param context Provides the storage context.
@@ -1252,6 +1336,9 @@ interface IndexRow extends RowDataPacket {
   non_unique: number;
   column_name: string;
   seq_in_index: number;
+  sub_part?: number | null;
+  collation?: string | null;
+  index_type?: string;
 }
 
 function mysqlColumnDefinition(

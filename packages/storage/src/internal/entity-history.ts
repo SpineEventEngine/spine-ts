@@ -26,6 +26,8 @@ export {
 } from "../entity/entity-history-storage.js";
 export type { EntityRecord, EntityRecordStorage } from "../entity/entity-record.js";
 export { eventHistorySpec, stateHistorySpec } from "../entity/entity-history-record-spec.js";
+export { AgentHistoryRecords } from "../entity/agent-history-record-spec.js";
+export { AgentHistoryPages } from "../entity/agent-history-provider-page.js";
 export {
   EntityHistoryConformance,
   type EntityHistoryConformanceAdapter,

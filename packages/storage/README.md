@@ -6,8 +6,10 @@ when an application needs a small record store, or when an adapter needs to
 implement the same storage contract for a durable provider.
 
 Agent history uses a separate provider contract. The in-memory factory offers
-indexed, append-only Agent history during the process lifetime. Adapter authors
-can use the provider-only history port and conformance checks described in the
+indexed, append-only history during the process lifetime; the PostgreSQL,
+MySQL, and Datastore providers persist the same entries in indexed native
+record families. Adapter authors can use the provider-only history port and
+conformance checks described in the
 [reference](REFERENCE.md#provider-spi); the storage root does not expose an
 application history service.
 

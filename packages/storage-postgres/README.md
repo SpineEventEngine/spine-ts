@@ -83,6 +83,10 @@ collisions are rejected before the database is accessed.
 ## Live integration checks
 
 The live suite is opt-in and requires an already running PostgreSQL service.
+Use disposable test databases and a PostgreSQL superuser for this suite. The Agent
+history regressions alter index catalog flags in isolated temporary schemas to
+check rejection of invalid or unfinished indexes; these schemas are removed after
+each test. The production adapter does not require superuser access.
 No container or database is started automatically:
 
 ```sh

@@ -20,6 +20,19 @@ const repoRoot = new URL("..", import.meta.url).pathname;
 const checkerPath = new URL("./check-api-docs.mjs", import.meta.url).pathname;
 
 const expectedStorageProviderExports = [
+  "AgentHistoryConformance",
+  "AgentHistoryConformanceAdapter",
+  "AgentHistoryKeys",
+  "AgentHistoryOrderKey",
+  "AgentHistoryPage",
+  "AgentHistoryPages",
+  "AgentHistoryRecords",
+  "AgentHistoryRead",
+  "AgentHistoryStorage",
+  "AgentHistoryStorageFactories",
+  "AgentHistoryStorageFactory",
+  "AgentHistoryStorageInput",
+  "AgentHistoryView",
   "CleanupOperation",
   "DeliveryCleanupInput",
   "DeliveryCleanupStorage",
@@ -97,6 +110,8 @@ describe("storage API documentation inventory", () => {
 
     expect(typedoc.entryPoints).toEqual(
       expect.arrayContaining([
+        "packages/ai/src/spi/adapter.ts",
+        "packages/ai/src/spi/runtime.ts",
         "packages/core/src/spi/subscription-lifecycle.ts",
         "packages/deployment/src/spi/backend-membership.ts",
         "packages/server/src/spi/handler-registry.ts",

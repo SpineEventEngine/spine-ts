@@ -24,11 +24,13 @@ import {
   type StorageGroup,
 } from "@spine-event-engine/storage";
 import { TenantBoundary, type TenantCatalog } from "@spine-event-engine/storage/provider";
+import { AgentHistoryRecords } from "@spine-event-engine/storage/provider";
 import {
   EntityCommitStorageFactories,
   type EntityCommitStorage,
 } from "@spine-event-engine/storage/provider";
 import { DeliveryCleanupStorageFactories } from "@spine-event-engine/storage/provider";
+import { AgentHistoryStorageFactories } from "@spine-event-engine/storage/provider";
 import type { EntityStorageInput } from "@spine-event-engine/storage/provider";
 import { eventStoreRecordSpec } from "@spine-event-engine/storage/provider";
 import type { TenantId } from "@spine-event-engine/proto";
@@ -40,6 +42,7 @@ import {
 import { MysqlRecordStorage, type MysqlRecordLifecycle } from "./record-storage.js";
 import { MysqlTableResolver } from "./table-resolver.js";
 import { MysqlEntityStorage } from "./entity-history.js";
+import { MysqlAgentHistory, AgentHistoryHash } from "./agent-history.js";
 import { mysqlEntityLockKey, MysqlEntityCommitCoordinator } from "./entity-commit.js";
 import { MysqlDeliveryCleanupStorage } from "./delivery-cleanup.js";
 import { resolvedMysqlTableSpec, type MysqlTableSpec } from "./table-spec.js";
@@ -283,6 +286,14 @@ export class MysqlStorageFactory extends StorageFactory {
     EntityCommitStorageFactories.register(this, {
       createEntityCommitStorage: (input) => this.createEntityCommitStorage(input),
     });
+    this.registerDeliveryCleanup();
+    this.registerAgentHistory();
+  }
+
+  /**
+   * Registers existing delivery cleanup over the selected tenant database.
+   */
+  private registerDeliveryCleanup(): void {
     DeliveryCleanupStorageFactories.register(this, {
       createDeliveryCleanupStorage: () =>
         new MysqlDeliveryCleanupStorage(
@@ -298,6 +309,25 @@ export class MysqlStorageFactory extends StorageFactory {
           },
           () => "spine-delivery-cleanup",
         ),
+    });
+  }
+
+  /**
+   * Registers the required provider-only Agent history capability.
+   */
+  private registerAgentHistory(): void {
+    AgentHistoryStorageFactories.register(this, {
+      createAgentHistoryStorage: (input) => {
+        if (!this.isOpen()) throw new Error("StorageFactory is closed.");
+        return new MysqlAgentHistory(
+          input,
+          this.createMysqlRecordStorage(
+            input.context,
+            AgentHistoryRecords.spec((value) => AgentHistoryHash.value(value)),
+            AgentHistoryRecords.group,
+          ),
+        );
+      },
     });
   }
 

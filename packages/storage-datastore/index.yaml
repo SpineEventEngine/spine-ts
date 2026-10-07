@@ -1,1 +1,15 @@
-indexes: []
+indexes:
+  - kind: spine_agent_history
+    properties:
+      - name: scope_digest
+      - name: order_key
+  - kind: spine_agent_history
+    properties:
+      - name: scope_digest
+      - name: category
+      - name: order_key
+  - kind: spine_agent_history
+    properties:
+      - name: scope_digest
+      - name: conversation_digest
+      - name: order_key

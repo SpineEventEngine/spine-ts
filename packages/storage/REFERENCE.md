@@ -42,6 +42,12 @@ is rejected. `AgentHistoryConformance` runs reusable view, order, paging,
 scope, and retention checks for adapter implementations. The memory provider
 retains entries across handles sharing a backend during the process lifetime;
 it does not provide restart durability.
+The PostgreSQL, MySQL, and Datastore providers store complete entries in one
+tenant-scoped `agent_history` record family with native full, category, and
+conversation ordering indexes. Each derives a bounded physical record ID from
+the full state type, Agent key, category, and original record ID, then checks
+immutable payload equality on repeated appends. Their provider references
+specify physical index and payload constraints.
 
 ## Record storage
 

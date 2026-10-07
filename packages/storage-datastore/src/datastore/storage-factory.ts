@@ -27,6 +27,7 @@ import {
   type TenantCatalog,
   type TenantCatalogProvider,
 } from "@spine-event-engine/storage/provider";
+import { AgentHistoryRecords } from "@spine-event-engine/storage/provider";
 import type {
   EntityCommitStorage,
   EntityEventHistoryPort,
@@ -36,6 +37,7 @@ import type {
 } from "@spine-event-engine/storage/provider";
 import { EntityCommitStorageFactories } from "@spine-event-engine/storage/provider";
 import { DeliveryCleanupStorageFactories } from "@spine-event-engine/storage/provider";
+import { AgentHistoryStorageFactories } from "@spine-event-engine/storage/provider";
 
 import {
   DatastoreEntityCommitStorage,
@@ -43,6 +45,7 @@ import {
   type OpenEntityRecords,
 } from "./entity-history.js";
 import { DatastoreRecordStorage } from "./record-storage.js";
+import { DatastoreAgentHistory, AgentHistoryHash } from "./agent-history.js";
 import { DatastoreDeliveryCleanupStorage } from "./delivery-cleanup.js";
 import {
   DefaultNamespaceConverter,
@@ -68,39 +71,56 @@ export interface RecordLayout {
 /**
  * Creates a customized provider for one record family.
  *
- * A custom provider owns tenant, ID, and column mapping. Builder-configured
+ * The custom provider handles tenant, ID, and column mapping. Builder-configured
  * namespace converters and stringifiers are not passed to this callback.
  *
- * @param context The storage context.
- * @param recordSpec The record-family contract.
- * @param client The caller-owned Datastore client.
- * @param maxClientSideScan The finite reconciliation bound.
- * @returns The customized storage handle.
+ * @typeParam R Stored record message.
  */
-export type CreateRecordStorage<R extends Message = Message> = <I>(
-  context: StorageContext,
-  recordSpec: RecordSpec<I, R>,
-  client: Datastore,
-  maxClientSideScan: number,
-) => RecordStorage<I, R>;
+export interface CreateRecordStorage<R extends Message = Message> {
+  /**
+   * Creates one custom record-family provider.
+   * @param context Complete storage and tenant scope.
+   * @param recordSpec Generated record layout.
+   * @param client Caller-supplied Datastore client.
+   * @param maxClientSideScan Finite reconciliation bound.
+   * @returns Customized storage handle.
+   * @typeParam I Typed record identifier.
+   */
+  // The canonical TSDoc checker requires a documented generic call signature.
+  // eslint-disable-next-line @typescript-eslint/prefer-function-type
+  <I>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+    client: Datastore,
+    maxClientSideScan: number,
+  ): RecordStorage<I, R>;
+}
 
 /**
  * Creates a coherent customized persistence provider for one Entity type.
  *
- * A custom provider owns tenant, ID, and column mapping. Builder-configured
+ * The custom provider handles tenant, ID, and column mapping. Builder-configured
  * namespace converters and stringifiers are not passed to this callback.
  *
- * @param input The Entity storage contract.
- * @param client The caller-owned Datastore client.
- * @returns The customized Entity storage handle.
+ * @typeParam S Entity state message.
  */
-export type CreateEntityStorage<S extends Message = Message> = <I>(
-  input: EntityStorageInput<I, S>,
-  client: Datastore,
-) => DatastoreEntityStorageHandle<I, S>;
+export interface CreateEntityStorage<S extends Message = Message> {
+  /**
+   * Creates one custom Entity persistence provider.
+   * @param input Entity storage contract.
+   * @param client Caller-supplied Datastore client.
+   * @returns Customized Entity storage handle.
+   * @typeParam I Typed Entity identifier.
+   */
+  // The canonical TSDoc checker requires a documented generic call signature.
+  // eslint-disable-next-line @typescript-eslint/prefer-function-type
+  <I>(input: EntityStorageInput<I, S>, client: Datastore): DatastoreEntityStorageHandle<I, S>;
+}
 
 /**
  * Groups the current state, histories, and commits for one Entity type.
+ * @typeParam I Typed Entity identifier.
+ * @typeParam S Entity state message.
  */
 export interface DatastoreEntityStorageHandle<I, S extends Message> {
   // prettier-ignore
@@ -174,6 +194,7 @@ export interface DatastoreStorageFactoryBuilder {
    * @param recordType The record type that receives the layout.
    * @param layout The selected physical layout.
    * @returns This builder.
+   * @typeParam R Stored record message.
    */
   organizeRecords<R extends Message>(recordType: GenMessage<R>, layout: RecordLayout): this;
 
@@ -184,6 +205,8 @@ export interface DatastoreStorageFactoryBuilder {
    * @param recordType The record type that receives the layout.
    * @param layout The selected physical layout.
    * @returns This builder.
+   * @typeParam S Source Entity state message.
+   * @typeParam R Stored record message.
    */
   organizeRecords<S extends Message, R extends Message>(
     sourceType: GenMessage<S>,
@@ -197,6 +220,7 @@ export interface DatastoreStorageFactoryBuilder {
    * @param recordType The record type served by the provider.
    * @param creator The custom record-storage provider.
    * @returns This builder.
+   * @typeParam R Stored record message.
    */
   useRecordStorage<R extends Message>(
     recordType: GenMessage<R>,
@@ -210,6 +234,8 @@ export interface DatastoreStorageFactoryBuilder {
    * @param recordType The record type served by the provider.
    * @param creator The custom record-storage provider.
    * @returns This builder.
+   * @typeParam S Source Entity state message.
+   * @typeParam R Stored record message.
    */
   useRecordStorage<S extends Message, R extends Message>(
     sourceType: GenMessage<S>,
@@ -223,6 +249,7 @@ export interface DatastoreStorageFactoryBuilder {
    * @param sourceType The Entity state type served by the provider.
    * @param creator The custom Entity persistence provider.
    * @returns This builder.
+   * @typeParam S Entity state message.
    */
   useEntityStorage<S extends Message>(
     sourceType: GenMessage<S>,
@@ -241,12 +268,51 @@ export interface DatastoreStorageFactoryBuilder {
  * A Google Cloud Datastore-backed implementation of the Spine TS storage port.
  */
 export class DatastoreStorageFactory extends StorageFactory implements TenantCatalogProvider {
+  /**
+   * Caller-supplied Datastore client.
+   */
   readonly #client: Datastore;
+
+  /**
+
+   * Custom record providers by family.
+
+   */
   readonly #recordCreators: ReadonlyMap<string, CreateRecordStorage>;
+
+  /**
+
+   * Physical kinds by record family.
+
+   */
   readonly #layouts: ReadonlyMap<string, RecordLayout>;
+
+  /**
+
+   * Custom Entity providers by state type.
+
+   */
   readonly #entityCreators: ReadonlyMap<string, CreateEntityStorage>;
+
+  /**
+
+   * Complete tenant-to-namespace conversion.
+
+   */
   readonly #namespaceConverter: NamespaceAssignments;
+
+  /**
+
+   * Schema-bound message stringifiers.
+
+   */
   readonly #stringifiers: StringifierRegistry;
+
+  /**
+
+   * Native tenant catalog for the selected client.
+
+   */
   readonly #catalog: DatastoreTenantCatalog;
 
   /**
@@ -302,6 +368,31 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
       createDeliveryCleanupStorage: () =>
         new DatastoreDeliveryCleanupStorage((context, spec) => this.cleanupStorage(context, spec)),
     });
+    this.registerAgentHistory();
+  }
+
+  /**
+   * Registers the required provider-only Agent history capability.
+   */
+  private registerAgentHistory(): void {
+    AgentHistoryStorageFactories.register(this, {
+      createAgentHistoryStorage: (input) => {
+        if (!this.isOpen()) throw new Error("StorageFactory is closed.");
+        return new DatastoreAgentHistory(
+          input,
+          new DatastoreRecordStorage(
+            input.context,
+            AgentHistoryRecords.spec((value) => AgentHistoryHash.value(value)),
+            this.#client,
+            maxClientSideScan,
+            AgentHistoryRecords.group,
+            "spine_agent_history",
+            this.#namespaceConverter,
+            this.#stringifiers,
+          ),
+        );
+      },
+    });
   }
 
   /**
@@ -309,6 +400,8 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
    *
    * @param input The Entity persistence contract.
    * @returns The coherent Entity storage handle.
+   * @typeParam I Typed Entity identifier.
+   * @typeParam S Entity state message.
    */
   createEntityStorage<I, S extends Message>(
     input: EntityStorageInput<I, S>,
@@ -334,6 +427,8 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
    * @param recordSpec The record specification.
    * @param group Separates records that share one source type.
    * @returns The created Datastore record storage.
+   * @typeParam I Typed record identifier.
+   * @typeParam R Stored record message.
    */
   protected onCreateRecordStorage<I, R extends Message>(
     context: StorageContext,
@@ -356,6 +451,15 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
     );
   }
 
+  /**
+   * Creates a canonical Entity record handle without a custom provider callback.
+   * @param context Complete storage and tenant scope.
+   * @param recordSpec Generated record layout.
+   * @param group Optional record family group.
+   * @returns Native record handle.
+   * @typeParam I Typed record identifier.
+   * @typeParam R Stored record message.
+   */
   private createEntityRecordStorage<I, R extends Message>(
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,
@@ -374,6 +478,14 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
     );
   }
 
+  /**
+   * Creates a canonical delivery-cleanup record handle.
+   * @param context Complete storage and tenant scope.
+   * @param recordSpec Generated record layout.
+   * @returns Native record handle.
+   * @typeParam I Typed record identifier.
+   * @typeParam R Stored record message.
+   */
   private cleanupStorage<I, R extends Message>(
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,
@@ -391,6 +503,15 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
     );
   }
 
+  /**
+   * Resolves a declared record family's native kind and optional callback.
+   * @param recordSpec Generated record layout.
+   * @param group Optional record family group.
+   * @param includeCreator Whether custom callbacks are permitted.
+   * @returns Matching custom provider and physical layout, when configured.
+   * @typeParam I Typed record identifier.
+   * @typeParam R Stored record message.
+   */
   private resolve<I, R extends Message>(
     recordSpec: RecordSpec<I, R>,
     group: StorageGroup | undefined,
@@ -432,14 +553,56 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
   }
 }
 
+/**
+
+ * Builds a Datastore factory from caller-supplied client and layout options.
+
+ */
 class Builder implements DatastoreStorageFactoryBuilder {
+  /**
+   * Caller-supplied Datastore client.
+   */
   #client: Datastore | undefined;
+
+  /**
+
+   * Custom providers by record-family identity.
+
+   */
   #recordCreators = new Map<string, CreateRecordStorage>();
+
+  /**
+
+   * Physical kinds by record-family identity.
+
+   */
   #layouts = new Map<string, RecordLayout>();
+
+  /**
+
+   * Custom Entity providers by generated state type.
+
+   */
   #entityCreators = new Map<string, CreateEntityStorage>();
+
+  /**
+
+   * Complete tenant-to-namespace converter.
+
+   */
   #namespaceConverter: NamespaceConverter = new DefaultNamespaceConverter();
+
+  /**
+
+   * Schema-bound message stringifiers.
+
+   */
   #stringifiers = new StringifierRegistry();
 
+  /**
+   * Binds the resolved configuration to a factory constructor.
+   * @param create Creates the configured Datastore factory.
+   */
   constructor(
     private readonly create: (
       client: Datastore,
@@ -451,21 +614,44 @@ class Builder implements DatastoreStorageFactoryBuilder {
     ) => DatastoreStorageFactory,
   ) {}
 
+  /**
+   * Sets the caller-supplied Datastore client.
+   * @param client Datastore client.
+   * @returns This builder.
+   */
   setClient(client: Datastore): this {
     this.#client = client;
     return this;
   }
 
+  /**
+   * Sets reversible complete tenant namespace conversion.
+   * @param converter Tenant namespace converter.
+   * @returns This builder.
+   */
   setNamespaceConverter(converter: NamespaceConverter): this {
     this.#namespaceConverter = converter;
     return this;
   }
 
+  /**
+   * Sets schema-bound message stringifiers for IDs and columns.
+   * @param registry Custom message stringifiers.
+   * @returns This builder.
+   */
   setStringifierRegistry(registry: StringifierRegistry): this {
     this.#stringifiers = new StringifierRegistry(registry);
     return this;
   }
 
+  /**
+   * Maps a record family to one native Datastore kind.
+   * @param first Source or record message type.
+   * @param second Record message type or kind layout.
+   * @param third Kind layout for a source-record pair.
+   * @returns This builder.
+   * @typeParam R Stored record message.
+   */
   organizeRecords<R extends Message>(
     first: GenMessage<Message> | GenMessage<R>,
     second: GenMessage<R> | RecordLayout,
@@ -480,6 +666,14 @@ class Builder implements DatastoreStorageFactoryBuilder {
     return this;
   }
 
+  /**
+   * Registers one custom record provider for a record family.
+   * @param first Source or record message type.
+   * @param second Record message type or provider callback.
+   * @param third Provider callback for a source-record pair.
+   * @returns This builder.
+   * @typeParam R Stored record message.
+   */
   useRecordStorage<R extends Message>(
     first: GenMessage<Message> | GenMessage<R>,
     second: GenMessage<R> | CreateRecordStorage<R>,
@@ -496,6 +690,13 @@ class Builder implements DatastoreStorageFactoryBuilder {
     return this;
   }
 
+  /**
+   * Registers one custom Entity provider for a generated state type.
+   * @param sourceType Generated Entity state type.
+   * @param creator Custom Entity provider callback.
+   * @returns This builder.
+   * @typeParam S Entity state message.
+   */
   useEntityStorage<S extends Message>(
     sourceType: GenMessage<S>,
     creator: CreateEntityStorage<S>,
@@ -504,6 +705,10 @@ class Builder implements DatastoreStorageFactoryBuilder {
     return this;
   }
 
+  /**
+   * Builds the configured Datastore factory.
+   * @returns Factory bound to the supplied client and layout configuration.
+   */
   build(): DatastoreStorageFactory {
     if (this.#client === undefined)
       throw new Error("DatastoreStorageFactory builder requires a client.");
@@ -519,13 +724,50 @@ class Builder implements DatastoreStorageFactoryBuilder {
   }
 }
 
+/**
+ * Groups current Entity records, histories, and commit access in one handle.
+ * @typeParam I Typed Entity identifier.
+ * @typeParam S Entity state message.
+ */
 class DefaultEntityHandle<I, S extends Message> implements DatastoreEntityStorageHandle<I, S> {
+  /**
+   * Current Entity record access.
+   */
   readonly current: EntityRecordStorage<I>;
+
+  /**
+
+   * Retained Entity state history.
+
+   */
   readonly states: EntityStateHistoryPort<I, S>;
+
+  /**
+
+   * Retained diagnostic Event history.
+
+   */
   readonly events: EntityEventHistoryPort<I>;
+
+  /**
+
+   * Atomic Entity commit access.
+
+   */
   readonly commits: EntityCommitStorage;
+
+  /**
+
+   * Backing Entity storage handle.
+
+   */
   readonly #storage: DatastoreEntityStorage<I, S>;
 
+  /**
+   * Binds Entity storage and commit access to one closeable handle.
+   * @param storage Current record and history access.
+   * @param commits Atomic Entity commit access.
+   */
   constructor(storage: DatastoreEntityStorage<I, S>, commits: EntityCommitStorage) {
     this.#storage = storage;
     this.current = storage.current;
@@ -534,9 +776,19 @@ class DefaultEntityHandle<I, S extends Message> implements DatastoreEntityStorag
     this.commits = commits;
   }
 
+  /**
+   * Checks whether the backing Entity storage remains open.
+   * @returns Whether operations are accepted.
+   */
   isOpen(): boolean {
     return this.#storage.isOpen();
   }
+
+  /**
+
+   * Closes all Entity storage and commit handles.
+
+   */
   close(): void {
     this.#storage.close();
     this.commits.close();
