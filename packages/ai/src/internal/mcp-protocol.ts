@@ -173,6 +173,11 @@ export interface AiMcpToolDefinition {
    * Accepted input schema serialized as JSON.
    */
   readonly inputSchemaJson: string;
+
+  /**
+   * Canonical supported output schema, when advertised by the server.
+   */
+  readonly outputSchemaJson?: string;
 }
 
 /**
@@ -198,6 +203,11 @@ export interface AiMcpAdvertisedTool {
    * Canonical accepted JSON input schema.
    */
   readonly inputSchemaJson: string;
+
+  /**
+   * Canonical supported output schema retained for request replay comparison.
+   */
+  readonly outputSchemaJson?: string;
 }
 
 /**

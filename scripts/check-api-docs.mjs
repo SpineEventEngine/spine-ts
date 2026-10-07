@@ -716,6 +716,7 @@ const expectedServerExports = [
   "Agent",
   "ConcreteRepositoryEntityType",
   "Repository",
+  "RepositoryEntityId",
   "RepositoryEntityType",
   "RepositoryIdentityError",
   "RepositoryIdentityErrorCode",

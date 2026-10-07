@@ -21,11 +21,11 @@ import "spine/ts/agent/model.proto";
 
 option (type_url_prefix) = "type.spine.examples.support";
 
-// Current warehouse incident recorded by the ticket Aggregate.
+// Current warehouse incident facts retained for one support ticket.
 message SupportTicketState {
   option (entity).kind = AGGREGATE;
 
-  // Ticket represented by this Aggregate.
+  // Ticket to which these incident facts belong.
   SupportTicketId id = 1 [
     (required) = true,
     (validate) = true
@@ -35,11 +35,11 @@ message SupportTicketState {
   SupportRequest request = 2 [(validate) = true];
 }
 
-// Latest accepted draft retained by the drafting Agent.
+// Latest accepted reply draft for one warehouse support ticket.
 message SupportDraftState {
   option (entity).kind = ENTITY;
 
-  // Ticket assisted by this Agent.
+  // Ticket for which this reply was drafted.
   SupportTicketId id = 1 [
     (required) = true,
     (validate) = true

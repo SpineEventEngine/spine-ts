@@ -60,17 +60,18 @@ describe("Agent saved history reads", () => {
   it("replays exact projection states while ignoring only a regenerated Query ID", async () => {
     const session = readSession(1n, 10_000n);
     const acceptedAt = Time.currentTime();
-    const query = (id: string) => create(QuerySchema, {
-      id: { value: id },
-      target: {
-        type: TypeUrls.derive(ProjectStateSchema),
-        criterion: { case: "includeAll", value: true },
-      },
-      context: create(ActorContextSchema, {
-        actor: create(UserIdSchema, { value: "reviewer-1" }),
-        timestamp: acceptedAt,
-      }),
-    });
+    const query = (id: string) =>
+      create(QuerySchema, {
+        id: { value: id },
+        target: {
+          type: TypeUrls.derive(ProjectStateSchema),
+          criterion: { case: "includeAll", value: true },
+        },
+        context: create(ActorContextSchema, {
+          actor: create(UserIdSchema, { value: "reviewer-1" }),
+          timestamp: acceptedAt,
+        }),
+      });
     const state = create(ProjectStateSchema, { id: "project-1" });
     let liveReads = 0;
     const live = () => {
@@ -81,16 +82,19 @@ describe("Agent saved history reads", () => {
     expect(await first.query(ProjectStateSchema, query("q-first"), live)).toEqual([state]);
     first.finish();
     const replay = new AgentReadRuntime(session, 0);
-    expect(await replay.query(ProjectStateSchema, query("q-new"), () => {
-      throw new Error("Live projection must not be queried on replay.");
-    })).toEqual([state]);
+    expect(
+      await replay.query(ProjectStateSchema, query("q-new"), () => {
+        throw new Error("Live projection must not be queried on replay.");
+      }),
+    ).toEqual([state]);
     replay.finish();
     expect(liveReads).toBe(1);
     const changed = query("q-another");
     if (changed.target === undefined) throw new Error("Expected typed query target.");
     changed.target.type = "type.spine.io/other.State";
-    await expect(new AgentReadRuntime(session, 0).query(ProjectStateSchema, changed, live))
-      .rejects.toThrow("changed");
+    await expect(
+      new AgentReadRuntime(session, 0).query(ProjectStateSchema, changed, live),
+    ).rejects.toThrow("changed");
   });
   it("returns the exact saved page without querying changed live storage", async () => {
     const session = readSession(1n, 10_000n);

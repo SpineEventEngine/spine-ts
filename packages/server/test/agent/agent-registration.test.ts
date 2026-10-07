@@ -18,6 +18,7 @@ import { AiModel, AiRegistry, ModelRef } from "@spine-event-engine/ai";
 import { createBackendRegistration } from "@spine-event-engine/ai/spi/adapter";
 import { AnyMessages, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import { Time } from "@spine-event-engine/core/time";
+import { AgentInvocationTerminatedSchema } from "@spine-event-engine/proto/agent";
 import {
   ActorContextSchema,
   CommandContextSchema,
@@ -32,6 +33,7 @@ import type {
   AgentInvocationKey,
   AgentExecutionRecord,
 } from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
+import { AgentInvocationStatus } from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
 import type {
   AgentExecutionStorage,
   AgentExecutionStorageInput,
@@ -74,6 +76,26 @@ class SupportAgent extends Agent<SupportReplyAgentId, typeof SupportReplyAgentSt
     void command;
     SupportAgent.calls += 1;
     SupportAgent.onDraft?.();
+  }
+}
+
+class ReadingSupportAgent extends Agent<SupportReplyAgentId, typeof SupportReplyAgentStateSchema> {
+  static completed = 0;
+  static replayPageSize = 1;
+  static failAfterRead = false;
+
+  async draft(command: DraftSupportReply): Promise<void> {
+    if (command.question === "Exhaust read budget") {
+      await this.fullHistory({ pageSize: 1 });
+      return;
+    }
+    if (command.question === "Replay changed read") {
+      await this.fullHistory({ pageSize: ReadingSupportAgent.replayPageSize });
+      if (ReadingSupportAgent.failAfterRead) throw new Error("Transient callback failure.");
+      return;
+    }
+    ReadingSupportAgent.completed++;
+    this.update((state) => Object.assign(state, { id: this.id, proposedReply: "Ready" }));
   }
 }
 
@@ -122,7 +144,9 @@ class CommandingSupportAgent extends Agent<
 
 class RecordingExecutionFactory extends InMemoryStorageFactory {
   failAdmission = false;
+  failUpdateOnce = false;
   failMarkDeliveryOnce = false;
+  suppressSchedulerDiscovery = false;
   admittedKeys: AgentInvocationKey[] = [];
   pendingPage?: () => Promise<AgentPendingPage>;
   readAccepted?: (key: AgentInvocationKey) => Promise<AgentExecutionRecord | undefined>;
@@ -132,6 +156,14 @@ class RecordingExecutionFactory extends InMemoryStorageFactory {
   ): AgentExecutionStorage<I, S> {
     const storage = super.createAgentExecutionStorage(input);
     const admit = storage.admit.bind(storage);
+    const update = storage.update.bind(storage);
+    storage.update = async (input) => {
+      if (this.failUpdateOnce) {
+        this.failUpdateOnce = false;
+        throw new Error("Agent execution provider temporarily unavailable.");
+      }
+      return update(input);
+    };
     storage.admit = async (accepted) => {
       if (this.failAdmission) throw new Error("Agent admission provider unavailable.");
       const record = await admit(accepted);
@@ -146,6 +178,11 @@ class RecordingExecutionFactory extends InMemoryStorageFactory {
       }
       await markDelivered(...args);
     };
+    const pending = storage.pending.bind(storage);
+    storage.pending = (read) =>
+      this.suppressSchedulerDiscovery
+        ? Promise.resolve({ records: [], hasMore: false })
+        : pending(read);
     this.pendingPage ??= () => storage.pending({ count: 10 });
     this.readAccepted ??= (key) => storage.read(key);
     return storage;
@@ -199,6 +236,7 @@ describe("Agent registration readiness", () => {
   it("selects and saves a credential-free deployment only when execution starts", async () => {
     const factory = new RecordingExecutionFactory();
     let resolved = 0;
+    let savedBeforeIdentity: AgentExecutionRecord | undefined;
     const ref = ModelRef.of("support-scripted", "v1");
     const registry = AiRegistry.create({
       defaultModels: { generation: ref },
@@ -220,8 +258,11 @@ describe("Agent registration readiness", () => {
         ref,
         kind: "generation",
         supports: () => true,
-        resolveIdentity: () => {
+        resolveIdentity: async () => {
           resolved++;
+          const key = factory.admittedKeys[0];
+          if (key === undefined) throw new Error("Expected Agent intake before selection.");
+          savedBeforeIdentity = await factory.readAccepted?.(key);
           return {
             provider: "scripted",
             account: "support",
@@ -275,11 +316,399 @@ describe("Agent registration readiness", () => {
       if (key === undefined) throw new Error("Expected Agent intake.");
       await repositoryAccess.runAcceptedAgent(configured, undefined, key);
       expect(resolved).toBe(1);
+      expect(savedBeforeIdentity?.started?.deadline).toBeDefined();
+      expect(savedBeforeIdentity?.started?.bounds?.modelRequests).toBe(1n);
+      expect(savedBeforeIdentity?.started?.models).toEqual([]);
       expect(
         (await factory.readAccepted?.(key))?.started?.models[0]?.connection?.model?.value,
       ).toBe("support-v1");
     } finally {
       await context.close();
+    }
+  });
+  it("keeps the saved start deadline when selection is interrupted", async () => {
+    const factory = new RecordingExecutionFactory();
+    factory.suppressSchedulerDiscovery = true;
+    let nowMs = 1_782_979_201_000;
+    const previousTime = Time.setProvider({
+      currentTime: () =>
+        create(TimestampSchema, {
+          seconds: BigInt(Math.floor(nowMs / 1_000)),
+          nanos: (nowMs % 1_000) * 1_000_000,
+        }),
+    });
+    let enteredSelection: (() => void) | undefined;
+    const entered = new Promise<void>((resolve) => {
+      enteredSelection = resolve;
+    });
+    let releaseSelection: (() => void) | undefined;
+    const pending = new Promise<void>((resolve) => {
+      releaseSelection = resolve;
+    });
+    let selectionCalls = 0;
+    let modelCalls = 0;
+    const ref = ModelRef.of("support-delayed", "v1");
+    const registry = AiRegistry.create({
+      defaultModels: { generation: ref },
+      invocationLimits: {
+        operations: 1,
+        modelRequests: 1,
+        toolCalls: 0,
+        recordedReads: 1,
+        deadlineMs: 1_000,
+        totalInputBytes: 4_000,
+        totalOutputBytes: 4_000,
+        maxRecoveryBytes: 4_000,
+      },
+      concurrentOperations: 1,
+      queuedOperations: 0,
+    });
+    registry.register(
+      createBackendRegistration({
+        ref,
+        kind: "generation",
+        supports: () => true,
+        resolveIdentity: async () => {
+          selectionCalls++;
+          enteredSelection?.();
+          await pending;
+          return { provider: "scripted", account: "support", endpoint: "local", model: "v1" };
+        },
+        authorizeUse: () => true,
+        connect: (_scope, identity) => ({ model: {}, identity }),
+        execute: () => {
+          modelCalls++;
+          return Promise.reject(new Error("Unexpected model call."));
+        },
+      }),
+    );
+    const configured = new Repository({
+      entityType: SupportAgent,
+      schema: SupportReplyAgentStateSchema,
+      handlers: EntityHandlers.define(SupportAgent, SupportReplyAgentStateSchema, (builder) => [
+        builder.assign(DraftSupportReplySchema, "draft"),
+      ]),
+      agentCodeRevision: "support-interrupted-selection-v1",
+      ai: { models: [proposal] },
+    });
+    const context = BoundedContext.singleTenant("InterruptedSelection")
+      .withAi(registry)
+      .persistSystemEvents()
+      .withStorageFactory(factory)
+      .add(configured)
+      .build();
+    try {
+      const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-interrupted" });
+      const command = SignalEnvelopes.command({
+        schema: DraftSupportReplySchema,
+        message: create(DraftSupportReplySchema, { agent: id, question: "Status?" }),
+        context: create(CommandContextSchema, {
+          actorContext: create(ActorContextSchema, {
+            actor: create(UserIdSchema, { value: "support-user" }),
+          }),
+        }),
+      });
+      await repositoryAccess.entityInboxTarget(configured)?.replay({
+        ...createMessage("interrupted", command.id?.uuid ?? "", 1n),
+        inboxId: {
+          targetId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+          targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
+        },
+        signal: AnyMessages.pack(CommandSchema, command, { validate: false }),
+        label: "HANDLE_COMMAND",
+        status: "TO_DELIVER",
+      });
+      const key = factory.admittedKeys[0];
+      if (key === undefined) throw new Error("Expected accepted Agent signal.");
+      const abort = new AbortController();
+      const interrupted = repositoryAccess.runAcceptedAgent(
+        configured,
+        undefined,
+        key,
+        abort.signal,
+      );
+      await entered;
+      const fixed = await factory.readAccepted?.(key);
+      expect(fixed?.started?.deadline?.seconds).toBe(BigInt(Math.floor((nowMs + 1_000) / 1_000)));
+      expect(fixed?.started?.bounds?.modelRequests).toBe(1n);
+      expect(fixed?.started?.models).toEqual([]);
+      abort.abort();
+      await interrupted;
+      releaseSelection?.();
+      nowMs += 31_000;
+      await repositoryAccess.runAcceptedAgent(configured, undefined, key);
+      expect((await factory.readAccepted?.(key))?.status).toBe(
+        AgentInvocationStatus.AGENT_INVOCATION_TERMINATED,
+      );
+      expect(selectionCalls).toBe(1);
+      expect(modelCalls).toBe(0);
+    } finally {
+      await context.close();
+      Time.setProvider(previousTime);
+    }
+  });
+  it("terminates a read-budget fault so the next accepted signal can run", async () => {
+    ReadingSupportAgent.completed = 0;
+    const factory = new RecordingExecutionFactory();
+    factory.suppressSchedulerDiscovery = true;
+    const registry = AiRegistry.create({
+      defaultModels: {},
+      invocationLimits: {
+        operations: 1,
+        modelRequests: 1,
+        toolCalls: 0,
+        recordedReads: 0,
+        deadlineMs: 10_000,
+        totalInputBytes: 4_000,
+        totalOutputBytes: 4_000,
+        maxRecoveryBytes: 8_000,
+      },
+      concurrentOperations: 1,
+      queuedOperations: 0,
+    });
+    const configured = new Repository({
+      entityType: ReadingSupportAgent,
+      schema: SupportReplyAgentStateSchema,
+      handlers: EntityHandlers.define(
+        ReadingSupportAgent,
+        SupportReplyAgentStateSchema,
+        (builder) => [builder.assign(DraftSupportReplySchema, "draft")],
+      ),
+      agentCodeRevision: "support-read-budget-v1",
+      ai: { models: [] },
+    });
+    const context = BoundedContext.singleTenant("ReadBudgetProgress")
+      .withAi(registry)
+      .persistSystemEvents()
+      .withStorageFactory(factory)
+      .add(configured)
+      .build();
+    try {
+      const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-budget" });
+      for (const [index, question] of ["Exhaust read budget", "Continue"].entries()) {
+        const command = SignalEnvelopes.command({
+          schema: DraftSupportReplySchema,
+          message: create(DraftSupportReplySchema, { agent: id, question }),
+          context: create(CommandContextSchema, {
+            actorContext: create(ActorContextSchema, {
+              actor: create(UserIdSchema, { value: "support-user" }),
+            }),
+          }),
+        });
+        await repositoryAccess.entityInboxTarget(configured)?.replay({
+          ...createMessage(`budget-${String(index)}`, command.id?.uuid ?? "", BigInt(index + 1)),
+          inboxId: {
+            targetId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+            targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
+          },
+          signal: AnyMessages.pack(CommandSchema, command, { validate: false }),
+          label: "HANDLE_COMMAND",
+          status: "TO_DELIVER",
+        });
+      }
+      const [first, second] = factory.admittedKeys;
+      if (first === undefined || second === undefined)
+        throw new Error("Expected two accepted signals.");
+      await repositoryAccess.runAcceptedAgent(configured, undefined, first);
+      expect((await factory.readAccepted?.(first))?.status).toBe(
+        AgentInvocationStatus.AGENT_INVOCATION_TERMINATED,
+      );
+      const audit = await repositoryAccess.agentHistoryPage(configured, id, { pageSize: 20 });
+      const terminated = audit.items.flatMap((entry) => {
+        if (entry.item.case !== "systemEvent" || entry.item.value.message === undefined) return [];
+        const event = AnyMessages.unpack(entry.item.value.message, AgentInvocationTerminatedSchema);
+        return event === undefined ? [] : [event];
+      });
+      expect(terminated).toMatchObject([
+        {
+          reason: "READ_BUDGET_EXCEEDED",
+          unresolvedAttempts: [],
+          unresolvedToolCalls: [],
+        },
+      ]);
+      await repositoryAccess.runAcceptedAgent(configured, undefined, second);
+      expect((await factory.readAccepted?.(second))?.status).toBe(
+        AgentInvocationStatus.AGENT_INVOCATION_COMPLETED,
+      );
+      expect(ReadingSupportAgent.completed).toBe(1);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("terminates changed saved history reads and advances the next signal", async () => {
+    ReadingSupportAgent.completed = 0;
+    ReadingSupportAgent.replayPageSize = 1;
+    ReadingSupportAgent.failAfterRead = true;
+    const factory = new RecordingExecutionFactory();
+    factory.suppressSchedulerDiscovery = true;
+    let seconds = 1_782_979_201n;
+    const previousTime = Time.setProvider({
+      currentTime: () => create(TimestampSchema, { seconds }),
+    });
+    const registry = AiRegistry.create({
+      defaultModels: {},
+      invocationLimits: {
+        operations: 1,
+        modelRequests: 1,
+        toolCalls: 0,
+        recordedReads: 1,
+        deadlineMs: 60_000,
+        totalInputBytes: 4_000,
+        totalOutputBytes: 4_000,
+        maxRecoveryBytes: 8_000,
+      },
+      concurrentOperations: 1,
+      queuedOperations: 0,
+    });
+    const configured = new Repository({
+      entityType: ReadingSupportAgent,
+      schema: SupportReplyAgentStateSchema,
+      handlers: EntityHandlers.define(
+        ReadingSupportAgent,
+        SupportReplyAgentStateSchema,
+        (builder) => [builder.assign(DraftSupportReplySchema, "draft")],
+      ),
+      agentCodeRevision: "support-read-replay-v1",
+      ai: { models: [] },
+    });
+    const context = BoundedContext.singleTenant("ReadReplayProgress")
+      .withAi(registry)
+      .persistSystemEvents()
+      .withStorageFactory(factory)
+      .add(configured)
+      .build();
+    try {
+      const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-read-replay" });
+      for (const [index, question] of ["Replay changed read", "Continue"].entries()) {
+        const command = SignalEnvelopes.command({
+          schema: DraftSupportReplySchema,
+          message: create(DraftSupportReplySchema, { agent: id, question }),
+          context: create(CommandContextSchema, {
+            actorContext: create(ActorContextSchema, {
+              actor: create(UserIdSchema, { value: "support-user" }),
+            }),
+          }),
+        });
+        await repositoryAccess.entityInboxTarget(configured)?.replay({
+          ...createMessage(
+            `read-replay-${String(index)}`,
+            command.id?.uuid ?? "",
+            BigInt(index + 1),
+          ),
+          inboxId: {
+            targetId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+            targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
+          },
+          signal: AnyMessages.pack(CommandSchema, command, { validate: false }),
+          label: "HANDLE_COMMAND",
+          status: "TO_DELIVER",
+        });
+      }
+      const [first, second] = factory.admittedKeys;
+      if (first === undefined || second === undefined)
+        throw new Error("Expected two accepted signals.");
+      await expect(repositoryAccess.runAcceptedAgent(configured, undefined, first)).rejects.toThrow(
+        "Transient callback failure",
+      );
+      const savedDeadline = (await factory.readAccepted?.(first))?.started?.deadline;
+      ReadingSupportAgent.failAfterRead = false;
+      ReadingSupportAgent.replayPageSize = 2;
+      seconds += 31n;
+      await repositoryAccess.runAcceptedAgent(configured, undefined, first);
+      const terminal = await factory.readAccepted?.(first);
+      expect(terminal?.status).toBe(AgentInvocationStatus.AGENT_INVOCATION_TERMINATED);
+      expect(terminal?.started?.deadline).toEqual(savedDeadline);
+      await repositoryAccess.runAcceptedAgent(configured, undefined, second);
+      expect((await factory.readAccepted?.(second))?.status).toBe(
+        AgentInvocationStatus.AGENT_INVOCATION_COMPLETED,
+      );
+      expect(ReadingSupportAgent.completed).toBe(1);
+    } finally {
+      await context.close();
+      Time.setProvider(previousTime);
+      ReadingSupportAgent.failAfterRead = false;
+      ReadingSupportAgent.replayPageSize = 1;
+    }
+  });
+
+  it("preserves accepted work when a provider mutation fails transiently", async () => {
+    const factory = new RecordingExecutionFactory();
+    factory.suppressSchedulerDiscovery = true;
+    let seconds = 1_782_979_201n;
+    const previousTime = Time.setProvider({
+      currentTime: () => create(TimestampSchema, { seconds }),
+    });
+    const registry = AiRegistry.create({
+      defaultModels: {},
+      invocationLimits: {
+        operations: 1,
+        modelRequests: 1,
+        toolCalls: 0,
+        recordedReads: 0,
+        deadlineMs: 60_000,
+        totalInputBytes: 4_000,
+        totalOutputBytes: 4_000,
+        maxRecoveryBytes: 8_000,
+      },
+      concurrentOperations: 1,
+      queuedOperations: 0,
+    });
+    const configured = new Repository({
+      entityType: ChangingSupportAgent,
+      schema: SupportReplyAgentStateSchema,
+      handlers: EntityHandlers.define(
+        ChangingSupportAgent,
+        SupportReplyAgentStateSchema,
+        (builder) => [builder.assign(DraftSupportReplySchema, "draft")],
+      ),
+      agentCodeRevision: "support-transient-v1",
+      ai: { models: [] },
+    });
+    const context = BoundedContext.singleTenant("TransientAgentMutation")
+      .withAi(registry)
+      .persistSystemEvents()
+      .withStorageFactory(factory)
+      .add(configured)
+      .build();
+    try {
+      const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-transient" });
+      const command = SignalEnvelopes.command({
+        schema: DraftSupportReplySchema,
+        message: create(DraftSupportReplySchema, { agent: id, question: "Status?" }),
+        context: create(CommandContextSchema, {
+          actorContext: create(ActorContextSchema, {
+            actor: create(UserIdSchema, { value: "support-user" }),
+          }),
+        }),
+      });
+      await repositoryAccess.entityInboxTarget(configured)?.replay({
+        ...createMessage("transient", command.id?.uuid ?? "", 1n),
+        inboxId: {
+          targetId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+          targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
+        },
+        signal: AnyMessages.pack(CommandSchema, command, { validate: false }),
+        label: "HANDLE_COMMAND",
+        status: "TO_DELIVER",
+      });
+      const key = factory.admittedKeys[0];
+      if (key === undefined) throw new Error("Expected accepted Agent signal.");
+      factory.failUpdateOnce = true;
+      await expect(repositoryAccess.runAcceptedAgent(configured, undefined, key)).rejects.toThrow(
+        "temporarily unavailable",
+      );
+      expect((await factory.readAccepted?.(key))?.status).toBe(
+        AgentInvocationStatus.AGENT_INVOCATION_ACTIVE,
+      );
+      seconds += 31n;
+      await repositoryAccess.runAcceptedAgent(configured, undefined, key);
+      expect((await factory.readAccepted?.(key))?.status).toBe(
+        AgentInvocationStatus.AGENT_INVOCATION_COMPLETED,
+      );
+    } finally {
+      await context.close();
+      Time.setProvider(previousTime);
     }
   });
   it("discovers admitted Agent work without an application worker call", async () => {
@@ -787,6 +1216,14 @@ describe("Agent registration readiness", () => {
       const waiting = await factory.readAccepted?.(key);
       expect(waiting?.status).toBe(3);
       const originalId = waiting?.completion?.outgoing[0]?.signal;
+      seconds += 31n;
+      factory.failMarkDeliveryOnce = true;
+      await expect(repositoryAccess.runAcceptedAgent(configured, undefined, key)).rejects.toThrow(
+        /acknowledgement unavailable/,
+      );
+      expect((await factory.readAccepted?.(key))?.status).toBe(
+        AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_DELIVERY,
+      );
       seconds += 31n;
       await repositoryAccess.runAcceptedAgent(configured, undefined, key);
       const completed = await factory.readAccepted?.(key);

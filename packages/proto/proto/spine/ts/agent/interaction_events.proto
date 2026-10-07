@@ -339,7 +339,7 @@ message AgentModelSelectionChanged {
   ];
 }
 
-// Accepted invocation terminated with unresolved external interactions.
+// Accepted invocation ended because execution could not complete.
 message AgentInvocationTerminated {
   // Agent whose invocation terminated.
   spine.core.MessageId agent = 1 [

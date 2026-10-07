@@ -1962,3 +1962,123 @@ TypeDoc/API contracts and all documentation snippets PASS. Full native18 matrix
 running on exact compiled source. Remaining estimate2–4hours for review fixes,
 release/package-consumer checks and pushes; globalcoverage remains unverified.
 Feature checkpoint saves current implementation, not final release acceptance.
+
+Independent runtime wave complete. Explicit Sol/medium API, reliability and style
+profiles confirmed; actualruntime metadata not exposed, configured profiles accepted.
+API P2: BlackBox history repository/ID pairing erased to unknown. Reliability P1:
+start deadline saved only after selection callbacks; failedselection resets it.
+Reliability P1: typed deterministic replay/revision/budget faults need final
+recorded disposition so later accepted work progresses; read credit must be checked
+before live reads. Style P2: two runtime fixtures use Agent ID as Command source.
+All four accepted for bounded corrections in existing main implementation context;
+no broad error taxonomy or transient-storage terminalization. Parent requires
+behavior tests preserving originaldeadline, unknownbytecredit and transientretry.
+Separate general physical deletion remains deferred. Checkpoint584798bb5 retains
+current implementation before review corrections; no release acceptance claimed.
+
+Checkpoint584798bb5 pushed to origin. Native final checkpoint matrix18/18 PASS
+(437.37s) PG16/MySQL8.4/Datastore, including savedread andactor/tenant cuts;
+children and isolated schemas/databases cleaned. Explicit configured foundation
+Sol/medium accepted, metadata unavailable; representative rerun follows fixes.
+All34 workspace top-level versions updated only in529df627f with exact required
+message Bump version -> 2.0.0-snapshot.23, immediately pushed. NPM registry confirms
+this version unused for all21 public package names. Separate39df91e2d updates63
+internal exactdependency pins and lockfile, immediately pushed. Offline install
+and offline frozen-lockfile install PASS. Canonical Proto manifest versions will
+refresh with final generation; no generated handedit or publication performed.
+Accepted correction seam uses existing private AgentExecutionStart to persist
+original deadline/bounds before selection, each selected identity saved in turn;
+known pure deterministic faults use internal typed errors and retain claim only
+before provider mutation, while unknown/storage errors still stop/retry. Public
+history helper uses typed Repository and inferred ID, no permissiveunknown overload.
+
+History typing correction integration: generated `.add(AgentClass)` exposes a
+copy-safe RepositoryView, so requiring only an explicit typed Repository would
+force the support example away from generated handler discovery. Parent rejected
+manual EntityHandlers metadata and a new context capture hook. Accepted bounded
+API correction allows the Agent class plus its inferred ID, alongside typed
+Repository; testing bridge resolves exact registered class identity and retains
+context/family checks. Wrong-domain-ID compile tests cover both overloads.
+The example must preserve generated `.add` registration and contain no handwritten
+handler metadata. Fresh origin/master remains658da1cdddcb8fd40f9205b1c200abc3a58dd62e.
+
+Runtime correction batch frozen: 55/55 affected tests and five API-doc tests pass;
+scoped builds, tooling TypeScript, lint, format, cleanup, TSDoc, log containment,
+checksum and API inventory pass. Explicit Sol/medium implementation accepted;
+actual runtime metadata unavailable. Canonical generation found a preflight gap:
+example Proto checker hardcodes four existing domains and rejects support; two
+support comments also violate its rules. Same implementer fixes checker domain
+registration with regression coverage and domain comments before regeneration.
+Affected specialist follow-up uses existing roles, explicit gpt-6-sol/medium,
+no memory or grandchildren. Security release-readiness review follows convergence,
+explicit gpt-6-sol/high. No release or final-SHA CI acceptance yet.
+
+Focused reliability and fixture-style follow-ups are clean. API wrong-ID finding
+is closed; residual P3 non-Agent target acceptance is accepted for an Agent-only
+constraint and compile-negative coverage in the same implementation context.
+Support Proto checker correction passes24 tests; canonical generation then found
+version22 source manifests incompatible with version23 packages. Parent updates
+only packageVersion metadata in ten manifests, preserving UUIDs and all other
+fields, then runs canonical generation. The prior expectation that generation
+alone could update these dependency manifests was incorrect. No generated source
+or generation identity is hand-edited. Runtime combined suite128/128 passes;
+tooling TypeScript, cleanup, TSDoc, containment and audience checks pass.
+Final security reviewer dispatch: existing security_reviewer, gpt-6-sol/high,
+fresh context/no memory or grandchildren, credential/tool/tenant/replay boundaries
+only; read-only while final typed testing-helper correction completes.
+
+API follow-up now clean after Agent-only target constraints. Genuine Projection
+class/repository and CommandId negative cases compile as expected; valid generated
+Agent registration remains unchanged. All four review concerns are closed;
+explicit configured Sol/medium profiles accepted, actual metadata unavailable.
+Canonical generation/build and generated-clean check pass with snapshot23 metadata.
+The six full-format findings are corrected; one long test import uses a named
+module namespace to satisfy both formatting and120-character policy. Final cheap
+preflight passes128 runtime tests,29 checker/API-doc tests, tooling TypeScript,
+cleanup,TSDoc,fullformat and diff checks. Whole-tree ESLint, both dependency audits
+and Rekor recovery regression pass. Native representative rerun and final security
+are in progress. Example API audit confirms generated registration, typed domain
+returns, Agent @Assign and Projection @Subscribe, no manual transaction/envelopes.
+General System persistence prose now explicitly states that Agents require it.
+
+Final security review confirmed one P2: advertised MCP outputSchema is discarded,
+so invalid structuredContent could be admitted and passed back to the model.
+Accept S-1 for bounded adapter correction: pin/compile supported advertised schema
+at discovery and validate structured results before admission, with regression.
+No other confirmed security defect; audit reports zero advisories. Existing
+adapter implementation context receives this batch, explicit gpt-6-sol/medium,
+no subagents; affected security concern re-reviewed with Sol/high after tests.
+Release gate remains deferred until this correction converges.
+
+Post-correction native selection passes6/6 (12 intentionally filtered) in186.22s:
+saved response onPG16/MySQL8.4/Datastore plusPG recorded-read/tool lookup,
+actor/tenant retention and partial fan-out. Release tooling focused105/105 passes.
+Docs/API/snippets,copyright,Time policy,production dependency checks all pass.
+Security correction bounded seam accepted: optional canonical outputSchemaJson in
+internal MCP definition/catalog, same bounded supported-schema compiler, require
+and validate structuredContent only for successful schema-advertising tools;
+retain bounded tool-error responses. Include output schema in existing prepared
+request JSON/digest for replay comparison. No Proto/user DSL additions. Adapter
+writer also updates narrow MCP reference; shared build released after native run.
+Estimate0.5–1hour includes correction tests and affected security re-review.
+
+Security correction frozen:136/136 across adapter factory, MCP protocol and real
+Agent/OpenAI Responses/MCP BlackBox tests. Malformed successful tool output causes
+one physical tools/call, non-ADMITTED audit, no second provider request and no
+domain Event. Optional output schema is retained in prepared request digest;
+unsupported schemas reject discovery, valid structured responses and bounded
+isError results pass. AI/adapter/server/private builds,root tooling TS,scoped
+lint/format,TSDoc,cleanup pass. Explicit Sol/medium implementation accepted;
+actual runtime metadata unavailable. Same Sol/high final security reviewer now
+checks only S-1 correction and associated replay/schema-error behavior. Source
+frozen for staged preflight and one converged full release profile.
+
+Final security S-1 follow-up is clean; explicit configured Sol/high profile
+accepted, actual runtime metadata unavailable. All canonical review concerns
+now have completed dispositions. Post-security preflight passes129 Agent tests,
+cleanup,TSDoc,containment,fullformat and stageddiff checks; source/test builds and
+136 focused adapter/protocol/BlackBox tests passed before re-review. Changed
+output-schema branches have wrong/missing/valid/error/unsupported and changed-
+prepared-request tests. Source frozen. Commit this correction batch and push
+immediately, then run verify:release once; fullglobal coverage and publication
+trial are still outstanding. This is not final CI or task completion.

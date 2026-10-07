@@ -452,7 +452,7 @@
     },
     {
       "localPath": "packages/proto/proto/spine/ts/agent/interaction_events.proto",
-      "sha256": "bae8382a66d3e68ea516cac51ad013c543bc7cc07b3c1d668172ceb4fbc1167b"
+      "sha256": "9c991d632faf035c8489e88235ee55308f9ff6dfb29cfe664cf579ca96d1c01e"
     },
     {
       "localPath": "packages/proto/proto/spine/ts/agent/model.proto",

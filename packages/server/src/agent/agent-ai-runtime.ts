@@ -15,6 +15,7 @@
 import { clone, create, toBinary, type MessageShape } from "@bufbuild/protobuf";
 import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { createHash, randomUUID } from "node:crypto";
+import { AgentExecutionFault } from "./agent-execution-fault.js";
 import {
   AnyMessages,
   Time,
@@ -284,7 +285,10 @@ export class AgentAiRuntime implements AgentAi {
     if (this.#busy) throw new Error("Agent handler returned with a pending AI call.");
     const saved = this.#savedOperations(this.session.record());
     if (this.#cursor !== saved.length)
-      throw new Error("Agent named operation sequence changed on recovery.");
+      throw new AgentExecutionFault(
+        "REPLAY_DIVERGENCE",
+        "Agent named operation sequence changed on recovery.",
+      );
   }
 
   /**
@@ -383,7 +387,10 @@ export class AgentAiRuntime implements AgentAi {
       saved.capabilityRevision?.value !== model.definition.version ||
       !this.#sameInput(saved, model.definition.input, request.input)
     )
-      throw new Error("Agent named operation changed on recovery.");
+      throw new AgentExecutionFault(
+        "REPLAY_DIVERGENCE",
+        "Agent named operation changed on recovery.",
+      );
   }
 
   /**
@@ -552,7 +559,10 @@ export class AgentAiRuntime implements AgentAi {
       control.deadlineEpochMs,
     );
     if (!this.#sameIdentity(connected.identity, identity))
-      throw new Error("Agent backend connection identity changed.");
+      throw new AgentExecutionFault(
+        "REVISION_CHANGED",
+        "Agent backend connection identity changed.",
+      );
     return this.#adapterExecution(
       model,
       request,
@@ -780,7 +790,10 @@ export class AgentAiRuntime implements AgentAi {
         model: saved.model?.value ?? "",
       })
     )
-      throw new Error("Agent model identity or authorization changed.");
+      throw new AgentExecutionFault(
+        "REVISION_CHANGED",
+        "Agent model identity or authorization changed.",
+      );
     return identity;
   }
 
@@ -1005,7 +1018,10 @@ export class AgentAiRuntime implements AgentAi {
       number > model.definition.limits.modelRequests ||
       this.#attemptCount() >= Number(this.session.record().started?.bounds?.modelRequests ?? 0n)
     )
-      throw new Error("Agent physical model request budget is exhausted.");
+      throw new AgentExecutionFault(
+        "MODEL_BUDGET_EXCEEDED",
+        "Agent physical model request budget is exhausted.",
+      );
     const id = randomUUID();
     const requestContent =
       request.kind === "generation"
@@ -1046,7 +1062,10 @@ export class AgentAiRuntime implements AgentAi {
     prior: AgentAttemptEvidence,
   ): AiAttemptReplay {
     if (!this.#sameRequest(prior, request))
-      throw new Error("Saved Agent provider request changed on recovery.");
+      throw new AgentExecutionFault(
+        "REPLAY_DIVERGENCE",
+        "Saved Agent provider request changed on recovery.",
+      );
     if (prior.response.case !== "generationResponse" && prior.response.case !== "decisionResponse")
       throw new AgentUncertainAttemptError();
     const diagnosticId = prior.response.value.diagnosticId?.value;

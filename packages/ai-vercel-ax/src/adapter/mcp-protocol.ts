@@ -114,6 +114,8 @@ class VercelMcpSession implements AiMcpProtocolSession {
 
   private validators = new Map<string, ValidateFunction>();
 
+  private outputValidators = new Map<string, ValidateFunction>();
+
   /**
    * Binds the negotiated client to one credential-free configured identity.
    * @param client Initialized Vercel MCP client.
@@ -141,7 +143,9 @@ class VercelMcpSession implements AiMcpProtocolSession {
    */
   async discover(allowedNames: readonly string[]): Promise<readonly AiMcpToolDefinition[]> {
     this.validators.clear();
+    this.outputValidators.clear();
     const pendingValidators = new Map<string, ValidateFunction>();
+    const pendingOutputValidators = new Map<string, ValidateFunction>();
     const allowed = new Set(allowedNames);
     const result: AiMcpToolDefinition[] = [];
     const seen = new Set<string>();
@@ -152,17 +156,19 @@ class VercelMcpSession implements AiMcpProtocolSession {
       const listing = await this.client.listTools({ params: cursor ? { cursor } : undefined });
       if (listing.tools.length + seen.size > maximumTools)
         throw new Error("MCP discovery exceeds tool limit");
-      for (const tool of listing.tools) {
-        if (seen.has(tool.name)) throw new Error("MCP discovery repeats tool name");
-        seen.add(tool.name);
-        if (!allowed.has(tool.name)) continue;
-        const accepted = acceptTool(tool.name, tool.description ?? "", tool.inputSchema, ajv);
-        pendingValidators.set(tool.name, accepted.validator);
-        result.push(accepted.definition);
-      }
+      collectTools(
+        listing.tools,
+        allowed,
+        seen,
+        ajv,
+        pendingValidators,
+        pendingOutputValidators,
+        result,
+      );
       cursor = listing.nextCursor;
       if (!cursor) {
         this.validators = pendingValidators;
+        this.outputValidators = pendingOutputValidators;
         return Object.freeze(result);
       }
       if (cursors.has(cursor)) throw new Error("MCP discovery repeats cursor");
@@ -222,6 +228,7 @@ class VercelMcpSession implements AiMcpProtocolSession {
     try {
       if (signal.aborted) throw new Error("MCP call deadline or cancellation");
       const result = await this.client.callTool({ name, arguments: args, options: { signal } });
+      validateToolOutput(result, this.outputValidators.get(name));
       return convertResult(result, options.maxResultBytes);
     } finally {
       stopDeadline();
@@ -241,14 +248,60 @@ class VercelMcpSession implements AiMcpProtocolSession {
 }
 
 /**
+ * Validates one discovery page without publishing a partial callable catalog.
+ * @param tools Tool definitions from one protocol page.
+ * @param allowed Explicitly registered names.
+ * @param seen Names from prior pages.
+ * @param ajv Local schema compiler.
+ * @param inputs Staged argument validators.
+ * @param outputs Staged result validators.
+ * @param result Staged model-visible definitions.
+ */
+const collectTools = (
+  tools: readonly {
+    name: string;
+    description?: string | undefined;
+    inputSchema: unknown;
+    outputSchema?: unknown;
+  }[],
+  allowed: Set<string>,
+  seen: Set<string>,
+  ajv: Ajv,
+  inputs: Map<string, ValidateFunction>,
+  outputs: Map<string, ValidateFunction>,
+  result: AiMcpToolDefinition[],
+): void => {
+  for (const tool of tools) {
+    if (seen.has(tool.name)) throw new Error("MCP discovery repeats tool name");
+    seen.add(tool.name);
+    if (!allowed.has(tool.name)) continue;
+    const accepted = acceptTool(
+      tool.name,
+      tool.description ?? "",
+      tool.inputSchema,
+      tool.outputSchema,
+      ajv,
+    );
+    inputs.set(tool.name, accepted.validator);
+    if (accepted.outputValidator) outputs.set(tool.name, accepted.outputValidator);
+    result.push(accepted.definition);
+  }
+};
+
+/**
  * Accepts a bounded JSON Schema subset before its definition reaches a model.
  */
 const acceptTool = (
   name: string,
   description: string,
   schema: unknown,
+  outputSchema: unknown,
   ajv: Ajv,
-): { definition: AiMcpToolDefinition; validator: ValidateFunction } => {
+): {
+  definition: AiMcpToolDefinition;
+  validator: ValidateFunction;
+  outputValidator?: ValidateFunction;
+} => {
   if (Buffer.byteLength(description) > maximumDescriptionBytes)
     throw new Error("MCP tool description exceeds limit");
   const schemaJson = JSON.stringify(canonicalJsonValue(schema));
@@ -256,10 +309,53 @@ const acceptTool = (
     throw new Error("MCP tool schema exceeds limit");
   assertSchemaSubset(schema, 0);
   const validator = ajv.compile(schema as Record<string, unknown>);
+  const output = compileOutputSchema(outputSchema, ajv);
   return {
-    definition: Object.freeze({ name, description, inputSchemaJson: schemaJson }),
+    definition: Object.freeze({
+      name,
+      description,
+      inputSchemaJson: schemaJson,
+      ...(output === undefined ? {} : { outputSchemaJson: output.json }),
+    }),
     validator,
+    ...(output === undefined ? {} : { outputValidator: output.validator }),
   };
+};
+
+/**
+ * Compiles a bounded advertised output schema without exposing untrusted schema text.
+ * @param schema Advertised output schema, when supplied.
+ * @param ajv Strict local JSON Schema compiler.
+ * @returns Canonical schema text and validator, or absence when unadvertised.
+ */
+const compileOutputSchema = (
+  schema: unknown,
+  ajv: Ajv,
+): { json: string; validator: ValidateFunction } | undefined => {
+  if (schema === undefined) return undefined;
+  try {
+    const json = JSON.stringify(canonicalJsonValue(schema));
+    if (!json || Buffer.byteLength(json) > maximumSchemaBytes) throw new Error("schema size");
+    assertSchemaSubset(schema, 0);
+    if ((schema as Record<string, unknown>).type !== "object") throw new Error("schema root");
+    return { json, validator: ajv.compile(schema as Record<string, unknown>) };
+  } catch {
+    throw new Error("MCP output schema unsupported");
+  }
+};
+
+/**
+ * Rejects a successful result that omits or violates its advertised structure.
+ * @param result Bounded SDK call result from the untrusted server.
+ * @param validator Compiled advertised output schema, when present.
+ */
+const validateToolOutput = (result: unknown, validator?: ValidateFunction): void => {
+  if (!validator || typeof result !== "object" || result === null) return;
+  const value = result as Record<string, unknown>;
+  if (value.isError === true) return;
+  if (value.structuredContent === undefined)
+    throw new Error("MCP structured result required by output schema");
+  if (!validator(value.structuredContent)) throw new Error("MCP result violates output schema");
 };
 
 /**

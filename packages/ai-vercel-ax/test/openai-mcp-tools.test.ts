@@ -21,24 +21,42 @@ describe("pinned OpenAI Responses tool serialization", () => {
     const network = vi.fn<typeof fetch>().mockImplementation((_input, init) => {
       if (typeof init?.body !== "string") throw new Error("Expected serialized provider request");
       sent = JSON.parse(init.body) as unknown;
-      return Promise.resolve(new Response("data: [DONE]\n\n", {
-        headers: { "content-type": "text/event-stream" },
-      }));
+      return Promise.resolve(
+        new Response("data: [DONE]\n\n", {
+          headers: { "content-type": "text/event-stream" },
+        }),
+      );
     });
     const openai = createOpenAI({ apiKey: "fixture-only", fetch: network });
     const model = openai.responses("gpt-4.1");
     const schema = {
-      type: "object" as const, properties: { ticket: { type: "string" as const } },
-      required: ["ticket"], additionalProperties: false,
+      type: "object" as const,
+      properties: { ticket: { type: "string" as const } },
+      required: ["ticket"],
+      additionalProperties: false,
     };
     const response = await model.doStream({
       prompt: [{ role: "user", content: [{ type: "text", text: "Find ticket" }] }],
-      tools: [{ type: "function", name: "tool_0", description: "Lookup a support ticket", inputSchema: schema }],
+      tools: [
+        {
+          type: "function",
+          name: "tool_0",
+          description: "Lookup a support ticket",
+          inputSchema: schema,
+        },
+      ],
       responseFormat: { type: "text" },
     });
     expect(sent).toMatchObject({
-      tools: [{ type: "function", name: "tool_0", description: "Lookup a support ticket",
-        parameters: schema, strict: false }],
+      tools: [
+        {
+          type: "function",
+          name: "tool_0",
+          description: "Lookup a support ticket",
+          parameters: schema,
+          strict: false,
+        },
+      ],
     });
     expect(network).toHaveBeenCalledTimes(1);
     await response.stream.cancel();

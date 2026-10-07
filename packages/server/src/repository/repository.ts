@@ -176,6 +176,7 @@ import { AgentReadRuntime } from "../agent/agent-read-runtime.js";
 import { AgentAdmission, type AgentAdmissionInput } from "../agent/agent-admission.js";
 import { AgentRevisions } from "../agent/agent-revisions.js";
 import { AgentExecutionSession } from "../agent/agent-execution-session.js";
+import { AgentExecutionFault } from "../agent/agent-execution-fault.js";
 import { AgentModelSelection } from "../agent/agent-model-selection.js";
 import { AgentAiRuntime, AgentUncertainAttemptError } from "../agent/agent-ai-runtime.js";
 import { AgentInteractionEvents } from "../agent/agent-interaction-events.js";
@@ -4256,11 +4257,19 @@ const AgentExecutionRunner = {
     session: AgentExecutionSession,
     error: unknown,
   ): Promise<void> {
+    if (
+      session.record().status === AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_DELIVERY
+    )
+      throw error;
     if (error instanceof AgentUncertainAttemptError) {
       const reason = this.hasUnresolvedToolWrite(session.record())
         ? "TOOL_OUTCOME_UNKNOWN"
         : "MODEL_OUTCOME_UNKNOWN";
       return this.terminate(repository, runtime, tenantId, session, reason);
+    }
+    if (error instanceof AgentExecutionFault) {
+      if (session.signal.aborted) throw error;
+      return this.terminate(repository, runtime, tenantId, session, error.reason);
     }
     if (this.deadlineExpired(session.record()))
       return this.terminate(repository, runtime, tenantId, session, "DEADLINE_EXCEEDED");
@@ -4427,13 +4436,7 @@ const AgentExecutionRunner = {
       agent: scope.agent,
       sourceSignal: scope.source,
       reason,
-      unresolvedAttempts: record.journal.flatMap((entry) =>
-        entry.evidence.case === "attempt" &&
-        entry.evidence.value.response.case === undefined &&
-        entry.evidence.value.attempt !== undefined
-          ? [entry.evidence.value.attempt]
-          : [],
-      ),
+      unresolvedAttempts: this.unresolvedAttempts(record),
       unresolvedToolCalls,
       terminatedAt: Time.currentTime(),
     });
@@ -4444,6 +4447,24 @@ const AgentExecutionRunner = {
       AgentInvocationTerminatedSchema,
       payload,
     );
+  },
+
+  /**
+   * Returns IDs only for physically reserved model requests without saved outcomes.
+   * @param record Durable execution journal.
+   * @returns Original attempt IDs for unresolved physical sends.
+   */
+  unresolvedAttempts(record: AgentExecutionRecord) {
+    return record.journal.flatMap((entry) => {
+      if (entry.evidence.case !== "attempt") return [];
+      const attempt = entry.evidence.value;
+      return attempt.reservedResponseBytes > 0n &&
+        attempt.response.case === undefined &&
+        !this.hasSavedOperationResult(record, attempt.operation?.value) &&
+        attempt.attempt !== undefined
+        ? [attempt.attempt]
+        : [];
+    });
   },
 
   /**
@@ -4478,18 +4499,20 @@ const AgentExecutionRunner = {
     tenantId: TenantId | undefined,
     session: AgentExecutionSession,
   ): Promise<void> {
-    const claimed = session.record();
-    const accepted = claimed.accepted;
+    const accepted = session.record().accepted;
     if (accepted?.key === undefined || accepted.recipientId === undefined)
       throw new Error("Claimed Agent invocation lacks accepted source and recipient.");
     const entityId = InboxMessages.targetEntityId(accepted.recipientId, repository.idField);
     const support = new ProcessManagerExecutionSupport(repository, runtime);
     const loaded = await support.load(entityId, tenantId === undefined ? {} : { tenantId });
     const handlers = this.handlers(repository, accepted);
+    const configuration = repositoryAccess.agentConfiguration(repository);
+    if (runtime.ai === undefined) throw new Error("Agent execution requires a bound AI registry.");
+    this.assertRevisions(repository, accepted, handlers, runtime.ai, configuration);
     const record =
-      claimed.started === undefined
-        ? await this.start(repository, runtime, session, loaded, handlers, entityId, tenantId)
-        : claimed;
+      session.record().started === undefined
+        ? await this.start(repository, runtime, session, loaded, entityId, tenantId)
+        : await this.selectMissingModels(repository, runtime, session, accepted, tenantId);
     if (session.signal.aborted) return;
     const completed = await this.completeExecution(
       repository,
@@ -5169,11 +5192,17 @@ const AgentExecutionRunner = {
     if (routing === undefined) throw new Error("Agent execution requires registered handlers.");
     const current = this.selectedHandlers(routing, accepted);
     if (accepted.handlers.length !== current.length || current.length === 0)
-      throw new Error("Accepted Agent handler binding changed before replay.");
+      throw new AgentExecutionFault(
+        "REVISION_CHANGED",
+        "Accepted Agent handler binding changed before replay.",
+      );
     for (const [ordinal, handler] of current.entries()) {
       const binding = accepted.handlers[ordinal];
       if (binding === undefined || !AgentAdmission.matchesHandler(binding, handler, ordinal))
-        throw new Error("Accepted Agent handler binding changed before replay.");
+        throw new AgentExecutionFault(
+          "REVISION_CHANGED",
+          "Accepted Agent handler binding changed before replay.",
+        );
     }
     return current;
   },
@@ -5211,7 +5240,6 @@ const AgentExecutionRunner = {
    * @param runtime Bound services.
    * @param session Fenced provider claim and current record.
    * @param loaded Restored Entity and initial Version.
-   * @param handlers Current selected handlers.
    * @param entityId Original typed recipient.
    * @param tenantId Accepted delivery tenant when applicable.
    * @returns Updated record image for exact subsequent CAS.
@@ -5221,23 +5249,14 @@ const AgentExecutionRunner = {
     runtime: RepositoryRuntime,
     session: AgentExecutionSession,
     loaded: LoadedRepositoryEntity,
-    handlers: readonly RegisteredHandlerMetadata[],
     entityId: unknown,
     tenantId: TenantId | undefined,
   ): Promise<AgentExecutionRecord> {
     const accepted = session.record().accepted;
     if (accepted === undefined) throw new Error("Agent start requires accepted work.");
-    const started = await this.startFacts(
-      repository,
-      runtime,
-      session,
-      accepted,
-      loaded,
-      handlers,
-      tenantId,
-    );
+    const started = this.startFacts(repository, runtime, accepted, loaded);
     const audit = this.startAudit(runtime, repository, accepted, entityId);
-    const next = await session.update(
+    await session.update(
       (current) => {
         current.started = started;
         return current;
@@ -5246,7 +5265,7 @@ const AgentExecutionRunner = {
     );
     if (accepted.signal.case === "command") HandlerDispatchPublisher.publishCommand(runtime, audit);
     else HandlerDispatchPublisher.publishReactor(runtime, audit);
-    return next;
+    return this.selectMissingModels(repository, runtime, session, accepted, tenantId);
   },
 
   /**
@@ -5267,44 +5286,72 @@ const AgentExecutionRunner = {
    * Verifies admission revisions and fixes whole-invocation limits before execution.
    * @param repository Registered Entity repository for this operation.
    * @param runtime Bound context storage and publication services.
-   * @param session Fenced Agent execution session.
    * @param accepted Durable original signal and saved handler bindings.
    * @param loaded Loaded Entity and its repository storage state.
-   * @param handlers Generated handlers in their saved order.
-   * @param tenantId Tenant selected for this accepted signal.
-   * @returns Durable invocation start facts and selected model identities.
+   * @returns Durable deadline, initial version, and whole-invocation bounds.
    */
-  async startFacts(
+  startFacts(
     repository: RepositoryView,
     runtime: RepositoryRuntime,
-    session: AgentExecutionSession,
     accepted: NonNullable<AgentExecutionRecord["accepted"]>,
     loaded: LoadedRepositoryEntity,
-    handlers: readonly RegisteredHandlerMetadata[],
-    tenantId: TenantId | undefined,
-  ): Promise<AgentExecutionStart> {
+  ): AgentExecutionStart {
     const configuration = repositoryAccess.agentConfiguration(repository);
     const ai = runtime.ai;
     if (accepted.key === undefined || ai === undefined || configuration.ai === undefined)
       throw new Error("Agent execution start requires accepted work and AI policy.");
-    this.assertRevisions(repository, accepted, handlers, ai, configuration);
     const limits = registryOptions(ai).invocationLimits;
     const deadline = addMillis(Time.currentTime(), limits.deadlineMs);
-    const scope = AgentModelSelection.scope(accepted, repository.stateSchema, tenantId);
-    const models = await AgentModelSelection.select(
-      ai,
-      configuration.ai,
-      scope,
-      session.preferences(),
-      session.signal,
-      Number(deadline.seconds) * 1_000 + Math.floor(deadline.nanos / 1_000_000),
-    );
     return create(AgentExecutionStartSchema, {
       deadline,
       initialVersion: RepositoryEntities.priorVersion(loaded.current),
       bounds: this.invocationBounds(limits),
-      models: [...models],
     });
+  },
+
+  /**
+   * Persists each model kind without a saved connection identity.
+   * @param repository Agent registration and permitted capabilities.
+   * @param runtime Bound AI registry.
+   * @param session Current fenced execution record.
+   * @param accepted Original accepted signal and actor.
+   * @param tenantId Accepted tenant when applicable.
+   * @returns Record after each missing identity has been saved.
+   */
+  async selectMissingModels(
+    repository: RepositoryView,
+    runtime: RepositoryRuntime,
+    session: AgentExecutionSession,
+    accepted: NonNullable<AgentExecutionRecord["accepted"]>,
+    tenantId: TenantId | undefined,
+  ): Promise<AgentExecutionRecord> {
+    const ai = runtime.ai;
+    const configuration = repositoryAccess.agentConfiguration(repository).ai;
+    const deadline = session.record().started?.deadline;
+    if (ai === undefined || configuration === undefined || deadline === undefined)
+      throw new Error("Agent model selection requires saved start facts and AI policy.");
+    const deadlineMs = Number(deadline.seconds) * 1_000 + Math.floor(deadline.nanos / 1_000_000);
+    const scope = AgentModelSelection.scope(accepted, repository.stateSchema, tenantId);
+    for (const kind of ["generation", "decision"] as const) {
+      if (!configuration.models.some((model) => model.definition.kind === kind)) continue;
+      const modelKind = AgentModelSelection.kind(kind);
+      if (session.record().started?.models.some((model) => model.kind === modelKind)) continue;
+      const selected = await AgentModelSelection.selectKind(
+        ai,
+        configuration,
+        scope,
+        session.initialPreferences(),
+        session.signal,
+        deadlineMs,
+        kind,
+      );
+      await session.update((record) => {
+        if (record.started === undefined) throw new Error("Agent start facts disappeared.");
+        record.started.models.push(selected);
+        return record;
+      });
+    }
+    return session.record();
   },
 
   /**
@@ -5334,7 +5381,10 @@ const AgentExecutionRunner = {
       accepted.schemaRevision?.value !== revisions.schema ||
       accepted.policyRevision?.value !== revisions.policy
     )
-      throw new Error("Accepted Agent code, schema, or policy changed before execution.");
+      throw new AgentExecutionFault(
+        "REVISION_CHANGED",
+        "Accepted Agent code, schema, or policy changed before execution.",
+      );
   },
 
   /**

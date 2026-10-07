@@ -15,12 +15,13 @@
 import { create } from "@bufbuild/protobuf";
 import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
 import {
-  ActorContextSchema, CommandSchema, EventContextSchema, EventSchema,
+  ActorContextSchema,
+  CommandSchema,
+  EventContextSchema,
+  EventSchema,
   RejectionEventContextSchema,
 } from "@spine-event-engine/proto";
-import {
-  AgentAcceptedInvocationSchema,
-} from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
+import * as Records from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
 import { describe, expect, it } from "vitest";
 import { AgentModelSelection } from "../../src/agent/agent-model-selection.js";
 import { ProjectStateSchema } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
@@ -30,39 +31,51 @@ import { ReviewTaskAssignedSchema } from "../../test-fixtures/generated/handler-
 
 describe("Agent model authorization scope", () => {
   it("identifies the actual handled Command and Event types", () => {
-    const recipientId = AnyMessages.pack(ProjectIdSchema,
-      create(ProjectIdSchema, { value: "project-1" }));
+    const recipientId = AnyMessages.pack(
+      ProjectIdSchema,
+      create(ProjectIdSchema, { value: "project-1" }),
+    );
     const actor = create(ActorContextSchema);
     const command = create(CommandSchema, {
       id: { uuid: "command-1" },
-      message: AnyMessages.pack(AssignReviewTaskSchema,
-        create(AssignReviewTaskSchema, { id: "project-1" })),
+      message: AnyMessages.pack(
+        AssignReviewTaskSchema,
+        create(AssignReviewTaskSchema, { id: "project-1" }),
+      ),
     });
     const event = create(EventSchema, {
       id: { value: "event-1" },
-      message: AnyMessages.pack(ReviewTaskAssignedSchema,
-        create(ReviewTaskAssignedSchema, { id: "project-1" })),
+      message: AnyMessages.pack(
+        ReviewTaskAssignedSchema,
+        create(ReviewTaskAssignedSchema, { id: "project-1" }),
+      ),
     });
-    const accepted = (signal: "command" | "event") => create(AgentAcceptedInvocationSchema, {
-      recipientId,
-      actor,
-      signal: signal === "command" ? { case: "command", value: command } : { case: "event", value: event },
-    });
-    expect(AgentModelSelection.scope(accepted("command"), ProjectStateSchema).source.typeUrl)
-      .toBe(TypeUrls.derive(AssignReviewTaskSchema));
-    expect(AgentModelSelection.scope(accepted("event"), ProjectStateSchema).source.typeUrl)
-      .toBe(TypeUrls.derive(ReviewTaskAssignedSchema));
+    const accepted = (signal: "command" | "event") =>
+      create(Records.AgentAcceptedInvocationSchema, {
+        recipientId,
+        actor,
+        signal:
+          signal === "command"
+            ? { case: "command", value: command }
+            : { case: "event", value: event },
+      });
+    expect(AgentModelSelection.scope(accepted("command"), ProjectStateSchema).source.typeUrl).toBe(
+      TypeUrls.derive(AssignReviewTaskSchema),
+    );
+    expect(AgentModelSelection.scope(accepted("event"), ProjectStateSchema).source.typeUrl).toBe(
+      TypeUrls.derive(ReviewTaskAssignedSchema),
+    );
     const rejection = accepted("event");
     if (rejection.signal.case !== "event") throw new Error("Expected Event signal.");
     rejection.signal.value.context = create(EventContextSchema, {
       rejection: create(RejectionEventContextSchema, { command }),
     });
-    expect(AgentModelSelection.scope(rejection, ProjectStateSchema).source.typeUrl)
-      .toBe(TypeUrls.derive(ReviewTaskAssignedSchema));
+    expect(AgentModelSelection.scope(rejection, ProjectStateSchema).source.typeUrl).toBe(
+      TypeUrls.derive(ReviewTaskAssignedSchema),
+    );
     const incomplete = accepted("command");
     if (incomplete.signal.case !== "command") throw new Error("Expected Command signal.");
     incomplete.signal.value.message = undefined;
-    expect(() => AgentModelSelection.scope(incomplete, ProjectStateSchema))
-      .toThrow("payload type");
+    expect(() => AgentModelSelection.scope(incomplete, ProjectStateSchema)).toThrow("payload type");
   });
 });

@@ -30,6 +30,7 @@ import type {
   AgentExecutionCapacity,
   AgentExecutionStorage,
 } from "@spine-event-engine/storage/provider";
+import { AgentExecutionFault } from "./agent-execution-fault.js";
 
 type SessionStorage = Pick<
   AgentExecutionStorage<unknown, Message>,
@@ -265,7 +266,7 @@ export class AgentExecutionSession {
       try {
         return await work();
       } catch (error) {
-        this.stop();
+        if (!(error instanceof AgentExecutionFault)) this.stop();
         throw error;
       }
     });

@@ -20,11 +20,17 @@ function registry(concurrentOperations: number, queuedOperations: number) {
   return AiRegistry.create({
     defaultModels: {},
     invocationLimits: {
-      operations: 1, modelRequests: 1, toolCalls: 0, recordedReads: 0,
-      deadlineMs: 1_000, totalInputBytes: 1_000, totalOutputBytes: 1_000,
+      operations: 1,
+      modelRequests: 1,
+      toolCalls: 0,
+      recordedReads: 0,
+      deadlineMs: 1_000,
+      totalInputBytes: 1_000,
+      totalOutputBytes: 1_000,
       maxRecoveryBytes: 4_000,
     },
-    concurrentOperations, queuedOperations,
+    concurrentOperations,
+    queuedOperations,
   });
 }
 
@@ -36,25 +42,42 @@ describe("shared Agent execution capacity", () => {
     expect(firstContext).toBe(secondContext);
     const order: string[] = [];
     let release: (() => void) | undefined;
-    const blocked = new Promise<void>((resolve) => { release = resolve; });
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
     const active = firstContext.trySubmit({
-      key: "context-A:signal-1", signal: new AbortController().signal,
-      run: async () => { order.push("A-start"); await blocked; order.push("A-end"); },
+      key: "context-A:signal-1",
+      signal: new AbortController().signal,
+      run: async () => {
+        order.push("A-start");
+        await blocked;
+        order.push("A-end");
+      },
     });
     const waiting = secondContext.trySubmit({
-      key: "context-B:signal-1", signal: new AbortController().signal,
-      run: () => { order.push("B-start"); return Promise.resolve(); },
+      key: "context-B:signal-1",
+      signal: new AbortController().signal,
+      run: () => {
+        order.push("B-start");
+        return Promise.resolve();
+      },
     });
     expect(active).toBeDefined();
     expect(waiting).toBeDefined();
-    expect(secondContext.trySubmit({
-      key: "context-C:overflow", signal: new AbortController().signal,
-      run: () => Promise.resolve(),
-    })).toBeUndefined();
-    expect(firstContext.trySubmit({
-      key: "context-B:signal-1", signal: new AbortController().signal,
-      run: () => Promise.resolve(),
-    })).toBeUndefined();
+    expect(
+      secondContext.trySubmit({
+        key: "context-C:overflow",
+        signal: new AbortController().signal,
+        run: () => Promise.resolve(),
+      }),
+    ).toBeUndefined();
+    expect(
+      firstContext.trySubmit({
+        key: "context-B:signal-1",
+        signal: new AbortController().signal,
+        run: () => Promise.resolve(),
+      }),
+    ).toBeUndefined();
     await Promise.resolve();
     expect(order).toEqual(["A-start"]);
     if (release === undefined) throw new Error("Expected active gate.");
@@ -67,33 +90,47 @@ describe("shared Agent execution capacity", () => {
     const ai = registry(1, 0);
     const capacity = AgentExecutionCapacity.for(ai);
     let release: (() => void) | undefined;
-    const blocked = new Promise<void>((resolve) => { release = resolve; });
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
     const active = capacity.trySubmit({
-      key: "active", signal: new AbortController().signal,
+      key: "active",
+      signal: new AbortController().signal,
       run: () => blocked,
     });
-    expect(capacity.trySubmit({
-      key: "overflow", signal: new AbortController().signal,
-      run: () => Promise.resolve(),
-    })).toBeUndefined();
+    expect(
+      capacity.trySubmit({
+        key: "overflow",
+        signal: new AbortController().signal,
+        run: () => Promise.resolve(),
+      }),
+    ).toBeUndefined();
     if (release === undefined) throw new Error("Expected active gate.");
     release();
     await active;
     const queue = AgentExecutionCapacity.for(registry(1, 1));
     let releaseSecond: (() => void) | undefined;
-    const held = new Promise<void>((resolve) => { releaseSecond = resolve; });
+    const held = new Promise<void>((resolve) => {
+      releaseSecond = resolve;
+    });
     const running = queue.trySubmit({
-      key: "running", signal: new AbortController().signal, run: () => held,
+      key: "running",
+      signal: new AbortController().signal,
+      run: () => held,
     });
     const cancelled = new AbortController();
     const waiting = queue.trySubmit({
-      key: "waiting", signal: cancelled.signal,
-      run: () => { throw new Error("Cancelled descriptor must not run."); },
+      key: "waiting",
+      signal: cancelled.signal,
+      run: () => {
+        throw new Error("Cancelled descriptor must not run.");
+      },
     });
     cancelled.abort();
     await waiting;
     const replacement = queue.trySubmit({
-      key: "replacement", signal: new AbortController().signal,
+      key: "replacement",
+      signal: new AbortController().signal,
       run: () => Promise.resolve(),
     });
     expect(replacement).toBeDefined();

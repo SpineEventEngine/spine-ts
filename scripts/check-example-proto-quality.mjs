@@ -509,7 +509,9 @@ function scanProto(file, source) {
  */
 export function scanExampleProtoContract(file, source) {
   const failures = [];
-  const example = /(?:^|\/)examples\/(message-board|projects|orders|todo)(?:\/|$)/.exec(file)?.[1];
+  const example = /(?:^|\/)examples\/(message-board|projects|orders|support|todo)(?:\/|$)/.exec(
+    file,
+  )?.[1];
   const domain = example === "message-board" ? "messageboard" : example;
   const packageName = /^\s*package\s+([\w.]+)\s*;/m.exec(source)?.[1];
   if (domain === undefined || packageName !== `spine.examples.${domain}`)

@@ -608,6 +608,12 @@ describe("Vercel connection registration", () => {
   });
 
   it("records the exact discovered tool schema and mapping in prepared generation input", async () => {
+    const outputSchemaJson = JSON.stringify({
+      additionalProperties: false,
+      properties: { ticket: { type: "string" } },
+      required: ["ticket"],
+      type: "object",
+    });
     const fixture = generationFixture(
       [
         [
@@ -622,7 +628,7 @@ describe("Vercel connection registration", () => {
       1,
       true,
     );
-    await fixture.run();
+    await fixture.run([{ ...advertisedLookup, outputSchemaJson }]);
     const started = vi.mocked(fixture.runtime.beginAttempt).mock.calls[0]?.[0];
     if (started?.kind !== "generation") throw new Error("Expected generation request");
     expect(JSON.parse(started.content.promptJson) as unknown).toMatchObject({
@@ -633,6 +639,7 @@ describe("Vercel connection registration", () => {
           tool: "lookup",
           description: "Lookup a support ticket",
           inputSchemaJson: advertisedLookup.inputSchemaJson,
+          outputSchemaJson,
         },
       ],
     });
@@ -644,6 +651,20 @@ describe("Vercel connection registration", () => {
         inputSchema: JSON.parse(advertisedLookup.inputSchemaJson) as unknown,
       },
     ]);
+    const baseline = generationFixture(
+      [
+        [
+          { type: "text-delta", id: "t", delta: '{"replyText":"Done"}' },
+          { type: "finish", finishReason: { unified: "stop", raw: "stop" }, usage: sdkUsage(1, 1) },
+        ],
+      ],
+      1,
+      true,
+    );
+    await baseline.run();
+    const original = vi.mocked(baseline.runtime.beginAttempt).mock.calls[0]?.[0];
+    if (original?.kind !== "generation") throw new Error("Expected original generation request");
+    expect(started.content.digest?.value).not.toBe(original.content.digest?.value);
   });
 
   it("rejects missing and unexpected tool catalogs before a provider attempt", async () => {

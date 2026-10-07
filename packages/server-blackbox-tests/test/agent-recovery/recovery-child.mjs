@@ -727,7 +727,12 @@ async function run() {
     process.on("message", (candidate) => {
       if (candidate?.kind !== "probe-tenant") return;
       void Promise.all([storage.probeExecution(), postgresHeadProbe()]).then(([record, head]) =>
-        send({ kind: "tenant-probe", ...record, ...head, physicalRequests: backend.requests().length }),
+        send({
+          kind: "tenant-probe",
+          ...record,
+          ...head,
+          physicalRequests: backend.requests().length,
+        }),
       );
     });
   if (mode === "crash") {
@@ -855,7 +860,8 @@ async function run() {
       .filter((entry) => entry.item.case === "conversationRecord")
       .map((entry) => entry.item.value.operation?.value)
       .filter(Boolean);
-    const version = (await built.stand().readVersioned(stateSchema, id, stateScope))?.version?.number;
+    const version = (await built.stand().readVersioned(stateSchema, id, stateScope))?.version
+      ?.number;
     const events = await box.eventually(
       () =>
         box

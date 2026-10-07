@@ -60,7 +60,7 @@ They exclude test inputs, external inputs, system events, stored-event replay,
 and output from unsuccessful handlers. Use `eventually()` when detached handling has not yet
 admitted a produced signal.
 
-`readAgentHistory(repository, entityId, request)` reads the registered Agent's
+`readAgentHistory(repositoryOrAgentClass, entityId, request)` reads the registered Agent's
 full retained history newest first. It uses the same `HistoryRead` page size and
 opaque cursor as protected Agent history; a cursor from another Agent or view
 is rejected. `readSystemEvents(ids)` reads exact persisted System Event IDs from

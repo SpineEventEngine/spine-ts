@@ -1573,5 +1573,14 @@
     "name": "mcpPolicies",
     "disposition": "necessity",
     "reason": "TypeScript MCP revision boundary: mcpPolicies hashes fixed server transport and tool policy without executing scoped credential callbacks."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/testing/index.ts",
+    "kind": "function-declaration",
+    "identity": "agentHistoryView()#1",
+    "name": "agentHistoryView",
+    "disposition": "necessity",
+    "reason": "TypeScript testing boundary: agentHistoryView validates a context-issued repository view when framework conformance checks cannot retain the application repository's generic ID type."
   }
 ]

@@ -36,6 +36,7 @@ import {
 } from "@spine-event-engine/storage/provider";
 import type { HistoryRead } from "@spine-event-engine/ai";
 import type { AgentHistoryScope } from "./agent-history.js";
+import { AgentExecutionFault } from "./agent-execution-fault.js";
 
 interface ReadSession {
   /**
@@ -148,7 +149,10 @@ export class AgentReadRuntime {
     live: () => Promise<readonly MessageShape<Schema>[]>,
   ): Promise<readonly MessageShape<Schema>[]> {
     if (query.target?.type !== TypeUrls.derive(schema))
-      throw new Error("Agent projection query target type changed.");
+      throw new AgentExecutionFault(
+        "REPLAY_DIVERGENCE",
+        "Agent projection query target type changed.",
+      );
     const name = `query:${String(this.#cursor)}`;
     const prior = this.#savedReads()[this.#cursor];
     if (prior !== undefined) {
@@ -156,6 +160,7 @@ export class AgentReadRuntime {
       this.#cursor++;
       return states;
     }
+    this.#checkBudget(this.session.record());
     const states = await live();
     await this.#saveQuery(name, query, schema, states);
     this.#cursor++;
@@ -183,20 +188,48 @@ export class AgentReadRuntime {
       prior.scope === undefined ||
       !equals(AgentExecutionScopeSchema, prior.scope, scope)
     )
-      throw new Error("Agent projection query request or scope changed on recovery.");
+      throw new AgentExecutionFault(
+        "REPLAY_DIVERGENCE",
+        "Agent projection query request or scope changed on recovery.",
+      );
     const normalized = clone(QuerySchema, query);
     normalized.id = clone(QueryIdSchema, saved.id);
     if (!equals(QuerySchema, normalized, saved))
-      throw new Error("Agent projection query request changed on recovery.");
+      throw new AgentExecutionFault(
+        "REPLAY_DIVERGENCE",
+        "Agent projection query request changed on recovery.",
+      );
+    return this.#savedQueryStates(prior, schema);
+  }
+
+  /**
+   * Decodes only states matching the requested generated Projection schema.
+   * @typeParam Schema Generated state schema requested by the handler.
+   * @param prior Saved read entry with its typed result.
+   * @param schema Expected Projection state schema.
+   * @returns Independent retained state messages.
+   */
+  #savedQueryStates<Schema extends MessageSchema>(
+    prior: AgentReadSnapshot,
+    schema: Schema,
+  ): readonly MessageShape<Schema>[] {
     const result =
       prior.result === undefined
         ? undefined
         : AnyMessages.unpack(prior.result, ProjectionResultSchema);
-    if (result === undefined) throw new Error("Saved Agent projection result is absent.");
+    if (result === undefined)
+      throw new AgentExecutionFault(
+        "REPLAY_DIVERGENCE",
+        "Saved Agent projection result is absent.",
+      );
     return Object.freeze(
       result.states.map((packed) => {
         const state = AnyMessages.unpack(packed, schema);
-        if (state === undefined) throw new Error("Saved Agent projection state type changed.");
+        if (state === undefined)
+          throw new AgentExecutionFault(
+            "REPLAY_DIVERGENCE",
+            "Saved Agent projection state type changed.",
+          );
         return state;
       }),
     );
@@ -277,6 +310,7 @@ export class AgentReadRuntime {
       this.#cursor++;
       return page;
     }
+    this.#checkBudget(this.session.record());
     const page = await live();
     await this.#save(named, prepared, page);
     this.#cursor++;
@@ -289,7 +323,10 @@ export class AgentReadRuntime {
   finish(): void {
     if (this.#pending !== 0) throw new Error("Agent history read is still in progress.");
     if (this.#cursor !== this.#savedReads().length)
-      throw new Error("Agent history read sequence changed on recovery.");
+      throw new AgentExecutionFault(
+        "REPLAY_DIVERGENCE",
+        "Agent history read sequence changed on recovery.",
+      );
   }
 
   /**
@@ -298,7 +335,10 @@ export class AgentReadRuntime {
   #checkScope(scope: AgentHistoryScope): void {
     const accepted = this.session.record().accepted?.key?.scope;
     if (accepted?.stateType !== scope.repository || accepted.agentKey !== scope.entity)
-      throw new Error("Agent history read scope changed on recovery.");
+      throw new AgentExecutionFault(
+        "REPLAY_DIVERGENCE",
+        "Agent history read scope changed on recovery.",
+      );
   }
 
   /**
@@ -352,10 +392,17 @@ export class AgentReadRuntime {
       !equals(AnySchema, prior.request, request) ||
       !equals(AgentExecutionScopeSchema, prior.scope, scope)
     )
-      throw new Error("Agent history read request or scope changed on recovery.");
+      throw new AgentExecutionFault(
+        "REPLAY_DIVERGENCE",
+        "Agent history read request or scope changed on recovery.",
+      );
     const page =
       prior.result === undefined ? undefined : AnyMessages.unpack(prior.result, ReadPageSchema);
-    if (page === undefined) throw new Error("Saved Agent history page is absent or changed.");
+    if (page === undefined)
+      throw new AgentExecutionFault(
+        "REPLAY_DIVERGENCE",
+        "Saved Agent history page is absent or changed.",
+      );
     return { entries: page.entries, hasMore: page.hasMore };
   }
 
@@ -379,7 +426,10 @@ export class AgentReadRuntime {
   #checkBudget(record: AgentExecutionRecord): void {
     const count = record.journal.filter((entry) => entry.evidence.case === "read").length;
     if (BigInt(count) >= (record.started?.bounds?.recordedReads ?? 0n))
-      throw new Error("Agent recorded read budget is exhausted.");
+      throw new AgentExecutionFault(
+        "READ_BUDGET_EXCEEDED",
+        "Agent recorded read budget is exhausted.",
+      );
   }
 
   /**

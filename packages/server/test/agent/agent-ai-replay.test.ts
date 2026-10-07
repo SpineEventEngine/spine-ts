@@ -53,6 +53,7 @@ import { describe, expect, it } from "vitest";
 import { AgentAiRuntime } from "../../src/agent/agent-ai-runtime.js";
 import { AgentExecutionSession } from "../../src/agent/agent-execution-session.js";
 import { SupportReplyAgentIdSchema } from "../../test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
+import { DraftSupportReplySchema } from "../../test-fixtures/generated/entity-metadata/support_agent_commands_pb.js";
 import {
   ProposedSupportReplySchema,
   SupportRoutingResultSchema,
@@ -276,10 +277,16 @@ function harness(kind: Kind, correction = false) {
     },
   });
   const agentId = create(SupportReplyAgentIdSchema, { ticketNumber: "T-7" });
-  const source = create(MessageIdSchema, {
+  const agent = create(MessageIdSchema, {
     id: AnyMessages.pack(SupportReplyAgentIdSchema, agentId),
     typeUrl: TypeUrls.derive(SupportReplyAgentIdSchema),
   });
+  const source = create(MessageIdSchema, {
+    id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "source-7" })),
+    typeUrl: TypeUrls.derive(DraftSupportReplySchema),
+  });
+  expect(source.typeUrl).toBe(TypeUrls.derive(DraftSupportReplySchema));
+  expect(source.id?.typeUrl).not.toBe(agent.id?.typeUrl);
   const key = create(AgentInvocationKeySchema, {
     scope: create(AgentExecutionScopeSchema, {
       stateType: "support.SupportAgent",
@@ -362,7 +369,7 @@ function harness(kind: Kind, correction = false) {
       {
         actor: create(ActorContextSchema),
         tenant: { kind: "single-tenant" },
-        agent: source,
+        agent,
         source,
       },
       new AgentExecutionSession(storage, saved, "claim-7"),
@@ -450,9 +457,10 @@ describe("Agent AI replay from a persisted execution journal", () => {
       "interrupted before result persistence",
     );
     fixture.changePreparedPrompt();
-    await expect(fixture.runtime().invoke(generation, request)).rejects.toThrow(
-      "provider request changed on recovery",
-    );
+    await expect(fixture.runtime().invoke(generation, request)).rejects.toMatchObject({
+      reason: "REPLAY_DIVERGENCE",
+      message: "Saved Agent provider request changed on recovery.",
+    });
     expect(fixture.counts()).toEqual({ physicalRequests: 1, executeCalls: 2 });
   });
 

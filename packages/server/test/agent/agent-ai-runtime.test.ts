@@ -19,8 +19,12 @@ import { AnyMessages, Time, TypeUrls } from "@spine-event-engine/core";
 import { ActorContextSchema, CommandIdSchema, MessageIdSchema } from "@spine-event-engine/proto";
 import { ConversationIdSchema } from "@spine-event-engine/proto/agent";
 import {
-  AgentAcceptedInvocationSchema, AgentExecutionRecordSchema, AgentExecutionScopeSchema,
-  AgentExecutionStartSchema, AgentInvocationKeySchema, AgentInvocationStatus,
+  AgentAcceptedInvocationSchema,
+  AgentExecutionRecordSchema,
+  AgentExecutionScopeSchema,
+  AgentExecutionStartSchema,
+  AgentInvocationKeySchema,
+  AgentInvocationStatus,
   AgentSignalKeySchema,
 } from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
 import type { AgentExecutionStorage } from "@spine-event-engine/storage/provider";
@@ -28,17 +32,28 @@ import { describe, expect, it } from "vitest";
 import { AgentAiRuntime } from "../../src/agent/agent-ai-runtime.js";
 import { AgentExecutionSession } from "../../src/agent/agent-execution-session.js";
 import { SupportReplyAgentIdSchema } from "../../test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
+import { DraftSupportReplySchema } from "../../test-fixtures/generated/entity-metadata/support_agent_commands_pb.js";
 import {
-  ProposedSupportReplySchema, SupportTicketFactsSchema, SupportTicketNumberSchema,
+  ProposedSupportReplySchema,
+  SupportTicketFactsSchema,
+  SupportTicketNumberSchema,
 } from "../../test-fixtures/generated/entity-metadata/support_ai_types_pb.js";
 
 const model = AiModel.define({
-  name: "propose-support-reply", version: "v1", kind: "generation",
-  input: SupportTicketFactsSchema, output: ProposedSupportReplySchema,
-  instructions: "Propose a support reply.", outputMode: "prompt-and-validate",
+  name: "propose-support-reply",
+  version: "v1",
+  kind: "generation",
+  input: SupportTicketFactsSchema,
+  output: ProposedSupportReplySchema,
+  instructions: "Propose a support reply.",
+  outputMode: "prompt-and-validate",
   limits: {
-    modelRequests: 1, toolCalls: 0, deadlineMs: 1_000,
-    maxInputBytes: 2_000, maxOutputBytes: 2_000, maxOutputTokens: 100,
+    modelRequests: 1,
+    toolCalls: 0,
+    deadlineMs: 1_000,
+    maxInputBytes: 2_000,
+    maxOutputBytes: 2_000,
+    maxOutputTokens: 100,
   },
 });
 
@@ -47,7 +62,8 @@ describe("Agent named call sequencing", () => {
     const ticket = create(SupportReplyAgentIdSchema, { ticketNumber: "T-1" });
     const key = create(AgentInvocationKeySchema, {
       scope: create(AgentExecutionScopeSchema, {
-        stateType: "support.SupportAgent", agentKey: "T-1",
+        stateType: "support.SupportAgent",
+        agentKey: "T-1",
       }),
       sourceSignal: create(AgentSignalKeySchema, {
         id: { case: "command", value: create(CommandIdSchema, { uuid: "source-1" }) },
@@ -62,13 +78,18 @@ describe("Agent named call sequencing", () => {
       }),
     });
     let release: (() => void) | undefined;
-    const blocked = new Promise<void>((resolve) => { release = resolve; });
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
     const port: Pick<
       AgentExecutionStorage<unknown, Message>,
       "capacity" | "update" | "renew" | "read" | "complete" | "markDelivered"
     > = {
       capacity: {},
-      update: async ({ next }) => { await blocked; stored = clone(AgentExecutionRecordSchema, next); },
+      update: async ({ next }) => {
+        await blocked;
+        stored = clone(AgentExecutionRecordSchema, next);
+      },
       renew: () => Promise.resolve(false),
       read: () => Promise.resolve(clone(AgentExecutionRecordSchema, stored)),
       complete: () => Promise.resolve(),
@@ -79,19 +100,35 @@ describe("Agent named call sequencing", () => {
       id: AnyMessages.pack(SupportReplyAgentIdSchema, ticket),
       typeUrl: TypeUrls.derive(SupportReplyAgentIdSchema),
     });
+    const source = create(MessageIdSchema, {
+      id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "source-1" })),
+      typeUrl: TypeUrls.derive(DraftSupportReplySchema),
+    });
+    expect(source.typeUrl).toBe(TypeUrls.derive(DraftSupportReplySchema));
+    expect(source.id?.typeUrl).not.toBe(reference.id?.typeUrl);
     const runtime = new AgentAiRuntime(
       AiRegistry.create({
         defaultModels: {},
         invocationLimits: {
-          operations: 2, modelRequests: 2, toolCalls: 0, recordedReads: 0,
-          deadlineMs: 1_000, totalInputBytes: 4_000, totalOutputBytes: 4_000,
+          operations: 2,
+          modelRequests: 2,
+          toolCalls: 0,
+          recordedReads: 0,
+          deadlineMs: 1_000,
+          totalInputBytes: 4_000,
+          totalOutputBytes: 4_000,
           maxRecoveryBytes: 8_000,
         },
-        concurrentOperations: 1, queuedOperations: 0,
+        concurrentOperations: 1,
+        queuedOperations: 0,
       }),
       { models: [model] },
-      { actor: create(ActorContextSchema), tenant: { kind: "single-tenant" },
-        agent: reference, source: reference },
+      {
+        actor: create(ActorContextSchema),
+        tenant: { kind: "single-tenant" },
+        agent: reference,
+        source,
+      },
       session,
       0,
       undefined,
@@ -104,10 +141,13 @@ describe("Agent named call sequencing", () => {
     const first = runtime.invoke(model, { call: "first", conversation, input });
     const second = runtime.invoke(model, { call: "second", conversation, input });
     await expect(second).rejects.toThrow("sequential");
-    expect(() => { runtime.finish(); }).toThrow("pending");
+    expect(() => {
+      runtime.finish();
+    }).toThrow("pending");
     runtime.close();
-    await expect(runtime.invoke(model, { call: "escaped", conversation, input }))
-      .rejects.toThrow("closed");
+    await expect(runtime.invoke(model, { call: "escaped", conversation, input })).rejects.toThrow(
+      "closed",
+    );
     if (release !== undefined) release();
     await expect(first).rejects.toThrow("closed");
     expect(stored.journal.filter((entry) => entry.evidence.case === "operation")).toHaveLength(1);

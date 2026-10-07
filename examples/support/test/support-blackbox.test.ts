@@ -109,7 +109,7 @@ describe("warehouse support draft through BlackBox", () => {
       questions: ["What error appears when either station prints?"],
     });
     backend.forModel(draftSupportReply).respondWith(reply);
-    const { box, context, scope } = await started(backend);
+    const { box, scope } = await started(backend);
     try {
       const suggested = await box.eventually(
         () =>
@@ -136,11 +136,7 @@ describe("warehouse support draft through BlackBox", () => {
         (rows) => rows.length === 1 && rows[0]?.hasDraft === true,
       );
       expect(review[0]?.reply).toEqual(reply);
-      const repository = context
-        .registeredRepositories()
-        .find((view) => view.entityType === SupportDraftAgent);
-      if (repository === undefined) throw new Error("Support Agent repository is missing.");
-      const audit = await box.readAgentHistory(repository, ticketId, { pageSize: 10 });
+      const audit = await box.readAgentHistory(SupportDraftAgent, ticketId, { pageSize: 10 });
       expect(audit.items.length).toBeGreaterThan(0);
       expect(audit.items.some((entry) => entry.item.case === "conversationRecord")).toBe(true);
       expect(backend.requests()).toHaveLength(1);

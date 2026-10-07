@@ -744,7 +744,7 @@ is a separate feature; this API does not introduce it. Authentication callbacks 
 reasoning is not part of the audit API. The records describe the supplied
 requests, received supported content, tool calls and admitted outcomes.
 
-Use `BlackBox.readAgentHistory(repositoryView, id, request)` to inspect full
+Use `BlackBox.readAgentHistory(AgentClass, id, request)` to inspect full
 history in an application test. `BlackBox.readSystemEvents(ids)` reads the paired
 System store by exact Event IDs. See the [testing reference](../testing/REFERENCE.md)
 and [complete support tests](../../examples/support/test/support-blackbox.test.ts).
@@ -770,10 +770,10 @@ an internal diagnostic, not a retry guarantee.
 
 Every domain context has an internal paired System Context. Domain events use
 the domain `EventBus` and domain `EventStore`. System events use only the
-System Context `EventBus`, so they never enter the domain EventStore. System
-event persistence is optional: `persistSystemEvents()` enables the paired
-System Context's separate storage; otherwise the bus validates, dispatches,
-and notifies without appending. Schemas may come from an external dispatcher or
+System Context `EventBus`, so they never enter the domain EventStore.
+`persistSystemEvents()` enables the paired System Context's separate storage.
+Contexts with Agents must enable it. For other contexts it is optional; without
+it, the bus validates, dispatches and notifies without appending. Schemas may come from an external dispatcher or
 a registered internal repository producer. A producer-only schema is not
 thereby an external dispatch route.
 

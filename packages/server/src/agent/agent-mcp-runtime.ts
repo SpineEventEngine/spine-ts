@@ -255,7 +255,12 @@ export class AgentMcpRuntime {
   private collectDefinitions(
     id: string,
     allowed: readonly string[],
-    found: readonly { name: string; description: string; inputSchemaJson: string }[],
+    found: readonly {
+      name: string;
+      description: string;
+      inputSchemaJson: string;
+      outputSchemaJson?: string;
+    }[],
     definitions: Map<string, AiMcpAdvertisedTool>,
   ): void {
     for (const tool of found) {
@@ -269,6 +274,9 @@ export class AgentMcpRuntime {
           tool: tool.name,
           description: tool.description,
           inputSchemaJson: tool.inputSchemaJson,
+          ...(tool.outputSchemaJson === undefined
+            ? {}
+            : { outputSchemaJson: tool.outputSchemaJson }),
         }),
       );
     }

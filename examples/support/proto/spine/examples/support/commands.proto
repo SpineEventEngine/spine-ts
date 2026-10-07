@@ -23,7 +23,7 @@ option (type_url_prefix) = "type.spine.examples.support";
 
 // Opens the warehouse incident as a support ticket.
 message OpenSupportTicket {
-  // Ticket to create.
+  // Identifier assigned to the warehouse incident being opened.
   SupportTicketId id = 1 [
     (required) = true,
     (validate) = true

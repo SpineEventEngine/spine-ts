@@ -124,7 +124,7 @@ const replyStream = (requestNumber: number): string =>
 /**
  * Starts local Responses and MCP endpoints without paid external access.
  */
-const startEndpoints = async () => {
+const startEndpoints = async (invalidToolOutput = false) => {
   const methods: string[] = [];
   const providerBodies: unknown[] = [];
   const server: Server = createServer((request, response) => {
@@ -171,6 +171,16 @@ const startEndpoints = async () => {
                     required: ["ticket"],
                     additionalProperties: false,
                   },
+                  ...(invalidToolOutput
+                    ? {
+                        outputSchema: {
+                          type: "object",
+                          properties: { ticketNumber: { type: "string" } },
+                          required: ["ticketNumber"],
+                          additionalProperties: false,
+                        },
+                      }
+                    : {}),
                 },
               ],
             },
@@ -181,7 +191,13 @@ const startEndpoints = async () => {
           JSON.stringify({
             jsonrpc: "2.0",
             id: rpc.id,
-            result: { content: [{ type: "text", text: "Ticket found" }], isError: false },
+            result: invalidToolOutput
+              ? {
+                  content: [{ type: "text", text: "Ticket found" }],
+                  structuredContent: { ticketNumber: 17 },
+                  isError: false,
+                }
+              : { content: [{ type: "text", text: "Ticket found" }], isError: false },
           }),
         );
       else response.writeHead(202).end();
@@ -221,7 +237,120 @@ const supportRepository = () =>
     events: [SupportReplyDraftedSchema],
   });
 
+/**
+ * Creates a real Agent with the local Responses and MCP endpoints.
+ * @param base Local fixture address.
+ * @returns BlackBox and repository for checking the persisted outcome.
+ */
+const supportBox = async (base: string) => {
+  const identity = {
+    provider: "openai",
+    account: "fixture",
+    endpoint: `${base}/v1`,
+    model: "fixture-model",
+  };
+  const registration = VercelAx.model({
+    ref: ModelRef.of("support-vercel", "v1"),
+    capabilities: VercelAx.capabilities.openAIResponses(),
+    resolveIdentity: () => identity,
+    authorizeUse: () => true,
+    connect: (_scope, _expected, control) => ({
+      model: createOpenAI({
+        apiKey: "fixture-only",
+        baseURL: identity.endpoint,
+        fetch: control.fetch,
+      }).responses(identity.model),
+      identity,
+    }),
+  });
+  const tools = Mcp.server({
+    id: "knowledge",
+    revision: "v1",
+    transport: { kind: "streamable-http", url: `${base}/mcp` },
+    authorizeConnect: () => true,
+    tools: {
+      lookup: {
+        effect: "read",
+        timeoutMs: 2_000,
+        maxArgumentBytes: 1_024,
+        maxResultBytes: 4_096,
+        authorize: () => true,
+      },
+    },
+  });
+  const registry = AiRegistry.create({
+    defaultModels: { generation: registration.ref },
+    invocationLimits: {
+      operations: 1,
+      modelRequests: 3,
+      toolCalls: 1,
+      recordedReads: 0,
+      deadlineMs: 10_000,
+      totalInputBytes: 32_768,
+      totalOutputBytes: 262_144,
+      maxRecoveryBytes: 262_144,
+    },
+    concurrentOperations: 1,
+    queuedOperations: 0,
+    hookTimeoutMs: 2_000,
+  })
+    .register(registration)
+    .registerTools(tools);
+  const repository = supportRepository();
+  const context = BoundedContext.singleTenant("RealVercelMcpSupport")
+    .withAi(registry)
+    .persistSystemEvents()
+    .withStorageFactory(new InMemoryStorageFactory())
+    .add(repository)
+    .build();
+  return { box: await BlackBox.from(context, { timeoutMs: 10_000 }), repository };
+};
+
 describe("Agent with real Vercel Responses and MCP transports", () => {
+  it("does not admit malformed successful MCP structure or resume the model", async () => {
+    const endpoint = await startEndpoints(true);
+    const { box, repository } = await supportBox(endpoint.base);
+    const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-47" });
+    try {
+      const posted = await box
+        .asGuest()
+        .post(
+          DraftRecoverySupportReplySchema,
+          create(DraftRecoverySupportReplySchema, { agent: id, question: "Where is my order?" }),
+        );
+      expect(posted.kind).toBe("ok");
+      await box.eventually(
+        () => box.readAgentHistory(repository, id, { pageSize: 30 }),
+        (page) =>
+          page.items.some((entry) => {
+            if (entry.item.case !== "conversationRecord") return false;
+            return (
+              entry.item.value.content !== undefined &&
+              AnyMessages.unpack(entry.item.value.content, ToolResponseSchema) !== undefined
+            );
+          }),
+      );
+      const page = await box.readAgentHistory(repository, id, { pageSize: 30 });
+      const toolResponses = page.items.flatMap((entry) => {
+        if (entry.item.case !== "conversationRecord" || !entry.item.value.content) return [];
+        const response = AnyMessages.unpack(entry.item.value.content, ToolResponseSchema);
+        return response ? [response] : [];
+      });
+      expect(toolResponses).toHaveLength(1);
+      expect(toolResponses[0]?.outcome).not.toBe(AiOutcome.ADMITTED);
+      expect(endpoint.methods.filter((method) => method === "tools/call")).toHaveLength(1);
+      expect(endpoint.providerBodies).toHaveLength(1);
+      expect(box.assertEvents()).toEqual([]);
+    } finally {
+      await box.close();
+      await new Promise<void>((resolve) => {
+        endpoint.server.close(() => {
+          resolve();
+        });
+      });
+    }
+  }, 20_000);
+
   it("persists tool use and a corrected reply through real provider and MCP requests", async () => {
     const endpoint = await startEndpoints();
     const identity = {

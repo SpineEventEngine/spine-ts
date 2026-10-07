@@ -43,7 +43,13 @@ import {
 import type { Query, Topic } from "@spine-event-engine/proto/client";
 import {
   BoundedContext,
+  Agent,
+  Repository,
   type BoundedContextBuilder,
+  type ConcreteRepositoryEntityType,
+  type RepositoryEntityId,
+  type RepositoryEntityType,
+  type RepositoryStateSchema,
   type RepositoryView,
   Server,
   type RunningServer,
@@ -51,7 +57,7 @@ import {
 import {
   observeProducedSignals,
   postExternalEvent,
-  readAgentHistoryPage,
+  agentHistoryView,
   readSystemEvents as readStoredSystemEvents,
 } from "@spine-event-engine/server/testing";
 import type { AgentHistoryEntry } from "@spine-event-engine/proto/agent";
@@ -368,18 +374,48 @@ export class BlackBox {
 
   /**
    * Reads complete retained Agent history through its opaque full-history cursor.
-   * @param repository Exact Agent repository registered in this context.
+   * @typeParam EntityType Generated Agent class registered in this context.
+   * @param target Exact typed Agent repository or its generated class.
    * @param entityId Typed Agent identifier.
    * @param request Positive page size and optional prior cursor.
    * @returns Provider-backed entries newest first, with an older-page cursor when present.
    */
+  readAgentHistory<
+    EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>,
+  >(
+    target: (Repository<EntityType> | EntityType) &
+      (EntityType["prototype"] extends Agent<
+        RepositoryEntityId<EntityType>,
+        RepositoryStateSchema<EntityType>
+      >
+        ? unknown
+        : never),
+    entityId: NoInfer<RepositoryEntityId<EntityType>>,
+    request: HistoryRead,
+  ): Promise<HistoryPage<AgentHistoryEntry>>;
+
+  /**
+   * Reads registered Agent history after resolving the typed target.
+   * @param target Typed repository or generated Agent class.
+   * @param entityId Agent identifier paired with the target.
+   * @param request Page size and optional prior cursor.
+   * @returns Provider-backed retained entries with an older-page cursor when present.
+   */
   readAgentHistory(
-    repository: RepositoryView,
+    target: RepositoryView | RepositoryEntityType,
     entityId: unknown,
     request: HistoryRead,
   ): Promise<HistoryPage<AgentHistoryEntry>> {
     this.#assertOpen();
-    return readAgentHistoryPage(this.#context, repository, entityId, request, this.#tenant);
+    if (typeof target === "function") {
+      const repository = this.#context
+        .registeredRepositories()
+        .find((view) => view.entityType === target);
+      if (repository === undefined)
+        throw new TypeError("Agent audit target is not registered in this BlackBox context.");
+      return agentHistoryView(this.#context, repository, entityId, request, this.#tenant);
+    }
+    return agentHistoryView(this.#context, target, entityId, request, this.#tenant);
   }
 
   /**

@@ -247,6 +247,7 @@ export {
   Repository,
   type RepositoryCommandRoute,
   type RepositoryEntityType,
+  type RepositoryEntityId,
   type RepositoryEventRoute,
   RepositoryIdentityError,
   type RepositoryIdentityErrorCode,

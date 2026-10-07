@@ -105,33 +105,50 @@ const advertisedFunctions = (request: AiBackendExecution) => {
   const catalog = request.advertisedTools ?? [];
   if (catalog.length !== configured.length) throw new TypeError("MCP tool catalog mismatch");
   const seen = new Set<string>();
-  return configured.map((reference, index) => {
-    const tool = catalog[index];
-    const key = `${reference.server}\u0000${reference.tool}`;
-    if (!tool) throw new TypeError("MCP tool catalog mismatch");
-    if (tool.server !== reference.server || tool.tool !== reference.tool || seen.has(key))
-      throw new TypeError("MCP tool catalog mismatch");
-    seen.add(key);
-    if (
-      Buffer.byteLength(tool.description) > 4_096 ||
-      Buffer.byteLength(tool.inputSchemaJson) > 16_384
-    )
-      throw new TypeError("MCP tool catalog exceeds limit");
-    const schema = JSON.parse(tool.inputSchemaJson) as JSONSchema7;
-    if (schema.type !== "object") throw new TypeError("MCP tool schema must be an object");
-    const axSchema = axToolSchema(schema as Record<string, unknown>);
-    if (JSON.stringify(canonicalJsonValue(axSchema)) !== tool.inputSchemaJson)
-      throw new TypeError("MCP tool schema unsupported by Ax");
-    return {
-      modelName: `tool_${String(index)}`,
-      server: tool.server,
-      tool: tool.tool,
-      description: tool.description,
-      inputSchemaJson: tool.inputSchemaJson,
-      schema,
-      axSchema,
-    };
-  });
+  return configured.map((reference, index) =>
+    advertisedFunction(reference, catalog[index], index, seen),
+  );
+};
+
+/**
+ * Validates one catalog entry before exposing it to Ax.
+ * @param reference Configured server and tool reference.
+ * @param tool Discovered tool metadata.
+ * @param index Model-visible tool position.
+ * @param seen Previously checked references.
+ * @returns Bounded model-visible tool metadata.
+ */
+const advertisedFunction = (
+  reference: { server: string; tool: string },
+  tool: NonNullable<AiBackendExecution["advertisedTools"]>[number] | undefined,
+  index: number,
+  seen: Set<string>,
+) => {
+  const key = `${reference.server}\u0000${reference.tool}`;
+  if (tool?.server !== reference.server || tool.tool !== reference.tool || seen.has(key))
+    throw new TypeError("MCP tool catalog mismatch");
+  seen.add(key);
+  if (
+    Buffer.byteLength(tool.description) > 4_096 ||
+    Buffer.byteLength(tool.inputSchemaJson) > 16_384 ||
+    (tool.outputSchemaJson !== undefined && Buffer.byteLength(tool.outputSchemaJson) > 16_384)
+  )
+    throw new TypeError("MCP tool catalog exceeds limit");
+  const schema = JSON.parse(tool.inputSchemaJson) as JSONSchema7;
+  if (schema.type !== "object") throw new TypeError("MCP tool schema must be an object");
+  const axSchema = axToolSchema(schema as Record<string, unknown>);
+  if (JSON.stringify(canonicalJsonValue(axSchema)) !== tool.inputSchemaJson)
+    throw new TypeError("MCP tool schema unsupported by Ax");
+  return {
+    modelName: `tool_${String(index)}`,
+    server: tool.server,
+    tool: tool.tool,
+    description: tool.description,
+    inputSchemaJson: tool.inputSchemaJson,
+    ...(tool.outputSchemaJson === undefined ? {} : { outputSchemaJson: tool.outputSchemaJson }),
+    schema,
+    axSchema,
+  };
 };
 
 /**
@@ -263,6 +280,7 @@ const requestContent = (
     tool: tool.tool,
     description: tool.description,
     inputSchemaJson: tool.inputSchemaJson,
+    ...(tool.outputSchemaJson === undefined ? {} : { outputSchemaJson: tool.outputSchemaJson }),
   }));
   const promptJson = JSON.stringify({ messages: modelPrompt(prepared, instructions), tools });
   return create(GenerationRequestSchema, {

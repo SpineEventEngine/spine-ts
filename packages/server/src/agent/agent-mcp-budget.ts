@@ -15,6 +15,7 @@
 import { clone, create, toBinary } from "@bufbuild/protobuf";
 import type { Any } from "@bufbuild/protobuf/wkt";
 import { createHash, randomUUID } from "node:crypto";
+import { AgentExecutionFault } from "./agent-execution-fault.js";
 import { AnyMessages, Time } from "@spine-event-engine/core";
 import type {
   AiMcpMessageRequest,
@@ -143,9 +144,15 @@ export class AgentMcpBudget {
       0n,
     );
     if (spent + BigInt(input) > (record.started?.bounds?.totalInputBytes ?? 0n))
-      throw new Error("Agent invocation input byte budget is exhausted.");
+      throw new AgentExecutionFault(
+        "TOOL_BUDGET_EXCEEDED",
+        "Agent invocation input byte budget is exhausted.",
+      );
     if (reserved + BigInt(output) > (record.started?.bounds?.totalOutputBytes ?? 0n))
-      throw new Error("Agent invocation output byte credit is exhausted.");
+      throw new AgentExecutionFault(
+        "TOOL_BUDGET_EXCEEDED",
+        "Agent invocation output byte credit is exhausted.",
+      );
   }
 
   /**
@@ -278,17 +285,7 @@ export class AgentMcpBudget {
       this.#checkProposal(record, invocation);
       if (this.#toolByProposal(record, invocation) !== undefined)
         throw new Error("Agent tool proposal was concurrently journaled.");
-      const calls = record.journal.filter((entry) => entry.evidence.case === "tool");
-      const operationCalls = calls.filter(
-        (entry) =>
-          entry.evidence.case === "tool" &&
-          entry.evidence.value.operation?.value === this.operation.operation?.value,
-      );
-      if (
-        operationCalls.length >= operationLimit ||
-        calls.length >= Number(record.started?.bounds?.toolCalls ?? 0n)
-      )
-        throw new Error("Agent invocation tool-call budget is exhausted.");
+      this.#checkToolCount(record, operationLimit);
       record.journal.push(this.#toolEntry(invocation, request, record.journal.length));
       this.#checkCapacity(record, [history]);
       return record;
@@ -299,6 +296,28 @@ export class AgentMcpBudget {
         history,
       ]);
     return { kind: "new", callId };
+  }
+
+  /**
+   * Checks the saved tool count before appending another intent.
+   * @param record Current fenced execution image.
+   * @param operationLimit Selected capability's tool limit.
+   */
+  #checkToolCount(record: AgentExecutionRecord, operationLimit: number): void {
+    const calls = record.journal.filter((entry) => entry.evidence.case === "tool");
+    const operationCalls = calls.filter(
+      (entry) =>
+        entry.evidence.case === "tool" &&
+        entry.evidence.value.operation?.value === this.operation.operation?.value,
+    );
+    if (
+      operationCalls.length >= operationLimit ||
+      calls.length >= Number(record.started?.bounds?.toolCalls ?? 0n)
+    )
+      throw new AgentExecutionFault(
+        "TOOL_BUDGET_EXCEEDED",
+        "Agent invocation tool-call budget is exhausted.",
+      );
   }
 
   /**
@@ -427,7 +446,7 @@ export class AgentMcpBudget {
       request.argumentsJson !== facts.argumentsJson ||
       request.effect !== facts.effect
     )
-      throw new Error("Agent tool request changed on recovery.");
+      throw new AgentExecutionFault("REPLAY_DIVERGENCE", "Agent tool request changed on recovery.");
     if (prior.response !== undefined)
       return { kind: "replay", response: clone(ToolResponseSchema, prior.response) };
     const callId = request.call?.value;

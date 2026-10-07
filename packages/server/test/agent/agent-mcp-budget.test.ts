@@ -162,6 +162,25 @@ describe("Agent MCP protocol budget", () => {
     expect(record().journal).toHaveLength(1);
   });
 
+  it("classifies exhausted physical-message credit before another send", async () => {
+    const { budget, record } = fixture(20n, 7n);
+    await budget.reserveMessage("lookup", {
+      phase: "setup",
+      method: "initialize",
+      inputBytes: 1,
+      maxOutputBytes: 7,
+    });
+    await expect(
+      budget.reserveMessage("lookup", {
+        phase: "setup",
+        method: "tools/list",
+        inputBytes: 1,
+        maxOutputBytes: 1,
+      }),
+    ).rejects.toMatchObject({ reason: "TOOL_BUDGET_EXCEEDED" });
+    expect(record().journal).toHaveLength(1);
+  });
+
   it("charges a persisted known receipt instead of its old response allowance", async () => {
     const { budget, record } = fixture();
     const first = await budget.reserveMessage("lookup", {

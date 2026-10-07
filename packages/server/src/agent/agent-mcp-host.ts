@@ -33,7 +33,7 @@ export type AgentMcpIntent =
   | {
       /**
        * Identifies an admitted intent that has not dispatched.
-      */
+       */
       readonly kind: "new";
 
       /**
@@ -44,7 +44,7 @@ export type AgentMcpIntent =
   | {
       /**
        * Identifies a saved completed call.
-      */
+       */
       readonly kind: "replay";
 
       /**
@@ -55,7 +55,7 @@ export type AgentMcpIntent =
   | {
       /**
        * Identifies a write whose physical outcome cannot be proven.
-      */
+       */
       readonly kind: "unknown";
 
       /**

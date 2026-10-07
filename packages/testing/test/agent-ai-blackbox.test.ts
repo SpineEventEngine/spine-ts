@@ -53,6 +53,7 @@ import {
   Repository,
 } from "@spine-event-engine/server";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
+import { agentHistoryView } from "@spine-event-engine/server/testing";
 import type {
   AgentExecutionCapacity,
   AgentExecutionStorage,
@@ -996,7 +997,7 @@ describe("Agent scripted execution through BlackBox", () => {
       const retained = await blackBox.readAgentHistory(repository, agentId, { pageSize: 10 });
       const issued = context.registeredRepositories()[0];
       if (issued === undefined) throw new Error("Expected a registered Agent view.");
-      expect((await blackBox.readAgentHistory(issued, agentId, { pageSize: 10 })).items).toEqual(
+      expect((await agentHistoryView(context, issued, agentId, { pageSize: 10 })).items).toEqual(
         retained.items,
       );
       expect(

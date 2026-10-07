@@ -268,7 +268,9 @@ describe.runIf(emulatorHost !== undefined)("Datastore Agent execution", () => {
       const second = accepted(randomUUID(), `T-${randomUUID()}`);
       await storage.admit(second);
       now = create(TimestampSchema, { seconds: 1_000n, nanos: 3 });
-      await expect(storage.pending({ count: 1, after: required(observed.after) })).resolves.toMatchObject({
+      await expect(
+        storage.pending({ count: 1, after: required(observed.after) }),
+      ).resolves.toMatchObject({
         records: [],
       });
       const fresh = await storage.pending({ count: 2 });

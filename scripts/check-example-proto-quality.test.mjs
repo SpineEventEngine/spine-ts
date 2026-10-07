@@ -86,6 +86,35 @@ option (type_url_prefix) = "type.spine.examples.todo-v1";
     ).toMatch(/namespace|owned-v1|type-prefix|unrelated-framework-jargon|comment-separation/);
   });
 
+  it("recognizes the support example while retaining its exact namespace and prefix checks", () => {
+    const file = "examples/support/proto/spine/examples/support/commands.proto";
+    const valid = `syntax = "proto3";
+
+package spine.examples.support;
+
+option (type_url_prefix) = "type.spine.examples.support";
+
+// Opens a warehouse support ticket for an incident.
+message OpenSupportTicket {
+  // Ticket identifier assigned to this incident.
+  string id = 1;
+}
+`;
+    expect(scanExampleProtoContract(file, valid)).toEqual([]);
+    expect(
+      scanExampleProtoContract(
+        file,
+        valid.replace("package spine.examples.support;", "package spine.examples.orders;"),
+      ),
+    ).toContain(`${file} namespace spine.examples.<domain>`);
+    expect(
+      scanExampleProtoContract(
+        file,
+        valid.replace("type.spine.examples.support", "type.spine.examples.orders"),
+      ),
+    ).toContain(`${file} type-prefix type.spine.examples.<domain>`);
+  });
+
   it("does not classify required entity options as documentation jargon", () => {
     const source = `syntax = "proto3";
 

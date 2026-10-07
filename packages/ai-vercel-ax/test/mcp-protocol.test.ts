@@ -1347,8 +1347,10 @@ describe("bounded MCP protocol", () => {
     let unsafeHeaderSchema = false;
     let unsupportedContent = false;
     let structuredContent = false;
+    let structuredValue: unknown = { ticket: "T-3" };
     let toolError = false;
     let schemaOverride: unknown;
+    let outputSchemaOverride: unknown;
     let listingMode:
       "normal" | "repeat-name" | "repeat-cursor" | "many" | "long-description" | "partial-failure" =
       "normal";
@@ -1424,6 +1426,9 @@ describe("bounded MCP protocol", () => {
                                 required: ["ticket"],
                                 additionalProperties: false,
                               },
+                              ...(outputSchemaOverride === undefined
+                                ? {}
+                                : { outputSchema: outputSchemaOverride }),
                             },
                           ],
                 ...(["repeat-name", "repeat-cursor"].includes(listingMode)
@@ -1441,7 +1446,7 @@ describe("bounded MCP protocol", () => {
                 content: unsupportedContent
                   ? [{ type: "image", data: "AA==", mimeType: "image/png" }]
                   : [{ type: "text", text: "Ticket found" }],
-                ...(structuredContent ? { structuredContent: { ticket: "T-3" } } : {}),
+                ...(structuredContent ? { structuredContent: structuredValue } : {}),
                 isError: toolError,
               },
             }),
@@ -1582,6 +1587,81 @@ describe("bounded MCP protocol", () => {
       }),
     ).resolves.toEqual({ content: [{ kind: "text", text: "Ticket found" }], isError: true });
     toolError = false;
+    outputSchemaOverride = {
+      type: "object",
+      properties: { ticket: { type: "string" } },
+      required: ["ticket"],
+      additionalProperties: false,
+    };
+    expect(await session.discover(["lookup"])).toEqual([
+      expect.objectContaining({
+        outputSchemaJson: JSON.stringify({
+          additionalProperties: false,
+          properties: { ticket: { type: "string" } },
+          required: ["ticket"],
+          type: "object",
+        }),
+      }),
+    ]);
+    structuredContent = true;
+    structuredValue = { ticket: 17 };
+    await expect(
+      session.call("lookup", '{"ticket":"T-6"}', {
+        toolCallId: "bad-type",
+        signal: new AbortController().signal,
+        deadlineEpochMs: Date.now() + 5_000,
+        maxResultBytes: 4_096,
+      }),
+    ).rejects.toThrow("output schema");
+    structuredValue = {};
+    await expect(
+      session.call("lookup", '{"ticket":"T-7"}', {
+        toolCallId: "missing-field",
+        signal: new AbortController().signal,
+        deadlineEpochMs: Date.now() + 5_000,
+        maxResultBytes: 4_096,
+      }),
+    ).rejects.toThrow("output schema");
+    structuredContent = false;
+    await expect(
+      session.call("lookup", '{"ticket":"T-8"}', {
+        toolCallId: "missing-structure",
+        signal: new AbortController().signal,
+        deadlineEpochMs: Date.now() + 5_000,
+        maxResultBytes: 4_096,
+      }),
+    ).rejects.toThrow("structured result required");
+    structuredContent = true;
+    structuredValue = { ticket: "T-9" };
+    await expect(
+      session.call("lookup", '{"ticket":"T-9"}', {
+        toolCallId: "valid-result",
+        signal: new AbortController().signal,
+        deadlineEpochMs: Date.now() + 5_000,
+        maxResultBytes: 4_096,
+      }),
+    ).resolves.toEqual({
+      content: [
+        { kind: "text", text: "Ticket found" },
+        { kind: "json", json: '{"ticket":"T-9"}' },
+      ],
+      isError: false,
+    });
+    structuredContent = false;
+    toolError = true;
+    await expect(
+      session.call("lookup", '{"ticket":"T-10"}', {
+        toolCallId: "tool-error",
+        signal: new AbortController().signal,
+        deadlineEpochMs: Date.now() + 5_000,
+        maxResultBytes: 4_096,
+      }),
+    ).resolves.toEqual({ content: [{ kind: "text", text: "Ticket found" }], isError: true });
+    toolError = false;
+    outputSchemaOverride = { $ref: "https://untrusted.example/output" };
+    await expect(session.discover(["lookup"])).rejects.toThrow("output schema unsupported");
+    outputSchemaOverride = undefined;
+    await session.discover(["lookup"]);
     await expect(
       session.call("lookup", '{"ticket":"T-5"}', {
         toolCallId: "call-5",

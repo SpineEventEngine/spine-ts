@@ -13,6 +13,7 @@
  */
 
 import { ServerEnvironmentLifecycle } from "../server/server-environment.js";
+import type { Agent } from "../entity/entity.js";
 import { boundedContextAccess, type BoundedContext } from "../context/bounded-context.js";
 import { clone } from "@bufbuild/protobuf";
 import type { HistoryPage, HistoryRead } from "@spine-event-engine/ai";
@@ -32,7 +33,15 @@ import type {
   AgentHistoryPage,
   AgentHistoryView,
 } from "@spine-event-engine/storage/provider";
-import { repositoryAccess, type RepositoryView } from "../repository/repository.js";
+import {
+  repositoryAccess,
+  type ConcreteRepositoryEntityType,
+  type Repository,
+  type RepositoryEntityId,
+  type RepositoryEntityType,
+  type RepositoryStateSchema,
+  type RepositoryView,
+} from "../repository/repository.js";
 
 type AgentHistoryReader = (
   repository: RepositoryView,
@@ -122,13 +131,47 @@ export const readAgentHistory: AgentHistoryReader = (repository, entityId, view,
  * Reads retained Agent history through the same cursor contract as Entity handlers.
  *
  * @param context Running test context that registered the repository.
- * @param repository Registered Agent repository view from this context.
+ * @typeParam EntityType Generated Agent class registered by the context.
+ * @param target Typed Agent repository or its generated class.
  * @param entityId Typed identifier of the Agent to inspect.
  * @param request Page size and optional continuation from an earlier full-history page.
  * @param tenantId Fixed tenant of a multitenant BlackBox; absent for a single tenant.
  * @returns Newest-first complete history entries and continuation for older entries.
  */
-export function readAgentHistoryPage(
+export function readAgentHistoryPage<
+  EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>,
+>(
+  context: BoundedContext,
+  target: (Repository<EntityType> | EntityType) &
+    (EntityType["prototype"] extends Agent<
+      RepositoryEntityId<EntityType>,
+      RepositoryStateSchema<EntityType>
+    >
+      ? unknown
+      : never),
+  entityId: NoInfer<RepositoryEntityId<EntityType>>,
+  request: HistoryRead,
+  tenantId?: TenantId,
+): Promise<HistoryPage<AgentHistoryEntry>> {
+  const repository =
+    typeof target === "function"
+      ? context.registeredRepositories().find((view) => view.entityType === target)
+      : target;
+  if (repository === undefined)
+    throw new TypeError("Agent audit target is not registered in this BlackBox context.");
+  return agentHistoryView(context, repository, entityId, request, tenantId);
+}
+
+/**
+ * Reads a context-issued repository view for framework conformance checks.
+ * @param context Running test context that issued the view.
+ * @param repository Context-issued repository view.
+ * @param entityId Entity ID presented by the framework test.
+ * @param request Page size and optional opaque cursor.
+ * @param tenantId Fixed tenant when the context is multitenant.
+ * @returns Provider-backed Agent history page.
+ */
+export function agentHistoryView(
   context: BoundedContext,
   repository: RepositoryView,
   entityId: unknown,
