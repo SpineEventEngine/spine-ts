@@ -265,7 +265,7 @@ export class AiTestBackend {
   }
 
   /**
-   * Executes one physical request through runtime journal and validation barriers.
+   * Executes bounded generation corrections through runtime journal and validation barriers.
    *
    * @param request Selected authenticated backend invocation.
    * @returns Admitted output or runtime-recorded failure.
@@ -275,13 +275,22 @@ export class AiTestBackend {
     const candidate = this.#queues.get(key);
     const queue = candidate?.definition === request.definition ? candidate : undefined;
     const operation = request.operationId.value;
-    const prior = this.#records.findLast(
+    let prior = this.#records.findLast(
       (candidate) => candidate.operation === operation && candidate.dispatched,
     );
-    const record = ScriptedAttempts.record(request, (prior?.attempt ?? 0) + 1, prior);
-    this.#records.push(record);
-    const outcome = await ScriptedAttempts.execute(request, record, queue);
-    record.settled = true;
-    return outcome;
+    for (;;) {
+      const record = ScriptedAttempts.record(request, (prior?.attempt ?? 0) + 1, prior);
+      this.#records.push(record);
+      const outcome = await ScriptedAttempts.execute(request, record, queue);
+      record.settled = true;
+      if (
+        outcome.ok ||
+        request.definition.kind !== "generation" ||
+        outcome.failure.code !== "INVALID_OUTPUT" ||
+        record.attempt >= request.definition.limits.modelRequests
+      )
+        return outcome;
+      prior = record;
+    }
   }
 }

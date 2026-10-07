@@ -499,6 +499,15 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
   }
 
   /**
+   * Returns the exact tenant-scoped native key for a typed record ID.
+   * @param id Complete persisted record identity.
+   * @returns Native key for the typed record identity.
+   */
+  transactionKey(id: I): ReturnType<Datastore["key"]> {
+    return this.#codec.key(this.client, id);
+  }
+
+  /**
    * Decodes one entity read by a provider-owned multi-record transaction.
    *
    * @param entity The raw Datastore entity returned inside that transaction.
@@ -577,6 +586,33 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
       cursor: info.more ? next : undefined,
       hasMore: info.more,
     };
+  }
+
+  /**
+   * Reads at most two indexed successor records inside the caller's transaction.
+   * @param filters Native indexed query predicates.
+   * @param orderProperty Native property containing the complete order key.
+   * @param transaction Current native transaction.
+   * @returns Earliest scoped rows in native order.
+   */
+  async queryTransactionSuccessors(
+    transaction: ReturnType<Datastore["transaction"]>,
+    filters: readonly DatastoreRangeFilter[],
+    orderProperty: string,
+  ): Promise<readonly R[]> {
+    const query = this.#codec.createQuery(this.client);
+    for (const filter of filters)
+      query.filter(
+        new PropertyFilter(
+          filter.property,
+          filter.operator,
+          this.#codec.columnValue(filter.property, filter.value),
+        ),
+      );
+    query.order(orderProperty);
+    query.limit(2);
+    const response = await transaction.runQuery(query, wrappedReadOptions);
+    return DatastoreResults.entities(response).map((entity) => this.#codec.decode(entity));
   }
 
   /**

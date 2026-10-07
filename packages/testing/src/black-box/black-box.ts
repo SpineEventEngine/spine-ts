@@ -13,6 +13,7 @@
  */
 
 import { Time } from "@spine-event-engine/core/time";
+import type { HistoryPage, HistoryRead } from "@spine-event-engine/ai";
 import { clone, create, type Message, type MessageShape } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import {
@@ -37,15 +38,23 @@ import {
   type ZoneId,
   type Command,
   type Event,
+  type EventId,
 } from "@spine-event-engine/proto";
 import type { Query, Topic } from "@spine-event-engine/proto/client";
 import {
   BoundedContext,
   type BoundedContextBuilder,
+  type RepositoryView,
   Server,
   type RunningServer,
 } from "@spine-event-engine/server";
-import { observeProducedSignals, postExternalEvent } from "@spine-event-engine/server/testing";
+import {
+  observeProducedSignals,
+  postExternalEvent,
+  readAgentHistoryPage,
+  readSystemEvents as readStoredSystemEvents,
+} from "@spine-event-engine/server/testing";
+import type { AgentHistoryEntry } from "@spine-event-engine/proto/agent";
 
 /**
  * Fixed configuration for one runner-neutral BlackBox session.
@@ -355,6 +364,33 @@ export class BlackBox {
   assertEvents(): readonly Event[] {
     this.#assertOpen();
     return Object.freeze(this.#events.map((event) => clone(EventSchema, event)));
+  }
+
+  /**
+   * Reads complete retained Agent history through its opaque full-history cursor.
+   * @param repository Exact Agent repository registered in this context.
+   * @param entityId Typed Agent identifier.
+   * @param request Positive page size and optional prior cursor.
+   * @returns Provider-backed entries newest first, with an older-page cursor when present.
+   */
+  readAgentHistory(
+    repository: RepositoryView,
+    entityId: unknown,
+    request: HistoryRead,
+  ): Promise<HistoryPage<AgentHistoryEntry>> {
+    this.#assertOpen();
+    return readAgentHistoryPage(this.#context, repository, entityId, request, this.#tenant);
+  }
+
+  /**
+   * Reads original persisted System Event envelopes by exact IDs, in requested order.
+   * Missing IDs are omitted; repeated IDs return independent copies.
+   * @param ids Exact System Event IDs from retained Agent history.
+   * @returns Stored envelopes for this context and fixed tenant.
+   */
+  readSystemEvents(ids: readonly EventId[]): Promise<readonly Event[]> {
+    this.#assertOpen();
+    return readStoredSystemEvents(this.#context, ids, this.#tenant);
   }
 
   /**

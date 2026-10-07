@@ -1,0 +1,81 @@
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+syntax = "proto3";
+
+package spine.server.testing;
+
+import "spine/options.proto";
+import "spine/server/testing/support_agent_states.proto";
+
+option (type_url_prefix) = "type.spine.server.testing";
+
+// Retains a support draft across a process interruption.
+message SupportRecoveryState {
+  option (entity).kind = ENTITY;
+
+  // Identifies the ticket handled by this Agent.
+  SupportReplyAgentId id = 1 [
+    (required) = true,
+    (validate) = true,
+    (set_once) = true
+  ];
+
+  // Latest reply proposed for human review.
+  string proposed_reply = 2;
+}
+
+// Retains the support escalation result only after its write outcome is known.
+message SupportEscalationRecoveryState {
+  option (entity).kind = ENTITY;
+
+  // Identifies the ticket handled by this escalation Agent.
+  SupportReplyAgentId id = 1 [
+    (required) = true,
+    (validate) = true,
+    (set_once) = true
+  ];
+
+  // Reply proposed after the external escalation is safely resolved.
+  string proposed_reply = 2;
+}
+
+// Retains a reply based on a prior draft and a read-only ticket lookup.
+message SupportLookupRecoveryState {
+  option (entity).kind = ENTITY;
+
+  // Identifies the ticket inspected by this Agent.
+  SupportReplyAgentId id = 1 [
+    (required) = true,
+    (validate) = true,
+    (set_once) = true
+  ];
+
+  // Reply proposed after the recorded lookup is reused or completed.
+  string proposed_reply = 2;
+}
+
+// Records the support draft accepted by the first fan-out recipient.
+message SupportDraftProjectionState {
+  option (entity).kind = PROJECTION;
+
+  // Identifies the support ticket whose draft was observed.
+  SupportReplyAgentId id = 1 [
+    (required) = true,
+    (validate) = true,
+    (set_once) = true
+  ];
+
+  // Latest reply proposed for this ticket.
+  string proposed_reply = 2;
+}

@@ -17,41 +17,47 @@ import type { ModelRef } from "@spine-event-engine/proto/agent";
 import type { AiConnectionIdentity, AiControl, AiModelDefinition, AiScope } from "./contracts.js";
 import { modelRefKey, nonblank } from "./model.js";
 import type { AiBackendExecution, AiBackendOutcome, AiExecutionControl } from "./execution.js";
+import type { AiMcpProtocolFactory } from "./mcp-protocol.js";
 
 const aiBackendBrand: unique symbol = Symbol("SpineAiBackend");
 const backendDefinitions = new WeakMap<object, AiBackendDefinition>();
 
 /**
- * Adapter-created deployment admitted to an application registry.
+ * * Adapter-created deployment admitted to an application registry.
  */
 export interface AiBackendRegistration {
   /**
-   * Private marker carried only by an adapter-created backend registration.
+   * * Private marker carried only by an adapter-created backend registration.
    */
   readonly [aiBackendBrand]: true;
 
   /**
-   * Credential-free deployment reference.
+   * * Credential-free deployment reference.
    */
   readonly ref: ModelRef;
 
   /**
-   * Declared generation or decision kind.
+   * * Declared generation or decision kind.
    */
   readonly kind: "generation" | "decision";
 }
 
 /**
- * SDK-free adapter registration boundary used by optional integrations.
+ * * SDK-free adapter registration boundary used by optional integrations.
  */
 export interface AiBackendDefinition {
   /**
-   * Credential-free deployment reference.
+   * Optional protocol factory used by this backend's registered MCP tools.
+   */
+  readonly mcp?: AiMcpProtocolFactory;
+
+  /**
+   * * Credential-free deployment reference.
    */
   readonly ref: ModelRef;
 
   /**
-   * Declared generation or decision kind.
+   * * Declared generation or decision kind.
    */
   readonly kind: "generation" | "decision";
 

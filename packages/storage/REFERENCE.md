@@ -23,8 +23,9 @@ The provider entry point also exports `AgentHistoryStorage`,
 `AgentHistoryStorageFactories`, `AgentHistoryKeys`, and
 `AgentHistoryConformance`. Calling `AgentHistoryStorageFactories.create()` to
 open a handle fails if the supplied factory has not registered the capability.
-This check runs on explicit handle creation; repository creation does not call
-this capability in the current runtime. Agent history's append-only entries
+Agent repository registration requires this capability. Opening the actual
+tenant handle also checks the selected provider before accepting Agent work.
+Agent history's append-only entries
 retain the original conversation record or Event envelope,
 ID, and occurrence time. The full, conversation, System, and domain views use
 separate indexes. Conversation reads require a `ConversationId`. The complete
@@ -48,6 +49,47 @@ conversation ordering indexes. Each derives a bounded physical record ID from
 the full state type, Agent key, category, and original record ID, then checks
 immutable payload equality on repeated appends. Their provider references
 specify physical index and payload constraints.
+
+## Agent execution storage
+
+`AgentExecutionStorageFactories` opens the provider-only execution handle for an
+Agent repository and tenant. `supports()` checks factory registration without
+opening a tenant. It does not replace the provider checks made when admitting
+work. Application code configures a storage factory; it does not claim or poll
+these records directly.
+
+The handle's `capacity` reports encoded execution, per-instance and history-record
+limits plus a transaction payload limit where the provider enforces one.
+`AgentExecutionSizes` measures the full internal Protobuf wrappers, including
+scope and metadata. The runtime must allow for the bounded response and complete
+record overhead before dispatch; a payload limit is not a history retention rule.
+
+`admit()` stores the original signal, typed recipient and selected handlers once.
+`claim()` permits one execution at a time for an Agent instance. `renew()`,
+`update()`, `complete()` and `markDelivered()` check the current claim token.
+Updates also compare the exact previously read record. Completion compares the
+initial Entity Version and stores the Entity changes, mandatory histories, model
+preferences and original outgoing signals in one provider operation. This includes
+handlers that change no state or produce only a Command.
+
+Pending queries read one candidate per Agent instance from an index. A page
+carries its original time cutoff and the provider-observed continuation, so the
+caller can continue even when another execution claims a returned candidate.
+These internal pages are separate from application history pages. Eligibility
+and claim expiry use Spine `Time`; original Inbox order determines which signal
+runs next within an instance.
+
+Each saved output can receive one delivery plan before transport begins. The
+plan and original envelope cannot be replaced. `markDelivered()` requires that
+plan and a current claim. The framework's internal EventStore retry operation
+accepts an identical existing envelope; ordinary public EventStore append still
+rejects duplicate IDs. Delivery retries must still visit every saved recipient.
+These records do not make downstream application callbacks execute exactly once.
+
+The memory implementation coordinates changes only within a shared in-process
+backend. PostgreSQL, transactional MySQL and Datastore use native transactions.
+Database query, index and payload requirements are documented in each provider's
+reference. No execution-storage operation trims the Agent's history.
 
 ## Record storage
 

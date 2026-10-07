@@ -14,16 +14,22 @@
 
 import { create, toJsonString, type MessageShape } from "@bufbuild/protobuf";
 import { createHash } from "node:crypto";
-import { AxGen, type AxChatResponse } from "@ax-llm/ax";
+import {
+  AxGen,
+  axMCPToolInputSchemaToFunctionSchema as axToolSchema,
+  type AxChatResponse,
+} from "@ax-llm/ax";
 import type { JSONSchema7, LanguageModelV3Message, LanguageModelV3Prompt } from "@ai-sdk/provider";
 import { AnyMessages, type MessageSchema } from "@spine-event-engine/core";
 import type { AiFailure } from "@spine-event-engine/ai";
 import {
+  assertAiOutcomeContext,
   deriveOutputSchema,
   type AiBackendExecution,
   type AiBackendOutcome,
   type AiCandidateAdmission,
   type AiAttemptTicket,
+  type AiAttemptReplay,
 } from "@spine-event-engine/ai/spi/adapter";
 import {
   AiAttemptIdSchema,
@@ -39,6 +45,8 @@ import {
 } from "@spine-event-engine/proto/agent";
 import { AxVercelBridge, type PreparedRequest } from "./bridge.js";
 import { providerConnection } from "./factory.js";
+import { canonicalJsonValue } from "./mcp-protocol.js";
+import { replayFailure } from "./replay-failure.js";
 import {
   collectModelStream,
   StreamCollectionError,
@@ -84,6 +92,47 @@ const modelPrompt = (prepared: PreparedRequest, instructions: string): LanguageM
     throw new TypeError("Unsupported generation prompt role");
   }),
 ];
+
+/**
+ * Checks the exact discovered catalog against configured tool references.
+ * @param request Selected generation execution.
+ * @returns Model-visible names with accepted schemas and configured server/tool mapping.
+ */
+const advertisedFunctions = (request: AiBackendExecution) => {
+  const definition = request.definition;
+  if (definition.kind !== "generation") throw new TypeError("Generation capability required");
+  const configured = definition.tools ?? [];
+  const catalog = request.advertisedTools ?? [];
+  if (catalog.length !== configured.length) throw new TypeError("MCP tool catalog mismatch");
+  const seen = new Set<string>();
+  return configured.map((reference, index) => {
+    const tool = catalog[index];
+    const key = `${reference.server}\u0000${reference.tool}`;
+    if (!tool) throw new TypeError("MCP tool catalog mismatch");
+    if (tool.server !== reference.server || tool.tool !== reference.tool || seen.has(key))
+      throw new TypeError("MCP tool catalog mismatch");
+    seen.add(key);
+    if (
+      Buffer.byteLength(tool.description) > 4_096 ||
+      Buffer.byteLength(tool.inputSchemaJson) > 16_384
+    )
+      throw new TypeError("MCP tool catalog exceeds limit");
+    const schema = JSON.parse(tool.inputSchemaJson) as JSONSchema7;
+    if (schema.type !== "object") throw new TypeError("MCP tool schema must be an object");
+    const axSchema = axToolSchema(schema as Record<string, unknown>);
+    if (JSON.stringify(canonicalJsonValue(axSchema)) !== tool.inputSchemaJson)
+      throw new TypeError("MCP tool schema unsupported by Ax");
+    return {
+      modelName: `tool_${String(index)}`,
+      server: tool.server,
+      tool: tool.tool,
+      description: tool.description,
+      inputSchemaJson: tool.inputSchemaJson,
+      schema,
+      axSchema,
+    };
+  });
+};
 
 /**
  * @param instructions Application instructions.
@@ -202,13 +251,20 @@ const requestContent = (
   request: AiBackendExecution,
   prepared: PreparedRequest,
   schema: JSONSchema7,
-  previous: AiAttemptTicket | undefined,
+  previous: Pick<AiAttemptTicket, "id"> | undefined,
 ) => {
   const definition = request.definition;
   if (definition.kind !== "generation") throw new TypeError("Generation capability required");
   const instructions = outputInstructions(definition.instructions, definition.outputMode, schema);
   const outputSchemaJson = JSON.stringify(schema);
-  const promptJson = JSON.stringify(modelPrompt(prepared, instructions));
+  const tools = advertisedFunctions(request).map((tool) => ({
+    modelName: tool.modelName,
+    server: tool.server,
+    tool: tool.tool,
+    description: tool.description,
+    inputSchemaJson: tool.inputSchemaJson,
+  }));
+  const promptJson = JSON.stringify({ messages: modelPrompt(prepared, instructions), tools });
   return create(GenerationRequestSchema, {
     input: AnyMessages.pack(definition.input, request.input),
     instructions,
@@ -282,31 +338,31 @@ const axCandidate = (candidate: string): string => {
 };
 
 /**
- * Mutable state for one bounded Ax program; runtime persists every attempt separately.
+ * * Mutable state for one bounded Ax program; runtime persists every attempt separately.
  */
 interface GenerationState {
   /**
-   * Most recent physical attempt for correction correlation.
+   * * Most recent physical attempt for correction correlation.
    */
-  previous?: AiAttemptTicket;
+  previous?: Pick<AiAttemptTicket, "id">;
 
   /**
-   * Most recent definitive local admission.
+   * * Most recent definitive local admission.
    */
   admission?: AiCandidateAdmission;
 
   /**
-   * Safe diagnostic from an invalid or failed physical attempt.
+   * * Safe diagnostic from an invalid or failed physical attempt.
    */
   failure?: AiFailure;
 
   /**
-   * Provider IDs retained after their response journal barrier.
+   * * Provider IDs retained after their response journal barrier.
    */
   readonly pendingCalls: Map<string, { ticketId: string; providerCallId: string; input: string }[]>;
 
   /**
-   * Persistence failure that must not be reclassified as provider content.
+   * * Persistence failure that must not be reclassified as provider content.
    */
   barrierFailed?: boolean;
 }
@@ -400,7 +456,7 @@ const journalCandidate = async (
   const response = responseContent(
     partial,
     admitted.ok ? AiOutcome.ADMITTED : AiOutcome.INVALID_OUTPUT,
-    state.failure,
+    admitted.ok ? undefined : state.failure,
     admitted.ok ? admitted.value : undefined,
     request.definition.output,
   );
@@ -442,7 +498,6 @@ const journalFailure = async (
   );
   await finishAttempt(request, state, {
     ticketId: ticket.id,
-    ...receipt(request, ticket),
     response,
     ...(response.usage ? { usage: response.usage } : {}),
   });
@@ -538,6 +593,89 @@ const toolContinuation = (partial: StreamedPartialResult): AxChatResponse => ({
 });
 
 /**
+ * Replays one saved response without admitting a new transport request.
+ * @param request Selected typed capability.
+ * @param state Ax continuation and validation state.
+ * @param replay Complete durable attempt record.
+ * @returns Equivalent Ax response for correction or continuation.
+ */
+const replayGeneration = (
+  request: AiBackendExecution,
+  state: GenerationState,
+  replay: AiAttemptReplay,
+): AxChatResponse => {
+  const response = replay.response;
+  if (response.$typeName !== "spine.ts.agent.GenerationResponse")
+    throw new TypeError("Saved attempt response kind mismatch");
+  assertAiOutcomeContext(response);
+  if (response.outcome === AiOutcome.ADMITTED)
+    return replayAdmittedGeneration(request, state, response);
+  const partial: StreamedPartialResult = {
+    text: response.rawOutput,
+    toolCalls: response.toolCalls.map((call) => ({
+      id: call.providerCallId,
+      name: call.toolName,
+      input: call.argumentsJson,
+    })),
+  };
+  if (response.outcome === AiOutcome.TOOL_REQUESTED)
+    return replayToolProposals(request, state, replay.id, partial);
+  state.failure = replayFailure(replay);
+  if (response.outcome !== AiOutcome.INVALID_OUTPUT || !replay.issues?.length)
+    throw new Error("Saved generation failure terminates this attempt");
+  state.admission = { ok: false, issues: replay.issues };
+  return {
+    results: [{ index: 0, content: axCandidate(response.rawOutput), finishReason: "stop" }],
+  };
+};
+
+/**
+ * Rebuilds a saved admitted generation without provider dispatch.
+ * @param request Selected typed capability.
+ * @param state Ax continuation and validation state.
+ * @param response Saved admitted generation response.
+ * @returns Equivalent Ax response with admitted application output.
+ */
+const replayAdmittedGeneration = (
+  request: AiBackendExecution,
+  state: GenerationState,
+  response: GenerationResponse,
+): AxChatResponse => {
+  const output =
+    response.admittedOutput &&
+    AnyMessages.unpack(response.admittedOutput, request.definition.output);
+  if (!output) throw new TypeError("Saved generation output missing");
+  state.admission = { ok: true, value: output };
+  return {
+    results: [
+      {
+        index: 0,
+        content: axCandidate(toJsonString(request.definition.output, output)),
+        finishReason: "stop",
+      },
+    ],
+  };
+};
+
+/**
+ * Rebuilds only a previously journaled coherent tool proposal queue.
+ */
+const replayToolProposals = (
+  request: AiBackendExecution,
+  state: GenerationState,
+  ticketId: string,
+  partial: StreamedPartialResult,
+): AxChatResponse => {
+  if (!coherentProposals(partial, request)) throw new TypeError("Saved tool proposals invalid");
+  for (const call of partial.toolCalls) {
+    const queue = state.pendingCalls.get(call.name) ?? [];
+    queue.push({ ticketId, providerCallId: call.id, input: call.input });
+    state.pendingCalls.set(call.name, queue);
+  }
+  return toolContinuation(partial);
+};
+
+/**
  * @param request Selected execution.
  * @param state Program state.
  * @param partial Complete proposal batch.
@@ -581,19 +719,19 @@ const journalToolProposals = async (
  */
 const runtimeFunctions = (request: AiBackendExecution, state: GenerationState) => {
   if (request.definition.kind !== "generation") return [];
-  return (request.definition.tools ?? []).map((ref, index) => ({
-    name: `tool_${String(index)}`,
-    description: `${ref.server}/${ref.tool}`,
-    parameters: { type: "object" as const, properties: {}, additionalProperties: true },
+  return advertisedFunctions(request).map((tool) => ({
+    name: tool.modelName,
+    description: tool.description,
+    parameters: tool.axSchema,
     func: async () => {
-      const next = state.pendingCalls.get(`tool_${String(index)}`)?.shift();
+      const next = state.pendingCalls.get(tool.modelName)?.shift();
       if (!next) throw new Error("Unrecorded provider tool proposal");
       const result = await runtimeBarrier(state, () =>
         request.control.callTool({
           ticketId: next.ticketId,
           providerCallId: next.providerCallId,
-          server: ref.server,
-          tool: ref.tool,
+          server: tool.server,
+          tool: tool.tool,
           argumentsJson: next.input,
         }),
       );
@@ -626,6 +764,12 @@ const providerOptions = (
   const instructions = outputInstructions(definition.instructions, definition.outputMode, schema);
   return {
     prompt: modelPrompt(prepared, instructions),
+    tools: advertisedFunctions(request).map((tool) => ({
+      type: "function" as const,
+      name: tool.modelName,
+      description: tool.description,
+      inputSchema: tool.schema,
+    })),
     abortSignal: ticket.signal,
     ...(definition.limits.maxOutputTokens
       ? { maxOutputTokens: definition.limits.maxOutputTokens }
@@ -655,11 +799,36 @@ const chat = async (
   const connection = providerConnection(request.model);
   if (!("doStream" in connection.model)) throw new TypeError("Streaming generation model required");
   const content = requestContent(request, prepared, schema, state.previous);
-  const ticket = await runtimeBarrier(state, () =>
+  const attempt = await runtimeBarrier(state, () =>
     request.control.beginAttempt({ kind: "generation", content }),
   );
+  if ("kind" in attempt) {
+    state.previous = { id: attempt.id };
+    try {
+      return replayGeneration(request, state, attempt);
+    } catch (error) {
+      if (!state.failure) state.barrierFailed = true;
+      throw error;
+    }
+  }
+  const ticket = attempt;
   state.previous = ticket;
   await admitGenerationTicket(request, state, ticket);
+  return collectAttempt(request, state, prepared, schema, ticket);
+};
+
+/**
+ * Streams one admitted ticket and journals either its proposal or output.
+ */
+const collectAttempt = async (
+  request: AiBackendExecution,
+  state: GenerationState,
+  prepared: PreparedRequest,
+  schema: JSONSchema7,
+  ticket: AiAttemptTicket,
+): Promise<AxChatResponse> => {
+  const connection = providerConnection(request.model);
+  if (!("doStream" in connection.model)) throw new TypeError("Streaming generation model required");
   const options = providerOptions(request, prepared, schema, ticket);
   let partial: StreamedPartialResult;
   try {
@@ -732,6 +901,7 @@ export const executeGeneration = async (request: AiBackendExecution): Promise<Ai
   const schema = deriveOutputSchema(definition.output) as JSONSchema7;
   const state: GenerationState = { pendingCalls: new Map() };
   try {
+    advertisedFunctions(request);
     await runProgram(request, connection.model, schema, state);
     if (state.admission?.ok) return { ok: true, value: state.admission.value };
   } catch (error) {

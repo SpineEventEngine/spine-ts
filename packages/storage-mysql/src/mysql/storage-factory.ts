@@ -24,13 +24,17 @@ import {
   type StorageGroup,
 } from "@spine-event-engine/storage";
 import { TenantBoundary, type TenantCatalog } from "@spine-event-engine/storage/provider";
-import { AgentHistoryRecords } from "@spine-event-engine/storage/provider";
+import { AgentExecutionRecords, AgentHistoryRecords } from "@spine-event-engine/storage/provider";
 import {
   EntityCommitStorageFactories,
   type EntityCommitStorage,
 } from "@spine-event-engine/storage/provider";
 import { DeliveryCleanupStorageFactories } from "@spine-event-engine/storage/provider";
 import { AgentHistoryStorageFactories } from "@spine-event-engine/storage/provider";
+import {
+  AgentExecutionStorageFactories,
+  type AgentExecutionStorageInput,
+} from "@spine-event-engine/storage/provider";
 import type { EntityStorageInput } from "@spine-event-engine/storage/provider";
 import { eventStoreRecordSpec } from "@spine-event-engine/storage/provider";
 import type { TenantId } from "@spine-event-engine/proto";
@@ -43,6 +47,7 @@ import { MysqlRecordStorage, type MysqlRecordLifecycle } from "./record-storage.
 import { MysqlTableResolver } from "./table-resolver.js";
 import { MysqlEntityStorage } from "./entity-history.js";
 import { MysqlAgentHistory, AgentHistoryHash } from "./agent-history.js";
+import { MysqlAgentExecution } from "./agent-execution.js";
 import { mysqlEntityLockKey, MysqlEntityCommitCoordinator } from "./entity-commit.js";
 import { MysqlDeliveryCleanupStorage } from "./delivery-cleanup.js";
 import { resolvedMysqlTableSpec, type MysqlTableSpec } from "./table-spec.js";
@@ -288,6 +293,7 @@ export class MysqlStorageFactory extends StorageFactory {
     });
     this.registerDeliveryCleanup();
     this.registerAgentHistory();
+    this.registerAgentExecution();
   }
 
   /**
@@ -329,6 +335,58 @@ export class MysqlStorageFactory extends StorageFactory {
         );
       },
     });
+  }
+
+  /**
+   * Registers durable Agent execution over the selected tenant database.
+   */
+  private registerAgentExecution(): void {
+    AgentExecutionStorageFactories.register(this, {
+      createAgentExecutionStorage: (input) => this.createAgentExecution(input),
+    });
+  }
+
+  /**
+   * Opens all record families required by fenced Agent completion.
+   * @param input Requested fenced execution change.
+   * @returns Tenant-scoped Agent execution storage handle.
+   * @typeParam I Typed entity identifier.
+   * @typeParam S Generated Entity state.
+   */
+  private createAgentExecution<I, S extends Message>(
+    input: AgentExecutionStorageInput<I, S>,
+  ): MysqlAgentExecution<I, S> {
+    if (!this.isOpen()) throw new Error("StorageFactory is closed.");
+    const database = this.database(input.entity.context);
+    const context = input.entity.context;
+    const digest = (value: string) => AgentHistoryHash.value(value);
+    return new MysqlAgentExecution(
+      input,
+      {
+        invocation: this.createMysqlRecordStorage(
+          context,
+          AgentExecutionRecords.invocationSpec(digest),
+          AgentExecutionRecords.invocationGroup,
+          database,
+        ),
+        head: this.createMysqlRecordStorage(
+          context,
+          AgentExecutionRecords.headSpec(digest),
+          AgentExecutionRecords.headGroup,
+          database,
+        ),
+        history: this.createMysqlRecordStorage(
+          context,
+          AgentHistoryRecords.spec(digest),
+          AgentHistoryRecords.group,
+          database,
+        ),
+        entity: this.createEntityStorage(input.entity),
+        events: this.createMysqlRecordStorage(context, eventStoreRecordSpec, undefined, database),
+      },
+      new MysqlEntityCommitCoordinator(this.connections(database)),
+      database.databaseName,
+    );
   }
 
   /**

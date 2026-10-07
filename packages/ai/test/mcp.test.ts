@@ -13,8 +13,13 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { AiRegistry, Mcp } from "../src/index.js";
-import { mcpDefinition } from "../src/spi/runtime.js";
+import { AiRegistry, Mcp, type McpServerRegistration } from "../src/index.js";
+import {
+  freezeRegistry,
+  mcpDefinition,
+  mcpRegistration,
+  mcpRegistrations,
+} from "../src/spi/runtime.js";
 
 const policy = {
   effect: "read" as const,
@@ -41,6 +46,38 @@ const limits = {
 };
 
 describe("MCP connection and authorization configuration", () => {
+  it("exposes registered server identities through immutable runtime lookups", () => {
+    const first = Mcp.server({
+      ...base,
+      transport: { kind: "streamable-http", url: "https://example.test/first" },
+    });
+    const second = Mcp.server({
+      ...base,
+      id: "second",
+      transport: { kind: "stdio", executable: "/bin/tool", args: [] },
+    });
+    const registry = AiRegistry.create({
+      defaultModels: {},
+      invocationLimits: limits,
+      concurrentOperations: 1,
+      queuedOperations: 0,
+    })
+      .registerTools(first)
+      .registerTools(second);
+    expect(mcpRegistration(registry, "lookup")).toBe(first);
+    expect(mcpRegistration(registry, "second")).toBe(second);
+    expect(mcpRegistration(registry, "missing")).toBeUndefined();
+    const snapshot = mcpRegistrations(registry);
+    expect(snapshot).toEqual([first, second]);
+    expect(Array.isArray(snapshot)).toBe(true);
+    expect(snapshot).not.toBe(mcpRegistrations(registry));
+    expect(() => (snapshot as unknown as McpServerRegistration[]).push(first)).toThrow();
+    freezeRegistry(registry);
+    expect(mcpRegistrations(registry)).toEqual([first, second]);
+    expect(() => registry.registerTools(first)).toThrow("frozen");
+    expect(() => mcpRegistration({} as AiRegistry, "lookup")).toThrow("AiRegistry.create");
+    expect(() => mcpRegistrations({} as AiRegistry)).toThrow("AiRegistry.create");
+  });
   it("accepts fixed stdio configuration and copies mutable arrays and policies", () => {
     const args = ["--safe"];
     const server = Mcp.server({

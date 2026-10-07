@@ -42,6 +42,19 @@ export class AgentHistoryIndex {
   readonly #byIdentity = new Map<string, IndexedEntry>();
 
   /**
+   * Prepares new immutable entries without mutating the current index.
+   * @param entries Entries to add to a private copy.
+   * @returns Complete replacement index after validation.
+   */
+  withEntries(entries: readonly AgentHistoryEntry[]): AgentHistoryIndex {
+    const next = new AgentHistoryIndex();
+    for (const indexed of this.#all)
+      next.append(fromBinary(AgentHistoryEntrySchema, indexed.bytes));
+    for (const entry of entries) next.append(entry);
+    return next;
+  }
+
+  /**
    * Adds an immutable entry to its indexed views.
    *
    * @param entry Complete Proto history record.

@@ -19,6 +19,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import type { ILogLayer } from "loglayer";
 
 import { clone, create, getOption, hasOption, type Message } from "@bufbuild/protobuf";
+import type { AiRegistry } from "@spine-event-engine/ai";
+import { freezeRegistry, isAiModel, registryOptions } from "@spine-event-engine/ai/spi/runtime";
 import type { Any } from "@bufbuild/protobuf/wkt";
 import { TypeUrls, type MessageSchema } from "@spine-event-engine/core";
 import {
@@ -31,6 +33,10 @@ import {
   type TenantId,
 } from "@spine-event-engine/proto";
 import { SPI_type, internal_all, internal_type } from "@spine-event-engine/proto";
+// prettier-ignore
+import type {
+  AgentSavedDispatchPlan,
+} from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
 import {
   ColumnTypes,
   EventStore,
@@ -40,13 +46,18 @@ import {
   type StorageFactory,
   type StorageMode,
 } from "@spine-event-engine/storage";
-import { TenantBoundary } from "@spine-event-engine/storage/provider";
+import {
+  AgentExecutionStorageFactories,
+  AgentHistoryStorageFactories,
+  TenantBoundary,
+} from "@spine-event-engine/storage/provider";
 
 import { CommandBus, commandBusAccess } from "../bus/command-bus.js";
 import type { CommandDispatcher } from "../bus/command-dispatcher.js";
 import {
   EventBus,
   eventBusAccess,
+  isSystemEventSchema,
   type EventSubscriber,
   type EventSubscription,
 } from "../bus/event-bus.js";
@@ -60,6 +71,8 @@ import {
 import { LocalEntityInbox } from "./entity-inbox.js";
 import { LocalProjectionInbox } from "./projection-handoff.js";
 import { TenantIndexes, type TenantIndex } from "./tenant-index.js";
+import { AgentScheduler, type AgentScanScope } from "../agent/agent-scheduler.js";
+import { AgentExecutionCapacity } from "../agent/agent-execution-capacity.js";
 import {
   Repository,
   repositoryAccess,
@@ -212,6 +225,46 @@ interface RepositoryRegistration {
    * Context storage factory.
    */
   readonly storageFactory: StorageFactory;
+
+  /**
+   * Application AI registry selected before Agent repository intake.
+   */
+  readonly ai?: AiRegistry;
+
+  /**
+   * Validates and freezes normal Event recipients before saved output transport.
+   */
+  readonly prepareSavedEvent: (event: Event) => Promise<AgentSavedDispatchPlan>;
+
+  /**
+   * Validates and freezes the normal Command recipient before transport.
+   */
+  readonly prepareSavedCommand: (command: Command) => Promise<AgentSavedDispatchPlan>;
+
+  /**
+   * Accepts the original Event and every frozen recipient through the normal bus.
+   */
+  readonly publishSavedEvent: (event: Event, plan: AgentSavedDispatchPlan) => Promise<void>;
+
+  /**
+   * Accepts the original Command and frozen recipient through the normal bus.
+   */
+  readonly publishSavedCommand: (command: Command, plan: AgentSavedDispatchPlan) => Promise<void>;
+
+  /**
+   * Persists the original mandatory Agent System Event in this context's EventStore.
+   */
+  readonly publishAgentSystemEvent: (event: Event) => Promise<void>;
+
+  /**
+   * Notifies package testing after a saved original output is acknowledged.
+   */
+  readonly recordAcceptedSaved: (signal: Command | Event) => void;
+
+  /**
+   * Wakes indexed Agent work discovery after an accepted Inbox handoff.
+   */
+  readonly wakeAcceptedAgent: () => void;
 
   /**
    * Stand that stores read-side state for this context.
@@ -501,6 +554,11 @@ const contextSubscriptionRuntimes = new WeakMap<BoundedContext, SubscriptionRunt
 const contextLoggers = new WeakMap<BoundedContext, ILogLayer>();
 const contextSignalPublishers = new WeakMap<BoundedContext, SignalPublisher>();
 const contextEventBuses = new WeakMap<BoundedContext, readonly [EventBus, EventBus]>();
+const contextRepositoryViews = new WeakMap<BoundedContext, ReadonlySet<RepositoryView>>();
+const issuedRepositoryViews = new WeakMap<
+  RepositoryView,
+  { readonly context: BoundedContext; readonly repository: RepositoryView }
+>();
 const closingContexts = new WeakSet<BoundedContext>();
 const contextClosePhases = new WeakMap<
   BoundedContext,
@@ -513,10 +571,19 @@ const contextIntegrations = new WeakMap<
 const systemEventPosters = new WeakMap<BoundedContext, (event: Event) => Promise<void>>();
 const builderBuilds = new WeakMap<
   BoundedContextBuilder,
-  (defaultStorageFactory: StorageFactory) => Promise<BoundedContext>
+  (defaultStorageFactory: StorageFactory, defaultAi?: AiRegistry) => Promise<BoundedContext>
 >();
 
 interface BoundedContextAccess {
+  /**
+   * Resolves an original or context-issued copy-safe repository view.
+   *
+   * @param context Built context that registered the repository.
+   * @param view Candidate original or issued view.
+   * @returns Registered repository, or undefined for a foreign view.
+   */
+  resolveRepository(context: BoundedContext, view: RepositoryView): RepositoryView | undefined;
+
   /**
    * Stops new work admission before a Server drains all its contexts.
    *
@@ -545,11 +612,13 @@ interface BoundedContextAccess {
    *
    * @param builder Registered builder to build.
    * @param defaultStorageFactory Storage used when the builder has none.
+   * @param defaultAi AI registry used when the builder has none.
    * @returns Promise resolving to a bounded context.
    */
   build(
     builder: BoundedContextBuilder,
     defaultStorageFactory: StorageFactory,
+    defaultAi?: AiRegistry,
   ): Promise<BoundedContext>;
 
   /**
@@ -727,6 +796,11 @@ interface BoundedContextAssembly {
   readonly storageFactory: StorageFactory;
 
   /**
+   * Selected AI registry, if this context accepts Agent work.
+   */
+  readonly ai?: AiRegistry;
+
+  /**
    * Repositories registered in this context.
    */
   readonly repositories: readonly RepositoryView[];
@@ -806,11 +880,17 @@ export class BoundedContext {
 
   readonly #storageFactory: StorageFactory;
 
+  readonly #ai: AiRegistry | undefined;
+
   readonly #stand: Stand;
 
   readonly #systemStand: Stand;
 
   readonly #subscriptionRuntime: SubscriptionRuntime;
+
+  #agentScheduler: AgentScheduler | undefined;
+
+  readonly #agentErrors: unknown[] = [];
 
   #closed: Promise<void> | undefined;
 
@@ -840,6 +920,7 @@ export class BoundedContext {
     this.#systemStand = input.systemStand;
     this.#subscriptionRuntime = input.subscriptionRuntime;
     this.#storageFactory = input.storageFactory;
+    this.#ai = input.ai;
     this.#deliveryStrategy = ContextParts.snapshotDeliveryStrategy(input.deliveryStrategy);
     this.#commandEndpoint = Object.freeze({
       acceptedCommandTypes: () => this.#commandBus.acceptedCommandTypes(),
@@ -854,7 +935,53 @@ export class BoundedContext {
     this.#projectionInbox = delivery.projectionInbox;
     this.#installReferences(input, delivery);
     this.#registerAndStart(input.repositories, delivery.tenantIndex);
+    this.#startAgentScheduler(delivery.tenantIndex);
     Object.freeze(this);
+  }
+
+  /**
+   * Starts bounded indexed discovery for registered Agent repositories.
+   */
+  #startAgentScheduler(tenantIndex: TenantIndex): void {
+    if (this.#ai === undefined) return;
+    const repositories = [...this.#repositoryViews].filter(
+      (entry) => entry.entityFamily === "agent",
+    );
+    if (repositories.length === 0) return;
+    this.#agentScheduler = new AgentScheduler(
+      () => this.#agentScopes(tenantIndex, repositories),
+      AgentExecutionCapacity.for(this.#ai),
+      (error) => {
+        if (this.#agentErrors.length < 32) this.#agentErrors.push(error);
+      },
+    );
+    this.#agentScheduler.start();
+  }
+
+  /**
+   * Enumerates complete tenant and Agent repository scan scopes.
+   */
+  async #agentScopes(
+    tenants: TenantIndex,
+    repositories: readonly RepositoryView[],
+  ): Promise<readonly AgentScanScope[]> {
+    const ids = await tenants.all();
+    return ids.flatMap((id) =>
+      repositories.map((repository) => {
+        const tenantId = tenants.tenantMode === "single-tenant" ? undefined : id;
+        return {
+          id: JSON.stringify([
+            this.#snapshot.name.value,
+            String(TenantBoundary.from(id).key),
+            repository.stateFullTypeName,
+          ]),
+          pending: (after, count) =>
+            repositoryAccess.pendingAcceptedAgents(repository, tenantId, after, count),
+          run: (key, signal) =>
+            repositoryAccess.runAcceptedAgent(repository, tenantId, key, signal),
+        };
+      }),
+    );
   }
 
   /**
@@ -893,6 +1020,7 @@ export class BoundedContext {
    */
   #installReferences(input: BoundedContextAssembly, delivery: ContextDeliveryParts): void {
     contextEventBuses.set(this, [this.#eventBus, this.#systemEventBus]);
+    contextRepositoryViews.set(this, this.#repositoryViews);
     eventSubscribers.set(this, (typeUrl, subscriber) =>
       eventBusAccess.subscribe(this.#eventBus, typeUrl, subscriber),
     );
@@ -974,21 +1102,7 @@ export class BoundedContext {
   }
 
   #prepareRepositories(repositories: readonly RepositoryView[]): PreparedRepository[] {
-    const registration: RepositoryRegistration = {
-      name: ContextParts.cloneName(this.#snapshot.name),
-      storageContext: ContextParts.createStorageMode(this.#snapshot.spec),
-      storageFactory: this.#storageFactory,
-      stand: this.#stand,
-      entityInbox: this.#entityInbox,
-      projectionInbox: this.#projectionInbox,
-      publisher: this.#publisher,
-      registerEventSchema: (schema) => {
-        eventBusAccess.registerSchemas(this.#eventBus, [schema]);
-      },
-      registerSystemEventSchema: (schema) => {
-        eventBusAccess.registerSchemas(this.#systemEventBus, [schema]);
-      },
-    };
+    const registration = this.#repositoryRegistration();
     const preparedRepositories: PreparedRepository[] = [];
     try {
       for (const repository of repositories) {
@@ -1000,6 +1114,42 @@ export class BoundedContext {
       this.#failRegistration(error, preparedRepositories);
     }
     return preparedRepositories;
+  }
+
+  /**
+   * Builds callbacks shared by every repository prepared for this context.
+   */
+  #repositoryRegistration(): RepositoryRegistration {
+    const registration: RepositoryRegistration = {
+      name: ContextParts.cloneName(this.#snapshot.name),
+      storageContext: ContextParts.createStorageMode(this.#snapshot.spec),
+      storageFactory: this.#storageFactory,
+      ...(this.#ai === undefined ? {} : { ai: this.#ai }),
+      stand: this.#stand,
+      entityInbox: this.#entityInbox,
+      projectionInbox: this.#projectionInbox,
+      publisher: this.#publisher,
+      registerEventSchema: (schema) => {
+        eventBusAccess.registerSchemas(this.#eventBus, [schema]);
+      },
+      registerSystemEventSchema: (schema) => {
+        eventBusAccess.registerSchemas(this.#systemEventBus, [schema]);
+      },
+      prepareSavedEvent: (event) => eventBusAccess.prepareSaved(this.#eventBus, event),
+      prepareSavedCommand: (command) => commandBusAccess.prepareSaved(this.#commandBus, command),
+      publishSavedEvent: (event, plan) =>
+        eventBusAccess.postSavedFollowUp(this.#eventBus, event, plan),
+      publishSavedCommand: (command, plan) =>
+        commandBusAccess.postSavedFollowUp(this.#commandBus, command, plan),
+      publishAgentSystemEvent: (event) => eventBusAccess.postFollowUp(this.#systemEventBus, event),
+      recordAcceptedSaved: (signal) => {
+        this.#publisher.recordAcceptedSaved(signal);
+      },
+      wakeAcceptedAgent: () => {
+        this.#agentScheduler?.wake();
+      },
+    };
+    return registration;
   }
 
   #failRegistration(error: unknown, preparedRepositories: readonly PreparedRepository[]): never {
@@ -1111,9 +1261,14 @@ export class BoundedContext {
    * @returns Returns immutable repository views.
    */
   registeredRepositories(): readonly RepositoryView[] {
-    return this.#registeredRepositories.map((snapshot) =>
-      ContextParts.createRepositoryView(snapshot),
-    );
+    const originals = [...this.#repositoryViews];
+    return this.#registeredRepositories.map((snapshot, index) => {
+      const repository = originals[index];
+      if (repository === undefined) throw new Error("Registered repository view disappeared.");
+      const view = ContextParts.createRepositoryView(snapshot);
+      issuedRepositoryViews.set(view, { context: this, repository });
+      return view;
+    });
   }
 
   /**
@@ -1202,6 +1357,7 @@ export class BoundedContext {
    */
   #beginClose(): void {
     closingContexts.add(this);
+    this.#agentScheduler?.stop();
     this.#publisher.beginClose();
     commandBusAccess.beginClose(this.#commandBus);
     eventBusAccess.beginClose(this.#eventBus);
@@ -1236,6 +1392,8 @@ export class BoundedContext {
    */
   async #closeOnce(): Promise<void> {
     const errors: unknown[] = [];
+
+    await ContextParts.closeContextPart(() => this.#agentScheduler?.close(), errors);
 
     await ContextParts.closeContextPart(() => this.#drainWork(), errors);
     this.#publisher.finishClose();
@@ -1285,6 +1443,20 @@ export class BoundedContext {
  * Exposes framework-only operations for built contexts and their builders.
  */
 export const boundedContextAccess: BoundedContextAccess = Object.freeze({
+  /**
+   * Resolves a view only within the context that issued it.
+   * @param context Built context that registered the repository.
+   * @param view Candidate original or issued view.
+   * @returns Registered repository, or undefined for a foreign view.
+   */
+  resolveRepository(context: BoundedContext, view: RepositoryView): RepositoryView | undefined {
+    const originals = contextRepositoryViews.get(context);
+    if (originals?.has(view)) return view;
+    const issued = issuedRepositoryViews.get(view);
+    return issued?.context === context && originals?.has(issued.repository)
+      ? issued.repository
+      : undefined;
+  },
   beginClose(context: BoundedContext): void {
     const phase = contextClosePhases.get(context);
     if (phase === undefined) throw new TypeError("Close phase requires a built BoundedContext.");
@@ -1339,6 +1511,7 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
   build(
     builder: BoundedContextBuilder,
     defaultStorageFactory: StorageFactory,
+    defaultAi?: AiRegistry,
   ): Promise<BoundedContext> {
     const build = builderBuilds.get(builder);
 
@@ -1346,7 +1519,7 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
       throw new TypeError("Builder access requires a BoundedContextBuilder instance.");
     }
 
-    return build(defaultStorageFactory);
+    return build(defaultStorageFactory, defaultAi);
   },
 
   subscribeToEvent(
@@ -1454,7 +1627,12 @@ export type GeneratedRepositoryOptions<
 > = Readonly<
   Pick<
     RepositoryOptions<EntityType>,
-    "commandRouting" | "eventRouting" | "stateUpdateRouting" | "stringifierRegistry"
+    | "commandRouting"
+    | "eventRouting"
+    | "stateUpdateRouting"
+    | "stringifierRegistry"
+    | "agentCodeRevision"
+    | "ai"
   >
 > &
   (RepositoryOptions<EntityType> extends { readonly onCreate: infer Callback }
@@ -1532,6 +1710,8 @@ export class BoundedContextBuilder {
 
   #storageFactory: StorageFactory | undefined;
 
+  #aiRegistry: AiRegistry | undefined;
+
   #subscriptionRegistry: StandSubscriptionRegistry | undefined;
 
   #persistSystemEvents = false;
@@ -1558,7 +1738,9 @@ export class BoundedContextBuilder {
       "BoundedContextBuilder instances are framework-owned.",
     );
     this.#specSnapshot = ContextParts.cloneSpecSnapshot(specSnapshot);
-    builderBuilds.set(this, (defaultStorageFactory) => this.#buildAsyncWith(defaultStorageFactory));
+    builderBuilds.set(this, (defaultStorageFactory, defaultAi) =>
+      this.#buildAsyncWith(defaultStorageFactory, defaultAi),
+    );
     Object.freeze(this);
   }
 
@@ -1755,6 +1937,16 @@ export class BoundedContextBuilder {
   }
 
   /**
+   * Sets the application AI registry before this context is built.
+   * @param registry Factory-created deployment registry.
+   * @returns This builder.
+   */
+  withAi(registry: AiRegistry): this {
+    this.#aiRegistry = registry;
+    return this;
+  }
+
+  /**
    * Persists internal system events in the paired System Context storage.
    *
    * System events are forgotten by default. Enabling this option does not put
@@ -1816,6 +2008,8 @@ export class BoundedContextBuilder {
     return this.#buildWith(
       [...this.#repositories],
       this.#storageFactory ?? new InMemoryStorageFactory(),
+      [],
+      this.#aiRegistry,
     );
   }
 
@@ -1833,7 +2027,10 @@ export class BoundedContextBuilder {
     return this.#buildAsyncWith();
   }
 
-  async #buildAsyncWith(defaultStorageFactory?: StorageFactory): Promise<BoundedContext> {
+  async #buildAsyncWith(
+    defaultStorageFactory?: StorageFactory,
+    defaultAi?: AiRegistry,
+  ): Promise<BoundedContext> {
     const generated = await this.#loadGeneratedArtifacts([...this.#entityTypes]);
     const repositories = [...this.#repositories, ...generated.repositories];
 
@@ -1841,6 +2038,7 @@ export class BoundedContextBuilder {
       repositories,
       this.#storageFactory ?? defaultStorageFactory ?? new InMemoryStorageFactory(),
       generated.standalone,
+      this.#aiRegistry ?? defaultAi,
     );
     try {
       await ContextParts.integrationReady(context);
@@ -1862,13 +2060,20 @@ export class BoundedContextBuilder {
     repositories: readonly RepositoryView[],
     storageFactory: StorageFactory,
     standalone: readonly GeneratedStandaloneHandlerGroup[] = [],
+    ai?: AiRegistry,
   ): BoundedContext {
     const resources: ContextBuildResources =
       this.#subscriptionRegistry === undefined ? {} : { registry: this.#subscriptionRegistry };
     this.#subscriptionRegistry = undefined;
     const registeredRepositories = [...repositories];
     try {
-      return this.#assembleContext(registeredRepositories, storageFactory, standalone, resources);
+      return this.#assembleContext(
+        registeredRepositories,
+        storageFactory,
+        standalone,
+        resources,
+        ai,
+      );
     } catch (error) {
       return this.#failBuild(resources, error);
     }
@@ -1879,8 +2084,11 @@ export class BoundedContextBuilder {
     storageFactory: StorageFactory,
     standalone: readonly GeneratedStandaloneHandlerGroup[],
     resources: ContextBuildResources,
+    ai?: AiRegistry,
   ): BoundedContext {
     ContextParts.preflightRepositories(repositories);
+    this.#preflightAgents(repositories, storageFactory, ai);
+    if (ai !== undefined) freezeRegistry(ai);
     const dispatchers = this.#buildDispatchers(repositories);
     const buses = this.#buildBuses(repositories, storageFactory, dispatchers, resources);
     const standaloneEvent = this.#installStandalone(standalone, buses);
@@ -1890,7 +2098,7 @@ export class BoundedContextBuilder {
       ...ContextParts.standaloneProducedEventSchemas(standalone),
     ]);
     const running = this.#buildRuntime(storageFactory, buses, resources);
-    const context = this.#createContext(repositories, storageFactory, buses, running);
+    const context = this.#createContext(repositories, storageFactory, buses, running, ai);
     ContextParts.attachIntegration(
       context,
       buses.eventBus,
@@ -1901,6 +2109,69 @@ export class BoundedContextBuilder {
       ]),
     );
     return context;
+  }
+
+  /**
+   * Rejects missing Agent prerequisites before repository intake is installed.
+   * @param repositories Repositories selected for this context.
+   * @param storageFactory Provider supplying mandatory Agent records.
+   * @param ai Effective context or server registry.
+   */
+  #preflightAgents(
+    repositories: readonly RepositoryView[],
+    storageFactory: StorageFactory,
+    ai?: AiRegistry,
+  ): void {
+    const agents = repositories.filter((repository) => repository.entityFamily === "agent");
+    if (agents.length === 0) return;
+    if (ai === undefined) throw new TypeError("Agent registration requires an AI registry.");
+    registryOptions(ai);
+    if (!this.#persistSystemEvents)
+      throw new TypeError("Agent registration requires persisted System Events.");
+    if (!AgentHistoryStorageFactories.supports(storageFactory))
+      throw new TypeError("Agent registration requires indexed history storage.");
+    if (!AgentExecutionStorageFactories.supports(storageFactory))
+      throw new TypeError("Agent registration requires durable execution storage.");
+    this.#checkAgentOutputBindings(agents);
+    for (const repository of agents) {
+      const config = repositoryAccess.agentConfiguration(repository);
+      if (config.codeRevision === undefined || config.codeRevision.trim() === "")
+        throw new TypeError("Agent registration requires a code revision.");
+      if (config.ai === undefined)
+        throw new TypeError("Agent registration requires repository capabilities.");
+      if (config.ai.models.some((model) => !isAiModel(model)))
+        throw new TypeError("Agent repository capabilities must be factory-created models.");
+    }
+  }
+
+  /**
+   * Rejects Agent outcomes whose raw matching dispatcher cannot bind a saved plan.
+   */
+  #checkAgentOutputBindings(agents: readonly RepositoryView[]): void {
+    const rawEvents = new Set(
+      [...this.#eventDispatchers].flatMap((dispatcher) =>
+        dispatcher.messageSchemas().map((schema) => TypeUrls.derive(schema)),
+      ),
+    );
+    const rawCommands = new Set(
+      [...this.#commandDispatchers].flatMap((dispatcher) =>
+        dispatcher.messageSchemas().map((schema) => TypeUrls.derive(schema)),
+      ),
+    );
+    for (const repository of agents) {
+      if (
+        repositoryAccess
+          .producedEventSchemas(repository)
+          .some((schema) => rawEvents.has(TypeUrls.derive(schema)))
+      )
+        throw new TypeError("Agent Event output requires a durable dispatcher binding.");
+      if (
+        repositoryAccess
+          .producedCommandSchemas(repository)
+          .some((schema) => rawCommands.has(TypeUrls.derive(schema)))
+      )
+        throw new TypeError("Agent Command output requires a durable dispatcher binding.");
+    }
   }
 
   #buildDispatchers(repositories: readonly RepositoryView[]): ContextBuildDispatchers {
@@ -2035,20 +2306,16 @@ export class BoundedContextBuilder {
     storageFactory: StorageFactory,
     buses: ContextBuildBuses,
     running: ContextBuildRuntime,
+    ai?: AiRegistry,
   ): BoundedContext {
     return ContextParts.createBoundedContext(
       this.#specSnapshot,
-      buses.commandBus,
-      buses.eventBus,
-      buses.systemEventBus,
-      buses.publisher,
-      running.stand,
-      buses.systemStand,
-      running.runtime,
-      buses.systemSpec,
       storageFactory,
       repositories,
       this.#deliveryStrategy,
+      buses,
+      running,
+      ai,
     );
   }
 
@@ -2433,32 +2700,22 @@ const ContextParts = Object.freeze({
    * Creates a bounded context from assembled runtime components.
    *
    * @param specSnapshot Context configuration.
-   * @param commandBus Command dispatch bus.
-   * @param eventBus Domain event bus.
-   * @param systemEventBus System event bus.
-   * @param publisher Signal publisher.
-   * @param stand Domain read-side Stand.
-   * @param systemStand System read-side Stand.
-   * @param runtime Subscription runtime.
-   * @param systemSpec Paired System specification.
    * @param storageFactory Storage provider.
    * @param repositories Registered repository views.
    * @param deliveryStrategy Delivery sharding strategy.
+   * @param buses Prepared domain and System buses.
+   * @param running Prepared Stand and subscription runtime.
+   * @param ai Effective AI registry when Agent repositories are present.
    * @returns Constructed bounded context.
    */
   createBoundedContext(
     specSnapshot: ContextSpecSnapshot,
-    commandBus: CommandBus,
-    eventBus: EventBus,
-    systemEventBus: EventBus,
-    publisher: SignalPublisher,
-    stand: Stand,
-    systemStand: Stand,
-    runtime: SubscriptionRuntime,
-    systemSpec: ContextSpecSnapshot,
     storageFactory: StorageFactory,
     repositories: readonly RepositoryView[],
     deliveryStrategy: DeliveryStrategy,
+    buses: ContextBuildBuses,
+    running: ContextBuildRuntime,
+    ai?: AiRegistry,
   ): BoundedContext {
     return constructBoundedContext({
       snapshot: {
@@ -2466,17 +2723,18 @@ const ContextParts = Object.freeze({
         tenantMode: ContextParts.toTenantMode(specSnapshot.multitenant),
         spec: specSnapshot,
       },
-      commandBus,
-      eventBus,
-      systemEventBus,
-      publisher,
-      stand,
-      systemStand,
-      subscriptionRuntime: runtime,
-      systemSpec,
+      commandBus: buses.commandBus,
+      eventBus: buses.eventBus,
+      systemEventBus: buses.systemEventBus,
+      publisher: buses.publisher,
+      stand: running.stand,
+      systemStand: buses.systemStand,
+      subscriptionRuntime: running.runtime,
+      systemSpec: buses.systemSpec,
       storageFactory,
       repositories,
       deliveryStrategy,
+      ...(ai === undefined ? {} : { ai }),
       token: frameworkConstructionToken,
     });
   },
@@ -3411,7 +3669,7 @@ const ContextParts = Object.freeze({
    */
   isSystemEventDispatcher(dispatcher: EventDispatcher): boolean {
     const schemas = [...dispatcher.messageSchemas()];
-    const systemSchemas = schemas.filter((schema) => schema.typeName.startsWith("spine.system."));
+    const systemSchemas = schemas.filter(isSystemEventSchema);
     if (systemSchemas.length > 0 && systemSchemas.length !== schemas.length) {
       throw new Error("An EventDispatcher cannot mix domain and system event schemas.");
     }
@@ -3651,17 +3909,7 @@ const ContextParts = Object.freeze({
     ContextParts.requireRepositoryInstance(repository, "BoundedContext repository registration");
     const snapshot = ContextParts.repositorySnapshot(repository);
     ContextParts.rejectRegisteredRepository(repository);
-    repositoryAccess.bindRuntime(repository, {
-      context: registration.storageContext,
-      storageFactory: registration.storageFactory,
-      stand: registration.stand,
-      signalMetadata: new SignalMetadata(),
-      entityInbox: registration.entityInbox,
-      projectionInbox: registration.projectionInbox,
-      publisher: registration.publisher,
-      registerEventSchema: registration.registerEventSchema,
-      registerSystemEventSchema: registration.registerSystemEventSchema,
-    });
+    ContextParts.bindRepositoryRuntime(repository, registration);
 
     const entityInboxTarget = repositoryAccess.entityInboxTarget(repository);
     const projectionInboxTarget = repositoryAccess.projectionInboxTarget(repository);
@@ -3678,6 +3926,33 @@ const ContextParts = Object.freeze({
         repositoryAccess.clearRuntime(repository);
       },
     };
+  },
+
+  /**
+   * Binds context services to a prepared repository before target registration.
+   * @param repository Prepared repository receiving runtime services.
+   * @param registration Context services and schemas.
+   */
+  bindRepositoryRuntime(repository: RepositoryView, registration: RepositoryRegistration): void {
+    repositoryAccess.bindRuntime(repository, {
+      context: registration.storageContext,
+      storageFactory: registration.storageFactory,
+      ...(registration.ai === undefined ? {} : { ai: registration.ai }),
+      stand: registration.stand,
+      signalMetadata: new SignalMetadata(),
+      entityInbox: registration.entityInbox,
+      projectionInbox: registration.projectionInbox,
+      publisher: registration.publisher,
+      registerEventSchema: registration.registerEventSchema,
+      registerSystemEventSchema: registration.registerSystemEventSchema,
+      prepareSavedEvent: registration.prepareSavedEvent,
+      prepareSavedCommand: registration.prepareSavedCommand,
+      publishSavedEvent: registration.publishSavedEvent,
+      publishSavedCommand: registration.publishSavedCommand,
+      publishAgentSystemEvent: registration.publishAgentSystemEvent,
+      recordAcceptedSaved: registration.recordAcceptedSaved,
+      wakeAcceptedAgent: registration.wakeAcceptedAgent,
+    });
   },
 
   /**

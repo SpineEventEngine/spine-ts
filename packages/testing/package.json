@@ -30,6 +30,7 @@
     "@spine-event-engine/client-node": "workspace:*",
     "@spine-event-engine/core": "workspace:*",
     "@spine-event-engine/proto": "workspace:*",
-    "@spine-event-engine/server": "workspace:*"
+    "@spine-event-engine/server": "workspace:*",
+    "@spine-event-engine/storage": "workspace:*"
   }
 }

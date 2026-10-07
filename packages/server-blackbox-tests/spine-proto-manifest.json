@@ -1,6 +1,6 @@
 {
   "formatVersion": 2,
-  "generationId": "d9b5f603-7afd-4bd5-80ba-b636d3350cdb",
+  "generationId": "0f922f11-86af-429d-9da0-0d4d5a18c113",
   "packageName": "@spine-event-engine/server-blackbox-tests",
   "packageVersion": "2.0.0-snapshot.22",
   "protoFiles": [
@@ -11,7 +11,11 @@
     "spine/server/testing/support_agent_commands.proto",
     "spine/server/testing/support_agent_events.proto",
     "spine/server/testing/support_agent_rejections.proto",
-    "spine/server/testing/support_agent_states.proto"
+    "spine/server/testing/support_agent_states.proto",
+    "spine/server/testing/support_recovery_commands.proto",
+    "spine/server/testing/support_recovery_states.proto",
+    "spine/server/testing/support_recovery_types.proto",
+    "spine/server/testing/support_review_events.proto"
   ],
   "generatedExports": {
     "spine/server/testing/project_commands.proto": "generated/spine/server/testing/project_commands_pb.js",
@@ -21,7 +25,11 @@
     "spine/server/testing/support_agent_commands.proto": "generated/spine/server/testing/support_agent_commands_pb.js",
     "spine/server/testing/support_agent_events.proto": "generated/spine/server/testing/support_agent_events_pb.js",
     "spine/server/testing/support_agent_rejections.proto": "generated/spine/server/testing/support_agent_rejections_pb.js",
-    "spine/server/testing/support_agent_states.proto": "generated/spine/server/testing/support_agent_states_pb.js"
+    "spine/server/testing/support_agent_states.proto": "generated/spine/server/testing/support_agent_states_pb.js",
+    "spine/server/testing/support_recovery_commands.proto": "generated/spine/server/testing/support_recovery_commands_pb.js",
+    "spine/server/testing/support_recovery_states.proto": "generated/spine/server/testing/support_recovery_states_pb.js",
+    "spine/server/testing/support_recovery_types.proto": "generated/spine/server/testing/support_recovery_types_pb.js",
+    "spine/server/testing/support_review_events.proto": "generated/spine/server/testing/support_review_events_pb.js"
   },
   "dependencies": [
     "@spine-event-engine/proto"

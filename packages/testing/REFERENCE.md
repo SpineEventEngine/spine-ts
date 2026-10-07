@@ -57,8 +57,18 @@ timestamp, and external marker, reaches only external handlers, and is not
 captured as produced output. `assertCommands()` and `assertEvents()` return
 independently cloned snapshots of admitted produced signals in admission order.
 They exclude test inputs, external inputs, system events, stored-event replay,
-and rolled-back output. Use `eventually()` when detached handling has not yet
+and output from unsuccessful handlers. Use `eventually()` when detached handling has not yet
 admitted a produced signal.
+
+`readAgentHistory(repository, entityId, request)` reads the registered Agent's
+full retained history newest first. It uses the same `HistoryRead` page size and
+opaque cursor as protected Agent history; a cursor from another Agent or view
+is rejected. `readSystemEvents(ids)` reads exact persisted System Event IDs from
+the paired context, in requested order, and returns independent envelope copies;
+missing IDs are omitted. Both methods use the BlackBox's fixed tenant and fail after close. History
+reads also reject a repository from another context. System reads fail when System Event
+recording is unavailable. These audit reads are separate from `assertEvents()`,
+which observes produced domain output.
 
 ## Waiting and lifecycle
 

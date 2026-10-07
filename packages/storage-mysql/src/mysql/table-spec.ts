@@ -17,6 +17,11 @@ import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { ScalarType } from "@bufbuild/protobuf";
 import type { RecordColumn, RecordColumnType } from "@spine-event-engine/storage";
 import { AgentHistoryRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
+// prettier-ignore
+import {
+  AgentExecutionHeadSchema,
+  AgentExecutionRecordSchema,
+} from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
 
 import { MysqlIdColumn } from "./id-column.js";
 
@@ -195,9 +200,14 @@ function mysqlColumnSpec<R extends Message>(
     recordType.typeName === AgentHistoryRecordSchema.typeName
       ? AgentHistoryColumnTypes.for(column.name)
       : undefined;
+  const executionType =
+    recordType.typeName === AgentExecutionRecordSchema.typeName ||
+    recordType.typeName === AgentExecutionHeadSchema.typeName
+      ? AgentExecutionColumnTypes.for(column.name)
+      : undefined;
   return {
     name: column.name,
-    mysqlType: historyType ?? mysqlColumnType(column.type),
+    mysqlType: executionType ?? historyType ?? mysqlColumnType(column.type),
     nullable: entityDefault === undefined,
     ...(entityDefault === undefined ? {} : { defaultSql: entityDefault }),
   };
@@ -207,6 +217,30 @@ function mysqlColumnSpec<R extends Message>(
  * Complete order-key bytes available after the fixed digest columns in an InnoDB index.
  */
 export const AgentHistoryIndexBytes = 2944;
+
+/**
+ * Complete native key bytes after the fixed digest and status components.
+ */
+export const AgentExecutionIndexBytes: number = AgentHistoryIndexBytes;
+
+/**
+ * Maps complete Agent execution order and exact scope to binary index columns.
+ */
+const AgentExecutionColumnTypes = Object.freeze({
+  /**
+   * Returns the native type for one indexed execution column.
+   * @param name Indexed column name.
+   * @returns Full binary column type when this execution index uses one.
+   */
+  for(name: string): string | undefined {
+    if (name === "order_key" || name === "pending_key")
+      return `VARBINARY(${String(AgentExecutionIndexBytes)})`;
+    if (name === "state_digest" || name === "scope_digest") return "VARBINARY(64)";
+    if (name === "status") return "VARBINARY(1)";
+    if (name === "claim_expires") return "VARBINARY(22)";
+    return undefined;
+  },
+});
 
 /**
  * Maps Agent history indexes to complete native binary column types.

@@ -76,6 +76,19 @@ B-tree entry limits still apply to exceptionally long record IDs. Pages use
 bounded SQL chunks and sum serialized entry bytes; a fetched chunk can be
 larger than the returned byte budget.
 
+## Agent execution
+
+Agent execution records and per-instance pending entries are stored in separate
+tenant database tables. Indexed queries select the next eligible instance and
+the first unresolved signal within it. Required B-tree indexes use complete
+binary-comparable ordering keys and are checked before admission.
+
+Claims, history updates and conditional Entity completion use the same native
+transaction connection. Completion compares the original Entity Version before
+writing the resulting state, history, preferences and outgoing signals. Reopening
+a factory can read the saved work. No database transaction remains open while a
+model request runs.
+
 ## Lifecycle and errors
 
 `factory.close()` is idempotent, closes registered handles, prevents new handle

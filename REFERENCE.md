@@ -34,15 +34,26 @@ sessions, policy, TLS, and deployment.
 
 - `proto` and `proto-tools`: framework contracts and application model generation.
 - `core`: validation, type URLs, `Any`, registries, envelopes, and rejections.
-- `server`: bounded contexts, entities, services, delivery, environments, and hosting.
+- `server`: bounded contexts, entities, Agent execution, services, delivery, and hosting.
+- `ai`: typed model definitions, deployment selection, budgets, tools, and Agent history contracts.
+- `ai-vercel-ax`: optional Vercel/Ax generation, decision, and MCP provider adapters.
 - `client-node`, `client-web`, `client-react`: Node, browser, and React clients.
 - `auth`: provider-neutral sessions, policies, trusted contexts, and gateways.
-- `storage*`: storage contract, in-memory implementation, Datastore, and MySQL.
+- `storage*`: storage contract, in-memory implementation, Datastore, MySQL, and PostgreSQL.
 - `delivery-*` and `transport`: in-memory delivery coordination and same-host IPC.
-- `testing`: end-user `BlackBox` application testing.
+- `testing`: end-user `BlackBox` application testing and scripted `AiTestBackend` deployments.
 
 Each package README teaches ordinary use. Its adjacent `REFERENCE.md` records
 detailed exports, lifecycle, trust, error, concurrency, and test constraints.
+
+## Agent applications
+
+Start with [the warehouse support example](examples/support/README.md). Agent
+handlers call the Spine facade; SDK connections belong in registered deployments.
+The [server reference](packages/server/REFERENCE.md#agent-execution) defines
+acceptance, asynchronous execution, recorded histories, recovery and delivery.
+The [AI reference](packages/ai/REFERENCE.md) describes model definitions and
+configuration. Physical Entity deletion remains a separate feature.
 
 ## Stand subscription registries
 

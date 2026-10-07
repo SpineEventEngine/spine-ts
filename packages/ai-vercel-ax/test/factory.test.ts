@@ -13,11 +13,15 @@
  */
 
 import { AiModel, ModelRef, type AiFailure, type AiModelDefinition } from "@spine-event-engine/ai";
-import type { MessageSchema } from "@spine-event-engine/core";
+import { AnyMessages, type MessageSchema } from "@spine-event-engine/core";
 import { backendDefinition } from "@spine-event-engine/ai/spi/adapter";
-import type { AiBackendExecution, AiExecutionControl } from "@spine-event-engine/ai/spi/adapter";
+import type {
+  AiBackendExecution,
+  AiExecutionControl,
+  AiMcpAdvertisedTool,
+} from "@spine-event-engine/ai/spi/adapter";
 import { MockLanguageModelV3 } from "ai/test";
-import type { LanguageModelV3StreamPart } from "@ai-sdk/provider";
+import type { LanguageModelV3CallOptions, LanguageModelV3StreamPart } from "@ai-sdk/provider";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { createOpenAI } from "@ai-sdk/openai";
 import { create } from "@bufbuild/protobuf";
@@ -26,6 +30,8 @@ import {
   AiToolCallIdSchema,
   AiUsageSchema,
   AiOutcome,
+  DecisionResponseSchema,
+  GenerationResponseSchema,
   ToolResponseSchema,
 } from "@spine-event-engine/proto/agent";
 import {
@@ -51,6 +57,15 @@ const identity = {
 };
 
 const scope = {} as Parameters<ReturnType<typeof backendDefinition>["resolveIdentity"]>[0];
+
+const advertisedLookup = Object.freeze({
+  server: "support",
+  tool: "lookup",
+  description: "Lookup a support ticket",
+  inputSchemaJson:
+    '{"additionalProperties":false,"properties":{"ticket":{"type":"string"}},' +
+    '"required":["ticket"],"type":"object"}',
+});
 
 const sdkUsage = (input: number, output: number) => ({
   inputTokens: { total: input, noCache: undefined, cacheRead: undefined, cacheWrite: undefined },
@@ -103,9 +118,11 @@ function generationFixture(
 ) {
   let scopedFetch!: typeof fetch;
   let nextStream = 0;
+  const providerCalls: LanguageModelV3CallOptions[] = [];
   const network = vi.fn<typeof fetch>().mockResolvedValue(new Response("ok"));
   const model = new MockLanguageModelV3({
-    doStream: async () => {
+    doStream: async (options) => {
+      providerCalls.push(options);
       await (
         await scopedFetch("https://provider.example/v1/responses", { method: "POST", body: "{}" })
       ).text();
@@ -161,7 +178,9 @@ function generationFixture(
       signal: runtime.signal,
     }),
   );
-  const run = async () => {
+  const run = async (
+    advertisedTools: readonly AiMcpAdvertisedTool[] = withTool ? [advertisedLookup] : [],
+  ) => {
     const selected = await backendDefinition(registration).connect(scope, identity, runtime);
     return backendDefinition(registration).execute({
       operationId: create(AiOperationIdSchema, { value: "generation-case" }),
@@ -170,6 +189,7 @@ function generationFixture(
       identity,
       model: selected.model,
       definition,
+      advertisedTools,
       input: create(SupportTicketFactsSchema, {
         ticketNumber: { value: "T-1" },
         customerQuestion: "When will my order arrive?",
@@ -177,7 +197,7 @@ function generationFixture(
       control: runtime,
     });
   };
-  return { run, runtime, model, network };
+  return { run, runtime, model, network, registration, providerCalls };
 }
 
 function decisionFixture(model: VercelDecisionModel) {
@@ -241,6 +261,439 @@ function decisionFixture(model: VercelDecisionModel) {
 }
 
 describe("Vercel connection registration", () => {
+  it("reuses a saved admitted decision without a second provider call", async () => {
+    const doDecide = vi.fn().mockRejectedValue(new Error("provider must not run"));
+    const fixture = decisionFixture({
+      specificationVersion: "v4",
+      provider: "fixture",
+      modelId: identity.model,
+      supportedQuestionTypes: ["boolean"],
+      doDecide,
+    });
+    const saved = create(SupportRoutingResultSchema, { queue: { value: "tier-one" } });
+    vi.mocked(fixture.runtime.beginAttempt).mockResolvedValue({
+      kind: "replay",
+      id: "saved-decision",
+      response: create(DecisionResponseSchema, {
+        outcome: AiOutcome.ADMITTED,
+        admittedOutput: AnyMessages.pack(SupportRoutingResultSchema, saved),
+      }),
+    });
+    await expect(fixture.run()).resolves.toMatchObject({ ok: true, value: saved });
+    expect(doDecide).not.toHaveBeenCalled();
+    expect(fixture.runtime.finishAttempt).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { outcome: AiOutcome.INVALID_OUTPUT, code: "INVALID_OUTPUT" as const, retryable: false },
+    { outcome: AiOutcome.FAILED, code: "UNAVAILABLE" as const, retryable: true },
+    { outcome: AiOutcome.REFUSED, code: "REFUSED" as const, retryable: false },
+  ])("preserves saved decision $code without another provider call", async (saved) => {
+    const doDecide = vi.fn().mockRejectedValue(new Error("provider must not run"));
+    const fixture = decisionFixture({
+      specificationVersion: "v4",
+      provider: "fixture",
+      modelId: identity.model,
+      supportedQuestionTypes: ["boolean"],
+      doDecide,
+    });
+    vi.mocked(fixture.runtime.beginAttempt).mockResolvedValue({
+      kind: "replay",
+      id: "saved-decision-failure",
+      response: create(DecisionResponseSchema, {
+        outcome: saved.outcome,
+        diagnosticId: { value: "original-diagnostic" },
+      }),
+      failure: {
+        code: saved.code,
+        retryableByNewSignal: saved.retryable,
+        diagnosticId: "original-diagnostic",
+      },
+    });
+    await expect(fixture.run()).resolves.toMatchObject({
+      ok: false,
+      failure: {
+        code: saved.code,
+        retryableByNewSignal: saved.retryable,
+        diagnosticId: "original-diagnostic",
+      },
+    });
+    expect(doDecide).not.toHaveBeenCalled();
+    expect(fixture.runtime.recordFailure).not.toHaveBeenCalled();
+    expect(fixture.runtime.finishAttempt).not.toHaveBeenCalled();
+  });
+
+  it("replays a saved invalid decision diagnostic without another provider call", async () => {
+    const doDecide = vi.fn().mockRejectedValue(new Error("provider must not run"));
+    const fixture = decisionFixture({
+      specificationVersion: "v4",
+      provider: "fixture",
+      modelId: identity.model,
+      supportedQuestionTypes: ["boolean"],
+      doDecide,
+    });
+    vi.mocked(fixture.runtime.beginAttempt).mockResolvedValue({
+      kind: "replay",
+      id: "saved-invalid-decision",
+      response: create(DecisionResponseSchema, {
+        outcome: AiOutcome.INVALID_OUTPUT,
+        diagnosticId: { value: "diagnostic-saved" },
+      }),
+      failure: {
+        code: "INVALID_OUTPUT",
+        retryableByNewSignal: false,
+        diagnosticId: "diagnostic-saved",
+      },
+    });
+    await expect(fixture.run()).resolves.toMatchObject({
+      ok: false,
+      failure: { code: "INVALID_OUTPUT", diagnosticId: "diagnostic-saved" },
+    });
+    expect(doDecide).not.toHaveBeenCalled();
+    expect(fixture.runtime.finishAttempt).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    create(DecisionResponseSchema, { outcome: AiOutcome.ADMITTED }),
+    create(DecisionResponseSchema, { outcome: AiOutcome.INVALID_OUTPUT }),
+    create(GenerationResponseSchema, { outcome: AiOutcome.INVALID_OUTPUT }),
+  ])("rejects incompatible saved decision response without provider dispatch", async (response) => {
+    const doDecide = vi.fn().mockRejectedValue(new Error("provider must not run"));
+    const fixture = decisionFixture({
+      specificationVersion: "v4",
+      provider: "fixture",
+      modelId: identity.model,
+      supportedQuestionTypes: ["boolean"],
+      doDecide,
+    });
+    vi.mocked(fixture.runtime.beginAttempt).mockResolvedValue({
+      kind: "replay",
+      id: "saved-incomplete-decision",
+      response,
+    });
+    await expect(fixture.run()).rejects.toThrow("Saved");
+    expect(doDecide).not.toHaveBeenCalled();
+    expect(fixture.runtime.finishAttempt).not.toHaveBeenCalled();
+  });
+
+  it("reuses a saved admitted generation response without another provider attempt", async () => {
+    const fixture = generationFixture([], 1);
+    const saved = create(ProposedSupportReplySchema, { replyText: "Saved" });
+    vi.mocked(fixture.runtime.beginAttempt).mockResolvedValue({
+      kind: "replay",
+      id: "saved-attempt",
+      response: create(GenerationResponseSchema, {
+        rawOutput: '{"replyText":"Saved"}',
+        outcome: AiOutcome.ADMITTED,
+        admittedOutput: AnyMessages.pack(ProposedSupportReplySchema, saved),
+      }),
+    });
+    await expect(fixture.run()).resolves.toMatchObject({ ok: true, value: saved });
+    expect(fixture.network).not.toHaveBeenCalled();
+    expect(fixture.runtime.reserveTransport).not.toHaveBeenCalled();
+    expect(fixture.runtime.finishAttempt).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { outcome: AiOutcome.FAILED, code: "UNAVAILABLE" as const, retryable: true },
+    { outcome: AiOutcome.REFUSED, code: "REFUSED" as const, retryable: false },
+  ])("preserves saved generation $code without another provider attempt", async (saved) => {
+    const fixture = generationFixture([], 1);
+    vi.mocked(fixture.runtime.beginAttempt).mockResolvedValue({
+      kind: "replay",
+      id: "saved-failure",
+      response: create(GenerationResponseSchema, {
+        outcome: saved.outcome,
+        diagnosticId: { value: "original-diagnostic" },
+      }),
+      failure: {
+        code: saved.code,
+        retryableByNewSignal: saved.retryable,
+        diagnosticId: "original-diagnostic",
+      },
+    });
+    await expect(fixture.run()).resolves.toMatchObject({
+      ok: false,
+      failure: {
+        code: saved.code,
+        retryableByNewSignal: saved.retryable,
+        diagnosticId: "original-diagnostic",
+      },
+    });
+    expect(fixture.network).not.toHaveBeenCalled();
+    expect(fixture.runtime.recordFailure).not.toHaveBeenCalled();
+    expect(fixture.runtime.finishAttempt).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { outcome: AiOutcome.INVALID_OUTPUT, code: "UNAVAILABLE" as const, diagnosticId: "original" },
+    { outcome: AiOutcome.REFUSED, code: "UNAVAILABLE" as const, diagnosticId: "original" },
+    { outcome: AiOutcome.FAILED, code: "REFUSED" as const, diagnosticId: "original" },
+    { outcome: AiOutcome.FAILED, code: "UNAVAILABLE" as const, diagnosticId: "changed" },
+    { outcome: AiOutcome.UNSPECIFIED, code: "UNAVAILABLE" as const, diagnosticId: "original" },
+  ])("rejects an incoherent saved generation failure before redispatch", async (saved) => {
+    const fixture = generationFixture([], 1);
+    vi.mocked(fixture.runtime.beginAttempt).mockResolvedValue({
+      kind: "replay",
+      id: "saved-incoherent",
+      response: create(GenerationResponseSchema, {
+        outcome: saved.outcome,
+        diagnosticId: { value: "original" },
+      }),
+      failure: { code: saved.code, retryableByNewSignal: false, diagnosticId: saved.diagnosticId },
+    });
+    await expect(fixture.run()).rejects.toThrow();
+    expect(fixture.network).not.toHaveBeenCalled();
+    expect(fixture.runtime.recordFailure).not.toHaveBeenCalled();
+  });
+
+  it("replays saved tool proposals before the next physical model attempt", async () => {
+    const fixture = generationFixture(
+      [
+        [
+          { type: "text-delta", id: "t", delta: '{"replyText":"Done"}' },
+          {
+            type: "finish",
+            finishReason: { unified: "stop", raw: "stop" },
+            usage: sdkUsage(2, 1),
+          },
+        ],
+      ],
+      2,
+      true,
+    );
+    vi.mocked(fixture.runtime.beginAttempt)
+      .mockResolvedValueOnce({
+        kind: "replay",
+        id: "saved-proposal",
+        response: create(GenerationResponseSchema, {
+          outcome: AiOutcome.TOOL_REQUESTED,
+          toolCalls: [
+            {
+              providerCallId: "provider-saved",
+              toolName: "tool_0",
+              argumentsJson: '{"ticket":"T-1"}',
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        id: "fresh-after-tool",
+        maxInputBytes: 2000,
+        maxOutputBytes: 2000,
+        deadlineEpochMs: 1000,
+        signal: fixture.runtime.signal,
+      });
+    vi.mocked(fixture.runtime.callTool).mockResolvedValue(
+      create(ToolResponseSchema, {
+        call: create(AiToolCallIdSchema, { value: "spine-saved" }),
+        outcome: AiOutcome.ADMITTED,
+        text: ["Ticket found"],
+      }),
+    );
+    const output = create(ProposedSupportReplySchema, { replyText: "Done" });
+    vi.mocked(fixture.runtime.admitGeneration).mockReturnValue({ ok: true, value: output });
+    await expect(fixture.run()).resolves.toMatchObject({ ok: true, value: output });
+    expect(fixture.network).toHaveBeenCalledTimes(1);
+    expect(fixture.runtime.callTool).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ticketId: "saved-proposal",
+        providerCallId: "provider-saved",
+      }),
+    );
+    expect(fixture.runtime.finishAttempt).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    { providerCallId: "", toolName: "tool_0", argumentsJson: "{}" },
+    { providerCallId: "saved", toolName: "other", argumentsJson: "{}" },
+    { providerCallId: "saved", toolName: "tool_0", argumentsJson: "{" },
+    { providerCallId: "saved", toolName: "tool_0", argumentsJson: "[]" },
+  ])("rejects an incoherent saved tool proposal before tool or provider dispatch", async (call) => {
+    const fixture = generationFixture([], 1, true);
+    vi.mocked(fixture.runtime.beginAttempt).mockResolvedValue({
+      kind: "replay",
+      id: "malformed-proposal",
+      response: create(GenerationResponseSchema, {
+        outcome: AiOutcome.TOOL_REQUESTED,
+        toolCalls: [call],
+      }),
+    });
+    await expect(fixture.run()).rejects.toThrow("Saved tool proposals invalid");
+    expect(fixture.runtime.callTool).not.toHaveBeenCalled();
+    expect(fixture.network).not.toHaveBeenCalled();
+    expect(fixture.runtime.finishAttempt).not.toHaveBeenCalled();
+  });
+
+  it("rejects a saved response with the wrong capability kind before dispatch", async () => {
+    const fixture = generationFixture([], 1);
+    vi.mocked(fixture.runtime.beginAttempt).mockResolvedValue({
+      kind: "replay",
+      id: "wrong-kind",
+      response: create(DecisionResponseSchema, { outcome: AiOutcome.INVALID_OUTPUT }),
+    });
+    await expect(fixture.run()).rejects.toThrow("kind mismatch");
+    expect(fixture.network).not.toHaveBeenCalled();
+    expect(fixture.runtime.finishAttempt).not.toHaveBeenCalled();
+  });
+
+  it("rejects incomplete saved generation outcomes without refetching", async () => {
+    for (const response of [
+      create(GenerationResponseSchema, { outcome: AiOutcome.ADMITTED }),
+      create(GenerationResponseSchema, { outcome: AiOutcome.INVALID_OUTPUT, rawOutput: "bad" }),
+    ]) {
+      const fixture = generationFixture([], 1);
+      vi.mocked(fixture.runtime.beginAttempt).mockResolvedValue({
+        kind: "replay",
+        id: "saved-incomplete",
+        response,
+      });
+      await expect(fixture.run()).rejects.toThrow();
+      expect(fixture.network).not.toHaveBeenCalled();
+      expect(fixture.runtime.finishAttempt).not.toHaveBeenCalled();
+    }
+  });
+
+  it("uses saved validation issues for correction without refetching the invalid output", async () => {
+    const fixture = generationFixture(
+      [
+        [
+          { type: "text-delta", id: "t", delta: '{"replyText":"Fixed"}' },
+          {
+            type: "finish",
+            finishReason: { unified: "stop", raw: "stop" },
+            usage: sdkUsage(2, 1),
+          },
+        ],
+      ],
+      2,
+    );
+    vi.mocked(fixture.runtime.beginAttempt)
+      .mockResolvedValueOnce({
+        kind: "replay",
+        id: "saved-invalid",
+        response: create(GenerationResponseSchema, {
+          rawOutput: "not-json",
+          outcome: AiOutcome.INVALID_OUTPUT,
+          diagnosticId: { value: "diagnostic-saved" },
+        }),
+        failure: {
+          code: "INVALID_OUTPUT",
+          retryableByNewSignal: false,
+          diagnosticId: "diagnostic-saved",
+        },
+        issues: [{ code: "INVALID_OUTPUT", path: "replyText", message: "A reply is required" }],
+      })
+      .mockResolvedValueOnce({
+        id: "correction",
+        maxInputBytes: 2000,
+        maxOutputBytes: 2000,
+        deadlineEpochMs: 1000,
+        signal: fixture.runtime.signal,
+      });
+    const output = create(ProposedSupportReplySchema, { replyText: "Fixed" });
+    vi.mocked(fixture.runtime.admitGeneration).mockReturnValue({ ok: true, value: output });
+    await expect(fixture.run()).resolves.toMatchObject({ ok: true, value: output });
+    expect(fixture.network).toHaveBeenCalledTimes(1);
+    expect(fixture.runtime.finishAttempt).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(fixture.runtime.finishAttempt).mock.calls[0]?.[0].response).toMatchObject({
+      outcome: AiOutcome.ADMITTED,
+    });
+    expect(vi.mocked(fixture.runtime.finishAttempt).mock.calls[0]?.[0].response).not.toHaveProperty(
+      "diagnosticId",
+    );
+    const corrected = vi.mocked(fixture.runtime.beginAttempt).mock.calls[1]?.[0];
+    if (corrected?.kind !== "generation") throw new Error("Expected correction request");
+    expect(corrected.content.corrects?.value).toBe("saved-invalid");
+  });
+
+  it("records the exact discovered tool schema and mapping in prepared generation input", async () => {
+    const fixture = generationFixture(
+      [
+        [
+          { type: "text-delta", id: "t", delta: '{"replyText":"Done"}' },
+          {
+            type: "finish",
+            finishReason: { unified: "stop", raw: "stop" },
+            usage: sdkUsage(1, 1),
+          },
+        ],
+      ],
+      1,
+      true,
+    );
+    await fixture.run();
+    const started = vi.mocked(fixture.runtime.beginAttempt).mock.calls[0]?.[0];
+    if (started?.kind !== "generation") throw new Error("Expected generation request");
+    expect(JSON.parse(started.content.promptJson) as unknown).toMatchObject({
+      tools: [
+        {
+          modelName: "tool_0",
+          server: "support",
+          tool: "lookup",
+          description: "Lookup a support ticket",
+          inputSchemaJson: advertisedLookup.inputSchemaJson,
+        },
+      ],
+    });
+    expect(fixture.providerCalls[0]?.tools).toEqual([
+      {
+        type: "function",
+        name: "tool_0",
+        description: "Lookup a support ticket",
+        inputSchema: JSON.parse(advertisedLookup.inputSchemaJson) as unknown,
+      },
+    ]);
+  });
+
+  it("rejects missing and unexpected tool catalogs before a provider attempt", async () => {
+    const missing = generationFixture([], 1, true);
+    await expect(missing.run([])).resolves.toMatchObject({ ok: false });
+    expect(missing.runtime.beginAttempt).not.toHaveBeenCalled();
+    expect(missing.providerCalls).toHaveLength(0);
+    const unexpected = generationFixture([], 1, false);
+    await expect(unexpected.run([advertisedLookup])).resolves.toMatchObject({ ok: false });
+    expect(unexpected.runtime.beginAttempt).not.toHaveBeenCalled();
+    expect(unexpected.providerCalls).toHaveLength(0);
+  });
+
+  it.each([
+    { label: "server mapping", catalog: { ...advertisedLookup, server: "other" } },
+    { label: "tool mapping", catalog: { ...advertisedLookup, tool: "other" } },
+    {
+      label: "oversized description",
+      catalog: { ...advertisedLookup, description: "x".repeat(4_097) },
+    },
+    {
+      label: "oversized schema",
+      catalog: { ...advertisedLookup, inputSchemaJson: "x".repeat(16_385) },
+    },
+    { label: "malformed schema", catalog: { ...advertisedLookup, inputSchemaJson: "{" } },
+    {
+      label: "non-object schema",
+      catalog: { ...advertisedLookup, inputSchemaJson: '{"type":"string"}' },
+    },
+    {
+      label: "changed schema encoding",
+      catalog: {
+        ...advertisedLookup,
+        inputSchemaJson:
+          '{"type":"object","properties":{"ticket":{"type":"string"}},' +
+          '"required":["ticket"],"additionalProperties":false}',
+      },
+    },
+  ])("rejects $label before beginning a model attempt", async ({ catalog }) => {
+    const fixture = generationFixture([], 1, true);
+    await expect(fixture.run([catalog])).resolves.toMatchObject({ ok: false });
+    expect(fixture.runtime.beginAttempt).not.toHaveBeenCalled();
+    expect(fixture.providerCalls).toHaveLength(0);
+  });
+
+  it("makes the bounded MCP protocol factory available to generation runtime", () => {
+    const fixture = generationFixture([], 1, true);
+    expect(typeof backendDefinition(fixture.registration).mcp?.connect).toBe("function");
+  });
+
   it("journals explicit zero decision precision and output-only usage", async () => {
     const model = {
       specificationVersion: "v4" as const,
@@ -630,14 +1083,19 @@ describe("Vercel connection registration", () => {
         response: {
           outcome: AiOutcome.INVALID_OUTPUT,
           rawOutput: "{}",
+          diagnosticId: { value: "diagnostic-1" },
           usage: { inputTokens: { value: 2n } },
         },
         issues: [{ code: "INVALID_OUTPUT", path: "replyText" }],
       });
-      if (maxRequests === 2)
+      if (maxRequests === 2) {
         expect(vi.mocked(fixture.runtime.beginAttempt).mock.calls[1]?.[0]).toMatchObject({
           content: { corrects: { value: "attempt-1" } },
         });
+        expect(
+          vi.mocked(fixture.runtime.finishAttempt).mock.calls[1]?.[0].response,
+        ).not.toHaveProperty("diagnosticId");
+      }
     },
   );
 
@@ -749,6 +1207,26 @@ describe("Vercel connection registration", () => {
     expect(await fixture.run()).toMatchObject({ ok: false, failure: { code: "INVALID_OUTPUT" } });
     expect(fixture.runtime.admitGeneration).not.toHaveBeenCalled();
     expect(fixture.runtime.finishAttempt).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not report a partial provider response as a complete byte receipt", async () => {
+    const fixture = generationFixture([[]]);
+    let chunk = 0;
+    fixture.network.mockResolvedValue(
+      new Response(
+        new ReadableStream<Uint8Array>({
+          pull(controller) {
+            if (chunk++ === 0) controller.enqueue(new TextEncoder().encode("partial"));
+            else controller.error(new Error("response interrupted"));
+          },
+        }),
+      ),
+    );
+    expect(await fixture.run()).toMatchObject({ ok: false });
+    expect(fixture.runtime.onReceived).toHaveBeenCalled();
+    const completion = vi.mocked(fixture.runtime.finishAttempt).mock.calls[0]?.[0];
+    expect(completion).toBeDefined();
+    expect(completion).not.toHaveProperty("receivedBytes");
   });
 
   it("journals cancellation after reservation without dispatching the model", async () => {
@@ -964,6 +1442,7 @@ describe("Vercel connection registration", () => {
       identity,
       model: selected.model,
       definition,
+      advertisedTools: [advertisedLookup],
       input: create(SupportTicketFactsSchema, {
         ticketNumber: { value: "T-1" },
         customerQuestion: "Help?",
@@ -1483,6 +1962,7 @@ describe("Vercel connection registration", () => {
         identity,
         model: selected.model,
         definition,
+        advertisedTools: [advertisedLookup],
         input: create(SupportTicketFactsSchema, {
           ticketNumber: create(SupportTicketNumberSchema, { value: "T-1" }),
           customerQuestion: "Where is my order?",

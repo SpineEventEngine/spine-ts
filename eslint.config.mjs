@@ -48,6 +48,15 @@ export default tseslint.config(
     },
   },
   {
+    files: ["packages/server-blackbox-tests/test/agent-vercel-mcp-blackbox.test.ts"],
+    languageOptions: {
+      parserOptions: {
+        project: "./packages/server-blackbox-tests/tsconfig.provider-tests.json",
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+  },
+  {
     files: ["scripts/**/*.mjs"],
     languageOptions: {
       globals: {

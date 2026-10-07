@@ -37,6 +37,7 @@
     "spine/net/email_address.proto",
     "spine/net/internet_domain.proto",
     "spine/options.proto",
+    "spine/server/agent/execution_record.proto",
     "spine/server/agent/history_record.proto",
     "spine/server/catchup/catch_up.proto",
     "spine/server/delivery/delivery.proto",
@@ -94,6 +95,7 @@
     "spine/net/email_address.proto": "generated/spine/net/email_address_pb.js",
     "spine/net/internet_domain.proto": "generated/spine/net/internet_domain_pb.js",
     "spine/options.proto": "generated/spine/options_pb.js",
+    "spine/server/agent/execution_record.proto": "generated/spine/server/agent/execution_record_pb.js",
     "spine/server/agent/history_record.proto": "generated/spine/server/agent/history_record_pb.js",
     "spine/server/catchup/catch_up.proto": "generated/spine/server/catchup/catch_up_pb.js",
     "spine/server/delivery/delivery.proto": "generated/spine/server/delivery/delivery_pb.js",
@@ -118,5 +120,5 @@
   },
   "dependencies": [],
   "moduleExport": "spineProtoModule",
-  "generationId": "ddaf85d4-ee26-49a4-939e-0dc9f10680f8"
+  "generationId": "c0637f5e-aa66-4a50-aa7a-71470c796bbe"
 }

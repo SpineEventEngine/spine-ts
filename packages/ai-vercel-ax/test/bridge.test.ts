@@ -907,8 +907,9 @@ describe("controlled Ax bridge dispatch", () => {
       maxRequests: 1,
       onChat: (_model, prepared) => {
         seen.push(prepared.instructions);
-        return Promise.resolve({ results: [{ index: 0,
-          content: '{"reply":"controlled"}', finishReason: "stop" }] });
+        return Promise.resolve({
+          results: [{ index: 0, content: '{"reply":"controlled"}', finishReason: "stop" }],
+        });
       },
     });
     const generator = new AxGen<{ ticket: string }, { reply: string }>(

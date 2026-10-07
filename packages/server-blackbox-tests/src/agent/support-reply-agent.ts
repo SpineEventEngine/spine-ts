@@ -26,9 +26,7 @@ import {
   type SupportTicketUpdated,
 } from "../../generated/spine/server/testing/support_agent_events_pb.js";
 import { SupportReplyUnavailable } from "../../generated/spine/server/testing/support_agent_rejections.js";
-import type {
-  SupportReplyUnavailable as SupportReplyUnavailableMessage,
-} from "../../generated/spine/server/testing/support_agent_rejections_pb.js";
+import type * as ReplyMessages from "../../generated/spine/server/testing/support_agent_rejections_pb.js";
 import {
   type SupportReplyAgentId,
   SupportReplyAgentStateSchema as AgentStateSchema,
@@ -103,7 +101,7 @@ export class SupportReplyAgent extends Agent<SupportReplyAgentId, typeof AgentSt
    * @param rejection The rejected draft request.
    */
   @React
-  onReplyUnavailable(rejection: SupportReplyUnavailableMessage): undefined {
+  onReplyUnavailable(rejection: ReplyMessages.SupportReplyUnavailable): undefined {
     void rejection;
     SupportReplyAgent.rejectionsSeen += 1;
     return undefined;

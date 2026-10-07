@@ -11,6 +11,10 @@ record schemas, and a reachable MySQL database.
 For database requirements, query limits, lifecycle, and error details, see
 [REFERENCE documentation for agents](REFERENCE.md).
 
+Agent repositories require InnoDB so their state, history and execution completion
+can be saved together. They cannot use MyISAM or Aria. Model calls happen outside
+the database transaction.
+
 ## 💡 Why use it?
 
 - ✅ Stores Spine records durably in a MySQL database.

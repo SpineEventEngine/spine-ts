@@ -16,6 +16,11 @@ application history service.
 This is an experimental snapshot package. Use Node 24 or newer and generated
 Protobuf record schemas before configuring storage.
 
+Agent execution also uses the configured storage factory. It keeps accepted
+signals and completed work so the framework can resume delivery without repeating
+a completed Agent handler. In-memory storage keeps this data only while the
+process runs; use a database provider when it must survive restart.
+
 ## Install and write one record
 
 Install the storage contract and Protobuf-ES in the application or adapter that

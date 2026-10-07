@@ -264,3 +264,22 @@ export const selectDeployment = (
 export const registryOptions = (registry: AiRegistry): Readonly<AiRegistryOptions> => {
   return state(registry).options;
 };
+
+/**
+ * Finds a factory-created MCP registration by configured server ID.
+ * @param registry Application configuration.
+ * @param id Configured MCP server identifier.
+ * @returns Registered server, or absence when the ID is not configured.
+ */
+export const mcpRegistration = (
+  registry: AiRegistry,
+  id: string,
+): McpServerRegistration | undefined => state(registry).tools.get(id);
+
+/**
+ * Returns a frozen snapshot of configured MCP registrations.
+ * @param registry Application configuration.
+ * @returns Registrations in configuration order without the mutable registry map.
+ */
+export const mcpRegistrations = (registry: AiRegistry): readonly McpServerRegistration[] =>
+  Object.freeze([...state(registry).tools.values()]);

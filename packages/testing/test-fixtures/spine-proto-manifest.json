@@ -1,18 +1,24 @@
 {
   "formatVersion": 2,
-  "generationId": "01a32080-5bf2-4766-b921-b81dbd95b5b7",
+  "generationId": "43cce6e4-eeec-4be1-a8d7-5e0423e94551",
   "packageName": "@spine-event-engine/testing-test-fixtures",
   "packageVersion": "2.0.0-snapshot.22",
   "protoFiles": [
     "project_commands.proto",
     "project_events.proto",
     "project_states.proto",
+    "support_agent_commands.proto",
+    "support_agent_events.proto",
+    "support_agent_states.proto",
     "support_ai_types.proto"
   ],
   "generatedExports": {
     "project_commands.proto": "generated/project_commands_pb.js",
     "project_events.proto": "generated/project_events_pb.js",
     "project_states.proto": "generated/project_states_pb.js",
+    "support_agent_commands.proto": "generated/support_agent_commands_pb.js",
+    "support_agent_events.proto": "generated/support_agent_events_pb.js",
+    "support_agent_states.proto": "generated/support_agent_states_pb.js",
     "support_ai_types.proto": "generated/support_ai_types_pb.js"
   },
   "dependencies": [

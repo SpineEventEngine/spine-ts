@@ -1,0 +1,44 @@
+{
+  "name": "@spine-event-engine/example-support",
+  "version": "2.0.0-snapshot.22",
+  "private": true,
+  "type": "module",
+  "description": "Credential-free support-ticket Agent example for Spine TS.",
+  "scripts": {
+    "proto:generate": "spine-proto generate",
+    "clean:generated-dist": "node scripts/clean-generated-dist.mjs",
+    "prepack": "pnpm clean:generated-dist && tsc -b"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    },
+    "./spine-proto-manifest.json": "./spine-proto-manifest.json",
+    "./proto/*": "./proto/*",
+    "./generated/*.js": {
+      "types": "./dist/generated/*.d.ts",
+      "default": "./dist/generated/*.js"
+    }
+  },
+  "files": [
+    "dist",
+    "proto",
+    "spine-proto.json",
+    "spine-proto-manifest.json",
+    "README.md",
+    "REFERENCE.md"
+  ],
+  "dependencies": {
+    "@bufbuild/protobuf": "2.12.1",
+    "@spine-event-engine/ai": "workspace:*",
+    "@spine-event-engine/core": "workspace:*",
+    "@spine-event-engine/proto": "2.0.0-snapshot.22",
+    "@spine-event-engine/server": "workspace:*",
+    "@spine-event-engine/storage": "workspace:*"
+  },
+  "devDependencies": {
+    "@spine-event-engine/proto-tools": "2.0.0-snapshot.22",
+    "@spine-event-engine/testing": "workspace:*"
+  }
+}

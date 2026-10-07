@@ -22,8 +22,10 @@ import type {
   AiBackendExecution,
   AiBackendOutcome,
   AiAttemptTicket,
+  AiAttemptReplay,
   AiCandidateAdmission,
 } from "@spine-event-engine/ai/spi/adapter";
+import { assertAiOutcomeContext } from "@spine-event-engine/ai/spi/adapter";
 import {
   AiContentDigestSchema,
   AiDiagnosticIdSchema,
@@ -44,6 +46,7 @@ import {
   type DecisionAnswer,
 } from "@spine-event-engine/proto/agent";
 import { providerConnection } from "./factory.js";
+import { replayFailure } from "./replay-failure.js";
 import { scheduleBoundedDeadline } from "./deadline.js";
 
 /**
@@ -185,7 +188,7 @@ const semanticRounding = (
 };
 
 /**
- * Identifies this adapter's bounded decision deadline without inspecting provider text.
+ * * Identifies this adapter's bounded decision deadline without inspecting provider text.
  */
 class DecisionDeadlineError extends Error {}
 
@@ -306,10 +309,8 @@ const providerFailure = async (
   retryable = true,
 ): Promise<AiBackendOutcome> => {
   const failure = await request.control.recordFailure(code, retryable);
-  const bytes = providerConnection(request.model).receivedBytes(ticket.id);
   await request.control.finishAttempt({
     ticketId: ticket.id,
-    ...(bytes === undefined ? {} : { receivedBytes: bytes }),
     response: create(DecisionResponseSchema, {
       outcome: AiOutcome.FAILED,
       diagnosticId: create(AiDiagnosticIdSchema, { value: failure.diagnosticId }),
@@ -361,6 +362,24 @@ const providerDecision = async (
 };
 
 /**
+ * Returns a saved typed decision without consuming another attempt ticket.
+ */
+const replayDecision = (request: AiBackendExecution, replay: AiAttemptReplay): AiBackendOutcome => {
+  const response = replay.response;
+  if (response.$typeName !== "spine.ts.agent.DecisionResponse")
+    throw new TypeError("Saved attempt response kind mismatch");
+  assertAiOutcomeContext(response);
+  if (response.outcome === AiOutcome.ADMITTED) {
+    const output =
+      response.admittedOutput &&
+      AnyMessages.unpack(response.admittedOutput, request.definition.output);
+    if (!output) throw new TypeError("Saved decision output missing");
+    return { ok: true, value: output };
+  }
+  return { ok: false, failure: replayFailure(replay) };
+};
+
+/**
  * Executes one non-generative Jev decision without SDK retries.
  * @param request Authenticated capability and fenced runtime controls.
  * @returns Admitted mapped Proto or safe recorded failure.
@@ -373,10 +392,12 @@ export const executeDecision = async (request: AiBackendExecution): Promise<AiBa
   const supported = new Set(connection.model.supportedQuestionTypes);
   if (Object.values(request.definition.questions).some((question) => !supported.has(question.type)))
     throw new TypeError("Decision question kind is unsupported by provider");
-  const ticket = await request.control.beginAttempt({
+  const attempt = await request.control.beginAttempt({
     kind: "decision",
     content: requestContent(request),
   });
+  if ("kind" in attempt) return replayDecision(request, attempt);
+  const ticket = attempt;
   if (ticket.signal.aborted) return providerFailure(request, ticket, "CANCELLED", false);
   if (request.control.nowEpochMs() >= ticket.deadlineEpochMs)
     return providerFailure(request, ticket, "DEADLINE_EXCEEDED", false);

@@ -1,0 +1,83 @@
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+syntax = "proto3";
+
+package spine.examples.support;
+
+import "spine/examples/support/types.proto";
+import "spine/options.proto";
+import "spine/ts/agent/model.proto";
+
+option (type_url_prefix) = "type.spine.examples.support";
+
+// Current warehouse incident recorded by the ticket Aggregate.
+message SupportTicketState {
+  option (entity).kind = AGGREGATE;
+
+  // Ticket represented by this Aggregate.
+  SupportTicketId id = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Most recently submitted warehouse facts.
+  SupportRequest request = 2 [(validate) = true];
+}
+
+// Latest accepted draft retained by the drafting Agent.
+message SupportDraftState {
+  option (entity).kind = ENTITY;
+
+  // Ticket assisted by this Agent.
+  SupportTicketId id = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Request that produced the current draft.
+  SupportRequest request = 2 [(validate) = true];
+
+  // Current validated reply awaiting review.
+  SupportReply reply = 3 [(validate) = true];
+
+  // Conversation used for the current draft.
+  spine.ts.agent.ConversationId conversation = 4 [(validate) = true];
+}
+
+// Queryable result visible to a support person.
+message SupportReviewState {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = QUERY;
+
+  // Ticket whose draft is shown.
+  SupportTicketId id = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Request facts associated with the latest proposal or failure.
+  SupportRequest request = 2 [(validate) = true];
+
+  // Latest usable draft, absent after a failed request.
+  SupportReply reply = 3 [(validate) = true];
+
+  // Conversation associated with this result.
+  spine.ts.agent.ConversationId conversation = 4 [(validate) = true];
+
+  // Whether the latest request produced a reviewable draft.
+  bool has_draft = 5;
+
+  // Whether the latest request failed while any previous accepted reply remains available.
+  bool latest_request_failed = 6;
+}

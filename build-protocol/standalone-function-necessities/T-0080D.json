@@ -241,5 +241,104 @@
     "name": "isCanonicalChannelType",
     "disposition": "necessity",
     "reason": "TypeScript transport boundary: isCanonicalChannelType validates shared generated channel identities before either adapter allocates lifecycle state."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage/src/entity/agent-execution-record-spec.ts",
+    "kind": "function-declaration",
+    "identity": "requiredInvocation()#1",
+    "name": "requiredInvocation",
+    "disposition": "necessity",
+    "reason": "TypeScript record boundary: requiredInvocation validates immutable source identity before record-column callbacks materialize indexed values."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage/src/entity/agent-execution-record-spec.ts",
+    "kind": "function-declaration",
+    "identity": "requiredOrder()#1",
+    "name": "requiredOrder",
+    "disposition": "necessity",
+    "reason": "TypeScript record boundary: requiredOrder validates original Inbox order before record-column callbacks materialize native keys."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage/src/entity/agent-execution-record-spec.ts",
+    "kind": "function-declaration",
+    "identity": "requiredScope()#1",
+    "name": "requiredScope",
+    "disposition": "necessity",
+    "reason": "TypeScript record boundary: requiredScope validates the per-instance head scope before native index materialization."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage/src/entity/agent-execution-record-spec.ts",
+    "kind": "function-declaration",
+    "identity": "timestampKey()#1",
+    "name": "timestampKey",
+    "disposition": "necessity",
+    "reason": "TypeScript record boundary: timestampKey encodes the complete seconds and nanos range consistently for both pending bounds and head values."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage/src/entity/agent-execution-record-spec.ts",
+    "kind": "function-declaration",
+    "identity": "headPendingKey()#1",
+    "name": "headPendingKey",
+    "disposition": "necessity",
+    "reason": "TypeScript record boundary: headPendingKey maps the optional pending-head fields to one complete native index value."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage/src/entity/agent-execution-record-spec.ts",
+    "kind": "function-declaration",
+    "identity": "utf8Hex()#1",
+    "name": "utf8Hex",
+    "disposition": "necessity",
+    "reason": "TypeScript record boundary: utf8Hex preserves complete UTF-8 byte order for all record-layout keys without locale collation."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage/src/memory/in-memory-agent-execution.ts",
+    "kind": "function-declaration",
+    "identity": "compareRecords()#1",
+    "name": "compareRecords",
+    "disposition": "necessity",
+    "reason": "TypeScript record boundary: compareRecords orders unresolved invocation records by original Inbox order and source identity."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage/src/memory/in-memory-agent-execution.ts",
+    "kind": "function-declaration",
+    "identity": "compareOrder()#1",
+    "name": "compareOrder",
+    "disposition": "necessity",
+    "reason": "TypeScript record boundary: compareOrder compares original Inbox timestamps and versions for in-memory FIFO."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage/src/memory/in-memory-agent-execution.ts",
+    "kind": "function-declaration",
+    "identity": "compareSignal()#1",
+    "name": "compareSignal",
+    "disposition": "necessity",
+    "reason": "TypeScript record boundary: compareSignal compares original typed Command and Event IDs when Inbox order ties."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage/src/memory/in-memory-agent-execution.ts",
+    "kind": "function-declaration",
+    "identity": "compareScope()#1",
+    "name": "compareScope",
+    "disposition": "necessity",
+    "reason": "TypeScript record boundary: compareScope orders complete Agent instance scopes for deterministic in-memory selection."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage/src/memory/in-memory-agent-execution.ts",
+    "kind": "function-declaration",
+    "identity": "compareUtf8()#1",
+    "name": "compareUtf8",
+    "disposition": "necessity",
+    "reason": "TypeScript record boundary: compareUtf8 compares complete UTF-8 bytes in the same order as native provider keys."
   }
 ]

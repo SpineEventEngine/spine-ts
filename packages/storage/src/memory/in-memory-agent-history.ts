@@ -22,7 +22,9 @@ import type {
 } from "../entity/agent-history.js";
 import { TenantBoundary } from "../internal/tenancy.js";
 import { AgentHistoryIndex } from "./agent-history-index.js";
+import { AgentHistoryMutationQueue } from "./agent-history-mutation-queue.js";
 import { InMemoryStorageBackend } from "./in-memory-storage-backend.js";
+import type { KeyedSerialQueue } from "./in-memory-entity-history.js";
 
 /**
  * Opens scoped in-memory Agent history handles.
@@ -66,7 +68,11 @@ export const MemoryAgentHistory: MemoryAgentHistoryAccess = Object.freeze({
       `agent-history:${input.stateType}`,
       () => new Map<string, AgentHistoryIndex>(),
     );
-    return new MemoryAgentHistoryHandle(input.id.key, records);
+    return new MemoryAgentHistoryHandle(
+      input.id.key,
+      records,
+      AgentHistoryMutationQueue.bind(backend, TenantBoundary.of(input.context)),
+    );
   },
 });
 
@@ -80,6 +86,8 @@ class MemoryAgentHistoryHandle<Id> implements AgentHistoryStorage<Id> {
 
   readonly #records: Map<string, AgentHistoryIndex>;
 
+  readonly #queue: KeyedSerialQueue;
+
   #open = true;
 
   /**
@@ -87,10 +95,16 @@ class MemoryAgentHistoryHandle<Id> implements AgentHistoryStorage<Id> {
    *
    * @param idKey Canonical Entity ID conversion.
    * @param records Retained indexes in the provider backend.
+   * @param queue Serializes standalone append with fenced execution writes.
    */
-  constructor(idKey: (id: Id) => string, records: Map<string, AgentHistoryIndex>) {
+  constructor(
+    idKey: (id: Id) => string,
+    records: Map<string, AgentHistoryIndex>,
+    queue: KeyedSerialQueue,
+  ) {
     this.#idKey = idKey;
     this.#records = records;
+    this.#queue = queue;
   }
 
   /**
@@ -101,9 +115,9 @@ class MemoryAgentHistoryHandle<Id> implements AgentHistoryStorage<Id> {
    * @returns Resolves after the entry is indexed.
    */
   append(entityId: Id, entry: AgentHistoryEntry): Promise<void> {
-    return Promise.resolve().then(() => {
+    const key = this.#key(entityId);
+    return this.#queue.run(key, () => {
       this.#requireOpen();
-      const key = this.#key(entityId);
       let index = this.#records.get(key);
       if (index === undefined) {
         index = new AgentHistoryIndex();

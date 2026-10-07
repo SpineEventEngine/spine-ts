@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { clone, create, ScalarType } from "@bufbuild/protobuf";
+import { clone, create, ScalarType, toBinary } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import type { Event, EventId, TenantId } from "@spine-event-engine/proto";
 import { EventIdSchema, EventSchema, TenantIdSchema } from "@spine-event-engine/proto";
@@ -26,6 +26,14 @@ import type { StorageContext } from "../storage/storage.js";
 import type { StorageFactory } from "../storage/storage-factory.js";
 import { TenantBoundary } from "../internal/tenancy.js";
 
+const savedEventStores = new WeakMap<
+  EventStore,
+  {
+    readonly context: EventStoreContext;
+    readonly factory: StorageFactory;
+  }
+>();
+
 /**
  * Framework event store backed by record storage.
  *
@@ -35,7 +43,9 @@ import { TenantBoundary } from "../internal/tenancy.js";
  */
 export class EventStore {
   readonly #context: EventStoreContext;
+
   readonly #factory: StorageFactory;
+
   #open = true;
 
   /**
@@ -47,6 +57,7 @@ export class EventStore {
   constructor(context: EventStoreContext, factory: StorageFactory) {
     this.#context = EventContexts.base(context);
     this.#factory = factory;
+    savedEventStores.set(this, { context: this.#context, factory });
   }
 
   /**
@@ -167,6 +178,12 @@ export class EventStore {
     }
   }
 
+  /**
+   * Persists one batch only when every original Event ID is available.
+   * @param records Original Event envelopes.
+   * @param context Captured tenant and bounded context.
+   * @returns Completion after all unique Events are persisted.
+   */
   private async appendUnique(records: readonly Event[], context: StorageContext): Promise<void> {
     this.requireOpen();
     const ids = records.map((record) => EventIds.require(record));
@@ -182,6 +199,12 @@ export class EventStore {
     });
   }
 
+  /**
+   * Deletes the IDs inserted by a failed legacy batch operation.
+   * @param ids IDs inserted by the current batch.
+   * @param context Captured tenant and bounded context.
+   * @returns Completion after those IDs are removed.
+   */
   private async deleteIds(ids: readonly EventId[], context: StorageContext): Promise<void> {
     this.requireOpen();
 
@@ -197,6 +220,12 @@ export class EventStore {
     });
   }
 
+  /**
+   * Checks that no ID in a batch is already stored in this context.
+   * @param ids Original Event IDs.
+   * @param context Captured tenant and bounded context.
+   * @returns Completion after duplicate validation.
+   */
   private async checkUnique(ids: readonly EventId[], context: StorageContext): Promise<void> {
     this.requireOpen();
     EventIds.rejectDuplicates(ids);
@@ -211,6 +240,9 @@ export class EventStore {
     });
   }
 
+  /**
+   * Rejects calls after this Event Store closes.
+   */
   private requireOpen(): void {
     if (!this.#open) throw new Error("EventStore is closed.");
   }
@@ -280,6 +312,14 @@ export interface EventRollback {
 const EventStoreLocks = Object.freeze({
   queues: new WeakMap<StorageFactory, Map<string | symbol, Promise<void>>>(),
 
+  /**
+   * Serializes Event ID checks and insertion in one captured context.
+   * @param factory Storage provider used for the Event family.
+   * @param context Captured tenant and bounded context.
+   * @param work Operation run under the context lock.
+   * @returns Result returned by the operation.
+   * @typeParam T Operation result.
+   */
   async withLock<T>(
     factory: StorageFactory,
     context: StorageContext,
@@ -304,6 +344,11 @@ const EventStoreLocks = Object.freeze({
     }
   },
 
+  /**
+   * Returns the serial queue map for one storage provider.
+   * @param factory Storage provider used for the Event family.
+   * @returns Context queues for this provider.
+   */
   queueMap(factory: StorageFactory): Map<string | symbol, Promise<void>> {
     let queues = this.queues.get(factory);
     if (queues === undefined) {
@@ -315,16 +360,34 @@ const EventStoreLocks = Object.freeze({
 });
 
 /**
- * Provider-only coordination access for the Event Store context lock.
+ * Provider-only Event Store coordination bound to captured context and tenant.
  * @internal
  */
-export const eventStoreAccess: {
-  readonly withLock: <T>(
-    factory: StorageFactory,
-    context: StorageContext,
-    work: () => Promise<T>,
-  ) => Promise<T>;
-} = Object.freeze({
+interface EventStoreAccess {
+  /**
+   * Serializes work for one captured provider context.
+   * @param factory Storage provider used for the Event family.
+   * @param context Captured tenant and bounded context.
+   * @param work Operation run under the context lock.
+   * @returns Result returned by the operation.
+   * @typeParam T Result of the serialized operation.
+   */
+  withLock<T>(factory: StorageFactory, context: StorageContext, work: () => Promise<T>): Promise<T>;
+
+  /**
+   * Accepts an original saved Event ID or verifies its exact stored envelope.
+   * @param store Event Store with captured context and tenant.
+   * @param event Original saved Event envelope.
+   * @returns Stored or newly appended original Event.
+   */
+  appendOrVerifyOriginal(store: EventStore, event: Event): Promise<Event>;
+}
+
+/**
+ * Exposes captured Event Store coordination to provider and Agent delivery paths.
+ * @internal
+ */
+export const eventStoreAccess: EventStoreAccess = Object.freeze({
   // prettier-ignore
 
   /**
@@ -334,6 +397,7 @@ export const eventStoreAccess: {
    * @param context The Event Store context to serialize.
    * @param work The operation to run while holding the lock.
    * @returns The operation result.
+   * @typeParam T Result returned by the transaction callback.
    */
   withLock<T>(
     factory: StorageFactory,
@@ -342,7 +406,72 @@ export const eventStoreAccess: {
   ): Promise<T> {
     return EventStoreLocks.withLock(factory, context, work);
   },
+
+  /**
+   * Reuses one EventStore's captured tenant/context for saved-output retry.
+   */
+  async appendOrVerifyOriginal(store: EventStore, event: Event): Promise<Event> {
+    if (!store.isOpen()) throw new Error("EventStore is closed.");
+    const binding = savedEventStores.get(store);
+    if (binding === undefined)
+      throw new Error("Saved Agent Event requires an EventStore instance.");
+    const record = clone(EventSchema, event);
+    const context = EventContexts.snapshotForEvent(binding.context, record);
+    const id = EventIds.require(record);
+    await this.withLock(binding.factory, context, async () => {
+      const storage = binding.factory.createRecordStorage(context, eventStoreRecordSpec);
+      try {
+        await SavedEvents.appendOrVerify(storage, id, record);
+      } finally {
+        storage.close();
+      }
+    });
+    return clone(EventSchema, record);
+  },
 });
+
+/**
+ * Keeps saved-output insert and complete-envelope comparison together.
+ */
+const SavedEvents = {
+  /**
+   * Applies atomic insert and compares every original Event byte after a collision.
+   * @param event Original event envelope.
+   * @param id Complete persisted record identity.
+   * @param storage Native record storage for this row.
+   * @returns Completion after exact-envelope insertion or verification.
+   */
+  async appendOrVerify(
+    storage: RecordStorage<EventId, Event>,
+    id: EventId,
+    event: Event,
+  ): Promise<void> {
+    if (!storage.atomicCompareAndSet)
+      throw new Error("Saved Agent Event requires atomic record compare-and-set.");
+    try {
+      if (await storage.compareAndSet(id, undefined, event)) return;
+    } catch (error) {
+      const stored = await storage.read(id);
+      if (stored !== undefined && this.same(stored, event)) return;
+      throw error;
+    }
+    const stored = await storage.read(id);
+    if (stored === undefined || !this.same(stored, event))
+      throw new Error("Saved Agent Event ID conflicts with another envelope.");
+  },
+
+  /**
+   * Compares complete Protobuf envelopes, including unknown fields.
+   * @param left First value in the comparison.
+   * @param right Second value in the comparison.
+   * @returns Whether the two original Event envelopes have identical bytes.
+   */
+  same(left: Event, right: Event): boolean {
+    const a = toBinary(EventSchema, left);
+    const b = toBinary(EventSchema, right);
+    return a.length === b.length && a.every((byte, index) => byte === b[index]);
+  },
+};
 
 /**
  * Validates event IDs before record-store operations.
@@ -351,7 +480,9 @@ const EventIds = {
   // prettier-ignore
 
   /**
-   * Requires an event to have a non-blank ID.
+   * Validates an event to have a non-blank ID.
+   * @param event Original event envelope.
+   * @returns Present value or an error when missing.
    */
   require(event: Event): EventId {
     if (event.id === undefined) throw new Error("EventStore requires event.id.");
@@ -363,6 +494,9 @@ const EventIds = {
 
   /**
    * Rejects IDs that already exist in storage.
+   * @param ids Original event identities.
+   * @param storage Native record storage for this row.
+   * @returns Completion after duplicate-ID validation.
    */
   async rejectStored(
     storage: RecordStorage<EventId, Event>,
@@ -374,7 +508,10 @@ const EventIds = {
   },
 
   /**
-   * Atomically inserts each event ID and rolls back this batch on collision.
+   * Writes each event ID and rejects the whole batch on collision.
+   * @param records Records participating in this operation.
+   * @param storage Native record storage for this row.
+   * @returns Completion after unique Event IDs are persisted.
    */
   async insertUnique(
     storage: RecordStorage<EventId, Event>,
@@ -412,6 +549,7 @@ const EventIds = {
 
   /**
    * Rejects repeated IDs within one append operation.
+   * @param ids Original event identities.
    */
   rejectDuplicates(ids: readonly EventId[]): void {
     const seen = new Set<string>();
@@ -430,6 +568,8 @@ const EventContexts = {
 
   /**
    * Captures one storage context.
+   * @param context Captured event storage context.
+   * @returns Base event storage context.
    */
   base(context: EventStoreContext): EventStoreContext {
     return context.multitenant
@@ -443,6 +583,11 @@ const EventContexts = {
       : Object.freeze({ name: context.name, multitenant: false });
   },
 
+  /**
+   * Captures the selected tenant for an Event Store read.
+   * @param context Event Store context and selected tenant.
+   * @returns Immutable storage context for the read.
+   */
   snapshot(context: EventStoreContext): StorageContext {
     if (!context.multitenant) return Object.freeze({ name: context.name, multitenant: false });
     if (context.tenantId === undefined)
@@ -458,6 +603,9 @@ const EventContexts = {
 
   /**
    * Captures one context using an event envelope tenant when present.
+   * @param context Captured event storage context.
+   * @param event Original event envelope.
+   * @returns Captured context for this Event and tenant.
    */
   snapshotForEvent(context: EventStoreContext, event: Event): StorageContext {
     if (!context.multitenant) return EventContexts.snapshot(context);
@@ -471,6 +619,12 @@ const EventContexts = {
     });
   },
 
+  /**
+   * Checks every Event in one batch uses the same captured tenant.
+   * @param context Event Store context before envelope validation.
+   * @param events Original Event envelopes in the batch.
+   * @returns Immutable context shared by every Event in the batch.
+   */
   batch(context: EventStoreContext, events: readonly Event[]): StorageContext {
     const first = events[0];
     if (first === undefined) throw new Error("EventStore batch requires at least one event.");
@@ -485,6 +639,8 @@ const EventContexts = {
 
   /**
    * Reads an explicit tenant from an event envelope.
+   * @param event Original event envelope.
+   * @returns Tenant encoded in the original Event when present.
    */
   readEventTenant(event: Event): TenantId | undefined {
     switch (event.context?.origin.case) {
@@ -499,6 +655,8 @@ const EventContexts = {
 
   /**
    * Converts a typed tenant ID to its storage-scope value.
+   * @param tenantId Tenant identifier captured for this operation.
+   * @returns Tenant identity when configured.
    */
   tenantValue(tenantId: TenantId | undefined): TenantId | undefined {
     return tenantId === undefined ? undefined : clone(TenantIdSchema, tenantId);
@@ -506,6 +664,8 @@ const EventContexts = {
 
   /**
    * Creates a deterministic key for a context-scoped append lock.
+   * @param context Captured event storage context.
+   * @returns Complete encoded invocation identity.
    */
   key(context: StorageContext): string | symbol {
     return TenantBoundary.of(context).key;

@@ -40,23 +40,17 @@ export interface AgentHistoryScope {
   readonly context: string;
 
   /**
-
    * Complete tenant identity encoding.
-
    */
   readonly tenant: string;
 
   /**
-
    * Registered Entity state type.
-
    */
   readonly repository: string;
 
   /**
-
    * Canonical typed Agent ID key.
-
    */
   readonly entity: string;
 }
@@ -68,6 +62,7 @@ export interface AgentHistoryScope {
  * @param view Indexed history view.
  * @param request Public read request.
  * @param live Loads the current provider page only when needed.
+ * @param maxBytes Effective response-byte ceiling for this read.
  * @returns The saved or newly loaded complete provider page.
  */
 export type AgentHistoryJournal = (
@@ -75,6 +70,7 @@ export type AgentHistoryJournal = (
   view: AgentHistoryView,
   request: HistoryRead,
   live: () => Promise<AgentHistoryPage>,
+  maxBytes: number,
 ) => Promise<AgentHistoryPage>;
 
 /**
@@ -89,23 +85,17 @@ export interface AgentHistoryBinding<Id> {
   readonly storage: AgentHistoryStorage<Id>;
 
   /**
-
    * Typed Agent ID.
-
    */
   readonly entityId: Id;
 
   /**
-
    * Full cursor and journal scope.
-
    */
   readonly scope: AgentHistoryScope;
 
   /**
-
    * Optional durable read replay interceptor.
-
    */
   readonly journal?: AgentHistoryJournal;
 
@@ -130,6 +120,15 @@ export interface AgentHistoryReadAccess {
    * @param binding Repository history binding.
    */
   bind<Id>(entity: object, binding: AgentHistoryBinding<Id>): void;
+
+  /**
+   * Binds a journal that records and replays this handler's history reads.
+   *
+   * @param entity Agent with an existing repository history binding.
+   * @param journal Intercepts history reads during the handler.
+   * @returns Callback that restores the original history binding after the handler finishes.
+   */
+  withJournal(entity: object, journal: AgentHistoryJournal): () => void;
 
   /**
    * Reads all categories.
@@ -185,6 +184,21 @@ export interface AgentHistoryReadAccess {
   ): Promise<HistoryPage<AgentHistoryEntry>>;
 
   /**
+   * Applies the same opaque cursor contract to a testing repository binding.
+   *
+   * @typeParam Id Typed Agent identifier supplied by the repository binding.
+   * @param binding Exact Agent repository and tenant storage scope.
+   * @param view Indexed history view.
+   * @param request Public page request.
+   * @returns Retained entries and opaque continuation.
+   */
+  readBound<Id>(
+    binding: AgentHistoryBinding<Id>,
+    view: AgentHistoryView,
+    request: HistoryRead,
+  ): Promise<HistoryPage<AgentHistoryEntry>>;
+
+  /**
    * Persists a genuine framework System Event.
    *
    * @param entity Agent instance.
@@ -207,6 +221,16 @@ export const AgentHistoryReads: AgentHistoryReadAccess = Object.freeze({
    */
   bind<Id>(entity: object, binding: AgentHistoryBinding<Id>): void {
     bindings.set(entity, binding);
+  },
+
+  withJournal(entity: object, journal: AgentHistoryJournal): () => void {
+    const binding = bindings.get(entity);
+    if (binding === undefined)
+      throw new Error("Agent history is available only from repository execution.");
+    bindings.set(entity, { ...binding, journal });
+    return () => {
+      bindings.set(entity, binding);
+    };
   },
 
   /**
@@ -331,6 +355,23 @@ export const AgentHistoryReads: AgentHistoryReadAccess = Object.freeze({
     const binding = bindings.get(entity);
     if (binding === undefined)
       throw new Error("Agent history is available only from repository execution.");
+    return this.readBound(binding, view, request);
+  },
+
+  /**
+   * Reads a bounded provider page or reuses the page saved by the active handler.
+   *
+   * @typeParam Id Typed Agent identifier supplied by the repository binding.
+   * @param binding Repository storage, identity and optional handler journal.
+   * @param view Indexed category and optional conversation filter.
+   * @param request Page size and opaque continuation from a previous page.
+   * @returns Retained entries with the next cursor when older entries remain.
+   */
+  async readBound<Id>(
+    binding: AgentHistoryBinding<Id>,
+    view: AgentHistoryView,
+    request: HistoryRead,
+  ): Promise<HistoryPage<AgentHistoryEntry>> {
     if (!Number.isSafeInteger(request.pageSize) || request.pageSize <= 0)
       throw new RangeError("Agent history pageSize must be a positive safe integer.");
     const maxBytes = AgentHistoryPages.limit(binding.maxBytes);
@@ -345,7 +386,7 @@ export const AgentHistoryReads: AgentHistoryReadAccess = Object.freeze({
     const page =
       binding.journal === undefined
         ? await live()
-        : await binding.journal(binding.scope, view, request, live);
+        : await binding.journal(binding.scope, view, request, live, maxBytes);
     return AgentHistoryPages.present(binding.scope, view, page);
   },
 });

@@ -24,11 +24,16 @@ import {
   type StorageGroup,
 } from "@spine-event-engine/storage";
 import { TenantBoundary, type TenantCatalog } from "@spine-event-engine/storage/provider";
-import { AgentHistoryRecords } from "@spine-event-engine/storage/provider";
+import {
+  AgentExecutionRecords,
+  AgentHistoryRecords,
+  type AgentExecutionStorageInput,
+} from "@spine-event-engine/storage/provider";
 import {
   DeliveryCleanupStorageFactories,
   EntityCommitStorageFactories,
   AgentHistoryStorageFactories,
+  AgentExecutionStorageFactories,
 } from "@spine-event-engine/storage/provider";
 import { Pool, type PoolConfig, type PoolClient } from "pg";
 
@@ -36,6 +41,7 @@ import { PostgresStorageConfigurationError, PostgresStorageConnectionError } fro
 import { PostgresRecordStorage, type PostgresRecordLifecycle } from "./record-storage.js";
 import { PostgresEntityStorage } from "./entity-history.js";
 import { PostgresAgentHistory, AgentHistoryHash } from "./agent-history.js";
+import { PostgresAgentExecution } from "./agent-execution.js";
 import { PostgresEntityCommitStorage } from "./entity-commit.js";
 import { PostgresDeliveryCleanupStorage } from "./delivery-cleanup.js";
 import { PostgresTableResolver } from "./table-resolver.js";
@@ -337,6 +343,44 @@ export class PostgresStorageFactory extends StorageFactory {
         );
       },
     });
+    AgentExecutionStorageFactories.register(this, {
+      createAgentExecutionStorage: (input) => this.createAgentExecutionStorage(input),
+    });
+  }
+
+  /**
+   * Opens native record families for one typed Agent repository.
+   * @param input Tenant scope, typed ID and generated state layout.
+   * @returns Closeable Agent execution storage handle.
+   * @typeParam I Typed Agent identifier.
+   * @typeParam S Generated Agent state.
+   */
+  private createAgentExecutionStorage<I, S extends Message>(
+    input: AgentExecutionStorageInput<I, S>,
+  ): PostgresAgentExecution<I, S> {
+    if (!this.isOpen()) throw new Error("StorageFactory is closed.");
+    const context = input.entity.context;
+    const digest = (value: string) => AgentHistoryHash.value(value);
+    return new PostgresAgentExecution(
+      input,
+      this.createPostgresRecordStorage(
+        context,
+        AgentExecutionRecords.invocationSpec(digest),
+        AgentExecutionRecords.invocationGroup,
+      ),
+      this.createPostgresRecordStorage(
+        context,
+        AgentExecutionRecords.headSpec(digest),
+        AgentExecutionRecords.headGroup,
+      ),
+      this.createPostgresRecordStorage(
+        context,
+        AgentHistoryRecords.spec(digest),
+        AgentHistoryRecords.group,
+      ),
+      this.createPostgresRecordStorage(context, input.entity.recordSpec),
+      () => this.createEntityCommitStorage(input.entity),
+    );
   }
 
   /**

@@ -40,7 +40,20 @@ import {
   ReviewTaskAssignedSchema,
 } from "../../test-fixtures/generated/handler-registry/events_pb.js";
 import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
+import * as AgentInteraction from "@spine-event-engine/proto/agent";
 import { tenant } from "../tenant-fixture.js";
+
+const agentInteractionSchemas = [
+  AgentInteraction.AgentAiOperationStartedSchema,
+  AgentInteraction.AgentModelAttemptStartedSchema,
+  AgentInteraction.AgentModelAttemptFinishedSchema,
+  AgentInteraction.AgentAiResultAdmittedSchema,
+  AgentInteraction.AgentAiOperationFailedSchema,
+  AgentInteraction.AgentToolCallStartedSchema,
+  AgentInteraction.AgentToolCallFinishedSchema,
+  AgentInteraction.AgentModelSelectionChangedSchema,
+  AgentInteraction.AgentInvocationTerminatedSchema,
+];
 
 const validationChecks = vi.hoisted(() => vi.fn());
 
@@ -199,10 +212,25 @@ describe("EventBus", () => {
       eventBusAccess.registerSchemas(bus, [EntityLog.EntityStateChangedSchema]);
     }).not.toThrow();
     expect(() => {
+      eventBusAccess.registerSchemas(bus, agentInteractionSchemas);
+    }).not.toThrow();
+    expect(() => {
       eventBusAccess.registerSchemas(bus, [ReviewTaskAssignedSchema]);
     }).toThrow(
       'System EventBus rejects domain event schema "type.spine.server.testing.handlerregistry.ReviewTaskAssigned".',
     );
+  });
+
+  it("rejects Agent interaction System schemas from the domain bus", () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: false },
+      new InMemoryStorageFactory(),
+    );
+    const bus = new EventBus(store);
+    for (const schema of agentInteractionSchemas)
+      expect(() => {
+        eventBusAccess.registerSchemas(bus, [schema]);
+      }).toThrow(`Domain EventBus rejects system event schema "type.${schema.typeName}".`);
   });
 
   it("rejects untyped construction without an EventStore", () => {

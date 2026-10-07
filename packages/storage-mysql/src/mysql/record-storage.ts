@@ -13,6 +13,7 @@
  */
 
 import { fromBinary, ScalarType, toBinary, type Message } from "@bufbuild/protobuf";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash } from "node:crypto";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { StringifierRegistry } from "@spine-event-engine/core";
@@ -87,7 +88,10 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
 
   #ready: Promise<void> | undefined;
 
-  #bound: import("mysql2/promise").PoolConnection | undefined;
+  /**
+   * Keeps transaction connections separate across concurrent asynchronous calls.
+   */
+  readonly #bound = new AsyncLocalStorage<import("mysql2/promise").PoolConnection>();
 
   readonly #idColumn: MysqlIdColumn<I>;
 
@@ -185,9 +189,9 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
       rows.some(
         (row, index) =>
           row.column_name !== columns[index] ||
-          row.seq_in_index !== index + 1 ||
+          Number(row.seq_in_index) !== index + 1 ||
           row.sub_part !== null ||
-          row.non_unique !== 1 ||
+          Number(row.non_unique) !== 1 ||
           row.collation !== "A" ||
           row.index_type !== "BTREE",
       )
@@ -346,16 +350,16 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     connection: import("mysql2/promise").PoolConnection,
     work: () => Promise<T>,
   ): Promise<T> {
-    if (this.#bound !== undefined) {
+    const bound = this.#bound.getStore();
+    if (bound !== undefined) {
+      if (bound !== connection)
+        throw new Error("MySQL record handle is bound to another transaction.");
       return work();
     }
-    this.#bound = connection;
-    try {
+    return this.#bound.run(connection, async () => {
       await this.ready(connection);
       return await work();
-    } finally {
-      this.#bound = undefined;
-    }
+    });
   }
 
   /**
@@ -603,7 +607,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
   private async using<T>(
     work: (connection: import("mysql2/promise").PoolConnection) => Promise<T>,
   ): Promise<T> {
-    const bound = this.#bound;
+    const bound = this.#bound.getStore();
     if (bound !== undefined) {
       return work(bound);
     }
@@ -1333,9 +1337,9 @@ interface EngineRow extends RowDataPacket {
 
 interface IndexRow extends RowDataPacket {
   index_name: string;
-  non_unique: number;
+  non_unique: number | string;
   column_name: string;
-  seq_in_index: number;
+  seq_in_index: number | string;
   sub_part?: number | null;
   collation?: string | null;
   index_type?: string;
@@ -1401,10 +1405,10 @@ function groupedIndexes(
   for (const index of indexes) {
     const existing = grouped.get(index.index_name) ?? {
       name: index.index_name,
-      nonUnique: index.non_unique,
+      nonUnique: Number(index.non_unique),
       columns: [],
     };
-    existing.columns[index.seq_in_index - 1] = index.column_name;
+    existing.columns[Number(index.seq_in_index) - 1] = index.column_name;
     grouped.set(index.index_name, existing);
   }
   return [...grouped.values()];

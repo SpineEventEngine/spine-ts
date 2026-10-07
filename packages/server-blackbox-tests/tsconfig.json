@@ -8,5 +8,6 @@
     "outDir": "dist",
     "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
   },
-  "include": ["src/**/*.ts", "generated/**/*.ts"]
+  "include": ["src/**/*.ts", "generated/**/*.ts"],
+  "references": [{ "path": "../ai-vercel-ax" }]
 }

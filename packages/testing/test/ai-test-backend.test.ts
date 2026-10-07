@@ -13,9 +13,12 @@
  */
 
 import { create } from "@bufbuild/protobuf";
+import { createHash } from "node:crypto";
+import { AnyMessages } from "@spine-event-engine/core";
 import { AiModel, AiRegistry, ModelRef, type AiDecisionResult } from "@spine-event-engine/ai";
 import {
   backendDefinition,
+  type AiAttemptRequest,
   type AiBackendExecution,
   type AiExecutionControl,
 } from "@spine-event-engine/ai/spi/adapter";
@@ -25,6 +28,8 @@ import {
   AiTokenCountSchema,
   AiUsageSchema,
   AiOutcome,
+  DecisionResponseSchema,
+  GenerationResponseSchema,
 } from "@spine-event-engine/proto/agent";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -138,6 +143,125 @@ function harness(backend: AiTestBackend, model = generation) {
 }
 
 describe("AiTestBackend", () => {
+  it("rejects saved response-kind and diagnostic changes without consuming scripts", async () => {
+    const backend = AiTestBackend.create({ ref: ModelRef.of("fixture", "v1"), kind: "decision" });
+    backend.forModel(decision).refuse();
+    const run = harness(backend, decision);
+    const admitted = create(GenerationResponseSchema, {
+      outcome: AiOutcome.ADMITTED,
+      admittedOutput: AnyMessages.pack(
+        ProposedSupportReplySchema,
+        create(ProposedSupportReplySchema, { reply: "Same output type" }),
+      ),
+    });
+    const wrongKind = {
+      ...run.request,
+      control: {
+        ...run.control,
+        beginAttempt: () => Promise.resolve({ kind: "replay", id: "saved", response: admitted }),
+      },
+    } as AiBackendExecution;
+    await expect(backendDefinition(backend.registration).execute(wrongKind)).rejects.toThrow(
+      "changed request kind",
+    );
+    const wrongDiagnostic = {
+      ...run.request,
+      control: {
+        ...run.control,
+        beginAttempt: () =>
+          Promise.resolve({
+            kind: "replay",
+            id: "saved",
+            response: create(DecisionResponseSchema, {
+              outcome: AiOutcome.FAILED,
+              diagnosticId: { value: "original" },
+            }),
+            failure: { code: "UNAVAILABLE", diagnosticId: "changed", retryableByNewSignal: true },
+          }),
+      },
+    } as AiBackendExecution;
+    await expect(backendDefinition(backend.registration).execute(wrongDiagnostic)).rejects.toThrow(
+      "cannot be reconstructed",
+    );
+    expect(run.control.reserveTransport).not.toHaveBeenCalled();
+    expect(run.completions).toHaveLength(0);
+    await backendDefinition(backend.registration).execute(harness(backend, decision).request);
+    backend.assertSatisfied();
+  });
+
+  it.each([
+    {
+      model: generation,
+      response: create(GenerationResponseSchema, {
+        outcome: AiOutcome.INVALID_OUTPUT,
+        diagnosticId: { value: "saved-invalid" },
+        rawOutput: "bad",
+      }),
+      code: "INVALID_OUTPUT",
+      retryable: false,
+    },
+    {
+      model: generation,
+      response: create(GenerationResponseSchema, {
+        outcome: AiOutcome.FAILED,
+        diagnosticId: { value: "saved-failed" },
+      }),
+      code: "UNAVAILABLE",
+      retryable: true,
+    },
+    {
+      model: decision,
+      response: create(DecisionResponseSchema, {
+        outcome: AiOutcome.INVALID_OUTPUT,
+        diagnosticId: { value: "saved-invalid-decision" },
+      }),
+      code: "INVALID_OUTPUT",
+      retryable: false,
+    },
+    {
+      model: decision,
+      response: create(DecisionResponseSchema, {
+        outcome: AiOutcome.REFUSED,
+        diagnosticId: { value: "saved-refused" },
+      }),
+      code: "REFUSED",
+      retryable: false,
+    },
+  ])(
+    "replays saved $code without consuming a fresh script",
+    async ({ model, response, code, retryable }) => {
+      const backend = AiTestBackend.create({
+        ref: ModelRef.of("fixture", "v1"),
+        kind: model.definition.kind,
+      });
+      backend.forModel(model).refuse();
+      const run = harness(backend, model);
+      const diagnosticId = response.diagnosticId?.value ?? "";
+      const replay = {
+        kind: "replay" as const,
+        id: "saved-attempt",
+        response,
+        failure: { code, retryableByNewSignal: retryable, diagnosticId },
+      };
+      const request = {
+        ...run.request,
+        control: {
+          ...run.control,
+          beginAttempt: vi.fn(() => Promise.resolve(replay)),
+        },
+      } as AiBackendExecution;
+      expect(await backendDefinition(backend.registration).execute(request)).toMatchObject({
+        ok: false,
+        failure: replay.failure,
+      });
+      expect(run.completions).toHaveLength(0);
+      expect(run.control.reserveTransport).not.toHaveBeenCalled();
+      const fresh = harness(backend, model);
+      await backendDefinition(backend.registration).execute(fresh.request);
+      backend.assertSatisfied();
+    },
+  );
+
   it("registers through the normal registry and validates typed output after barriers", async () => {
     const backend = AiTestBackend.create({ ref: ModelRef.of("fixture", "v1"), kind: "generation" });
     const response = create(ProposedSupportReplySchema, {
@@ -198,25 +322,63 @@ describe("AiTestBackend", () => {
     backend.assertSatisfied();
   });
 
-  it("records invalid raw output and runtime-assigned failures without silent retry", async () => {
+  it("reports an unscripted required correction after recording invalid output", async () => {
     const backend = AiTestBackend.create({ ref: ModelRef.of("fixture", "v1"), kind: "generation" });
     backend.forModel(generation).respondWithText("not JSON");
     const run = harness(backend);
     const outcome = await backendDefinition(backend.registration).execute(run.request);
     expect(outcome).toMatchObject({
       ok: false,
-      failure: { code: "INVALID_OUTPUT", diagnosticId: "runtime-1" },
+      failure: { code: "UNAVAILABLE", diagnosticId: "runtime-2" },
     });
-    expect(run.attempts).toHaveLength(1);
+    expect(run.attempts).toHaveLength(2);
     expect(backend.requests()[0]?.validationIssues[0]?.code).toBe("MALFORMED_JSON");
-    backend.forModel(generation).respondWithText(JSON.stringify({ reply: "Corrected" }));
-    const corrected = await backendDefinition(backend.registration).execute(run.request);
-    expect(corrected).toMatchObject({ ok: true, value: { reply: "Corrected" } });
     expect(backend.requests()[1]).toMatchObject({
       attempt: 2,
       corrects: "ticket-1",
       correctionIssues: [{ code: "MALFORMED_JSON" }],
     });
+    expect(() => {
+      backend.assertSatisfied();
+    }).toThrow("unexpected request");
+  });
+
+  it("corrects an invalid generation candidate within one bounded invocation", async () => {
+    const backend = AiTestBackend.create({ ref: ModelRef.of("fixture", "v1"), kind: "generation" });
+    backend
+      .forModel(generation)
+      .respondWithText("not JSON")
+      .respondWithText('{"reply":"Corrected"}');
+    const run = harness(backend);
+    const outcome = await backendDefinition(backend.registration).execute(run.request);
+    expect(outcome).toMatchObject({ ok: true, value: { reply: "Corrected" } });
+    expect(run.attempts).toHaveLength(2);
+    expect(run.completions).toMatchObject([
+      { response: { outcome: AiOutcome.INVALID_OUTPUT, diagnosticId: { value: "runtime-1" } } },
+      { response: { outcome: AiOutcome.ADMITTED } },
+    ]);
+    expect(backend.requests()[1]).toMatchObject({
+      attempt: 2,
+      corrects: "ticket-1",
+      correctionIssues: [{ code: "MALFORMED_JSON" }],
+    });
+    const correction = run.attempts[1] as AiAttemptRequest;
+    if (correction.kind !== "generation") throw new Error("Expected generation correction");
+    const prompt = JSON.parse(correction.content.promptJson) as {
+      correction?: { candidate?: string; issues?: { code: string }[] };
+    };
+    expect(prompt.correction).toMatchObject({
+      candidate: "not JSON",
+      issues: [{ code: "MALFORMED_JSON" }],
+    });
+    const digestInput = JSON.stringify({
+      instructions: correction.content.instructions,
+      outputSchemaJson: correction.content.outputSchemaJson,
+      promptJson: correction.content.promptJson,
+    });
+    expect(correction.content.digest?.value).toBe(
+      createHash("sha256").update(digestInput).digest("hex"),
+    );
     backend.assertSatisfied();
   });
 

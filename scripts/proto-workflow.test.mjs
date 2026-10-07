@@ -1156,6 +1156,7 @@ describe("proto-workflow", () => {
       "examples/todo/generated",
       "examples/projects/generated",
       "examples/orders/generated",
+      "examples/support/generated",
       "examples/message-board/model/generated",
     ]);
     expect(atomicGeneratedTargets.map((target) => target.displayPath)).toEqual([
@@ -1167,6 +1168,7 @@ describe("proto-workflow", () => {
       "examples/todo/generated",
       "examples/projects/generated",
       "examples/orders/generated",
+      "examples/support/generated",
       "examples/message-board/model/generated",
       "examples/message-board/app/generated",
     ]);
@@ -2440,6 +2442,7 @@ describe("proto-workflow", () => {
       "examples/todo/proto",
       "examples/projects/proto",
       "examples/orders/proto",
+      "examples/support/proto",
     ];
 
     for (const modulePath of modulePaths) {
@@ -2456,6 +2459,7 @@ describe("proto-workflow", () => {
     const validExampleModules = [
       ["examples/projects/proto/spine/examples/projects", "projects"],
       ["examples/orders/proto/spine/examples/orders", "orders"],
+      ["examples/support/proto/spine/examples/support", "support"],
     ];
     for (const [directory, packageSegment] of validExampleModules) {
       const absoluteDirectory = join(repoRoot, directory);

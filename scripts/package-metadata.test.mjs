@@ -258,6 +258,7 @@ describe("package metadata", () => {
       "examples/message-board/web",
       "examples/orders",
       "examples/projects",
+      "examples/support",
       "examples/todo",
       "packages/ai",
       "packages/ai-vercel-ax",

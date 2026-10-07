@@ -435,12 +435,16 @@
       "sha256": "7c300d215a1757c17b7bd1a89cebb4825df28a58fcc119f2aa6d5535d7520073"
     },
     {
+      "localPath": "packages/proto/proto/spine/server/agent/execution_record.proto",
+      "sha256": "051cff9a1c7873f40c34101f7d30c86416775ed18fce3223a3eb7452adf83db4"
+    },
+    {
       "localPath": "packages/proto/proto/spine/server/agent/history_record.proto",
       "sha256": "24ed282bc0cd901a3b38748ea7b516e972a87b2a7f69db99a2b094458d48e38a"
     },
     {
       "localPath": "packages/proto/proto/spine/ts/agent/content.proto",
-      "sha256": "acf80d57fb9250d17608d160735169673ec7e539e72cb0e9524a6c9d395d83b2"
+      "sha256": "d5be1c76f420d2185013cb77e2be59b86cad23cb30f3399ea29f5eddfb2e7341"
     },
     {
       "localPath": "packages/proto/proto/spine/ts/agent/history.proto",

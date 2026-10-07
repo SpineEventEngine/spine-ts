@@ -12,9 +12,11 @@
  * the License.
  */
 
+import { createHash, randomUUID } from "node:crypto";
 import {
   clone,
   create,
+  equals,
   ScalarType,
   toBinary,
   type Message,
@@ -24,6 +26,7 @@ import type { EntityQueryPlan } from "@spine-event-engine/core/spi/entity-query-
 import type { EntityQueryDescription } from "@spine-event-engine/core/codegen";
 import {
   AnySchema,
+  FileDescriptorProtoSchema,
   Int32ValueSchema,
   Int64ValueSchema,
   StringValueSchema,
@@ -54,6 +57,7 @@ import {
   type MessageId,
   RejectionEventContextSchema,
   type Command,
+  type ActorContext,
   type Event,
   type TenantId,
   type Version,
@@ -91,7 +95,55 @@ import {
   type AgentHistoryStorage,
   type AgentHistoryView,
 } from "@spine-event-engine/storage/provider";
-import { AgentHistoryEntrySchema } from "@spine-event-engine/proto/agent";
+import {
+  AgentExecutionStorageFactories,
+  type AgentExecutionStorage,
+  type AgentPendingCursor,
+  type AgentPendingPage,
+} from "@spine-event-engine/storage/provider";
+import {
+  AgentHistoryEntrySchema,
+  AgentInvocationTerminatedSchema,
+  AgentModelSelectionChangedSchema as SelectionChangedSchema,
+  AiModelKind,
+  AiDiagnosticIdSchema,
+  ModelPreferenceSchema,
+  ModelRefSchema,
+  ToolEffect,
+  type AgentHistoryEntry,
+} from "@spine-event-engine/proto/agent";
+import {
+  AgentExecutionRecordSchema,
+  AgentExecutionStartSchema,
+  type AgentExecutionStart,
+  AgentExecutionCompletionSchema,
+  AgentInvocationBoundsSchema,
+  type AgentInvocationBounds,
+  AgentInvocationStatus,
+  AgentOutgoingSignalSchema,
+  type AgentOutgoingSignal,
+  AgentSignalKeySchema,
+  type AgentSignalKey,
+  AgentSavedDispatchTargetSchema as SavedTargetSchema,
+  AgentSavedRepositoryFamily,
+  AgentSavedTargetKind,
+  type AgentSavedDispatchPlan,
+  type AgentSavedDispatchTarget,
+  type AgentInvocationKey,
+  type AgentExecutionRecord,
+} from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
+import type {
+  AiControl,
+  AiDefaultModels,
+  AiInvocationLimits,
+  AiModel,
+  AiRegistry,
+  AiScope,
+  HistoryPage,
+  HistoryRead,
+} from "@spine-event-engine/ai";
+import type { ModelPreference, ModelRef } from "@spine-event-engine/proto/agent";
+import { registryOptions } from "@spine-event-engine/ai/spi/runtime";
 
 import { CommandValidationError } from "../bus/command-errors.js";
 import { SignalPublisher } from "../runtime/signal-publisher.js";
@@ -112,9 +164,23 @@ import { RoutingDeclarations, type RoutingDeclarationSnapshot } from "./routing-
 import type { CommandDispatcher } from "../bus/command-dispatcher.js";
 import type { EventDispatcher } from "../bus/event-dispatcher.js";
 import { EventDispatcherOriginSchemas } from "../bus/event-dispatcher-origin-schemas.js";
+import {
+  SavedDispatcherBindings,
+  type SavedCommandBinding,
+  type SavedEventBinding,
+} from "../bus/saved-dispatcher-binding.js";
 import { Delivery } from "../delivery/delivery.js";
 import { commitFenced } from "./commit-fence.js";
 import { AgentHistoryReads } from "../agent/agent-history.js";
+import { AgentReadRuntime } from "../agent/agent-read-runtime.js";
+import { AgentAdmission, type AgentAdmissionInput } from "../agent/agent-admission.js";
+import { AgentRevisions } from "../agent/agent-revisions.js";
+import { AgentExecutionSession } from "../agent/agent-execution-session.js";
+import { AgentModelSelection } from "../agent/agent-model-selection.js";
+import { AgentAiRuntime, AgentUncertainAttemptError } from "../agent/agent-ai-runtime.js";
+import { AgentInteractionEvents } from "../agent/agent-interaction-events.js";
+import { AgentInteractionAudit } from "../agent/agent-interaction-audit.js";
+import { AgentAiBindings } from "../agent/agent-ai-binding.js";
 import { InboxTargets, type InboxMessage, type InboxMessageInput } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
 import {
@@ -448,6 +514,16 @@ interface RepositoryOptionsBase<
   readonly events?: readonly MessageSchema[];
 
   /**
+   * Revision of Agent handler code retained for accepted-execution recovery.
+   */
+  readonly agentCodeRevision?: string;
+
+  /**
+   * Models and deployment policy available to this Agent repository.
+   */
+  readonly ai?: RepositoryAiOptions;
+
+  /**
    * Retain a state-history row after each successful logical store. Defaults to false.
    */
   readonly stateHistory?: boolean;
@@ -466,6 +542,47 @@ interface RepositoryOptionsBase<
    * Manager and Agent repositories currently require retained diagnostic Events.
    */
   readonly doubleDispatchGuard?: boolean | { readonly depth?: number };
+}
+
+/**
+ * Repository-local Agent capabilities and authenticated deployment selection.
+ */
+export interface RepositoryAiOptions {
+  /**
+   * Factory-created capabilities callable by this Agent.
+   */
+  readonly models: readonly AiModel<MessageSchema, MessageSchema>[];
+
+  /**
+   * Per-kind defaults taking precedence over context or server defaults.
+   */
+  readonly defaultModels?: AiDefaultModels;
+
+  /**
+   * Per-kind deployment references permitted for this repository.
+   */
+  readonly allowedModels?: {
+    readonly generation?: readonly ModelRef[];
+    readonly decision?: readonly ModelRef[];
+  };
+
+  /**
+   * Whole-signal bounds that may only narrow registry limits.
+   */
+  readonly invocationLimits?: Partial<AiInvocationLimits>;
+
+  /**
+   * Checks one explicit model change or inheritance selection.
+   * @param scope Accepted actor, source, context, and tenant.
+   * @param reference Selected model deployment, or inheritance.
+   * @param control Deadline and cancellation for the authorization call.
+   * @returns Whether this repository permits the requested selection.
+   */
+  readonly authorizeSelection?: (
+    scope: AiScope,
+    reference: ModelRef | undefined,
+    control: AiControl,
+  ) => boolean | Promise<boolean>;
 }
 
 /**
@@ -964,6 +1081,8 @@ const repositoryHistoryConfigurations = new WeakMap<
   RepositoryView,
   RepositoryHistoryConfiguration
 >();
+const repositoryAiConfigurations = new WeakMap<RepositoryView, RepositoryAiOptions>();
+const repositoryAgentCodeRevisions = new WeakMap<RepositoryView, string>();
 interface DispatchGuard {
   readonly completed: Set<string>;
   readonly order: string[];
@@ -1014,6 +1133,7 @@ const RepositoryRegistration = {
       repository,
       RepositoryStorage.readHistoryConfiguration(options, entityFamily),
     );
+    this.installAgentOptions(repository, options, entityFamily);
     repositorySnapshots.set(
       repository,
       RepositoryIdentity.createRepositorySnapshot(entityType, entityFamily, metadata),
@@ -1023,6 +1143,26 @@ const RepositoryRegistration = {
       RepositoryDispatch.createRepositoryDispatchers(repository, routing),
     );
     RepositoryRegistration.installTargets(repository, routing);
+  },
+
+  /**
+   * Captures Agent capability and code revisions during repository registration.
+   * @typeParam EntityType Concrete generated Entity constructor.
+   * @param repository Registered Entity repository for this operation.
+   * @param options Repository or execution options for this operation.
+   * @param family Registered Entity family.
+   */
+  installAgentOptions<
+    EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>,
+  >(
+    repository: Repository<EntityType>,
+    options: RepositoryOptions<EntityType>,
+    family: EntityFamily,
+  ): void {
+    if (family !== "agent") return;
+    if (options.ai !== undefined) repositoryAiConfigurations.set(repository, options.ai);
+    if (options.agentCodeRevision !== undefined)
+      repositoryAgentCodeRevisions.set(repository, options.agentCodeRevision);
   },
 
   /**
@@ -1244,6 +1384,53 @@ export interface RepositoryAccess {
   producedEventSchemas(repository: RepositoryView): readonly MessageSchema[];
 
   /**
+   * Returns Command outcomes declared by generated handlers in this repository.
+   * @param repository Registered repository to inspect.
+   * @returns Generated Command outcome descriptors.
+   */
+  producedCommandSchemas(repository: RepositoryView): readonly MessageSchema[];
+
+  /**
+   * Returns the Agent's registered capabilities and recovery code revision.
+   * @param repository Agent repository registration.
+   * @returns Configured Agent policy, when present.
+   */
+  agentConfiguration(repository: RepositoryView): {
+    readonly ai?: RepositoryAiOptions;
+    readonly codeRevision?: string;
+  };
+
+  /**
+   * Processes one provider-claimed Agent invocation for framework scheduling.
+   * @param repository Registered Agent repository.
+   * @param tenantId Complete tenant for this accepted invocation.
+   * @param key Stored invocation key from a bounded pending page.
+   * @param signal Cancellation of this scheduled execution.
+   * @returns When the claimed invocation advances or its provider error propagates.
+   */
+  runAcceptedAgent(
+    repository: RepositoryView,
+    tenantId: TenantId | undefined,
+    key: AgentInvocationKey,
+    signal?: AbortSignal,
+  ): Promise<void>;
+
+  /**
+   * Reads one bounded, provider-indexed Agent head page for framework scheduling.
+   * @param repository Registered Agent repository to scan.
+   * @param tenantId Complete tenant selected for this scan.
+   * @param after Provider continuation from the preceding head page.
+   * @param count Maximum number of eligible heads to return.
+   * @returns Eligible heads and their next continuation.
+   */
+  pendingAcceptedAgents(
+    repository: RepositoryView,
+    tenantId: TenantId | undefined,
+    after: AgentPendingCursor | undefined,
+    count: number,
+  ): Promise<AgentPendingPage>;
+
+  /**
    * Reads retained Agent history for the package's testing observation seam.
    * @param repository Registered Agent repository.
    * @param entityId Typed Agent identifier.
@@ -1263,6 +1450,21 @@ export interface RepositoryAccess {
     },
     tenantId?: TenantId,
   ): Promise<AgentHistoryPage>;
+
+  /**
+   * Reads one full Agent history page with the application opaque cursor.
+   * @param repository Registered Agent repository.
+   * @param entityId Typed Agent identifier.
+   * @param request Application page size and opaque cursor.
+   * @param tenantId Complete tenant identity when required.
+   * @returns Retained history items and the next opaque cursor.
+   */
+  agentHistoryPage(
+    repository: RepositoryView,
+    entityId: unknown,
+    request: HistoryRead,
+    tenantId?: TenantId,
+  ): Promise<HistoryPage<AgentHistoryEntry>>;
 
   /**
    * Returns the repository command dispatcher when it has command routing.
@@ -1402,6 +1604,54 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
     return schemas;
   },
 
+  producedCommandSchemas(repository: RepositoryView): readonly MessageSchema[] {
+    const routing = repositoryRoutings.get(repository);
+    if (routing === undefined)
+      throw new TypeError("Produced Command schemas require a Repository instance.");
+    return routing.producedCommandSchemas;
+  },
+
+  agentConfiguration(repository: RepositoryView) {
+    const ai = repositoryAiConfigurations.get(repository);
+    const codeRevision = repositoryAgentCodeRevisions.get(repository);
+    return {
+      ...(ai === undefined ? {} : { ai }),
+      ...(codeRevision === undefined ? {} : { codeRevision }),
+    };
+  },
+
+  runAcceptedAgent(
+    repository: RepositoryView,
+    tenantId: TenantId | undefined,
+    key: AgentInvocationKey,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    return AgentExecutionRunner.run(repository, tenantId, key, signal);
+  },
+
+  pendingAcceptedAgents(
+    repository: RepositoryView,
+    tenantId: TenantId | undefined,
+    after: AgentPendingCursor | undefined,
+    count: number,
+  ): Promise<AgentPendingPage> {
+    const runtime = repositoryRuntimes.get(repository);
+    if (runtime === undefined || repository.entityFamily !== "agent")
+      throw new Error("Agent pending discovery requires a registered Agent repository.");
+    const input = RepositoryStorage.entityStorageInput(
+      repository,
+      RepositoryTenants.storageContextForTenant(runtime.context, tenantId),
+    );
+    const storage = RepositoryStorage.openRepositoryEntityStorage(
+      repository,
+      runtime.storageFactory,
+      input,
+    );
+    if (storage.agentExecution === undefined)
+      throw new Error("Agent pending discovery requires execution storage.");
+    return storage.agentExecution.pending({ count, ...(after === undefined ? {} : { after }) });
+  },
+
   /**
    * Opens a scoped provider read without restoring an application Entity.
    * @param repository Registered Agent repository.
@@ -1438,6 +1688,54 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
     } finally {
       history.close();
     }
+  },
+
+  async agentHistoryPage(
+    repository: RepositoryView,
+    entityId: unknown,
+    request: HistoryRead,
+    tenantId?: TenantId,
+  ): Promise<HistoryPage<AgentHistoryEntry>> {
+    if (repository.entityFamily !== "agent")
+      throw new TypeError("Agent history requires an Agent repository.");
+    const runtime = repositoryRuntimes.get(repository);
+    if (runtime === undefined) throw new Error("Agent history requires an active repository.");
+    const context = RepositoryTenants.storageContextForTenant(runtime.context, tenantId);
+    const input = RepositoryStorage.entityStorageInput(repository, context);
+    const history = AgentHistoryStorageFactories.create(runtime.storageFactory, {
+      context,
+      stateType: repository.stateSchema.typeName,
+      id: { key: input.id.key },
+    });
+    try {
+      return await AgentHistoryReads.readBound(
+        {
+          storage: history,
+          entityId,
+          scope: this.agentHistoryScope(context, input, entityId),
+        },
+        { kind: "full" },
+        request,
+      );
+    } finally {
+      history.close();
+    }
+  },
+
+  /**
+   * Computes the opaque cursor scope for a registered Agent history read.
+   */
+  agentHistoryScope(
+    context: StorageContext,
+    input: EntityStorageInput<unknown, Message>,
+    entityId: unknown,
+  ) {
+    return {
+      context: context.name,
+      tenant: JSON.stringify(context.tenantId ?? null),
+      repository: input.sourceType.typeName,
+      entity: input.id.key(entityId),
+    };
   },
 
   /**
@@ -1752,6 +2050,7 @@ interface RoutingInput<Id> {
 interface RepositoryRuntime {
   readonly context: StorageMode;
   readonly storageFactory: StorageFactory;
+  readonly ai?: AiRegistry;
   readonly stand: Stand;
   readonly signalMetadata: SignalMetadata;
   readonly entityInbox: EntityInbox;
@@ -1759,6 +2058,13 @@ interface RepositoryRuntime {
   readonly publisher: SignalPublisher;
   readonly registerEventSchema: (schema: MessageSchema) => void;
   readonly registerSystemEventSchema: (schema: MessageSchema) => void;
+  readonly prepareSavedEvent: (event: Event) => Promise<AgentSavedDispatchPlan>;
+  readonly prepareSavedCommand: (command: Command) => Promise<AgentSavedDispatchPlan>;
+  readonly publishSavedEvent: (event: Event, plan: AgentSavedDispatchPlan) => Promise<void>;
+  readonly publishSavedCommand: (command: Command, plan: AgentSavedDispatchPlan) => Promise<void>;
+  readonly publishAgentSystemEvent: (event: Event) => Promise<void>;
+  readonly recordAcceptedSaved: (signal: Command | Event) => void;
+  readonly wakeAcceptedAgent: () => void;
 }
 
 type RepositoryHandlersOption =
@@ -3500,7 +3806,14 @@ class ProjectionEventExecution {
 
 /**
  * Binds Process Manager query access to Stand for one handler invocation.
+ * @typeParam Schema Generated Projection state descriptor.
  */
+type ProjectionReadInterceptor = <Schema extends DescriptorMessageSchema>(
+  schema: Schema,
+  query: Query,
+  live: () => Promise<readonly MessageShape<Schema>[]>,
+) => Promise<readonly MessageShape<Schema>[]>;
+
 const ProcessManagerQueries = Object.freeze({
   /**
    * Binds tenant-aware query reads and returns a release callback.
@@ -3509,6 +3822,7 @@ const ProcessManagerQueries = Object.freeze({
    * @param runtime Context Stand and query services.
    * @param actorContext Actor metadata from the source signal.
    * @param tenantId Tenant for query reads, when present.
+   * @param intercept Durable Agent snapshot interception, when active.
    * @returns Callback that removes the query binding.
    */
   bind(
@@ -3516,6 +3830,7 @@ const ProcessManagerQueries = Object.freeze({
     runtime: RepositoryRuntime,
     actorContext: NonNullable<Command["context"]>["actorContext"] | undefined,
     tenantId: TenantId | undefined,
+    intercept?: ProjectionReadInterceptor,
   ): () => void {
     const context =
       actorContext === undefined
@@ -3526,7 +3841,7 @@ const ProcessManagerQueries = Object.freeze({
     return processManagerQueryAccess.bind(
       entity,
       (plan, schema, query) =>
-        ProcessManagerQueries.read(runtime, effectiveTenant, plan, schema, query),
+        ProcessManagerQueries.read(runtime, effectiveTenant, plan, schema, query, intercept),
       context,
     );
   },
@@ -3540,6 +3855,7 @@ const ProcessManagerQueries = Object.freeze({
    * @param plan Compiled read criteria.
    * @param schema State schema supplied by the handler.
    * @param query Wire query carrying the actor and requested fields.
+   * @param intercept Durable Agent snapshot interception, when active.
    * @returns Detached state snapshots decoded with the caller's schema.
    */
   async read<Schema extends DescriptorMessageSchema>(
@@ -3548,6 +3864,7 @@ const ProcessManagerQueries = Object.freeze({
     plan: EntityQueryPlan,
     schema: Schema,
     query: Query,
+    intercept?: ProjectionReadInterceptor,
   ): Promise<readonly MessageShape<Schema>[]> {
     const routes = RegisteredTargets.forStand(runtime.stand);
     const typeUrl = TypeUrls.derive(schema);
@@ -3565,8 +3882,39 @@ const ProcessManagerQueries = Object.freeze({
       tenantId,
       target?.context.isMultitenant ?? runtime.context.multitenant,
     );
+    const live = () =>
+      this.load(
+        target?.context.stand() ?? runtime.stand,
+        registeredSchema,
+        plan,
+        destination,
+        query,
+        schema,
+      );
+    return intercept === undefined ? live() : intercept(schema, query, live);
+  },
+
+  /**
+   * Reads the authorized target after optional Agent snapshot reuse is checked.
+   * @typeParam Schema Generated Projection state descriptor.
+   * @param stand Stand selected by the authorized query route.
+   * @param registeredSchema Descriptor registered for the target.
+   * @param plan Compiled query criteria.
+   * @param destination Effective tenant selected for the target.
+   * @param query Original typed Query envelope.
+   * @param schema Descriptor expected by the caller.
+   * @returns Detached Projection state snapshots.
+   */
+  async load<Schema extends DescriptorMessageSchema>(
+    stand: RepositoryRuntime["stand"],
+    registeredSchema: DescriptorMessageSchema,
+    plan: EntityQueryPlan,
+    destination: TenantId | undefined,
+    query: Query,
+    schema: Schema,
+  ): Promise<readonly MessageShape<Schema>[]> {
     const results = await QueryReader.read(
-      target?.context.stand() ?? runtime.stand,
+      stand,
       registeredSchema,
       plan,
       destination,
@@ -3810,7 +4158,1469 @@ class ProcessManagerExecutionSupport {
 }
 
 /**
- * Executes a routed Process Manager Command and publishes its results.
+ * Advances admitted Agent work only under a provider claim and exact record fence.
+ */
+const AgentExecutionRunner = {
+  /**
+   * Processes one accepted Agent transition under its provider claim.
+   * @param repository Registered Agent repository.
+   * @param tenantId Tenant selected for this invocation.
+   * @param key Exact accepted invocation key.
+   * @param signal Cancellation signal for the current accepted execution.
+   * @returns When the fenced repository operation completes.
+   */
+  async run(
+    repository: RepositoryView,
+    tenantId: TenantId | undefined,
+    key: AgentInvocationKey,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    if (signal?.aborted) return;
+    const runtime = repositoryRuntimes.get(repository);
+    if (runtime?.ai === undefined || repository.entityFamily !== "agent")
+      throw new Error("Agent execution requires a bound Agent repository and AI registry.");
+    const input = RepositoryStorage.entityStorageInput(
+      repository,
+      RepositoryTenants.storageContextForTenant(runtime.context, tenantId),
+    );
+    const storage = RepositoryStorage.openRepositoryEntityStorage(
+      repository,
+      runtime.storageFactory,
+      input,
+    );
+    const executions = storage.agentExecution;
+    if (executions === undefined) throw new Error("Agent execution storage is required.");
+    const token = randomUUID();
+    const claimed = await executions.claim(key, token, addMillis(Time.currentTime(), 30_000));
+    if (claimed === undefined) return;
+    const session = new AgentExecutionSession(
+      executions,
+      claimed.record,
+      token,
+      claimed.preferences,
+    );
+    await this.runClaimed(repository, runtime, tenantId, session, signal);
+  },
+
+  /**
+   * Updates and releases one exact claim while its saved work advances.
+   * @param repository Registered Entity repository for this operation.
+   * @param runtime Bound context storage and publication services.
+   * @param tenantId Tenant selected for this accepted signal.
+   * @param session Fenced Agent execution session.
+   * @param signal Cancellation signal for the current accepted execution.
+   * @returns When the fenced repository operation completes.
+   */
+  async runClaimed(
+    repository: RepositoryView,
+    runtime: RepositoryRuntime,
+    tenantId: TenantId | undefined,
+    session: AgentExecutionSession,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const abort = () => {
+      session.stop();
+    };
+    signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) abort();
+    const renewal = setInterval(() => {
+      // spine-log-boundary: server.agent_lease_renewal
+      void session.renew(addMillis(Time.currentTime(), 30_000)).catch(() => undefined);
+    }, 10_000);
+    try {
+      if (session.signal.aborted) return;
+      await this.advanceClaimed(repository, runtime, tenantId, session);
+    } catch (error) {
+      if (signal?.aborted) return;
+      await this.handleRunFailure(repository, runtime, tenantId, session, error);
+    } finally {
+      clearInterval(renewal);
+      signal?.removeEventListener("abort", abort);
+      session.stop();
+    }
+  },
+
+  /**
+   * Handles transient failures while giving expired work a final audit.
+   * @param repository Registered Entity repository for this operation.
+   * @param runtime Bound context storage and publication services.
+   * @param tenantId Tenant selected for this accepted signal.
+   * @param session Fenced Agent execution session.
+   * @param error Failure raised while processing this accepted signal.
+   * @returns When the fenced repository operation completes.
+   */
+  async handleRunFailure(
+    repository: RepositoryView,
+    runtime: RepositoryRuntime,
+    tenantId: TenantId | undefined,
+    session: AgentExecutionSession,
+    error: unknown,
+  ): Promise<void> {
+    if (error instanceof AgentUncertainAttemptError) {
+      const reason = this.hasUnresolvedToolWrite(session.record())
+        ? "TOOL_OUTCOME_UNKNOWN"
+        : "MODEL_OUTCOME_UNKNOWN";
+      return this.terminate(repository, runtime, tenantId, session, reason);
+    }
+    if (this.deadlineExpired(session.record()))
+      return this.terminate(repository, runtime, tenantId, session, "DEADLINE_EXCEEDED");
+    throw error;
+  },
+
+  /**
+   * Processes one claimed record according to its saved completion or request state.
+   * @param repository Registered Entity repository for this operation.
+   * @param runtime Bound context storage and publication services.
+   * @param tenantId Tenant selected for this accepted signal.
+   * @param session Fenced Agent execution session.
+   * @returns When the fenced repository operation completes.
+   */
+  async advanceClaimed(
+    repository: RepositoryView,
+    runtime: RepositoryRuntime,
+    tenantId: TenantId | undefined,
+    session: AgentExecutionSession,
+  ): Promise<void> {
+    if (this.hasUnresolvedPhysicalRequest(session.record()))
+      return this.terminate(
+        repository,
+        runtime,
+        tenantId,
+        session,
+        this.hasUnresolvedToolWrite(session.record())
+          ? "TOOL_OUTCOME_UNKNOWN"
+          : "MODEL_OUTCOME_UNKNOWN",
+      );
+    if (
+      session.record().status === AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_DELIVERY
+    )
+      return this.deliver(runtime, session);
+    if (this.deadlineExpired(session.record()))
+      return this.terminate(repository, runtime, tenantId, session, "DEADLINE_EXCEEDED");
+    return this.execute(repository, runtime, tenantId, session);
+  },
+
+  /**
+   * Tests the original saved deadline without granting recovery fresh time.
+   * @param record Durable Agent execution record.
+   * @returns Whether the checked condition holds.
+   */
+  deadlineExpired(record: AgentExecutionRecord): boolean {
+    const deadline = record.started?.deadline;
+    return (
+      deadline !== undefined &&
+      Time.currentTimeMillis() >=
+        Number(deadline.seconds) * 1_000 + Math.floor(deadline.nanos / 1_000_000)
+    );
+  },
+
+  /**
+   * Checks for a dispatched model reservation whose response was never saved.
+   * @param record Durable Agent execution record.
+   * @returns Whether the checked condition holds.
+   */
+  hasUnresolvedPhysicalRequest(record: AgentExecutionRecord): boolean {
+    const model = record.journal.some((entry) => {
+      if (entry.evidence.case !== "attempt") return false;
+      const attempt = entry.evidence.value;
+      return (
+        attempt.reservedResponseBytes > 0n &&
+        attempt.response.case === undefined &&
+        !this.hasSavedOperationResult(record, attempt.operation?.value)
+      );
+    });
+    return model || this.hasUnresolvedToolWrite(record);
+  },
+
+  /**
+   * Checks for a dispatched write with no recorded tool result.
+   * @param record Durable Agent execution record.
+   * @returns Whether the checked condition holds.
+   */
+  hasUnresolvedToolWrite(record: AgentExecutionRecord): boolean {
+    return record.journal.some((entry) => {
+      if (entry.evidence.case !== "tool") return false;
+      const tool = entry.evidence.value;
+      return (
+        tool.request?.effect === ToolEffect.WRITE &&
+        tool.response === undefined &&
+        (tool.dispatched || tool.outcomeUnknown) &&
+        !this.hasSavedOperationResult(record, tool.operation?.value)
+      );
+    });
+  },
+
+  /**
+   * Checks for a settled named result even when physical evidence is incomplete.
+   * @param record Durable Agent execution record.
+   * @param id Saved signal, operation, or Entity identifier.
+   * @returns Whether the checked condition holds.
+   */
+  hasSavedOperationResult(record: AgentExecutionRecord, id: string | undefined): boolean {
+    return record.journal.some(
+      (entry) =>
+        entry.evidence.case === "operation" &&
+        entry.evidence.value.operation?.value === id &&
+        entry.evidence.value.result.case !== undefined,
+    );
+  },
+
+  /**
+   * Records termination of an unreplayable physical request under the provider fence.
+   * @param repository Registered Entity repository for this operation.
+   * @param runtime Bound context storage and publication services.
+   * @param tenantId Tenant selected for this accepted signal.
+   * @param session Fenced Agent execution session.
+   * @param reason Safe terminal reason retained in Agent audit.
+   * @returns When the fenced repository operation completes.
+   */
+  async terminate(
+    repository: RepositoryView,
+    runtime: RepositoryRuntime,
+    tenantId: TenantId | undefined,
+    session: AgentExecutionSession,
+    reason: string,
+  ): Promise<void> {
+    const record = session.record();
+    const event = this.terminationEvent(repository, runtime, tenantId, record, reason);
+    const occurredAt = event.context?.timestamp;
+    if (occurredAt === undefined) throw new Error("Agent termination Event requires Time.");
+    runtime.registerSystemEventSchema(AgentInvocationTerminatedSchema);
+    await session.update(
+      (next) => {
+        next.status = AgentInvocationStatus.AGENT_INVOCATION_TERMINATED;
+        next.terminalFailure = create(AiDiagnosticIdSchema, { value: randomUUID() });
+        return next;
+      },
+      [
+        create(AgentHistoryEntrySchema, {
+          occurredAt,
+          item: { case: "systemEvent", value: event },
+        }),
+      ],
+    );
+    await runtime.publishAgentSystemEvent(event);
+  },
+
+  /**
+   * Builds one original termination envelope for a saved terminal reason.
+   * @param repository Registered Entity repository for this operation.
+   * @param runtime Bound context storage and publication services.
+   * @param tenantId Tenant selected for this accepted signal.
+   * @param record Durable Agent execution record.
+   * @param reason Safe terminal reason retained in Agent audit.
+   * @returns Original AgentInvocationTerminated System Event envelope.
+   */
+  terminationEvent(
+    repository: RepositoryView,
+    runtime: RepositoryRuntime,
+    tenantId: TenantId | undefined,
+    record: AgentExecutionRecord,
+    reason: string,
+  ): Event {
+    const accepted = record.accepted;
+    if (accepted?.recipientId === undefined)
+      throw new Error("Agent termination requires the original typed recipient.");
+    const scope = AgentModelSelection.scope(accepted, repository.stateSchema, tenantId);
+    const unresolvedToolCalls = this.unresolvedToolCalls(record);
+    const payload = create(AgentInvocationTerminatedSchema, {
+      agent: scope.agent,
+      sourceSignal: scope.source,
+      reason,
+      unresolvedAttempts: record.journal.flatMap((entry) =>
+        entry.evidence.case === "attempt" &&
+        entry.evidence.value.response.case === undefined &&
+        entry.evidence.value.attempt !== undefined
+          ? [entry.evidence.value.attempt]
+          : [],
+      ),
+      unresolvedToolCalls,
+      terminatedAt: Time.currentTime(),
+    });
+    return AgentInteractionEvents.envelope(
+      accepted,
+      runtime.signalMetadata,
+      accepted.recipientId,
+      AgentInvocationTerminatedSchema,
+      payload,
+    );
+  },
+
+  /**
+   * Returns exact IDs for dispatched write effects without saved results.
+   * @param record Durable Agent execution record.
+   * @returns Original ToolCall IDs for unresolved dispatched writes.
+   */
+  unresolvedToolCalls(record: AgentExecutionRecord) {
+    return record.journal.flatMap((entry) => {
+      if (entry.evidence.case !== "tool") return [];
+      const tool = entry.evidence.value;
+      return tool.request?.effect === ToolEffect.WRITE &&
+        tool.response === undefined &&
+        (tool.dispatched || tool.outcomeUnknown) &&
+        tool.request.call !== undefined
+        ? [tool.request.call]
+        : [];
+    });
+  },
+
+  /**
+   * Persists start facts, runs selected handlers, and conditionally completes a no-op.
+   * @param repository Agent registration.
+   * @param runtime Bound services.
+   * @param tenantId Complete tenant, when applicable.
+   * @param session Fenced Agent execution session.
+   * @returns When the fenced repository operation completes.
+   */
+  async execute(
+    repository: RepositoryView,
+    runtime: RepositoryRuntime,
+    tenantId: TenantId | undefined,
+    session: AgentExecutionSession,
+  ): Promise<void> {
+    const claimed = session.record();
+    const accepted = claimed.accepted;
+    if (accepted?.key === undefined || accepted.recipientId === undefined)
+      throw new Error("Claimed Agent invocation lacks accepted source and recipient.");
+    const entityId = InboxMessages.targetEntityId(accepted.recipientId, repository.idField);
+    const support = new ProcessManagerExecutionSupport(repository, runtime);
+    const loaded = await support.load(entityId, tenantId === undefined ? {} : { tenantId });
+    const handlers = this.handlers(repository, accepted);
+    const record =
+      claimed.started === undefined
+        ? await this.start(repository, runtime, session, loaded, handlers, entityId, tenantId)
+        : claimed;
+    if (session.signal.aborted) return;
+    const completed = await this.completeExecution(
+      repository,
+      runtime,
+      tenantId,
+      session,
+      loaded,
+      accepted,
+      handlers,
+      entityId,
+      record.started?.initialVersion ?? create(VersionSchema),
+    );
+    if (completed.status === AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_DELIVERY)
+      await this.deliver(runtime, session);
+  },
+
+  /**
+   * Creates or rejects the draft before one conditional Entity completion.
+   * @param repository Registered Entity repository for this operation.
+   * @param runtime Bound context storage and publication services.
+   * @param tenantId Tenant selected for this accepted signal.
+   * @param session Fenced Agent execution session.
+   * @param loaded Loaded Entity and its repository storage state.
+   * @param accepted Durable original signal and saved handler bindings.
+   * @param handlers Generated handlers in their saved order.
+   * @param entityId Typed recipient Entity identifier.
+   * @param initialVersion Entity version before selected handlers run.
+   * @returns Record after conditional Entity and execution completion.
+   */
+  async completeExecution(
+    repository: RepositoryView,
+    runtime: RepositoryRuntime,
+    tenantId: TenantId | undefined,
+    session: AgentExecutionSession,
+    loaded: LoadedRepositoryEntity,
+    accepted: NonNullable<AgentExecutionRecord["accepted"]>,
+    handlers: readonly RegisteredHandlerMetadata[],
+    entityId: unknown,
+    initialVersion: Version,
+  ): Promise<AgentExecutionRecord> {
+    const outputs = await this.outputsOrRejection(
+      repository,
+      runtime,
+      tenantId,
+      session,
+      loaded.entity,
+      accepted,
+      handlers,
+      entityId,
+      initialVersion,
+    );
+    return this.complete(repository, runtime, tenantId, session, loaded, entityId, outputs);
+  },
+
+  /**
+   * Rejects a Command draft and persists only its declared rejection.
+   * @param repository Registered Entity repository for this operation.
+   * @param runtime Bound context storage and publication services.
+   * @param tenantId Tenant selected for this accepted signal.
+   * @param session Fenced Agent execution session.
+   * @param entity Loaded recipient Entity instance.
+   * @param accepted Durable original signal and saved handler bindings.
+   * @param handlers Generated handlers in their saved order.
+   * @param entityId Typed recipient Entity identifier.
+   * @param initialVersion Entity version before selected handlers run.
+   * @returns Prepared outgoing signals, or only the declared rejection.
+   */
+  async outputsOrRejection(
+    repository: RepositoryView,
+    runtime: RepositoryRuntime,
+    tenantId: TenantId | undefined,
+    session: AgentExecutionSession,
+    entity: object,
+    accepted: NonNullable<AgentExecutionRecord["accepted"]>,
+    handlers: readonly RegisteredHandlerMetadata[],
+    entityId: unknown,
+    initialVersion: Version,
+  ): Promise<readonly AgentOutgoingSignal[]> {
+    try {
+      return await this.produceOutputs(
+        repository,
+        runtime,
+        tenantId,
+        session,
+        entity,
+        accepted,
+        handlers,
+        entityId,
+        initialVersion,
+      );
+    } catch (error) {
+      if (!RejectionThrowable.is(error) || accepted.signal.case !== "command") throw error;
+      const handler = handlers[0];
+      if (handler === undefined) throw new Error("Agent rejection requires a Command assignee.");
+      RepositorySignals.requireDeclaredRejection(handler.handler, error);
+      session.discardPreferenceChanges();
+      return [this.rejectionOutput(runtime, repository, accepted.signal.value, entityId, error)];
+    }
+  },
+
+  /**
+   * Wraps the original rejection Event as one pending saved output.
+   * @param runtime Bound context storage and publication services.
+   * @param repository Registered Entity repository for this operation.
+   * @param command Original typed Command envelope.
+   * @param entityId Typed recipient Entity identifier.
+   * @param error Failure raised while processing this accepted signal.
+   * @returns Prepared original rejection Event for durable delivery.
+   */
+  rejectionOutput(
+    runtime: RepositoryRuntime,
+    repository: RepositoryView,
+    command: Command,
+    entityId: unknown,
+    error: RejectionThrowable,
+  ): AgentOutgoingSignal {
+    return create(AgentOutgoingSignalSchema, {
+      signal: {
+        case: "event",
+        value: RepositorySignals.rejectionEvent(runtime, repository, command, entityId, error),
+      },
+    });
+  },
+
+  /**
+   * Restores handler results and binds their declared original output envelopes.
+   * @param repository Registered Entity repository for this operation.
+   * @param runtime Bound context storage and publication services.
+   * @param tenantId Tenant selected for this accepted signal.
+   * @param session Fenced Agent execution session.
+   * @param entity Loaded recipient Entity instance.
+   * @param accepted Durable original signal and saved handler bindings.
+   * @param handlers Generated handlers in their saved order.
+   * @param entityId Typed recipient Entity identifier.
+   * @param initialVersion Entity version before selected handlers run.
+   * @returns Prepared outgoing signals from accepted handler results.
+   */
+  async produceOutputs(
+    repository: RepositoryView,
+    runtime: RepositoryRuntime,
+    tenantId: TenantId | undefined,
+    session: AgentExecutionSession,
+    entity: object,
+    accepted: NonNullable<AgentExecutionRecord["accepted"]>,
+    handlers: readonly RegisteredHandlerMetadata[],
+    entityId: unknown,
+    initialVersion: Version,
+  ): Promise<readonly AgentOutgoingSignal[]> {
+    const produced = await this.invoke(
+      repository,
+      runtime,
+      tenantId,
+      session,
+      entity,
+      accepted,
+      handlers,
+    );
+    return this.bindOutputs(repository, runtime, accepted, entityId, initialVersion, produced);
+  },
+
+  /**
+   * Commits changed state and the fenced execution record as one provider mutation.
+   * @param repository Agent registration.
+   * @param runtime Context Stand and provider services.
+   * @param tenantId Complete delivery tenant.
+   * @param session Serialized provider claim and current record.
+   * @param loaded Entity after handler transaction commit.
+   * @param entityId Original typed recipient.
+   * @param outputs Original emitted Event or Command envelopes.
+   * @returns Complete record after the atomic provider mutation.
+   */
+  async complete(
+    repository: RepositoryView,
+    runtime: RepositoryRuntime,
+    tenantId: TenantId | undefined,
+    session: AgentExecutionSession,
+    loaded: LoadedRepositoryEntity,
+    entityId: unknown,
+    outputs: readonly AgentOutgoingSignal[],
+  ): Promise<AgentExecutionRecord> {
+    const version = RepositoryEntities.repositoryVersion(loaded.entity);
+    const preferences = session.preferences();
+    const { historyEntries: emitted } = this.completionFacts(
+      session.record(),
+      version,
+      outputs,
+      preferences,
+    );
+    const preferenceEvents = this.preferenceEvents(repository, runtime, tenantId, session);
+    const historyEntries = [...emitted, ...this.preferenceHistory(preferenceEvents)];
+    const makeNext = (record: AgentExecutionRecord) =>
+      this.completionFacts(record, version, outputs, preferences).next;
+    const completed = await this.commitCompletion(
+      repository,
+      runtime,
+      tenantId,
+      session,
+      loaded,
+      entityId,
+      makeNext,
+      historyEntries,
+    );
+    for (const event of preferenceEvents) await runtime.publishAgentSystemEvent(event);
+    return completed;
+  },
+
+  /**
+   * Applies the same provider fence to preference events and Entity completion.
+   * @param repository Registered Entity repository for this operation.
+   * @param runtime Bound context storage and publication services.
+   * @param tenantId Tenant selected for this accepted signal.
+   * @param session Fenced Agent execution session.
+   * @param loaded Loaded Entity and its repository storage state.
+   * @param entityId Typed recipient Entity identifier.
+   * @param makeNext Callback constructing the next durable execution record.
+   * @param historyEntries Agent history rows included in the fenced mutation.
+   * @returns Saved execution record after conditional completion.
+   */
+  commitCompletion(
+    repository: RepositoryView,
+    runtime: RepositoryRuntime,
+    tenantId: TenantId | undefined,
+    session: AgentExecutionSession,
+    loaded: LoadedRepositoryEntity,
+    entityId: unknown,
+    makeNext: (record: AgentExecutionRecord) => AgentExecutionRecord,
+    historyEntries: readonly AgentHistoryEntry[],
+  ): Promise<AgentExecutionRecord> {
+    return RepositoryEntities.repositoryChanged(loaded.entity)
+      ? this.commitChanged(
+          repository,
+          runtime,
+          tenantId,
+          session,
+          loaded,
+          entityId,
+          makeNext,
+          historyEntries,
+        )
+      : session.complete(makeNext, historyEntries);
+  },
+
+  /**
+   * Wraps original preference Events as indexed Agent history entries.
+   * @param events Original Event envelopes retained for diagnostics.
+   * @returns Typed Agent history rows for saved preference changes.
+   */
+  preferenceHistory(events: readonly Event[]): readonly AgentHistoryEntry[] {
+    return events.map((event) => {
+      const occurredAt = event.context?.timestamp;
+      if (occurredAt === undefined) throw new Error("Agent preference Event requires Time.");
+      return create(AgentHistoryEntrySchema, {
+        occurredAt,
+        item: { case: "systemEvent", value: event },
+      });
+    });
+  },
+
+  /**
+   * Captures only effective preference changes committed by this signal.
+   * @param repository Registered Entity repository for this operation.
+   * @param runtime Bound context storage and publication services.
+   * @param tenantId Tenant selected for this accepted signal.
+   * @param session Fenced Agent execution session.
+   * @returns Original model-selection System Events.
+   */
+  preferenceEvents(
+    repository: RepositoryView,
+    runtime: RepositoryRuntime,
+    tenantId: TenantId | undefined,
+    session: AgentExecutionSession,
+  ): readonly Event[] {
+    const accepted = session.record().accepted;
+    if (accepted?.recipientId === undefined)
+      throw new Error("Agent preference requires accepted work.");
+    const scope = AgentModelSelection.scope(accepted, repository.stateSchema, tenantId);
+    return [AiModelKind.GENERATION, AiModelKind.DECISION].flatMap((kind) => {
+      const previous = this.preferenceModel(session.initialPreferences(), kind);
+      const selected = this.preferenceModel(session.preferences(), kind);
+      if (previous === undefined && selected === undefined) return [];
+      if (
+        previous !== undefined &&
+        selected !== undefined &&
+        equals(ModelRefSchema, previous, selected)
+      )
+        return [];
+      return [this.preferenceEvent(accepted, scope, kind, previous, selected, runtime)];
+    });
+  },
+
+  /**
+   * Builds one effective selection change with its original causal context.
+   * @param accepted Durable original signal and saved handler bindings.
+   * @param scope Accepted actor, source, context, and tenant.
+   * @param kind Generation or decision model kind.
+   * @param previous Previously selected model deployment.
+   * @param selected Newly selected model deployment.
+   * @param runtime Bound context storage and publication services.
+   * @returns Original model-selection System Event.
+   */
+  preferenceEvent(
+    accepted: NonNullable<AgentExecutionRecord["accepted"]>,
+    scope: AiScope,
+    kind: AiModelKind,
+    previous: ModelRef | undefined,
+    selected: ModelRef | undefined,
+    runtime: RepositoryRuntime,
+  ): Event {
+    const recipientId = accepted.recipientId;
+    if (recipientId === undefined) throw new Error("Agent preference requires a recipient.");
+    const payload = create(SelectionChangedSchema, {
+      agent: scope.agent,
+      sourceSignal: scope.source,
+      kind,
+      ...(previous === undefined ? {} : { previousModel: previous }),
+      ...(selected === undefined ? {} : { selectedModel: selected }),
+      changedAt: Time.currentTime(),
+    });
+    runtime.registerSystemEventSchema(SelectionChangedSchema);
+    return AgentInteractionEvents.envelope(
+      accepted,
+      runtime.signalMetadata,
+      recipientId,
+      SelectionChangedSchema,
+      payload,
+    );
+  },
+
+  /**
+   * Reads an explicit model selection, including inherited defaults as absence.
+   * @param preferences Current Agent instance model preferences.
+   * @param kind Generation or decision model kind.
+   * @returns Selected deployment reference, or inherited default.
+   */
+  preferenceModel(
+    preferences: readonly ModelPreference[],
+    kind: AiModelKind,
+  ): ModelRef | undefined {
+    const selected = preferences.find((entry) => entry.kind === kind);
+    return selected?.selection.case === "model" ? selected.selection.value : undefined;
+  },
+
+  /**
+   * Builds the immutable completion image and emitted domain history.
+   * @param record Durable Agent execution record.
+   * @param version Entity version associated with the signal.
+   * @param outputs Prepared outgoing domain signals.
+   * @param preferences Current Agent instance model preferences.
+   * @returns Completion facts with original outputs and resulting version.
+   */
+  completionFacts(
+    record: AgentExecutionRecord,
+    version: Version,
+    outputs: readonly AgentOutgoingSignal[],
+    preferences: readonly ModelPreference[],
+  ) {
+    const initialVersion = record.started?.initialVersion;
+    if (initialVersion === undefined)
+      throw new Error("Agent completion requires its started Version.");
+    const next = clone(AgentExecutionRecordSchema, record);
+    next.status =
+      outputs.length === 0
+        ? AgentInvocationStatus.AGENT_INVOCATION_COMPLETED
+        : AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_DELIVERY;
+    next.completion = create(AgentExecutionCompletionSchema, {
+      initialVersion,
+      resultingVersion: version,
+      preferences: preferences.map((entry) => clone(ModelPreferenceSchema, entry)),
+      outgoing: outputs.map((output) => clone(AgentOutgoingSignalSchema, output)),
+    });
+    return { next, historyEntries: this.emittedHistory(outputs) };
+  },
+
+  /**
+   * Stores only committed domain Events in the Agent's emitted history.
+   * @param outputs Prepared outgoing domain signals.
+   * @returns Committed domain Event rows for Agent history.
+   */
+  emittedHistory(outputs: readonly AgentOutgoingSignal[]): readonly AgentHistoryEntry[] {
+    return outputs.flatMap((output) => {
+      if (output.signal.case !== "event" || output.signal.value.context?.rejection !== undefined)
+        return [];
+      const event = output.signal.value;
+      const occurredAt = event.context?.timestamp;
+      if (occurredAt === undefined)
+        throw new Error("Agent emitted Event requires its original timestamp.");
+      return [
+        create(AgentHistoryEntrySchema, {
+          occurredAt,
+          item: { case: "domainEvent", value: event },
+        }),
+      ];
+    });
+  },
+
+  /**
+   * Commits changed Entity state with the already prepared execution image.
+   * @param repository Registered Entity repository for this operation.
+   * @param runtime Bound context storage and publication services.
+   * @param tenantId Tenant selected for this accepted signal.
+   * @param session Fenced Agent execution session.
+   * @param loaded Loaded Entity and its repository storage state.
+   * @param entityId Typed recipient Entity identifier.
+   * @param makeNext Callback constructing the next durable execution record.
+   * @param historyEntries Agent history rows included in the fenced mutation.
+   * @returns Saved execution record after the changed Entity commit.
+   */
+  async commitChanged(
+    repository: RepositoryView,
+    runtime: RepositoryRuntime,
+    tenantId: TenantId | undefined,
+    session: AgentExecutionSession,
+    loaded: LoadedRepositoryEntity,
+    entityId: unknown,
+    makeNext: (record: AgentExecutionRecord) => AgentExecutionRecord,
+    historyEntries: readonly AgentHistoryEntry[],
+  ): Promise<AgentExecutionRecord> {
+    const version = RepositoryEntities.repositoryVersion(loaded.entity);
+    const state = RepositoryEntities.repositoryState(loaded.entity) as Message;
+    const lifecycle = RepositoryEntities.repositoryLifecycle(loaded.entity);
+    const deferred = await standAccess.deferUpdate(
+      runtime.stand,
+      repository.stateSchema,
+      state,
+      RepositoryStand.standUpdateOptions(tenantId, version, lifecycle),
+      repository.metadata,
+    );
+    const prepared = RepositoryStand.preparedRecord(repository, deferred, entityId);
+    return this.commitDeferred(
+      repository,
+      session,
+      loaded,
+      entityId,
+      makeNext,
+      historyEntries,
+      deferred,
+      prepared,
+    );
+  },
+
+  /**
+   * Applies the deferred Stand image only after fenced provider completion.
+   * @param repository Registered Entity repository for this operation.
+   * @param session Fenced Agent execution session.
+   * @param loaded Loaded Entity and its repository storage state.
+   * @param entityId Typed recipient Entity identifier.
+   * @param makeNext Callback constructing the next durable execution record.
+   * @param historyEntries Agent history rows included in the fenced mutation.
+   * @param deferred Prepared Stand update awaiting conditional commit.
+   * @param prepared Prepared conditional Entity commit.
+   * @returns Saved execution record after the deferred Entity commit.
+   */
+  async commitDeferred(
+    repository: RepositoryView,
+    session: AgentExecutionSession,
+    loaded: LoadedRepositoryEntity,
+    entityId: unknown,
+    makeNext: (record: AgentExecutionRecord) => AgentExecutionRecord,
+    historyEntries: readonly AgentHistoryEntry[],
+    deferred: Awaited<ReturnType<typeof standAccess.deferUpdate>>,
+    prepared: EntityRecord,
+  ): Promise<AgentExecutionRecord> {
+    try {
+      const completed = await session.complete(makeNext, historyEntries, {
+        context: loaded.storageInput.context,
+        entity: loaded.storageInput,
+        entityId,
+        next: prepared,
+        ...(RepositoryStorage.historyConfiguration(repository).stateHistory
+          ? { states: [prepared] }
+          : {}),
+      });
+      deferred.notify();
+      return completed;
+    } catch (error) {
+      deferred.cancel();
+      throw error;
+    }
+  },
+
+  /**
+   * Binds declared generated Event and Command results in handler order.
+   * @param repository Agent declaration.
+   * @param runtime Signal metadata factory.
+   * @param accepted Original accepted envelope.
+   * @param entityId Typed recipient.
+   * @param version Entity Version before this transition.
+   * @param produced Handler results in declaration order.
+   * @returns Original outgoing envelopes ready for one conditional completion.
+   */
+  bindOutputs(
+    repository: RepositoryView,
+    runtime: RepositoryRuntime,
+    accepted: NonNullable<AgentExecutionRecord["accepted"]>,
+    entityId: unknown,
+    version: Version,
+    produced: readonly unknown[],
+  ): readonly AgentOutgoingSignal[] {
+    const source = accepted.signal;
+    if (source.case !== "command" && source.case !== "event")
+      throw new Error("Agent output requires its accepted source signal.");
+    const routing = repositoryRoutings.get(repository);
+    if (routing === undefined) throw new Error("Agent output requires registered schemas.");
+    return produced.map((signal) =>
+      this.bindOutput(repository, runtime, routing, source, entityId, version, signal),
+    );
+  },
+
+  /**
+   * Binds one declared result using its generated Event or Command role.
+   * @param repository Registered Entity repository for this operation.
+   * @param runtime Bound context storage and publication services.
+   * @param routing Registered generated handler routing metadata.
+   * @param source Original accepted source signal.
+   * @param entityId Typed recipient Entity identifier.
+   * @param version Entity version associated with the signal.
+   * @param signal Original domain signal or execution cancellation signal.
+   * @returns Typed outgoing signal with its original envelope.
+   */
+  bindOutput(
+    repository: RepositoryView,
+    runtime: RepositoryRuntime,
+    routing: RepositoryRouting,
+    source: NonNullable<AgentExecutionRecord["accepted"]>["signal"],
+    entityId: unknown,
+    version: Version,
+    signal: unknown,
+  ): AgentOutgoingSignal {
+    const typeName = EntityInvocation.messageTypeName(signal);
+    const eventSchema = routing.producedEventSchemas.find((entry) => entry.typeName === typeName);
+    if (eventSchema !== undefined)
+      return this.bindEventOutput(
+        repository,
+        runtime,
+        source,
+        entityId,
+        version,
+        signal,
+        eventSchema,
+      );
+    const schema = routing.producedCommandSchemas.find((entry) => entry.typeName === typeName);
+    if (schema === undefined) throw new Error(`Agent cannot emit undeclared signal "${typeName}".`);
+    return this.bindCommandOutput(runtime, source, signal, schema);
+  },
+
+  /**
+   * Creates the original domain Event envelope and producer context.
+   * @param repository Registered Entity repository for this operation.
+   * @param runtime Bound context storage and publication services.
+   * @param source Original accepted source signal.
+   * @param entityId Typed recipient Entity identifier.
+   * @param version Entity version associated with the signal.
+   * @param signal Original domain signal or execution cancellation signal.
+   * @param schema Generated message descriptor for the signal.
+   * @returns Typed original Event envelope for durable delivery.
+   */
+  bindEventOutput(
+    repository: RepositoryView,
+    runtime: RepositoryRuntime,
+    source: NonNullable<AgentExecutionRecord["accepted"]>["signal"],
+    entityId: unknown,
+    version: Version,
+    signal: unknown,
+    schema: MessageSchema,
+  ): AgentOutgoingSignal {
+    if (source.case !== "command" && source.case !== "event") throw new Error("Missing source.");
+    const metadata =
+      source.case === "command"
+        ? runtime.signalMetadata.eventFromCommand(source.value, { version: version.number })
+        : runtime.signalMetadata.eventFromEvent(source.value, { version: version.number });
+    const event = create(EventSchema, {
+      id: metadata.id,
+      message: AnyMessages.pack(schema, signal as never),
+      context: RepositorySignals.eventContextWithProducer(
+        metadata.context,
+        repository,
+        entityId,
+        version,
+      ),
+    });
+    return create(AgentOutgoingSignalSchema, { signal: { case: "event", value: event } });
+  },
+
+  /**
+   * Creates the original Command envelope from its accepted origin.
+   * @param runtime Bound context storage and publication services.
+   * @param source Original accepted source signal.
+   * @param signal Original domain signal or execution cancellation signal.
+   * @param schema Generated message descriptor for the signal.
+   * @returns Typed original Command envelope for durable delivery.
+   */
+  bindCommandOutput(
+    runtime: RepositoryRuntime,
+    source: NonNullable<AgentExecutionRecord["accepted"]>["signal"],
+    signal: unknown,
+    schema: MessageSchema,
+  ): AgentOutgoingSignal {
+    if (source.case !== "command" && source.case !== "event") throw new Error("Missing source.");
+    const metadata =
+      source.case === "command"
+        ? runtime.signalMetadata.commandFromCommand(source.value)
+        : runtime.signalMetadata.commandFromEvent(source.value);
+    const command = create(CommandSchema, {
+      id: metadata.id,
+      message: AnyMessages.pack(schema, signal as never),
+      context: metadata.context,
+    });
+    return create(AgentOutgoingSignalSchema, { signal: { case: "command", value: command } });
+  },
+
+  /**
+   * Publishes saved envelopes through normal bus acceptance before marking original IDs.
+   * @param runtime Bound normal bus acceptance callbacks.
+   * @param session Fenced record containing pending saved envelopes.
+   * @returns When the fenced repository operation completes.
+   */
+  async deliver(runtime: RepositoryRuntime, session: AgentExecutionSession): Promise<void> {
+    const completed = session.record();
+    const key = completed.accepted?.key;
+    if (key === undefined) throw new Error("Agent output delivery requires its accepted key.");
+    for (const [index, output] of (completed.completion?.outgoing ?? []).entries()) {
+      if (session.signal.aborted) return;
+      if (output.delivered) continue;
+      const signal = output.signal;
+      if (signal.case !== "event" && signal.case !== "command")
+        throw new Error("Agent outgoing signal has no original envelope.");
+      const key = this.outputKey(output);
+      const plan =
+        output.plan ??
+        (await (signal.case === "event"
+          ? runtime.prepareSavedEvent(signal.value)
+          : runtime.prepareSavedCommand(signal.value)));
+      if (output.plan === undefined) {
+        await session.update((current) => {
+          const pending = current.completion?.outgoing[index];
+          if (pending?.plan !== undefined || pending?.signal.case !== signal.case)
+            throw new Error("Saved Agent output changed before plan installation.");
+          pending.plan = plan;
+          return current;
+        });
+      }
+      if (signal.case === "event") await runtime.publishSavedEvent(signal.value, plan);
+      else await runtime.publishSavedCommand(signal.value, plan);
+      await session.markDelivered([key]);
+      runtime.recordAcceptedSaved(signal.value);
+    }
+  },
+
+  /**
+   * Returns the typed original ID of one completed outgoing signal.
+   * @param output Prepared outgoing domain signal.
+   * @returns Original durable key for the outgoing signal.
+   */
+  outputKey(output: AgentOutgoingSignal): AgentSignalKey {
+    if (output.signal.case === "event" && output.signal.value.id !== undefined)
+      return create(AgentSignalKeySchema, {
+        id: { case: "event", value: output.signal.value.id },
+      });
+    if (output.signal.case === "command" && output.signal.value.id !== undefined)
+      return create(AgentSignalKeySchema, {
+        id: { case: "command", value: output.signal.value.id },
+      });
+    throw new Error("Agent outgoing signal requires its original typed ID.");
+  },
+
+  /**
+   * Validates every stored binding against the current generated selectors.
+   * @param repository Agent registration.
+   * @param accepted Immutable source and ordered bindings.
+   * @returns Current matching handler metadata.
+   */
+  handlers(
+    repository: RepositoryView,
+    accepted: NonNullable<AgentExecutionRecord["accepted"]>,
+  ): readonly RegisteredHandlerMetadata[] {
+    const routing = repositoryRoutings.get(repository);
+    if (routing === undefined) throw new Error("Agent execution requires registered handlers.");
+    const current = this.selectedHandlers(routing, accepted);
+    if (accepted.handlers.length !== current.length || current.length === 0)
+      throw new Error("Accepted Agent handler binding changed before replay.");
+    for (const [ordinal, handler] of current.entries()) {
+      const binding = accepted.handlers[ordinal];
+      if (binding === undefined || !AgentAdmission.matchesHandler(binding, handler, ordinal))
+        throw new Error("Accepted Agent handler binding changed before replay.");
+    }
+    return current;
+  },
+
+  /**
+   * Finds current Command or Event handlers from the immutable source envelope.
+   * @param routing Registered generated handler routing metadata.
+   * @param accepted Durable original signal and saved handler bindings.
+   * @returns Generated handlers selected for the accepted signal.
+   */
+  selectedHandlers(
+    routing: RepositoryRouting,
+    accepted: NonNullable<AgentExecutionRecord["accepted"]>,
+  ): readonly RegisteredHandlerMetadata[] {
+    if (accepted.signal.case === "command") {
+      const binding = accepted.handlers[0];
+      const current = routing.commandReadiness?.findCommandAssignee(binding?.signalType ?? "");
+      return current === undefined ? [] : [current.registeredHandler];
+    }
+    if (accepted.signal.case !== "event") throw new Error("Agent source envelope is missing.");
+    const event = accepted.signal.value;
+    const packed = EntityInvocation.requireSignalMessage(event.message, "event");
+    const schema = RepositoryRoutes.schemaForTypeUrl(routing.eventSchemas, packed.typeUrl, "event");
+    const value = EntityInvocation.unpackRequired(packed, schema, "event");
+    const external = event.context?.external === true;
+    return [
+      ...routing.eventReactors(schema.typeName, value, external),
+      ...routing.commandReactions(schema.typeName, value, external),
+    ];
+  },
+
+  /**
+   * Records start facts and the original dispatch System Event before handler execution.
+   * @param repository Agent registration.
+   * @param runtime Bound services.
+   * @param session Fenced provider claim and current record.
+   * @param loaded Restored Entity and initial Version.
+   * @param handlers Current selected handlers.
+   * @param entityId Original typed recipient.
+   * @param tenantId Accepted delivery tenant when applicable.
+   * @returns Updated record image for exact subsequent CAS.
+   */
+  async start(
+    repository: RepositoryView,
+    runtime: RepositoryRuntime,
+    session: AgentExecutionSession,
+    loaded: LoadedRepositoryEntity,
+    handlers: readonly RegisteredHandlerMetadata[],
+    entityId: unknown,
+    tenantId: TenantId | undefined,
+  ): Promise<AgentExecutionRecord> {
+    const accepted = session.record().accepted;
+    if (accepted === undefined) throw new Error("Agent start requires accepted work.");
+    const started = await this.startFacts(
+      repository,
+      runtime,
+      session,
+      accepted,
+      loaded,
+      handlers,
+      tenantId,
+    );
+    const audit = this.startAudit(runtime, repository, accepted, entityId);
+    const next = await session.update(
+      (current) => {
+        current.started = started;
+        return current;
+      },
+      [this.startHistory(audit)],
+    );
+    if (accepted.signal.case === "command") HandlerDispatchPublisher.publishCommand(runtime, audit);
+    else HandlerDispatchPublisher.publishReactor(runtime, audit);
+    return next;
+  },
+
+  /**
+   * Stores the original dispatch audit envelope in mandatory Agent history.
+   * @param audit Original Agent System event envelope.
+   * @returns Typed Agent history row for the original dispatch Event.
+   */
+  startHistory(audit: Event): AgentHistoryEntry {
+    const occurredAt = audit.context?.timestamp;
+    if (occurredAt === undefined) throw new Error("Agent dispatch audit requires its timestamp.");
+    return create(AgentHistoryEntrySchema, {
+      occurredAt,
+      item: { case: "systemEvent", value: audit },
+    });
+  },
+
+  /**
+   * Verifies admission revisions and fixes whole-invocation limits before execution.
+   * @param repository Registered Entity repository for this operation.
+   * @param runtime Bound context storage and publication services.
+   * @param session Fenced Agent execution session.
+   * @param accepted Durable original signal and saved handler bindings.
+   * @param loaded Loaded Entity and its repository storage state.
+   * @param handlers Generated handlers in their saved order.
+   * @param tenantId Tenant selected for this accepted signal.
+   * @returns Durable invocation start facts and selected model identities.
+   */
+  async startFacts(
+    repository: RepositoryView,
+    runtime: RepositoryRuntime,
+    session: AgentExecutionSession,
+    accepted: NonNullable<AgentExecutionRecord["accepted"]>,
+    loaded: LoadedRepositoryEntity,
+    handlers: readonly RegisteredHandlerMetadata[],
+    tenantId: TenantId | undefined,
+  ): Promise<AgentExecutionStart> {
+    const configuration = repositoryAccess.agentConfiguration(repository);
+    const ai = runtime.ai;
+    if (accepted.key === undefined || ai === undefined || configuration.ai === undefined)
+      throw new Error("Agent execution start requires accepted work and AI policy.");
+    this.assertRevisions(repository, accepted, handlers, ai, configuration);
+    const limits = registryOptions(ai).invocationLimits;
+    const deadline = addMillis(Time.currentTime(), limits.deadlineMs);
+    const scope = AgentModelSelection.scope(accepted, repository.stateSchema, tenantId);
+    const models = await AgentModelSelection.select(
+      ai,
+      configuration.ai,
+      scope,
+      session.preferences(),
+      session.signal,
+      Number(deadline.seconds) * 1_000 + Math.floor(deadline.nanos / 1_000_000),
+    );
+    return create(AgentExecutionStartSchema, {
+      deadline,
+      initialVersion: RepositoryEntities.priorVersion(loaded.current),
+      bounds: this.invocationBounds(limits),
+      models: [...models],
+    });
+  },
+
+  /**
+   * Rejects accepted work when its exact handler and AI policy changed.
+   * @param repository Registered Entity repository for this operation.
+   * @param accepted Durable original signal and saved handler bindings.
+   * @param handlers Generated handlers in their saved order.
+   * @param ai Configured AI registry for this context.
+   * @param configuration Repository and AI policy used for revision checks.
+   */
+  assertRevisions(
+    repository: RepositoryView,
+    accepted: NonNullable<AgentExecutionRecord["accepted"]>,
+    handlers: readonly RegisteredHandlerMetadata[],
+    ai: AiRegistry,
+    configuration: ReturnType<typeof repositoryAccess.agentConfiguration>,
+  ): void {
+    if (configuration.ai === undefined) throw new Error("Agent AI policy is required.");
+    const revisions = AgentRevisions.atAdmission(
+      repository.stateSchema,
+      handlers,
+      ai,
+      configuration.ai,
+    );
+    if (
+      accepted.codeRevision?.value !== configuration.codeRevision ||
+      accepted.schemaRevision?.value !== revisions.schema ||
+      accepted.policyRevision?.value !== revisions.policy
+    )
+      throw new Error("Accepted Agent code, schema, or policy changed before execution.");
+  },
+
+  /**
+   * Copies the whole-invocation budget into its durable integer fields.
+   * @param limits Configured whole-invocation limits.
+   * @returns Whole-transition limits persisted at invocation start.
+   */
+  invocationBounds(limits: AiInvocationLimits): AgentInvocationBounds {
+    return create(AgentInvocationBoundsSchema, {
+      operations: BigInt(limits.operations),
+      modelRequests: BigInt(limits.modelRequests),
+      toolCalls: BigInt(limits.toolCalls),
+      recordedReads: BigInt(limits.recordedReads),
+      deadlineMillis: BigInt(limits.deadlineMs),
+      totalInputBytes: BigInt(limits.totalInputBytes),
+      totalOutputBytes: BigInt(limits.totalOutputBytes),
+      maxRecoveryBytes: BigInt(limits.maxRecoveryBytes),
+    });
+  },
+
+  /**
+   * Creates a genuine source-specific dispatch System Event before the handler.
+   * @param runtime Bound context storage and publication services.
+   * @param repository Registered Entity repository for this operation.
+   * @param accepted Durable original signal and saved handler bindings.
+   * @param entityId Typed recipient Entity identifier.
+   * @returns Original dispatch System Event envelope.
+   */
+  startAudit(
+    runtime: RepositoryRuntime,
+    repository: RepositoryView,
+    accepted: NonNullable<AgentExecutionRecord["accepted"]>,
+    entityId: unknown,
+  ): Event {
+    const source = accepted.signal;
+    if (source.case === "command")
+      return HandlerDispatchPublisher.commandEvent(runtime, repository, source.value, entityId);
+    if (source.case === "event")
+      return HandlerDispatchPublisher.reactorEvent(runtime, repository, source.value, entityId);
+    throw new Error("Agent start requires its accepted envelope.");
+  },
+
+  /**
+   * Invokes saved Command or Event bindings inside one Entity transaction.
+   * @param entity Restored Agent instance.
+   * @param accepted Original accepted signal.
+   * @param handlers Validated current handler bindings.
+   * @param repository Registered Entity repository for this operation.
+   * @param runtime Bound context storage and publication services.
+   * @param tenantId Tenant selected for this accepted signal.
+   * @param session Fenced Agent execution session.
+   * @returns Outputs returned by the selected generated handlers.
+   */
+  async invoke(
+    repository: RepositoryView,
+    runtime: RepositoryRuntime,
+    tenantId: TenantId | undefined,
+    session: AgentExecutionSession,
+    entity: object,
+    accepted: NonNullable<AgentExecutionRecord["accepted"]>,
+    handlers: readonly RegisteredHandlerMetadata[],
+  ): Promise<readonly unknown[]> {
+    transactionalEntityAccess.start(entity);
+    try {
+      const signals: unknown[] = [];
+      for (const [ordinal, handler] of handlers.entries()) {
+        signals.push(
+          ...(await this.invokeBoundHandler(
+            repository,
+            runtime,
+            tenantId,
+            session,
+            entity,
+            accepted,
+            handler,
+            ordinal,
+          )),
+        );
+      }
+      await this.commitInvokedEntity(entity);
+      return signals;
+    } catch (error) {
+      transactionalEntityAccess.rollback(entity);
+      throw error;
+    }
+  },
+
+  /**
+   * Validates the transaction result before Agent output completion.
+   * @param entity Loaded recipient Entity instance.
+   * @returns When the fenced repository operation completes.
+   */
+  async commitInvokedEntity(entity: object): Promise<void> {
+    const commit = await commitFenced(entity, (current) =>
+      transactionalEntityAccess.commit(current),
+    );
+    if (commit.status === "rejected") throw new TransitionValidationError(commit.validation.error);
+  },
+
+  /**
+   * Binds named AI and history reads around one generated handler call.
+   * @param repository Registered Entity repository for this operation.
+   * @param runtime Bound context storage and publication services.
+   * @param tenantId Tenant selected for this accepted signal.
+   * @param session Fenced Agent execution session.
+   * @param entity Loaded recipient Entity instance.
+   * @param accepted Durable original signal and saved handler bindings.
+   * @param handler Generated handler selected for this signal.
+   * @param ordinal Saved position of the selected handler.
+   * @returns Outputs returned by one generated handler.
+   */
+  async invokeBoundHandler(
+    repository: RepositoryView,
+    runtime: RepositoryRuntime,
+    tenantId: TenantId | undefined,
+    session: AgentExecutionSession,
+    entity: object,
+    accepted: NonNullable<AgentExecutionRecord["accepted"]>,
+    handler: RegisteredHandlerMetadata,
+    ordinal: number,
+  ): Promise<readonly unknown[]> {
+    const facade = this.handlerFacade(repository, runtime, tenantId, session, accepted, ordinal);
+    const reads = new AgentReadRuntime(session, ordinal);
+    const release = this.bindHandlerCapabilities(
+      entity,
+      runtime,
+      tenantId,
+      accepted,
+      reads,
+      facade,
+    );
+    try {
+      const signals = await this.invokeHandler(entity, accepted, handler);
+      reads.finish();
+      facade.finish();
+      return signals;
+    } finally {
+      facade.close();
+      release();
+    }
+  },
+
+  /**
+   * Binds Agent AI, indexed history and routed projection queries for one handler.
+   * @param entity Loaded recipient Entity instance.
+   * @param runtime Bound context storage and publication services.
+   * @param tenantId Tenant selected for this accepted signal.
+   * @param accepted Durable original signal and saved handler bindings.
+   * @param reads Handler-scoped durable read facade.
+   * @param facade Handler-scoped AI facade.
+   * @returns Release callback for handler-scoped AI and read facades.
+   */
+  bindHandlerCapabilities(
+    entity: object,
+    runtime: RepositoryRuntime,
+    tenantId: TenantId | undefined,
+    accepted: NonNullable<AgentExecutionRecord["accepted"]>,
+    reads: AgentReadRuntime,
+    facade: AgentAiRuntime,
+  ): () => void {
+    const releaseHistory = AgentHistoryReads.withJournal(
+      entity,
+      (scope, view, request, live, maxBytes) => reads.history(scope, view, request, live, maxBytes),
+    );
+    let releaseQuery: (() => void) | undefined;
+    try {
+      releaseQuery = ProcessManagerQueries.bind(
+        entity,
+        runtime,
+        accepted.actor,
+        tenantId,
+        (schema, query, live) => reads.query(schema, query, live),
+      );
+      const releaseAi = AgentAiBindings.bind(entity, facade);
+      return () => {
+        releaseQuery?.();
+        releaseHistory();
+        releaseAi();
+      };
+    } catch (error) {
+      releaseQuery?.();
+      releaseHistory();
+      throw error;
+    }
+  },
+
+  /**
+   * Creates one handler-scoped facade from its accepted model policy.
+   * @param repository Registered Entity repository for this operation.
+   * @param runtime Bound context storage and publication services.
+   * @param tenantId Tenant selected for this accepted signal.
+   * @param session Fenced Agent execution session.
+   * @param accepted Durable original signal and saved handler bindings.
+   * @param ordinal Saved position of the selected handler.
+   * @returns AI facade bound to one selected handler.
+   */
+  handlerFacade(
+    repository: RepositoryView,
+    runtime: RepositoryRuntime,
+    tenantId: TenantId | undefined,
+    session: AgentExecutionSession,
+    accepted: NonNullable<AgentExecutionRecord["accepted"]>,
+    ordinal: number,
+  ): AgentAiRuntime {
+    const ai = runtime.ai;
+    const configuration = repositoryAccess.agentConfiguration(repository).ai;
+    if (ai === undefined || configuration === undefined)
+      throw new Error("Agent handler requires its bound AI registry.");
+    return new AgentAiRuntime(
+      ai,
+      configuration,
+      AgentModelSelection.scope(accepted, repository.stateSchema, tenantId),
+      session,
+      ordinal,
+      new AgentInteractionAudit(
+        session,
+        accepted,
+        repository.stateSchema,
+        runtime.signalMetadata,
+        runtime.registerSystemEventSchema,
+        runtime.publishAgentSystemEvent,
+      ),
+    );
+  },
+
+  /**
+   * Invokes one selected generated handler and validates its declared results.
+   * @param entity Loaded recipient Entity instance.
+   * @param accepted Durable original signal and saved handler bindings.
+   * @param handler Generated handler selected for this signal.
+   * @returns Declared outputs returned by one generated handler.
+   */
+  async invokeHandler(
+    entity: object,
+    accepted: NonNullable<AgentExecutionRecord["accepted"]>,
+    handler: RegisteredHandlerMetadata,
+  ): Promise<readonly unknown[]> {
+    const source = accepted.signal;
+    if (source.case !== "command" && source.case !== "event")
+      throw new Error("Agent source envelope is missing.");
+    const kind = source.case;
+    const message = EntityInvocation.unpackRequired(
+      EntityInvocation.requireSignalMessage(source.value.message, kind),
+      handler.handler.schema,
+      kind,
+    );
+    const context =
+      source.case === "command"
+        ? EntityInvocation.commandHandlerContext(source.value)
+        : EntityInvocation.eventHandlerContext(source.value);
+    const produced = await EntityInvocation.invokeEntityMethod(
+      entity,
+      handler.handler.methodName,
+      message,
+      handler.handler.parameterCount,
+      context,
+    );
+    const signals: readonly unknown[] =
+      produced === undefined
+        ? []
+        : Array.isArray(produced)
+          ? Array.from(produced as readonly unknown[])
+          : [produced];
+    RepositoryHandlers.requireDeclaredOutputs(handler.handler, signals);
+    return signals;
+  },
+};
+
+/**
+ * Adds a positive timeout to a Time-sampled Protobuf timestamp.
+ * @param at Provider-independent current time.
+ * @param millis Bounded additional milliseconds.
+ * @returns Absolute timestamp retaining nanosecond precision.
+ */
+function addMillis(at: Timestamp, millis: number): Timestamp {
+  const nanos = at.nanos + (millis % 1000) * 1_000_000;
+  return {
+    ...at,
+    seconds:
+      at.seconds + BigInt(Math.floor(millis / 1000)) + BigInt(Math.floor(nanos / 1_000_000_000)),
+    nanos: nanos % 1_000_000_000,
+  };
+}
+
+/**
+ * Executes one Process Manager Command against its loaded Entity state.
  */
 class ProcessManagerCommandExecution {
   readonly #repository: CommandRoutingRepository;
@@ -4728,6 +6538,7 @@ interface RepositoryEntityStorage<I, S extends Message> {
   readonly events: EntityEventHistoryPort<I>;
   readonly commits: EntityCommitStorage;
   readonly agentHistory?: AgentHistoryStorage<I>;
+  readonly agentExecution?: AgentExecutionStorage<I, S>;
 
   /**
    * Closes the Entity history and commit storage handles.
@@ -5531,8 +7342,35 @@ const RepositorySignals = {
     entityId: unknown,
     rejection: RejectionThrowable,
   ): EntityInboxFollowUp {
+    const event = this.rejectionEvent(runtime, repository, command, entityId, rejection);
+    return async () => {
+      try {
+        // spine-log-boundary: server.repository_rejection_follow_up
+        await runtime.publisher.publishRejectionEvent(event);
+      } catch (error) {
+        runtime.publisher.reportFailure("event", event, error);
+      }
+    };
+  },
+
+  /**
+   * Creates the original declared rejection envelope without publishing it.
+   * @param runtime Bound context storage and publication services.
+   * @param repository Registered Entity repository for this operation.
+   * @param command Original typed Command envelope.
+   * @param entityId Typed recipient Entity identifier.
+   * @param rejection Declared rejection from the selected handler.
+   * @returns Original declared-rejection Event envelope.
+   */
+  rejectionEvent(
+    runtime: RepositoryRuntime,
+    repository: RepositoryView,
+    command: Command,
+    entityId: unknown,
+    rejection: RejectionThrowable,
+  ): Event {
     const metadata = runtime.signalMetadata.eventFromCommand(command, {});
-    const event = create(EventSchema, {
+    return create(EventSchema, {
       id: metadata.id,
       message: AnyMessages.pack(rejection.schema, rejection.messageThrown()),
       context: create(EventContextSchema, {
@@ -5543,15 +7381,6 @@ const RepositorySignals = {
         }),
       }),
     });
-
-    return async () => {
-      try {
-        // spine-log-boundary: server.repository_rejection_follow_up
-        await runtime.publisher.publishRejectionEvent(event);
-      } catch (error) {
-        runtime.publisher.reportFailure("event", event, error);
-      }
-    };
   },
 
   /**
@@ -8177,14 +10006,11 @@ const RepositoryStorage = {
       throw new Error("StorageFactory does not provide required atomic Entity commit storage.");
     const entity = candidate.createEntityStorage(input);
     const commits = EntityCommitStorageFactories.create(factory, input);
-    let agentHistory: AgentHistoryStorage<I> | undefined;
+    let ports:
+      | { agentHistory: AgentHistoryStorage<I>; agentExecution: AgentExecutionStorage<I, S> }
+      | undefined;
     try {
-      if (agent)
-        agentHistory = AgentHistoryStorageFactories.create(factory, {
-          context: input.context,
-          stateType: input.sourceType.typeName,
-          id: { key: input.id.key },
-        });
+      if (agent) ports = this.openAgentPorts(factory, input);
     } catch (error) {
       commits.close();
       entity.close();
@@ -8193,13 +10019,43 @@ const RepositoryStorage = {
     return {
       ...entity,
       commits,
-      ...(agentHistory === undefined ? {} : { agentHistory }),
+      ...ports,
       close: () => {
-        agentHistory?.close();
+        ports?.agentExecution.close();
+        ports?.agentHistory.close();
         commits.close();
         entity.close();
       },
     };
+  },
+
+  /**
+   * Opens both mandatory Agent ports and closes the first if the second fails.
+   * @typeParam I Typed Agent identifier.
+   * @typeParam S Generated Agent state message.
+   * @param factory Storage factory registered with the context.
+   * @param input Original Inbox or storage input.
+   * @returns Indexed history and execution handles for the same tenant.
+   */
+  openAgentPorts<I, S extends Message>(
+    factory: StorageFactory,
+    input: EntityStorageInput<I, S>,
+  ): { agentHistory: AgentHistoryStorage<I>; agentExecution: AgentExecutionStorage<I, S> } {
+    const agentHistory = AgentHistoryStorageFactories.create(factory, {
+      context: input.context,
+      stateType: input.sourceType.typeName,
+      id: { key: input.id.key },
+    });
+    try {
+      const agentExecution = AgentExecutionStorageFactories.create(factory, {
+        entity: input,
+        stateType: input.sourceType.typeName,
+      });
+      return { agentHistory, agentExecution };
+    } catch (error) {
+      agentHistory.close();
+      throw error;
+    }
   },
 
   /**
@@ -9155,6 +11011,10 @@ const InboxReplay = {
     message: InboxMessage,
     deliveryTenantId?: TenantId,
   ): Promise<EntityInboxFollowUp | undefined> {
+    if (repository.entityFamily === "agent") {
+      await InboxReplay.replayAgentInbox(repository, routing, message, deliveryTenantId);
+      return undefined;
+    }
     if (message.label === "HANDLE_COMMAND") {
       return await InboxReplay.replayProcessManagerCommand(
         repository,
@@ -9169,6 +11029,226 @@ const InboxReplay = {
     }
 
     throw new Error(`Entity Inbox replay does not handle "${message.label}" messages.`);
+  },
+
+  /**
+   * Persists selected Agent work before the normal Inbox acknowledges delivery.
+   * @param repository Agent repository receiving the original signal.
+   * @param routing Registered handler routes and schemas.
+   * @param message Original durable Inbox message.
+   * @param deliveryTenantId Tenant selected by delivery.
+   * @returns When the fenced repository operation completes.
+   */
+  async replayAgentInbox(
+    repository: CommandRoutingRepository & EventRoutingRepository,
+    routing: RepositoryRouting,
+    message: InboxMessage,
+    deliveryTenantId?: TenantId,
+  ): Promise<void> {
+    const runtime = repositoryRuntimes.get(repository);
+    if (runtime === undefined) throw new Error("Agent Inbox replay requires a bound runtime.");
+    if (message.label === "HANDLE_COMMAND") {
+      await InboxReplay.replayAgentCommand(repository, routing, runtime, message, deliveryTenantId);
+      return;
+    }
+    if (message.label !== "REACT_UPON_EVENT")
+      throw new Error(`Agent Inbox replay does not handle "${message.label}" messages.`);
+    await InboxReplay.replayAgentEvent(repository, routing, runtime, message, deliveryTenantId);
+  },
+
+  /**
+   * Admits a Command using its stored target and registered assignee.
+   * @param repository Agent repository.
+   * @param routing Registered Command routes.
+   * @param runtime Bound context services.
+   * @param message Original Inbox row.
+   * @param tenantId Delivery tenant.
+   * @returns When the fenced repository operation completes.
+   */
+  async replayAgentCommand(
+    repository: CommandRoutingRepository,
+    routing: RepositoryRouting,
+    runtime: RepositoryRuntime,
+    message: InboxMessage,
+    tenantId?: TenantId,
+  ): Promise<void> {
+    const command = InboxMessages.readInboxCommand(message);
+    InboxReplay.validateReplayTenant(runtime.context, tenantId, command);
+    InboxReplay.validateReplayedCommandPayload(routing, command);
+    const route = InboxReplay.replayCommandRoute(repository, routing, message, command);
+    const assignee = routing.commandReadiness?.findCommandAssignee(route.messageFullTypeName);
+    if (assignee === undefined) throw new Error("Agent Command has no selected assignee.");
+    await InboxReplay.admitAgent(
+      repository,
+      runtime,
+      message,
+      tenantId,
+      route.entityId,
+      { kind: "command", value: command },
+      command.context?.actorContext ?? create(ActorContextSchema),
+      [assignee.registeredHandler],
+    );
+  },
+
+  /**
+   * Admits matching Event handlers from the stored target without rerouting.
+   * @param repository Agent repository.
+   * @param routing Registered Event routes.
+   * @param runtime Bound context services.
+   * @param message Original Inbox row.
+   * @param tenantId Delivery tenant.
+   * @returns When the fenced repository operation completes.
+   */
+  async replayAgentEvent(
+    repository: EventRoutingRepository,
+    routing: RepositoryRouting,
+    runtime: RepositoryRuntime,
+    message: InboxMessage,
+    tenantId?: TenantId,
+  ): Promise<void> {
+    const event = InboxMessages.readPmInboxEvent(message);
+    InboxReplay.validatePmReplayTenant(runtime.context, tenantId, event);
+    InboxReplay.validateReplayedEventPayload(
+      routing,
+      event,
+      "Agent Inbox replay requires an Event payload.",
+    );
+    const route = InboxReplay.replayEventRoute(
+      repository,
+      routing,
+      message,
+      event,
+      "Agent Inbox replay",
+    );
+    const handlers = InboxReplay.agentEventHandlers(routing, route.messageFullTypeName, event);
+    if (handlers.length === 0) return;
+    await InboxReplay.admitAgent(
+      repository,
+      runtime,
+      message,
+      tenantId,
+      route.entityIds[0],
+      { kind: "event", value: event },
+      runtime.signalMetadata.originFromEvent(event).actorContext ?? create(ActorContextSchema),
+      handlers,
+    );
+  },
+
+  /**
+   * Restores selected Event and Command reactions from the original payload.
+   * @param routing Registered generated handler routing metadata.
+   * @param typeName Generated message type name.
+   * @param event Original typed Event envelope.
+   * @returns Generated reactions selected for the accepted Event.
+   */
+  agentEventHandlers(
+    routing: RepositoryRouting,
+    typeName: string,
+    event: Event,
+  ): readonly RegisteredHandlerMetadata[] {
+    const packed = EntityInvocation.requireSignalMessage(event.message, "event");
+    const schema = RepositoryRoutes.schemaForTypeUrl(routing.eventSchemas, packed.typeUrl, "event");
+    const value = EntityInvocation.unpackRequired(packed, schema, "event");
+    const external = event.context?.external === true;
+    return [
+      ...routing.eventReactors(typeName, value, external),
+      ...routing.commandReactions(typeName, value, external),
+    ];
+  },
+
+  /**
+   * Opens the actual tenant handle and records a selected invocation before handoff.
+   * @param repository Registered Agent repository.
+   * @param runtime Context services including the effective registry.
+   * @param message Durable Inbox receipt.
+   * @param tenantId Selected delivery tenant.
+   * @param entityId Typed target from the stored route.
+   * @param signal Original source envelope.
+   * @param actor Original actor metadata.
+   * @param handlers Selected handler metadata in execution order.
+   * @returns When the fenced repository operation completes.
+   */
+  async admitAgent(
+    repository: RepositoryView,
+    runtime: RepositoryRuntime,
+    message: InboxMessage,
+    tenantId: TenantId | undefined,
+    entityId: unknown,
+    signal: AgentAdmissionInput["signal"],
+    actor: ActorContext,
+    handlers: readonly RegisteredHandlerMetadata[],
+  ): Promise<void> {
+    const revisions = InboxReplay.agentRevisions(repository, runtime, handlers);
+    const input = RepositoryStorage.entityStorageInput(
+      repository,
+      RepositoryTenants.storageContextForTenant(runtime.context, tenantId),
+    );
+    const execution = InboxReplay.agentExecutionHandle(repository, runtime, input);
+    await execution.admit(
+      AgentAdmission.create({
+        stateType: repository.stateSchema.typeName,
+        agentKey: input.id.key(entityId),
+        recipientId: message.inboxId.targetId,
+        signal,
+        actor,
+        inbox: message,
+        handlers,
+        codeRevision: revisions.codeRevision,
+        schemaRevision: revisions.schema,
+        policyRevision: revisions.policy,
+      }),
+    );
+    runtime.wakeAcceptedAgent();
+  },
+
+  /**
+   * Opens the actual tenant's mandatory execution handle.
+   * @typeParam I Typed Agent identifier.
+   * @typeParam S Generated Agent state message.
+   * @param repository Registered Entity repository for this operation.
+   * @param runtime Bound context storage and publication services.
+   * @param input Original Inbox or storage input.
+   * @returns Fenced execution handle for the accepted tenant.
+   */
+  agentExecutionHandle<I, S extends Message>(
+    repository: RepositoryView,
+    runtime: RepositoryRuntime,
+    input: EntityStorageInput<I, S>,
+  ): AgentExecutionStorage<I, S> {
+    const storage = RepositoryStorage.openRepositoryEntityStorage(
+      repository,
+      runtime.storageFactory,
+      input,
+    );
+    if (storage.agentExecution === undefined)
+      throw new Error("Agent Inbox replay requires durable execution storage.");
+    return storage.agentExecution;
+  },
+
+  /**
+   * Records the registered code, schema, and AI policy before Inbox handoff.
+   * @param repository Registered Entity repository for this operation.
+   * @param runtime Bound context storage and publication services.
+   * @param handlers Generated handlers in their saved order.
+   * @returns Pinned code, schema, and AI policy digests.
+   */
+  agentRevisions(
+    repository: RepositoryView,
+    runtime: RepositoryRuntime,
+    handlers: readonly RegisteredHandlerMetadata[],
+  ): { codeRevision: string; schema: string; policy: string } {
+    const ai = runtime.ai;
+    const configuration = repositoryAccess.agentConfiguration(repository);
+    if (
+      ai === undefined ||
+      configuration.ai === undefined ||
+      configuration.codeRevision === undefined
+    )
+      throw new Error("Agent Inbox replay requires registered AI capabilities and revisions.");
+    return {
+      codeRevision: configuration.codeRevision,
+      ...AgentRevisions.atAdmission(repository.stateSchema, handlers, ai, configuration.ai),
+    };
   },
 
   /**
@@ -9659,13 +11739,15 @@ const InboxHandoff = {
    * @param runtime Inbox, storage, tenant mode, and delivery strategy.
    * @param command Command envelope to retain and deliver.
    * @returns Completion of Inbox receipt and its selected delivery operation.
+   * @param acceptedRoute Recipient route saved when the signal was accepted.
    */
   async handoffEntityCommand(
     repository: CommandRoutingRepository,
     runtime: RepositoryRuntime,
     command: Command,
+    acceptedRoute?: RepositoryCommandRoute,
   ): Promise<void> {
-    const route = await repository.routeCommand(command);
+    const route = acceptedRoute ?? (await repository.routeCommand(command));
     const commandId = RepositorySignals.requireCommandId(command);
     const keepUntil = new Date(Time.currentTimeMillis() + inboxDedupMs);
     const deliveryTenantId = RepositoryTenants.requireCommandTenant(runtime.context, command);
@@ -9830,6 +11912,346 @@ const InboxHandoff = {
 Object.freeze(InboxHandoff);
 
 /**
+ * Rebinds generated repository recipients without repeating accepted route queries.
+ */
+const SavedRepositoryDispatch = {
+  /**
+   * Maps a generated repository family to its serialized binding value.
+   * @param repository Registered Entity repository for this operation.
+   * @returns Repository family encoded in a saved dispatch target.
+   */
+  family(repository: RepositoryView): AgentSavedRepositoryFamily {
+    switch (repository.entityFamily) {
+      case "aggregate":
+        return AgentSavedRepositoryFamily.AGENT_SAVED_AGGREGATE;
+      case "projection":
+        return AgentSavedRepositoryFamily.AGENT_SAVED_PROJECTION;
+      case "process-manager":
+        return AgentSavedRepositoryFamily.AGENT_SAVED_PROCESS_MANAGER;
+      case "agent":
+        return AgentSavedRepositoryFamily.AGENT_SAVED_AGENT;
+    }
+  },
+
+  /**
+   * Finds the current generated handlers that determine an Event handoff.
+   * @param routing Registered generated handler routing metadata.
+   * @param event Original typed Event envelope.
+   * @returns Generated handlers matching the outgoing Event.
+   */
+  eventHandlers(routing: RepositoryRouting, event: Event): readonly RegisteredHandlerMetadata[] {
+    const packed = EntityInvocation.requireSignalMessage(event.message, "event");
+    const schema = RepositoryRoutes.schemaForTypeUrl(routing.eventSchemas, packed.typeUrl, "event");
+    const value = EntityInvocation.unpackRequired(packed, schema, "event");
+    const external = event.context?.external === true;
+    return [
+      ...routing.eventReactors(schema.typeName, value, external),
+      ...routing.commandReactions(schema.typeName, value, external),
+      ...routing
+        .eventSubscribers(schema.typeName, value, external)
+        .map((entry) => entry.registeredHandler),
+    ];
+  },
+
+  /**
+   * Calculates a digest of ordered generated metadata and message descriptors.
+   * @param repository Registered Entity repository for this operation.
+   * @param handlers Generated handlers in their saved order.
+   * @returns Digest of ordered generated handler metadata.
+   */
+  fingerprint(repository: RepositoryView, handlers: readonly RegisteredHandlerMetadata[]): string {
+    const selected = handlers.map(({ entity, handler }, ordinal) => ({
+      ordinal,
+      receiver: entity.schema.typeName,
+      kind: handler.kind,
+      method: handler.methodName,
+      signal: handler.messageFullTypeName,
+      origin: handler.origin,
+      parameters: handler.parameterCount,
+      where: handler.where === undefined ? null : [handler.where.eventField, handler.where.equals],
+      descriptor: Buffer.from(
+        toBinary(FileDescriptorProtoSchema, handler.schema.file.proto),
+      ).toString("base64"),
+    }));
+    const state = Buffer.from(
+      toBinary(FileDescriptorProtoSchema, repository.stateSchema.file.proto),
+    );
+    return createHash("sha256").update(state).update(JSON.stringify(selected)).digest("hex");
+  },
+
+  /**
+   * Restores a typed ID only when its canonical wire representation is unchanged.
+   * @param repository Registered Entity repository for this operation.
+   * @param packed Original typed Protobuf payload.
+   * @returns Typed recipient identifier from the frozen route.
+   */
+  recipient(repository: RepositoryView, packed: Any): unknown {
+    const id = InboxMessages.targetEntityId(packed, repository.idField);
+    if (!equals(AnySchema, InboxMessages.inboxTargetId(id, repository.idField), packed))
+      throw new Error("Saved Agent output recipient ID is not canonical for its repository.");
+    return id;
+  },
+
+  /**
+   * Checks the stable repository and signal identity before saved transport.
+   * @param repository Registered Entity repository for this operation.
+   * @param target Frozen recipient binding.
+   * @param kind Generation or decision model kind.
+   * @returns Whether the checked condition holds.
+   */
+  matches(
+    repository: RepositoryView,
+    target: AgentSavedDispatchTarget,
+    kind: AgentSavedTargetKind,
+  ): boolean {
+    return (
+      target.kind === kind &&
+      target.receiverStateType === repository.stateSchema.typeName &&
+      target.repositoryFamily === SavedRepositoryDispatch.family(repository)
+    );
+  },
+
+  /**
+   * Prepares one typed Command recipient with its selected generated assignee.
+   * @param repository Registered Entity repository for this operation.
+   * @param routing Registered generated handler routing metadata.
+   * @param command Original typed Command envelope.
+   * @returns Validated frozen Command recipient target.
+   */
+  async prepareCommand(
+    repository: CommandRoutingRepository,
+    routing: RepositoryRouting,
+    command: Command,
+  ): Promise<AgentSavedDispatchTarget> {
+    const route = await repository.routeCommand(command);
+    const assignee = routing.commandReadiness?.findCommandAssignee(route.messageFullTypeName);
+    if (assignee === undefined) throw new Error("Saved Agent Command has no generated assignee.");
+    return create(SavedTargetSchema, {
+      kind: AgentSavedTargetKind.AGENT_SAVED_REPOSITORY_COMMAND,
+      receiverStateType: repository.stateSchema.typeName,
+      repositoryFamily: SavedRepositoryDispatch.family(repository),
+      signalType: route.messageFullTypeName,
+      bindingFingerprint: SavedRepositoryDispatch.fingerprint(repository, [
+        assignee.registeredHandler,
+      ]),
+      recipients: [InboxMessages.inboxTargetId(route.entityId, repository.idField)],
+    });
+  },
+
+  /**
+   * Resolves the original Command recipient without calling its route again.
+   * @param repository Registered Entity repository for this operation.
+   * @param routing Registered generated handler routing metadata.
+   * @param command Original typed Command envelope.
+   * @param target Frozen recipient binding.
+   * @returns When the fenced repository operation completes.
+   */
+  bindCommand(
+    repository: CommandRoutingRepository,
+    routing: RepositoryRouting,
+    command: Command,
+    target: AgentSavedDispatchTarget,
+  ): Promise<() => Promise<void>> {
+    const { runtime, signalType, recipient } = SavedRepositoryDispatch.requireCommandBinding(
+      repository,
+      routing,
+      command,
+      target,
+    );
+    const entityId = SavedRepositoryDispatch.recipient(repository, recipient);
+    const route: RepositoryCommandRoute = {
+      entityId,
+      messageFullTypeName: signalType,
+      invocation: "deferred",
+    };
+    return Promise.resolve(() =>
+      InboxHandoff.handoffEntityCommand(repository, runtime, command, route),
+    );
+  },
+
+  /**
+   * Checks saved Command metadata, typed target presence, and runtime registration.
+   * @param repository Registered Entity repository for this operation.
+   * @param routing Registered generated handler routing metadata.
+   * @param command Original typed Command envelope.
+   * @param target Frozen recipient binding.
+   * @returns Registered Command route and original recipient.
+   */
+  requireCommandBinding(
+    repository: CommandRoutingRepository,
+    routing: RepositoryRouting,
+    command: Command,
+    target: AgentSavedDispatchTarget,
+  ): { runtime: RepositoryRuntime; signalType: string; recipient: Any } {
+    const packed = EntityInvocation.requireSignalMessage(command.message, "command");
+    const schema = RepositoryRoutes.schemaForTypeUrl(
+      routing.commandSchemas,
+      packed.typeUrl,
+      "command",
+    );
+    const assignee = routing.commandReadiness?.findCommandAssignee(schema.typeName);
+    const fingerprint =
+      assignee === undefined
+        ? ""
+        : SavedRepositoryDispatch.fingerprint(repository, [assignee.registeredHandler]);
+    const recipient = target.recipients[0];
+    const runtime = repositoryRuntimes.get(repository);
+    if (
+      !SavedRepositoryDispatch.matches(
+        repository,
+        target,
+        AgentSavedTargetKind.AGENT_SAVED_REPOSITORY_COMMAND,
+      ) ||
+      target.signalType !== schema.typeName ||
+      target.bindingFingerprint !== fingerprint ||
+      target.recipients.length !== 1 ||
+      recipient === undefined ||
+      runtime === undefined
+    )
+      throw new Error("Saved Agent Command repository binding changed before delivery.");
+    return { runtime, signalType: schema.typeName, recipient };
+  },
+
+  /**
+   * Prepares the exact ordered Event recipients and selected generated handlers.
+   * @param repository Registered Entity repository for this operation.
+   * @param routing Registered generated handler routing metadata.
+   * @param event Original typed Event envelope.
+   * @returns Validated frozen Event recipient target.
+   */
+  async prepareEvent(
+    repository: EventRoutingRepository,
+    routing: RepositoryRouting,
+    event: Event,
+  ): Promise<AgentSavedDispatchTarget> {
+    const route = await repository.routeEvent(event);
+    return create(SavedTargetSchema, {
+      kind: AgentSavedTargetKind.AGENT_SAVED_REPOSITORY_EVENT,
+      receiverStateType: repository.stateSchema.typeName,
+      repositoryFamily: SavedRepositoryDispatch.family(repository),
+      signalType: route.messageFullTypeName,
+      bindingFingerprint: SavedRepositoryDispatch.fingerprint(
+        repository,
+        SavedRepositoryDispatch.eventHandlers(routing, event),
+      ),
+      recipients: route.entityIds.map((id) => InboxMessages.inboxTargetId(id, repository.idField)),
+    });
+  },
+
+  /**
+   * Restores the saved Event route and current generated handler metadata.
+   * @param repository Registered Entity repository for this operation.
+   * @param routing Registered generated handler routing metadata.
+   * @param event Original typed Event envelope.
+   * @param target Frozen recipient binding.
+   * @returns When the fenced repository operation completes.
+   */
+  bindEvent(
+    repository: EventRoutingRepository,
+    routing: RepositoryRouting,
+    event: Event,
+    target: AgentSavedDispatchTarget,
+  ): Promise<() => Promise<void>> {
+    const { signalType } = SavedRepositoryDispatch.requireEventBinding(
+      repository,
+      routing,
+      event,
+      target,
+    );
+    const entityIds = target.recipients.map((id) =>
+      SavedRepositoryDispatch.recipient(repository, id),
+    );
+    const route: RepositoryEventRoute = {
+      entityIds,
+      messageFullTypeName: signalType,
+      invocation: "deferred",
+    };
+    return Promise.resolve(() =>
+      RepositoryDispatch.dispatchRepositoryEvent(repository, routing, event, route),
+    );
+  },
+
+  /**
+   * Checks saved Event metadata and active repository registration.
+   * @param repository Registered Entity repository for this operation.
+   * @param routing Registered generated handler routing metadata.
+   * @param event Original typed Event envelope.
+   * @param target Frozen recipient binding.
+   * @returns Registered Event route for the frozen target.
+   */
+  requireEventBinding(
+    repository: EventRoutingRepository,
+    routing: RepositoryRouting,
+    event: Event,
+    target: AgentSavedDispatchTarget,
+  ): { runtime: RepositoryRuntime; signalType: string } {
+    const packed = EntityInvocation.requireSignalMessage(event.message, "event");
+    const schema = RepositoryRoutes.schemaForTypeUrl(routing.eventSchemas, packed.typeUrl, "event");
+    const fingerprint = SavedRepositoryDispatch.fingerprint(
+      repository,
+      SavedRepositoryDispatch.eventHandlers(routing, event),
+    );
+    const runtime = repositoryRuntimes.get(repository);
+    if (
+      !SavedRepositoryDispatch.matches(
+        repository,
+        target,
+        AgentSavedTargetKind.AGENT_SAVED_REPOSITORY_EVENT,
+      ) ||
+      target.signalType !== schema.typeName ||
+      target.bindingFingerprint !== fingerprint ||
+      runtime === undefined
+    )
+      throw new Error("Saved Agent Event repository binding changed before delivery.");
+    return { runtime, signalType: schema.typeName };
+  },
+
+  /**
+   * Creates one internal Command binding from the repository registration.
+   * @param repository Registered Entity repository for this operation.
+   * @param routing Registered generated handler routing metadata.
+   * @returns Saved Command binding for this registration.
+   */
+  commandBinding(
+    repository: CommandRoutingRepository,
+    routing: RepositoryRouting,
+  ): SavedCommandBinding {
+    return {
+      prepare: (command) => SavedRepositoryDispatch.prepareCommand(repository, routing, command),
+      matches: (target) =>
+        SavedRepositoryDispatch.matches(
+          repository,
+          target,
+          AgentSavedTargetKind.AGENT_SAVED_REPOSITORY_COMMAND,
+        ),
+      bind: (command, target) =>
+        SavedRepositoryDispatch.bindCommand(repository, routing, command, target),
+    };
+  },
+
+  /**
+   * Creates one internal Event binding from the repository registration.
+   * @param repository Registered Entity repository for this operation.
+   * @param routing Registered generated handler routing metadata.
+   * @returns Saved Event binding for this registration.
+   */
+  eventBinding(repository: EventRoutingRepository, routing: RepositoryRouting): SavedEventBinding {
+    return {
+      prepare: (event) => SavedRepositoryDispatch.prepareEvent(repository, routing, event),
+      matches: (target) =>
+        SavedRepositoryDispatch.matches(
+          repository,
+          target,
+          AgentSavedTargetKind.AGENT_SAVED_REPOSITORY_EVENT,
+        ),
+      bind: (event, target) =>
+        SavedRepositoryDispatch.bindEvent(repository, routing, event, target),
+    };
+  },
+};
+Object.freeze(SavedRepositoryDispatch);
+
+/**
  * Connects bus dispatchers and Inbox replay to repository execution.
  */
 const RepositoryDispatch = {
@@ -9864,13 +12286,16 @@ const RepositoryDispatch = {
     repository: CommandRoutingRepository,
     routing: RepositoryRouting,
   ): CommandDispatcher | undefined {
-    return routing.commandSchemas.length === 0
-      ? undefined
-      : Object.freeze({
-          messageSchemas: () => routing.commandSchemas,
-          dispatch: (command: Command): Promise<void> =>
-            RepositoryDispatch.dispatchRepositoryCommand(repository, routing, command),
-        });
+    if (routing.commandSchemas.length === 0) return undefined;
+    const dispatcher = Object.freeze({
+      messageSchemas: () => routing.commandSchemas,
+      dispatch: (command: Command): Promise<void> =>
+        RepositoryDispatch.dispatchRepositoryCommand(repository, routing, command),
+    });
+    return SavedDispatcherBindings.command(
+      dispatcher,
+      SavedRepositoryDispatch.commandBinding(repository, routing),
+    );
   },
 
   /**
@@ -9899,10 +12324,14 @@ const RepositoryDispatch = {
         return RepositoryDispatch.dispatchRepositoryEvent(repository, routing, event, route);
       },
     });
-    return EventDispatcherOriginSchemas.define(
+    const originAware = EventDispatcherOriginSchemas.define(
       dispatcher,
       routing.domesticEventSchemas,
       routing.externalEventSchemas,
+    );
+    return SavedDispatcherBindings.event(
+      originAware,
+      SavedRepositoryDispatch.eventBinding(repository, routing),
     );
   },
 

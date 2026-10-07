@@ -1492,5 +1492,86 @@
     "name": "observeProducedSignals",
     "disposition": "necessity",
     "reason": "TypeScript package-testing boundary: observeProducedSignals exposes produced-signal observation only through the server/testing entrypoint."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/testing/index.ts",
+    "kind": "function-declaration",
+    "identity": "readAgentHistoryPage()#1",
+    "name": "readAgentHistoryPage",
+    "disposition": "necessity",
+    "reason": "TypeScript testing-package boundary: readAgentHistoryPage is exported across the package entrypoint to validate BoundedContext repository membership while preserving the existing opaque HistoryRead cursor and hiding provider keys."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/testing/index.ts",
+    "kind": "function-declaration",
+    "identity": "readSystemEvents()#1",
+    "name": "readSystemEvents",
+    "disposition": "necessity",
+    "reason": "TypeScript testing-package boundary: readSystemEvents is exported across the package entrypoint to read exact IDs from the paired System EventStore under the BlackBox tenant without widening the public server object."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/repository/commit-fence.ts",
+    "kind": "function-declaration",
+    "identity": "withoutDeliveryCommitFence()#1",
+    "name": "withoutDeliveryCommitFence",
+    "disposition": "necessity",
+    "reason": "TypeScript AsyncLocalStorage boundary: withoutDeliveryCommitFence exits an earlier Inbox shard commit guard before starting independently claimed Agent execution."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/repository/repository.ts",
+    "kind": "function-declaration",
+    "identity": "addMillis()#1",
+    "name": "addMillis",
+    "disposition": "necessity",
+    "reason": "TypeScript Time boundary: addMillis supplies claim renewal and invocation deadlines with nanosecond-preserving Timestamp addition without sampling a second clock."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/agent/agent-admission.ts",
+    "kind": "function-declaration",
+    "identity": "signalKey()#1",
+    "name": "signalKey",
+    "disposition": "necessity",
+    "reason": "TypeScript accepted-signal boundary: signalKey retains the original Command or Event ID and its domain discriminator before Inbox acknowledgement."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/agent/agent-admission.ts",
+    "kind": "function-declaration",
+    "identity": "binding()#1",
+    "name": "binding",
+    "disposition": "necessity",
+    "reason": "TypeScript generated-handler boundary: binding converts selected handler metadata into the exact durable ordinal, kind, origin and filter compared on replay."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/agent/agent-admission.ts",
+    "kind": "function-declaration",
+    "identity": "nonblank()#1",
+    "name": "nonblank",
+    "disposition": "necessity",
+    "reason": "TypeScript admission validation boundary: nonblank rejects missing state, Agent key and revision strings before a durable accepted record is formed."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/agent/agent-revisions.ts",
+    "kind": "function-declaration",
+    "identity": "policyShape()#1",
+    "name": "policyShape",
+    "disposition": "necessity",
+    "reason": "TypeScript revision boundary: policyShape selects serializable registry and repository policy while callback implementations remain covered by the explicit code revision."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/agent/agent-revisions.ts",
+    "kind": "function-declaration",
+    "identity": "mcpPolicies()#1",
+    "name": "mcpPolicies",
+    "disposition": "necessity",
+    "reason": "TypeScript MCP revision boundary: mcpPolicies hashes fixed server transport and tool policy without executing scoped credential callbacks."
   }
 ]

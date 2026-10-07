@@ -46,10 +46,16 @@ import {
 } from "@spine-event-engine/proto";
 import type { Query } from "@spine-event-engine/proto/client";
 import type { EntityEventStorage, EntityStateHistoryStorage } from "@spine-event-engine/storage";
-import type { ConversationHistoryRead, HistoryPage, HistoryRead } from "@spine-event-engine/ai";
+import type {
+  AgentAi,
+  ConversationHistoryRead,
+  HistoryPage,
+  HistoryRead,
+} from "@spine-event-engine/ai";
 import type { AgentHistoryEntry, ConversationRecord } from "@spine-event-engine/proto/agent";
 
 import { AgentHistoryReads } from "../agent/agent-history.js";
+import { AgentAiBindings } from "../agent/agent-ai-binding.js";
 
 import {
   describeEntityMetadata,
@@ -1445,6 +1451,15 @@ export abstract class Agent<Id, Schema extends DescriptorMessageSchema> extends 
   constructor(options: EntityOptions<Id, Schema>) {
     super(options);
     EntityFamilies.mark(this, "agent");
+  }
+
+  /**
+   * Returns the AI facade bound to the current Agent signal handler.
+   *
+   * @returns Model invocation and selection operations limited to this handler's execution.
+   */
+  protected get ai(): AgentAi {
+    return AgentAiBindings.require(this);
   }
 
   /**

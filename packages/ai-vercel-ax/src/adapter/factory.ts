@@ -28,6 +28,7 @@ import { scheduleBoundedDeadline } from "./deadline.js";
 import type { StreamModel } from "./streamed-model.js";
 import { executeGeneration } from "./generation.js";
 import { executeDecision } from "./decision.js";
+import { createMcpProtocolFactory } from "./mcp-protocol.js";
 
 /**
  * Operation-scoped provider fetch supplied to a trusted connection callback.
@@ -399,6 +400,7 @@ export const VercelAx = {
     return createBackendRegistration({
       ref: options.ref,
       kind: "generation",
+      mcp: createMcpProtocolFactory(),
       supports: (definition) => definition.kind === "generation",
       resolveIdentity: options.resolveIdentity,
       authorizeUse: options.authorizeUse,

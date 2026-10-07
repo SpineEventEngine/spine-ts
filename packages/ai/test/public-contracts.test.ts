@@ -184,11 +184,15 @@ describe("public SDK-free facade inventory", () => {
       );
     }).toThrow("without outstanding proposals");
     expect(() => {
-      assertAiOutcomeContext(create(GenerationResponseSchema, {
-        outcome: AiOutcome.INVALID_OUTPUT,
-        admittedOutput: AnyMessages.pack(ProposedSupportReplySchema,
-          create(ProposedSupportReplySchema, { replyText: "Hello" })),
-      }));
+      assertAiOutcomeContext(
+        create(GenerationResponseSchema, {
+          outcome: AiOutcome.INVALID_OUTPUT,
+          admittedOutput: AnyMessages.pack(
+            ProposedSupportReplySchema,
+            create(ProposedSupportReplySchema, { replyText: "Hello" }),
+          ),
+        }),
+      );
     }).toThrow("Only ADMITTED");
     expect(() => {
       assertAiOutcomeContext(create(DecisionResponseSchema, { outcome: AiOutcome.FAILED }));

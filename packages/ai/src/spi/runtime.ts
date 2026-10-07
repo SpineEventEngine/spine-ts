@@ -14,7 +14,13 @@
 
 export { isAiModel, modelRefKey } from "../internal/model.js";
 export { backendDefinition } from "../internal/registration.js";
-export { freezeRegistry, registryOptions, selectDeployment } from "../internal/registry.js";
+export {
+  freezeRegistry,
+  mcpRegistration,
+  mcpRegistrations,
+  registryOptions,
+  selectDeployment,
+} from "../internal/registry.js";
 export { mcpDefinition } from "../internal/mcp.js";
 export type { AiSelection } from "../internal/registry.js";
 export { deriveOutputSchema, parseCandidate } from "../internal/schema.js";

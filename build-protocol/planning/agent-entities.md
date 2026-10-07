@@ -7,8 +7,8 @@ High-risk runtime/public-contract task authorized on 7 October 2026. Base:
 `agent-entities`; worktree: native managed `agent-readiness/spine-ts`.
 Adapter composition, the bounded transport and Agent family foundation are
 verified. The AI facade, repository history binding and all history providers are
-accepted. Durable execution, scripted testing and production adapters are in
-progress. Physical Entity deletion is explicitly deferred.
+accepted. Scripted testing and production adapters are accepted at856e5efcf.
+Durable execution and MCP integration are in progress. Physical Entity deletion is explicitly deferred.
 
 The approved specification is `AGENT_ENTITIES_API_TASK_2026-10-02.md` and its
 `AGENT_HISTORY_PROPOSAL.md` appendix in the user's
@@ -1151,3 +1151,814 @@ Inbox handoffs. Existing requirements_splitter function dispatched as fresh
 agent_output_acceptance_architecture, explicit gpt-6-astra/high, to design only
 internal acceptance/retry semantics and source-grounded regressions. No public
 publisher API or context/repository event-copy reconciliation is authorized.
+
+Checkpoint856e5efcf pushed to official origin. Remaining estimate revised to
+4–8hours for durable runtime/providers, MCP, integration/recovery tests, independent
+reviews and release verification. The demonstrated output acceptance gap is the
+main uncertainty. Next adapter packet includes actual MCP schema advertisement
+and complete advertised-input audit, replacing permissive placeholder schemas.
+
+Output acceptance architecture accepted. Requirements_splitter explicit
+gpt-6-astra/high dispatch confirmed; actual runtime metadata unavailable. Native
+EventBus/EventStore/Inbox and local JVM evidence supports at-least-once delivery:
+persist output recipient/handler plan in existing execution record before first
+transport, exact-envelope internal append-or-existing, repeat every saved target,
+ack only after successful dispatch under current token. No recipient bitmap,
+reception ledger, retention change, rerouting, or producer handler/model replay.
+Downstream callbacks may repeat. Unsupported raw custom dispatchers lack durable
+binding metadata and must reject matching Agent output before transport; ordinary
+non-Agent dispatch stays unchanged. Existing provider implementer takes internal
+Proto/validation and EventStore seam; server implementer takes bus/bindings/runner.
+
+MCP packet dispatched to same accepted adapter implementer, configured explicit
+gpt-6-sol/medium profile preserved. No children/commits; adapter/protocol SPI only,
+coordinate server runtime authority. Public Mcp.server/AgentAi unchanged.
+Datastore four focusedtests and combined three-provider six tests pass; storage
+review awaits outputplan addition and remaining conformance/preflight.
+
+MCP integration binding settled within existing adapter SPI: optional backend
+protocol factory, no change to Mcp.server or registerTools. Server and adapter
+implementers agreed per-message reserveMessage/onReceived/finishMessage hooks,
+including setup/discovery under persisted invocation byte credit. Call messages
+refer to runtime tool intent without double-counting tool calls. Known receipt
+is reported; uncertain work retains reserved credit. Credentials stay outside
+journals. Existing GenerationRequest.prompt_json records the actual prepared
+conversation plus advertised definitions/mapping as canonical JSON; its comment
+was clarified before first release, avoiding a redundant serialized field.
+
+Parent takes narrow storage package README/REFERENCE integration and exact API
+inventories while provider implementer fixes scoped cleanup/TSDoc/coverage.
+Document in-process memory lifetime, native transactional Agent completion,
+provider index/query prerequisites and at-least-once output retry; do not imply
+full server recovery has already passed. New Ajv dependency passes full and
+production release audits with no known vulnerabilities.
+
+Cross-family output tests exposed an inherited diagnostic-history constraint:
+Aggregate appendDiagnosticEvent retains the original incoming Event, while
+InMemoryEntityHistory.producerIdIn decodes its producer using the receiving
+Entity's ID codec. Different typed source/recipient IDs reject; equal codecs
+can still address diagnostic history by the producer. This predates Agents and
+requires a general recipient-history contract decision, not a wire-compatible
+fixture substitution. Current Agent emitted-domain history is separately scoped
+and preserves the envelope. Test valid same-ticket Aggregate/Agent IDs and
+different-ID Projection/PM routes without optional diagnostics; flag this
+existing limitation in final reliability review. No general history redesign
+is accepted by this note.
+
+Partial-chain recovery review found an implementation gap in the adapter SPI:
+whole-operation reuse alone cannot resume a saved TOOL_REQUESTED response or a
+finished tool before final operation persistence. Accepted AiAttemptReplay union
+(kind, original id, typed saved response and validation issues) as the bounded
+implementation of the already frozen saved-response guarantee. Runtime verifies
+request/content/order; adapter reconstructs without transport, new reservation
+or a second finish. Tool replay uses original correlation and never resends an
+uncertain write. No new domain guarantee or serialized Proto contract. Existing
+adapter implementer updates both production adapters and scripted backend call
+sites; server writer retains BlackBox integration. Re-review these changed
+adapter paths with the MCP wave. Provider cleanup and focused tests continue.
+
+Parent prepared disposable PG18, MySQL5.7.34 and MariaDB11.4.13 services for the
+remaining supported-provider matrix. Tenant databases exist; source cleanup
+precedes test runs. Only task-prefixed containers will be removed at completion.
+Existing unrelated stopped containers are preserved. Focused server Agent suite
+now17tests passes; named AI journal integration remains incomplete.
+
+Pre-inference capacity gap confirmed: providers rejected oversized serialized
+records only at write time, but runtime must avoid a model request whose bounded
+response cannot fit. Add typed provider-only capacity metadata with precise
+execution/head/history-record/transaction payload definitions. Existing MySQL
+guards enforce65,535-byte BLOB payloads; Datastore guards enforce1,000,000-byte
+execution/head and9MiB transaction payloads. Runtime checks remaining encoded
+journal, bounded response/admitted-output duplication and mandatory history
+overhead before physical dispatch. No truncation or recording exception.
+
+MCP and partial-chain replay preflight frozen:199tests pass, adapter coverage
+94.19/90.09/93.58/97.41; scoped types/lint/TSDoc/cleanup/format pass. Review wave
+uses existing reliability, TypeScript/API, style and documentation concerns,
+fresh contexts without memory or children. First reliability dispatch explicitly
+gpt-6-sol/medium; runtime metadata unavailable beyond configured profile. Review
+new MCP protocol and changed replay paths against856e5efcf; server runtime is
+still being implemented and is excluded from adapter acceptance. Estimated wave
+0.5–1hour including fixes, overlapping ongoing storage/runtime work. Collect all
+concerns before returning one correction batch to the existing implementer.
+
+MCP reliability review returned three confirmed transport lifecycle findings:
+SSE completion waits for EOF, rejected HTTP response bodies remain active, and
+stdio close may leave a child running. Explicit Sol/medium profile confirmed;
+actual runtime metadata unavailable. Continue fresh TypeScript/API reviewer
+explicitly gpt-6-sol/medium, read-only without memory or children. Collect the
+complete concern wave before returning a combined correction batch.
+
+First real memory BlackBox Agent invoke test passes: public Command reaches
+protected facade, scripted backend dispatches once, and typed domain Event is
+observed. Fixed leaked Inbox delivery AsyncLocalStorage fence at scheduled work
+boundary; claimed Agent execution supplies its authority. Persisted audit/tool/
+recovery proof remains pending. Parent adds testing-to-storage dependency for
+normal provider-backed audit assertions. Internal attempt evidence must retain
+exact validation issues for saved invalid-output correction; add typed issue
+records within the accepted journal contract, no recalculation after restart.
+
+MCP TypeScript/API review confirms scripted replay rejects saved failure/invalid
+outcomes and omits generation/decision kind validation. Remaining reviewed
+Proto/SDK-free/pinned SDK contracts clean. Explicit Sol/medium profile confirmed;
+actual runtime metadata unavailable. Continue fresh existing style reviewer,
+explicit gpt-6-sol/medium, read-only without memory or children. Complete wave
+still pending; do not apply a fragmented correction batch.
+
+MCP style review found partial discovery leaves validators callable after a later
+page/tool fails. Explicit Sol/medium profile confirmed; runtime metadata unavailable.
+Final wave concern: fresh documentation reviewer explicitly gpt-6-luna/medium,
+read-only without memory or children. Parent canonical Proto generation reached
+format check and stopped on three new testing fixtures; formatting those only
+before retry. Source checksums/authored style/frozen descriptors already passed.
+
+MCP review wave complete. Technical profiles explicitly Sol/medium and docs
+Luna/medium confirmed; actual runtime metadata unavailable. Accepted correction
+batch: incremental bounded SSE delivery; rejected HTTP body cancellation; bounded
+stdio exit/kill cleanup; scripted saved invalid/failure/kind replay; discovery
+validators published only on complete success; accurate HTTP/stdio identity and
+setup/argument limits documentation. Docs suggestion to publish temporary
+unfinished-workflow wording is not adopted: final runtime integration and final
+documentation must remove scaffold-stage claims before release. Return batch to
+same existing implementer, configured explicit Sol/medium profile preserved.
+Require meaningful regressions and scoped preflight/coverage, then substantive
+reliability/API follow-up. No repeated unchanged style/docs wave.
+
+Execution storage preflight frozen: four-package build, native7tests and direct
+13tests pass after generated validation issues; broader67tests and PG18/MySQL5.7/
+MariaDB matrix pass. Changed new-branch inspection covers stale token/expiry,
+wrong expected image/version, completion/plan immutability, capacity and paging.
+Selected-file coverage86.80lines/73.79branches/92.08functions is diagnostic, not a
+claim that final global90 gate passed. Remaining defensive cases are recorded in
+/tmp/agent-execution-storage-result.md. Review concerns use fresh existing roles,
+explicit Sol/medium technical and Luna/medium docs; no memory or children. First
+reliability dispatch explicitly gpt-6-sol/medium. Estimated review/fix wave0.5–1h
+in parallel with runtime/adapter completion. Runtime metadata unavailable.
+
+Exact failure replay must include pre-attempt errors. Add nonterminal repeated
+AgentSavedFailure diagnostics field14 to AgentNamedOperation; recordFailure
+persists before returning and response diagnosticId selects exact saved failure.
+AiAttemptReplay carries that original failure. No premature operation termination,
+new failure ledger or fabricated category. This implements frozen recorded-failure
+semantics; parent coordinates checksum/generation, implementers consume fields.
+
+Provider reliability review returned memory repeated-completion replacement of
+pending outputs and missing duplicate typed outgoing-ID rejection. Explicit
+Sol/medium profile confirmed; actual runtime metadata unavailable. Continue fresh
+TypeScript/API reviewer explicitly gpt-6-sol/medium, read-only without memory or
+children. Complete concern wave precedes one correction batch. Parent canonical
+failure-diagnostic generation and Proto build pass; storage README/REFERENCE
+formatting corrected and scoped formatting passes. Production replay also needs
+original failure preservation, confirmed by adapter inspection during fixes.
+
+Provider TypeScript/API review found only pending-page TSDoc: returned heads are
+observed candidates, not a current eligibility guarantee; claim remains authority.
+Explicit Sol/medium profile confirmed; runtime metadata unavailable. Continue
+fresh existing style reviewer explicitly gpt-6-sol/medium, read-only without
+memory or children. Parent documentation policy and API inventory unit tests
+pass; package boundary policy10tests pass. No full release claim.
+
+Provider style review returned mutable memory preference aliasing and repeated
+provider-independent pending-head offer/advance rules. Explicit Sol/medium profile
+confirmed; runtime metadata unavailable. Final documentation concern dispatched
+to fresh existing reviewer explicitly gpt-6-luna/medium, read-only without memory
+or children, scoped to eight storage README/REFERENCE files and port TSDoc.
+Draft BlackBox provider-key public method removed before contract acceptance;
+internal testing read proves retained rows while final public audit seam must use
+existing opaque history cursor contracts and bound context/tenant.
+
+Execution storage complete review wave accepted. Explicit Sol/medium technical
+and Luna/medium docs dispatch fields confirmed; actual runtime metadata unavailable.
+Batch to existing implementation context: require ACTIVE before memory completion;
+reject duplicate/nonblank typed outgoing IDs; deep-clone retained/returned memory
+preferences; share native head offer/promote rules while retaining provider-local
+transactions/queries/size guards; clarify observed-candidate paging TSDoc. Parent
+handles tested provider matrix/Datastore mode wording in eight storage docs after
+source verification. Require meaningful regressions, native matrix and scoped
+preflight; re-review substantive reliability/style changes only. No extra full
+wave for deterministic wording corrections.
+
+MCP corrections frozen:216adapter+17scripted tests pass, adapter coverage
+93.96/90.05/92.22/97.21; scoped build/tooling/lint/docs mechanics pass. Same
+existing reliability reviewer, configured explicit Sol/medium, follows up SSE,
+HTTP cancellation and bounded child cleanup. Then same TypeScript/API reviewer
+checks exact production/scripted failure replay. Parent directly verifies atomic
+discovery test and factual documentation fixes. Storage docs matrix and explicit
+Datastore concurrency restriction verified against Google's official transaction
+documentation; formatting and docs-audience check pass.
+
+MCP reliability follow-up closes original findings but returns quadratic SSE
+prefix parsing and stdio kill escalation delayed by stalled receipt persistence.
+Configured explicit Sol/medium profile confirmed; runtime metadata unavailable.
+Continue same TypeScript/API reviewer under configured Sol/medium for exact
+production/scripted replay corrections, then return combined residual batch.
+Parent source inspection confirms discovery validators publish only after full
+success and corrected limits/identity prose; targeted protocol rerun underway.
+
+MCP TypeScript/API follow-up closes original scripted/production replay issues,
+returns one residual: successful corrected response retains prior attempt failure
+diagnostic. Explicit Sol/medium profile confirmed; actual runtime metadata absent.
+Return three residual findings (quadratic SSE scan, kill escalation blocked by
+receipt barrier, stale success diagnostic) to same implementer context Sol/medium.
+Parent independent protocol rerun27/27 passed; it does not close new findings.
+Server proposes disjoint MCP runtime module consuming shared budget/audit hooks;
+parent evaluates interface before assigning parallel implementation, no duplicate
+budget authority or public API expansion.
+
+Execution storage correction preflight frozen:71focused tests pass, selected
+coverage87.5lines/74.5branches/93.39functions; four-package build/scoped lint/format
+pass. Main PG16/MySQL8.4/Datastore7tests, extra PG18/MySQL5.7 two and MariaDB one
+pass. Same existing reliability reviewer explicit configured Sol/medium follows
+up completion/duplicate output findings and shared head mutation changes; same
+style reviewer then follows up alias isolation/shared transition. Parent directly
+checks candidate TSDoc and documentation corrections; no unchanged API/docs wave.
+Final global coverage and release verification remain outstanding.
+
+Storage reliability follow-up clean: original completion/duplicate-ID findings
+closed, shared head behavior and preference isolation preserved. Explicit
+configured Sol/medium profile confirmed; runtime metadata unavailable. Same
+existing style reviewer Sol/medium follows up its two substantive findings only.
+BlackBox audit seam now uses opaque full-history cursors and exact System Event
+IDs, verifies context/tenant and returns copies; four tests pass including actual
+paired System store retention. Public contract adds no provider keys or new
+assertion harness. Final runtime review still required.
+
+Storage style follow-up closes production findings but requests one meaningful
+active-claim earlier-admission test; same implementer adds it, parent verifies
+exact branch with focused test (no third full review). Explicit configured
+Sol/medium profile confirmed; runtime metadata unavailable. Parent independent
+memory/shared/EventStore regression rerun is recorded separately.
+
+MCP runtime hook implementation requires typed setup/call reservation evidence:
+current model/tool variants cannot truthfully represent negotiation/discovery.
+Add one internal AgentProtocolEvidence journal alternative with distinct ticket,
+operation/server, setup/call phase, method, input/reserved/observed bytes and settled
+state. Reuse invocation counters and session fence, not a second budget system.
+Add narrow AI runtime registry tool lookup/enumeration under internal SPI so
+policy hashing and configured tool resolution can use accepted registrations.
+These complete existing frozen per-message reservation/identity semantics; no
+public API or autonomous tool selection is added.
+
+Storage final focused earlier-admission test5/5 and scoped mechanics pass; no
+new runtime algorithm changes. MCP residual fixes218tests pass, coverage
+93.8/90.09/91.92/96.79; current adapter transport/replay source frozen for targeted
+follow-up. Existing adapter implementer remains explicitly configured Sol/medium
+for disjoint registry accessor microtask; no memory/map exposure and focused tests.
+Parent coordinates protocol-evidence generation. Ticket correlation/settlement/
+monotonic receipt invariants belong in shared runtime hooks under the provider
+fence; do not invent a second storage-level protocol state machine.
+
+MCP reliability follow-up2 clean; explicit configured Sol/medium profile confirmed,
+actual runtime metadata unavailable. Same TypeScript/API reviewer Sol/medium now
+checks only corrected successful-response diagnostic and narrow registry accessors.
+Registry microtask13tests/build/tooling/lint/format pass. Parent adds actual wire
+input bytes to internal model attempt evidence, matching existing protocol field,
+so persisted totals never substitute prepared Proto size for provider body size.
+Support example can proceed against working Agent/BlackBox API: existing storage
+implementer context explicitly configured Sol/medium receives disjoint example
+files only; parent retains manifests/generation/build graph. No runtime edits.
+Estimated example1–2hours including generated wiring, behavior tests and docs,
+overlapping remaining runtime work. Further MCP module delegation waits shared
+budget hooks; no duplicate ledger is accepted.
+
+Adapter TypeScript/API follow-up2 clean; successful correction diagnostics and
+internal registry accessors accepted under explicit configured Sol/medium profile,
+actual runtime metadata unavailable. Before checkpoint, parent verifies scoped
+TSDoc directly because latest implementer report ambiguously mentions broad
+adapter diagnostics. Per-operation absolute deadline is added to existing named
+operation evidence with actual wire input bytes, preserving both elapsed and
+byte budgets on restart. Canonical generation coordinated with active writers.
+
+Direct parent TSDoc check found assigned AI/adapter/scripted-backend diagnostics;
+the earlier clean claim is rejected. Existing implementer, explicitly configured
+Sol/medium, receives all assigned documentation corrections before checkpoint.
+Technical review remains closed unless code behavior changes. Workspace install
+and Proto generation are coordinated by parent while example writer continues
+source. Support example joins Buf modules, atomic model/handler generation and
+root build graph. First generation correctly rejected a missing direct Core
+dependency for generated Entity queries; dependency is added before rerun.
+The operation Proto build was blocked only by stale workspace installation,
+not a demonstrated compiler defect. No successful build claim is made yet.
+
+Proto package build and canonical generation now pass, including Support model
+and handler registry after explicit handler return correction. Server/testing
+build and17 focused tests pass. Parent direct TSDoc check confirms no assigned
+AI/adapter/scripted findings;51 focused adapter tests and scoped mechanics pass.
+Existing adapter implementer continues as explicitly configured Sol/medium for
+disjoint server MCP runtime module/tests, packet in /tmp. Server writer confirms
+exact host interface can be consumed while shared hook implementation proceeds;
+only host methods may mutate budgets/journal. Expected1–2hours including tests
+and targeted review. Runtime metadata unavailable; configured profile retained.
+Parent inspected active-head earlier-admission regression and accepts the final
+storage style test correction; no new production behavior was introduced.
+
+Support BlackBox test demonstrates a generation-validation gap: blank text passes
+the configured application validation hook and is published as a suggestion.
+Accepted runtime defect; existing adapter implementer pauses MCP module to fix
+shared generation admission and both real/scripted paths. Example retains its
+blank-to-corrected regression with no application workaround. This reopens only
+affected generation correctness/API review after focused checks. Parent continues
+user guide integration, replacing outdated draft/DB transaction wording and
+linking the actual Support example. Guide claims require final runtime review.
+
+Generation validation source now passes the application callback through existing
+candidate admission. Support regression rejects blank output and reveals a second
+gap: scripted backend omitted bounded corrections. Existing adapter implementer
+adds production-equivalent correction flow to AiTestBackend; missing scripts must
+fail satisfaction rather than change semantics. Focused18 tests and corrected
+Support case pass; final-failure fixtures must supply both allowed bad attempts.
+After example freeze, same former storage implementer explicitly configured
+Sol/medium starts disjoint native crash harness under server-blackbox-tests,
+packet /tmp/agent-native-recovery-test-packet.md. Parent coordinates dependencies
+and generation. Expected2–3hours for first SIGKILL proof and provider matrix,
+overlapping runtime/MCP completion; discovered defects may extend the estimate.
+
+Support example4/4 and scoped mechanics pass; compiled-source coverage95.91lines,
+86.36branches is diagnostic pending global gate. Native fixture generation passes;
+old7testAgent suite revealed missing mandatorysetup and unsupportedrawreceiver
+fixtures. Writer migrates to real generated receivers and retains producer and
+receiver assertions. Runtime readiness now rejects only matching rawdispatchers,
+withfocusednegative and unrelateddispatcherpositive passing. Broader49runtime
+tests pass. MCPmodule25tests and allcoverage metrics>90 pass before review.
+Remaining runtime estimate5–8hours includes audit/capacity, reads/preferences,
+actualMCP/nativecrash/delivery tests and cleanup/review; work continues.
+
+Parent workflow regression114tests:111pass, two fixed Supportmodule fixture
+inventories, one clean-HEAD install failure on Ax25postinstall. Inspected installed
+Ax script: it installs editor skills, not runtime build output. Explicitly deny
+that script with existing pnpm allowBuilds policy. Ordinary offline install proves
+policy afterlockupdate; cleanHEAD bootstrap must rerun afterpolicycommit. Parent
+adds optionaladapter testdependency/reference solely to privateblackboxpackage;
+adapter implementer handles disjoint actualtransporttest. Parent public guide,
+AI/server reference and compiling snippets updated; final runtime/docs review
+must check claims. This is not a completion or release acceptance.
+
+Saved-history request/page Protos generated and Proto build passed. Cleaned native
+PG response-saved SIGKILL test passes again. Adapter218/MCP27 tests and assigned
+cleanup/TSDoc pass per implementer report; final independent review remains. Same
+explicit Sol/medium implementer continues disjoint full Agent plus actual Vercel
+OpenAI Responses/MCP HTTP integration, not a mock-language-model substitute.
+Parent adds Support docs to permanent strict snippet inventory and makes the
+scripted BlackBox introduction concrete. Runtime and native matrix continue.
+
+Public API TypeDoc inventory and strict documentation snippets pass. Snippet
+inventory tests20/20 pass; package metadata17/18 revealed missing Support entry
+in expected workspace list, corrected. Private native crash tests gain explicit
+MySQL/Datastore and pinned Google Datastore client dependencies; full real model
+transport test gains pinned OpenAI dev dependency. Offline installs pass.
+Generated standalone receiver migration exposed missing SavedDispatcherBindings
+in StandaloneHandlerRuntime (three receipt timeouts); main server implementer
+fixes production routing while foundation implementer extends native matrix.
+
+Native response-saved SIGKILL case now passes PostgreSQL16, MySQL8.4 and
+Datastore emulator. Other crash cuts still pending. Package boundaries/artifacts
+21/21 and corrected metadata13/13 pass. Parent corrected testing bridge TSDoc,
+with scoped format and concrete scripted proposal snippet compilation passing.
+Standalone binding fix restores6/7 support tests. Parent rejected proposed
+weaker rejection assertion: saved rejection observation must retain canonical
+rejection-event classification, as existing SignalPublisher and BlackBox contract
+require. Main writer fixes it; original empty-produced-events assertion stays.
+
+Saved-history validation reproduced a parent-authored Proto mistake: required
+on uint64 is unsupported by installed validator. Replace only positive page_size
+and max_bytes constraints with existing `(min).value = "1"`; regenerate rather
+than disable validation. Saved standalone rejection correction now passes7/7 plus
+21standalone tests with original observation assertion. Actual Agent+Vercel
+Responses+MCP+correction BlackBox passes; focused mechanics pending. Its direct
+provider import exposes existing vendor TS6 exactOptional declaration defect,
+so parent isolates that single test's vendor-declaration check as already done
+for optional adapter tooling; authored strictness and core skipLibCheck stay.
+
+Full actual OpenAI Responses/Vercel MCP Agent BlackBox frozen:8/8 focused tests,
+scoped TS/lint/format/copyright pass, assigned cleanup/TSDoc clean. Parent narrow
+provider-test tooling TS passes. Runtime and native cuts still changing. Next
+bounded review wave starts existing performance_reliability_reviewer explicitly
+Sol/medium, fresh no-memory context, packet /tmp/agent-mcp-runtime-review-packet.md;
+new runtime MCP, bounded correction, adapter helper extractions and actual combined
+fixture only. Expected0.5–1h review/fixes overlapping implementation. Other concerns
+follow as capacity frees; collect complete batch before returning fixes. Actual
+runtime metadata unavailable; explicit immutable dispatch profile is acceptance.
+
+Fresh MCP reliability review (explicit Sol/medium) found two confirmed shutdown
+races: stdio closed notification before completed receipt settles (P2), runtime
+concurrent close early return (P3). Full report in /tmp, no acceptance yet; collect
+remaining review concerns before one correction batch. Next existing
+style_maintainability_reviewer explicitly Sol/medium, fresh no-memory context,
+same bounded packet with style/testing clarity concern. No public contract change
+in new module, but correctness of scripted correction receives separate types/API
+review after capacity frees. Runtime metadata unavailable; configured profile used.
+
+MCP style review (fresh explicit Sol/medium) found registered maxArgumentBytes
+not enforced before tool authorization/journal/send; add to correction batch.
+Next existing typescript_api_docs_reviewer explicitly Sol/medium, fresh context,
+bounded public contract behavior (limits, typed failure/correction and test teaching)
+for same packet. No full server approval inferred. Both dependency audits pass.
+Admission-cut investigation uses fixed dist/generated output window to exclude
+revision changes across killed/restarted processes before classifying scheduler.
+
+MCP bounded review wave complete: reliability2, style1, API2 findings accepted
+pending concrete fixes. Existing adapter implementer (explicit immutable Sol/medium)
+receives four disjoint corrections: stdio receipt/close race, concurrent MCP close,
+per-tool argument bound, persisted scripted correction prompt. Main runtime writer
+receives close-failure/AiResult replacement finding in active agent-ai-runtime.
+No new fixer, no grandchildren. Fresh relevant follow-up after focused red/green.
+Documentation concern deferred to final coherent package/example review; this wave
+adds no package public signatures. Native earlier admitted-record failed run DID
+have exact native readback; keep separate reproduction under fixed builds rather
+than dismissing it as timing. In-handler history BlackBox plus unit replay tests pass.
+
+Adapter correction batch frozen:79/79 focused tests, noEmit TS/lint/format/copyright
+pass; assigned cleanup/TSDoc clean. Aggregate diagnostic V8 94.15S/90B/93.07F/96.09L,
+not final release acceptance. Existing explicitly configured Sol/medium reliability
+reviewer follows up only its two receipt/close findings and regressions, then other
+substantively affected concerns. Main runtime cleanup checker now passes; queued
+operations/registry concurrency remains explicitly unfinished. Parent identified
+canonical source MessageId typeUrl must use actual payload type (SignalMetadata
+convention), not generic Command/Event envelope; server writer takes correction.
+
+MCP reliability follow-up clean for both shutdown races, configured profile
+confirmed explicit Sol/medium. Existing style reviewer follows up registered
+argument-byte bound with same profile; API follow-up awaits emitted main runtime
+close regression. Native main-provider matrix admission+completion5/6 passes:
+PG Inbox recovery intermittent failure persists too, so earlier boundary-only
+explanation retracted. MySQL/Datastore admission and all main-provider completion
+cuts pass. No failure waived; native persisted status/index evidence collection.
+
+MCP style follow-up closes byte-limit finding; reviewer explicitly retained
+Sol/medium profile. API reviewer same configured profile follows up persisted
+scripted correction and close/result source change. Main close BlackBox regression
+was red before fix and source noEmit passes; emitted rerun intentionally pending
+native no-emit window. Reviewer must label that test evidence pending rather than
+claim passing; parent runs deterministic acceptance after window release.
+
+API follow-up: scripted correction closed; close rejection fixed in source but
+never-settling SPI close still blocks saved outcome, so finite cleanup bound remains.
+Server writer confirms registry-wide concurrency gap across contexts and parallel
+invoke calls, queued cap inert. Existing requirements_splitter explicitly Astra/high
+gets one narrow architecture escalation for precise gate placement/backpressure and
+queue-deadline semantics, packet in /tmp. No public knobs or persistence subsystem
+redesign. Expected0.25–0.5h overlaps PG diagnosis and audit. Main writer continues
+other work, adapter bounded-close correction follows capacity availability.
+
+Agent projection reads reuse existing routed actor/tenant-aware query execution,
+with internal AgentProjectionReadResult repeated Any states for the exact returned
+array. Canonical QueryResponse is not a substitute because this API returns states
+without response/version envelope semantics. Persist original Query ID, normalize
+only its regenerated value for replay semantic comparison; target/format/scope
+stay exact. Parent coordinates generation. Native red now includes TO_DELIVER
+Inbox persisted/read back but no Agent admit before crash; worker diagnosis open.
+
+Registry-capacity architecture accepted: existing requirements_splitter explicitly
+Astra/high, configured profile confirmed; runtime introspection unavailable. Shared
+server-internal WeakMap per AiRegistry object, C whole active transitions and Q
+resident waiting descriptors, durable overflow retained. Normative sequential
+model calls enforced before second admission; closed facade and unawaited calls
+rejected. Fresh deadline/preferences only after promotion, recovered deadline
+preserved. Decision /tmp/agent-registry-capacity-decision-result.md returned to
+existing server implementer Sol/medium. No public knobs or storage redesign.
+
+Canonical projection-read Proto generation/build passed; writers released. Existing
+adapter implementer Sol/medium receives finite MCP cleanup residual and disjoint
+pure AgentInteractionEvents helper, no publication/storage changes. Main writer
+retains actual audit hooks. Native PG diagnosis found shared-schema TO_DELIVER
+rows from previous crash cases; isolated provider fixtures required before ruling
+on product failure. Parent adds private pg/mysql2 dev dependencies at existing
+provider versions; foundation writer handles isolated schema/database/project
+setup and cleanup, retaining exact native readback and kill assertions.
+
+Parent preflight: Buf lint and git diff --check pass; four changed tooling suites
+152/152 pass, warehouse support BlackBox4/4 pass. Offline private fixture dependency
+install passes. Main writer verifies finite MCP close actual BlackBox1/1 after
+server emit: saved result remains deliverable and cleanup diagnostic retained.
+Foundation isolated-schema PG admission/execution-admit16/16 pass; shared-schema
+unfinished Inbox records caused prior red. Full isolated native matrix continues;
+do not infer all remaining crash cuts from these passes. No server emit during
+that bounded native window; source work continues.
+
+Parent documentation adds approved sequential-call and shared-registry capacity
+semantics pending implementation/review verification. Scoped prose format,
+audience policy, runtime Time boundary and production-dependency checks pass.
+Coverage inspection finds new execution provider/memory branches below90 in prior
+bounded diagnostic; prepare test-only follow-up after active writer capacity frees,
+without weakening global release gate or adding coverage exclusions.
+
+Parent found concrete memory-provider cross-repository defect during coverage
+inspection: tenant binding key `agent-execution` captures first stateType history
+map, and pending index contains other state types rejected by handle.key(). Micro
+correction: one binding per state type, test-first two genuine Agent schemas with
+same typed ID and independent pending/history reads. Parent handles only memory
+execution module/new regression file; main server/native writers notified. Native
+providers already use per-type tables. Relevant reliability follow-up required.
+
+Memory isolation regression reproduced both failures before fix: pending read
+throws on another Agent type; first history sees both types' records. One-line
+stateType-qualified backend binding fixes both. Two suites11/11 and scopedESLint
+pass. Tests use real SupportReplyAgentState/SupportRecoveryState with genuine
+shared SupportReplyAgentId and proper source Commands. Root tooling typecheck
+pending. Add this substantive provider isolation correction to reliability follow-up.
+
+Adapter helper slice accepted for review: explicit existing implementer Sol/medium,
+39/39 tests and94.69branch coverage, server sourceTS/scopedlint/format pass. Includes
+bounded rejected-identity session close and removes unsupported nonempty-ID-bytes
+guard; original typed bytes preserved. Main integration uses same frozen helper
+signatures. Native isolated matrix10+7+7 passes (3Datastore skips in each extra
+engine run); fixture contamination resolved. Runtime gating5/5 unit tests passes,
+query replay4/4 source tests passes; integrated BlackBox and terminal handling pending.
+
+Next focused review: existing TypeScript/API reviewer explicit immutable Sol/medium
+follows up finite cleanup residual, including identity mismatch, actual BlackBox and
+new pure audit helper reference/envelope correctness. Scope /tmp/agent-interaction-events-result.md,
+no full runtime approval. Parent memory isolation gets existing reliability review
+next; style correction deterministic three long imports fixed. Runtime metadata
+not exposed; configured explicit profiles remain acceptance evidence.
+
+MCP/helper TypeScript/API follow-up clean: explicit configured Sol/medium confirmed,
+finite cleanup residual closed including rejected identity; helper original typed
+IDs/domain payload URL/causality correct. Review limits exclude active audit hooks.
+Combined storage/server emit passes. Next existing performance_reliability_reviewer
+explicit Sol/medium, fresh no-memory context, reviews only parent memory execution
+stateType isolation correction plus two-type regression. Other concerns: API no
+public signature change; documentation no changed contract; style deterministic
+cleanup/lint pass. Read-only, no grandchildren. Runtime metadata unavailable.
+
+Memory isolation reliability follow-up clean: fresh explicit Sol/medium reviewer
+confirmed per-state separation, shared backend behavior and history serialization;
+domain fixtures valid. Parent checks cited, reviewer did not rerun them. Next
+bounded test-only execution-storage coverage assignment uses existing implementer
+role explicitly Sol/medium in fresh context (prior storage implementation context
+not available in live tree). Scope packet /tmp/agent-execution-coverage-followup-packet.md;
+no overlapping main runtime/native fixture work, no production edits without
+reporting demonstrated defect. Estimated0.5–1.5h for missing behavior tests and
+focused/provider verification, overlapping remaining runtime implementation.
+
+Remaining estimate revised4–7hours including audit/termination and lifecycle
+integration, interruption/fan-out/tool tests, changed-code coverage, focused review
+corrections, final security and full release/package/version/push. Native uncertainty
+and global coverage remain material unknowns; test work overlaps runtime writer.
+
+Dispatched-request native cut is red: one observed physical send, exact persisted
+unresolved attempt/output reservation, no resend after restart, but invocation
+not resolved. Main writer must distinguish pending discovery (diagnostic claim0)
+from missing terminal classification before accepting fix. Parent inspected new
+scheduler source and returned accepted-architecture corrections: retain only key
+in resident descriptors, no cloned full journal; remove random scheduler identity
+from shared gate dedup key, use complete durable context/tenant/repository/source.
+
+Native uncertainty diagnosis refined by exact PG head/provider-clock evidence:
+pending and active true, renewed expiry29seconds ahead at60seconds. Worker has
+reclaimed and is renewing; prior fixture claimAttempts0 was wrong cut-specific
+instrumentation. No pending-index defect inferred. Unresolved attempt/reservation
+persist and no fresh send; terminal runtime handling remains actual red. Foundation
+corrects counter and records limitation. Scheduler architecture corrections now
+5/5 source tests plus noEmit pass, queued descriptors key-only and scope dedup.
+
+First uncertainty terminal rerun remained red: replay error precedes typed
+attempt replay catch. Main adds claim-boundary unresolved-attempt preflight,
+excluding named operations with saved terminal results. Exact persisted evidence
+still required before acceptance. Tool-cut fixture adds genuine escalation Command
+and Agent state; parent coordinates canonical generation after all writers freeze.
+Ordinary native-provider boundary tests now exercise admits/claims/completion with
+scripted driver rows (not SQL simulator); default-only provider coverage75.9L62.24B,
+separate from native transaction proof. More coverage work remains.
+
+Tool-cut canonical generation initially caught missing explicit exported model
+annotation under isolatedDeclarations; foundation corrected annotation only.
+Generation and Proto/private BlackBox build then pass. All writers released.
+Native unresolved-attempt preflight still red; main will capture narrow temporary
+worker exception through existing logging seam if possible, remove diagnostic
+before review/commit, and fix confirmed cause rather than speculate further.
+
+Native diagnostic confirms actual termination blocker: paired System EventBus
+rejects AgentInvocationTerminated as domain schema. Main must classify all nine
+Agent System events and remove temporary worker diagnostic before next build.
+No unresolved paid retry inferred; no resend observed. Storage test follow-up
+frozen: five test paths, default provider boundaries76.17L62.24B; native76focused
+checks pass. All source/type/lint/format checks pass within that assignment; no
+claim global90 met. Existing reliability reviewer explicit immutable Sol/medium
+gets concern-specific test-quality follow-up over those five files, no runtime
+re-review. Other concerns: no public signature/doc change; style deterministic
+lint/format/cleanup and existing shared-conformance pattern, no new runtime class.
+
+Storage boundary test reliability follow-up found one confirmed gap: SQL test
+assertions inspect mutated head without proving updated head passed to driver.
+Return to same test implementer with mechanical root TypeScript errors in mock
+row/argument inference; complete correction batch for this narrow wave. Explicit
+reviewer Sol/medium profile confirmed, no test rerun by reviewer. Main handles
+unrelated System Event schema Set<string> inference diagnostic. No global check
+success inferred from production-only tsc builds that exclude tests.
+
+All nine Agent interaction schemas now classified System-only; focused56/56,
+server build/lint/format/cleanup pass. Temporary diagnostic removed. PG actual
+model-dispatch SIGKILL regression now PASSES: terminal advancement with retained
+uncertainty reservation and zero resend. Toolcut first run stopped before admission
+because fixture omitted generated standalone receivers; foundation corrects setup,
+not runtime semantics, then repeats against fixed dist. Main continues audit hooks.
+
+Storage test review correction: separate head/invocation write spies snapshot
+actual driver arguments; completed-head assertion proves mapped write. Evidence
+wording narrowed to scripted row claim handling. Same implementer Sol/medium
+reports SQL2/2, root tooling noEmit, scopedlint/format/diff clean. Existing reviewer
+same explicit immutable Sol/medium profile follows up only P2 driver-write proof.
+
+Tool native SIGKILL reaches actual external write1/native dispatched intent then
+restart does not finish. No resend observed. Main extends existing uncertainty
+preflight to unresolved dispatched WRITE tool and records original ToolCall ID;
+no new recovery protocol or storage change. Late probe confirms/limits next check.
+
+New bounded BlackBox capacity/lifecycle test assignment uses existing adapter
+implementer context, explicit immutable Sol/medium profile, now disjoint test-only
+packages/testing/test/agent-capacity-blackbox.test.ts. Main retains all production
+and existing agent-ai-blackbox/query tests. Prove shared registry across contexts,
+durable overflow, same-shard progress, waiting deadlines and context cancellation
+using existing genuine support fixtures, scripted backend gates and test-only
+provider observation. No new Proto or public instrumentation. Estimate0.5–1h,
+overlaps audit implementation; no duplicate main test authoring. No grandchildren.
+
+PG fixed-build paired uncertainty cuts PASS2/2: original model and real external
+WRITE each terminate with exact typed unresolved reference/reason, retained budget,
+Version0/no business outcome, zero resend. Agent history termination Event equals
+paired System EventStore envelope by original exact ID (binary equality). Tool
+external parent service observes1provider/1write across both child lifetimes.
+Foundation extends shared toolcut to native MySQL/Datastore then extra engineversions.
+Capacity BlackBox implementer confirms current emitted shared gate available;
+main continues actual operation/attempt/tool/selection audit hooks.
+
+Fan-out canonical generation and Proto/private BlackBox build PASS. All three
+implementation contexts released from atomic generation freeze. Foundation must
+supply new generated SupportDraftObserver in affected private test contexts.
+Native WRITE uncertainty passes all six engine variants with exact paired System
+event assertions. All nine interaction event source hooks now implemented; main
+reports focused65/65 plus source TS/cleanup pass. Generic termination, actual query
+replay evidence and final payload bounds remain before runtime review.
+
+Memory cross-state execution isolation correction passed independent reliability
+review. Storage boundary-test follow-up driver-write assertion corrected and
+reviewer closed finding; explicit immutable Sol/medium profiles confirmed.
+Coverage figures distinguish ordinary driver boundary tests from native evidence;
+no global90 claim. Latest default-provider subset76.17L62.24B, native subset88.17L
+75.13B. Final aggregate release coverage remains required.
+
+Capacity test-only implementation finished7/7 real BlackBox cases, root tooling
+TypeScript and scoped lint/cleanup/format/copyright pass. Same existing implementer
+explicit immutable Sol/medium profile confirmed; runtime metadata unavailable.
+No broad runtime acceptance inferred. Documentation wave now dispatched to existing
+documentation_reviewer role with explicit gpt-6-luna/medium, fresh context and no
+subagents. Scope is changed Agent prose and supported API claims, per
+/tmp/agent-final-documentation-packet.md; no production edits. Docs audience/diff
+checks pass, selected snippets compilation in progress. Parent handles corrections.
+Unknown handler errors remain retryable under original saved deadline; only
+proof-backed deterministic faults terminate. Ordinary storage errors must preserve
+accepted work. No broader exception taxonomy or copy-recovery mechanism.
+
+Independent docs reviewer explicit Luna/medium found two P2 omissions: public MCP
+setup example missing; OpenAI quickstart install unpinned vs tested4.0.84. Parent
+accepts both and supplies documented compilable setup plus pinned install. No
+public signature change. Selected existing snippets passed before corrections.
+Main deadline BlackBox red-to-green: unknown handler error retries without partial
+commit; original saved deadline expires to typed termination with paired audit.
+
+Docs corrections: AI reference now shows documented local MCP registration,
+per-tool allowlist/policy, capability tools and registry configuration with
+application-supplied model deployment; callbacks for restricted service credentials
+and permission explained. OpenAI installation pinned4.0.84. Affected snippets,
+docs audience and formatting pass. Same documentation reviewer explicit immutable
+Luna/medium receives bounded two-finding follow-up; no signature/runtime changes.
+Fresh origin/master remains658da1cdddcb8fd40f9205b1c200abc3a58dd62e.
+
+Docs review follow-up clean; explicit configured Luna/medium metadata accepted,
+runtime metadata unavailable. Capacity test follow-up assigned to same existing
+implementer explicit immutable Sol/medium: same-instance preference change must
+affect an already waiting signal while current invocation keeps original model.
+Test-only same capacity file, no new Proto and no production change. This closes
+explicit acceptance requirement not covered by initial seven cases; main avoids
+duplicate test authoring. Work begins only after atomic generation release.
+
+Second genuine standalone fixture canonical generation/private build PASS. PG native
+partial-fanout SIGKILL nowPASS1/1: first subscriber receipt survives in parentIPC,
+second paused; native completed invocation/original Event/savedbindings confirmed
+beforekill, restarted child delivers savedoutput/Projection withoutmodelresend.
+No firstProjectioncommit claim and no runtimecallbackordering change.
+Main actual ProjectAggregate->Projection->Agent read and two sequential named
+modelcall BlackBox tests pass; combined Agent/capacity20/20. Capacity follow-up
+now8/8: staged instancepreference leaves currentoriginalmodel and applies to same
+instance's alreadyacceptedwaiting signal. RoottestinclusiveTS/lint/format/copyright
+pass; concurrent nativefixtureline24 cleanup issue remains assignedfoundation.
+
+Parent API-comment correction aligns AiRegistryOptions with accepted shared-capacity
+implementation: active whole signal executions reserve slots, waiting descriptors
+are bounded in memory, overflow stays durable; capacity is per registryobject per
+process. No signature or behavior change. Include in final API/TSDoc review.
+
+TSDoc mechanical report1149findings requires bounded parallel correction. Main
+cedes comment-only closed files to same existing adapter implementer, explicit
+immutable gpt-6-sol/medium (public contract documentation requires code judgment):
+agent-admission/ai-binding/execution-capacity/execution-session/model-selection/
+read-runtime/revisions/scheduler, bus command/event/saved-dispatcher-binding,
+runtime signal-publisher/standalone-handler-runtime. Main retains mutable AI/MCP/
+audit/repository/context. No code behavior/signature edits or generations allowed
+in docs lane, no grandchildren. Scope identified before dispatch; metadata not
+exposed beyond immutable configured profile. Existing requirements unchanged.
+Capacity preflight cannot predict arbitrary user-created state/diagnostics; bound
+response-derived evidence conservatively and retain exact postvalidation checks,
+not invent new callback option or promise universal predispatch capacity.
+
+Parent handles14 mechanical TSDoc findings in closed agent-history, commit-fence
+and Entity.ai files; comments only, no runtime/signature changes. Otherdocwriter
+and main notified to prevent overlap.
+
+Broader focused preflight caught12failures before review. Six were fixture duplicate
+Assign bindings after lookup Agent reused DraftRecoverySupportReply; distinct
+DraftKnowledgeSupportReply added with same actualticketID/question semantics.
+Two exposed production failure-propagation bug: internal provider/ack errors were
+suppressed after session stopped. Runner now distinguishes externalcancellation
+and preserves original rejection/retry tests. Four supportexample timeouts came
+from insufficient32k recoverybudget for responsecopies/audit; configured96k with
+rationale, original four behavioralassertions preserved. Correctivecanonical
+generation+privatebuild and matchedsource/dist coverage run PASS115/115.
+Focused Agent-module coverage89.65L63.94B; combinedrepositorybaseline lowers totals
+to79.29L48.82B. Source/dist sourcemapping creates duplicate locations, so figures
+are diagnostic rather than a replacement for canonical global90 gate. Parent
+inspects actual uncovered behavior before targetedfollowup, no coverageexclusions.
+TSDoc closed13-file lane408→0 with scopedlint/format/diffpass, explicit configured
+Sol/medium accepted. Mainfinishesrepositorydocs; parent14findings clean.
+
+Runtime preflight continuation: complete repository TSDoc386→0, global checker
+passes. Native saved-read replay remains red: fresh process preserves saved
+Projection/model/tool evidence, no repeated physical call, but ACTIVE without
+completion at60s. Main/foundation retain diagnostic and correction contexts.
+Same existing adapter implementer assigned focused ordinary replay/decision
+behavior tests in a new agent-ai-replay.test.ts only, explicit immutable
+Sol/medium configured profile; no production edits or grandchildren. This
+closes uncovered acceptance paths observed in scoped coverage; source/dist
+mapping percentages remain diagnostic. Main retains all production corrections.
+
+Pre-review mechanics: full test-inclusive tooling TypeScript PASS; both full and
+production dependency audits PASS; copyright, Time policy, production dependency
+policy, docs audience, Proto source checksums and Buf lint PASS. Three earlier
+feature-file Prettier findings corrected without behavior changes. Cleanup has
+three known size/import findings assigned main; log containment has two repository
+catch annotations assigned main. Direct node formatter/generated-check attempts
+lacked package-bin PATH; corrected workflow uses pnpm scripts. No generated output
+acceptance inferred from that failed attempt. NPM server registry currently ends
+at snapshot22; final common unused version still to be checked across all packages.
+Native replay diagnostic now identifies MCP deadline/cancellation error; saved
+read/model/tool evidence persists and physical counters remain one each. No
+runtime cause accepted yet; strict completion assertion remains red.
+
+Replay test packet accepted: new agent-ai-replay.test.ts7/7, root test-inclusive
+TypeScript, scoped ESLint/Prettier and diff pass. Same explicit immutable configured
+Sol/medium implementer profile confirmed; runtime metadata not exposed. Genuine
+support Proto inputs/results; fresh runtime reuses persisted successful generation,
+decision, correction diagnostic and rejects changed facts. Scripted in-memory
+proof is distinct from native process-death proof.
+Native saved-read original failure identified: shared budget charges maximum
+reservation after exact protocol receipt is saved. Correction uses actual known
+bytes; unknown outcomes keep full reservation. Parent inspection identified
+partial observed prefixes must not be treated as complete receipts. Main retains
+runtime correction; bounded transport correction to follow in adapter context.
+No fixture budget inflation or deadline reset is allowed for this failure.
+
+Native PG saved-read/lookup cut PASS unchanged1/1 after accounting correction;
+original Projection read survives live revision, saved tool result reused without
+resend. Additional receipt correction remains before final acceptance: same
+adapter implementer explicit configured Sol/medium assigned only mcp-http-transport,
+mcp-stdio-transport and mcp-protocol tests/stdio fixture. Failed/partial sends pass
+unknown completion; only complete responses pass exact byte count including zero.
+Main retains runtime budget and model receipt handling. No serialized/API-shape
+change, no grandchildren. Foundation runs genuine multitenant actor recovery.
+
+Receipt correction complete before review: real partial-model regression red→green,
+factory98/98, MCP protocol36/36, MCP budget9/9. Adapter and server use explicit
+complete receipt only; an observed prefix never releases unknown reservation.
+Parent clarifies existing SPI comments and AI reference, no type-shape change.
+Explicit configured Sol/medium implementers accepted; runtime metadata unavailable.
+Global cleanup/TSDoc/logging and scoped TypeScript/lint/format pass. Source freeze
+ACK received from main/foundation; adapter complete. Parent canonical generation
+and build next. Actor/tenant native test remains diagnostic: correct accepted
+scope, saved attempt, zero reserved response bytes and zero physical requests.
+No product-runtime classification yet; fixture investigation continues read-only.
+
+Coordinated canonical generation + Proto/private/support build PASS. Combined
+runtime preflight PASS, source/test-inclusive TS, cleanup, TSDoc, containment,
+format/diff PASS. Scoped coverage now Agent modules91.77L75.61B, includes compiled
+BlackBox and direct tests; not a global90 claim. Existing fullhistory tests are
+outside this focused selection, and baseline repository code lowers aggregate.
+Source frozen for independent specialist wave: existing typescript_api_docs_reviewer
+and performance_reliability_reviewer each explicit gpt-6-sol/medium, fresh context,
+no memory/subagents, concern-specific packet /tmp/agent-runtime-review-packet.md.
+Style lane uses same explicit Sol/medium profile when slot available. Docs lane
+already clean, with bounded complete-receipt wording update included for API review.
+Foundation may finish isolated test-only actor/tenant fixture, production remains
+frozen; finalsecurity follows converged wave. Aggregate findings before fixes.
+
+Pre-review branch lint found three earlier AI registry test stubs marked async
+without await; parent changed them to explicit rejected Promises, focused8/8
+and lint/format PASS. Combined runtime suite123/123 PASS. Native actor/tenant
+SIGKILL nowPASS after honest96k record allowance and tenant-aware Stand read;
+original accepted reviewer-a/tenant-a and zero new model requests asserted.
+API and reliability specialist wave dispatched with explicit Sol/medium profiles,
+fresh contexts/no memory; style waits for available slot. Generated consistency,
+TypeDoc/API contracts and all documentation snippets PASS. Full native18 matrix
+running on exact compiled source. Remaining estimate2–4hours for review fixes,
+release/package-consumer checks and pushes; globalcoverage remains unverified.
+Feature checkpoint saves current implementation, not final release acceptance.

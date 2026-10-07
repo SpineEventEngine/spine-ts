@@ -294,6 +294,34 @@ importers:
         specifier: 2.0.0-snapshot.22
         version: link:../../packages/proto-tools
 
+  examples/support:
+    dependencies:
+      '@bufbuild/protobuf':
+        specifier: 2.12.1
+        version: 2.12.1
+      '@spine-event-engine/ai':
+        specifier: workspace:*
+        version: link:../../packages/ai
+      '@spine-event-engine/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@spine-event-engine/proto':
+        specifier: 2.0.0-snapshot.22
+        version: link:../../packages/proto
+      '@spine-event-engine/server':
+        specifier: workspace:*
+        version: link:../../packages/server
+      '@spine-event-engine/storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
+    devDependencies:
+      '@spine-event-engine/proto-tools':
+        specifier: 2.0.0-snapshot.22
+        version: link:../../packages/proto-tools
+      '@spine-event-engine/testing':
+        specifier: workspace:*
+        version: link:../../packages/testing
+
   examples/todo:
     dependencies:
       '@bufbuild/protobuf':
@@ -381,6 +409,9 @@ importers:
       ai:
         specifier: 7.0.128
         version: 7.0.128(zod@4.6.5)
+      ajv:
+        specifier: 8.20.0
+        version: 8.20.0
     devDependencies:
       '@ai-sdk/openai':
         specifier: 4.0.84
@@ -722,6 +753,9 @@ importers:
       '@bufbuild/protobuf':
         specifier: 2.12.1
         version: 2.12.1
+      '@spine-event-engine/ai':
+        specifier: workspace:*
+        version: link:../ai
       '@spine-event-engine/core':
         specifier: workspace:*
         version: link:../core
@@ -731,9 +765,40 @@ importers:
       '@spine-event-engine/server':
         specifier: workspace:*
         version: link:../server
+      '@spine-event-engine/storage':
+        specifier: workspace:*
+        version: link:../storage
+      '@spine-event-engine/storage-datastore':
+        specifier: workspace:*
+        version: link:../storage-datastore
+      '@spine-event-engine/storage-mysql':
+        specifier: workspace:*
+        version: link:../storage-mysql
+      '@spine-event-engine/storage-postgres':
+        specifier: workspace:*
+        version: link:../storage-postgres
       '@spine-event-engine/testing':
         specifier: workspace:*
         version: link:../testing
+    devDependencies:
+      '@ai-sdk/openai':
+        specifier: 4.0.84
+        version: 4.0.84(zod@4.6.5)
+      '@google-cloud/datastore':
+        specifier: 10.1.1
+        version: 10.1.1
+      '@spine-event-engine/ai-vercel-ax':
+        specifier: workspace:*
+        version: link:../ai-vercel-ax
+      '@types/pg':
+        specifier: 8.23.1
+        version: 8.23.1
+      mysql2:
+        specifier: 3.23.1
+        version: 3.23.1(@types/node@24.13.2)
+      pg:
+        specifier: 8.23.0
+        version: 8.23.0
 
   packages/server/test-fixtures:
     dependencies:
@@ -752,6 +817,9 @@ importers:
       '@bufbuild/protobuf':
         specifier: 2.12.1
         version: 2.12.1
+      '@spine-event-engine/core':
+        specifier: workspace:*
+        version: link:../core
       '@spine-event-engine/proto':
         specifier: 2.0.0-snapshot.22
         version: link:../proto
@@ -833,6 +901,9 @@ importers:
       '@spine-event-engine/server':
         specifier: workspace:*
         version: link:../server
+      '@spine-event-engine/storage':
+        specifier: workspace:*
+        version: link:../storage
 
   packages/testing/test-fixtures:
     dependencies:
@@ -1689,6 +1760,9 @@ packages:
   ajv@6.15.0:
     resolution: {integrity: sha512-fgFx7Hfoq60ytK2c7DhnF8jIvzYgOMxfugjLOSMHjLIPgenqa7S7oaagATUq99mV6IYvN2tRmC0wnTYX6iPbMw==}
 
+  ajv@8.20.0:
+    resolution: {integrity: sha512-Thbli+OlOj+iMPYFBVBfJ3OmCAnaSyNn4M1vz9T6Gka5Jt9ba/HIR56joy65tY6kx/FCF5VXNB819Y7/GUrBGA==}
+
   ansi-regex@5.0.1:
     resolution: {integrity: sha512-quJQXlTSUGL2LH9SUXo8VwsY4soanhgo6LNSm84E1LBcE8s3O0wpdiRzyR9z/ZZJMlMWv37qOOb9pdJlMUEKFQ==}
     engines: {node: '>=8'}
@@ -1978,6 +2052,9 @@ packages:
   fast-levenshtein@2.0.6:
     resolution: {integrity: sha512-DCXu6Ifhqcks7TZKY3Hxp3y6qphY5SJZmrWMDrKcERSOXWQdMhU9Ig/PYrzyw/ul9jOIyh0N4M0tbC5hodg8dw==}
 
+  fast-uri@3.1.8:
+    resolution: {integrity: sha512-GZMtZUTNRpOVIECoXwLNZS5xUGE+mVNbTB8h/7Rwh2TFWcBQiPzTgyZi05BF9UMZKkLJv8XBRJTlU7zg8+ZfMg==}
+
   fdir@6.5.0:
     resolution: {integrity: sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg==}
     engines: {node: '>=12.0.0'}
@@ -2217,6 +2294,9 @@ packages:
 
   json-schema-traverse@0.4.1:
     resolution: {integrity: sha512-xbbCH5dCYU5T8LcEhhuh7HJ88HXuW3qsI3Y0zOZFKfZEHcpWiHU/Jxzk629Brsab/mMiHQti9wMP+845RPe3Vg==}
+
+  json-schema-traverse@1.0.0:
+    resolution: {integrity: sha512-NM8/P9n3XjXhIZn1lLhkFaACTOURQXjWhV4BA/RnOv8xvgqtqpAX9IO4mRQxSx1Rlo4tqzeqb0sOlruaOy3dug==}
 
   json-schema@0.4.0:
     resolution: {integrity: sha512-es94M3nTIfsEPisRafak+HDLfHXnKBhV3vU5eqPcS3flIWqcxJWgXHXiey3YrpaNsanY5ei1VoYEbOzijuq9BA==}
@@ -3837,6 +3917,13 @@ snapshots:
       json-schema-traverse: 0.4.1
       uri-js: 4.4.1
 
+  ajv@8.20.0:
+    dependencies:
+      fast-deep-equal: 3.1.3
+      fast-uri: 3.1.8
+      json-schema-traverse: 1.0.0
+      require-from-string: 2.0.2
+
   ansi-regex@5.0.1: {}
 
   ansi-regex@6.2.2: {}
@@ -4109,6 +4196,8 @@ snapshots:
   fast-json-stable-stringify@2.1.0: {}
 
   fast-levenshtein@2.0.6: {}
+
+  fast-uri@3.1.8: {}
 
   fdir@6.5.0(picomatch@4.0.4):
     optionalDependencies:
@@ -4398,6 +4487,8 @@ snapshots:
   json-buffer@3.0.1: {}
 
   json-schema-traverse@0.4.1: {}
+
+  json-schema-traverse@1.0.0: {}
 
   json-schema@0.4.0: {}
 

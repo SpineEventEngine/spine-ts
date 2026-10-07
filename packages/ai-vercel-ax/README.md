@@ -7,7 +7,7 @@ Application developers use this optional package to register an authenticated Ve
 Install the adapter with the AI facade and the provider package you use:
 
 ```sh
-pnpm add @spine-event-engine/ai-vercel-ax@snapshot @spine-event-engine/ai@snapshot @ai-sdk/openai
+pnpm add @spine-event-engine/ai-vercel-ax@snapshot @spine-event-engine/ai@snapshot @ai-sdk/openai@4.0.84
 ```
 
 ## First success: prepare a guarded OpenAI Responses registration

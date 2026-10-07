@@ -61,9 +61,7 @@ function deployment(name: string) {
     resolveIdentity: () => ({ provider: "local", account: "test", endpoint: "local", model: name }),
     authorizeUse: () => true,
     connect: (_scope, identity) => ({ model: {}, identity }),
-    execute: async () => {
-      throw new Error("unused backend");
-    },
+    execute: () => Promise.reject(new Error("unused backend")),
   });
 }
 
@@ -160,9 +158,7 @@ describe("application AI registry", () => {
         }),
         authorizeUse: () => true,
         connect: (_scope, identity) => ({ model: {}, identity }),
-        execute: async () => {
-          throw new Error("unused backend");
-        },
+        execute: () => Promise.reject(new Error("unused backend")),
       }),
     );
     expect(() =>
@@ -212,7 +208,7 @@ describe("application AI registry", () => {
   });
 
   it("rejects malformed adapter registrations and preserves a copied reference", () => {
-    const ref = ModelRef.of("stable", "v1");
+    const ref = ModelRef.of("original", "v1");
     const config = {
       ref,
       kind: "generation" as const,
@@ -220,9 +216,7 @@ describe("application AI registry", () => {
       resolveIdentity: () => ({ provider: "p", account: "a", endpoint: "e", model: "m" }),
       authorizeUse: () => true,
       connect: (_scope: never, identity: never) => ({ model: {}, identity }),
-      execute: async () => {
-        throw new Error("unused backend");
-      },
+      execute: () => Promise.reject(new Error("unused backend")),
     };
     expect(() => createBackendRegistration({ ...config, kind: "other" as never })).toThrow("kind");
     expect(() => createBackendRegistration({ ...config, supports: undefined } as never)).toThrow(
@@ -234,8 +228,8 @@ describe("application AI registry", () => {
     const registration = createBackendRegistration(config);
     if (!ref.name) throw new Error("ModelRef factory omitted name");
     ref.name.value = "mutated";
-    expect(registration.ref.name?.value).toBe("stable");
-    expect(backendDefinition(registration).ref.name?.value).toBe("stable");
+    expect(registration.ref.name?.value).toBe("original");
+    expect(backendDefinition(registration).ref.name?.value).toBe("original");
     expect(() => backendDefinition({ ...registration })).toThrow("factory");
   });
 

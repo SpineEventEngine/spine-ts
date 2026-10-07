@@ -23,9 +23,11 @@ import type {
   AiValidationIssue,
 } from "@spine-event-engine/ai";
 import {
+  assertAiOutcomeContext,
   deriveOutputSchema,
   type AiCandidateAdmission,
   type AiAttemptRequest,
+  type AiAttemptReplay,
   type AiAttemptTicket,
   type AiBackendExecution,
   type AiBackendOutcome,
@@ -136,7 +138,30 @@ export interface RequestRecord extends AiTestRequest {
    * Local validation issues saved after response admission.
    */
   validationIssues: readonly AiValidationIssue[];
+
+  /**
+   * Exact previous generation text used to prepare a correction request.
+   */
+  candidateText?: string;
+
+  /**
+   * Candidate text copied from the prior invalid attempt.
+   */
+  correctionCandidate?: string;
 }
+
+/**
+ * Renders the exact scripted generation input and correction feedback.
+ * @param record Physical request observation.
+ * @returns Persistable prepared prompt JSON.
+ */
+const generationPrompt = (record: RequestRecord): string =>
+  JSON.stringify({
+    input: record.inputJson,
+    ...(record.correctionCandidate !== undefined
+      ? { correction: { candidate: record.correctionCandidate, issues: record.correctionIssues } }
+      : {}),
+  });
 
 interface ScriptedAttemptOps {
   /**
@@ -189,6 +214,22 @@ interface ScriptedAttemptOps {
     record: RequestRecord,
     queue?: ScriptQueue,
   ): Promise<AiBackendOutcome>;
+
+  /**
+   * Restores a saved response without consuming a queued physical script.
+   * @param request Selected scripted execution.
+   * @param saved Durable response and matching original failure.
+   * @returns Saved admitted output or exact recorded failure.
+   */
+  replay(request: AiBackendExecution, saved: AiAttemptReplay): AiBackendOutcome;
+
+  /**
+   * Checks saved failure correlation before reuse.
+   * @param response Saved terminal response.
+   * @param failure Original persisted failure, when available.
+   * @returns Exact saved failure.
+   */
+  replayFailure(response: AiAttemptReplay["response"], failure?: AiFailure): AiBackendOutcome;
 
   /**
    * Returns the scripted prepare result.
@@ -530,8 +571,9 @@ export const ScriptedAttempts: ScriptedAttemptOps = Object.freeze({
       attempt,
       inputJson,
       ...(prior?.ticketId ? { corrects: prior.ticketId } : {}),
+      ...(prior?.candidateText !== undefined ? { correctionCandidate: prior.candidateText } : {}),
       validationIssues: [],
-      correctionIssues: prior?.validationIssues ?? [],
+      correctionIssues: prior?.validationIssues.map((issue) => ({ ...issue })) ?? [],
       toolNames:
         request.definition.kind === "generation"
           ? Object.freeze(
@@ -580,6 +622,10 @@ export const ScriptedAttempts: ScriptedAttemptOps = Object.freeze({
     const prepared = this.prepare(request, record);
     const ticket = await request.control.beginAttempt(prepared);
     record.ticketId = ticket.id;
+    if ("kind" in ticket) {
+      record.validationIssues = ticket.issues ?? [];
+      return this.replay(request, ticket);
+    }
     const bytes = toBinary(
       prepared.kind === "generation" ? GenerationRequestSchema : DecisionRequestSchema,
       prepared.content,
@@ -604,6 +650,57 @@ export const ScriptedAttempts: ScriptedAttemptOps = Object.freeze({
   },
 
   /**
+   * Restores a saved typed response without consuming a queued physical script.
+   * @param request Selected scripted execution.
+   * @param saved Durable response and matching original failure, if any.
+   * @returns Saved admitted output or exact recorded failure.
+   */
+  replay(request: AiBackendExecution, saved: AiAttemptReplay): AiBackendOutcome {
+    const response = saved.response;
+    if (
+      request.definition.kind === "generation" &&
+      response.$typeName !== "spine.ts.agent.GenerationResponse"
+    )
+      throw new Error("Saved scripted response has a changed request kind.");
+    if (
+      request.definition.kind === "decision" &&
+      response.$typeName !== "spine.ts.agent.DecisionResponse"
+    )
+      throw new Error("Saved scripted response has a changed request kind.");
+    assertAiOutcomeContext(response);
+    if (response.outcome !== AiOutcome.ADMITTED) return this.replayFailure(response, saved.failure);
+    if (!response.admittedOutput) throw new Error("Saved scripted output is missing.");
+    const value = AnyMessages.unpack(response.admittedOutput, request.definition.output);
+    if (!value) throw new Error("Saved scripted response has a changed output type.");
+    return { ok: true, value };
+  },
+
+  /**
+   * Requires the original persisted failure category and matching diagnostic.
+   * @param response Saved terminal response.
+   * @param failure Original persisted failure, when available.
+   * @returns Exact failure without inventing retryability.
+   */
+  replayFailure(response: AiAttemptReplay["response"], failure?: AiFailure): AiBackendOutcome {
+    if (
+      ![AiOutcome.INVALID_OUTPUT, AiOutcome.FAILED, AiOutcome.REFUSED].includes(response.outcome) ||
+      !failure ||
+      response.diagnosticId?.value !== failure.diagnosticId
+    )
+      throw new Error("Saved scripted failure cannot be reconstructed.");
+    if (response.outcome === AiOutcome.INVALID_OUTPUT && failure.code !== "INVALID_OUTPUT")
+      throw new Error("Saved scripted failure category changed.");
+    if (response.outcome === AiOutcome.REFUSED && failure.code !== "REFUSED")
+      throw new Error("Saved scripted failure category changed.");
+    if (
+      response.outcome === AiOutcome.FAILED &&
+      (failure.code === "INVALID_OUTPUT" || failure.code === "REFUSED")
+    )
+      throw new Error("Saved scripted failure category changed.");
+    return { ok: false, failure };
+  },
+
+  /**
    * Materializes the exact typed generation or decision request.
    *
    * @param request Request for this operation.
@@ -624,7 +721,7 @@ export const ScriptedAttempts: ScriptedAttemptOps = Object.freeze({
       };
     }
     const outputSchemaJson = JSON.stringify(deriveOutputSchema(definition.output));
-    const promptJson = JSON.stringify({ input: record.inputJson });
+    const promptJson = generationPrompt(record);
     const digest = this.digest(
       JSON.stringify({ instructions: definition.instructions, outputSchemaJson, promptJson }),
     );
@@ -746,6 +843,7 @@ export const ScriptedAttempts: ScriptedAttemptOps = Object.freeze({
     request.control.onReceived(ticket.id, bytes);
     if (bytes > ticket.maxOutputBytes)
       return this.failure(request, ticket, "BUDGET_EXCEEDED", false, script.usage);
+    record.candidateText = script.text;
     const admitted = await request.control.admitGeneration(
       script.text,
       request.definition,

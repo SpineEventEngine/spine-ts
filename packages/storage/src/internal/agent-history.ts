@@ -36,6 +36,13 @@ const factories = new WeakMap<StorageFactory, AgentHistoryStorageFactory>();
  */
 export interface AgentHistoryFactoryAccess {
   /**
+   * Returns whether the provider registered mandatory Agent history.
+   * @param factory Storage factory checked before a tenant is selected.
+   * @returns Whether indexed Agent history handles are available.
+   */
+  supports(factory: StorageFactory): boolean;
+
+  /**
    * Registers an Agent history provider capability.
    *
    * @param factory Provider storage factory.
@@ -58,6 +65,15 @@ export interface AgentHistoryFactoryAccess {
  * Registers and opens the provider-only Agent history capability.
  */
 export const AgentHistoryStorageFactories: AgentHistoryFactoryAccess = Object.freeze({
+  /**
+   * Checks registration without creating a handle for an invented tenant.
+   * @param factory Storage factory checked at context registration.
+   * @returns Whether Agent history handles are available.
+   */
+  supports(factory: StorageFactory): boolean {
+    return factories.has(factory);
+  },
+
   /**
    * Registers a provider's Agent history handle factory.
    *

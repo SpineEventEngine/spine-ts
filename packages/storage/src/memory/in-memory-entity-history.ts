@@ -1098,7 +1098,7 @@ export class KeyedSerialQueue {
    * @param operation Supplies the operation to run.
    * @returns Resolves to the operation result.
    */
-  async run<T>(key: string, operation: () => Promise<T>): Promise<T> {
+  async run<T>(key: string, operation: () => Promise<T> | T): Promise<T> {
     const previous = this.#tails.get(key);
     let release!: () => void;
     const tail = new Promise<void>((resolve) => {

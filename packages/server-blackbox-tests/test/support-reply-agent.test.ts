@@ -14,8 +14,8 @@
 
 import { create } from "@bufbuild/protobuf";
 import type { Any } from "@bufbuild/protobuf/wkt";
+import { AiRegistry } from "@spine-event-engine/ai";
 import { AnyMessages } from "@spine-event-engine/core";
-import type { Event } from "@spine-event-engine/proto";
 // prettier-ignore
 import {
   CommandDispatchedToHandlerSchema,
@@ -44,8 +44,16 @@ import {
   SupportReplyAgentIdSchema,
   SupportReplyAgentStateSchema,
 } from "../dist/generated/spine/server/testing/support_agent_states_pb.js";
-import { SupportReplyUnavailableSchema } from "../dist/generated/spine/server/testing/support_agent_rejections_pb.js";
+import { SupportReplyReviewStartedSchema } from "../dist/generated/spine/server/testing/support_review_events_pb.js";
 import { SupportReplyAgent } from "../dist/src/agent/support-reply-agent.js";
+import {
+  SupportRejectionSubscriber,
+  SupportReviewAssignee,
+} from "../dist/src/agent/support-reply-receivers.js";
+import {
+  SupportDraftObserver,
+  SupportDraftReceiptObserver,
+} from "../dist/src/agent/support-draft-receivers.js";
 
 const generatedHandlers = new HandlerRegistryIngestor().ingest(generatedHandlerRegistry);
 const discoveredAgent = generatedHandlers.find((entry) => entry.entityType === SupportReplyAgent);
@@ -61,12 +69,49 @@ function requiredMessage(signal: { readonly message?: Any | undefined } | undefi
   return signal.message;
 }
 
+function emptyModelRegistry(): AiRegistry {
+  return AiRegistry.create({
+    defaultModels: {},
+    invocationLimits: {
+      operations: 1,
+      modelRequests: 1,
+      toolCalls: 0,
+      recordedReads: 1,
+      deadlineMs: 1_000,
+      totalInputBytes: 4_000,
+      totalOutputBytes: 4_000,
+      maxRecoveryBytes: 4_000,
+    },
+    concurrentOperations: 1,
+    queuedOperations: 0,
+  });
+}
+
+function supportContext(name: string) {
+  return BoundedContext.singleTenant(name).withAi(emptyModelRegistry()).persistSystemEvents();
+}
+
+function generatedSupportContext(
+  name: string,
+  assignee = new SupportReviewAssignee(),
+  subscriber = new SupportRejectionSubscriber(),
+) {
+  return supportContext(name)
+    .withGeneratedRegistryRoot(new URL("../dist/", import.meta.url))
+    .addAssignee(assignee)
+    .addEventDispatcher(subscriber)
+    .addEventDispatcher(new SupportDraftReceiptObserver())
+    .addEventDispatcher(new SupportDraftObserver());
+}
+
 describe("support reply Agent", () => {
   it("registers authored handlers through generated context discovery", async () => {
     const agent = create(SupportReplyAgentIdSchema, { ticketNumber: "T-48" });
-    const context = await BoundedContext.singleTenant("Support reply generated")
-      .withGeneratedRegistryRoot(new URL("../dist/", import.meta.url))
-      .add(SupportReplyAgent)
+    const context = await generatedSupportContext("Support reply generated")
+      .add(SupportReplyAgent, {
+        agentCodeRevision: "support-reply-v1",
+        ai: { models: [] },
+      })
       .buildAsync();
     const blackBox = await BlackBox.from(context);
     try {
@@ -89,21 +134,20 @@ describe("support reply Agent", () => {
 
   it("discards the whole Event draft when a later reactor fails", async () => {
     const agent = create(SupportReplyAgentIdSchema, { ticketNumber: "T-47" });
-    const context = BoundedContext.singleTenant("Support reply failed reaction")
+    const assignee = new SupportReviewAssignee();
+    const context = await generatedSupportContext("Support reply failed reaction", assignee)
       .add(
         new Repository({
           entityType: SupportReplyAgent,
+          agentCodeRevision: "support-reply-v1",
+          ai: { models: [] },
           schema: SupportReplyAgentStateSchema,
           handlers: agentHandlers,
           events: [SupportReplyDraftedSchema],
           eventRouting: EventRouting.create().route(SupportTicketUpdatedSchema, () => [agent]),
         }),
       )
-      .addCommandDispatcher({
-        messageSchemas: () => [ReviewSupportReplySchema],
-        dispatch: () => Promise.resolve(),
-      })
-      .build();
+      .buildAsync();
     const blackBox = await BlackBox.from(context);
     try {
       await blackBox
@@ -119,6 +163,7 @@ describe("support reply Agent", () => {
       expect(await context.stand().read(SupportReplyAgentStateSchema, agent)).toBeUndefined();
       expect(blackBox.assertEvents()).toEqual([]);
       expect(blackBox.assertCommands()).toEqual([]);
+      expect(assignee.requests).toEqual([]);
     } finally {
       await blackBox.close();
     }
@@ -126,24 +171,19 @@ describe("support reply Agent", () => {
 
   it("publishes a declared rejection without committing state or domain Events", async () => {
     const agent = create(SupportReplyAgentIdSchema, { ticketNumber: "T-45" });
-    const rejections: Event[] = [];
-    const context = BoundedContext.singleTenant("Support reply rejection")
+    const subscriber = new SupportRejectionSubscriber();
+    const context = await generatedSupportContext("Support reply rejection", undefined, subscriber)
       .add(
         new Repository({
           entityType: SupportReplyAgent,
+          agentCodeRevision: "support-reply-v1",
+          ai: { models: [] },
           schema: SupportReplyAgentStateSchema,
           handlers: agentHandlers,
           events: [SupportReplyDraftedSchema],
         }),
       )
-      .addEventDispatcher({
-        messageSchemas: () => [SupportReplyUnavailableSchema],
-        dispatch: (event) => {
-          rejections.push(event);
-          return Promise.resolve();
-        },
-      })
-      .build();
+      .buildAsync();
     const blackBox = await BlackBox.from(context);
     try {
       await blackBox
@@ -153,12 +193,10 @@ describe("support reply Agent", () => {
           create(DraftSupportReplySchema, { agent, question: "reject" }),
         );
       const rejection = await blackBox.eventually(
-        () => rejections[0],
+        () => subscriber.rejections[0],
         (candidate) => candidate !== undefined,
       );
-      expect(
-        AnyMessages.unpack(requiredMessage(rejection), SupportReplyUnavailableSchema)?.agent,
-      ).toEqual(agent);
+      expect(rejection?.agent).toEqual(agent);
       await blackBox.eventually(
         () => (SupportReplyAgent as unknown as { rejectionsSeen?: number }).rejectionsSeen,
         (count) => count === 1,
@@ -172,21 +210,20 @@ describe("support reply Agent", () => {
 
   it("posts a review Command without creating Agent state when reactions return undefined", async () => {
     const agent = create(SupportReplyAgentIdSchema, { ticketNumber: "T-44" });
-    const context = BoundedContext.singleTenant("Support reply no-op")
+    const assignee = new SupportReviewAssignee();
+    const context = await generatedSupportContext("Support reply no-op", assignee)
       .add(
         new Repository({
           entityType: SupportReplyAgent,
+          agentCodeRevision: "support-reply-v1",
+          ai: { models: [] },
           schema: SupportReplyAgentStateSchema,
           handlers: agentHandlers,
           events: [SupportReplyDraftedSchema],
           eventRouting: EventRouting.create().route(SupportTicketUpdatedSchema, () => [agent]),
         }),
       )
-      .addCommandDispatcher({
-        messageSchemas: () => [ReviewSupportReplySchema],
-        dispatch: () => Promise.resolve(),
-      })
-      .build();
+      .buildAsync();
     const blackBox = await BlackBox.from(context);
     try {
       await blackBox
@@ -202,8 +239,19 @@ describe("support reply Agent", () => {
       expect(
         AnyMessages.unpack(requiredMessage(commands[0]), ReviewSupportReplySchema)?.agent,
       ).toEqual(agent);
+      expect(assignee.requests).toHaveLength(1);
       expect(await context.stand().read(SupportReplyAgentStateSchema, agent)).toBeUndefined();
-      expect(blackBox.assertEvents()).toEqual([]);
+      const review = await blackBox.eventually(
+        () =>
+          blackBox
+            .assertEvents()
+            .map((event) =>
+              AnyMessages.unpack(requiredMessage(event), SupportReplyReviewStartedSchema),
+            )
+            .filter((event) => event !== undefined),
+        (events) => events.length === 1,
+      );
+      expect(review[0]?.agent).toEqual(agent);
     } finally {
       await blackBox.close();
     }
@@ -211,20 +259,19 @@ describe("support reply Agent", () => {
 
   it("runs matching Event reactions before Command production in one draft", async () => {
     const agent = create(SupportReplyAgentIdSchema, { ticketNumber: "T-43" });
+    const assignee = new SupportReviewAssignee();
     const repository = new Repository({
       entityType: SupportReplyAgent,
+      agentCodeRevision: "support-reply-v1",
+      ai: { models: [] },
       schema: SupportReplyAgentStateSchema,
       handlers: agentHandlers,
       events: [SupportReplyDraftedSchema],
       eventRouting: EventRouting.create().route(SupportTicketUpdatedSchema, () => [agent]),
     });
-    const context = BoundedContext.singleTenant("Support reply event")
+    const context = await generatedSupportContext("Support reply event", assignee)
       .add(repository)
-      .addCommandDispatcher({
-        messageSchemas: () => [ReviewSupportReplySchema],
-        dispatch: () => Promise.resolve(),
-      })
-      .build();
+      .buildAsync();
     const blackBox = await BlackBox.from(context);
     try {
       await blackBox
@@ -242,7 +289,13 @@ describe("support reply Agent", () => {
         (await context.stand().readVersioned(SupportReplyAgentStateSchema, agent))?.version?.number,
       ).toBe(1);
       const events = await blackBox.eventually(
-        () => blackBox.assertEvents(),
+        () =>
+          blackBox
+            .assertEvents()
+            .filter(
+              (event) =>
+                AnyMessages.unpack(requiredMessage(event), SupportReplyDraftedSchema) !== undefined,
+            ),
         (candidate) => candidate.length === 2,
       );
       expect(
@@ -257,6 +310,18 @@ describe("support reply Agent", () => {
       expect(
         AnyMessages.unpack(requiredMessage(commands[0]), ReviewSupportReplySchema)?.agent,
       ).toEqual(agent);
+      expect(assignee.requests).toHaveLength(1);
+      const review = await blackBox.eventually(
+        () =>
+          blackBox
+            .assertEvents()
+            .map((event) =>
+              AnyMessages.unpack(requiredMessage(event), SupportReplyReviewStartedSchema),
+            )
+            .filter((event) => event !== undefined),
+        (items) => items.length === 1,
+      );
+      expect(review[0]?.agent).toEqual(agent);
       const audit = await readAgentHistory(
         repository,
         agent,
@@ -271,20 +336,18 @@ describe("support reply Agent", () => {
 
   it("routes a generated assignment through BlackBox and commits the proposed reply", async () => {
     const agent = create(SupportReplyAgentIdSchema, { ticketNumber: "T-42" });
-    const context = BoundedContext.singleTenant("Support reply")
+    const context = await generatedSupportContext("Support reply")
       .add(
         new Repository({
           entityType: SupportReplyAgent,
+          agentCodeRevision: "support-reply-v1",
+          ai: { models: [] },
           schema: SupportReplyAgentStateSchema,
           handlers: agentHandlers,
           events: [SupportReplyDraftedSchema],
         }),
       )
-      .addCommandDispatcher({
-        messageSchemas: () => [ReviewSupportReplySchema],
-        dispatch: () => Promise.resolve(),
-      })
-      .build();
+      .buildAsync();
     const blackBox = await BlackBox.from(context);
     try {
       const result = await blackBox
@@ -315,11 +378,13 @@ describe("support reply Agent", () => {
     const agent = create(SupportReplyAgentIdSchema, { ticketNumber: "T-history" });
     const repository = new Repository({
       entityType: SupportReplyAgent,
+      agentCodeRevision: "support-reply-v1",
+      ai: { models: [] },
       schema: SupportReplyAgentStateSchema,
       handlers: agentHandlers,
       events: [SupportReplyDraftedSchema],
     });
-    const context = BoundedContext.singleTenant("Support history").add(repository).build();
+    const context = supportContext("Support history").add(repository).build();
     const blackBox = await BlackBox.from(context);
     try {
       const result = await blackBox

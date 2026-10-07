@@ -493,5 +493,68 @@
     "name": "assertNoRetiredLayout",
     "disposition": "necessity",
     "reason": "TypeScript MySQL migration boundary: assertNoRetiredLayout fails factory startup closed when any retired physical layout is detected."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/agent-execution.ts",
+    "kind": "function-declaration",
+    "identity": "invocationId()#1",
+    "name": "invocationId",
+    "disposition": "necessity",
+    "reason": "TypeScript provider boundary: invocationId derives the native invocation row identity from the original full Agent key."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/agent-execution.ts",
+    "kind": "function-declaration",
+    "identity": "checkIdentity()#1",
+    "name": "checkIdentity",
+    "disposition": "necessity",
+    "reason": "TypeScript provider boundary: checkIdentity verifies a decoded native row still carries the requested full Agent identity after digest lookup."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/agent-execution.ts",
+    "kind": "function-declaration",
+    "identity": "first()#1",
+    "name": "first",
+    "disposition": "necessity",
+    "reason": "TypeScript provider boundary: first reads the first native transaction result while rejecting malformed provider replies."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/agent-execution.ts",
+    "kind": "function-declaration",
+    "identity": "requiredStorage()#1",
+    "name": "requiredStorage",
+    "disposition": "necessity",
+    "reason": "TypeScript provider boundary: requiredStorage rejects disabled optional Entity state or diagnostic history before a conditional commit."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/agent-execution.ts",
+    "kind": "function-declaration",
+    "identity": "validateTransactionRows()#1",
+    "name": "validateTransactionRows",
+    "disposition": "necessity",
+    "reason": "TypeScript provider boundary: validateTransactionRows checks native transaction mutation, entity-group and staged payload budgets before commit."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/agent-execution.ts",
+    "kind": "function-declaration",
+    "identity": "isAborted()#1",
+    "name": "isAborted",
+    "disposition": "necessity",
+    "reason": "TypeScript provider boundary: isAborted classifies native transaction contention for bounded retry without hiding other errors."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-mysql/src/mysql/agent-execution.ts",
+    "kind": "function-declaration",
+    "identity": "invocationId()#1",
+    "name": "invocationId",
+    "disposition": "necessity",
+    "reason": "TypeScript provider boundary: invocationId derives the physical row identity from the complete original Agent key without allocating a counter."
   }
 ]

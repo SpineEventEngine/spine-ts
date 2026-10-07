@@ -37,7 +37,8 @@ message GenerationRequest {
   // Canonical JSON schema supplied to the provider.
   string output_schema_json = 3 [(required) = true];
 
-  // Actual model-facing conversation, excluding credential material.
+  // Actual prepared conversation and advertised tool definitions as canonical JSON.
+  // Includes model-visible names mapped to configured server/tool names, without credentials.
   string prompt_json = 4 [(required) = true];
 
   // Correction target; absent on the first attempt.

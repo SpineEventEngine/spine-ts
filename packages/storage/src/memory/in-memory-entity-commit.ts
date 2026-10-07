@@ -132,6 +132,55 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
   }
 
   /**
+   * Applies an Agent completion only while the current Entity Version matches.
+   * @typeParam I Typed Entity identifier.
+   * @typeParam S Generated Entity state.
+   * @param entity Existing Entity layout.
+   * @param entityId Typed Entity identifier.
+   * @param expectedVersion Version observed before Agent handlers ran.
+   * @param input Current-state mutation, absent for a no-op.
+   * @param extra Staged execution and history publication with restoration.
+   * @returns Completion after conditional Entity and execution publication.
+   */
+  commitConditional<I, S extends Message>(
+    entity: EntityStorageInput<I, S>,
+    entityId: I,
+    expectedVersion: number,
+    input: EntityCommitInput<I, S> | undefined,
+    extra: { apply(): void; restore(): void },
+  ): Promise<void> {
+    this.#requireOpen();
+    const backend = this.#entities.backend(entity);
+    const work = () =>
+      backend.mutationQueue.run(ENTITY_SCOPE_MUTATION_KEY, async () => {
+        this.#checkCurrentVersion(backend, entity.id.key(entityId), expectedVersion);
+        if (input === undefined) {
+          try {
+            extra.apply();
+          } catch (error) {
+            extra.restore();
+            throw error;
+          }
+          return;
+        }
+        await this.#commit(input, backend, extra);
+      });
+    return input?.events?.length
+      ? eventStoreAccess.withLock(this.#factory, entity.context, work)
+      : work();
+  }
+
+  /**
+   * Checks the current Version while the Entity mutation queue is held.
+   */
+  #checkCurrentVersion(backend: EntityBackend, key: string, expected: number): void {
+    const current = backend.current.get(key) as EntityRecord | undefined;
+    const actual = current?.version?.number ?? 0;
+    if (actual !== expected)
+      throw new Error("Agent execution initial Entity Version is no longer current.");
+  }
+
+  /**
    * Closes this commit handle without closing sibling handles.
    */
   close(): void {
@@ -149,11 +198,12 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
   async #commit<I, S extends Message>(
     input: EntityCommitInput<I, S>,
     liveBackend: EntityBackend,
+    extra?: { apply(): void; restore(): void },
   ): Promise<void> {
     const stage = this.stage(input, liveBackend);
     try {
       await this.#writeStage(input, stage);
-      this.#publish(stage, liveBackend);
+      this.#publish(stage, liveBackend, extra);
     } finally {
       stage.entity.close();
     }
@@ -307,6 +357,7 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
   #publish(
     stage: Omit<ReturnType<MemoryEntityCommitStorage["stage"]>, "entity">,
     backend: EntityBackend,
+    extra?: { apply(): void; restore(): void },
   ): void {
     const changes = [
       ...InMemoryCommitValues.changes(stage.live.states, stage.stagedStates, stage.stateIds),
@@ -321,7 +372,9 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
     try {
       for (const change of changes) change.apply();
       backend.current.set(stage.key, next);
+      extra?.apply();
     } catch (error) {
+      extra?.restore();
       if (stage.previous === undefined) backend.current.delete(stage.key);
       else backend.current.set(stage.key, stage.previous);
       for (const change of changes.reverse()) change.restore();

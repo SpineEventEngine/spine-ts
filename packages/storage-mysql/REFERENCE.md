@@ -150,6 +150,23 @@ misordered, or otherwise incompatible same-name indexes reject when the handle
 opens. Pages use bounded native SQL chunks and sum serialized entry bytes; a
 fetched chunk can be larger than the returned byte budget.
 
+## Agent execution
+
+Agent execution conformance is exercised with MySQL 5.7 and 8.4, and MariaDB 11.4.
+
+Agent repositories require InnoDB. The execution handle rejects a nontransactional
+engine before accepting Agent work; the existing engine choices for other Entity
+families are unchanged. Execution and per-instance pending records use complete
+binary ordering keys and validated composite indexes.
+
+One connection transaction checks the claim and initial Entity Version, then
+writes state, mandatory history, preferences and outgoing signals. Connection
+binding is scoped to that asynchronous operation. Encoded execution,
+per-instance, and Agent history records must each fit the 65,535-byte BLOB limit. The runtime must
+check its response reservation against the provider limits before inference.
+Reopening a factory can read the saved work. No transaction remains open during
+a model request.
+
 `MysqlStorageSchemaError` reports incompatible layouts,
 `MysqlStorageDataError` reports stored bytes that cannot be decoded, and
 `MysqlStorageOperationError` reports sanitized bounds, query, collision, and

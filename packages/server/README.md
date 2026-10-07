@@ -140,8 +140,9 @@ An Agent uses a Proto `ENTITY` state and a generated handler registry.
 `undefined`, and `@Command` returns native Commands under the existing Process
 Manager signal contract. Agents reject `@Subscribe` and Entity-state Apply
 handlers. Matching Event reactors run before commanders against one draft and
-commit one Version. AI invocation and conversation recording connect in the
-durable execution slice.
+commit one Version. The protected `ai` facade is available while a signal handler
+is active. Its asynchronous calls retain model requests and responses before
+returning a validated result or an operational failure.
 
 An Agent can read its repository history through protected `fullHistory`,
 `conversationHistory`, `systemEventHistory`, and `domainEventHistory` methods.
@@ -158,58 +159,78 @@ logical deletion. System dispatch audit and emitted domain Events use their
 original Event envelopes in repository history.
 
 Declare the Agent ID and state in Proto, with `option (entity).kind = ENTITY;`
-on the state. The [support reply fixture](../server-blackbox-tests/proto/spine/server/testing/support_agent_states.proto)
-shows this declaration. Extend `Agent` and return a domain Event from `@Assign`:
+on the state. The [Support example](../../examples/support/README.md) includes
+complete [domain Protos](../../examples/support/proto/spine/examples/support/states.proto),
+[a model definition](../../examples/support/src/model.ts), and
+[an Agent implementation](../../examples/support/src/index.ts).
 
-<!-- docs-snippet-path: packages/server-blackbox-tests/src/agent/support-reply-agent.ts -->
+The handler invokes a typed model operation, updates its draft only on success,
+and emits a domain outcome. This abbreviated declaration uses the example's
+actual generated messages:
+
+<!-- docs-snippet-path: examples/support/src/index.ts -->
 
 ```ts
 import { create } from "@bufbuild/protobuf";
 import { Agent, Assign } from "@spine-event-engine/server";
-import type { DraftSupportReply } from "../../generated/spine/server/testing/support_agent_commands_pb.js";
+import type { DraftSupportReply } from "../generated/spine/examples/support/commands_pb.js";
 import {
-  SupportReplyDraftedSchema,
-  type SupportReplyDrafted,
-} from "../../generated/spine/server/testing/support_agent_events_pb.js";
-import {
-  type SupportReplyAgentId,
-  SupportReplyAgentStateSchema,
-} from "../../generated/spine/server/testing/support_agent_states_pb.js";
+  SupportReplySuggestedSchema,
+  SupportReplyFailedSchema,
+  type SupportReplySuggested,
+  type SupportReplyFailed,
+} from "../generated/spine/examples/support/events_pb.js";
+import { SupportDraftStateSchema } from "../generated/spine/examples/support/states_pb.js";
+import type { SupportTicketId } from "../generated/spine/examples/support/types_pb.js";
+import { draftSupportReply } from "./model.js";
 
-/**
- * Drafts replies for support tickets.
- */
-class SupportReplyAgent extends Agent<SupportReplyAgentId, typeof SupportReplyAgentStateSchema> {
+/** Proposes support replies for a person's review. */
+class SupportDraftAgent extends Agent<SupportTicketId, typeof SupportDraftStateSchema> {
   /**
-   * Proposes a reply when the ticket requests one.
-   *
-   * @param command Support ticket request.
-   * @returns Event containing the proposed reply.
+   * Drafts a reply from the submitted ticket facts.
+   * @param command Ticket facts and an explicit conversation.
+   * @returns The proposed reply or a recorded failure outcome.
    */
   @Assign
-  draft(command: DraftSupportReply): SupportReplyDrafted {
-    const reply = `Answer: ${command.question}`;
-    this.update((state) => Object.assign(state, { id: this.id, proposedReply: reply }));
-    return create(SupportReplyDraftedSchema, { agent: this.id, reply });
+  async draft(command: DraftSupportReply): Promise<SupportReplySuggested | SupportReplyFailed> {
+    if (command.conversation === undefined || command.request === undefined)
+      throw new TypeError("A draft requires ticket facts and a conversation.");
+    const result = await this.ai.invoke(draftSupportReply, {
+      call: "draft-support-reply",
+      conversation: command.conversation,
+      input: command,
+    });
+    const outcome = {
+      id: this.id,
+      request: command.request,
+      conversation: command.conversation,
+      operation: result.operationId,
+    };
+    if (!result.ok) return create(SupportReplyFailedSchema, outcome);
+    this.update((state) =>
+      Object.assign(state, {
+        id: this.id,
+        request: command.request,
+        conversation: command.conversation,
+        reply: result.value,
+      }),
+    );
+    return create(SupportReplySuggestedSchema, { ...outcome, reply: result.value });
   }
 }
 ```
 
-Generate the handler registry from that class, then register the Agent in a
-bounded context. `buildAsync()` discovers its handlers:
+Configure the registry outside the Entity. The context requires persisted System
+Events, and the Agent registration supplies its code revision and permitted
+capabilities. The [example context factory](../../examples/support/src/index.ts)
+assembles these settings with the generated handler registry. A server-wide
+`withAi()` default can be supplied when building contexts through `Server`;
+context configuration can provide its registry directly.
 
-<!-- docs-snippet-path: packages/server-blackbox-tests/test/support-reply-agent.test.ts -->
-
-```ts
-import { BoundedContext } from "@spine-event-engine/server";
-import { SupportReplyAgent } from "../src/agent/support-reply-agent.js";
-
-const context = await BoundedContext.singleTenant("Support replies")
-  .withGeneratedRegistryRoot(new URL("../dist/", import.meta.url))
-  .add(SupportReplyAgent)
-  .buildAsync();
-await context.close();
-```
+Posting a Command awaits acceptance. Model work and the resulting domain Event
+arrive asynchronously afterward. The handling operation can await a model without
+keeping a database transaction open. See the [Agent execution reference](REFERENCE.md#agent-execution)
+for defaults, recovery and retained history.
 
 For Process Manager's schema-and-columns query form:
 
