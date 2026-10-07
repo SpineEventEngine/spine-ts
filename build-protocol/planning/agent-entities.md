@@ -5,8 +5,9 @@
 High-risk runtime/public-contract task authorized on 7 October 2026. Base:
 `658da1cdddcb8fd40f9205b1c200abc3a58dd62e` (snapshot.22). Feature branch:
 `agent-entities`; worktree: native managed `agent-readiness/spine-ts`.
-Adapter composition is verified; Agent family implementation is next. Physical
-Entity deletion is explicitly deferred.
+Adapter composition and the Agent family foundation are verified. AI facade
+validation is underway; dedicated history storage follows. Physical Entity
+deletion is explicitly deferred.
 
 The approved specification is `AGENT_ENTITIES_API_TASK_2026-10-02.md` and its
 `AGENT_HISTORY_PROPOSAL.md` appendix in the user's
@@ -455,3 +456,149 @@ remains available for later integration questions and corrections, with no
 concurrent production edits. New assignment receives the frozen architecture and
 exact requirements rather than repeating deep planning. Runtime metadata beyond
 configured profiles remains unavailable.
+
+Milestone 0 checkpoint `0e16da19a` was pushed to official `origin/agent-entities`.
+Foundation implementer dispatched with explicit Sol/medium; no child delegation.
+The existing explicit Luna/medium read-only scan function is independently mapping
+current Proto validation/JSON APIs for facade reuse. It does not design another
+architecture or edit production files.
+
+Facade preparation accepted from Luna/medium source scan: reuse public core
+TypeRegistry/TypeMetadata, Validate.message/check and Stringifiers.forMessage.
+Schema derivation and facade JSON policy need new behavior tests for presence,
+oneofs, extra properties and exact integer values. No runtime/schema library is
+selected by this scan. The official Buf protoschema plugin was investigated as
+an existing alternative: https://github.com/bufbuild/protoschema-plugins documents
+build-time Draft 2020-12 generation and Buf validation examples, rather than a
+JavaScript runtime descriptor API. Evaluate that distinction when implementing
+Spine-specific schema lowering; retain the existing Proto parser/validator.
+The same explicitly configured Luna/medium read-only function is checking the
+published OpenRouter decision API against pinned Vercel provider interfaces,
+using temporary package probes only and no live paid calls.
+
+Decision compatibility follow-up: the pinned ai 7.0.128 entrypoint already accepts
+both Experimental_DecisionModelV4 and Experimental_EvaluationModelV4 and normalizes
+legacy doEvaluate itself. Both interfaces are exported directly by provider 4.0.22.
+Published OpenRouter 3.1.0 evaluationModel satisfies that compatibility union;
+use the SDK normalization, not a second Spine method-name shim. The temporary
+strict authored-code probe passes; optional vendor declaration limitations remain
+as previously recorded. Production protocol tests must still prove actual Jev
+request/answer mapping, usage, rounding and cancellation.
+
+Adapter production preparation is assigned read-only to the existing explicit
+Sol/medium implementer context while the foundation writer edits server code.
+It checks pinned streaming request/result hooks and byte-buffering boundaries
+against the approved connection API; no production edits or new contract are
+authorized by that scan. Escalate only a source-demonstrated contract blocker.
+
+Demonstrated adapter boundary blocker: pinned provider-utils buffers SSE events
+without a configured parser cap and JSON/error bodies up to its default 2 GiB
+before doStream emits parsed items. Parsed-delta accounting alone cannot establish
+the required received-byte bound for an opaque model. Reopen only this boundary
+with the existing requirements_splitter role, explicitly gpt-6-astra/high, to
+choose the smallest compatible bounded-transport contract. Foundation work remains
+independent and continues. Source evidence and probes are outside the repository.
+
+Bounded transport decision accepted from the explicitly configured Astra/high
+requirements_splitter; configured metadata verified, runtime introspection absent.
+This check used codebase-design guidance to keep the interface in the optional
+adapter. The normative task §5.2 now requires VercelConnectControl.fetch for
+provider construction, retains connect -> {model, identity}, and documents exact
+decoded-body accounting, crossing-chunk failure, shared request reservation and
+no hidden fetches/redirects. OpenRouter uses explicit decisionsBaseURL from the
+accepted identity. No Agent/domain API or generic AiControl changes. Built-in
+profiles require tested fetch propagation; trusted custom implementations must
+meet that contract rather than pass a fictional transport-safe flag.
+
+Implementation: a pull-based response-body guard precedes SDK parsers and covers
+success, SSE and error bodies. Direct generation doStream avoids streamText's
+internal accumulation; decisions use the SDK compatibility input behind the same
+guard. Persist response-byte credit before dispatch so a crash cannot refund an
+uncertain reservation. The physical attempt is counted once across Ax/fetch.
+MCP's published client supports HTTP fetch injection and a custom MCPTransport;
+use guarded stdio before line parsing, not the built-in unbounded read buffer.
+The investigation inspected @ai-sdk/mcp 2.0.69 but did not select/install it.
+Protocol fixtures must prove exact-limit EOF, crossing chunks, giant SSE/JSON
+errors, split UTF-8, decompression accounting, cancellation, retry/redirect denial,
+credential containment, durable credit and uncertain writes. This is the only
+architecture extension; do not reopen the complete frozen wave.
+
+Proto formatting clarification: current repository workflow enforces Buf output
+for authored files. The older task's four-space JVM indentation refers to its
+illustrative text; actual source uses Buf formatting, preserving JVM declaration
+and comment ordering. Clarified the normative sentence rather than weakening
+format gates or reformatting unrelated source. No schema behavior changed.
+
+Facade slice preparation: dispatch the existing implementer context with its
+explicit gpt-6-sol/medium profile for packages/ai and public Agent Proto contracts.
+Its writing scope excludes server, proto-tools, existing adapter source and the
+foundation fixtures. Coordinate global generation/build commands after the
+foundation writer finishes. First deliver immutable model/MCP registrations,
+registry selection, SDK-free contracts and descriptor-backed validation with
+focused tests; server execution and provider transports remain later slices.
+Configured role metadata is available; runtime model introspection is not.
+
+Foundation review wave planned after its cheap checks: existing
+style_maintainability_reviewer, typescript_api_docs_reviewer and
+performance_reliability_reviewer each explicitly gpt-6-sol/medium;
+documentation_reviewer explicitly gpt-6-luna/medium. Fresh contexts receive only
+the relevant foundation requirements and changed paths, with no session memory.
+All four concerns apply to this public family/routing addition. Security remains
+the final release-readiness concern. Review the foundation diff against
+0e16da19a; exclude concurrent isolated facade/Proto additions. Collect the whole
+wave before returning one correction batch to the existing foundation writer.
+
+Foundation preflight: 9 suites/529 tests pass; generated build, tooling types,
+scoped ESLint, cleanup, TSDoc, documentation, format, Proto lint/current output
+and diff checks pass. Parent independently reran Agent BlackBox and scoped query
+tests (2 suites/6 tests): pass. Focused coverage of large existing files does not
+meet whole-file thresholds (89.78% statements, 83.35% branches); changed executable
+lines are 23/24 and their branches 30/32. The unmatched location is the preserved
+PM query branch and V8 lacks source attribution for compiled BlackBox handoff.
+Do not call this a passing full coverage gate. Final verify:release retains the
+global thresholds. The foundation is frozen for scoped review; facade work may
+now use shared generation/build outputs. Its draft copyright finding was fixed
+and copyright passes.
+
+Foundation review wave received from all four explicitly configured roles; no
+runtime profile introspection is exposed. Confirmed findings: duplicate guard
+accepts Agent without the event history needed for persistence; public repository
+TSDoc omits Agent; shared diagnostic text names Process Manager for Agent;
+generated fixture selects a positional registry entry; docs conflate Entity and
+database transaction wording, expose development-slice language, and omit a small
+Agent declaration/registration example. Return this complete batch to the same
+foundation implementer. The interim shared-PM guard prerequisite must not become
+a switch to disable the mandatory Agent histories in the final feature.
+
+While corrections and the isolated facade continue, dispatch a read-only storage
+test/integration scan as an orchestrator function, explicit gpt-6-luna/medium.
+Map existing provider extension points, conformance fixtures and local commands
+for the already frozen history/execution design. No new architecture, production
+edits, provider services or subprocess tests; do not repeat the completed design.
+
+Storage scan accepted from the explicit Luna/medium function (configured metadata
+verified; runtime introspection unavailable). Use the existing published
+storage/provider subpath, four factory registration points, separate conformance
+fixture and native Datastore query/index path. MySQL's shared coordinator already
+has requireTransaction for rejecting nontransactional participation; conditional
+Agent completion must use it. No provider services or tests were run by this scan.
+
+Foundation correction preflight: reconstructed-repository guard regression
+demonstrated red then green; generated-context Agent registration is now exercised
+through BlackBox. All 576 tests in 10 affected suites and the affected server/build
+fixture typecheck pass. Scoped format, lint, docs snippets/audience/API and diff
+checks pass. Global cleanup/TSDoc reports only in-progress facade paths. Parent
+verified corrected constructor/diagnostic wording and receiver-based fixture
+selection directly. Follow up only substantive reliability and new documentation
+content with the same explicitly configured Sol/medium and Luna/medium reviewers;
+no repeat architecture or complete four-lane wave for deterministic wording fixes.
+
+Foundation accepted: focused reliability follow-up closed the persistence finding
+using two distinct repositories/contexts over one storage factory. Documentation
+follow-up closed all three findings. Parent reran 7 Agent BlackBox/query tests and
+the reconstructed-repository regression: pass. Type/API wording, shared error text
+and receiver-based discovery corrections were verified directly. All four review
+concerns are closed for this slice; full feature/release coverage remains pending.
+Commit/push this checkpoint, then continue shared/memory Agent history storage
+with the same explicit Sol/medium implementation context. Facade validation is an
+independent active slice; its draft coverage and mechanics are not yet accepted.

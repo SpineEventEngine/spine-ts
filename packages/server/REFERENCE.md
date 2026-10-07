@@ -238,11 +238,13 @@ route registration API.
 
 Handlers may return their established result directly or through exactly one built-in `Promise<T>`.
 Nested promises and structural or imported thenable lookalikes are rejected during handler analysis.
-The entity transaction remains open until that promise settles; rejection rolls
-back framework state and suppresses produced output, but cannot undo external
-side effects. Process Managers may use their protected read-only query surface
-for eventually consistent Entity state during a handler. Aggregates must not
-use these reads for invariants.
+The in-memory Entity draft remains active until that promise settles. Storage
+writes use separate short operations after the handler succeeds; a rejected
+handler leaves no partial persisted state or produced signals, but cannot undo
+external side effects. Process Managers may use their protected read-only query
+surface for eventually consistent Entity state during a handler. Agents expose
+the generated `select(query).read()` form under the same handler scope and
+limits. Aggregates must not use these reads for invariants.
 
 `select(schema, columns)` supports `byId`, typed `where`, `orderBy`,
 `limit`, `read`, `findById`, and `all`. A Process Manager query returns at most
@@ -329,10 +331,11 @@ A command-input `@Command` method is a command substitution receptor: it is
 the one effective receptor for that Command type (instead of an `@Assign`),
 commits its Entity state before its one-or-more returned Commands are detached
 for in-process produced-command enqueue, and receives an optional `CommandContext`.
-Only Process Manager repositories support `@Command` handlers. Aggregate and
-Projection repositories reject command-input substitutions and event- or
+Process Manager and Agent repositories support `@Command` handlers. Aggregate
+and Projection repositories reject command-input substitutions and event- or
 rejection-input command reactions during generated metadata ingestion and
-repository construction.
+repository construction. Agents reject `@Subscribe`, including Entity-state
+Apply handlers, at generation and runtime registration.
 Event- and rejection-input `@Command` methods remain Event- or
 rejection-to-command reactions on Event Bus.
 
@@ -615,8 +618,10 @@ configuration and Datastore custom record storage registered for
 `SubscriptionRecord` are used by the registry. The registry uses one
 record-storage handle, while the context closes the registry.
 
-`Entity` is the state base class. `Aggregate`, `Projection`, and
-`ProcessManager` identify the three entity families. Handler decorators are
+`Entity` is the state base class. `Aggregate`, `Projection`,
+`ProcessManager`, and `Agent` identify the four entity families. Agent state
+declares canonical Proto kind `ENTITY` and uses the same Spine `Version`.
+Handler decorators are
 `@Assign`, `@Command`, `@React`, and `@Subscribe`. A command-accepting
 handler uses `@Throws(GeneratedRejection)` to declare its possible domain
 rejections. Write the primary handler decorator first and `@Throws` immediately
@@ -863,7 +868,7 @@ const context = BoundedContext.singleTenant("Tasks")
   .build();
 ```
 
-Aggregate commands and Process Manager commands/events derive their target shard
+Aggregate commands and Process Manager or Agent commands/events derive their target shard
 internally and persist their envelope in the target Entity Inbox before any
 handler runs. Local intake can directly drain the persisted Inbox in the
 current request path. Attached `ServerEnvironment` ports acknowledge admission

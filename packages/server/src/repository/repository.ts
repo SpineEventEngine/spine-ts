@@ -110,6 +110,7 @@ import { InboxTargets, type InboxMessage, type InboxMessageInput } from "../deli
 import { ShardIndex } from "../delivery/shard-index.js";
 import {
   Aggregate,
+  Agent,
   type EntityOptions,
   type EntityLifecycleFlags,
   ProcessManager,
@@ -174,7 +175,10 @@ import { ImplicitRequiredIds } from "../entity/implicit-required-id.js";
  * @typeParam Schema Generated state schema of the Entity instance.
  */
 type RepositoryEntityInstance<Schema extends DescriptorMessageSchema = DescriptorMessageSchema> =
-  Aggregate<unknown, Schema> | Projection<unknown, Schema> | ProcessManager<unknown, Schema>;
+  | Aggregate<unknown, Schema>
+  | Projection<unknown, Schema>
+  | ProcessManager<unknown, Schema>
+  | Agent<unknown, Schema>;
 
 /**
  * Generated state schema declared by a repository's Entity class.
@@ -188,7 +192,9 @@ export type RepositoryStateSchema<EntityType extends RepositoryEntityType> =
       ? Schema
       : EntityType["prototype"] extends ProcessManager<unknown, infer Schema>
         ? Schema
-        : never;
+        : EntityType["prototype"] extends Agent<unknown, infer Schema>
+          ? Schema
+          : never;
 
 /**
  * Selects the ID type declared by a repository Entity constructor.
@@ -202,7 +208,9 @@ export type RepositoryEntityId<EntityType extends RepositoryEntityType> =
       ? Id
       : EntityType["prototype"] extends ProcessManager<infer Id, DescriptorMessageSchema>
         ? Id
-        : never;
+        : EntityType["prototype"] extends Agent<infer Id, DescriptorMessageSchema>
+          ? Id
+          : never;
 
 /**
  * Read operations available for one receiving repository and incoming signal tenant.
@@ -295,7 +303,7 @@ type IsUnion<Type, Union = Type> = Type extends unknown
 /**
  * Checks whether a repository binds one concrete Entity class and state schema.
  *
- * Concrete aggregate, projection, and process-manager classes satisfy this type naturally. Broad
+ * Concrete aggregate, projection, process-manager, and Agent classes satisfy this type naturally. Broad
  * constructor aliases, constructor unions, broad state schemas, and state-schema unions are
  * rejected so a repository cannot lose its Entity class's state schema.
  *
@@ -332,9 +340,9 @@ interface RepositoryDescription<EntityType extends RepositoryEntityType> {
 }
 
 /**
- * Describes an Aggregate, Projection, or Process Manager class accepted by a repository.
+ * Describes an Aggregate, Projection, Process Manager, or Agent class accepted by a repository.
  *
- * @typeParam Instance The aggregate, projection, or process-manager instance type.
+ * @typeParam Instance The Entity instance type.
  * @param args The constructor arguments accepted by the entity class.
  * @returns An entity instance.
  */
@@ -357,7 +365,7 @@ export type RepositoryEntityType<
 /**
  * Entity class, state schema, and routing options for a repository.
  *
- * @typeParam EntityType A single concrete aggregate, projection, or process-manager constructor.
+ * @typeParam EntityType A single concrete aggregate, projection, process-manager, or Agent constructor.
  * The constructor's prototype must carry one concrete generated state schema; broad constructor,
  * constructor-union, broad-schema, and schema-union bindings are rejected at compile time.
  */
@@ -426,7 +434,7 @@ interface RepositoryOptionsBase<
   readonly stringifierRegistry?: StringifierRegistry;
 
   /**
-   * Generated event schemas that aggregate or process-manager handlers may emit.
+   * Generated Event schemas that Aggregate, Process Manager, or Agent handlers may emit.
    */
   readonly events?: readonly MessageSchema[];
 
@@ -436,7 +444,8 @@ interface RepositoryOptionsBase<
   readonly stateHistory?: boolean;
 
   /**
-   * Retain process-manager diagnostic events. Defaults to false; aggregate events are retained.
+   * Retain diagnostic Events for Process Managers and Agents. Defaults to false;
+   * Aggregate Events are retained.
    */
   readonly processManagerEventHistory?: boolean;
 
@@ -445,7 +454,7 @@ interface RepositoryOptionsBase<
    *
    * The guard is disabled by default and uses depth 100 when enabled without
    * an explicit depth. Projection repositories cannot enable it. Process
-   * Manager repositories must also enable `processManagerEventHistory`.
+   * Manager and Agent repositories currently require retained diagnostic Events.
    */
   readonly doubleDispatchGuard?: boolean | { readonly depth?: number };
 }
@@ -3918,7 +3927,7 @@ class ProcessManagerCommandExecution {
   /**
    * Binds query access for one Command handler invocation.
    *
-   * @param entity Process Manager instance.
+   * @param entity Entity instance.
    * @param assignee Registered Command handler.
    * @param message Decoded Command message.
    * @param tenantId Tenant for query reads, when present.
@@ -3946,7 +3955,7 @@ class ProcessManagerCommandExecution {
   /**
    * Invokes a Command handler and checks delivery before the Entity transaction commits.
    *
-   * @param entity Process Manager instance to mutate.
+   * @param entity Entity instance to mutate.
    * @param assignee Registered Command handler.
    * @param message Decoded Command message.
    * @returns Validated handler signals after commit.
@@ -3967,7 +3976,7 @@ class ProcessManagerCommandExecution {
       );
       const signals = this.#support.normalizeProducedSignals(produced);
       if (signals.length === 0)
-        throw new Error("Repository Process Manager command handlers must return a signal.");
+        throw new Error("Repository command handlers must return a signal.");
       RepositoryHandlers.requireDeclaredOutputs(assignee.handler, signals);
       const commit = await commitFenced(entity, (current) =>
         transactionalEntityAccess.commit(
@@ -3987,11 +3996,11 @@ class ProcessManagerCommandExecution {
   }
 
   /**
-   * Binds assignment results as Process Manager Events.
+   * Binds assignment results as Entity Events.
    *
    * @param produced Domain Event messages from the handler.
-   * @param entityId Target Process Manager identifier.
-   * @param version Process Manager Version before this dispatch.
+   * @param entityId Target Entity identifier.
+   * @param version Entity Version before this dispatch.
    * @returns Frozen Event envelope list.
    */
   #bindProducedEvents(
@@ -4008,8 +4017,8 @@ class ProcessManagerCommandExecution {
    * Packs one declared Event with source and producer context.
    *
    * @param signal Domain Event message to pack.
-   * @param entityId Target Process Manager identifier.
-   * @param version Process Manager Version before this dispatch.
+   * @param entityId Target Entity identifier.
+   * @param version Entity Version before this dispatch.
    * @returns Bound Event envelope.
    */
   #bindProducedEvent(signal: unknown, entityId: unknown, version: Version): Event {
@@ -4019,9 +4028,7 @@ class ProcessManagerCommandExecution {
     );
 
     if (schema === undefined) {
-      throw new Error(
-        `Repository process-manager execution cannot pack event message "${typeName}".`,
-      );
+      throw new Error(`Repository Entity handler cannot pack Event message "${typeName}".`);
     }
 
     const metadata = this.#runtime.signalMetadata.eventFromCommand(this.#command, {
@@ -4054,9 +4061,7 @@ class ProcessManagerCommandExecution {
           (candidate) => candidate.typeName === typeName,
         );
         if (schema === undefined) {
-          throw new Error(
-            `Repository process-manager execution cannot pack command message "${typeName}".`,
-          );
+          throw new Error(`Repository Entity handler cannot pack Command message "${typeName}".`);
         }
         const metadata = this.#runtime.signalMetadata.commandFromCommand(this.#command);
         return create(CommandSchema, {
@@ -4096,7 +4101,7 @@ class ProcessManagerCommandExecution {
 }
 
 /**
- * Runs Process Manager Event handlers and persists their results.
+ * Runs Process Manager or Agent Event handlers and persists their results.
  */
 class ProcessManagerEventExecution {
   readonly #repository: EventRoutingRepository;
@@ -4110,9 +4115,9 @@ class ProcessManagerEventExecution {
   readonly #support: ProcessManagerExecutionSupport;
 
   /**
-   * Captures Process Manager routing, runtime, and source Event.
+   * Captures Entity routing, runtime, and source Event.
    *
-   * @param repository Process Manager repository receiving the Event.
+   * @param repository Entity repository receiving the Event.
    * @param routing Registered Event routes and schemas.
    * @param runtime Built context services.
    * @param event Source Event to execute.
@@ -4131,7 +4136,7 @@ class ProcessManagerEventExecution {
   }
 
   /**
-   * Delivers a routed Event to the durable Process Manager inbox.
+   * Delivers a routed Event to the durable Entity inbox.
    *
    * @param acceptedRoute Route accepted before dispatch.
    * @returns Completion after inbox handoff.
@@ -4166,7 +4171,7 @@ class ProcessManagerEventExecution {
   /**
    * Delivers a routed Event for one target under the duplicate-dispatch guard.
    *
-   * @param entityId Target Process Manager identifier.
+   * @param entityId Target Entity identifier.
    * @param acceptedRoute Route accepted before replay.
    * @returns Completion after guarded target execution.
    */
@@ -4231,7 +4236,7 @@ class ProcessManagerEventExecution {
   /**
    * Invokes handlers, commits state, and publishes resulting Events and Commands.
    *
-   * @param entityId Target Process Manager identifier.
+   * @param entityId Target Entity identifier.
    * @param intake Decoded Event and matching handlers.
    * @returns Completion after accepted results are published.
    */
@@ -4270,10 +4275,10 @@ class ProcessManagerEventExecution {
   }
 
   /**
-   * Publishes a state-change System Event when the Process Manager changed.
+   * Publishes a state-change System Event when the Entity changed.
    *
-   * @param loaded Process Manager before and after handling.
-   * @param entityId Target Process Manager identifier.
+   * @param loaded Entity before and after handling.
+   * @param entityId Target Entity identifier.
    */
   #publishChangedState(
     loaded: Awaited<ReturnType<ProcessManagerExecutionSupport["load"]>>,
@@ -4323,8 +4328,8 @@ class ProcessManagerEventExecution {
   /**
    * Invokes Event handlers in one transaction with temporary query access.
    *
-   * @param entityId Target Process Manager identifier.
-   * @param entity Process Manager instance.
+   * @param entityId Target Entity identifier.
+   * @param entity Entity instance.
    * @param intake Decoded Event and matching handlers.
    * @param tenantId Tenant for query reads, when present.
    * @returns Validated Command and Event message lists.
@@ -4368,8 +4373,8 @@ class ProcessManagerEventExecution {
   /**
    * Invokes reactors and Command producers, collecting their separate outputs.
    *
-   * @param entityId Target Process Manager identifier.
-   * @param entity Process Manager instance.
+   * @param entityId Target Entity identifier.
+   * @param entity Entity instance.
    * @param intake Decoded Event and matching handlers.
    * @param context Copied source Event context.
    * @param events Output list for Event messages.
@@ -4397,7 +4402,7 @@ class ProcessManagerEventExecution {
   /**
    * Invokes each selected handler and appends its declared results.
    *
-   * @param entity Process Manager instance.
+   * @param entity Entity instance.
    * @param handlers Handler registrations to invoke.
    * @param message Decoded source Event message.
    * @param context Copied source Event context.
@@ -4430,7 +4435,7 @@ class ProcessManagerEventExecution {
   /**
    * Checks delivery immediately before the Entity transaction commits and raises transition rejection.
    *
-   * @param entity Process Manager instance to commit.
+   * @param entity Entity instance to commit.
    * @param producedEvents Whether handlers produced Events.
    * @returns Completion after a successful commit.
    */
@@ -4442,11 +4447,11 @@ class ProcessManagerEventExecution {
   }
 
   /**
-   * Binds reactor results as Process Manager Events.
+   * Binds reactor results as Entity Events.
    *
    * @param produced Domain Event messages from handlers.
-   * @param entityId Target Process Manager identifier.
-   * @param version Process Manager Version before this dispatch.
+   * @param entityId Target Entity identifier.
+   * @param version Entity Version before this dispatch.
    * @returns Frozen Event envelope list.
    */
   #bindProducedEvents(
@@ -4463,8 +4468,8 @@ class ProcessManagerEventExecution {
    * Packs one declared Event with source and producer context.
    *
    * @param signal Domain Event message to pack.
-   * @param entityId Target Process Manager identifier.
-   * @param version Process Manager Version before this dispatch.
+   * @param entityId Target Entity identifier.
+   * @param version Entity Version before this dispatch.
    * @returns Bound Event envelope.
    */
   #bindProducedEvent(signal: unknown, entityId: unknown, version: Version): Event {
@@ -4474,9 +4479,7 @@ class ProcessManagerEventExecution {
     );
 
     if (schema === undefined) {
-      throw new Error(
-        `Repository process-manager execution cannot pack event message "${typeName}".`,
-      );
+      throw new Error(`Repository Entity handler cannot pack Event message "${typeName}".`);
     }
 
     const metadata = this.#runtime.signalMetadata.eventFromEvent(this.#event, {
@@ -4510,9 +4513,7 @@ class ProcessManagerEventExecution {
         );
 
         if (schema === undefined) {
-          throw new Error(
-            `Repository process-manager execution cannot pack command message "${typeName}".`,
-          );
+          throw new Error(`Repository Entity handler cannot pack Command message "${typeName}".`);
         }
 
         const metadata = this.#runtime.signalMetadata.commandFromEvent(this.#event);
@@ -4622,7 +4623,7 @@ const RepositoryIdentity = {
       entityFamily,
       schema,
     );
-    if (metadata.kind !== entityFamily) {
+    if (metadata.kind !== (entityFamily === "agent" ? "entity" : entityFamily)) {
       throw new RepositoryIdentityError(
         "ENTITY_SCHEMA_KIND_MISMATCH",
         `Repository entity type "${displayName}" does not match the supplied state schema.`,
@@ -4648,7 +4649,7 @@ const RepositoryIdentity = {
       throw new RepositoryIdentityError(
         "UNSUPPORTED_ENTITY_TYPE",
         "Repository options must be a non-null object with an entity type class constructor " +
-          "extending Aggregate, Projection, or ProcessManager.",
+          "extending Aggregate, Projection, ProcessManager, or Agent.",
       );
     }
     const entityType = RepositoryIdentity.readEntityTypeOption(options);
@@ -4656,17 +4657,17 @@ const RepositoryIdentity = {
       throw new RepositoryIdentityError(
         "UNSUPPORTED_ENTITY_TYPE",
         `Repository entity type "${RepositoryIdentity.entityTypeName(entityType)}" must be a class constructor ` +
-          "extending Aggregate, Projection, or ProcessManager.",
+          "extending Aggregate, Projection, ProcessManager, or Agent.",
       );
     }
     return entityType;
   },
 
   /**
-   * Validates and returns Aggregate, Projection, or Process Manager inheritance.
+   * Validates and returns Aggregate, Projection, Process Manager, or Agent inheritance.
    *
    * @param entityType Validated class constructor.
-   * @returns Aggregate, Projection, or Process Manager.
+   * @returns Aggregate, Projection, Process Manager, or Agent.
    */
   requireEntityFamily(entityType: RuntimeRepositoryEntityType): EntityFamily {
     const family = RepositoryIdentity.resolveRepositoryEntityFamily(entityType);
@@ -4674,7 +4675,7 @@ const RepositoryIdentity = {
     throw new RepositoryIdentityError(
       "UNSUPPORTED_ENTITY_TYPE",
       `Repository entity type "${RepositoryIdentity.entityTypeName(entityType)}" must extend ` +
-        "Aggregate, Projection, or ProcessManager.",
+        "Aggregate, Projection, ProcessManager, or Agent.",
     );
   },
 
@@ -4683,7 +4684,7 @@ const RepositoryIdentity = {
    *
    * @typeParam EntityType Concrete Entity constructor represented by the snapshot.
    * @param entityType Entity constructor.
-   * @param entityFamily Aggregate, Projection, or Process Manager family.
+   * @param entityFamily Aggregate, Projection, Process Manager, or Agent family.
    * @param metadata Descriptor-derived state metadata.
    * @returns Copy-safe repository identity snapshot.
    */
@@ -4749,7 +4750,7 @@ const RepositoryIdentity = {
       throw new RepositoryIdentityError(
         "UNSUPPORTED_ENTITY_TYPE",
         "Repository options entityType must be readable and resolve to a class constructor " +
-          "extending Aggregate, Projection, or ProcessManager.",
+          "extending Aggregate, Projection, ProcessManager, or Agent.",
       );
     }
   },
@@ -4815,28 +4816,26 @@ const RepositoryIdentity = {
         Aggregate,
         Aggregate.prototype,
       )
-    ) {
+    )
       return "aggregate";
-    }
     if (
       RepositoryIdentity.hasEntityFamilyInheritance(
         runtimeEntityType,
         Projection,
         Projection.prototype,
       )
-    ) {
+    )
       return "projection";
-    }
     if (
       RepositoryIdentity.hasEntityFamilyInheritance(
         runtimeEntityType,
         ProcessManager,
         ProcessManager.prototype,
       )
-    ) {
+    )
       return "process-manager";
-    }
-
+    if (RepositoryIdentity.hasEntityFamilyInheritance(runtimeEntityType, Agent, Agent.prototype))
+      return "agent";
     return undefined;
   },
 
@@ -4844,7 +4843,7 @@ const RepositoryIdentity = {
    * Checks constructor and prototype inheritance against an Entity family.
    *
    * @param entityType Candidate constructor.
-   * @param familyConstructor Aggregate, Projection, or Process Manager constructor.
+   * @param familyConstructor Entity family constructor.
    * @param familyPrototype Prototype for the same family.
    * @returns Whether both inheritance paths match.
    */
@@ -6533,12 +6532,13 @@ const RepositoryHandlers = {
 
       if (
         metadata.kind !== "process-manager" &&
+        metadata.kind !== "entity" &&
         (handlersMetadata.commandSubstitutions.length > 0 ||
           handlersMetadata.commandReactions.length > 0)
       ) {
         throw new RepositoryIdentityError(
           "UNSUPPORTED_ENTITY_TYPE",
-          "Only Process Manager repositories support @Command handlers.",
+          "Only Process Manager and Agent repositories support @Command handlers.",
         );
       }
     }
@@ -8029,10 +8029,11 @@ const RepositoryStorage = {
     }
     if (
       depth !== undefined &&
-      family === "process-manager" &&
+      (family === "process-manager" || family === "agent") &&
       options.processManagerEventHistory !== true
     ) {
-      throw new Error("Process Manager doubleDispatchGuard requires processManagerEventHistory.");
+      const familyName = family === "agent" ? "Agent" : "Process Manager";
+      throw new Error(`${familyName} doubleDispatchGuard requires processManagerEventHistory.`);
     }
     return {
       stateHistory: options.stateHistory ?? false,
@@ -9689,7 +9690,9 @@ const RepositoryDispatch = {
     routing: RepositoryRouting,
   ): EntityInboxTarget | undefined {
     if (
-      (repository.entityFamily !== "aggregate" && repository.entityFamily !== "process-manager") ||
+      (repository.entityFamily !== "aggregate" &&
+        repository.entityFamily !== "process-manager" &&
+        repository.entityFamily !== "agent") ||
       (routing.commandSchemas.length === 0 && routing.eventSchemas.length === 0)
     ) {
       return undefined;
@@ -9699,7 +9702,9 @@ const RepositoryDispatch = {
       targetTypeUrl: TypeUrls.derive(repository.stateSchema),
       labels: Object.freeze([
         ...(routing.commandSchemas.length === 0 ? [] : (["HANDLE_COMMAND"] as const)),
-        ...(repository.entityFamily === "process-manager" && routing.eventSchemas.length > 0
+        ...((repository.entityFamily === "process-manager" ||
+          repository.entityFamily === "agent") &&
+        routing.eventSchemas.length > 0
           ? (["REACT_UPON_EVENT"] as const)
           : []),
       ]),
@@ -9786,6 +9791,7 @@ const RepositoryDispatch = {
         await RepositoryDispatch.dispatchAggregateEvent(repository, routing, runtime, event, route);
         return;
       case "process-manager":
+      case "agent":
         await new ProcessManagerEventExecution(repository, routing, runtime, event).run(route);
         return;
       case "projection":
@@ -9871,7 +9877,7 @@ const RepositoryDispatch = {
       return;
     }
 
-    if (repository.entityFamily === "process-manager") {
+    if (repository.entityFamily === "process-manager" || repository.entityFamily === "agent") {
       await InboxHandoff.handoffEntityCommand(repository, runtime, command);
       return;
     }

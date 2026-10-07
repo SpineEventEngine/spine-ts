@@ -680,6 +680,7 @@ const expectedServerExports = [
   "PrimitiveId",
   "ProcessManager",
   "Projection",
+  "Agent",
   "ConcreteRepositoryEntityType",
   "Repository",
   "RepositoryEntityType",

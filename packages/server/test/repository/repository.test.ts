@@ -12,10 +12,15 @@
  * the License.
  */
 
+import { create } from "@bufbuild/protobuf";
+import { SignalEnvelopes } from "@spine-event-engine/core";
+import { CommandContextSchema } from "@spine-event-engine/proto";
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
   Aggregate,
+  Agent,
+  EntityHandlers,
   describeEntityMetadata,
   ProcessManager,
   Projection,
@@ -36,6 +41,19 @@ import {
   ProjectStateSchema,
 } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 import { ProcessManagerStateSchema } from "../../test-fixtures/generated/entity-metadata/visibility_pb.js";
+import {
+  SupportReplyAgentStateSchema,
+  type SupportReplyAgentId,
+  SupportReplyAgentIdSchema,
+} from "../../test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
+import {
+  DraftSupportReplySchema,
+  type DraftSupportReply,
+} from "../../test-fixtures/generated/entity-metadata/support_agent_commands_pb.js";
+import {
+  SupportReplyDraftedSchema,
+  type SupportReplyDrafted,
+} from "../../test-fixtures/generated/entity-metadata/support_agent_events_pb.js";
 import {
   type CreateReviewProject,
   CreateReviewProjectSchema,
@@ -59,6 +77,12 @@ function expectRepositoryIdentityError(
 class TaskAggregate extends Aggregate<string, typeof ProjectStateSchema> {}
 class TaskProjection extends Projection<string, typeof ProjectOverviewStateSchema> {}
 class TaskProcessManager extends ProcessManager<string, typeof ProcessManagerStateSchema> {}
+class SupportReplyAgent extends Agent<SupportReplyAgentId, typeof SupportReplyAgentStateSchema> {
+  draft(command: DraftSupportReply): SupportReplyDrafted {
+    void command;
+    throw Error("Fixture method is not invoked.");
+  }
+}
 class RequiredTaskAssignment extends ProcessManager<string, typeof ProcessManagerStateSchema> {
   constructor(
     options: EntityOptions<string, typeof ProcessManagerStateSchema>,
@@ -111,6 +135,40 @@ class PlainEntityClass {
 }
 
 describe("repository identity", () => {
+  it("accepts an Agent repository backed by the canonical ENTITY kind", () => {
+    const repository = new Repository({
+      entityType: SupportReplyAgent,
+      schema: SupportReplyAgentStateSchema,
+    });
+
+    expect(repository.entityFamily).toBe("agent");
+    expect(repository.metadata.kind).toBe("entity");
+    expectTypeOf<SupportReplyAgent["entityFamily"]>().toEqualTypeOf<"agent">();
+  });
+
+  it("routes an Agent assignment to its typed support-ticket identifier", async () => {
+    const handlers = EntityHandlers.define(
+      SupportReplyAgent,
+      SupportReplyAgentStateSchema,
+      (builder) => [builder.assign(DraftSupportReplySchema, "draft")],
+    );
+    const repository = new Repository({
+      entityType: SupportReplyAgent,
+      schema: SupportReplyAgentStateSchema,
+      handlers,
+      events: [SupportReplyDraftedSchema],
+    });
+
+    const agent = create(SupportReplyAgentIdSchema, { ticketNumber: "T-42" });
+    const command = SignalEnvelopes.command({
+      schema: DraftSupportReplySchema,
+      message: create(DraftSupportReplySchema, { agent, question: "Where is my order?" }),
+      context: create(CommandContextSchema),
+    });
+
+    expect((await repository.routeCommand(command)).entityId).toEqual(agent);
+  });
+
   it("rejects command substitutions on Aggregates", () => {
     expect(() =>
       HandlerMetadataValues.defineArity(

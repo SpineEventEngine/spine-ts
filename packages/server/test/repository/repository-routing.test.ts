@@ -107,6 +107,7 @@ import type { ILogLayer } from "loglayer";
 
 import {
   Aggregate,
+  Agent,
   BoundedContext,
   CommandRouting,
   EventRouting,
@@ -126,6 +127,17 @@ import {
   SpecScanner,
   StateUpdateRouting,
 } from "../../src/index.js";
+import {
+  SupportReplyDraftedSchema,
+  type SupportReplyDrafted,
+  SupportTicketUpdatedSchema,
+  type SupportTicketUpdated,
+} from "../../test-fixtures/generated/entity-metadata/support_agent_events_pb.js";
+import {
+  SupportReplyAgentIdSchema,
+  type SupportReplyAgentId,
+  SupportReplyAgentStateSchema,
+} from "../../test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
 import { LocalEntityInbox } from "../../src/context/entity-inbox.js";
 import { CommandValidationError } from "../../src/bus/command-errors.js";
@@ -1887,6 +1899,17 @@ class BlockingProcessManager extends ProcessManager<string, typeof ProjectQueueS
         }),
       ),
     );
+  }
+}
+
+class GuardedSupportAgent extends Agent<SupportReplyAgentId, typeof SupportReplyAgentStateSchema> {
+  static reactions = 0;
+
+  onTicketUpdated(event: SupportTicketUpdated): SupportReplyDrafted {
+    GuardedSupportAgent.reactions += 1;
+    const reply = `Answer: ${event.question}`;
+    this.update((state) => Object.assign(state, { id: this.id, proposedReply: reply }));
+    return create(SupportReplyDraftedSchema, { agent: this.id, reply });
   }
 }
 
@@ -8363,6 +8386,39 @@ describe("repository signal routing", () => {
     expect(SplitRouteProcessManager.completedIds).toEqual(["pm-one", "pm-two"]);
   });
 
+  it("requires retained Event history for an Agent guard across repository reconstruction", async () => {
+    GuardedSupportAgent.reactions = 0;
+    const agent = create(SupportReplyAgentIdSchema, { ticketNumber: "T-guard" });
+    expect(() => createGuardedSupportAgentRepository(agent, false)).toThrow(
+      "Agent doubleDispatchGuard requires processManagerEventHistory.",
+    );
+
+    const factory = new InMemoryStorageFactory();
+    const event = SignalEnvelopes.event({
+      schema: SupportTicketUpdatedSchema,
+      message: create(SupportTicketUpdatedSchema, { agent, question: "Delivery?" }),
+      context: create(EventContextSchema, {
+        producerId: AnyMessages.pack(SupportReplyAgentIdSchema, agent),
+        version: create(VersionSchema, { number: 1 }),
+      }),
+    });
+    for (let run = 0; run < 2; run += 1) {
+      const repository = createGuardedSupportAgentRepository(agent, true);
+      const context = BoundedContext.singleTenant("SupportGuard")
+        .add(repository)
+        .withStorageFactory(factory)
+        .build();
+      try {
+        const dispatcher = repositoryAccess.eventDispatcher(repository);
+        if (dispatcher === undefined) throw new Error("Expected Agent Event dispatcher.");
+        await dispatcher.dispatch(event);
+      } finally {
+        await context.close();
+      }
+    }
+    expect(GuardedSupportAgent.reactions).toBe(1);
+  });
+
   it("routes every Aggregate delivery without a durable marker after lane eviction", async () => {
     GuardedAggregate.reset();
     const factory = new InMemoryStorageFactory();
@@ -13715,6 +13771,38 @@ function createDiagnosticOnlyProcessManagerRepository(): Repository<
     handlers,
     events: [ProjectCreatedSchema],
     processManagerEventHistory: true,
+  });
+}
+
+function createGuardedSupportAgentRepository(
+  agent: SupportReplyAgentId,
+  retainHistory: boolean,
+): Repository<typeof GuardedSupportAgent> {
+  const handlers = HandlerMetadataValues.defineArity(
+    GuardedSupportAgent,
+    SupportReplyAgentStateSchema,
+    (builder) => [builder.react(SupportTicketUpdatedSchema, "onTicketUpdated")],
+    [
+      {
+        kind: "event-reaction",
+        methodName: "onTicketUpdated",
+        parameterCount: 1,
+        origin: "domestic",
+        outcomes: handlerOutcomes([SupportReplyDraftedSchema]),
+      },
+    ],
+  );
+  return new Repository({
+    entityType: GuardedSupportAgent,
+    schema: SupportReplyAgentStateSchema,
+    handlers,
+    events: [SupportReplyDraftedSchema],
+    eventRouting: EventRouting.create<SupportReplyAgentId>().route(
+      SupportTicketUpdatedSchema,
+      () => [agent],
+    ),
+    ...(retainHistory ? { processManagerEventHistory: true } : {}),
+    doubleDispatchGuard: true,
   });
 }
 

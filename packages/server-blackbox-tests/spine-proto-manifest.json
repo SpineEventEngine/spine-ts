@@ -1,19 +1,27 @@
 {
   "formatVersion": 2,
-  "generationId": "0a49bf08-f37a-4d6a-8ad3-045a241295a8",
+  "generationId": "d9b5f603-7afd-4bd5-80ba-b636d3350cdb",
   "packageName": "@spine-event-engine/server-blackbox-tests",
   "packageVersion": "2.0.0-snapshot.22",
   "protoFiles": [
     "spine/server/testing/project_commands.proto",
     "spine/server/testing/project_events.proto",
     "spine/server/testing/project_rejections.proto",
-    "spine/server/testing/project_workflow.proto"
+    "spine/server/testing/project_workflow.proto",
+    "spine/server/testing/support_agent_commands.proto",
+    "spine/server/testing/support_agent_events.proto",
+    "spine/server/testing/support_agent_rejections.proto",
+    "spine/server/testing/support_agent_states.proto"
   ],
   "generatedExports": {
     "spine/server/testing/project_commands.proto": "generated/spine/server/testing/project_commands_pb.js",
     "spine/server/testing/project_events.proto": "generated/spine/server/testing/project_events_pb.js",
     "spine/server/testing/project_rejections.proto": "generated/spine/server/testing/project_rejections_pb.js",
-    "spine/server/testing/project_workflow.proto": "generated/spine/server/testing/project_workflow_pb.js"
+    "spine/server/testing/project_workflow.proto": "generated/spine/server/testing/project_workflow_pb.js",
+    "spine/server/testing/support_agent_commands.proto": "generated/spine/server/testing/support_agent_commands_pb.js",
+    "spine/server/testing/support_agent_events.proto": "generated/spine/server/testing/support_agent_events_pb.js",
+    "spine/server/testing/support_agent_rejections.proto": "generated/spine/server/testing/support_agent_rejections_pb.js",
+    "spine/server/testing/support_agent_states.proto": "generated/spine/server/testing/support_agent_states_pb.js"
   },
   "dependencies": [
     "@spine-event-engine/proto"

@@ -88,6 +88,20 @@ type ProcessManagerQueryExecutor = <Schema extends DescriptorMessageSchema>(
   query: Query,
 ) => Promise<readonly MessageShape<Schema>[]>;
 
+/**
+ * Reads projection states within an active Entity handler.
+ *
+ * @typeParam Schema Generated state schema returned by the read.
+ */
+interface EntityQueryRead<Schema extends DescriptorMessageSchema> {
+  /**
+   * Reads matching states using the current handler actor and tenant.
+   *
+   * @returns Matching state snapshots, capped at 1,000.
+   */
+  read(): Promise<readonly MessageShape<Schema>[]>;
+}
+
 interface ProcessManagerQueryCapability {
   readonly actorContext: ActorContext;
 
@@ -99,20 +113,20 @@ interface ProcessManagerQueryCapability {
 const processManagerQueries = new WeakMap<object, ProcessManagerQueryCapability>();
 
 /**
- * Keeps Process Manager execution limits at the read boundary.
+ * Keeps handler query limits at the read boundary.
  */
 const ProcessManagerQueryLimits = Object.freeze({
   /**
-   * Rejects plans that exceed Process Manager result or explicit-ID limits.
+   * Rejects plans that exceed Entity query result or explicit-ID limits.
    *
    * @param plan Compiled query plan to execute.
    */
   check(plan: EntityQueryPlan): void {
     if (plan.limit !== undefined && plan.limit > 1_000) {
-      throw new TypeError("Process Manager query limit may be at most 1000.");
+      throw new TypeError("Entity query limit may be at most 1000.");
     }
     if (plan.predicate !== undefined && this.ids(plan.predicate) > 1_000) {
-      throw new TypeError("Process Manager query ID filter may contain at most 1000 IDs.");
+      throw new TypeError("Entity query ID filter may contain at most 1000 IDs.");
     }
   },
 
@@ -130,7 +144,44 @@ const ProcessManagerQueryLimits = Object.freeze({
 });
 
 /**
- * Binds the repository-scoped query capability for one Process Manager invocation.
+ * Binds detached generated queries to a currently executing Entity handler.
+ */
+const EntityQueryReads = Object.freeze({
+  /**
+   * Creates a scoped read for a generated query description.
+   *
+   * @typeParam Schema Generated state schema read by the query.
+   * @typeParam Id Identifier represented by the query.
+   * @param entity Entity executing the active handler.
+   * @param query Detached query description.
+   * @returns A read facade bound to the active actor and tenant.
+   */
+  select<Schema extends DescriptorMessageSchema, Id>(
+    entity: object,
+    query: EntityQueryDescription<Schema, Id>,
+  ): Readonly<EntityQueryRead<Schema>> {
+    processManagerQueryAccess.require(entity);
+    return Object.freeze({
+      /**
+       * Reads projection states with the current handler actor and tenant.
+       *
+       * @returns Matching state snapshots, capped at 1,000.
+       */
+      async read(): Promise<readonly MessageShape<Schema>[]> {
+        const active = processManagerQueryAccess.require(entity);
+        const plan = query.buildPlan();
+        ProcessManagerQueryLimits.check(plan);
+        const wire = query.build();
+        wire.context = clone(ActorContextSchema, active.actorContext);
+        const states = await active.execute(plan, query.schema, wire);
+        return Object.freeze(states.slice(0, 1_000));
+      },
+    });
+  },
+});
+
+/**
+ * Binds the repository-scoped query capability for one Entity handler invocation.
  *
  * @internal
  */
@@ -145,7 +196,7 @@ export const processManagerQueryAccess: Readonly<{
   /**
    * Enables read-side queries for the duration of one handler invocation.
    *
-   * @param entity Process Manager receiving the query capability.
+   * @param entity Entity receiving the query capability.
    * @param execute Repository operation that runs queries.
    * @param actorContext Actor and tenant of the incoming signal.
    * @returns A function that disables and removes this capability.
@@ -168,17 +219,15 @@ export const processManagerQueryAccess: Readonly<{
   },
 
   /**
-   * Gets the query capability of a currently executing Process Manager.
+   * Gets the query capability of a currently executing Entity handler.
    *
-   * @param entity Process Manager attempting a query.
+   * @param entity Entity attempting a query.
    * @returns The active repository query capability.
    */
   require(entity: object): ProcessManagerQueryCapability {
     const capability = processManagerQueries.get(entity);
     if (capability?.active !== true) {
-      throw new Error(
-        "Process Manager queries are available only during repository handler execution.",
-      );
+      throw new Error("Entity queries are available only during repository handler execution.");
     }
     return capability;
   },
@@ -417,9 +466,9 @@ export interface EntityOptions<Id, Schema extends DescriptorMessageSchema> {
 }
 
 /**
- * The three kinds of Entity supported by server repositories.
+ * The four kinds of Entity supported by server repositories.
  */
-export type EntityFamily = "aggregate" | "projection" | "process-manager";
+export type EntityFamily = "aggregate" | "projection" | "process-manager" | "agent";
 
 /**
  * Identity, state, version, and lifecycle of one server-side Entity.
@@ -1353,18 +1402,7 @@ export abstract class ProcessManager<
     | Readonly<{ read(): Promise<readonly MessageShape<QuerySchema>[]> }> {
     const capability = processManagerQueryAccess.require(this);
     if (schemaOrQuery instanceof EntityQueryDescription) {
-      const query = schemaOrQuery;
-      return Object.freeze({
-        read: async (): Promise<readonly MessageShape<QuerySchema>[]> => {
-          const active = processManagerQueryAccess.require(this);
-          const plan = query.buildPlan();
-          ProcessManagerQueryLimits.check(plan);
-          const wire = query.build();
-          wire.context = clone(ActorContextSchema, active.actorContext);
-          const states = await active.execute(plan, query.schema, wire);
-          return Object.freeze(states.slice(0, 1_000));
-        },
-      });
+      return EntityQueryReads.select(this, schemaOrQuery);
     }
     if (columns === undefined) throw new TypeError("Process Manager query columns are required.");
     return new ProcessManagerQuery(
@@ -1376,11 +1414,56 @@ export abstract class ProcessManager<
 }
 
 /**
+ * Base class for signal-driven Agents with transactional Entity state.
+ *
+ * An Agent handles assigned Commands and reacts to Events through repository
+ * dispatch. Its state uses the canonical Entity Version.
+ *
+ * @typeParam Id Domain identifier type.
+ * @typeParam Schema Generated schema describing the Agent state.
+ */
+export abstract class Agent<Id, Schema extends DescriptorMessageSchema> extends TransactionalEntity<
+  Id,
+  Schema
+> {
+  // prettier-ignore
+
+  /**
+   * Identifies this instance as an Agent.
+   */
+  declare readonly entityFamily: "agent";
+
+  /**
+   * Creates an Agent from its identity, state, and metadata.
+   *
+   * @param options Identity, schema, state, version, and lifecycle inputs.
+   */
+  constructor(options: EntityOptions<Id, Schema>) {
+    super(options);
+    EntityFamilies.mark(this, "agent");
+  }
+
+  /**
+   * Binds a detached generated query to the active Agent handler.
+   *
+   * @typeParam QuerySchema Queried projection state schema.
+   * @typeParam QueryId Identifier type carried by the query.
+   * @param query Context-free query to execute with the handler actor and tenant.
+   * @returns Read facade for the current handler scope.
+   */
+  protected select<QuerySchema extends DescriptorMessageSchema, QueryId>(
+    query: EntityQueryDescription<QuerySchema, QueryId>,
+  ): Readonly<EntityQueryRead<QuerySchema>> {
+    return EntityQueryReads.select(this, query);
+  }
+}
+
+/**
  * Marks immutable entity families.
  */
 const EntityFamilies = Object.freeze({
   /**
-   * Records whether an Entity is an Aggregate, Projection, or Process Manager.
+   * Records the immutable runtime family of a supported Entity.
    *
    * @param entity Instance being constructed.
    * @param family Kind of Entity being constructed.

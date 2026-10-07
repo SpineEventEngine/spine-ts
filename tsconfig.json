@@ -17,6 +17,7 @@
     { "path": "./packages/core/test-fixtures" },
     { "path": "./packages/transport" },
     { "path": "./packages/server" },
+    { "path": "./packages/server-blackbox-tests" },
     { "path": "./packages/server/test-fixtures" },
     { "path": "./packages/storage" },
     { "path": "./packages/storage-datastore" },

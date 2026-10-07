@@ -27,11 +27,24 @@ import { ReviewStartedSchema } from "../../test-fixtures/generated/handler-regis
 import { ReviewRejectedSchema } from "../../test-fixtures/generated/handler-registry/rejections_pb.js";
 import { ReviewStateSchema } from "../../test-fixtures/generated/handler-registry/states_pb.js";
 import {
+  DraftSupportReplySchema,
+  ReviewSupportReplySchema,
+} from "../../test-fixtures/generated/entity-metadata/support_agent_commands_pb.js";
+import {
+  SupportReplyDraftedSchema,
+  SupportTicketUpdatedSchema,
+} from "../../test-fixtures/generated/entity-metadata/support_agent_events_pb.js";
+import {
+  SupportReplyAgentStateSchema,
+  type SupportReplyAgentId,
+} from "../../test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
+import {
   AbstractAssignee,
   AbstractCommander,
   AbstractEventReactor,
   AbstractEventSubscriber,
   Aggregate,
+  Agent,
   HandlerMetadataError,
   HandlerRegistryIngestionError,
   HandlerRegistryIngestor,
@@ -48,6 +61,23 @@ import type {
 class Manager extends ProcessManager<string, typeof StateSchema> {
   substitute(command: Message<"spine.server.testing.StartReview">) {
     return command;
+  }
+}
+class SupportReplyAgent extends Agent<SupportReplyAgentId, typeof SupportReplyAgentStateSchema> {
+  draft(): void {
+    return;
+  }
+
+  react(): void {
+    return;
+  }
+
+  command(): void {
+    return;
+  }
+
+  subscribe(): void {
+    return;
   }
 }
 class AggregateReceiver extends Aggregate<string, typeof StateSchema> {
@@ -118,6 +148,58 @@ function domainHandler(kind: GeneratedHandlerRecordInput["kind"]): GeneratedHand
 }
 
 describe("generated handler registry ingestion", () => {
+  it("ingests Agent native handler roles and rejects generated subscriptions", () => {
+    const handlers: GeneratedHandlerRecordInput[] = [
+      {
+        kind: "command-assignment",
+        methodName: "draft",
+        input: { schema: DraftSupportReplySchema, origin: "domestic" },
+        outcomes: { returned: [SupportReplyDraftedSchema], thrown: [] },
+        parameterCount: 1,
+      },
+      {
+        kind: "event-reaction",
+        methodName: "react",
+        input: { schema: SupportTicketUpdatedSchema, origin: "domestic" },
+        outcomes: { returned: [SupportReplyDraftedSchema], thrown: [] },
+        parameterCount: 1,
+      },
+      {
+        kind: "command-reaction",
+        methodName: "command",
+        input: { schema: SupportTicketUpdatedSchema, origin: "domestic" },
+        outcomes: { returned: [ReviewSupportReplySchema], thrown: [] },
+        parameterCount: 1,
+      },
+    ];
+    const receiver = {
+      receiverKind: "entity" as const,
+      receiverType: SupportReplyAgent,
+      stateSchema: SupportReplyAgentStateSchema,
+      handlers,
+    };
+
+    expect(new HandlerRegistryIngestor().ingest({ receivers: [receiver] })).toHaveLength(1);
+    expect(() =>
+      new HandlerRegistryIngestor().ingest({
+        receivers: [
+          {
+            ...receiver,
+            handlers: [
+              {
+                kind: "event-subscription",
+                methodName: "subscribe",
+                input: { schema: SupportTicketUpdatedSchema, origin: "domestic" },
+                outcomes: { returned: [], thrown: [] },
+                parameterCount: 1,
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow();
+  });
+
   it("rejects Projection command assignments from generated metadata", () => {
     expect(() =>
       new HandlerRegistryIngestor().ingest({

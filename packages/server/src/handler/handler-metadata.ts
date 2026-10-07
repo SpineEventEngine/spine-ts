@@ -14,7 +14,7 @@
 
 import type { EntityMetadata, DescriptorMessageSchema } from "../entity/entity-metadata.js";
 import { describeEntityMetadata, isEntitySchema } from "../entity/entity-metadata.js";
-import { ProcessManager, Projection } from "../entity/entity.js";
+import { Agent, ProcessManager, Projection } from "../entity/entity.js";
 
 /**
  * Entity class value accepted by explicit handler metadata registration.
@@ -78,7 +78,8 @@ export type HandlerMetadataErrorCode =
   | "UNKNOWN_HANDLER_METHOD"
   | "INVALID_PARAMETER_COUNT"
   | "UNSUPPORTED_COMMAND_HANDLER"
-  | "UNSUPPORTED_ASSIGN_HANDLER";
+  | "UNSUPPORTED_ASSIGN_HANDLER"
+  | "UNSUPPORTED_SUBSCRIBE_HANDLER";
 
 /**
  * Error thrown when explicit handler metadata cannot be defined.
@@ -1193,12 +1194,23 @@ class EntityHandlersOwner {
   }
 
   /**
-   * Rejects Assign on Projections and Command handlers outside Process Managers.
+   * Validates handler roles against the receiving Entity family.
    *
    * @param entityType Entity constructor determining supported handler roles.
    * @param handlers Handler declarations to validate.
    */
   #validateCommandHandlers(entityType: EntityClass, handlers: readonly HandlerMetadata[]): void {
+    if (
+      entityType.prototype instanceof Agent &&
+      handlers.some(
+        (handler) => handler.kind === "event-subscription" || handler.kind === "state-subscription",
+      )
+    ) {
+      throw new HandlerMetadataError(
+        "UNSUPPORTED_SUBSCRIBE_HANDLER",
+        "Agent entities cannot use @Subscribe handlers.",
+      );
+    }
     if (
       entityType.prototype instanceof Projection &&
       handlers.some((handler) => handler.kind === "command-assignment")
@@ -1212,11 +1224,12 @@ class EntityHandlersOwner {
       handlers.some(
         (handler) => handler.kind === "command-substitution" || handler.kind === "command-reaction",
       ) &&
-      !(entityType.prototype instanceof ProcessManager)
+      !(entityType.prototype instanceof ProcessManager) &&
+      !(entityType.prototype instanceof Agent)
     ) {
       throw new HandlerMetadataError(
         "UNSUPPORTED_COMMAND_HANDLER",
-        "Only Process Manager entities support @Command handlers.",
+        "Only Process Manager and Agent entities support @Command handlers.",
       );
     }
   }

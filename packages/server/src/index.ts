@@ -137,6 +137,7 @@ export {
 
 export {
   Aggregate,
+  Agent,
   Entity,
   type EntityFamily,
   type EntityLifecycleFlags,

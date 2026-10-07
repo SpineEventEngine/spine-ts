@@ -51,6 +51,7 @@ export const modelAtomicTargets = [
     displayPath: "packages/server-blackbox-tests/generated",
     packagePath: "packages/server-blackbox-tests",
     moduleName: "ServerBlackBoxTests",
+    handlerProjectPath: "packages/server-blackbox-tests/tsconfig.json",
   },
   {
     displayPath: "packages/server/test-fixtures/generated",

@@ -261,6 +261,7 @@ export type BuildHandlerDiagnosticCode =
   | "TYPESCRIPT_SYNTAX_ERROR"
   | "UNSUPPORTED_ASSIGN_HANDLER"
   | "UNSUPPORTED_COMMAND_HANDLER"
+  | "UNSUPPORTED_SUBSCRIBE_HANDLER"
   | "UNSUPPORTED_RETURN_TYPE";
 
 /**
@@ -476,7 +477,7 @@ interface HandlerDecoratorUse extends DecoratorUse {
 }
 
 const handlerDecorators = new Set<HandlerDecorator>(["Assign", "Command", "React", "Subscribe"]);
-const entityBaseNames = new Set(["Aggregate", "Projection", "ProcessManager"]);
+const entityBaseNames = new Set(["Aggregate", "Projection", "ProcessManager", "Agent"]);
 const standaloneBaseNames = new Set([
   "AbstractAssignee",
   "AbstractCommander",
@@ -1073,7 +1074,7 @@ const HandlerSources = Object.freeze({
   },
 
   /**
-   * Checks an entity handler against its aggregate, projection, or process manager base.
+   * Checks an entity handler against its declared Entity family.
    *
    * @param input The collected method or validation input.
    * @returns Whether the entity base supports this handler kind.
@@ -1085,27 +1086,55 @@ const HandlerSources = Object.freeze({
     readonly className: string;
     readonly method: string | undefined;
   }): boolean {
-    const { className, entityBase, handler, method, scope } = input;
+    const { entityBase, handler } = input;
+    if (entityBase === "Agent" && handler.name === "Subscribe")
+      return HandlerSources.unsupportedEntity(
+        input,
+        "UNSUPPORTED_SUBSCRIBE_HANDLER",
+        "Agent handlers cannot use @Subscribe.",
+      );
     if (entityBase === "Projection" && handler.name === "Assign")
-      return HandlerSources.unsupported(
-        scope,
+      return HandlerSources.unsupportedEntity(
+        input,
         "UNSUPPORTED_ASSIGN_HANDLER",
-        handler.node,
         "Projection handlers cannot use @Assign.",
-        className,
-        method,
       );
     return (
       (entityBase !== "Aggregate" && entityBase !== "Projection") ||
       handler.name !== "Command" ||
-      HandlerSources.unsupported(
-        scope,
+      HandlerSources.unsupportedEntity(
+        input,
         "UNSUPPORTED_COMMAND_HANDLER",
-        handler.node,
         "Only Process Managers support @Command handlers.",
-        className,
-        method,
       )
+    );
+  },
+
+  /**
+   * Records an Entity handler role that its family cannot receive.
+   *
+   * @param input Collected Entity handler and diagnostic context.
+   * @param code Diagnostic category for this role mismatch.
+   * @param message Human-readable role constraint.
+   * @returns False after recording the diagnostic.
+   */
+  unsupportedEntity(
+    input: {
+      readonly handler: HandlerDecoratorUse;
+      readonly scope: AnalyzerScope;
+      readonly className: string;
+      readonly method: string | undefined;
+    },
+    code: BuildHandlerDiagnosticCode,
+    message: string,
+  ): false {
+    return HandlerSources.unsupported(
+      input.scope,
+      code,
+      input.handler.node,
+      message,
+      input.className,
+      input.method,
     );
   },
 

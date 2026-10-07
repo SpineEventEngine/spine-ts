@@ -82,10 +82,12 @@ for the exact contract.
 
 An `@Assign`, `@Command`, `@React`, or `@Subscribe` handler may return its
 usual result directly or through exactly one built-in `Promise<T>` layer. Its
-transaction remains open until that promise settles. Nested `Promise<Promise<T>>`
+in-memory Entity draft remains active until that promise settles. Nested `Promise<Promise<T>>`
 results and structural or imported thenable lookalikes are rejected during handler
-analysis. Rejection rolls back framework state and suppresses produced output; it
-cannot roll back an external HTTP request or other side effect.
+analysis. Storage writes happen in separate short operations after the handler succeeds.
+A failed handler leaves previous persisted state unchanged and
+suppresses produced output. An external HTTP request or other side effect may
+already have happened.
 
 Handler return declarations can use native unions for one of several results,
 or fixed tuples for several ordered results. For example,
@@ -129,7 +131,72 @@ class TaskAssignee {
 Place the primary handler decorator first for readability. Reversing the two
 decorators has the same behavior.
 
-Process Managers, but not Aggregates, have protected read-only `select()` during a handler:
+Process Managers have protected read-only `select()` during a handler. Agents use
+the generated `select(query).read()` form with the same actor, tenant, and
+1,000-state limits. Aggregates do not expose handler-scoped queries.
+
+An Agent uses a Proto `ENTITY` state and a generated handler registry.
+`@Assign` returns one or more native Events, `@React` returns native Events or
+`undefined`, and `@Command` returns native Commands under the existing Process
+Manager signal contract. Agents reject `@Subscribe` and Entity-state Apply
+handlers. Matching Event reactors run before commanders against one draft and
+commit one Version. Agents do not execute AI or persist conversation history.
+
+Declare the Agent ID and state in Proto, with `option (entity).kind = ENTITY;`
+on the state. The [support reply fixture](../server-blackbox-tests/proto/spine/server/testing/support_agent_states.proto)
+shows this declaration. Extend `Agent` and return a domain Event from `@Assign`:
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/src/agent/support-reply-agent.ts -->
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import { Agent, Assign } from "@spine-event-engine/server";
+import type { DraftSupportReply } from "../../generated/spine/server/testing/support_agent_commands_pb.js";
+import {
+  SupportReplyDraftedSchema,
+  type SupportReplyDrafted,
+} from "../../generated/spine/server/testing/support_agent_events_pb.js";
+import {
+  type SupportReplyAgentId,
+  SupportReplyAgentStateSchema,
+} from "../../generated/spine/server/testing/support_agent_states_pb.js";
+
+/**
+ * Drafts replies for support tickets.
+ */
+class SupportReplyAgent extends Agent<SupportReplyAgentId, typeof SupportReplyAgentStateSchema> {
+  /**
+   * Proposes a reply when the ticket requests one.
+   *
+   * @param command Support ticket request.
+   * @returns Event containing the proposed reply.
+   */
+  @Assign
+  draft(command: DraftSupportReply): SupportReplyDrafted {
+    const reply = `Answer: ${command.question}`;
+    this.update((state) => Object.assign(state, { id: this.id, proposedReply: reply }));
+    return create(SupportReplyDraftedSchema, { agent: this.id, reply });
+  }
+}
+```
+
+Generate the handler registry from that class, then register the Agent in a
+bounded context. `buildAsync()` discovers its handlers:
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/support-reply-agent.test.ts -->
+
+```ts
+import { BoundedContext } from "@spine-event-engine/server";
+import { SupportReplyAgent } from "../src/agent/support-reply-agent.js";
+
+const context = await BoundedContext.singleTenant("Support replies")
+  .withGeneratedRegistryRoot(new URL("../dist/", import.meta.url))
+  .add(SupportReplyAgent)
+  .buildAsync();
+await context.close();
+```
+
+For Process Manager's schema-and-columns query form:
 
 ```ts
 import { EntityQuery, type EntityColumn } from "@spine-event-engine/core";

@@ -15,6 +15,7 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
+  Agent,
   EntityHandlers,
   type DescriptorMessageSchema,
   describeEntityMetadata,
@@ -25,6 +26,21 @@ import {
   type HandlerMethodName,
   Projection,
 } from "../../src/index.js";
+import {
+  type DraftSupportReply,
+  DraftSupportReplySchema,
+  type ReviewSupportReply,
+} from "../../test-fixtures/generated/entity-metadata/support_agent_commands_pb.js";
+import {
+  type SupportReplyDrafted,
+  type SupportTicketUpdated,
+  SupportTicketUpdatedSchema,
+} from "../../test-fixtures/generated/entity-metadata/support_agent_events_pb.js";
+import {
+  SupportReplyAgentStateSchema,
+  type SupportReplyAgentId,
+  type SupportReplyAgentState,
+} from "../../test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
 import {
   type CreateProject,
   CreateProjectSchema,
@@ -85,6 +101,31 @@ class TaskProjection {
   }
 }
 
+class SupportReplyAgent extends Agent<SupportReplyAgentId, typeof SupportReplyAgentStateSchema> {
+  draft(command: DraftSupportReply): SupportReplyDrafted {
+    void command;
+    throw Error("Fixture method is not invoked.");
+  }
+
+  react(event: SupportTicketUpdated): SupportReplyDrafted | undefined {
+    void event;
+    throw Error("Fixture method is not invoked.");
+  }
+
+  command(event: SupportTicketUpdated): ReviewSupportReply {
+    void event;
+    throw Error("Fixture method is not invoked.");
+  }
+
+  subscribe(event: SupportTicketUpdated): void {
+    void event;
+  }
+
+  apply(state: SupportReplyAgentState): void {
+    void state;
+  }
+}
+
 class AssignedProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   assignCreate(command: CreateProject): void {
     void command;
@@ -135,6 +176,35 @@ class AccessorProjection {
 }
 
 describe("handler metadata", () => {
+  it("accepts Agent assignment and reaction handlers", () => {
+    const metadata = EntityHandlers.define(
+      SupportReplyAgent,
+      SupportReplyAgentStateSchema,
+      (builder) => [
+        builder.assign(DraftSupportReplySchema, "draft"),
+        builder.react(SupportTicketUpdatedSchema, "react"),
+      ],
+    );
+
+    expect(metadata.handlers.map((handler) => handler.kind)).toEqual([
+      "command-assignment",
+      "event-reaction",
+    ]);
+  });
+
+  it("rejects Agent event and state subscriptions", () => {
+    expect(() =>
+      EntityHandlers.define(SupportReplyAgent, SupportReplyAgentStateSchema, (builder) => [
+        builder.subscribe(SupportTicketUpdatedSchema, "subscribe"),
+      ]),
+    ).toThrow(HandlerMetadataError);
+    expect(() =>
+      EntityHandlers.define(SupportReplyAgent, SupportReplyAgentStateSchema, (builder) => [
+        builder.subscribe(SupportReplyAgentStateSchema, "apply"),
+      ]),
+    ).toThrow(HandlerMetadataError);
+  });
+
   it("rejects Projection command assignments from explicit metadata", () => {
     const entity = describeEntityMetadata(ProjectOverviewStateSchema);
 
