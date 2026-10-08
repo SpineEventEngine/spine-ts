@@ -3125,3 +3125,45 @@ child agents. Review the complete Anthropic addition and receipt correction,
 focusing on public/serialized contracts, provider compatibility, auth/config
 examples, recorded output and runtime agreement. Report:
 `/tmp/anthropic-further-round-2.md`. No redesign or unrelated baseline work.
+
+Further round 2 found one confirmed P2: an interrupted Anthropic tool-input
+block remains in ordered content but is absent from the standard tool-call
+projection. A recorded failed response can therefore fail contextual validation
+when replayed, masking the original safe failure. Report:
+`/tmp/anthropic-further-round-2.md`; reviewer ran 148 focused cases and found no
+other contract/export/auth/example issue. Explicit Sol/medium profile matches.
+
+Return this bounded projection correction to the same implementer. Existing
+ModelToolCall explicitly permits incomplete/malformed/empty argument text, and
+failed GenerationResponse permits received proposals without dispatch. Prefer
+recording the received partial tool input consistently in both projections,
+while successful completion still requires every stream block to close. Add an
+actual pinned-SDK interrupted-tool fixture and serialized replay regression,
+prove no tool dispatch and preservation of the original safe failure. Do not
+introduce a new wire contract unless a concrete existing invariant prevents
+this representation. Parent retains canonical records; full preflight and
+independent closure precede final verification.
+
+Further round 2 correction is independently closed. Bounded partial tool input
+now appears consistently in ordered content and the proposal projection. Three
+fail-first regressions cover cutoff after tool start/input and a parsed-limit
+crossing; binary replay returns the original failure without transport or tool
+dispatch. All 358 focused tests and complete cheap preflight pass. The original
+API reviewer closed P2 after 151 focused tests; reports:
+`/tmp/anthropic-further-fix-2.md`, `/tmp/anthropic-further-round-2-closure.md`.
+Explicit configured Sol/medium profiles match; runtime introspection unavailable.
+A final comment clarification describes StreamToolCall as a received proposal,
+matching the now-documented incomplete failure content; no runtime change.
+
+Both further requested sequential rounds are complete. Reliability and API
+concerns are independently closed; narrow docs/type comments match behavior,
+cleanup/style checks pass, and previous specialist dispositions remain current.
+The correction preserves byte limits, tool authorization, credentials and
+journal barriers; it introduces no new trust surface requiring a repeat of the
+completed final security review. GitHub Security will run on the final push.
+
+Final mechanical assignment: existing agent_final_review_verification function,
+explicit configured `gpt-6-luna` / `low`, no source edits/memory/children. Run one
+full verify:release after this pushed checkpoint, then full/prod audits, package
+preparation with 21 external consumer checks, and offline publication trial.
+Save report/logs under /tmp; stop on failures. No PR or package publication.

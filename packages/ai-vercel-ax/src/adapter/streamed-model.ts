@@ -29,7 +29,7 @@ import { scheduleBoundedDeadline } from "./deadline.js";
 export type StreamModel = LanguageModelV3 | LanguageModelV4;
 
 /**
- * One complete tool call emitted by a model stream.
+ * One received tool proposal, which may be incomplete when the stream fails.
  */
 export interface StreamToolCall {
   /**
@@ -43,7 +43,7 @@ export interface StreamToolCall {
   readonly name: string;
 
   /**
-   * Complete JSON tool input, subject to runtime validation.
+   * Provider tool input; complete only after successful stream collection.
    */
   readonly input: string;
 }
@@ -141,6 +141,11 @@ export interface StreamedModelResult {
  * Received bounded content retained when a provider stream cannot complete.
  */
 export type StreamedPartialResult = Omit<StreamedModelResult, "finishReason"> & {
+  /**
+   * Received proposals, including bounded input prefixes from interrupted Anthropic blocks.
+   */
+  readonly toolCalls: readonly StreamToolCall[];
+
   /**
    * Provider stop state when supplied, including rejected truncation/refusal.
    */
@@ -240,7 +245,11 @@ interface AnthropicOpenBlock {
  */
 const partial = (state: State): StreamedPartialResult => ({
   text: state.text,
-  toolCalls: [...state.toolCalls],
+  toolCalls: state.anthropic
+    ? state.anthropic.blocks.flatMap((block) =>
+        block.type === "tool-call" ? [{ ...block.call }] : [],
+      )
+    : [...state.toolCalls],
   ...(state.anthropic ? { anthropicContent: [...state.anthropic.blocks] } : {}),
   ...(state.finishReason ? { finishReason: state.finishReason } : {}),
   ...(state.usage ? { usage: state.usage } : {}),
@@ -626,7 +635,10 @@ const anthropicToolInput = (
     return fail(state, "Orphan Anthropic tool input");
   if (part.type === "tool-input-end") opened.inputEnded = true;
   else {
+    const block = content.blocks[opened.index];
+    if (block?.type !== "tool-call") return fail(state, "Anthropic content kind mismatch");
     addBytes(state, part.delta, limit);
+    block.call = { ...block.call, input: block.call.input + part.delta };
     opened.inputBytes = (opened.inputBytes ?? 0) + Buffer.byteLength(part.delta);
   }
 };

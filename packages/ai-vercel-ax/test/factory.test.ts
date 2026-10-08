@@ -14,7 +14,7 @@
 
 import { AiModel, ModelRef, type AiFailure, type AiModelDefinition } from "@spine-event-engine/ai";
 import { AnyMessages, type MessageSchema } from "@spine-event-engine/core";
-import { backendDefinition } from "@spine-event-engine/ai/spi/adapter";
+import { assertAiOutcomeContext, backendDefinition } from "@spine-event-engine/ai/spi/adapter";
 import type {
   AiBackendExecution,
   AiExecutionControl,
@@ -774,6 +774,63 @@ describe("Vercel connection registration", () => {
       outcome: AiOutcome.FAILED,
       rawOutput: "partial",
     });
+  });
+
+  it.each([
+    {
+      point: "tool start",
+      marker: 'event: content_block_delta\ndata: {"type":"content_block_delta","index":1',
+      input: "",
+    },
+    {
+      point: "tool input delta",
+      marker: 'event: content_block_stop\ndata: {"type":"content_block_stop","index":1',
+      input: '{"ticket":"T-1"}',
+    },
+  ])("replays a failed Anthropic stream cut after $point without tool dispatch", async (cut) => {
+    const full = anthropicToolEvents();
+    const offset = full.indexOf(cut.marker);
+    expect(offset).toBeGreaterThan(0);
+    const original = realAnthropicFixture(
+      full.slice(0, offset),
+      "native-schema",
+      "claude-fable-5",
+      { withTool: true },
+    );
+    const firstResult = await original.run();
+    expect(firstResult).toMatchObject({ ok: false });
+    if (firstResult.ok) throw new Error("Expected interrupted stream failure");
+    expect(original.runtime.callTool).not.toHaveBeenCalled();
+    const saved = vi.mocked(original.runtime.finishAttempt).mock.calls[0]?.[0].response;
+    if (saved?.$typeName !== "spine.ts.agent.GenerationResponse")
+      throw new Error("Expected saved generation response");
+    expect(saved).toMatchObject({
+      outcome: AiOutcome.FAILED,
+      toolCalls: [
+        { providerCallId: "provider-call-1", toolName: "tool_0", argumentsJson: cut.input },
+      ],
+    });
+    expect(saved.anthropicContent?.blocks.at(-1)?.content).toMatchObject({
+      case: "toolCall",
+      value: { argumentsJson: cut.input },
+    });
+    expect(() => {
+      assertAiOutcomeContext(saved);
+    }).not.toThrow();
+
+    const replay = realAnthropicFixture("", "native-schema", "claude-fable-5", {
+      withTool: true,
+    });
+    vi.mocked(replay.runtime.beginAttempt).mockResolvedValue({
+      kind: "replay",
+      id: "saved-interrupted-tool",
+      response: fromBinary(GenerationResponseSchema, toBinary(GenerationResponseSchema, saved)),
+      failure: firstResult.failure,
+    });
+    await expect(replay.run()).resolves.toMatchObject({ ok: false, failure: firstResult.failure });
+    expect(replay.network).not.toHaveBeenCalled();
+    expect(replay.runtime.callTool).not.toHaveBeenCalled();
+    expect(replay.runtime.finishAttempt).not.toHaveBeenCalled();
   });
 
   it("bounds an actual Anthropic SSE body before candidate admission", async () => {

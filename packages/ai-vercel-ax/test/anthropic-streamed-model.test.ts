@@ -110,6 +110,26 @@ describe("bounded Anthropic stream collection", () => {
     ).rejects.toBeInstanceOf(StreamCollectionError);
   });
 
+  it("keeps bounded tool input and its proposal projection equal after a crossing delta", async () => {
+    const model = modelWith([
+      { type: "tool-input-start", id: "call-1", toolName: "tool_0" },
+      { type: "tool-input-delta", id: "call-1", delta: "ab" },
+      { type: "tool-input-delta", id: "call-1", delta: "over-limit" },
+    ]);
+    try {
+      await collectModelStream(model, { prompt: [] }, 64 + 6 + 6 + 2, undefined, true);
+      throw new Error("Expected parsed-output limit failure");
+    } catch (error) {
+      expect(error).toBeInstanceOf(StreamCollectionError);
+      if (!(error instanceof StreamCollectionError)) throw error;
+      expect(error.partial.toolCalls).toEqual([{ id: "call-1", name: "tool_0", input: "ab" }]);
+      expect(error.partial.anthropicContent?.at(0)).toEqual({
+        type: "tool-call",
+        call: { id: "call-1", name: "tool_0", input: "ab" },
+      });
+    }
+  });
+
   it("rejects provider text metadata that cannot be replayed as plain text", async () => {
     const compaction = modelWith([
       { type: "text-start", id: "0", providerMetadata: { anthropic: { type: "compaction" } } },
