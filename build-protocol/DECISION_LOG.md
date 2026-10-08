@@ -6077,7 +6077,7 @@ See [the Agent task](planning/agent-entities.md).
 
 ## D-0131: Preserve Anthropic Thinking In Recorded Continuations
 
-Status: Accepted; correction in progress
+Status: Implemented; review corrections and full release checks complete
 
 Date: 2026-10-08
 

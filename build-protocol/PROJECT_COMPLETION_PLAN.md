@@ -17,21 +17,19 @@ common workspace version under D-0115.
 Current work: [Signal-driven Agent entities](planning/agent-entities.md),
 on `agent-entities`, based on official master `658da1cdd`. Anthropic model
 support is included in the first snapshot. Three additional human-requested
-review rounds are in progress. Round 2 identified missing signed thinking content
-in Anthropic tool continuations; the correction preserves ordered provider content
-in recorded responses (D-0131). Final acceptance is pending this correction and
-round 3. The preceding implementation, independent reviews,
-full release verification and package checks completed at code checkpoint
-`a83d2bac0`. The three additional consecutive standalone Agent review rounds
-remain closed. The Anthropic concern reviews and final security review are also
-complete; all three findings were corrected and independently confirmed closed.
-Reviewers used fresh contexts without inherited conversation or memory.
-The release suite passes 5,929 tests with one skipped; coverage passes at 93.82%
-statements, 90.05% branches, 95.61% functions and 95.59% lines. Both dependency
-audits pass. All 21 package archives pass external consumer checks and the
-offline publication trial. Version `2.0.0-snapshot.23` remains unused for all
-21 publishable packages. GitHub Security is green for the code checkpoint.
-GitHub Build awaits a human-created PR; no PR was created.
+Anthropic review-and-fix rounds are complete, each with a fresh reviewer and no
+inherited conversation or memory. The signed-thinking continuation defect is
+fixed: ordered provider content is recorded and restored for tool and corrective
+requests, including replay (D-0131). All accepted findings, including the
+additional replay coverage and function-size corrections, are closed. Final
+security and specialist review dispositions are complete.
+
+Full release verification passes at code checkpoint `c131c59e8`: 5,941 tests
+passed and one skipped. Coverage: statements 93.78%, branches 90.01%, functions
+95.62%, lines 95.55%. Both dependency audits pass. All 21 package archives pass
+strict external consumer checks and the offline publication trial. The branch
+uses `2.0.0-snapshot.23`; no packages were published. GitHub Build awaits a
+human-created PR; no PR was created.
 
 The feature includes the Spine AI facade, mandatory indexed history, durable
 signal-triggered execution, Vercel/Ax integration, MCP and BlackBox support.
