@@ -6028,9 +6028,9 @@ task. Agent work remains a separate task.
 See [the Time task](planning/spine-time-task.md) and
 [its status](planning/spine-time-worklog.md).
 
-## D-0125: Bounded Tenant Paging For Agent Recovery
+## D-0129: Bounded Tenant Paging For Agent Recovery
 
-Status: Accepted; implementation verification in progress
+Status: Implemented; independent review and full release verification complete
 
 Date: 2026-10-08
 
