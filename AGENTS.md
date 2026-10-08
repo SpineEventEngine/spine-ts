@@ -31,6 +31,17 @@ wording that names the responsible class, module, package, agent, or person.
 This rule applies to code, documentation, review records, and user-facing chat
 responses.
 
+## Pull Request Descriptions
+
+Write pull request descriptions for human framework users. Explain the concrete
+behavior and how to use it. For significant features, include practical code
+examples, configuration, and authentication where relevant. Check examples
+against the implemented public API.
+
+Do not add a Verification section, test counts, coverage totals, audit results,
+or agent review records to a pull request description unless the human explicitly
+asks for them. Keep required development evidence in the existing task records.
+
 ## Model Allocation
 
 Use Standard speed. Do not enable Fast/boost mode. Do not use Max or Ultra in

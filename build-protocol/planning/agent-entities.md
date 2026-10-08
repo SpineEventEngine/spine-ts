@@ -2705,3 +2705,11 @@ The provider paging decision is D-0129; its earlier draft number duplicated an
 existing decision and was corrected. General physical Entity deletion remains
 outside this task. The final documentation update will be pushed immediately;
 no pull request is created or merged. GitHub Build awaits a human-created PR.
+
+PR-description follow-up (micro, documentation only): the human requires a
+usage-oriented description with examples and authentication configuration, and
+no unsolicited verification section or development statistics. Record that
+preference in AGENTS.md and base the chat draft on the implemented public APIs.
+Acceptance is the persisted instruction plus an accurate copy-pasteable draft;
+no runtime behavior or public contract changes. Relevant documentation was
+read directly; runtime, persistence and security review lanes are unaffected.
