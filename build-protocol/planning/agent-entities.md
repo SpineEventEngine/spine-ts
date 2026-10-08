@@ -2638,3 +2638,42 @@ full release profile, strict packaged-consumer checks and offline publication
 trial. Preserve existing unchanged native SQL Agent recovery evidence; this
 correction changes their configured tenant paging, not SQL persistence. Remove
 the task-local Datastore emulator after final native verification.
+
+Final mechanical verification assignment: orchestrator-dispatched execution
+function using explicit gpt-6-luna/low, no subagents or source edits. Run the
+full release profile at code checkpoint ed9d5068a after the clean preflight,
+then audit and prepare all package archives/strict consumer checks and the
+offline publication trial. Preserve full outputs under /tmp and stop for
+classification if a real failure occurs. Runtime profile metadata unavailable;
+explicit immutable dispatch profile is the acceptance evidence.
+
+Full release verification at ed9d5068a passed all deterministic gates and all
+5,886 tests (one skipped), but failed only the global branch threshold: 18,777
+of 20,866 branches, 89.98%, against 90%. Other totals: statements 31,817/33,917
+(93.8%), functions 8,082/8,453 (95.61%), lines 29,209/30,560 (95.57%). Report:
+`/tmp/agent-three-review-verification.md`. No audit/package trial started.
+
+Scripts-first full LCOV gap inspection is saved in
+`/tmp/agent-final-release-coverage-gaps.txt`. Return to existing Sol/medium
+implementer for tests only covering observable remaining paging/lifecycle
+behavior, especially multiple repositories per tenant, urgent continuing pages,
+empty memory catalog, non-cursor input and late pending-read settlement. Do not
+change source or thresholds just for coverage. Then repeat the complete cheap
+preflight before the required full release rerun. The three independent review
+rounds remain closed; test-only coverage corrections do not reopen review lanes.
+
+Coverage-only correction accepted from the existing Sol/medium implementer:
+five test files add observable paging, empty-catalog, cursor-rejection and late
+completion scenarios; production code and coverage configuration are unchanged.
+All 72 focused tests pass. The focused LCOV hits 11 branch keys that were zero
+in the complete release LCOV, compared with the three-hit shortfall. Report:
+`/tmp/agent-final-coverage-correction.md`. Affected builds, all four tooling
+typechecks, lint/format, cleanup/TSDoc, API-doc inventory, audience, Time,
+logging, dependencies, readiness and diff checks pass. Complete cheap preflight
+has been repeated after the failed release gate. Core snapshot.23 remains
+unpublished in the NPM version list; no version change is needed.
+
+Resume the same explicit Luna/low verification function for one full rerun at
+the upcoming test-only correction checkpoint, then audits/package/consumer/trial
+checks on success. Preserve the first run evidence and do not reuse its result
+as a successful coverage gate.

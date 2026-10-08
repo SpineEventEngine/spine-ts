@@ -271,6 +271,111 @@ describe("Agent indexed scheduler", () => {
     await scheduler.close();
   });
 
+  it("expands multiple repositories lazily for each tenant page", async () => {
+    const visited: string[] = [];
+    let constructed = 0;
+    const scheduler = new AgentScheduler(
+      {
+        repositories: 3,
+        page: () =>
+          Promise.resolve({
+            ids: ["one", "two", "three"].map((value) =>
+              create(TenantIdSchema, {
+                kind: { case: "value", value },
+              }),
+            ),
+            hasMore: false,
+          }),
+        scope: (tenant, repository) => {
+          if (tenant.kind.case !== "value") throw new Error("Expected value tenant.");
+          const id = `${tenant.kind.value}:${String(repository)}`;
+          constructed += 1;
+          return {
+            id,
+            pending: () => {
+              visited.push(id);
+              return Promise.resolve({ records: [], hasMore: false });
+            },
+            run: () => Promise.resolve(),
+          };
+        },
+      },
+      new AgentExecutionCapacity(2, 0),
+      () => undefined,
+    );
+    await ready(scheduler);
+    await scheduler.turn();
+    expect(constructed).toBe(4);
+    for (let turn = 0; turn < 4 && visited.length < 9; turn += 1) await scheduler.turn();
+    expect(visited).toEqual([
+      "one:0",
+      "one:1",
+      "one:2",
+      "two:0",
+      "two:1",
+      "two:2",
+      "three:0",
+      "three:1",
+      "three:2",
+    ]);
+    expect(constructed).toBe(9);
+    await scheduler.close();
+  });
+
+  it("retains an urgent continuing page when capacity delays later records", async () => {
+    const seen: string[] = [];
+    const afters: string[] = [];
+    let release: (() => void) | undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const cursor = {
+      asOf: create(TimestampSchema, { seconds: 10n }),
+      key: {
+        scope: create(AgentExecutionScopeSchema, { stateType: "support.Agent", agentKey: "B" }),
+        eligibleAt: create(TimestampSchema, { seconds: 9n }),
+      },
+    };
+    const scope: AgentScanScope = {
+      id: "urgent-continuing",
+      pending: (after) => {
+        afters.push(after === undefined ? "start" : "B");
+        return Promise.resolve(
+          after === undefined
+            ? {
+                records: [record("A"), record("B")].filter(
+                  (entry) => !seen.includes(entry.accepted?.key?.scope?.agentKey ?? "missing"),
+                ),
+                after: cursor,
+                hasMore: true,
+              }
+            : { records: [record("C")], hasMore: false },
+        );
+      },
+      run: async (key) => {
+        const name = key.scope?.agentKey ?? "missing";
+        seen.push(name);
+        if (name === "A") await held;
+      },
+    };
+    const capacity = new AgentExecutionCapacity(1, 0);
+    const scheduler = new AgentScheduler(source([]), capacity, () => undefined);
+    await ready(scheduler);
+    scheduler.wake(scope);
+    await scheduler.turn();
+    for (let tick = 0; tick < 8 && seen.length === 0; tick += 1) await Promise.resolve();
+    expect(seen).toEqual(["A"]);
+    release?.();
+    for (let tick = 0; tick < 20 && capacity.full(); tick += 1) await Promise.resolve();
+    for (let turn = 0; turn < 6 && !seen.includes("C"); turn += 1) {
+      await scheduler.turn();
+      for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+    }
+    expect(seen).toEqual(["A", "B", "C"]);
+    expect(afters).toEqual(expect.arrayContaining(["start", "start", "B"]));
+    await scheduler.close();
+  });
+
   it("visits a new accepted tenant even when the retained catalog is empty", async () => {
     let enumerations = 0;
     let targeted = 0;
@@ -710,6 +815,40 @@ describe("Agent indexed scheduler", () => {
     await expect(scan).rejects.toThrow(/discovery stopped/);
     rejectPending?.(new Error("Late provider failure."));
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+    expect(runs).toBe(0);
+  });
+
+  it("ignores a pending page that resolves after close", async () => {
+    let resolvePending:
+      ((page: { records: ReturnType<typeof record>[]; hasMore: false }) => void) | undefined;
+    const pending = new Promise<{ records: ReturnType<typeof record>[]; hasMore: false }>(
+      (resolve) => {
+        resolvePending = resolve;
+      },
+    );
+    let runs = 0;
+    const scheduler = new AgentScheduler(
+      source([
+        {
+          id: "late-pending",
+          pending: () => pending,
+          run: () => {
+            runs += 1;
+            return Promise.resolve();
+          },
+        },
+      ]),
+      new AgentExecutionCapacity(1, 0),
+      () => undefined,
+    );
+    await ready(scheduler);
+    const scan = scheduler.turn();
+    for (let tick = 0; tick < 4; tick += 1) await Promise.resolve();
+    await scheduler.close();
+    await expect(scan).rejects.toThrow(/discovery stopped/);
+    resolvePending?.({ records: [record("late")], hasMore: false });
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+    await scheduler.turn();
     expect(runs).toBe(0);
   });
 

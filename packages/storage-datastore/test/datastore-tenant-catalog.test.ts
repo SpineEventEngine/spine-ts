@@ -42,6 +42,15 @@ describe("DatastoreTenantCatalog", () => {
     expect(client.pageLimits).toEqual([1, 1]);
     expect(client.pageStarts).toEqual([undefined, "1"]);
     if (found.after === undefined) throw new Error("Expected final native continuation.");
+    await expect(
+      catalog.page({
+        count: 1,
+        signal,
+        after: {
+          [Symbol.toStringTag]: "TenantCatalogCursor",
+        },
+      }),
+    ).rejects.toThrow(/continuation/);
     const forged = Object.create(Reflect.getPrototypeOf(found.after)) as typeof found.after;
     await expect(catalog.page({ count: 1, signal, after: forged })).rejects.toThrow();
     const constructed = Reflect.construct(found.after.constructor, [

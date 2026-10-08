@@ -121,6 +121,15 @@ describe("InMemoryStorageBackend", () => {
     expect(page.boundaries).toHaveLength(1);
     expect(page.hasMore).toBe(true);
     if (page.after === undefined) throw new Error("Expected tenant continuation.");
+    await expect(
+      catalog.page({
+        count: 1,
+        signal,
+        after: {
+          [Symbol.toStringTag]: "TenantCatalogCursor",
+        },
+      }),
+    ).rejects.toThrow(/continuation/);
     const forged = Object.create(Reflect.getPrototypeOf(page.after)) as typeof page.after;
     await expect(catalog.page({ count: 1, signal, after: forged })).rejects.toThrow();
     const constructed = Reflect.construct(page.after.constructor, [
@@ -145,5 +154,24 @@ describe("InMemoryStorageBackend", () => {
     const aborted = new AbortController();
     aborted.abort();
     await expect(catalog.page({ count: 1, signal: aborted.signal })).rejects.toThrow();
+  });
+
+  it("returns a terminal empty page before any memory tenant is admitted", async () => {
+    const catalog = new InMemoryStorageFactory().tenantCatalog();
+    const signal = new AbortController().signal;
+    await expect(catalog.page({ count: 1, signal })).resolves.toEqual({
+      boundaries: [],
+      hasMore: false,
+    });
+    await catalog.keep(
+      TenantBoundary.from(
+        create(TenantIdSchema, {
+          kind: { case: "value", value: "later" },
+        }),
+      ),
+    );
+    const admitted = await catalog.page({ count: 1, signal });
+    expect(admitted.boundaries).toHaveLength(1);
+    expect(admitted.hasMore).toBe(false);
   });
 });

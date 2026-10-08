@@ -235,6 +235,15 @@ describe("MysqlStorageFactory builder contract", () => {
     const firstPage = await catalog.page({ count: 1, signal });
     expect(firstPage.boundaries).toHaveLength(1);
     if (firstPage.after === undefined) throw new Error("Expected MySQL catalog cursor.");
+    await expect(
+      catalog.page({
+        count: 1,
+        signal,
+        after: {
+          [Symbol.toStringTag]: "TenantCatalogCursor",
+        },
+      }),
+    ).rejects.toThrow(/continuation/);
     const constructed = Reflect.construct(firstPage.after.constructor, [
       catalog,
       1,
