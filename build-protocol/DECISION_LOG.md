@@ -6055,7 +6055,7 @@ changes. See [the Agent task](planning/agent-entities.md) and the
 
 ## D-0130: Add Anthropic Messages To The Initial Agent Adapter
 
-Status: Accepted; implementation in progress
+Status: Implemented; independent reviews and full release checks complete
 
 Date: 2026-10-08
 

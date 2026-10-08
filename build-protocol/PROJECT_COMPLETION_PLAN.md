@@ -15,17 +15,19 @@ future `master` merge triggers NPM publication and therefore carries a new
 common workspace version under D-0115.
 
 Current work: [Signal-driven Agent entities](planning/agent-entities.md),
-on `agent-entities`, based on official master `658da1cdd`. The human requires
-Anthropic model support in the first snapshot; that adapter integration and its
-focused review are in progress. The earlier implementation, independent reviews,
+on `agent-entities`, based on official master `658da1cdd`. Anthropic model
+support is included in the first snapshot. Implementation, independent reviews,
 full release verification and package checks completed at code checkpoint
-`b097c420c`; those results do not cover the Anthropic addition. Three additional consecutive standalone review
-and correction rounds are closed; each used a fresh reviewer without inherited
-conversation or memory. The release suite passes 5,890 tests with one skipped;
-all four coverage thresholds pass. Both dependency audits pass. All 21 package
-archives pass external consumer checks and the offline publication trial.
-GitHub Security is green for that code checkpoint. GitHub Build awaits a
-human-created PR; no PR was created.
+`a83d2bac0`. The three additional consecutive standalone Agent review rounds
+remain closed. The Anthropic concern reviews and final security review are also
+complete; all three findings were corrected and independently confirmed closed.
+Reviewers used fresh contexts without inherited conversation or memory.
+The release suite passes 5,929 tests with one skipped; coverage passes at 93.82%
+statements, 90.05% branches, 95.61% functions and 95.59% lines. Both dependency
+audits pass. All 21 package archives pass external consumer checks and the
+offline publication trial. Version `2.0.0-snapshot.23` remains unused for all
+21 publishable packages. GitHub Security is green for the code checkpoint.
+GitHub Build awaits a human-created PR; no PR was created.
 
 The feature includes the Spine AI facade, mandatory indexed history, durable
 signal-triggered execution, Vercel/Ax integration, MCP and BlackBox support.

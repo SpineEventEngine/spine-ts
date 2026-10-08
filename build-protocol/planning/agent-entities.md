@@ -2849,3 +2849,26 @@ full verify:release profile; on success, full/prod audits, 21-package prepare an
 strict external consumer, then offline publication trial. Preserve evidence under
 /tmp; never publish or create a PR. A failure stops the sequence for scripts-first
 classification and correction before repeating the full cheap preflight.
+
+Anthropic integration accepted at `a83d2bac046e8de5d559aef90858aeac67eaed9b`.
+The mechanical result matches the explicit gpt-6-luna/low assignment and its
+configured profile; runtime self-introspection is unavailable. The full release
+profile passes with 365 test files passed and one skipped, 5,929 tests passed
+and one skipped. Coverage: statements 93.82% (31,842/33,938), branches 90.05%
+(18,812/20,890), functions 95.61% (8,086/8,457), lines 95.59%
+(29,232/30,580). Full and production dependency audits report no known
+vulnerabilities. Package preparation, strict external consumer installation and
+all offline publication trial scenarios pass for all 21 packages. Reports and
+command output remain under `/tmp`; final report:
+`/tmp/anthropic-verification-final.md`.
+
+All three P2 review findings are closed independently; the final security review
+has no actionable findings. Tests exercise the actual pinned Anthropic SDK with
+local wire fixtures and MCP, including all 16 native model IDs, authentication,
+recorded recovery and output validation. No paid provider request was made.
+GitHub Security passed for the code checkpoint:
+https://github.com/SpineEventEngine/spine-ts/actions/runs/37799705851.
+A fresh NPM availability check confirms `2.0.0-snapshot.23` remains unpublished
+for all 21 packages. No package was published and no PR was created. General
+physical Entity deletion remains a separate deferred task. The implementation
+and review corrections are pushed; the remaining update records these results.
