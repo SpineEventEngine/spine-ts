@@ -717,14 +717,17 @@ describe("Vercel connection registration", () => {
     { stopReason: "refusal", code: "REFUSED", outcome: AiOutcome.REFUSED },
     { stopReason: "max_tokens", code: "INVALID_OUTPUT", outcome: AiOutcome.INVALID_OUTPUT },
   ])("journals Anthropic $stopReason without admitting its partial text", async (failure) => {
-    const fixture = realAnthropicFixture(anthropicEvents("partial", failure.stopReason));
+    const wire = anthropicEvents("partial", failure.stopReason);
+    const fixture = realAnthropicFixture(wire);
     await expect(fixture.run()).resolves.toMatchObject({
       ok: false,
       failure: { code: failure.code },
     });
     expect(fixture.network).toHaveBeenCalledTimes(1);
     expect(fixture.runtime.admitGeneration).not.toHaveBeenCalled();
-    expect(vi.mocked(fixture.runtime.finishAttempt).mock.calls[0]?.[0].response).toMatchObject({
+    const completion = vi.mocked(fixture.runtime.finishAttempt).mock.calls[0]?.[0];
+    expect(completion?.receivedBytes).toBe(Buffer.byteLength(wire));
+    expect(completion?.response).toMatchObject({
       outcome: failure.outcome,
       rawOutput: "partial",
       actualModel: { value: "claude-sonnet-4-5-20250929" },
@@ -765,7 +768,9 @@ describe("Vercel connection registration", () => {
     const fixture = realAnthropicFixture(partial);
     await expect(fixture.run()).resolves.toMatchObject({ ok: false });
     expect(fixture.runtime.admitGeneration).not.toHaveBeenCalled();
-    expect(vi.mocked(fixture.runtime.finishAttempt).mock.calls[0]?.[0].response).toMatchObject({
+    const completion = vi.mocked(fixture.runtime.finishAttempt).mock.calls[0]?.[0];
+    expect(completion?.receivedBytes).toBe(Buffer.byteLength(partial));
+    expect(completion?.response).toMatchObject({
       outcome: AiOutcome.FAILED,
       rawOutput: "partial",
     });
@@ -781,9 +786,9 @@ describe("Vercel connection registration", () => {
     await expect(fixture.run()).resolves.toMatchObject({ ok: false });
     expect(fixture.network).toHaveBeenCalledTimes(1);
     expect(fixture.runtime.admitGeneration).not.toHaveBeenCalled();
-    expect(vi.mocked(fixture.runtime.finishAttempt).mock.calls[0]?.[0].response.outcome).toBe(
-      AiOutcome.FAILED,
-    );
+    const completion = vi.mocked(fixture.runtime.finishAttempt).mock.calls[0]?.[0];
+    expect(completion?.receivedBytes).toBeUndefined();
+    expect(completion?.response.outcome).toBe(AiOutcome.FAILED);
   });
 
   it("cancels a pending Anthropic fetch and journals one cancelled attempt", async () => {
@@ -2108,7 +2113,7 @@ describe("Vercel connection registration", () => {
     expect(fixture.runtime.finishAttempt).toHaveBeenCalledTimes(1);
   });
 
-  it("does not report a partial provider response as a complete byte receipt", async () => {
+  it("reports known partial response bytes after an interrupted stream", async () => {
     const fixture = generationFixture([[]]);
     let chunk = 0;
     fixture.network.mockResolvedValue(
@@ -2125,7 +2130,7 @@ describe("Vercel connection registration", () => {
     expect(fixture.runtime.onReceived).toHaveBeenCalled();
     const completion = vi.mocked(fixture.runtime.finishAttempt).mock.calls[0]?.[0];
     expect(completion).toBeDefined();
-    expect(completion).not.toHaveProperty("receivedBytes");
+    expect(completion?.receivedBytes).toBe(Buffer.byteLength("partial"));
   });
 
   it("journals cancellation after reservation without dispatching the model", async () => {

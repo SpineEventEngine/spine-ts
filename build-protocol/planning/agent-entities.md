@@ -3068,3 +3068,60 @@ no paid provider call was made. The branch is pushed, physical Entity deletion
 remains deferred, and no PR or package publication was performed. The final
 record-only commit receives documentation checks and a GitHub Security run;
 its result is reported to the human without a self-referential record commit.
+
+## Two further independent Anthropic review rounds — 2026-10-08
+
+The human requests two more sequential review-and-fix rounds. Continue the
+existing feature branch/worktree; scope remains the complete Anthropic addition
+from `0dbe80b5d` through current HEAD `1390f6f62`, including ordered thinking
+content and recovery. This is a standard review correction cycle. Each round
+uses a fresh reviewer with no inherited conversation, memory access, prior review
+reports or child agents. Fix confirmed findings and run focused checks before the
+next round. Preserve the application-facing contracts and unrelated changes.
+
+Existing skill applicability remains current: requesting-code-review and
+receiving-code-review were read earlier in this conversation and govern this
+same-scope continuation. Desktop supports explicit required model/reasoning
+profiles. Full release evidence at `c131c59e8` remains current for unchanged
+source; repeat the full profile only if runtime/tests/contracts change. No
+speculative architecture pass or new evidence files in the repository.
+
+Round 1 assignment: fresh existing performance_reliability_reviewer, explicit
+`gpt-6-sol` / `medium`, read-only review of stream state, recorded content,
+continuation/recovery, resource bounds and storage capacity. Report:
+`/tmp/anthropic-further-round-1.md`. Acceptance checks explicit dispatch and
+configured profile; runtime self-introspection is not exposed. Review relevant
+API/docs/style claims alongside runtime invariants; prior specialist dispositions
+remain applicable where source is unchanged.
+
+Further round 1 returned one P2: journalFailure omits known response-byte
+receipts, causing failed generation attempts to retain full reserved output
+credit in shared-budget accounting. The finding is confirmed against the
+adapter receipt path and AgentAiRuntime completion/shared-budget logic. Preserve
+counts within the ticket allowance; an over-limit crossing chunk must retain
+absent receipt so failure journaling does not itself violate the reservation.
+Reviewer ran 148 focused tests; explicit configured Sol/medium matched, runtime
+introspection unavailable. Report `/tmp/anthropic-further-round-1.md`.
+
+Return the bounded fix to existing implementer, explicit configured
+`gpt-6-sol` / `medium`, one production writer, no children. Add fail-first
+in-limit failure receipt and over-limit failure regressions; keep all public
+contracts unchanged. Parent maintains canonical records. Run full cheap
+preflight including lint:cleanup before independent closure and round 2.
+
+Further round 1 correction passed 355 focused tests across 11 files, affected
+builds, all four tooling typechecks and the complete cheap preflight including
+lint:cleanup. Fail-first actual-SDK fixtures reproduced missing receipts for
+refusal, max_tokens and truncated SSE; corrected assertions pass, and crossing
+chunks still leave the receipt unset. Report `/tmp/anthropic-further-fix-1.md`.
+The reviewer initially could not perform closure without stating a blocker; a
+retry completed and independently closed P2 with 145 factory tests passing.
+Report `/tmp/anthropic-further-round-1-closure.md`. Explicit configured Sol/medium
+profile matches the dispatch; runtime introspection unavailable.
+
+Further round 2 assignment: fresh existing typescript_api_docs_reviewer,
+explicit `gpt-6-sol` / `medium`, no inherited context, memory, prior reports or
+child agents. Review the complete Anthropic addition and receipt correction,
+focusing on public/serialized contracts, provider compatibility, auth/config
+examples, recorded output and runtime agreement. Report:
+`/tmp/anthropic-further-round-2.md`. No redesign or unrelated baseline work.

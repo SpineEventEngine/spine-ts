@@ -678,6 +678,19 @@ const receipt = (request: AiBackendExecution, ticket: AiAttemptTicket) => {
 };
 
 /**
+ * Retains a failed stream's known receipt only within its reserved allowance.
+ * @param request Active adapter execution.
+ * @param ticket Attempt identity and output allowance.
+ * @returns Bounded receipt, if known.
+ */
+const failureReceipt = (request: AiBackendExecution, ticket: AiAttemptTicket) => {
+  const known = receipt(request, ticket);
+  return known.receivedBytes !== undefined && known.receivedBytes <= ticket.maxOutputBytes
+    ? known
+    : {};
+};
+
+/**
  * @param request Selected execution.
  * @param state Program state.
  * @param partial Received stream content.
@@ -741,6 +754,7 @@ const journalFailure = async (
   );
   await finishAttempt(request, state, {
     ticketId: ticket.id,
+    ...failureReceipt(request, ticket),
     response,
     ...(response.usage ? { usage: response.usage } : {}),
   });
