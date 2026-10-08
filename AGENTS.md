@@ -36,7 +36,12 @@ responses.
 Write pull request descriptions for human framework users. Explain the concrete
 behavior and how to use it. For significant features, include practical code
 examples, configuration, and authentication where relevant. Check examples
-against the implemented public API.
+against the implemented public API. Assume readers know the framework basics:
+start with the problem and explain the new behavior. Omit statements that are
+obvious in this repository, avoid repeatedly naming Spine, and rephrase rather
+than mechanically replacing its name with “framework”. Format code examples
+according to CODE_QUALITY.md, including multi-line TSDoc, declaration spacing,
+readable line lengths, and short methods.
 
 Do not add a Verification section, test counts, coverage totals, audit results,
 or agent review records to a pull request description unless the human explicitly

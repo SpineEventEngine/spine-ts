@@ -2713,3 +2713,9 @@ preference in AGENTS.md and base the chat draft on the implemented public APIs.
 Acceptance is the persisted instruction plus an accurate copy-pasteable draft;
 no runtime behavior or public contract changes. Relevant documentation was
 read directly; runtime, persistence and security review lanes are unaffected.
+
+PR-writing follow-up: read CODE_QUALITY.md and the developer API rules, then
+record the requested problem-first, non-redundant wording and example layout in
+AGENTS.md. No runtime changes. Provider inspection confirms that VercelAx.model
+accepts only the OpenAI Responses profile; Anthropic support is an implementation
+gap despite the upstream SDK providing it. Do not describe it as supported.
