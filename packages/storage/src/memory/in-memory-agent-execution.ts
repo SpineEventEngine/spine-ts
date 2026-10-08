@@ -41,7 +41,7 @@ import { TenantBoundary } from "../internal/tenancy.js";
 import { AgentExecutionRecords } from "../entity/agent-execution-record-spec.js";
 import { AgentExecutionTransitions } from "../entity/agent-execution-transitions.js";
 import { AgentExecutionValues } from "../entity/agent-execution-values.js";
-import { AgentHistoryIndex } from "./agent-history-index.js";
+import { AgentHistoryIndex, type AgentHistoryUpdate } from "./agent-history-index.js";
 import { AgentHistoryMutationQueue } from "./agent-history-mutation-queue.js";
 import { MemoryPendingHeadIndex } from "./agent-execution-head-index.js";
 import { InMemoryStorageBackend } from "./in-memory-storage-backend.js";
@@ -285,9 +285,14 @@ class MemoryAgentExecutionHandle<I, S extends Message> implements AgentExecution
         const prior = this.checkExpected(input);
         AgentExecutionTransitions.assertUpdate(prior, input.next);
         const staged = this.stageHistory(input.key, input.historyEntries ?? []);
-        this.state.records.set(this.key(input.key), AgentExecutionValues.cloneRecord(input.next));
+        const next = AgentExecutionValues.cloneRecord(input.next);
+        staged?.apply();
+        this.state.records.set(this.key(input.key), next);
         if (staged !== undefined)
-          this.state.history.set(AgentExecutionValues.require(input.key.scope).agentKey, staged);
+          this.state.history.set(
+            AgentExecutionValues.require(input.key.scope).agentKey,
+            staged.index,
+          );
         if (input.next.status === AgentInvocationStatus.AGENT_INVOCATION_TERMINATED)
           this.release(scope, input.key);
       }),
@@ -378,7 +383,7 @@ class MemoryAgentExecutionHandle<I, S extends Message> implements AgentExecution
   private publication(
     input: AgentExecutionComplete<I, S>,
     scope: string,
-    staged: AgentHistoryIndex | undefined,
+    staged: AgentHistoryUpdate | undefined,
   ) {
     const key = this.key(input.key);
     const historyKey = AgentExecutionValues.require(input.key.scope).agentKey;
@@ -388,8 +393,9 @@ class MemoryAgentExecutionHandle<I, S extends Message> implements AgentExecution
     const priorUnresolved = [...(this.state.unresolved.get(scope) ?? [])];
     return {
       apply: () => {
+        staged?.apply();
         this.state.records.set(key, AgentExecutionValues.cloneRecord(input.next));
-        if (staged !== undefined) this.state.history.set(historyKey, staged);
+        if (staged !== undefined) this.state.history.set(historyKey, staged.index);
         this.head(scope).preferences = AgentExecutionValues.require(
           input.next.completion,
         ).preferences.map((item) => clone(ModelPreferenceSchema, item));
@@ -398,6 +404,7 @@ class MemoryAgentExecutionHandle<I, S extends Message> implements AgentExecution
         else this.state.pending.set(scope, this.head(scope));
       },
       restore: () => {
+        staged?.restore();
         if (prior === undefined) this.state.records.delete(key);
         else this.state.records.set(key, prior);
         if (priorHistory === undefined) this.state.history.delete(historyKey);
@@ -553,7 +560,7 @@ class MemoryAgentExecutionHandle<I, S extends Message> implements AgentExecution
   private stageHistory(
     key: AgentInvocationKey,
     entries: readonly AgentHistoryEntry[],
-  ): AgentHistoryIndex | undefined {
+  ): AgentHistoryUpdate | undefined {
     if (entries.length === 0) return undefined;
     const agentKey = AgentExecutionValues.require(key.scope).agentKey;
     return (this.state.history.get(agentKey) ?? new AgentHistoryIndex()).withEntries(entries);

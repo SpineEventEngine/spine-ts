@@ -381,13 +381,18 @@ describe("in-memory Agent execution", () => {
       "conversation-history",
       create(TimestampSchema, { seconds: 102n }),
     );
+    const earlier = conversation(
+      "batch-entry-before-conflict",
+      "conversation-history",
+      create(TimestampSchema, { seconds: 103n }),
+    );
     await expect(
       handle.update({
         key: required(source.key),
         token: "history-token",
         expectedRecordBytes: toBinary(AgentExecutionRecordSchema, next),
         next: conflicted,
-        historyEntries: [collision],
+        historyEntries: [earlier, collision],
       }),
     ).rejects.toThrow(/immutable/i);
     await expect(handle.read(required(source.key))).resolves.toMatchObject({

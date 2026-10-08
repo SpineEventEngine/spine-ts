@@ -14,6 +14,7 @@
 
 import { create } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { Time } from "@spine-event-engine/core";
 import {
   AgentAcceptedInvocationSchema,
   AgentExecutionRecordSchema,
@@ -89,7 +90,7 @@ describe("Agent indexed scheduler", () => {
       id: "durable-overflow",
       pending: () =>
         Promise.resolve({
-          records: [record("A"), record("B"), record("C")],
+          records: ["A", "B", "C"].filter((name) => !seen.includes(name)).map(record),
           hasMore: false,
         }),
       run: async (key) => {
@@ -190,6 +191,134 @@ describe("Agent indexed scheduler", () => {
       "scope-0",
       "scope-1",
     ]);
+  });
+
+  it("reuses a large discovery snapshot and promptly visits newly accepted work", async () => {
+    const visited: number[] = [];
+    let enumerations = 0;
+    const scopes: AgentScanScope[] = Array.from({ length: 10_000 }, (_, index) => ({
+      id: `tenant-${String(index)}`,
+      pending: () => {
+        visited.push(index);
+        return Promise.resolve({ records: [], hasMore: false });
+      },
+      run: () => Promise.resolve(),
+    }));
+    const scheduler = new AgentScheduler(
+      () => {
+        enumerations += 1;
+        return Promise.resolve(scopes);
+      },
+      new AgentExecutionCapacity(2, 0),
+      () => undefined,
+    );
+    await scheduler.turn();
+    await scheduler.turn();
+    expect(enumerations).toBe(1);
+    expect(visited).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+    scheduler.wake(scopes[9_999]);
+    await scheduler.turn();
+    expect(visited).toContain(9_999);
+    expect(visited).toContain(8);
+    await scheduler.close();
+  });
+
+  it("visits a new accepted tenant even when the retained catalog is empty", async () => {
+    let enumerations = 0;
+    let targeted = 0;
+    const scheduler = new AgentScheduler(
+      () => {
+        enumerations += 1;
+        return Promise.resolve([]);
+      },
+      new AgentExecutionCapacity(1, 0),
+      () => undefined,
+    );
+    await scheduler.turn();
+    scheduler.wake({
+      id: "new-tenant",
+      pending: () => {
+        targeted += 1;
+        return Promise.resolve({ records: [], hasMore: false });
+      },
+      run: () => Promise.resolve(),
+    });
+    await scheduler.turn();
+    expect(enumerations).toBe(1);
+    expect(targeted).toBe(1);
+    await scheduler.close();
+  });
+
+  it("continues catalog discovery with one execution slot and sustained accepted wakes", async () => {
+    const seen: string[] = [];
+    let releaseFirst: (() => void) | undefined;
+    const held = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const sweep: AgentScanScope = {
+      id: "recovery",
+      pending: () =>
+        Promise.resolve({
+          records: seen.includes("recovery") ? [] : [record("recovery")],
+          hasMore: false,
+        }),
+      run: () => {
+        seen.push("recovery");
+        return Promise.resolve();
+      },
+    };
+    const scheduler = new AgentScheduler(
+      () => Promise.resolve([sweep]),
+      new AgentExecutionCapacity(1, 0),
+      () => undefined,
+    );
+    const accepted = (index: number): AgentScanScope => ({
+      id: `accepted-${String(index)}`,
+      pending: () => Promise.resolve({ records: [record(String(index))], hasMore: false }),
+      run: async () => {
+        seen.push(`accepted-${String(index)}`);
+        if (index === 0) await held;
+      },
+    });
+    scheduler.wake(accepted(0));
+    await scheduler.turn();
+    expect(seen).toEqual(["accepted-0"]);
+    await scheduler.turn();
+    expect(seen).toEqual(["accepted-0"]);
+    releaseFirst?.();
+    await Promise.resolve();
+    await Promise.resolve();
+    scheduler.wake(accepted(1));
+    await scheduler.turn();
+    await Promise.resolve();
+    expect(seen).toContain("recovery");
+    await scheduler.close();
+  });
+
+  it("refreshes the catalog after provider time advances despite a retained sweep", async () => {
+    let now = create(TimestampSchema, { seconds: 100n });
+    const prior = Time.setProvider({ currentTime: () => now });
+    let enumerations = 0;
+    const scheduler = new AgentScheduler(
+      () => {
+        enumerations += 1;
+        return Promise.resolve([]);
+      },
+      new AgentExecutionCapacity(1, 0),
+      () => undefined,
+    );
+    try {
+      await scheduler.turn();
+      now = create(TimestampSchema, { seconds: 104n });
+      await scheduler.turn();
+      expect(enumerations).toBe(1);
+      now = create(TimestampSchema, { seconds: 105n });
+      await scheduler.turn();
+      expect(enumerations).toBe(2);
+    } finally {
+      await scheduler.close();
+      Time.setProvider(prior);
+    }
   });
 
   it("cancels an active execution and stops discovery before shutdown drains", async () => {

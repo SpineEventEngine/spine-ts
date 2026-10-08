@@ -2065,7 +2065,7 @@ interface RepositoryRuntime {
   readonly publishSavedCommand: (command: Command, plan: AgentSavedDispatchPlan) => Promise<void>;
   readonly publishAgentSystemEvent: (event: Event) => Promise<void>;
   readonly recordAcceptedSaved: (signal: Command | Event) => void;
-  readonly wakeAcceptedAgent: () => void;
+  readonly wakeAcceptedAgent: (repository: RepositoryView, tenantId: TenantId | undefined) => void;
 }
 
 type RepositoryHandlersOption =
@@ -11306,7 +11306,7 @@ const InboxReplay = {
         policyRevision: revisions.policy,
       }),
     );
-    runtime.wakeAcceptedAgent();
+    runtime.wakeAcceptedAgent(repository, tenantId);
   },
 
   /**

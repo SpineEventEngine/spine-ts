@@ -71,6 +71,7 @@ import {
 import { LocalEntityInbox } from "./entity-inbox.js";
 import { LocalProjectionInbox } from "./projection-handoff.js";
 import { TenantIndexes, type TenantIndex } from "./tenant-index.js";
+import { EffectiveTenants } from "./effective-tenant.js";
 import { AgentScheduler, type AgentScanScope } from "../agent/agent-scheduler.js";
 import { AgentExecutionCapacity } from "../agent/agent-execution-capacity.js";
 import {
@@ -264,7 +265,7 @@ interface RepositoryRegistration {
   /**
    * Wakes indexed Agent work discovery after an accepted Inbox handoff.
    */
-  readonly wakeAcceptedAgent: () => void;
+  readonly wakeAcceptedAgent: (repository: RepositoryView, tenantId: TenantId | undefined) => void;
 
   /**
    * Stand that stores read-side state for this context.
@@ -967,21 +968,33 @@ export class BoundedContext {
   ): Promise<readonly AgentScanScope[]> {
     const ids = await tenants.all();
     return ids.flatMap((id) =>
-      repositories.map((repository) => {
-        const tenantId = tenants.tenantMode === "single-tenant" ? undefined : id;
-        return {
-          id: JSON.stringify([
-            this.#snapshot.name.value,
-            String(TenantBoundary.from(id).key),
-            repository.stateFullTypeName,
-          ]),
-          pending: (after, count) =>
-            repositoryAccess.pendingAcceptedAgents(repository, tenantId, after, count),
-          run: (key, signal) =>
-            repositoryAccess.runAcceptedAgent(repository, tenantId, key, signal),
-        };
-      }),
+      repositories.map((repository) =>
+        this.#agentScope(repository, tenants.tenantMode === "single-tenant" ? undefined : id),
+      ),
     );
+  }
+
+  /**
+   * Builds one scan scope from an accepted handoff or a catalog sweep.
+   * @param repository Registered Agent repository.
+   * @param tenantId Accepted tenant, absent only in a single-tenant context.
+   * @returns The matching indexed provider scan scope.
+   */
+  #agentScope(repository: RepositoryView, tenantId: TenantId | undefined): AgentScanScope {
+    const effective = EffectiveTenants.current(
+      this.#snapshot.tenantMode === "multitenant",
+      tenantId,
+    );
+    return {
+      id: JSON.stringify([
+        this.#snapshot.name.value,
+        String(TenantBoundary.from(effective).key),
+        repository.stateFullTypeName,
+      ]),
+      pending: (after, count) =>
+        repositoryAccess.pendingAcceptedAgents(repository, tenantId, after, count),
+      run: (key, signal) => repositoryAccess.runAcceptedAgent(repository, tenantId, key, signal),
+    };
   }
 
   /**
@@ -1145,8 +1158,8 @@ export class BoundedContext {
       recordAcceptedSaved: (signal) => {
         this.#publisher.recordAcceptedSaved(signal);
       },
-      wakeAcceptedAgent: () => {
-        this.#agentScheduler?.wake();
+      wakeAcceptedAgent: (repository, tenantId) => {
+        this.#agentScheduler?.wake(this.#agentScope(repository, tenantId));
       },
     };
     return registration;

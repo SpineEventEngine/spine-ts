@@ -690,7 +690,17 @@ claim. Different instances can run concurrently within configured limits.
 Contexts using the same registry object share its capacity within the process.
 Signals beyond the bounded in-memory waiting queue remain durably pending.
 Waiting before a fresh execution starts precedes its deadline. Once execution
-starts, recovery continues with the saved deadline and counts.
+starts, recovery continues with the saved deadline and counts. The same deadline
+bounds an awaited application handler. Expiry or context shutdown ends that wait
+and prevents late handler results from changing Entity state or emitting signals;
+it cannot stop arbitrary application JavaScript or undo external effects.
+
+Newly accepted work supplies its repository and tenant to prompt discovery.
+Periodic discovery also visits scopes from the provider tenant catalog, which is
+read initially and refreshed after five seconds measured by `Time`. The catalog
+API returns the complete tenant list; that list is reused between refreshes.
+Each scheduler turn reads at most four indexed pending-work pages, with turns
+reserved for periodic discovery so new arrivals cannot indefinitely delay it.
 
 The signal's matching handlers share one Entity draft. Each handler can await
 `this.ai.invoke()` through the protected Spine facade. Calls in one handler must

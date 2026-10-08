@@ -2468,3 +2468,59 @@ gpt-6-sol/medium, no inherited conversation, memory or earlier findings. Review
 the complete feature against the same fixed base after the round 1 correction
 commit, using only normative requirements and source/tests/docs. Runtime
 metadata remains unavailable; validate the immutable dispatch profile.
+
+Round 2 completed independently at 697c802ee with two confirmed performance
+findings. Explicit Sol/medium dispatch and configured role match; runtime
+introspection is unavailable. The scheduler enumerates the entire tenant catalog
+and builds every tenant/repository scope each turn despite reading only four
+pages. Accepted work also lacks a direct tenant/repository wake hint. In-memory
+fenced history updates deserialize and reinsert the entire prior history for
+every append, causing quadratic cumulative work. Report:
+`/tmp/agent-standalone-round-2.md`. Source inspection confirms both paths.
+
+Correction assignment returns this complete batch to the existing server/history
+implementer, configured gpt-6-sol/medium. Limit recurring discovery allocation
+and route newly accepted work promptly without losing periodic restart discovery
+or fairness. Validate new history rows before an incremental atomic append,
+preserving immutable identity conflicts and all indexed history views. Tests
+must measure the relevant bounded work, not timing benchmarks alone. Preserve
+provider contracts where possible; escalate a necessary public/provider contract
+change before implementing it. Follow focused checks and narrow independent
+confirmation before round 3.
+
+Parent documentation follow-through: clarify awaited-handler deadline and late
+framework effects, and the scheduler's prompt admission path, periodic catalog
+refresh and four-page turn limit in the server reference. The existing provider
+catalog still returns the complete list; no fully paged catalog is claimed.
+
+Round 2 follow-up found one correction defect before closure: a scan with no
+free execution slot still toggled the reserved recovery turn. Repeating such
+busy scans between completed urgent tasks could let urgent arrivals repeatedly
+win the next slot. The existing implementer is preserving the reservation on
+no-progress scans and extending the held-task regression with an intervening
+full-capacity scan. All four tooling typechecks and deterministic API-doc,
+audience, runtime-Time, logging, dependency and readiness checks currently pass.
+
+Round 2 is closed after independent confirmation. Catalog snapshots are reused
+for five Time-provider seconds; known accepted scopes receive prompt visits,
+with recovery priority retained across scans that cannot visit a page. The
+provider catalog remains a full-list API at initial/periodic refresh. Incremental
+history preparation validates only new rows, preserving immutable identities,
+native completion restoration and newest-first reads. The ordinary append adds
+to the end of internal sorted arrays instead of shifting retained rows.
+
+The combined affected tests pass 64/64. The final busy-scan regression failed
+before its correction and passes afterwards; the reviewer independently reran
+all 10 scheduler tests successfully. Storage/server builds, root and all other
+tooling types, scoped lint/format, TSDoc, cleanup, documentation, dependency,
+Time and readiness checks pass. Narrow LCOV inspected in
+`/tmp/agent-round2-coverage/lcov.info` and
+`/tmp/agent-round2-followup-coverage/lcov.info`; full release coverage remains
+pending final convergence. Reports: `/tmp/agent-round-2-correction.md` and
+`/tmp/agent-round-2-followup.md`. No accepted finding remains in this round.
+
+Round 3 assignment: fresh standalone performance/reliability reviewer,
+explicit gpt-6-sol/medium, fixed original base through the upcoming round 2
+correction commit. No inherited history, memory, previous reports or findings.
+Review all changed feature paths against normative requirements and standards.
+Configured role/profile is the available metadata; no runtime introspection.

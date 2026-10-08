@@ -24,7 +24,30 @@ import {
 
 interface IndexedEntry {
   readonly indexKey: string;
+  readonly identity: string;
+  readonly category: "conversation" | "system" | "domain";
+  readonly conversation?: string;
   readonly bytes: Uint8Array;
+}
+
+/**
+ * A validated batch applied and restored within a fenced mutation.
+ */
+export interface AgentHistoryUpdate {
+  /**
+   * The retained index receiving the new rows.
+   */
+  readonly index: AgentHistoryIndex;
+
+  /**
+   * Adds the validated rows once.
+   */
+  apply(): void;
+
+  /**
+   * Removes only rows added by this batch.
+   */
+  restore(): void;
 }
 
 /**
@@ -42,16 +65,43 @@ export class AgentHistoryIndex {
   readonly #byIdentity = new Map<string, IndexedEntry>();
 
   /**
-   * Prepares new immutable entries without mutating the current index.
-   * @param entries Entries to add to a private copy.
-   * @returns Complete replacement index after validation.
+   * Validates and serializes only the new entries before a fenced mutation.
+   * @param entries Entries to append after the containing write is accepted.
+   * @returns A reversible batch without copying retained rows.
    */
-  withEntries(entries: readonly AgentHistoryEntry[]): AgentHistoryIndex {
-    const next = new AgentHistoryIndex();
-    for (const indexed of this.#all)
-      next.append(fromBinary(AgentHistoryEntrySchema, indexed.bytes));
-    for (const entry of entries) next.append(entry);
-    return next;
+  withEntries(entries: readonly AgentHistoryEntry[]): AgentHistoryUpdate {
+    const additions: IndexedEntry[] = [];
+    const pending = new Map<string, IndexedEntry>();
+    for (const entry of entries) {
+      const indexed = this.#indexed(entry);
+      const existing = pending.get(indexed.identity) ?? this.#byIdentity.get(indexed.identity);
+      if (existing !== undefined) {
+        if (!this.#sameBytes(existing.bytes, indexed.bytes))
+          throw new Error("Agent history record ID conflicts with immutable content.");
+        continue;
+      }
+      pending.set(indexed.identity, indexed);
+      additions.push(indexed);
+    }
+    let applied = false;
+    return {
+      index: this,
+      apply: () => {
+        if (applied) return;
+        try {
+          for (const indexed of additions) this.#appendIndexed(indexed);
+          applied = true;
+        } catch (error) {
+          for (const indexed of additions) this.#removeIndexed(indexed);
+          throw error;
+        }
+      },
+      restore: () => {
+        if (!applied) return;
+        for (const indexed of additions) this.#removeIndexed(indexed);
+        applied = false;
+      },
+    };
   }
 
   /**
@@ -60,26 +110,61 @@ export class AgentHistoryIndex {
    * @param entry Complete Proto history record.
    */
   append(entry: AgentHistoryEntry): void {
+    this.withEntries([entry]).apply();
+  }
+
+  /**
+   * Serializes one entry after checking its complete history identity.
+   * @param entry Complete history entry.
+   * @returns Immutable indexed row.
+   */
+  #indexed(entry: AgentHistoryEntry): IndexedEntry {
     const key = AgentHistoryKeys.fromEntry(entry);
     const indexKey = AgentHistoryKeys.indexValue(key);
     const bytes = toBinary(AgentHistoryEntrySchema, entry);
     const identity = `${key.category}:${key.recordId}`;
-    const existing = this.#byIdentity.get(identity);
-    if (existing !== undefined) {
-      if (!this.#sameBytes(existing.bytes, bytes))
-        throw new Error("Agent history record ID conflicts with immutable content.");
-      return;
-    }
-    const indexed = { indexKey, bytes };
-    this.#byIdentity.set(identity, indexed);
+    const conversation =
+      entry.item.case === "conversationRecord" ? entry.item.value.conversation?.value : undefined;
+    if (key.category === "conversation" && conversation === undefined)
+      throw new TypeError("Conversation history requires a ConversationId.");
+    return {
+      indexKey,
+      identity,
+      category: key.category,
+      ...(conversation === undefined ? {} : { conversation }),
+      bytes,
+    };
+  }
+
+  /**
+   * Adds one already validated immutable entry to its indexed views.
+   * @param indexed Serialized row to append.
+   */
+  #appendIndexed(indexed: IndexedEntry): void {
+    this.#byIdentity.set(indexed.identity, indexed);
     this.#insert(this.#all, indexed);
-    if (key.category === "system") this.#insert(this.#system, indexed);
-    if (key.category === "domain") this.#insert(this.#domain, indexed);
-    if (entry.item.case === "conversationRecord") {
-      const conversation = entry.item.value.conversation;
-      if (conversation === undefined)
-        throw new TypeError("Conversation history requires a ConversationId.");
-      this.#insert(this.#conversation(conversation.value), indexed);
+    if (indexed.category === "system") this.#insert(this.#system, indexed);
+    if (indexed.category === "domain") this.#insert(this.#domain, indexed);
+    if (indexed.conversation !== undefined)
+      this.#insert(this.#conversation(indexed.conversation), indexed);
+  }
+
+  /**
+   * Reverses only rows appended by a failed containing mutation.
+   * @param indexed Serialized row to remove.
+   */
+  #removeIndexed(indexed: IndexedEntry): void {
+    if (this.#byIdentity.get(indexed.identity) !== indexed) return;
+    this.#byIdentity.delete(indexed.identity);
+    this.#remove(this.#all, indexed);
+    if (indexed.category === "system") this.#remove(this.#system, indexed);
+    if (indexed.category === "domain") this.#remove(this.#domain, indexed);
+    if (indexed.conversation !== undefined) {
+      const records = this.#conversations.get(indexed.conversation);
+      if (records !== undefined) {
+        this.#remove(records, indexed);
+        if (records.length === 0) this.#conversations.delete(indexed.conversation);
+      }
     }
   }
 
@@ -100,11 +185,13 @@ export class AgentHistoryIndex {
   ): AgentHistoryPage {
     const records = this.#view(view);
     const start =
-      after === undefined ? 0 : this.#upperBound(records, AgentHistoryKeys.indexValue(after));
+      after === undefined
+        ? records.length - 1
+        : this.#firstNotOlder(records, AgentHistoryKeys.indexValue(after)) - 1;
     const entries: AgentHistoryEntry[] = [];
     let bytes = 0;
     let index = start;
-    while (index < records.length && entries.length < count) {
+    while (index >= 0 && entries.length < count) {
       const record = records[index];
       if (record === undefined) throw new Error("Agent history index changed during read.");
       if (record.bytes.length > maxBytes - bytes) {
@@ -114,9 +201,9 @@ export class AgentHistoryIndex {
       }
       entries.push(fromBinary(AgentHistoryEntrySchema, record.bytes));
       bytes += record.bytes.length;
-      index += 1;
+      index -= 1;
     }
-    return { entries: Object.freeze(entries), hasMore: index < records.length };
+    return { entries: Object.freeze(entries), hasMore: index >= 0 };
   }
 
   /**
@@ -147,20 +234,30 @@ export class AgentHistoryIndex {
    * Inserts one immutable record at its sorted position.
    */
   #insert(records: IndexedEntry[], entry: IndexedEntry): void {
-    records.splice(this.#upperBound(records, entry.indexKey), 0, entry);
+    records.splice(this.#firstNotOlder(records, entry.indexKey), 0, entry);
+  }
+
+  /**
+   * Removes one exact indexed row when its containing mutation restores.
+   * @param records Ordered view to update.
+   * @param entry Exact appended row.
+   */
+  #remove(records: IndexedEntry[], entry: IndexedEntry): void {
+    const index = records.indexOf(entry);
+    if (index >= 0) records.splice(index, 1);
   }
 
   /**
    * Finds the first record strictly after the complete key.
    */
-  #upperBound(records: readonly IndexedEntry[], key: string): number {
+  #firstNotOlder(records: readonly IndexedEntry[], key: string): number {
     let low = 0;
     let high = records.length;
     while (low < high) {
       const middle = Math.floor((low + high) / 2);
       const candidate = records[middle];
       if (candidate === undefined) throw new Error("Agent history index changed during search.");
-      if (candidate.indexKey <= key) low = middle + 1;
+      if (candidate.indexKey > key) low = middle + 1;
       else high = middle;
     }
     return low;

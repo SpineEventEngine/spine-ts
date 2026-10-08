@@ -19,6 +19,7 @@ import {
   type AgentInvocationKey,
 } from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
 import type { AgentPendingCursor, AgentPendingPage } from "@spine-event-engine/storage/provider";
+import { Time } from "@spine-event-engine/core";
 import { withoutDeliveryCommitFence } from "../repository/commit-fence.js";
 import { AgentExecutionCapacity } from "./agent-execution-capacity.js";
 
@@ -58,6 +59,14 @@ export class AgentScheduler {
 
   readonly #active = new Map<string, Promise<void>>();
 
+  readonly #urgent = new Map<string, AgentScanScope>();
+
+  #snapshot: readonly AgentScanScope[] = [];
+
+  #refreshAt = 0n;
+
+  #sweepFirst = false;
+
   #nextScope = 0;
 
   #timer: ReturnType<typeof setTimeout> | undefined;
@@ -87,9 +96,12 @@ export class AgentScheduler {
 
   /**
    * Schedules a prompt bounded turn without resetting the fixed-time sweep.
+   * @param scope Newly accepted repository and tenant, when available.
    */
-  wake(): void {
+  wake(scope?: AgentScanScope): void {
     if (this.#closed) return;
+    if (scope !== undefined && (this.#urgent.has(scope.id) || this.#urgent.size < 64))
+      this.#urgent.set(scope.id, scope);
     if (this.#timer !== undefined) clearTimeout(this.#timer);
     this.#timer = setTimeout(() => {
       this.#timer = undefined;
@@ -118,15 +130,67 @@ export class AgentScheduler {
   }
 
   async #scan(): Promise<void> {
-    const scopes = await this.scopes();
-    if (scopes.length === 0) return;
-    for (let pages = 0; pages < Math.min(4, scopes.length); pages += 1) {
-      if (this.#closed || this.capacity.full()) return;
+    const scopes = await this.#scopeSnapshot();
+    const sweepFirst = this.#sweepFirst;
+    const firstSweep = sweepFirst ? await this.#sweepPages(scopes, 1, 0) : 0;
+    let pages = firstSweep;
+    pages += await this.#urgentPages(3 - pages);
+    pages += await this.#sweepPages(scopes, 4 - pages, firstSweep);
+    if (pages > 0) this.#sweepFirst = !sweepFirst;
+  }
+
+  /**
+   * Visits a bounded set of accepted scopes ahead of catalog rotation.
+   * @param limit Maximum indexed pages to visit.
+   * @returns Number of pages visited.
+   */
+  async #urgentPages(limit: number): Promise<number> {
+    let pages = 0;
+    for (const [id, scope] of this.#urgent) {
+      if (pages === limit || this.#closed || this.capacity.full()) break;
+      this.#urgent.delete(id);
+      await this.#visit(scope);
+      pages += 1;
+    }
+    return pages;
+  }
+
+  /**
+   * Advances the periodic catalog sweep even under sustained accepted work.
+   * @param scopes Current catalog snapshot.
+   * @param limit Remaining page budget.
+   * @param alreadyVisited Scope pages visited earlier in this turn.
+   * @returns Number of pages visited.
+   */
+  async #sweepPages(
+    scopes: readonly AgentScanScope[],
+    limit: number,
+    alreadyVisited: number,
+  ): Promise<number> {
+    let pages = 0;
+    for (; pages < Math.min(limit, scopes.length - alreadyVisited); pages += 1) {
+      if (this.#closed || this.capacity.full()) break;
       const scope = scopes[this.#nextScope % scopes.length];
       this.#nextScope += 1;
-      if (scope === undefined) return;
+      if (scope === undefined) break;
       await this.#visit(scope);
     }
+    return pages;
+  }
+
+  /**
+   * Amortizes the provider's full tenant catalog across bounded page turns.
+   * @returns The current sweep snapshot, refreshed after five provider-time seconds.
+   */
+  async #scopeSnapshot(): Promise<readonly AgentScanScope[]> {
+    const now = Time.currentTime();
+    const current = now.seconds * 1_000_000_000n + BigInt(now.nanos);
+    if (current >= this.#refreshAt) {
+      this.#snapshot = await this.scopes();
+      this.#refreshAt = current + 5_000_000_000n;
+      this.#nextScope %= Math.max(1, this.#snapshot.length);
+    }
+    return this.#snapshot;
   }
 
   async #visit(scope: AgentScanScope): Promise<void> {
@@ -182,6 +246,7 @@ export class AgentScheduler {
     this.#controller.abort();
     if (this.#timer !== undefined) clearTimeout(this.#timer);
     this.#timer = undefined;
+    this.#urgent.clear();
   }
 
   /**
