@@ -18,7 +18,10 @@ import { AiModel, AiRegistry, ModelRef } from "@spine-event-engine/ai";
 import { createBackendRegistration } from "@spine-event-engine/ai/spi/adapter";
 import { AnyMessages, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import { Time } from "@spine-event-engine/core/time";
-import { AgentInvocationTerminatedSchema } from "@spine-event-engine/proto/agent";
+import {
+  AgentInvocationTerminatedSchema,
+  ConversationIdSchema,
+} from "@spine-event-engine/proto/agent";
 import {
   ActorContextSchema,
   CommandContextSchema,
@@ -44,6 +47,7 @@ import { Agent } from "../../src/entity/entity.js";
 import { BoundedContext } from "../../src/context/bounded-context.js";
 import { Repository } from "../../src/repository/repository.js";
 import { repositoryAccess } from "../../src/repository/repository.js";
+import { observeProducedSignals } from "../../src/testing/index.js";
 import { EntityHandlers, HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
 import { createMessage } from "../delivery/inbox-message-fixture.js";
 import {
@@ -60,6 +64,7 @@ import {
 import {
   ProposedSupportReplySchema,
   SupportTicketFactsSchema,
+  SupportTicketNumberSchema,
 } from "../../test-fixtures/generated/entity-metadata/support_ai_types_pb.js";
 import {
   SupportReplyDraftedSchema,
@@ -142,6 +147,52 @@ class CommandingSupportAgent extends Agent<
   }
 }
 
+class WaitingSupportAgent extends Agent<SupportReplyAgentId, typeof SupportReplyAgentStateSchema> {
+  static entered: (() => void) | undefined;
+  static gate: Promise<void> | undefined;
+  static invokeAfterWait = false;
+
+  async draft(command: DraftSupportReply): Promise<SupportReplyDrafted> {
+    WaitingSupportAgent.entered?.();
+    if (command.question === "Wait for service") await WaitingSupportAgent.gate;
+    if (command.question === "Wait for service" && WaitingSupportAgent.invokeAfterWait)
+      await this.ai.invoke(proposal, {
+        call: "draft",
+        conversation: create(ConversationIdSchema, { value: "late-support" }),
+        input: create(SupportTicketFactsSchema, {
+          ticketNumber: create(SupportTicketNumberSchema, { value: this.id.ticketNumber }),
+          customerQuestion: command.question,
+        }),
+      });
+    this.update((state) => Object.assign(state, { id: this.id, proposedReply: "Ready" }));
+    return create(SupportReplyDraftedSchema, { agent: this.id, reply: "Ready" });
+  }
+}
+
+function waitingRepository(withModel = false) {
+  return new Repository({
+    entityType: WaitingSupportAgent,
+    schema: SupportReplyAgentStateSchema,
+    handlers: HandlerMetadataValues.defineArity(
+      WaitingSupportAgent,
+      SupportReplyAgentStateSchema,
+      (builder) => [builder.assign(DraftSupportReplySchema, "draft")],
+      [
+        {
+          kind: "command-assignment",
+          methodName: "draft",
+          parameterCount: 1,
+          origin: "domestic",
+          outcomes: { returned: [SupportReplyDraftedSchema], thrown: [] },
+        },
+      ],
+    ),
+    agentCodeRevision: "waiting-support-v1",
+    ai: { models: withModel ? [proposal] : [] },
+    events: [SupportReplyDraftedSchema],
+  });
+}
+
 class RecordingExecutionFactory extends InMemoryStorageFactory {
   failAdmission = false;
   failUpdateOnce = false;
@@ -189,15 +240,15 @@ class RecordingExecutionFactory extends InMemoryStorageFactory {
   }
 }
 
-const ai = () =>
+const ai = (defaultModel?: ModelRef, deadlineMs = 1_000) =>
   AiRegistry.create({
-    defaultModels: {},
+    defaultModels: defaultModel === undefined ? {} : { generation: defaultModel },
     invocationLimits: {
       operations: 1,
       modelRequests: 1,
       toolCalls: 0,
       recordedReads: 1,
-      deadlineMs: 1000,
+      deadlineMs,
       totalInputBytes: 4000,
       totalOutputBytes: 4000,
       maxRecoveryBytes: 4000,
@@ -233,6 +284,217 @@ const proposal = AiModel.define({
 });
 
 describe("Agent registration readiness", () => {
+  it("expires a hanging handler and fences a late draft before the next signal", async () => {
+    const factory = new RecordingExecutionFactory();
+    factory.suppressSchedulerDiscovery = true;
+    const ref = ModelRef.of("waiting-support", "v1");
+    const registry = ai(ref);
+    let physicalCalls = 0;
+    registry.register(
+      createBackendRegistration({
+        ref,
+        kind: "generation",
+        supports: () => true,
+        resolveIdentity: () => ({
+          provider: "fixture",
+          account: "support",
+          endpoint: "memory",
+          model: "waiting-support",
+        }),
+        authorizeUse: () => true,
+        connect: (_scope, identity) => ({ model: {}, identity }),
+        execute: () => {
+          physicalCalls += 1;
+          return Promise.reject(new Error("Late handler must not dispatch a model request."));
+        },
+      }),
+    );
+    let entered: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let release: (() => void) | undefined;
+    WaitingSupportAgent.gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    WaitingSupportAgent.entered = entered;
+    WaitingSupportAgent.invokeAfterWait = true;
+    const configured = waitingRepository(true);
+    const context = BoundedContext.singleTenant("WaitingSupport")
+      .withAi(registry)
+      .persistSystemEvents()
+      .withStorageFactory(factory)
+      .add(configured)
+      .build();
+    const emitted: string[] = [];
+    const observation = observeProducedSignals(context, {
+      onEvent: (event) => {
+        if (event.message?.typeUrl === TypeUrls.derive(SupportReplyDraftedSchema))
+          emitted.push(event.id?.value ?? "");
+      },
+    });
+    try {
+      const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-waiting" });
+      const replay = async (question: string, suffix: string, version: bigint) => {
+        const command = SignalEnvelopes.command({
+          schema: DraftSupportReplySchema,
+          message: create(DraftSupportReplySchema, { agent: id, question }),
+          context: create(CommandContextSchema, {
+            actorContext: create(ActorContextSchema, {
+              actor: create(UserIdSchema, { value: "support-user" }),
+            }),
+          }),
+        });
+        await repositoryAccess.entityInboxTarget(configured)?.replay({
+          ...createMessage(suffix, command.id?.uuid ?? "", version),
+          inboxId: {
+            targetId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+            targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
+          },
+          signal: AnyMessages.pack(CommandSchema, command, { validate: false }),
+          label: "HANDLE_COMMAND",
+          status: "TO_DELIVER",
+        });
+        const key = factory.admittedKeys.at(-1);
+        if (key === undefined) throw new Error("Expected accepted Agent signal.");
+        return key;
+      };
+      const first = await replay("Wait for service", "waiting-first", 1n);
+      const running = repositoryAccess.runAcceptedAgent(configured, undefined, first);
+      await started;
+      await expect(running).resolves.toBeUndefined();
+      expect((await factory.readAccepted?.(first))?.status).toBe(
+        AgentInvocationStatus.AGENT_INVOCATION_TERMINATED,
+      );
+      expect(await context.stand().read(SupportReplyAgentStateSchema, id)).toBeUndefined();
+      expect(emitted).toEqual([]);
+      release?.();
+      await Promise.resolve();
+      expect(await context.stand().read(SupportReplyAgentStateSchema, id)).toBeUndefined();
+      expect(emitted).toEqual([]);
+      expect(physicalCalls).toBe(0);
+      const second = await replay("Continue", "waiting-second", 2n);
+      await repositoryAccess.runAcceptedAgent(configured, undefined, second);
+      expect((await context.stand().read(SupportReplyAgentStateSchema, id))?.proposedReply).toBe(
+        "Ready",
+      );
+      expect(emitted).toHaveLength(1);
+      expect(physicalCalls).toBe(0);
+    } finally {
+      observation.close();
+      WaitingSupportAgent.entered = undefined;
+      WaitingSupportAgent.gate = undefined;
+      WaitingSupportAgent.invokeAfterWait = false;
+      release?.();
+      await context.close();
+    }
+  }, 10_000);
+
+  it("rejects handler output when saved Time passes before its promise settles", async () => {
+    let now = create(TimestampSchema, { seconds: 1_782_979_200n });
+    const previousTime = Time.setProvider({ currentTime: () => now });
+    const factory = new RecordingExecutionFactory();
+    factory.suppressSchedulerDiscovery = true;
+    let entered: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let release: (() => void) | undefined;
+    WaitingSupportAgent.entered = entered;
+    WaitingSupportAgent.gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const configured = waitingRepository();
+    const context = BoundedContext.singleTenant("LateHandlerResult")
+      .withAi(ai())
+      .persistSystemEvents()
+      .withStorageFactory(factory)
+      .add(configured)
+      .build();
+    try {
+      const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-late-result" });
+      const command = SignalEnvelopes.command({
+        schema: DraftSupportReplySchema,
+        message: create(DraftSupportReplySchema, { agent: id, question: "Wait for service" }),
+        context: create(CommandContextSchema, {
+          actorContext: create(ActorContextSchema, {
+            actor: create(UserIdSchema, { value: "support-user" }),
+          }),
+        }),
+      });
+      await repositoryAccess.entityInboxTarget(configured)?.replay({
+        ...createMessage("late-handler-result", command.id?.uuid ?? "", 1n),
+        inboxId: {
+          targetId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+          targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
+        },
+        signal: AnyMessages.pack(CommandSchema, command, { validate: false }),
+        label: "HANDLE_COMMAND",
+        status: "TO_DELIVER",
+      });
+      const key = factory.admittedKeys[0];
+      if (key === undefined) throw new Error("Expected accepted Agent signal.");
+      const running = repositoryAccess.runAcceptedAgent(configured, undefined, key);
+      await started;
+      now = create(TimestampSchema, { seconds: now.seconds + 2n });
+      release?.();
+      await running;
+      expect((await factory.readAccepted?.(key))?.status).toBe(
+        AgentInvocationStatus.AGENT_INVOCATION_TERMINATED,
+      );
+      expect(await context.stand().read(SupportReplyAgentStateSchema, id)).toBeUndefined();
+    } finally {
+      WaitingSupportAgent.entered = undefined;
+      WaitingSupportAgent.gate = undefined;
+      release?.();
+      await context.close();
+      Time.setProvider(previousTime);
+    }
+  });
+
+  it("closes an Agent context while an application handler ignores cancellation", async () => {
+    let entered: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let rejectLate: ((reason?: unknown) => void) | undefined;
+    WaitingSupportAgent.entered = entered;
+    WaitingSupportAgent.gate = new Promise<void>((_resolve, reject) => {
+      rejectLate = reject;
+    });
+    const context = BoundedContext.singleTenant("WaitingShutdown")
+      .withAi(ai(undefined, 5_000))
+      .persistSystemEvents()
+      .withStorageFactory(new InMemoryStorageFactory())
+      .add(waitingRepository())
+      .build();
+    try {
+      const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-shutdown" });
+      await context.commandBus().post(
+        SignalEnvelopes.command({
+          schema: DraftSupportReplySchema,
+          message: create(DraftSupportReplySchema, { agent: id, question: "Wait for service" }),
+          context: create(CommandContextSchema, {
+            actorContext: create(ActorContextSchema, {
+              actor: create(UserIdSchema, { value: "support-user" }),
+            }),
+          }),
+        }),
+      );
+      await started;
+      const beforeClose = Date.now();
+      await context.close();
+      expect(Date.now() - beforeClose).toBeLessThan(2_000);
+      rejectLate?.(new Error("Application service failed after context shutdown."));
+      await Promise.resolve();
+    } finally {
+      rejectLate?.(new Error("Application service cancelled by test cleanup."));
+      WaitingSupportAgent.entered = undefined;
+      WaitingSupportAgent.gate = undefined;
+      await context.close();
+    }
+  }, 10_000);
+
   it("selects and saves a credential-free deployment only when execution starts", async () => {
     const factory = new RecordingExecutionFactory();
     let resolved = 0;

@@ -5517,7 +5517,12 @@ const AgentExecutionRunner = {
       facade,
     );
     try {
-      const signals = await this.invokeHandler(entity, accepted, handler);
+      const deadlineEpochMs = this.handlerDeadline(session);
+      const signals = await this.awaitHandler(
+        this.invokeHandler(entity, accepted, handler),
+        session.signal,
+        deadlineEpochMs,
+      );
       reads.finish();
       facade.finish();
       return signals;
@@ -5650,6 +5655,59 @@ const AgentExecutionRunner = {
           : [produced];
     RepositoryHandlers.requireDeclaredOutputs(handler.handler, signals);
     return signals;
+  },
+
+  /**
+   * Reads the original invocation deadline before starting an application callback.
+   * @param session Current fenced execution session.
+   * @returns Absolute saved deadline in milliseconds.
+   */
+  handlerDeadline(session: AgentExecutionSession): number {
+    const record = session.record();
+    const deadline = record.started?.deadline;
+    if (deadline === undefined) throw new Error("Agent handler requires its saved deadline.");
+    if (session.signal.aborted || this.deadlineExpired(record))
+      throw new Error("Agent handler deadline or claim ended.");
+    return Number(deadline.seconds) * 1_000 + Math.floor(deadline.nanos / 1_000_000);
+  },
+
+  /**
+   * Awaits an application handler within its saved deadline and current claim.
+   * @typeParam Value Handler result.
+   * @param work Already-started generated handler invocation.
+   * @param signal Session cancellation when claim authority ends.
+   * @param deadlineEpochMs Original saved invocation deadline.
+   * @returns Handler result only while its claim and deadline remain valid.
+   */
+  async awaitHandler<Value>(
+    work: Promise<Value>,
+    signal: AbortSignal,
+    deadlineEpochMs: number,
+  ): Promise<Value> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let abort: () => void = () => undefined;
+    const cutoff = new Promise<never>((_resolve, reject) => {
+      abort = () => {
+        reject(new Error("Agent handler claim ended."));
+      };
+      const tick = () => {
+        const remaining = deadlineEpochMs - Time.currentTimeMillis();
+        if (remaining <= 0) reject(new Error("Agent handler deadline expired."));
+        else timer = setTimeout(tick, Math.min(remaining, 2_147_483_647));
+      };
+      signal.addEventListener("abort", abort, { once: true });
+      if (signal.aborted) abort();
+      else tick();
+    });
+    try {
+      const result = await Promise.race([work, cutoff]);
+      if (signal.aborted || Time.currentTimeMillis() >= deadlineEpochMs)
+        throw new Error("Agent handler deadline or claim ended.");
+      return result;
+    } finally {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", abort);
+    }
   },
 };
 

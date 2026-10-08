@@ -2402,3 +2402,69 @@ The branch is ready for human review. GitHub Build runs only on pull requests
 and therefore awaits a human-created PR; none was created or merged. General
 physical Entity deletion remains deferred to its separate task. The next step
 is human review and, if requested, PR preparation.
+
+## Three additional independent review rounds — 8 October 2026
+
+The user requests three consecutive standalone review-and-fix cycles over the
+Agent changeset, each using a fresh subagent with no memory use. Continue the
+existing feature worktree and branch; preserve fixed comparison base
+`658da1cdddcb8fd40f9205b1c200abc3a58dd62e`. Initial reviewed head is
+`e6ade544ce345a498582dee94a4322461c1be542`. This is a high-risk feature review
+continuation, not a new architecture wave. Estimate: 1–2 hours for the three
+reviews, corrections, verification, and immediate feature-branch pushes.
+
+Acceptance: each reviewer independently examines the current branch against
+the approved requirements and repository standards; each round's confirmed
+findings are fixed and verified before the next fresh reviewer starts. Reviewers
+receive no conversation history, memory files, prior review reports, or prior
+finding summaries. They may read the normative specification, the human
+requirements section and source/tests/docs. No subagent delegation is allowed.
+
+Desktop supports the required explicit model/reasoning dispatch. Each review
+uses the existing performance/reliability reviewer role, explicit gpt-6-sol
+and medium reasoning, with a fresh fork containing no inherited turns. The
+user-requested whole-feature examination includes changed public contracts,
+DDD semantics, persistence, bounded execution, API/documentation claims and
+test fidelity. Runtime profile introspection is unavailable; configured profile
+metadata will be recorded on acceptance. Correctness findings return to an
+existing implementation context where available. The final release profile
+runs after all correction rounds converge; focused checks precede each review.
+
+Round 1 assignment: fresh standalone reviewer, performance/reliability role,
+explicit gpt-6-sol/medium, fixed base above through e6ade544c. Scope is the
+whole Agent changeset, including affected callers and declared behavior.
+
+Round 1 review completed independently at e6ade544c. Configured Sol/medium
+profile was explicit and accepted; runtime introspection is unavailable. One P2
+finding is confirmed by source inspection: the Agent runner directly awaits
+a handler promise, allowing a non-cooperative application await to outlive the
+persisted deadline and block context shutdown while lease renewal continues.
+Report: `/tmp/agent-standalone-round-1.md`. No other confirmed finding.
+
+Correction assignment: existing server implementation context, explicit
+gpt-6-sol/medium retained, responsible for the bounded handler wait, cancellation
+and late-completion fence plus relevant regression tests and narrow API docs.
+Preserve the original persisted deadline and saved-result semantics. Prove
+never-settling and late-resolving handlers do not block shutdown or commit state
+or signals after timeout/cancellation, and later accepted work can proceed.
+No new public contract or architecture pass is planned. Verify this correction
+and close the finding before a fresh round 2 reviewer is dispatched.
+
+Round 1 correction and follow-up accepted. The runner bounds application handler
+completion by its original saved deadline and current session cancellation,
+rechecks authority after settlement, and releases framework bindings and lease
+renewal when the wait ends. Late application code cannot commit state or signals
+or start another facade model call. Arbitrary application JavaScript itself is
+not forcibly stopped. Focused tests pass 21/21; the registration suite passes
+19/19 independently in reviewer follow-up. Server build, root tooling types,
+scoped ESLint/formatting, TSDoc, cleanup and diff checks pass. Focused coverage
+hits 23/24 new helper executable lines, including expiry, cancellation, cleanup
+and late-result rejection. Correction report:
+`/tmp/agent-round-1-correction.md`; independent disposition:
+`/tmp/agent-round-1-followup.md`. No remaining finding in this round.
+
+Round 2 assignment: a new standalone performance/reliability reviewer, explicit
+gpt-6-sol/medium, no inherited conversation, memory or earlier findings. Review
+the complete feature against the same fixed base after the round 1 correction
+commit, using only normative requirements and source/tests/docs. Runtime
+metadata remains unavailable; validate the immutable dispatch profile.
