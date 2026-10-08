@@ -3167,3 +3167,20 @@ explicit configured `gpt-6-luna` / `low`, no source edits/memory/children. Run o
 full verify:release after this pushed checkpoint, then full/prod audits, package
 preparation with 21 external consumer checks, and offline publication trial.
 Save report/logs under /tmp; stop on failures. No PR or package publication.
+
+Both further review rounds are accepted at code checkpoint
+`5c3d76a9bd01693d098dc475013d7bb85e6523dc`. All confirmed findings are fixed and
+independently closed. The final mechanical function used the explicitly recorded
+Luna/low profile; runtime introspection unavailable. Full release profile passes:
+366 files and 5,944 tests passed, one file/test skipped. Coverage: statements
+93.78% (32,019/34,142), branches 90.01% (19,021/21,131), functions 95.62%
+(8,112/8,483), lines 95.55% (29,396/30,763). Full and production audits found
+no known vulnerabilities. All 21 archives passed strict external consumer
+installation and every offline publication trial scenario. Source worktree was
+clean. Report `/tmp/anthropic-further-verification.md` retains exact commands
+and log paths. No threshold change, paid provider request, PR or publication.
+
+The final record-only update receives formatting, audience, readiness and diff
+checks before push, then GitHub Security runs on that final head. Report its
+result to the human without a self-referential record commit. Physical Entity
+deletion remains the separate deferred task.

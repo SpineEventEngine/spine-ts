@@ -16,15 +16,17 @@ common workspace version under D-0115.
 
 Current work: [Signal-driven Agent entities](planning/agent-entities.md),
 on `agent-entities`, based on official master `658da1cdd`. Anthropic model
-support is included in the first snapshot. Three additional human-requested
-Anthropic review-and-fix rounds are complete, each with a fresh reviewer and no
-inherited conversation or memory. The signed-thinking continuation defect is
+support is included in the first snapshot. The three additional Anthropic
+review-and-fix rounds and the two further requested rounds are complete, each
+with a fresh reviewer and no inherited conversation or memory. The signed-thinking continuation defect is
 fixed: ordered provider content is recorded and restored for tool and corrective
 requests, including replay (D-0131). All accepted findings, including the
 additional replay coverage and function-size corrections, are closed. Final
-security and specialist review dispositions are complete.
+security and specialist review dispositions are complete. Further corrections
+preserve measured bytes for bounded failed responses and keep interrupted tool
+input consistent across recorded projections and replay.
 
-Full release verification passes at code checkpoint `c131c59e8`: 5,941 tests
+Full release verification passes at code checkpoint `5c3d76a9b`: 5,944 tests
 passed and one skipped. Coverage: statements 93.78%, branches 90.01%, functions
 95.62%, lines 95.55%. Both dependency audits pass. All 21 package archives pass
 strict external consumer checks and the offline publication trial. The branch
