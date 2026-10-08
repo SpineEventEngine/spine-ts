@@ -447,62 +447,69 @@ describe("Vercel connection registration", () => {
     expect(fixture.runtime.recordFailure).not.toHaveBeenCalled();
   });
 
-  it("replays saved tool proposals before the next physical model attempt", async () => {
-    const fixture = generationFixture(
-      [
+  it.each(["text", "structured"] as const)(
+    "replays saved %s tool output before the next physical model attempt",
+    async (format) => {
+      const fixture = generationFixture(
         [
-          { type: "text-delta", id: "t", delta: '{"replyText":"Done"}' },
-          {
-            type: "finish",
-            finishReason: { unified: "stop", raw: "stop" },
-            usage: sdkUsage(2, 1),
-          },
-        ],
-      ],
-      2,
-      true,
-    );
-    vi.mocked(fixture.runtime.beginAttempt)
-      .mockResolvedValueOnce({
-        kind: "replay",
-        id: "saved-proposal",
-        response: create(GenerationResponseSchema, {
-          outcome: AiOutcome.TOOL_REQUESTED,
-          toolCalls: [
+          [
+            { type: "text-delta", id: "t", delta: '{"replyText":"Done"}' },
             {
-              providerCallId: "provider-saved",
-              toolName: "tool_0",
-              argumentsJson: '{"ticket":"T-1"}',
+              type: "finish",
+              finishReason: { unified: "stop", raw: "stop" },
+              usage: sdkUsage(2, 1),
             },
           ],
+        ],
+        2,
+        true,
+      );
+      vi.mocked(fixture.runtime.beginAttempt)
+        .mockResolvedValueOnce({
+          kind: "replay",
+          id: "saved-proposal",
+          response: create(GenerationResponseSchema, {
+            outcome: AiOutcome.TOOL_REQUESTED,
+            toolCalls: [
+              {
+                providerCallId: "provider-saved",
+                toolName: "tool_0",
+                argumentsJson: '{"ticket":"T-1"}',
+              },
+            ],
+          }),
+        })
+        .mockResolvedValueOnce({
+          id: "fresh-after-tool",
+          maxInputBytes: 2000,
+          maxOutputBytes: 2000,
+          deadlineEpochMs: 1000,
+          signal: fixture.runtime.signal,
+        });
+      vi.mocked(fixture.runtime.callTool).mockResolvedValue(
+        create(ToolResponseSchema, {
+          call: create(AiToolCallIdSchema, { value: "spine-saved" }),
+          outcome: AiOutcome.ADMITTED,
+          ...(format === "text"
+            ? { text: ["Ticket found"] }
+            : { structuredJson: '{"ticketNumber":"T-1"}' }),
         }),
-      })
-      .mockResolvedValueOnce({
-        id: "fresh-after-tool",
-        maxInputBytes: 2000,
-        maxOutputBytes: 2000,
-        deadlineEpochMs: 1000,
-        signal: fixture.runtime.signal,
-      });
-    vi.mocked(fixture.runtime.callTool).mockResolvedValue(
-      create(ToolResponseSchema, {
-        call: create(AiToolCallIdSchema, { value: "spine-saved" }),
-        outcome: AiOutcome.ADMITTED,
-        text: ["Ticket found"],
-      }),
-    );
-    const output = create(ProposedSupportReplySchema, { replyText: "Done" });
-    vi.mocked(fixture.runtime.admitGeneration).mockReturnValue({ ok: true, value: output });
-    await expect(fixture.run()).resolves.toMatchObject({ ok: true, value: output });
-    expect(fixture.network).toHaveBeenCalledTimes(1);
-    expect(fixture.runtime.callTool).toHaveBeenCalledWith(
-      expect.objectContaining({
-        ticketId: "saved-proposal",
-        providerCallId: "provider-saved",
-      }),
-    );
-    expect(fixture.runtime.finishAttempt).toHaveBeenCalledTimes(1);
-  });
+      );
+      const output = create(ProposedSupportReplySchema, { replyText: "Done" });
+      vi.mocked(fixture.runtime.admitGeneration).mockReturnValue({ ok: true, value: output });
+      await expect(fixture.run()).resolves.toMatchObject({ ok: true, value: output });
+      expect(fixture.network).toHaveBeenCalledTimes(1);
+      expect(fixture.runtime.callTool).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ticketId: "saved-proposal",
+          providerCallId: "provider-saved",
+        }),
+      );
+      expect(fixture.runtime.finishAttempt).toHaveBeenCalledTimes(1);
+      if (format === "structured")
+        expect(JSON.stringify(fixture.providerCalls[0]?.prompt)).toContain("ticketNumber");
+    },
+  );
 
   it.each([
     { providerCallId: "", toolName: "tool_0", argumentsJson: "{}" },
@@ -1145,6 +1152,44 @@ describe("Vercel connection registration", () => {
     },
   );
 
+  it.each(["input", "output"] as const)(
+    "preserves only the reported %s token count in a generation record",
+    async (known) => {
+      const fixture = generationFixture([
+        [
+          { type: "text-delta", id: "t", delta: '{"replyText":"Done"}' },
+          {
+            type: "finish",
+            finishReason: { unified: "stop", raw: "stop" },
+            usage: {
+              inputTokens: {
+                ...unknownUsage.inputTokens,
+                total: known === "input" ? 3 : undefined,
+              },
+              outputTokens: {
+                ...unknownUsage.outputTokens,
+                total: known === "output" ? 2 : undefined,
+              },
+            },
+          },
+        ],
+      ]);
+      vi.mocked(fixture.runtime.admitGeneration).mockReturnValue({
+        ok: true,
+        value: create(ProposedSupportReplySchema, { replyText: "Done" }),
+      });
+      expect(await fixture.run()).toMatchObject({ ok: true });
+      const usage = vi.mocked(fixture.runtime.finishAttempt).mock.calls[0]?.[0].response.usage;
+      if (known === "input") {
+        expect(usage?.inputTokens?.value).toBe(3n);
+        expect(usage?.outputTokens).toBeUndefined();
+      } else {
+        expect(usage?.inputTokens).toBeUndefined();
+        expect(usage?.outputTokens?.value).toBe(2n);
+      }
+    },
+  );
+
   it("fails closed when admission rejects output without correction feedback", async () => {
     const fixture = generationFixture([
       [
@@ -1209,6 +1254,27 @@ describe("Vercel connection registration", () => {
         usage: { inputTokens: { value: 5n } },
       },
     });
+  });
+
+  it("journals a provider stream error without exposing the provider exception", async () => {
+    const fixture = generationFixture([
+      [
+        { type: "text-delta", id: "t", delta: '{"replyText":"partial' },
+        { type: "error", error: new Error("private provider response") },
+      ],
+    ]);
+    expect(await fixture.run()).toMatchObject({
+      ok: false,
+      failure: { code: "UNAVAILABLE", retryableByNewSignal: true },
+    });
+    expect(fixture.runtime.admitGeneration).not.toHaveBeenCalled();
+    expect(vi.mocked(fixture.runtime.finishAttempt).mock.calls[0]?.[0]).toMatchObject({
+      response: { outcome: AiOutcome.FAILED, rawOutput: '{"replyText":"partial' },
+    });
+    expect(JSON.stringify(vi.mocked(fixture.runtime.finishAttempt).mock.calls)).not.toContain(
+      "private provider response",
+    );
+    expect(fixture.network).toHaveBeenCalledOnce();
   });
 
   it("journals a parsed output byte limit before admitting text", async () => {

@@ -151,6 +151,12 @@ describe("MySQL Agent execution provider boundary", () => {
         { requireTransaction: true },
       );
       rows.invocation.readLocked.mockImplementation(() => Promise.resolve(admitted));
+      rows.invocation.read.mockImplementation(() => Promise.resolve(admitted));
+      const detached = required(await storage.read(required(additional.key)));
+      detached.status = AgentInvocationStatus.AGENT_INVOCATION_TERMINATED;
+      expect((await storage.read(required(additional.key)))?.status).toBe(
+        AgentInvocationStatus.AGENT_INVOCATION_ACCEPTED,
+      );
       const changed = accepted("mysql-admission-source");
       required(changed.handlers[0]).methodName = "different-handler";
       await expect(storage.admit(changed)).rejects.toThrow(/immutable/i);
@@ -164,11 +170,18 @@ describe("MySQL Agent execution provider boundary", () => {
       rows.invocation.historyPage.mockImplementation((_sql, values: unknown[]) =>
         Promise.resolve(values[3] === "1" ? [admitted] : []),
       );
-      const claimed = await storage.claim(
-        required(additional.key),
-        "mysql-boundary-token",
-        create(TimestampSchema, { seconds: 4_000_000_000n }),
+      const expiry = create(TimestampSchema, { seconds: 4_000_000_000n });
+      await expect(storage.claim(required(additional.key), "", expiry)).rejects.toThrow(
+        /future expiry and token/i,
       );
+      await expect(
+        storage.claim(
+          required(additional.key),
+          "stale-token",
+          create(TimestampSchema, { seconds: 1n }),
+        ),
+      ).rejects.toThrow(/future expiry and token/i);
+      const claimed = await storage.claim(required(additional.key), "mysql-boundary-token", expiry);
       expect(claimed?.record).toMatchObject({
         claimToken: "mysql-boundary-token",
         status: AgentInvocationStatus.AGENT_INVOCATION_ACTIVE,
@@ -176,6 +189,31 @@ describe("MySQL Agent execution provider boundary", () => {
       expect(invocationWrite).toHaveBeenCalledWith(
         expect.objectContaining({ claimToken: "mysql-boundary-token" }),
       );
+      rows.invocation.readLocked.mockImplementation(() =>
+        Promise.resolve(required(claimed).record),
+      );
+      rows.head.readLocked.mockImplementation(() => Promise.resolve(required(headWrites.at(-1))));
+      const writesBeforeRenew = invocationWrite.mock.calls.length;
+      expect(
+        await storage.renew(
+          required(additional.key),
+          "wrong-token",
+          create(TimestampSchema, { seconds: 4_000_000_001n }),
+        ),
+      ).toBe(false);
+      expect(await storage.renew(required(additional.key), "mysql-boundary-token", expiry)).toBe(
+        false,
+      );
+      expect(invocationWrite).toHaveBeenCalledTimes(writesBeforeRenew);
+      await expect(
+        storage.markDelivered(
+          required(additional.key),
+          "mysql-boundary-token",
+          toBinary(AgentExecutionRecordSchema, required(claimed).record),
+          [],
+        ),
+      ).rejects.toThrow(/no completed output/i);
+      expect(invocationWrite).toHaveBeenCalledTimes(writesBeforeRenew);
       const next = clone(AgentExecutionRecordSchema, required(claimed).record);
       next.counters = create(AgentInvocationCountersSchema, { operations: 1n });
       const writesBeforeReject = invocationWrite.mock.calls.length;
@@ -220,5 +258,6 @@ describe("MySQL Agent execution provider boundary", () => {
     } finally {
       storage.close();
     }
+    await expect(storage.read(required(key))).rejects.toThrow(/closed/i);
   });
 });

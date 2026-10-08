@@ -57,6 +57,24 @@ const model = AiModel.define({
   },
 });
 
+const unregisteredModel = AiModel.define({
+  name: "unregistered-support-reply",
+  version: "v1",
+  kind: "generation",
+  input: SupportTicketFactsSchema,
+  output: ProposedSupportReplySchema,
+  instructions: "Propose an unregistered support reply.",
+  outputMode: "prompt-and-validate",
+  limits: {
+    modelRequests: 1,
+    toolCalls: 0,
+    deadlineMs: 1_000,
+    maxInputBytes: 2_000,
+    maxOutputBytes: 2_000,
+    maxOutputTokens: 100,
+  },
+});
+
 describe("Agent named call sequencing", () => {
   it("rejects overlap before a second operation is admitted", async () => {
     const ticket = create(SupportReplyAgentIdSchema, { ticketNumber: "T-1" });
@@ -138,6 +156,12 @@ describe("Agent named call sequencing", () => {
       customerQuestion: "Where is my order?",
     });
     const conversation = create(ConversationIdSchema, { value: "ticket-1" });
+    await expect(
+      runtime.invoke(unregisteredModel, { call: "other", conversation, input }),
+    ).rejects.toThrow("not registered");
+    await expect(runtime.invoke(model, { call: " ", conversation, input })).rejects.toThrow(
+      "nonblank",
+    );
     const first = runtime.invoke(model, { call: "first", conversation, input });
     const second = runtime.invoke(model, { call: "second", conversation, input });
     await expect(second).rejects.toThrow("sequential");

@@ -109,7 +109,7 @@ function fixture(input = 12n, output = 10n, capacity: AgentExecutionCapacity = {
       }),
     );
   };
-  return { budget, record: () => record, withProposal, historyWrites };
+  return { budget, record: () => record, withProposal, historyWrites, controller };
 }
 
 function protocol(record: AgentExecutionRecord): AgentProtocolEvidence {
@@ -119,6 +119,82 @@ function protocol(record: AgentExecutionRecord): AgentProtocolEvidence {
 }
 
 describe("Agent MCP protocol budget", () => {
+  it("reuses one dispatched read intent after recovery but reserves a fresh physical send", async () => {
+    const { budget, record, withProposal } = fixture(20n, 10n);
+    withProposal();
+    const invocation = {
+      ticketId: "attempt-1",
+      providerCallId: "provider-1",
+      server: "lookup",
+      tool: "save",
+      argumentsJson: "{}",
+    };
+    const request = {
+      server: create(McpServerIdSchema, { value: "lookup" }),
+      tool: create(McpToolNameSchema, { value: "save" }),
+      argumentsJson: "{}",
+      effect: ToolEffect.READ,
+    };
+    const first = await budget.journalToolIntent(invocation, request, 1);
+    if (first.kind !== "new") throw new Error("Expected a read intent.");
+    await budget.markToolDispatched(first.callId);
+    const send = (callId: string) =>
+      budget.reserveMessage("lookup", {
+        phase: "call",
+        method: "tools/call",
+        toolCallId: callId,
+        inputBytes: 1,
+        maxOutputBytes: 2,
+      });
+    const original = await send(first.callId);
+    await budget.finishMessage(original.id);
+    const recovered = await budget.journalToolIntent(invocation, request, 1);
+    expect(recovered).toEqual(first);
+    if (recovered.kind !== "new") throw new Error("Expected the saved read intent.");
+    const retried = await send(recovered.callId);
+    expect(retried.id).not.toBe(original.id);
+    expect(record().journal.filter((entry) => entry.evidence.case === "tool")).toHaveLength(1);
+    expect(record().journal.filter((entry) => entry.evidence.case === "protocol")).toHaveLength(2);
+  });
+
+  it("rejects changed recovered tool arguments before another send or history row", async () => {
+    const { budget, record, withProposal, historyWrites } = fixture();
+    withProposal();
+    const invocation = {
+      ticketId: "attempt-1",
+      providerCallId: "provider-1",
+      server: "lookup",
+      tool: "save",
+      argumentsJson: "{}",
+    };
+    const request = {
+      server: create(McpServerIdSchema, { value: "lookup" }),
+      tool: create(McpToolNameSchema, { value: "save" }),
+      argumentsJson: "{}",
+      effect: ToolEffect.WRITE,
+    };
+    await budget.journalToolIntent(invocation, request, 1);
+    await expect(
+      budget.journalToolIntent(invocation, { ...request, argumentsJson: '{"changed":true}' }, 1),
+    ).rejects.toMatchObject({ reason: "REPLAY_DIVERGENCE" });
+    expect(record().journal.filter((entry) => entry.evidence.case === "tool")).toHaveLength(1);
+    expect(historyWrites).toHaveLength(1);
+  });
+
+  it("does not reserve a physical message after the handler loses authority", async () => {
+    const { budget, record, controller } = fixture();
+    controller.abort();
+    await expect(
+      budget.reserveMessage("lookup", {
+        phase: "setup",
+        method: "initialize",
+        inputBytes: 1,
+        maxOutputBytes: 1,
+      }),
+    ).rejects.toThrow("deadline expired");
+    expect(record().journal).toHaveLength(0);
+  });
+
   it("persists setup credit before send and rejects a crossing response chunk", async () => {
     const { budget, record } = fixture();
     const ticket = await budget.reserveMessage("lookup", {

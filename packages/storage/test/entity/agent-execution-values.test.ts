@@ -14,7 +14,12 @@
 
 import { create } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { CommandIdSchema, EventIdSchema, EventSchema } from "@spine-event-engine/proto";
+import {
+  CommandIdSchema,
+  CommandSchema,
+  EventIdSchema,
+  EventSchema,
+} from "@spine-event-engine/proto";
 import { Time } from "@spine-event-engine/core";
 import {
   AgentExecutionCompletionSchema,
@@ -170,5 +175,81 @@ describe("Agent execution value boundaries", () => {
     } finally {
       Time.setProvider(previous);
     }
+  });
+});
+
+describe("Agent execution decoded record validation", () => {
+  it("rejects a persisted record that lacks accepted scope or original order", () => {
+    const record = create(AgentExecutionRecordSchema);
+    expect(() => AgentExecutionValues.requiredAccepted(record)).toThrow(/accepted source facts/i);
+    record.accepted = accepted("source");
+    record.accepted.order = undefined;
+    expect(() => AgentExecutionValues.requiredAccepted(record)).toThrow(/Inbox order/i);
+    expect(() => AgentExecutionValues.requiredScope(undefined)).toThrow(/scope/i);
+    expect(() => AgentExecutionValues.requiredHeadScope(create(AgentExecutionHeadSchema))).toThrow(
+      /scope/i,
+    );
+    expect(() => AgentExecutionValues.requiredCompletion(record)).toThrow(/completion/i);
+    expect(() => AgentExecutionValues.requiredKey(undefined, "support.State")).toThrow(
+      /configured state/i,
+    );
+  });
+
+  it("does not reclaim work without an active expired lease", () => {
+    const record = create(AgentExecutionRecordSchema, {
+      accepted: accepted("source"),
+      status: AgentInvocationStatus.AGENT_INVOCATION_ACTIVE,
+    });
+    const now = create(TimestampSchema, { seconds: 100n });
+    expect(AgentExecutionValues.isPending(record, now)).toBe(false);
+    record.status = AgentInvocationStatus.AGENT_INVOCATION_COMPLETED;
+    expect(AgentExecutionValues.isPending(record, now)).toBe(false);
+    record.status = AgentInvocationStatus.AGENT_INVOCATION_TERMINATED;
+    expect(AgentExecutionValues.isPending(record, now)).toBe(false);
+  });
+
+  it("marks only the saved Command when an Event has equal ID text", () => {
+    const record = create(AgentExecutionCompletionSchema, {
+      outgoing: [
+        create(AgentOutgoingSignalSchema, {
+          signal: {
+            case: "event",
+            value: create(EventSchema, { id: create(EventIdSchema, { value: "same-id" }) }),
+          },
+        }),
+        create(AgentOutgoingSignalSchema, {
+          signal: {
+            case: "command",
+            value: create(CommandSchema, { id: create(CommandIdSchema, { uuid: "same-id" }) }),
+          },
+        }),
+      ],
+    });
+    AgentExecutionValues.markSignal(
+      record,
+      create(AgentSignalKeySchema, {
+        id: { case: "command", value: create(CommandIdSchema, { uuid: "same-id" }) },
+      }),
+    );
+    expect(record.outgoing.map((item) => item.delivered)).toEqual([false, true]);
+  });
+
+  it("keeps the earlier pending signal when later work arrives", () => {
+    const original = accepted("earlier");
+    const later = accepted("later");
+    if (later.order === undefined) throw new Error("Fixture requires order.");
+    later.order.inboxVersion = 2n;
+    const head = create(AgentExecutionHeadSchema, {
+      scope: original.key?.scope,
+      pending: original.key,
+      pendingOrder: original.order,
+      eligibleAt: create(TimestampSchema, { seconds: 100n }),
+    });
+    AgentExecutionValues.offerCandidate(
+      head,
+      create(AgentExecutionRecordSchema, { accepted: later }),
+    );
+    expect(head.pending).toEqual(original.key);
+    expect(head.eligibleAt).toEqual(create(TimestampSchema, { seconds: 100n }));
   });
 });

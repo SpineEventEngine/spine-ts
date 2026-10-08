@@ -134,3 +134,45 @@ describe("Agent execution physical keys", () => {
     ).toBe(true);
   });
 });
+
+describe("Agent execution index input bounds", () => {
+  it.each([
+    [-62_135_596_801n, 0],
+    [253_402_300_800n, 0],
+    [0n, -1],
+    [0n, 1_000_000_000],
+  ])("rejects an out-of-range Timestamp (%s, %s) in both indexes", (seconds, nanos) => {
+    const value = order(seconds, nanos, "source");
+    expect(() => AgentExecutionRecords.order(value)).toThrow(/Timestamp/i);
+    expect(() =>
+      AgentExecutionRecords.pendingLower(create(TimestampSchema, { seconds, nanos })),
+    ).toThrow(/Timestamp/i);
+  });
+
+  it.each([-1n, 18_446_744_073_709_551_616n])(
+    "rejects Inbox Version outside uint64: %s",
+    (version) => {
+      const value = order(100n, 1, "source");
+      value.inboxVersion = version;
+      expect(() => AgentExecutionRecords.order(value)).toThrow(/Inbox order/i);
+    },
+  );
+
+  it("preserves the full valid Timestamp and Inbox Version endpoints", () => {
+    const first = order(-62_135_596_800n, 0, "source");
+    first.inboxVersion = 0n;
+    const last = order(253_402_300_799n, 999_999_999, "source");
+    last.inboxVersion = 18_446_744_073_709_551_615n;
+    expect(AgentExecutionRecords.order(first) < AgentExecutionRecords.order(last)).toBe(true);
+    expect(AgentExecutionRecords.order(last)).toContain("18446744073709551615");
+  });
+
+  it("rejects a missing or empty source identity before generating an index key", () => {
+    const value = order(100n, 1, "");
+    expect(() => AgentExecutionRecords.order(value)).toThrow(/source ID/i);
+    value.sourceSignal = create(AgentSignalKeySchema);
+    expect(() => AgentExecutionRecords.order(value)).toThrow(/source ID/i);
+    value.sourceSignal = undefined;
+    expect(() => AgentExecutionRecords.order(value)).toThrow(/Inbox order/i);
+  });
+});

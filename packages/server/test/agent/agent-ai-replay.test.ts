@@ -125,7 +125,7 @@ const decision = AiModel.define({
 
 type Kind = "generation" | "decision";
 
-function harness(kind: Kind, correction = false) {
+function harness(kind: Kind, correction = false, fail = false) {
   const model = kind === "decision" ? decision : correction ? correctiveGeneration : generation;
   const ref = ModelRef.of(`scripted-${kind}`, "v1");
   let physicalRequests = 0;
@@ -134,13 +134,20 @@ function harness(kind: Kind, correction = false) {
   let promptJson = '{"messages":[],"tools":[]}';
   let correctionDetails = "not json";
   let decisionInstruction = "Is this ticket safe to route?";
+  let identityChanged = false;
+  let connectionChanged = false;
+  let authorizationDenied = false;
   const backend = createBackendRegistration({
     ref,
     kind,
     supports: () => true,
-    resolveIdentity: () => identity,
-    authorizeUse: () => true,
-    connect: () => ({ model: {}, identity }),
+    resolveIdentity: () =>
+      identityChanged ? { ...identity, model: "unexpected-deployment" } : identity,
+    authorizeUse: () => !authorizationDenied,
+    connect: () => ({
+      model: {},
+      identity: connectionChanged ? { ...identity, model: "unexpected-connection" } : identity,
+    }),
     execute: async (execution: AiBackendExecution) => {
       executeCalls++;
       const content =
@@ -249,10 +256,34 @@ function harness(kind: Kind, correction = false) {
             ? GenerationResponseSchema.typeName
             : DecisionResponseSchema.typeName,
         );
+        if (fail) {
+          expect(attempt.response.outcome).toBe(AiOutcome.FAILED);
+          if (attempt.failure === undefined) throw new Error("Saved failure is missing.");
+          return { ok: false, failure: attempt.failure };
+        }
         return { ok: true, value: kind === "generation" ? reply : routed };
       }
       physicalRequests++;
       await execution.control.reserveTransport(attempt.id, 20, 200);
+      if (fail) {
+        const failure = await execution.control.recordFailure("UNAVAILABLE", true);
+        const response =
+          kind === "generation"
+            ? create(GenerationResponseSchema, {
+                outcome: AiOutcome.FAILED,
+                diagnosticId: { value: failure.diagnosticId },
+              })
+            : create(DecisionResponseSchema, {
+                outcome: AiOutcome.FAILED,
+                diagnosticId: { value: failure.diagnosticId },
+              });
+        await execution.control.finishAttempt({
+          ticketId: attempt.id,
+          receivedBytes: 10,
+          response,
+        });
+        return { ok: false, failure };
+      }
       const response =
         kind === "generation"
           ? create(GenerationResponseSchema, {
@@ -392,11 +423,83 @@ function harness(kind: Kind, correction = false) {
     changeDecisionQuestion: () => {
       decisionInstruction = "Should this ticket be escalated?";
     },
+    changeIdentity: () => {
+      identityChanged = true;
+    },
+    changeConnection: () => {
+      connectionChanged = true;
+    },
+    denyAuthorization: () => {
+      authorizationDenied = true;
+    },
+    corruptSavedOutput: () => {
+      const operation = saved.journal.find((entry) => entry.evidence.case === "operation");
+      if (operation?.evidence.case !== "operation")
+        throw new Error("Expected a saved named operation.");
+      operation.evidence.value.result = {
+        case: "admittedOutput",
+        value: AnyMessages.pack(SupportTicketFactsSchema, input),
+      };
+    },
     counts: () => ({ physicalRequests, executeCalls }),
   };
 }
 
 describe("Agent AI replay from a persisted execution journal", () => {
+  it("rejects a saved output with the wrong domain type before backend execution", async () => {
+    const fixture = harness("generation");
+    const request = { call: "draft", conversation, input };
+    expect((await fixture.runtime().invoke(generation, request)).ok).toBe(true);
+    fixture.corruptSavedOutput();
+    await expect(fixture.runtime().invoke(generation, request)).rejects.toThrow(
+      "output type changed",
+    );
+    expect(fixture.counts()).toEqual({ physicalRequests: 1, executeCalls: 1 });
+  });
+
+  it.each([
+    ["changed model identity", "changeIdentity", "identity or authorization changed"],
+    ["denied model use", "denyAuthorization", "identity or authorization changed"],
+    ["changed connection identity", "changeConnection", "identity changed"],
+  ] as const)("blocks %s before a physical request", async (_label, change, message) => {
+    const fixture = harness("generation");
+    fixture[change]();
+    await expect(
+      fixture.runtime().invoke(generation, { call: "draft", conversation, input }),
+    ).rejects.toThrow(message);
+    expect(fixture.counts()).toEqual({ physicalRequests: 0, executeCalls: 0 });
+    expect(fixture.saved().journal.filter((entry) => entry.evidence.case === "attempt")).toEqual(
+      [],
+    );
+  });
+
+  it.each(["generation", "decision"] as const)(
+    "replays a saved %s provider failure and its original diagnostic without another request",
+    async (kind) => {
+      const fixture = harness(kind, false, true);
+      fixture.interruptTerminalWrite();
+      const request = { call: "draft", conversation, input };
+      const invoke = () =>
+        kind === "generation"
+          ? fixture.runtime().invoke(generation, request)
+          : fixture.runtime().invoke(decision, request);
+      await expect(invoke()).rejects.toThrow("interrupted before result persistence");
+      const attempt = fixture.saved().journal.find((entry) => entry.evidence.case === "attempt");
+      expect(attempt?.evidence.case).toBe("attempt");
+      if (attempt?.evidence.case !== "attempt") throw new Error("Expected a physical attempt.");
+      expect(attempt.evidence.value.response.value?.diagnosticId?.value).toBeTruthy();
+      expect(fixture.counts().physicalRequests).toBe(1);
+      const resumed = await invoke();
+      expect(resumed).toMatchObject({
+        ok: false,
+        failure: { code: "UNAVAILABLE", retryableByNewSignal: true },
+      });
+      expect(fixture.counts()).toEqual({ physicalRequests: 1, executeCalls: 2 });
+      expect(await invoke()).toEqual(resumed);
+      expect(fixture.counts()).toEqual({ physicalRequests: 1, executeCalls: 2 });
+    },
+  );
+
   it.each(["generation", "decision"] as const)(
     "reuses the completed %s physical attempt and then the saved named result",
     async (kind) => {

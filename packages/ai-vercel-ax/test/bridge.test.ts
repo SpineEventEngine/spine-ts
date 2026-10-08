@@ -828,6 +828,26 @@ describe("Ax-to-Vercel bridge", () => {
       ],
     });
   });
+
+  it("keeps an empty assistant turn and rejects system text outside instructions", () => {
+    expect(AxVercelBridge.mapMessages({ chatPrompt: [{ role: "assistant" }] })).toEqual([
+      { role: "assistant", content: "" },
+    ]);
+    expect(() =>
+      AxVercelBridge.mapMessage({ role: "system", content: "private instruction" }, new Map()),
+    ).toThrow("System messages must be instructions");
+  });
+
+  it("preserves text details in an MCP tool error continuation", () => {
+    const output = AxVercelBridge.toolOutput({
+      role: "function",
+      functionId: "lookup-1",
+      result: "lookup failed",
+      isError: true,
+      content: [{ type: "text", text: "ticket unavailable" }],
+    });
+    expect(output).toEqual({ type: "error-text", value: '["ticket unavailable"]' });
+  });
   it.each(["content-filter", "error"] as const)(
     "rejects a %s provider finish state after recording usage",
     async (finish) => {

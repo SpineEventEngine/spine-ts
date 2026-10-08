@@ -143,6 +143,11 @@ describe("PostgreSQL Agent execution provider boundary", () => {
       expect(headWrites.at(-1)?.pending).toEqual(additional.key);
       expect(client.query).toHaveBeenCalledWith("SELECT pg_advisory_xact_lock($1)", [17]);
       invocation.read.mockImplementation(() => Promise.resolve(admitted));
+      const detached = required(await storage.read(required(additional.key)));
+      detached.status = AgentInvocationStatus.AGENT_INVOCATION_TERMINATED;
+      expect((await storage.read(required(additional.key)))?.status).toBe(
+        AgentInvocationStatus.AGENT_INVOCATION_ACCEPTED,
+      );
       const changed = accepted("postgres-admission-source");
       required(changed.handlers[0]).methodName = "different-handler";
       await expect(storage.admit(changed)).rejects.toThrow(/immutable/i);
@@ -156,10 +161,21 @@ describe("PostgreSQL Agent execution provider boundary", () => {
       query.mockImplementation((_client, _sql, values: unknown[]) =>
         Promise.resolve(values[3] === "1" ? [admitted] : []),
       );
+      const expiry = create(TimestampSchema, { seconds: 4_000_000_000n });
+      await expect(storage.claim(required(additional.key), "", expiry)).rejects.toThrow(
+        /future expiry and token/i,
+      );
+      await expect(
+        storage.claim(
+          required(additional.key),
+          "stale-token",
+          create(TimestampSchema, { seconds: 1n }),
+        ),
+      ).rejects.toThrow(/future expiry and token/i);
       const claimed = await storage.claim(
         required(additional.key),
         "postgres-boundary-token",
-        create(TimestampSchema, { seconds: 4_000_000_000n }),
+        expiry,
       );
       expect(claimed?.record).toMatchObject({
         claimToken: "postgres-boundary-token",
@@ -169,6 +185,29 @@ describe("PostgreSQL Agent execution provider boundary", () => {
         client,
         expect.objectContaining({ claimToken: "postgres-boundary-token" }),
       );
+      invocation.read.mockImplementation(() => Promise.resolve(required(claimed).record));
+      headRow.read.mockImplementation(() => Promise.resolve(required(headWrites.at(-1))));
+      const writesBeforeRenew = invocationWrite.mock.calls.length;
+      expect(
+        await storage.renew(
+          required(additional.key),
+          "wrong-token",
+          create(TimestampSchema, { seconds: 4_000_000_001n }),
+        ),
+      ).toBe(false);
+      expect(await storage.renew(required(additional.key), "postgres-boundary-token", expiry)).toBe(
+        false,
+      );
+      expect(invocationWrite).toHaveBeenCalledTimes(writesBeforeRenew);
+      await expect(
+        storage.markDelivered(
+          required(additional.key),
+          "postgres-boundary-token",
+          toBinary(AgentExecutionRecordSchema, required(claimed).record),
+          [],
+        ),
+      ).rejects.toThrow(/no completed output/i);
+      expect(invocationWrite).toHaveBeenCalledTimes(writesBeforeRenew);
       const next = clone(AgentExecutionRecordSchema, required(claimed).record);
       next.counters = create(AgentInvocationCountersSchema, { operations: 1n });
       const writesBeforeReject = invocationWrite.mock.calls.length;
@@ -213,5 +252,6 @@ describe("PostgreSQL Agent execution provider boundary", () => {
     } finally {
       storage.close();
     }
+    await expect(storage.read(required(key))).rejects.toThrow(/closed/i);
   });
 });

@@ -2148,3 +2148,110 @@ commit/push correction now, then rerun verify:release with Vitest's documented
 --coverage.reportOnFailure flag so any failure still emits diagnostic coverage.
 This changes reporting only, not tests, exclusions or90% thresholds. Readiness
 and targeted package consumer failures are resolved; fullprofile remains pending.
+
+Release4cedd9cb7:5728 tests pass,1 skipped; all preceding generated gates pass.
+Global branch coverage86.59% fails90%; statements90.88,functions91.47,lines92.37.
+No acceptance. Scripts-first inspection shows V8 isIncluded filters dist scripts
+before remapping, while BlackBox tests execute dist; authored source remains in
+include. Investigate collection correctness before adding behavior tests.
+Dispatch mechanical read-only coverage analysis as existing orchestrator function:
+explicit Luna/medium, fresh context, no grandchildren. No threshold/exclusion
+weakening or production behavior change authorized by this investigation.
+
+Existing foundation implementer receives bounded native Agent-history provider
+boundary tests (three new test files only), explicit configured Sol/medium from
+its original dispatch; follow-up retains that profile, no grandchildren. Native
+history adapters currently0% in ordinary suite; real native tests remain separate.
+Exercise indexing/scoped page queries/closure and invalid index handling through
+provider contracts with transport fakes. Do not manufacture assertions from
+private implementation details merely to increase counts. No runtime edits.
+
+Existing main implementer receives Agent runtime behavior coverage under
+server/test/agent only, original explicit Sol/medium retained. Scope replay and
+model invocation branches not covered by existing tests; no production edits
+without reporting a demonstrated defect. Independent from native history files
+and read-only collection investigation. No grandchildren or acceptance claims.
+
+Parent micro test correction: storage/entity saved-output transition tests only.
+Acceptance: Command and Event IDs with equal text remain distinct; saved plans
+cannot be removed/replaced or installed after delivery; malformed recipient
+bindings rejected. No production changes; independent test file from children.
+
+Coverage analysis accepted configured Luna/medium, no runtime introspection.
+It confirms omitted dist execution but naive inclusion adds branch locations
+from different transforms; do not apply globally. Follow-up narrows compiled-only
+example/private fixture attribution. Parent storage transition/index boundary
+checks27/27 pass. Timestamp/uint64 key endpoints tested; no runtime change.
+
+Do not change coverage collection in this task: source and compiled transforms
+still differ; no denominator workaround accepted. Existing adapter implementer
+receives tests-only correction in ai-vercel-ax/test, original explicitSol/medium
+retained. Focus missed generation/decision/MCP failure behavior from rootlcov.
+No production edits, thresholds, runtime package changes or grandchildren.
+
+Parent also adds one bounded in-memory execution boundary test file: invalid
+discovery pages/foreign continuation; token/lease checks; immutable source/read
+image; invalid completion and termination progress. Only tests; no production
+changes. Parent scope does not overlap native provider or server/adapter writers.
+
+History-boundary child checkpoint9/9 tests passes, all three adapters>90% branch
+coverage/100% lines; types/lint/format/cleanup pass. Source-only main runtime
+checkpoint33/33 adds24 branch locations and passes scope checks. Adapter initial
+checkpoint230 tests adds8 branches. Parent validation tests pass and toolingtype
+check passes. Existingmain follow-up now exercises source repository integration
+that BlackBox package tests execute only through compiled output; foundation
+continues native execution boundaries, adapter generation/decision gaps. All
+retain original explicit Sol/medium profiles and independent test file scopes.
+
+Demonstrated verification architecture blocker: V8 source-only drops compiled
+BlackBox runtime; raw src+dist collection merges divergent Vite/tsc branch maps
+and can create apparent hits from unexecuted output. Corrected Luna evidence in
+/tmp/agent-coverage-collection-analysis.md. Escalate one bounded existing
+requirements-splitter architecture function to explicit Astra/high, freshcontext,
+read-only no grandchildren. Decide minimal honest collection strategy retaining
+all runtime source scope and90% thresholds; not permission to change metrics or
+introduce a bespoke coverage engine. Existing source repository integration now
+proves one physical model call, state/domain/system/history via public context;
+source-local test and scoped mechanics pass. Fullglobalrelease stillblocked by
+coverage only; source/runtime unchanged since4ced.
+
+Coverage correction batch frozen:347/347 focused tests across28files; parent
+root test-inclusive tsc, cleanup,TSDoc,whole-repoformat,diff checks pass. Parent
+storage74/74 diagnostic passes. Source repository integration fixture roottypes
+fixed after narrowchildtypecheckmiss; genuine SupportTicketFacts narrowed with
+isMessage before use. No source/API/Proto/dependency changes since4ced.
+Dispatch independent test-correctness review to existing reliability role, fresh
+context, explicit Sol/medium. Scope diff4ced..working tree plus newtestfiles.
+Other canonical concerns: API/types mechanically unchanged andtypechecked;
+style mechanical lint/format/cleanup; docs no reader-facing change; security no
+production/credential boundary change, previous security disposition retained.
+Coverage reporting architecture decision remains separate and notaccepted yet.
+
+Astra/high architecture probe18/18 passes: Vite pre-transform with pinned
+TypeScript transpileModule and built-in transform disabled yields identical
+source/dist branchMap objects. AgentRuntime321branches; hits source20,dist190,
+combined196 exact union; unexecuted testingdist addszero hits andzero branches.
+Approve bounded verification-tooling implementation by existing main implementer
+explicitSol/medium retained: documented cached package-tsconfig transformer,
+full existing source+compiled runtime collection with generated exclusions and
+unchanged90% thresholds. Require broad map/TSX/decorator proof and focused
+regression before acceptance; no custom countermerging/provider overrides.
+Runtime/API remains unchanged. This supersedes provisional no-config-change
+decision only because reproducible same-map correction now exists.
+
+Independent Sol/medium test review found2P2 fidelity gaps: SQL query fakes
+enforced scope regardless of predicates; System-event ID filtering could make
+copy checks vacuous. Same foundation/main implementers fixed their respective
+files;12boundarytests+roottypes/lint/format and1sourceintegration+roottypes/lint
+pass. Request same reviewer narrowfollow-up; configuredprofileaccepted, actual
+runtimemetadata unavailable. Broader architecture probe399 authoredfiles all
+branch/statement/functionmaps identical andcombinedhits exactunion. Branch
+count20607 vsprior20605, no denominator reduction. Tooling correction retains
+fullsource scope and90%; exclude declarations/generated only, excludeAfterRemap
+for existing authored exclusions. No custom coverage merge/provider patch.
+
+Test-only independent follow-up isclean: bothP2findingsresolved, configured
+Sol/mediumaccepted(runtimeintrospectionunavailable). ArchitectureAstra/high
+formaldecision accepted at/tmp/agent-coverage-verification-decision.md; no
+architectureproductionchange. Tests correction checkpointmaycommit/push now;
+verification-tooling implementation remains separate andfullreleasepending.

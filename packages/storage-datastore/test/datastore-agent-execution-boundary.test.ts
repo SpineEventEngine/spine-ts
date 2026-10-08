@@ -13,8 +13,9 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { create } from "@bufbuild/protobuf";
+import { create, toBinary } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import * as Execution from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
 import { AgentExecutionStorageFactories } from "@spine-event-engine/storage/provider";
 import { describe, expect, it } from "vitest";
 
@@ -47,11 +48,32 @@ describe("Datastore Agent execution provider boundary", () => {
       await storage.admit(source);
       expect((await storage.pending({ count: 1 })).records[0]?.accepted).toEqual(source);
       const expiry = create(TimestampSchema, { seconds: 4_000_000_000n });
+      await expect(storage.claim(key, "", expiry)).rejects.toThrow(/future expiry and token/i);
+      await expect(
+        storage.claim(key, "stale-token", create(TimestampSchema, { seconds: 1n })),
+      ).rejects.toThrow(/future expiry and token/i);
       const first = required(await storage.claim(key, "first-token", expiry));
       expect(first.record.claimToken).toBe("first-token");
       expect(await storage.claim(key, "second-token", expiry)).toBeUndefined();
+      expect(
+        await storage.renew(
+          key,
+          "wrong-token",
+          create(TimestampSchema, { seconds: 4_000_000_001n }),
+        ),
+      ).toBe(false);
+      await expect(
+        storage.markDelivered(
+          key,
+          "first-token",
+          toBinary(Execution.AgentExecutionRecordSchema, first.record),
+          [],
+        ),
+      ).rejects.toThrow(/completion is missing/i);
+      expect((await storage.read(key))?.status).toBe(first.record.status);
       await exerciseAgentExecutionLifecycle(storage);
       storage.close();
+      await expect(storage.read(key)).rejects.toThrow(/closed/i);
       const reopened = AgentExecutionStorageFactories.create(factory, input);
       try {
         expect((await reopened.read(key))?.claimToken).toBe("first-token");

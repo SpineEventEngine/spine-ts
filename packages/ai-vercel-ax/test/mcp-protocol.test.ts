@@ -250,6 +250,7 @@ describe("bounded MCP protocol", () => {
     ["redirect", 302, "application/json", "{}", "redirect"],
     ["server failure", 503, "application/json", "{}", "HTTP 503"],
     ["unsupported content", 200, "text/plain", "{}", "content type"],
+    ["missing content type", 200, undefined, "{}", "content type"],
     ["invalid JSON", 200, "application/json", "{", "JSON"],
   ])(
     "rejects a %s response after its journal barrier",
@@ -284,7 +285,7 @@ describe("bounded MCP protocol", () => {
           Promise.resolve(
             new Response(body, {
               status,
-              headers: { "content-type": contentType },
+              ...(contentType === undefined ? {} : { headers: { "content-type": contentType } }),
             }),
           ),
       );
@@ -301,7 +302,10 @@ describe("bounded MCP protocol", () => {
     },
   );
 
-  it("parses finite SSE frames only after finishing the message journal", async () => {
+  it.each([
+    ["LF-terminated", 'data: {"jsonrpc":"2.0","id":1,"result":{}}\n\n'],
+    ["CRLF without final newline", 'data: {"jsonrpc":"2.0","id":1,"result":{}}\r'],
+  ])("parses %s SSE frames only after finishing the message journal", async (_name, frame) => {
     const signal = new AbortController().signal;
     const events: string[] = [];
     const transport = new BoundedMcpHttpTransport(
@@ -329,7 +333,7 @@ describe("bounded MCP protocol", () => {
       },
       () =>
         Promise.resolve(
-          new Response('data: {"jsonrpc":"2.0","id":1,"result":{}}\n\n', {
+          new Response(frame, {
             headers: { "content-type": "text/event-stream" },
           }),
         ),
@@ -1351,6 +1355,7 @@ describe("bounded MCP protocol", () => {
     let toolError = false;
     let schemaOverride: unknown;
     let outputSchemaOverride: unknown;
+    let discoveryCredit = 8_192;
     let listingMode:
       "normal" | "repeat-name" | "repeat-cursor" | "many" | "long-description" | "partial-failure" =
       "normal";
@@ -1472,7 +1477,7 @@ describe("bounded MCP protocol", () => {
           id: `ticket-${String(method)}`,
           signal: new AbortController().signal,
           deadlineEpochMs: Date.now() + 5_000,
-          maxOutputBytes: 8_192,
+          maxOutputBytes: discoveryCredit,
         }),
       ),
       onReceived: vi.fn(),
@@ -1659,6 +1664,20 @@ describe("bounded MCP protocol", () => {
     ).resolves.toEqual({ content: [{ kind: "text", text: "Ticket found" }], isError: true });
     toolError = false;
     outputSchemaOverride = { $ref: "https://untrusted.example/output" };
+    await expect(session.discover(["lookup"])).rejects.toThrow("output schema unsupported");
+    expect(() => {
+      session.validateArguments("lookup", '{"ticket":"T-9"}');
+    }).toThrow("not advertised");
+    outputSchemaOverride = { type: "string" };
+    await expect(session.discover(["lookup"])).rejects.toThrow("output schema unsupported");
+    discoveryCredit = 32_768;
+    outputSchemaOverride = { type: "object", description: "x".repeat(16_385) };
+    await expect(session.discover(["lookup"])).rejects.toThrow("output schema unsupported");
+    discoveryCredit = 8_192;
+    let nestedOutput: unknown = { type: "string" };
+    for (let depth = 0; depth < 14; depth += 1)
+      nestedOutput = { type: "object", properties: { next: nestedOutput } };
+    outputSchemaOverride = nestedOutput;
     await expect(session.discover(["lookup"])).rejects.toThrow("output schema unsupported");
     outputSchemaOverride = undefined;
     await session.discover(["lookup"]);
