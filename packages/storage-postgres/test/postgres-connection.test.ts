@@ -172,6 +172,20 @@ describe("PostgresStorageFactory connection", () => {
 
     const boundaries = await catalog.all();
     expect(boundaries).toHaveLength(2);
+    const signal = new AbortController().signal;
+    const firstPage = await catalog.page({ count: 1, signal });
+    expect(firstPage.boundaries).toEqual([boundaries[0]]);
+    if (firstPage.after === undefined) throw new Error("Expected PostgreSQL catalog cursor.");
+    const constructed = Reflect.construct(firstPage.after.constructor, [
+      catalog,
+      1,
+      2,
+    ]) as typeof firstPage.after;
+    await expect(catalog.page({ count: 1, signal, after: constructed })).rejects.toThrow();
+    const lastPage = await catalog.page({ count: 1, signal, after: firstPage.after });
+    expect(lastPage.boundaries).toEqual([boundaries[1]]);
+    expect(lastPage.hasMore).toBe(false);
+    await expect(catalog.page({ count: 128, signal })).rejects.toThrow(/count/);
     const configured = boundaries[0];
     if (configured === undefined) throw new Error("Expected one configured PostgreSQL tenant.");
     await expect(catalog.keep(configured)).resolves.toBeUndefined();

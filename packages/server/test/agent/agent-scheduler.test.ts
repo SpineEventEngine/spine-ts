@@ -22,9 +22,13 @@ import {
   AgentInvocationKeySchema,
   AgentSignalKeySchema,
 } from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
-import { CommandIdSchema } from "@spine-event-engine/proto";
+import { CommandIdSchema, TenantIdSchema } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
-import { AgentScheduler, type AgentScanScope } from "../../src/agent/agent-scheduler.js";
+import {
+  AgentScheduler,
+  type AgentScanScope,
+  type AgentScopeSource,
+} from "../../src/agent/agent-scheduler.js";
 import { AgentExecutionCapacity } from "../../src/agent/agent-execution-capacity.js";
 
 const record = (name: string) =>
@@ -38,6 +42,32 @@ const record = (name: string) =>
       }),
     }),
   });
+
+function source(scopes: readonly AgentScanScope[]): AgentScopeSource {
+  return {
+    repositories: 1,
+    page: () =>
+      Promise.resolve({
+        ids: scopes.map((_, index) =>
+          create(TenantIdSchema, {
+            kind: { case: "value", value: String(index) },
+          }),
+        ),
+        hasMore: false,
+      }),
+    scope: (tenant) => {
+      if (tenant.kind.case !== "value") throw new Error("Expected indexed test tenant.");
+      const selected = scopes[Number(tenant.kind.value)];
+      if (selected === undefined) throw new Error("Missing indexed test scope.");
+      return selected;
+    },
+  };
+}
+
+async function ready(scheduler: AgentScheduler): Promise<void> {
+  await scheduler.turn();
+  for (let index = 0; index < 6; index += 1) await Promise.resolve();
+}
 
 describe("Agent indexed scheduler", () => {
   it("coalesces an in-flight scan and retries provider errors without losing a sweep", async () => {
@@ -61,10 +91,11 @@ describe("Agent indexed scheduler", () => {
       run: () => Promise.resolve(),
     };
     const scheduler = new AgentScheduler(
-      () => Promise.resolve([scope]),
+      source([scope]),
       new AgentExecutionCapacity(1, 0),
       () => undefined,
     );
+    await ready(scheduler);
     const first = scheduler.turn();
     const concurrent = scheduler.turn();
     release?.();
@@ -100,10 +131,11 @@ describe("Agent indexed scheduler", () => {
       },
     };
     const scheduler = new AgentScheduler(
-      () => Promise.resolve([scope]),
+      source([scope]),
       new AgentExecutionCapacity(1, 1),
       () => undefined,
     );
+    await ready(scheduler);
     await scheduler.turn();
     await Promise.resolve();
     expect(seen).toEqual(["A"]);
@@ -146,12 +178,13 @@ describe("Agent indexed scheduler", () => {
       },
     };
     const scheduler = new AgentScheduler(
-      () => Promise.resolve([scope]),
+      source([scope]),
       new AgentExecutionCapacity(1, 0),
       (error) => {
         errors.push(error);
       },
     );
+    await ready(scheduler);
     await scheduler.turn();
     await Promise.resolve();
     await scheduler.turn();
@@ -174,52 +207,67 @@ describe("Agent indexed scheduler", () => {
       run: () => Promise.resolve(),
     }));
     const scheduler = new AgentScheduler(
-      () => Promise.resolve(scopes),
+      source(scopes),
       new AgentExecutionCapacity(2, 0),
       () => undefined,
     );
+    await ready(scheduler);
     await scheduler.turn();
     await scheduler.turn();
     await scheduler.close();
-    expect(visited).toEqual([
-      "scope-0",
-      "scope-1",
-      "scope-2",
-      "scope-3",
-      "scope-4",
-      "scope-5",
-      "scope-0",
-      "scope-1",
-    ]);
+    expect(visited).toEqual(["scope-0", "scope-1", "scope-2", "scope-3", "scope-4", "scope-5"]);
   });
 
-  it("reuses a large discovery snapshot and promptly visits newly accepted work", async () => {
+  it("pages a large catalog lazily and promptly visits newly accepted work", async () => {
     const visited: number[] = [];
     let enumerations = 0;
-    const scopes: AgentScanScope[] = Array.from({ length: 10_000 }, (_, index) => ({
-      id: `tenant-${String(index)}`,
-      pending: () => {
-        visited.push(index);
-        return Promise.resolve({ records: [], hasMore: false });
-      },
-      run: () => Promise.resolve(),
-    }));
-    const scheduler = new AgentScheduler(
-      () => {
+    let constructed = 0;
+    const large: AgentScopeSource = {
+      repositories: 1,
+      page: (after) => {
         enumerations += 1;
-        return Promise.resolve(scopes);
+        const start = (after as { readonly index?: number } | undefined)?.index ?? 0;
+        const end = Math.min(10_000, start + 16);
+        return Promise.resolve({
+          ids: Array.from({ length: end - start }, (_, offset) =>
+            create(TenantIdSchema, {
+              kind: { case: "value", value: String(start + offset) },
+            }),
+          ),
+          ...(end < 10_000
+            ? { after: { [Symbol.toStringTag]: "TenantCatalogCursor" as const, index: end } }
+            : {}),
+          hasMore: end < 10_000,
+        });
       },
-      new AgentExecutionCapacity(2, 0),
-      () => undefined,
-    );
+      scope: (tenant) => {
+        constructed += 1;
+        if (tenant.kind.case !== "value") throw new Error("Expected named tenant.");
+        const index = Number(tenant.kind.value);
+        return {
+          id: `tenant-${String(index)}`,
+          pending: () => {
+            visited.push(index);
+            return Promise.resolve({ records: [], hasMore: false });
+          },
+          run: () => Promise.resolve(),
+        };
+      },
+    };
+    const scheduler = new AgentScheduler(large, new AgentExecutionCapacity(2, 0), () => undefined);
+    await ready(scheduler);
     await scheduler.turn();
     await scheduler.turn();
     expect(enumerations).toBe(1);
     expect(visited).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
-    scheduler.wake(scopes[9_999]);
+    expect(constructed).toBe(8);
+    scheduler.wake(
+      large.scope(create(TenantIdSchema, { kind: { case: "value", value: "9999" } }), 0),
+    );
     await scheduler.turn();
     expect(visited).toContain(9_999);
     expect(visited).toContain(8);
+    expect(constructed).toBeLessThanOrEqual(13);
     await scheduler.close();
   });
 
@@ -227,13 +275,20 @@ describe("Agent indexed scheduler", () => {
     let enumerations = 0;
     let targeted = 0;
     const scheduler = new AgentScheduler(
-      () => {
-        enumerations += 1;
-        return Promise.resolve([]);
+      {
+        repositories: 1,
+        page: () => {
+          enumerations += 1;
+          return Promise.resolve({ ids: [], hasMore: false });
+        },
+        scope: () => {
+          throw new Error("Empty catalog has no periodic scope.");
+        },
       },
       new AgentExecutionCapacity(1, 0),
       () => undefined,
     );
+    await ready(scheduler);
     await scheduler.turn();
     scheduler.wake({
       id: "new-tenant",
@@ -251,6 +306,18 @@ describe("Agent indexed scheduler", () => {
 
   it("continues catalog discovery with one execution slot and sustained accepted wakes", async () => {
     const seen: string[] = [];
+    let releaseCatalog:
+      | ((page: {
+          ids: ReturnType<typeof create<typeof TenantIdSchema>>[];
+          hasMore: false;
+        }) => void)
+      | undefined;
+    const catalog = new Promise<{
+      ids: ReturnType<typeof create<typeof TenantIdSchema>>[];
+      hasMore: false;
+    }>((resolve) => {
+      releaseCatalog = resolve;
+    });
     let releaseFirst: (() => void) | undefined;
     const held = new Promise<void>((resolve) => {
       releaseFirst = resolve;
@@ -267,11 +334,13 @@ describe("Agent indexed scheduler", () => {
         return Promise.resolve();
       },
     };
+    const capacity = new AgentExecutionCapacity(1, 0);
     const scheduler = new AgentScheduler(
-      () => Promise.resolve([sweep]),
-      new AgentExecutionCapacity(1, 0),
+      { ...source([sweep]), page: () => catalog },
+      capacity,
       () => undefined,
     );
+    await scheduler.turn();
     const accepted = (index: number): AgentScanScope => ({
       id: `accepted-${String(index)}`,
       pending: () => Promise.resolve({ records: [record(String(index))], hasMore: false }),
@@ -283,14 +352,20 @@ describe("Agent indexed scheduler", () => {
     scheduler.wake(accepted(0));
     await scheduler.turn();
     expect(seen).toEqual(["accepted-0"]);
+    releaseCatalog?.({
+      ids: [create(TenantIdSchema, { kind: { case: "value", value: "0" } })],
+      hasMore: false,
+    });
+    for (let index = 0; index < 8; index += 1) await Promise.resolve();
     await scheduler.turn();
     expect(seen).toEqual(["accepted-0"]);
     releaseFirst?.();
-    await Promise.resolve();
-    await Promise.resolve();
+    for (let index = 0; index < 20 && capacity.full(); index += 1) await Promise.resolve();
+    expect(capacity.full()).toBe(false);
     scheduler.wake(accepted(1));
     await scheduler.turn();
-    await Promise.resolve();
+    for (let index = 0; index < 8 && !seen.includes("recovery"); index += 1)
+      await Promise.resolve();
     expect(seen).toContain("recovery");
     await scheduler.close();
   });
@@ -300,25 +375,342 @@ describe("Agent indexed scheduler", () => {
     const prior = Time.setProvider({ currentTime: () => now });
     let enumerations = 0;
     const scheduler = new AgentScheduler(
-      () => {
-        enumerations += 1;
-        return Promise.resolve([]);
+      {
+        repositories: 1,
+        page: () => {
+          enumerations += 1;
+          return Promise.resolve({ ids: [], hasMore: false });
+        },
+        scope: () => {
+          throw new Error("Empty catalog has no periodic scope.");
+        },
       },
       new AgentExecutionCapacity(1, 0),
       () => undefined,
     );
     try {
+      await ready(scheduler);
       await scheduler.turn();
       now = create(TimestampSchema, { seconds: 104n });
       await scheduler.turn();
       expect(enumerations).toBe(1);
       now = create(TimestampSchema, { seconds: 105n });
       await scheduler.turn();
+      for (let index = 0; index < 6; index += 1) await Promise.resolve();
       expect(enumerations).toBe(2);
     } finally {
       await scheduler.close();
       Time.setProvider(prior);
     }
+  });
+
+  it("finishes a long sweep before refreshing and retries a transient page at its continuation", async () => {
+    let now = create(TimestampSchema, { seconds: 100n });
+    const prior = Time.setProvider({ currentTime: () => now });
+    const token = { [Symbol.toStringTag]: "TenantCatalogCursor" as const };
+    const afters: (string | undefined)[] = [];
+    let failed = false;
+    const seen: string[] = [];
+    const scopeAt = (index: number): AgentScanScope => ({
+      id: `tenant-${String(index)}`,
+      pending: () => {
+        seen.push(String(index));
+        return Promise.resolve({ records: [], hasMore: false });
+      },
+      run: () => Promise.resolve(),
+    });
+    const scheduler = new AgentScheduler(
+      {
+        repositories: 1,
+        page: (after) => {
+          afters.push(after === undefined ? undefined : "continued");
+          if (after !== undefined && !failed) {
+            failed = true;
+            return Promise.reject(new Error("Transient tenant catalog failure."));
+          }
+          const start = after === undefined ? 0 : 16;
+          return Promise.resolve({
+            ids: Array.from({ length: 16 }, (_, offset) =>
+              create(TenantIdSchema, {
+                kind: { case: "value", value: String(start + offset) },
+              }),
+            ),
+            ...(start === 0 ? { after: token } : {}),
+            hasMore: start === 0,
+          });
+        },
+        scope: (tenant) => {
+          if (tenant.kind.case !== "value") throw new Error("Expected value tenant.");
+          return scopeAt(Number(tenant.kind.value));
+        },
+      },
+      new AgentExecutionCapacity(2, 0),
+      () => undefined,
+    );
+    try {
+      await ready(scheduler);
+      now = create(TimestampSchema, { seconds: 110n });
+      for (let turn = 0; turn < 40 && seen.length < 32; turn += 1) {
+        await scheduler.turn();
+        for (let tick = 0; tick < 6; tick += 1) await Promise.resolve();
+      }
+      expect(seen).toEqual(Array.from({ length: 32 }, (_, index) => String(index)));
+      expect(afters.slice(0, 3)).toEqual([undefined, "continued", "continued"]);
+      expect(afters.filter((after) => after === undefined)).toHaveLength(1);
+      for (
+        let turn = 0;
+        turn < 4 && afters.filter((after) => after === undefined).length < 2;
+        turn += 1
+      ) {
+        await scheduler.turn();
+        for (let tick = 0; tick < 6; tick += 1) await Promise.resolve();
+      }
+      expect(afters.filter((after) => after === undefined).length).toBeGreaterThan(1);
+    } finally {
+      await scheduler.close();
+      Time.setProvider(prior);
+    }
+  });
+
+  it("retries an unavailable catalog on the periodic cadence", async () => {
+    let requests = 0;
+    const scheduler = new AgentScheduler(
+      {
+        repositories: 1,
+        page: () => {
+          requests += 1;
+          return Promise.reject(new Error("Catalog temporarily unavailable."));
+        },
+        scope: () => {
+          throw new Error("No catalog page succeeded.");
+        },
+      },
+      new AgentExecutionCapacity(1, 0),
+      () => undefined,
+    );
+    await scheduler.turn();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(requests).toBe(1);
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    expect(requests).toBeGreaterThanOrEqual(2);
+    expect(requests).toBeLessThanOrEqual(3);
+    await scheduler.close();
+  });
+
+  it("rejects a nonadvancing pending cursor and an oversized provider page", async () => {
+    const cursor = {
+      asOf: create(TimestampSchema, { seconds: 10n }),
+      key: {
+        scope: create(AgentExecutionScopeSchema, { stateType: "support.Agent", agentKey: "same" }),
+        eligibleAt: create(TimestampSchema, { seconds: 9n }),
+      },
+    };
+    let reads = 0;
+    const scheduler = new AgentScheduler(
+      source([
+        {
+          id: "malformed-pending",
+          pending: () => {
+            reads += 1;
+            if (reads === 1)
+              return Promise.resolve({ records: [record("first")], after: cursor, hasMore: true });
+            return Promise.resolve({ records: [record("second")], after: cursor, hasMore: true });
+          },
+          run: () => Promise.resolve(),
+        },
+      ]),
+      new AgentExecutionCapacity(1, 0),
+      () => undefined,
+    );
+    await ready(scheduler);
+    await scheduler.turn();
+    await expect(scheduler.turn()).rejects.toThrow(/nonadvancing/);
+    await scheduler.close();
+
+    const oversized = new AgentScheduler(
+      source([
+        {
+          id: "oversized-pending",
+          pending: () =>
+            Promise.resolve({
+              records: Array.from({ length: 17 }, (_, i) => record(String(i))),
+              hasMore: false,
+            }),
+          run: () => Promise.resolve(),
+        },
+      ]),
+      new AgentExecutionCapacity(1, 0),
+      () => undefined,
+    );
+    await ready(oversized);
+    await expect(oversized.turn()).rejects.toThrow(/bounded page size/);
+    await oversized.close();
+  });
+
+  it("rejects a pending continuation that changes its fixed sweep cutoff", async () => {
+    let reads = 0;
+    const cursor = (seconds: bigint) => ({
+      asOf: create(TimestampSchema, { seconds }),
+      key: {
+        scope: create(AgentExecutionScopeSchema, { stateType: "support.Agent", agentKey: "same" }),
+        eligibleAt: create(TimestampSchema, { seconds: 9n }),
+      },
+    });
+    const scheduler = new AgentScheduler(
+      source([
+        {
+          id: "changed-cutoff",
+          pending: () =>
+            Promise.resolve({
+              records: [],
+              after: cursor(++reads === 1 ? 10n : 11n),
+              hasMore: true,
+            }),
+          run: () => Promise.resolve(),
+        },
+      ]),
+      new AgentExecutionCapacity(1, 0),
+      () => undefined,
+    );
+    await ready(scheduler);
+    await scheduler.turn();
+    await expect(scheduler.turn()).rejects.toThrow(/nonadvancing/);
+    await scheduler.close();
+  });
+
+  it("rejects oversized and uncontinuable catalog pages", async () => {
+    const identity = create(TenantIdSchema, { kind: { case: "value", value: "one" } });
+    const pages = [
+      { ids: Array.from({ length: 17 }, () => identity), hasMore: false },
+      { ids: [identity], hasMore: true },
+    ];
+    for (const page of pages) {
+      const scheduler = new AgentScheduler(
+        {
+          repositories: 1,
+          page: () => Promise.resolve(page),
+          scope: () => {
+            throw new Error("Malformed page must not construct a scope.");
+          },
+        },
+        new AgentExecutionCapacity(1, 0),
+        () => undefined,
+      );
+      await scheduler.turn();
+      for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+      await expect(scheduler.turn()).rejects.toThrow(/invalid bounded page/);
+      await scheduler.close();
+    }
+  });
+
+  it("rejects a catalog page that repeats its provider continuation", async () => {
+    const cursor = { [Symbol.toStringTag]: "TenantCatalogCursor" as const };
+    const scheduler = new AgentScheduler(
+      {
+        repositories: 1,
+        page: () => Promise.resolve({ ids: [], after: cursor, hasMore: true }),
+        scope: () => {
+          throw new Error("Empty catalog page has no scope.");
+        },
+      },
+      new AgentExecutionCapacity(1, 0),
+      () => undefined,
+    );
+    await scheduler.turn();
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+    await scheduler.turn();
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+    await expect(scheduler.turn()).rejects.toThrow(/nonadvancing continuation/);
+    await scheduler.close();
+  });
+
+  it("runs an accepted wake while catalog I/O hangs and ignores its late result after close", async () => {
+    let settleCatalog:
+      | ((page: {
+          ids: ReturnType<typeof create<typeof TenantIdSchema>>[];
+          hasMore: false;
+        }) => void)
+      | undefined;
+    const catalog = new Promise<{
+      ids: ReturnType<typeof create<typeof TenantIdSchema>>[];
+      hasMore: false;
+    }>((resolve) => {
+      settleCatalog = resolve;
+    });
+    let requests = 0;
+    const seen: string[] = [];
+    const scheduler = new AgentScheduler(
+      {
+        repositories: 1,
+        page: () => {
+          requests += 1;
+          return catalog;
+        },
+        scope: () => ({
+          id: "late-periodic",
+          pending: () => {
+            throw new Error("Late catalog must not schedule a read.");
+          },
+          run: () => Promise.resolve(),
+        }),
+      },
+      new AgentExecutionCapacity(1, 0),
+      () => undefined,
+    );
+    await scheduler.turn();
+    for (let tick = 0; tick < 4; tick += 1) await Promise.resolve();
+    scheduler.wake({
+      id: "accepted-during-catalog-read",
+      pending: () => Promise.resolve({ records: [record("accepted")], hasMore: false }),
+      run: (key) => {
+        seen.push(key.scope?.agentKey ?? "missing");
+        return Promise.resolve();
+      },
+    });
+    await scheduler.turn();
+    for (let tick = 0; tick < 8 && seen.length === 0; tick += 1) await Promise.resolve();
+    expect(seen).toEqual(["accepted"]);
+    await scheduler.close();
+    settleCatalog?.({
+      ids: [create(TenantIdSchema, { kind: { case: "value", value: "late" } })],
+      hasMore: false,
+    });
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+    await scheduler.turn();
+    expect(requests).toBe(1);
+    expect(seen).toEqual(["accepted"]);
+  });
+
+  it("detaches a hung pending read on close and ignores its late rejection", async () => {
+    let rejectPending: ((reason: Error) => void) | undefined;
+    const pending = new Promise<{ records: ReturnType<typeof record>[]; hasMore: false }>(
+      (_, reject) => {
+        rejectPending = reject;
+      },
+    );
+    let runs = 0;
+    const scheduler = new AgentScheduler(
+      source([
+        {
+          id: "hung-pending",
+          pending: () => pending,
+          run: () => {
+            runs += 1;
+            return Promise.resolve();
+          },
+        },
+      ]),
+      new AgentExecutionCapacity(1, 0),
+      () => undefined,
+    );
+    await ready(scheduler);
+    const scan = scheduler.turn();
+    for (let tick = 0; tick < 4; tick += 1) await Promise.resolve();
+    await scheduler.close();
+    await expect(scan).rejects.toThrow(/discovery stopped/);
+    rejectPending?.(new Error("Late provider failure."));
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+    expect(runs).toBe(0);
   });
 
   it("cancels an active execution and stops discovery before shutdown drains", async () => {
@@ -349,10 +741,11 @@ describe("Agent indexed scheduler", () => {
       },
     };
     const scheduler = new AgentScheduler(
-      () => Promise.resolve([scope]),
+      source([scope]),
       new AgentExecutionCapacity(1, 0),
       () => undefined,
     );
+    await ready(scheduler);
     await scheduler.turn();
     await active;
     await scheduler.close();
@@ -376,16 +769,10 @@ describe("Agent indexed scheduler", () => {
         await held;
       },
     };
-    const first = new AgentScheduler(
-      () => Promise.resolve([scope]),
-      capacity,
-      () => undefined,
-    );
-    const second = new AgentScheduler(
-      () => Promise.resolve([scope]),
-      capacity,
-      () => undefined,
-    );
+    const first = new AgentScheduler(source([scope]), capacity, () => undefined);
+    const second = new AgentScheduler(source([scope]), capacity, () => undefined);
+    await ready(first);
+    await ready(second);
     await first.turn();
     await second.turn();
     await Promise.resolve();

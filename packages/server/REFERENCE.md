@@ -696,11 +696,23 @@ and prevents late handler results from changing Entity state or emitting signals
 it cannot stop arbitrary application JavaScript or undo external effects.
 
 Newly accepted work supplies its repository and tenant to prompt discovery.
-Periodic discovery also visits scopes from the provider tenant catalog, which is
-read initially and refreshed after five seconds measured by `Time`. The catalog
-API returns the complete tenant list; that list is reused between refreshes.
-Each scheduler turn reads at most four indexed pending-work pages, with turns
-reserved for periodic discovery so new arrivals cannot indefinitely delay it.
+Periodic discovery reads tenant pages and constructs repository scopes as they
+are needed. It retains at most one page of 16 tenants, four periodic scan scopes,
+and 64 scopes awaiting a prompt scan. A turn requests at most one tenant page
+and reads at most four pending-work pages. It does not load the complete tenant
+catalog or retain a scan position for every tenant.
+
+A sweep finishes before another begins. The next starts no earlier than five
+seconds after the preceding sweep started, measured by `Time`; longer sweeps
+restart after completion. This lets discovery reach tenants near the end of a
+large catalog and find later admissions on the next sweep. Periodic scans keep
+their turn during new arrivals, including while execution capacity is full.
+A pending catalog request does not block prompt scans of known scopes.
+
+Context shutdown stops waiting for discovery reads even if a provider ignores
+cancellation. Late results cannot submit work or restart scanning. Built-in
+adapters use their available cancellation and timeout controls; detaching the
+scheduler does not guarantee cancellation of an already issued native request.
 
 The signal's matching handlers share one Entity draft. Each handler can await
 `this.ai.invoke()` through the protected Spine facade. Calls in one handler must

@@ -18,8 +18,15 @@ import {
   type AgentExecutionRecord,
   type AgentInvocationKey,
 } from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
-import type { AgentPendingCursor, AgentPendingPage } from "@spine-event-engine/storage/provider";
+import type { TenantId } from "@spine-event-engine/proto";
+import type {
+  AgentPendingCursor,
+  AgentPendingPage,
+  TenantCatalogCursor,
+} from "@spine-event-engine/storage/provider";
+import { AgentExecutionRecords } from "@spine-event-engine/storage/provider";
 import { Time } from "@spine-event-engine/core";
+import type { TenantIndexPage } from "../context/tenant-index.js";
 import { withoutDeliveryCommitFence } from "../repository/commit-fence.js";
 import { AgentExecutionCapacity } from "./agent-execution-capacity.js";
 
@@ -50,24 +57,81 @@ export interface AgentScanScope {
 }
 
 /**
+ * Produces finite tenant pages and lazily constructs registered scopes.
+ */
+export interface AgentScopeSource {
+  /**
+   * Number of registered Agent repository views per tenant.
+   */
+  readonly repositories: number;
+
+  /**
+   * Reads one bounded tenant catalog page.
+   * @param after Opaque provider continuation from the prior page.
+   * @param signal Scheduler shutdown signal.
+   * @returns Complete tenant IDs and a possible continuation.
+   */
+  page(after: TenantCatalogCursor | undefined, signal: AbortSignal): Promise<TenantIndexPage>;
+
+  /**
+   * Creates one registered repository scope for a selected tenant.
+   * @param tenant Complete tenant identifier.
+   * @param repository Index in the fixed registered repository list.
+   * @returns A lazily constructed scan scope.
+   */
+  scope(tenant: TenantId, repository: number): AgentScanScope;
+}
+
+interface ResidentScope {
+  readonly scope: AgentScanScope;
+  cursor?: AgentPendingCursor;
+}
+
+interface VisitedPage {
+  readonly page: AgentPendingPage;
+  readonly retry: boolean;
+}
+
+const catalogPageSize = 16;
+const pendingPageSize = 16;
+const maxPendingPages = 4;
+const maxResidentScopes = 4;
+const maxUrgentScopes = 64;
+const sweepIntervalNanoseconds = 5_000_000_000n;
+
+/**
  * Bounded, round-robin scan of provider-indexed Agent heads.
  */
 export class AgentScheduler {
   readonly #controller = new AbortController();
 
-  readonly #cursors = new Map<string, AgentPendingCursor>();
-
   readonly #active = new Map<string, Promise<void>>();
 
-  readonly #urgent = new Map<string, AgentScanScope>();
+  readonly #urgent = new Map<string, ResidentScope>();
 
-  #snapshot: readonly AgentScanScope[] = [];
+  readonly #resident: ResidentScope[] = [];
 
-  #refreshAt = 0n;
+  #catalogAfter: TenantCatalogCursor | undefined;
+
+  #catalogPage: TenantIndexPage | undefined;
+
+  #catalogReady: TenantIndexPage | undefined;
+
+  #catalogRequest: Promise<void> | undefined;
+
+  #catalogDone = false;
+
+  #tenantAt = 0;
+
+  #repositoryAt = 0;
+
+  #restartAt = 0n;
+
+  #sweepStarted = false;
 
   #sweepFirst = false;
 
-  #nextScope = 0;
+  #nextResident = 0;
 
   #timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -77,12 +141,12 @@ export class AgentScheduler {
 
   /**
    * Creates bounded discovery for the context's registered Agent scopes.
-   * @param scopes Enumerates current repository and tenant scan scopes.
+   * @param source Pages tenants and constructs a registered scope on demand.
    * @param capacity Shared registry execution gate.
    * @param onError Reports failed discovery or execution turns.
    */
   constructor(
-    private readonly scopes: () => Promise<readonly AgentScanScope[]>,
+    private readonly source: AgentScopeSource,
     private readonly capacity: AgentExecutionCapacity,
     private readonly onError: (error: unknown) => void,
   ) {}
@@ -100,8 +164,8 @@ export class AgentScheduler {
    */
   wake(scope?: AgentScanScope): void {
     if (this.#closed) return;
-    if (scope !== undefined && (this.#urgent.has(scope.id) || this.#urgent.size < 64))
-      this.#urgent.set(scope.id, scope);
+    if (scope !== undefined && !this.#urgent.has(scope.id) && this.#urgent.size < maxUrgentScopes)
+      this.#urgent.set(scope.id, { scope });
     if (this.#timer !== undefined) clearTimeout(this.#timer);
     this.#timer = setTimeout(() => {
       this.#timer = undefined;
@@ -130,12 +194,13 @@ export class AgentScheduler {
   }
 
   async #scan(): Promise<void> {
-    const scopes = await this.#scopeSnapshot();
+    this.#prepareSweep();
     const sweepFirst = this.#sweepFirst;
-    const firstSweep = sweepFirst ? await this.#sweepPages(scopes, 1, 0) : 0;
+    const visited = new Set<ResidentScope>();
+    const firstSweep = sweepFirst ? await this.#sweepPages(1, visited) : 0;
     let pages = firstSweep;
     pages += await this.#urgentPages(3 - pages);
-    pages += await this.#sweepPages(scopes, 4 - pages, firstSweep);
+    pages += await this.#sweepPages(maxPendingPages - pages, visited);
     if (pages > 0) this.#sweepFirst = !sweepFirst;
   }
 
@@ -146,10 +211,13 @@ export class AgentScheduler {
    */
   async #urgentPages(limit: number): Promise<number> {
     let pages = 0;
-    for (const [id, scope] of this.#urgent) {
+    for (const [id, resident] of this.#urgent) {
       if (pages === limit || this.#closed || this.capacity.full()) break;
-      this.#urgent.delete(id);
-      await this.#visit(scope);
+      const { page, retry } = await this.#visit(resident);
+      if (!retry) {
+        if (page.hasMore && page.after !== undefined) resident.cursor = page.after;
+        else this.#urgent.delete(id);
+      }
       pages += 1;
     }
     return pages;
@@ -157,57 +225,201 @@ export class AgentScheduler {
 
   /**
    * Advances the periodic catalog sweep even under sustained accepted work.
-   * @param scopes Current catalog snapshot.
    * @param limit Remaining page budget.
-   * @param alreadyVisited Scope pages visited earlier in this turn.
+   * @param visited Residents already read in this turn.
    * @returns Number of pages visited.
    */
-  async #sweepPages(
-    scopes: readonly AgentScanScope[],
-    limit: number,
-    alreadyVisited: number,
-  ): Promise<number> {
+  async #sweepPages(limit: number, visited: Set<ResidentScope>): Promise<number> {
     let pages = 0;
-    for (; pages < Math.min(limit, scopes.length - alreadyVisited); pages += 1) {
+    for (let considered = 0; considered < maxResidentScopes && pages < limit; considered += 1) {
       if (this.#closed || this.capacity.full()) break;
-      const scope = scopes[this.#nextScope % scopes.length];
-      this.#nextScope += 1;
-      if (scope === undefined) break;
-      await this.#visit(scope);
+      if (this.#resident.length === 0) break;
+      const index = this.#nextResident % this.#resident.length;
+      const resident = this.#resident[index];
+      if (resident === undefined) break;
+      if (visited.has(resident)) {
+        this.#nextResident = index + 1;
+        continue;
+      }
+      visited.add(resident);
+      const { page, retry } = await this.#visit(resident);
+      if (page.hasMore || retry) {
+        if (!retry && page.after !== undefined) resident.cursor = page.after;
+        this.#nextResident = index + 1;
+      } else {
+        this.#resident.splice(index, 1);
+        this.#nextResident = index;
+      }
+      pages += 1;
     }
     return pages;
   }
 
   /**
-   * Amortizes the provider's full tenant catalog across bounded page turns.
-   * @returns The current sweep snapshot, refreshed after five provider-time seconds.
+   * Restarts completed traversals only after their original cadence.
    */
-  async #scopeSnapshot(): Promise<readonly AgentScanScope[]> {
+  #prepareSweep(): void {
     const now = Time.currentTime();
     const current = now.seconds * 1_000_000_000n + BigInt(now.nanos);
-    if (current >= this.#refreshAt) {
-      this.#snapshot = await this.scopes();
-      this.#refreshAt = current + 5_000_000_000n;
-      this.#nextScope %= Math.max(1, this.#snapshot.length);
+    if (!this.#sweepStarted || (this.#completeSweep() && current >= this.#restartAt)) {
+      this.#sweepStarted = true;
+      this.#restartAt = current + sweepIntervalNanoseconds;
+      this.#catalogDone = false;
+      this.#catalogAfter = undefined;
     }
-    return this.#snapshot;
+    this.#acceptCatalogPage();
+    this.#fillResident();
+    if (!this.#catalogDone && this.#catalogPage === undefined && this.#catalogRequest === undefined)
+      this.#requestCatalogPage();
   }
 
-  async #visit(scope: AgentScanScope): Promise<void> {
-    if (this.capacity.full()) return;
-    const page = await scope.pending(this.#cursors.get(scope.id), 16);
+  /**
+   * Reports whether the prior finite catalog traversal has ended.
+   */
+  #completeSweep(): boolean {
+    return (
+      this.#catalogDone &&
+      this.#catalogPage === undefined &&
+      this.#catalogReady === undefined &&
+      this.#catalogRequest === undefined &&
+      this.#resident.length === 0
+    );
+  }
+
+  /**
+   * Installs one settled provider page without retaining earlier pages.
+   */
+  #acceptCatalogPage(): void {
+    const page = this.#catalogReady;
+    if (page === undefined) return;
+    this.#catalogReady = undefined;
+    if (page.ids.length > catalogPageSize || (page.hasMore && page.after === undefined))
+      throw new Error("Agent tenant catalog returned an invalid bounded page.");
+    if (page.hasMore && page.after === this.#catalogAfter)
+      throw new Error("Agent tenant catalog returned a nonadvancing continuation.");
+    this.#catalogPage = page;
+    this.#catalogAfter = page.after;
+    this.#catalogDone = !page.hasMore;
+    this.#tenantAt = 0;
+    this.#repositoryAt = 0;
+  }
+
+  /**
+   * Constructs at most four resident tenant/repository scopes.
+   */
+  #fillResident(): void {
+    while (this.#resident.length < maxResidentScopes && this.#catalogPage !== undefined) {
+      const tenant = this.#catalogPage.ids[this.#tenantAt];
+      if (tenant === undefined) {
+        this.#catalogPage = undefined;
+        break;
+      }
+      this.#resident.push({ scope: this.source.scope(tenant, this.#repositoryAt) });
+      this.#repositoryAt += 1;
+      if (this.#repositoryAt === this.source.repositories) {
+        this.#repositoryAt = 0;
+        this.#tenantAt += 1;
+      }
+    }
+  }
+
+  /**
+   * Starts one provider page without making urgent work await its I/O.
+   */
+  #requestCatalogPage(): void {
+    const after = this.#catalogAfter;
+    let received = false;
+    this.#catalogRequest = Promise.resolve()
+      .then(() => {
+        if (this.#closed) return undefined;
+        return this.source.page(after, this.#controller.signal);
+      })
+      .then((page) => {
+        if (!this.#closed && page !== undefined) {
+          this.#catalogReady = page;
+          received = true;
+        }
+      })
+      .catch((error: unknown) => {
+        if (!this.#closed) this.onError(error);
+      })
+      .finally(() => {
+        this.#catalogRequest = undefined;
+        if (this.#closed) return;
+        if (received) this.wake();
+        else this.#schedule(100);
+      });
+  }
+
+  /**
+   * Reads one indexed pending page with shutdown detachment.
+   */
+  async #visit(resident: ResidentScope): Promise<VisitedPage> {
+    const page = await this.#awaitStop(resident.scope.pending(resident.cursor, pendingPageSize));
+    if (page.records.length > pendingPageSize)
+      throw new Error("Agent pending provider exceeded the bounded page size.");
     if (page.hasMore && page.after === undefined)
       throw new Error("Agent pending provider omitted its required continuation.");
-    for (const record of page.records) this.#submit(scope, record);
-    if (page.hasMore && page.after !== undefined) this.#cursors.set(scope.id, page.after);
-    else this.#cursors.delete(scope.id);
+    if (page.hasMore && !this.#advances(resident.cursor, page.after))
+      throw new Error("Agent pending provider returned a nonadvancing continuation.");
+    let retry = false;
+    if (!this.#closed)
+      for (const record of page.records) if (!this.#submit(resident.scope, record)) retry = true;
+    return { page, retry };
   }
 
-  #submit(scope: AgentScanScope, record: AgentExecutionRecord): void {
+  /**
+   * Verifies that a continuation moves beyond the previously examined head.
+   */
+  #advances(
+    before: AgentPendingCursor | undefined,
+    after: AgentPendingCursor | undefined,
+  ): boolean {
+    if (after === undefined) return false;
+    if (before === undefined) return true;
+    if (after.asOf.seconds !== before.asOf.seconds || after.asOf.nanos !== before.asOf.nanos)
+      return false;
+    return (
+      AgentExecutionRecords.pendingKey(after.key.eligibleAt, after.key.scope) >
+      AgentExecutionRecords.pendingKey(before.key.eligibleAt, before.key.scope)
+    );
+  }
+
+  /**
+   * Detaches promptly from a provider read that ignores cancellation.
+   * @typeParam T Provider response type.
+   * @param promise Underlying provider read.
+   * @returns Response or prompt shutdown rejection.
+   */
+  #awaitStop<T>(promise: Promise<T>): Promise<T> {
+    return new Promise((resolve, reject) => {
+      const signal = this.#controller.signal;
+      const abort = () => {
+        signal.removeEventListener("abort", abort);
+        reject(new Error("Agent discovery stopped."));
+      };
+      signal.addEventListener("abort", abort, { once: true });
+      promise.then(
+        (value) => {
+          signal.removeEventListener("abort", abort);
+          if (!signal.aborted) resolve(value);
+        },
+        (error: unknown) => {
+          signal.removeEventListener("abort", abort);
+          reject(
+            error instanceof Error ? error : new Error("Agent discovery failed.", { cause: error }),
+          );
+        },
+      );
+      if (signal.aborted) abort();
+    });
+  }
+
+  #submit(scope: AgentScanScope, record: AgentExecutionRecord): boolean {
     const key = record.accepted?.key;
-    if (key === undefined || this.#closed) return;
+    if (key === undefined || this.#closed) return false;
     const id = `${scope.id}:${Buffer.from(toBinary(AgentInvocationKeySchema, key)).toString("base64")}`;
-    if (this.#active.has(id)) return;
+    if (this.#active.has(id)) return true;
     const invocation = clone(AgentInvocationKeySchema, key);
     const task = this.capacity.trySubmit({
       key: id,
@@ -218,12 +430,13 @@ export class AgentScheduler {
           return scope.run(invocation, this.#controller.signal);
         }),
     });
-    if (task === undefined) return;
+    if (task === undefined) return false;
     this.#active.set(id, task);
     void task.catch(this.onError).finally(() => {
       this.#active.delete(id);
       this.wake();
     });
+    return true;
   }
 
   #schedule(delay: number): void {
@@ -247,6 +460,9 @@ export class AgentScheduler {
     if (this.#timer !== undefined) clearTimeout(this.#timer);
     this.#timer = undefined;
     this.#urgent.clear();
+    this.#resident.length = 0;
+    this.#catalogPage = undefined;
+    this.#catalogReady = undefined;
   }
 
   /**
@@ -255,7 +471,9 @@ export class AgentScheduler {
    */
   async close(): Promise<void> {
     this.stop();
-    await this.#scanning;
+    await this.#scanning?.catch((error: unknown) => {
+      if (!this.#closed) throw error;
+    });
     await Promise.allSettled(this.#active.values());
   }
 }

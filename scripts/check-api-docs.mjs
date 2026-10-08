@@ -535,7 +535,12 @@ const expectedStorageProviderDocumentedExports = [
   "StorageQueryValues",
   "TenantBoundary",
   "TenantCatalog",
+  "TenantCatalogCursor",
+  "TenantCatalogPage",
   "TenantCatalogProvider",
+  "TenantCatalogRead",
+  "TenantCatalogReads",
+  "TenantCatalogSignal",
   "cleanupOperationActive",
   "disabledEventHistoryPort",
   "disabledStateHistoryPort",
@@ -1972,7 +1977,16 @@ const unexpectedStorageProviderExports = declaredStorageProviderExports.filter(
 const unexpectedDocumentedStorageProviderExports = [...storageProviderModuleNames].filter(
   (name) => !expectedStorageProviderDocumentedExports.includes(name),
 );
-const providerOnlyStorageContracts = ["TenantBoundary", "TenantCatalog", "TenantCatalogProvider"];
+const providerOnlyStorageContracts = [
+  "TenantBoundary",
+  "TenantCatalog",
+  "TenantCatalogCursor",
+  "TenantCatalogPage",
+  "TenantCatalogProvider",
+  "TenantCatalogRead",
+  "TenantCatalogReads",
+  "TenantCatalogSignal",
+];
 const leakedStorageRootContracts = providerOnlyStorageContracts.filter(
   (name) => storageModuleNames.has(name) || declaredStorageExports.includes(name),
 );

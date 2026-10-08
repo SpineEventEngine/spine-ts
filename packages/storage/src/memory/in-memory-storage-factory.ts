@@ -23,7 +23,11 @@ import { StorageFactory } from "../storage/storage-factory.js";
 import {
   TenantBoundary,
   type TenantCatalog,
+  type TenantCatalogCursor,
+  type TenantCatalogPage,
+  type TenantCatalogRead,
   type TenantCatalogProvider,
+  TenantCatalogReads,
 } from "../internal/tenancy.js";
 import { InMemoryStorageBackend } from "./in-memory-storage-backend.js";
 import { InMemoryRecordStorage } from "./in-memory-record-storage.js";
@@ -234,6 +238,8 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
  * Admits and lists tenant boundaries within one memory backend.
  */
 class MemoryTenantCatalog implements TenantCatalog {
+  readonly #cursorIdentity = {};
+
   #open = true;
 
   /**
@@ -252,6 +258,35 @@ class MemoryTenantCatalog implements TenantCatalog {
     return Promise.resolve().then(() => {
       this.requireOpen();
       return InMemoryStorageBackend.tenants(this.backend);
+    });
+  }
+
+  /**
+   * Reads one bounded admission-order page from a finite sweep.
+   * @param request Page size, cancellation, and catalog continuation.
+   * @returns Complete admitted boundaries and an optional continuation.
+   */
+  page(request: TenantCatalogRead): Promise<TenantCatalogPage> {
+    return Promise.resolve().then(() => {
+      this.requireOpen();
+      TenantCatalogReads.require(request);
+      const after = request.after;
+      if (after !== undefined && !(after instanceof MemoryTenantCursor))
+        throw new TypeError("Memory tenant catalog continuation is invalid.");
+      const cursor = after?.state(this.#cursorIdentity);
+      const start = cursor?.index ?? 0;
+      const length = cursor?.length ?? InMemoryStorageBackend.tenantCount(this.backend);
+      const end = Math.min(length, start + request.count);
+      const boundaries = InMemoryStorageBackend.tenantPage(this.backend, start, end - start);
+      request.signal.throwIfAborted();
+      this.requireOpen();
+      return {
+        boundaries,
+        ...(end < length
+          ? { after: new MemoryTenantCursor(this.#cursorIdentity, end, length) }
+          : {}),
+        hasMore: end < length,
+      };
     });
   }
 
@@ -284,5 +319,42 @@ class MemoryTenantCatalog implements TenantCatalog {
    */
   private requireOpen(): void {
     if (!this.#open) throw new Error("In-memory tenant catalog is closed.");
+  }
+}
+
+/**
+ * An immutable continuation bound to one memory catalog and sweep length.
+ */
+class MemoryTenantCursor implements TenantCatalogCursor {
+  readonly [Symbol.toStringTag] = "TenantCatalogCursor" as const;
+
+  readonly #identity: object;
+
+  readonly #index: number;
+
+  readonly #length: number;
+
+  /**
+   * Captures one finite admission-order sweep position.
+   * @param identity Private catalog issuance identity.
+   * @param index Next admission-order position.
+   * @param length Index length fixed at sweep start.
+   */
+  constructor(identity: object, index: number, length: number) {
+    this.#identity = identity;
+    this.#index = index;
+    this.#length = length;
+    Object.freeze(this);
+  }
+
+  /**
+   * Verifies issuance by the requested catalog before revealing the position.
+   * @param identity Private identity of the catalog reading this token.
+   * @returns Fixed sweep length and next position.
+   */
+  state(identity: object): { index: number; length: number } {
+    if (this.#identity !== identity)
+      throw new TypeError("Memory tenant catalog continuation is invalid.");
+    return { index: this.#index, length: this.#length };
   }
 }

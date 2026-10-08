@@ -50,6 +50,38 @@ the full state type, Agent key, category, and original record ID, then checks
 immutable payload equality on repeated appends. Their provider references
 specify physical index and payload constraints.
 
+## Tenant catalog paging
+
+Storage adapters implement `TenantCatalog.page({ count, signal, after? })` from
+the provider entry point. `count` is a positive safe integer up to 127 and bounds
+native candidates examined, including candidates filtered out as unrelated
+namespaces. `signal` accepts a native `AbortSignal`; `TenantCatalogSignal`
+describes the required members without requiring DOM declarations in storage
+consumers. `TenantCatalogReads.require()` performs common request validation.
+
+A `TenantCatalogPage` returns complete `boundaries`, `hasMore`, and an opaque
+`after` continuation when more candidates remain. Pass that continuation to the
+same catalog instance. Forged or cross-catalog continuations are rejected; the
+cursor is an in-process value, not a durable domain record. An empty page can
+still have more candidates. Continue until `hasMore` is false, rather than
+stopping at the first empty page. Repeating a valid continuation may repeat the
+page. A fresh sweep starts without a continuation.
+
+Memory pages use an admission-time index and capture its length for that sweep;
+PostgreSQL and MySQL page their configured tenant collections. Datastore pages
+its bounded early-admission cache and then native namespace metadata using a
+query limit and native cursor. A tenant can appear in both phases. Existing
+Agent claims prevent that duplicate discovery from running the same accepted
+invocation concurrently. An empty native `MORE_RESULTS_AFTER_LIMIT` tail that repeats its cursor ends
+that sweep; other continuing pages must advance. Datastore limits each page wait to five
+seconds and destroys its query stream on cancellation or timeout.
+
+Catalogs check cancellation before starting work and before returning a result.
+Paging is a finite traversal, not an atomic catalog snapshot: a concurrent
+admission can appear in the current or next sweep. Agent recovery uses this
+paged contract; the separate `all()` operation remains available for existing
+callers that require the complete catalog.
+
 ## Agent execution storage
 
 `AgentExecutionStorageFactories` opens the provider-only execution handle for an

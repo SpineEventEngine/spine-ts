@@ -70,7 +70,12 @@ const expectedStorageProviderExports = [
   "StorageQueryValues",
   "TenantBoundary",
   "TenantCatalog",
+  "TenantCatalogCursor",
+  "TenantCatalogPage",
   "TenantCatalogProvider",
+  "TenantCatalogRead",
+  "TenantCatalogReads",
+  "TenantCatalogSignal",
   "cleanupOperationActive",
   "disabledEventHistoryPort",
   "disabledStateHistoryPort",
@@ -140,7 +145,16 @@ describe("storage API documentation inventory", () => {
     const rootExports = moduleExports(resolve(repoRoot, "packages/storage/src/index.ts"));
     const providerExports = moduleExports(resolve(repoRoot, "packages/storage/src/provider.ts"));
 
-    for (const name of ["TenantBoundary", "TenantCatalog", "TenantCatalogProvider"]) {
+    for (const name of [
+      "TenantBoundary",
+      "TenantCatalog",
+      "TenantCatalogCursor",
+      "TenantCatalogPage",
+      "TenantCatalogProvider",
+      "TenantCatalogRead",
+      "TenantCatalogReads",
+      "TenantCatalogSignal",
+    ]) {
       expect(rootExports).not.toContain(name);
     }
     expect(providerExports).toEqual(

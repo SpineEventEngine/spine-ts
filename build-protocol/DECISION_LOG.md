@@ -6027,3 +6027,28 @@ task. Agent work remains a separate task.
 
 See [the Time task](planning/spine-time-task.md) and
 [its status](planning/spine-time-worklog.md).
+
+## D-0125: Bounded Tenant Paging For Agent Recovery
+
+Status: Accepted; implementation verification in progress
+
+Date: 2026-10-08
+
+Agent recovery uses mandatory provider tenant paging instead of `all()` or a
+periodically rebuilt tenant/repository product. A page has a native candidate
+limit, cancellation signal and opaque continuation tied to its catalog instance.
+Memory and configured SQL catalogs page existing indexed collections; Datastore
+uses limited native metadata queries and a finite page deadline. Existing
+unrelated callers retain `all()`; there is no paging fallback to that operation.
+
+The scheduler constructs scopes lazily and retains a fixed-size scan window.
+It finishes a traversal before restarting, preserves periodic work during new
+arrivals, and detaches from discovery waits on shutdown. Late results cannot
+submit work. These guarantees do not promise cancellation of a native request
+already issued by a provider, nor a fixed recovery latency across any backlog.
+
+This corrects the third independent Agent review's unbounded catalog finding.
+Amortizing full enumeration every five seconds did not bound the refresh itself.
+No domain Proto, history retention, deletion or Entity transaction contract
+changes. See [the Agent task](planning/agent-entities.md) and the
+[provider contract](../packages/storage/REFERENCE.md#tenant-catalog-paging).

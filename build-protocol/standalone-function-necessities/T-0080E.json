@@ -487,6 +487,24 @@
   },
   {
     "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/tenant-catalog.ts",
+    "kind": "function-declaration",
+    "identity": "collectNativeCandidates()#1",
+    "name": "collectNativeCandidates",
+    "disposition": "necessity",
+    "reason": "TypeScript Datastore paging boundary: collectNativeCandidates controls one total deadline and cancellation outside namespace conversion, allowing late stream events to be consumed without changing a settled page."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/tenant-catalog.ts",
+    "kind": "function-declaration",
+    "identity": "observeNativeCandidates()#1",
+    "name": "observeNativeCandidates",
+    "disposition": "necessity",
+    "reason": "TypeScript Datastore stream boundary: observeNativeCandidates separates bounded event observation from collector settlement so every handler checks settled state and late data cannot alter the result."
+  },
+  {
+    "rule": "standalone-function",
     "file": "packages/storage-mysql/src/mysql/storage-factory.ts",
     "kind": "function-declaration",
     "identity": "assertNoRetiredLayout()#1",

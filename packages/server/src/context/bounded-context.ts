@@ -950,28 +950,29 @@ export class BoundedContext {
     );
     if (repositories.length === 0) return;
     this.#agentScheduler = new AgentScheduler(
-      () => this.#agentScopes(tenantIndex, repositories),
+      {
+        repositories: repositories.length,
+        page: (after, signal) =>
+          tenantIndex.page({
+            count: 16,
+            signal,
+            ...(after === undefined ? {} : { after }),
+          }),
+        scope: (id, index) => {
+          const repository = repositories[index];
+          if (repository === undefined) throw new Error("Agent repository scope is unavailable.");
+          return this.#agentScope(
+            repository,
+            tenantIndex.tenantMode === "single-tenant" ? undefined : id,
+          );
+        },
+      },
       AgentExecutionCapacity.for(this.#ai),
       (error) => {
         if (this.#agentErrors.length < 32) this.#agentErrors.push(error);
       },
     );
     this.#agentScheduler.start();
-  }
-
-  /**
-   * Enumerates complete tenant and Agent repository scan scopes.
-   */
-  async #agentScopes(
-    tenants: TenantIndex,
-    repositories: readonly RepositoryView[],
-  ): Promise<readonly AgentScanScope[]> {
-    const ids = await tenants.all();
-    return ids.flatMap((id) =>
-      repositories.map((repository) =>
-        this.#agentScope(repository, tenants.tenantMode === "single-tenant" ? undefined : id),
-      ),
-    );
   }
 
   /**

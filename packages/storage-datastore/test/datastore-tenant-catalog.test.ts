@@ -13,15 +13,214 @@
  */
 
 import { create } from "@bufbuild/protobuf";
+import { Readable } from "node:stream";
 import { TenantIdSchema } from "@spine-event-engine/proto";
 import { TenantBoundary } from "@spine-event-engine/storage/provider";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { DatastoreStorageFactory, DefaultNamespaceConverter } from "../src/index.js";
 import { NamespaceAssignments } from "../src/datastore/namespace.js";
 import { DatastoreTenantCatalog } from "../src/datastore/tenant-catalog.js";
 
 describe("DatastoreTenantCatalog", () => {
+  it("reads bounded native namespace pages including an empty filtered continuation", async () => {
+    const client = new NamespaceClient(["external", "Valpha", "Vbeta"]);
+    const catalog = new DatastoreTenantCatalog(client as never, new DefaultNamespaceConverter());
+    const signal = new AbortController().signal;
+    const early = await catalog.page({ count: 1, signal });
+    expect(early.boundaries).toEqual([]);
+    expect(early.hasMore).toBe(true);
+    if (early.after === undefined) throw new Error("Expected early-cache continuation.");
+    const filtered = await catalog.page({ count: 1, signal, after: early.after });
+    expect(filtered.boundaries).toEqual([]);
+    expect(filtered.hasMore).toBe(true);
+    if (filtered.after === undefined) throw new Error("Expected native continuation.");
+    const found = await catalog.page({ count: 1, signal, after: filtered.after });
+    expect(found.boundaries.map((value) => value.tenantId?.kind)).toEqual([
+      { case: "value", value: "alpha" },
+    ]);
+    expect(client.pageLimits).toEqual([1, 1]);
+    expect(client.pageStarts).toEqual([undefined, "1"]);
+    if (found.after === undefined) throw new Error("Expected final native continuation.");
+    const forged = Object.create(Reflect.getPrototypeOf(found.after)) as typeof found.after;
+    await expect(catalog.page({ count: 1, signal, after: forged })).rejects.toThrow();
+    const constructed = Reflect.construct(found.after.constructor, [
+      catalog,
+      [],
+      "native",
+      0,
+      "2",
+    ]) as typeof found.after;
+    await expect(catalog.page({ count: 1, signal, after: constructed })).rejects.toThrow();
+    const last = await catalog.page({ count: 1, signal, after: found.after });
+    expect(last.boundaries.map((value) => value.tenantId?.kind)).toEqual([
+      { case: "value", value: "beta" },
+    ]);
+    expect(last.hasMore).toBe(false);
+    await expect(catalog.page({ count: 0, signal })).rejects.toThrow(/count/);
+    const foreign = new DatastoreTenantCatalog(client as never, new DefaultNamespaceConverter());
+    await expect(foreign.page({ count: 1, signal, after: found.after })).rejects.toThrow(
+      /continuation/,
+    );
+    const aborted = new AbortController();
+    aborted.abort();
+    await expect(catalog.page({ count: 1, signal: aborted.signal })).rejects.toThrow();
+  });
+
+  it("rejects a native continuation that does not advance", async () => {
+    const client = new NamespaceClient(["Va", "Vb", "Vc"]);
+    client.repeatCursor = true;
+    const catalog = new DatastoreTenantCatalog(client as never, new DefaultNamespaceConverter());
+    const signal = new AbortController().signal;
+    const early = await catalog.page({ count: 1, signal });
+    if (early.after === undefined) throw new Error("Expected native phase.");
+    const first = await catalog.page({ count: 1, signal, after: early.after });
+    if (first.after === undefined) throw new Error("Expected first native cursor.");
+    await expect(catalog.page({ count: 1, signal, after: first.after })).rejects.toThrow(
+      /nonadvancing/,
+    );
+  });
+
+  it("ends a native metadata sweep at an empty repeated-cursor tail", async () => {
+    const client = new NamespaceClient(["Va"]);
+    client.tailAfterLimit = true;
+    const catalog = new DatastoreTenantCatalog(client as never, new DefaultNamespaceConverter());
+    const signal = new AbortController().signal;
+    const early = await catalog.page({ count: 1, signal });
+    if (early.after === undefined) throw new Error("Expected native phase.");
+    const found = await catalog.page({ count: 1, signal, after: early.after });
+    if (found.after === undefined) throw new Error("Expected SDK tail cursor.");
+    const tail = await catalog.page({ count: 1, signal, after: found.after });
+    expect(tail.boundaries).toEqual([]);
+    expect(tail.hasMore).toBe(false);
+  });
+
+  it("rejects an empty repeated cursor when metadata says results may follow the cursor", async () => {
+    const client = new NamespaceClient(["Va"]);
+    client.tailAfterCursor = true;
+    client.tailAfterLimit = true;
+    const catalog = new DatastoreTenantCatalog(client as never, new DefaultNamespaceConverter());
+    const signal = new AbortController().signal;
+    const early = await catalog.page({ count: 1, signal });
+    if (early.after === undefined) throw new Error("Expected native phase.");
+    const found = await catalog.page({ count: 1, signal, after: early.after });
+    if (found.after === undefined) throw new Error("Expected native cursor.");
+    await expect(catalog.page({ count: 1, signal, after: found.after })).rejects.toThrow(
+      /nonadvancing continuation/,
+    );
+  });
+
+  it("rejects a continuing native page without a cursor", async () => {
+    const client = new NamespaceClient(["Va", "Vb"]);
+    client.missingCursor = true;
+    const catalog = new DatastoreTenantCatalog(client as never, new DefaultNamespaceConverter());
+    const signal = new AbortController().signal;
+    const early = await catalog.page({ count: 1, signal });
+    if (early.after === undefined) throw new Error("Expected native phase.");
+    await expect(catalog.page({ count: 1, signal, after: early.after })).rejects.toThrow(
+      /continuation/,
+    );
+  });
+
+  it("pages multiple early admissions before querying native namespaces", async () => {
+    const client = new NamespaceClient([]);
+    const catalog = new DatastoreTenantCatalog(client as never, new DefaultNamespaceConverter());
+    const signal = new AbortController().signal;
+    for (const value of ["one", "two", "three"])
+      await catalog.keep(TenantBoundary.from(tenant(value)));
+    const values: string[] = [];
+    let after;
+    for (let pageIndex = 0; pageIndex < 3; pageIndex += 1) {
+      const page = await catalog.page({
+        count: 1,
+        signal,
+        ...(after === undefined ? {} : { after }),
+      });
+      const boundary = page.boundaries[0];
+      if (boundary?.tenantId?.kind.case !== "value")
+        throw new Error("Expected early value tenant.");
+      values.push(boundary.tenantId.kind.value);
+      after = page.after;
+      expect(page.hasMore).toBe(true);
+    }
+    expect(values).toEqual(["one", "two", "three"]);
+    expect(client.pageLimits).toEqual([]);
+    if (after === undefined) throw new Error("Expected native phase.");
+    expect((await catalog.page({ count: 1, signal, after })).hasMore).toBe(false);
+    expect(client.pageLimits).toEqual([1]);
+  });
+
+  it("rejects oversized native streams and unrecognized continuation metadata", async () => {
+    const oversized = new NamespaceClient([]);
+    oversized.runQueryStream = () =>
+      Readable.from(
+        [{ [oversized.KEY]: { name: "Vone" } }, { [oversized.KEY]: { name: "Vtwo" } }],
+        { objectMode: true },
+      );
+    const signal = new AbortController().signal;
+    const large = new DatastoreTenantCatalog(oversized as never, new DefaultNamespaceConverter());
+    const largeEarly = await large.page({ count: 1, signal });
+    if (largeEarly.after === undefined) throw new Error("Expected native phase.");
+    await expect(large.page({ count: 1, signal, after: largeEarly.after })).rejects.toThrow(
+      /page limit/,
+    );
+
+    const malformed = new NamespaceClient(["Va"]);
+    malformed.invalidMetadata = true;
+    const invalid = new DatastoreTenantCatalog(malformed as never, new DefaultNamespaceConverter());
+    const invalidEarly = await invalid.page({ count: 1, signal });
+    if (invalidEarly.after === undefined) throw new Error("Expected native phase.");
+    await expect(invalid.page({ count: 1, signal, after: invalidEarly.after })).rejects.toThrow(
+      /invalid continuation metadata/,
+    );
+  });
+
+  it("settles a cancelled native read and ignores late stream events", async () => {
+    const client = new NamespaceClient([]);
+    const stream = new Readable({
+      objectMode: true,
+      read() {
+        /* Provider never responds. */
+      },
+    });
+    client.runQueryStream = () => stream;
+    const catalog = new DatastoreTenantCatalog(client as never, new DefaultNamespaceConverter());
+    const controller = new AbortController();
+    const early = await catalog.page({ count: 1, signal: controller.signal });
+    if (early.after === undefined) throw new Error("Expected native phase.");
+    const reading = catalog.page({ count: 1, signal: controller.signal, after: early.after });
+    controller.abort();
+    await expect(reading).rejects.toThrow(/cancelled/);
+    expect(() => {
+      stream.emit("data", { [client.KEY]: { name: "Vlate" } });
+      stream.emit("info", { moreResults: "MORE_RESULTS_AFTER_LIMIT", endCursor: "late" });
+      stream.emit("error", new Error("late provider detail"));
+    }).not.toThrow();
+  });
+
+  it("bounds an unresponsive native page by a total deadline", async () => {
+    vi.useFakeTimers();
+    try {
+      const client = new NamespaceClient([]);
+      client.runQueryStream = () =>
+        new Readable({
+          objectMode: true,
+          read() {
+            /* Provider never responds. */
+          },
+        });
+      const catalog = new DatastoreTenantCatalog(client as never, new DefaultNamespaceConverter());
+      const signal = new AbortController().signal;
+      const early = await catalog.page({ count: 1, signal });
+      if (early.after === undefined) throw new Error("Expected native phase.");
+      const reading = catalog.page({ count: 1, signal, after: early.after });
+      const rejected = expect(reading).rejects.toThrow(/deadline expired/);
+      await vi.advanceTimersByTimeAsync(5_001);
+      await rejected;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it("discovers only owned native namespaces without writing tenant records", async () => {
     const client = new NamespaceClient(["", "Vbeta", "external", "Valpha"]);
     const catalog = new DatastoreTenantCatalog(client as never, new DefaultNamespaceConverter());
@@ -166,6 +365,15 @@ class NamespaceClient {
   readonly queryArgs: string[] = [];
   selected: string | undefined;
   saved = 0;
+  readonly pageLimits: number[] = [];
+  readonly pageStarts: (string | undefined)[] = [];
+  limitValue = 0;
+  startValue: string | undefined;
+  repeatCursor = false;
+  tailAfterLimit = false;
+  tailAfterCursor = false;
+  missingCursor = false;
+  invalidMetadata = false;
   response: unknown;
   failure: Error | undefined;
 
@@ -179,12 +387,48 @@ class NamespaceClient {
 
   createQuery(...args: string[]) {
     this.queryArgs.push(...args);
+    this.startValue = undefined;
     return {
       select: (property: string) => {
         this.selected = property;
-        return this;
+        return {
+          limit: (count: number) => {
+            this.limitValue = count;
+            return {
+              start: (cursor: string) => {
+                this.startValue = cursor;
+              },
+            };
+          },
+        };
       },
     };
+  }
+
+  runQueryStream(): Readable {
+    const start = Number(this.startValue ?? "0");
+    this.pageLimits.push(this.limitValue);
+    this.pageStarts.push(this.startValue);
+    const values = (this.response as [unknown[]])[0].slice(start, start + this.limitValue);
+    const stream = Readable.from(values, { objectMode: true });
+    queueMicrotask(() => {
+      stream.emit("info", {
+        moreResults: this.invalidMetadata
+          ? "NOT_FINISHED"
+          : this.tailAfterCursor && values.length === 0
+            ? "MORE_RESULTS_AFTER_CURSOR"
+            : this.tailAfterLimit ||
+                start + values.length < (this.response as [unknown[]])[0].length
+              ? "MORE_RESULTS_AFTER_LIMIT"
+              : "NO_MORE_RESULTS",
+        endCursor: this.missingCursor
+          ? undefined
+          : this.repeatCursor && start > 0
+            ? this.startValue
+            : String(start + values.length),
+      });
+    });
+    return stream;
   }
 
   runQuery(): Promise<unknown> {

@@ -2524,3 +2524,117 @@ explicit gpt-6-sol/medium, fixed original base through the upcoming round 2
 correction commit. No inherited history, memory, previous reports or findings.
 Review all changed feature paths against normative requirements and standards.
 Configured role/profile is the available metadata; no runtime introspection.
+
+Round 3 completed independently at 22f06a48c. Explicit configured Sol/medium
+profile accepted; runtime metadata unavailable. One P2 remains in periodic
+recovery discovery: initial and periodic full catalog materialization still
+scales with every tenant/repository, and a blocked catalog read delays context
+shutdown. The earlier amortization fixed repeated short-turn work but did not
+bound the refresh itself. Report: `/tmp/agent-standalone-round-3.md`.
+
+Architecture escalation: the existing requirements-splitter role, explicit
+gpt-6-astra/high, will assess the smallest provider catalog paging and scheduler
+continuation contract, with cancellation, covering memory, SQL configured
+catalogs and native Datastore namespace metadata. This is a demonstrated
+provider-contract blocker; no other Agent API redesign. Return the bounded plan
+to the existing server/history implementer (gpt-6-sol/medium), then mechanically
+verify provider/server behavior and obtain narrow reviewer confirmation. No
+fourth whole-feature review is planned. Completion requires fixing this finding.
+
+Prepare a task-local Datastore emulator for the new native namespace paging
+check (`spine-agent-catalog-review3`). Use an ephemeral localhost port and local
+project only; remove this container after verification. Existing unrelated
+stopped database containers remain untouched. SQL catalog paging works over
+already configured tenant identities and does not introduce SQL queries.
+
+Architecture correction plan accepted:
+`/tmp/agent-catalog-paging-plan.md`. Existing requirements-splitter explicitly
+ran Astra/high; configured profile accepted, runtime introspection unavailable.
+No production edits by the planner. Three ordered slices: mandatory provider
+paging/cancellation; bounded TenantIndex and lazy scope construction; fixed-size
+scheduler continuation state and shutdown detachment. Existing all() remains
+for unrelated callers, but Agent discovery never calls it. Native Datastore
+uses supported limit/start/stream controls, with finite timeout; no invented SDK
+option. No domain Proto, deletion or history contract changes.
+
+Existing implementer Sol/medium is assigned all three slices and their focused
+provider/server tests and narrow docs. Keep one production writer. Revised
+remaining estimate: 1–2 hours including correction, review confirmation and
+release checks. Native emulator is ready on localhost:62842, project
+spine-agent-catalog-review3. Independent whole-feature round 3 is complete;
+its finding remains open until implementation and narrow confirmation pass.
+
+Round 3 provider slice milestone: mandatory page() implemented for memory,
+PostgreSQL, MySQL and Datastore, plus TenantIndex delegation. Memory admission
+index test failed before implementation, then passed. All catalog tokens use
+private state and reject forged prototypes/cross-catalog continuations. Focused
+provider tests pass 50/50 across five files, and storage plus all three native
+provider builds pass. Datastore tests check query limits/continuations, filtered
+pages, cancellation and malformed continuation. Scheduler conversion continues;
+these results do not yet close the round 3 finding or claim full release success.
+
+Native Datastore smoke exposed an actual metadata tail case missed by fixtures:
+with limit three, native pages returned 3/3/3/2 candidates, then zero raw
+candidates with MORE_RESULTS_AFTER_LIMIT and the unchanged requested cursor.
+The current strict continuation check rejects that finite end. The implementer
+will distinguish this empty native terminal condition from a filtered page
+(nonempty raw candidates must advance), and from a nonempty repeated-cursor
+protocol error. The scheduler still restarts complete sweeps to discover later
+admissions. Failure evidence: `/tmp/agent-round3-native-catalog.txt`. This
+SDK-observed refinement does not change the bounded paging contract.
+
+Native Datastore paging now passes against the task-local emulator after the
+empty-tail correction: six catalog pages, five native queries each limited to
+three candidates, eight complete value/domain tenant identities, two empty
+continuing pages, and no request for a pre-aborted signal. Provider rebuild
+passed. Smoke script and result: `/tmp/agent-round3-native-catalog.mjs` and
+`/tmp/agent-round3-native-catalog.txt`. Scheduler integration is still pending.
+
+Parent updated server/storage references for the final bounded paging design,
+including provider-only request/continuation/cancellation contracts, filtered
+pages and duplicate candidate discovery, fixed scheduler windows, complete
+sweeps and shutdown detachment. These replace the earlier full-catalog refresh
+text. Implementer retains production/test/TSDoc changes; no overlapping edits.
+
+Round 3 narrow follow-up confirms bounded catalog discovery is fixed, but one
+P2 correction remains: the Datastore empty-tail exception also accepts
+MORE_RESULTS_AFTER_CURSOR. Restrict it to the observed AFTER_LIMIT response;
+an empty repeated AFTER_CURSOR must reject. Report:
+`/tmp/agent-round-3-followup.md`. The existing implementer receives this finding
+and scripts-first coverage gaps at `/tmp/agent-review-new-coverage-gaps.txt`.
+Prior full-release branch coverage was 90.04%; the added provider/runtime paths
+need focused invalid-input, cancellation, continuation and multi-page tests
+before the expensive gate. Do not lower thresholds or exclude paths.
+
+All three requested standalone review/fix rounds are now closed. Round 3's final
+AFTER_LIMIT-only correction is independently confirmed in
+`/tmp/agent-round-3-followup.md`. Every reviewer was a distinct fresh subagent,
+explicit Sol/medium with no inherited turns or memory use. Follow-up checks
+returned to that round's reviewer. No accepted finding remains. Architecture
+used the existing Astra/high splitter only for the demonstrated provider paging
+contract blocker; implementation stayed with the existing Sol/medium context.
+
+Final focused evidence: 182/182 tests pass; affected provider/server builds,
+all four tooling typechecks, scoped ESLint/formatting, cleanup/TSDoc, TypeDoc
+inventory (63 documented and declared storage/provider exports), audience,
+runtime Time, logging containment, dependency and readiness checks pass.
+Changed-production coverage inspected: scheduler 123/138 branches, TenantIndex
+28/28, Datastore catalog 112/121. Added tests target actual malformed input,
+continuation, cancellation, deadline and paging behavior; thresholds unchanged.
+Final native Datastore smoke passes after the last provider build.
+
+Canonical concern dispositions: performance/reliability and persistence were
+reviewed in all three standalone rounds and their affected follow-ups. Public
+TypeScript/provider contracts and documentation claims were included in the
+round 3 follow-up, with deterministic declaration/export and TSDoc checks.
+Style/maintainability standards were checked against the scoped implementation
+and enforced mechanically. Existing credential/authentication/MCP security review
+remains applicable: these corrections do not change authorization, model/tool
+access or destinations; dependency audit and final Security workflow will be
+refreshed. No new general deletion or retention behavior was introduced.
+
+Next action: commit and immediately push the converged correction, then run one
+full release profile, strict packaged-consumer checks and offline publication
+trial. Preserve existing unchanged native SQL Agent recovery evidence; this
+correction changes their configured tenant paging, not SQL persistence. Remove
+the task-local Datastore emulator after final native verification.
