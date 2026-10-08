@@ -3026,3 +3026,24 @@ the pushed correction, then full/prod audits, prepare all 21 package archives
 with strict external consumer checks, and offline publication trial. Save
 command output and report under /tmp. Never publish packages or create a PR.
 Stop on any failure, preserve output, and classify before further commands.
+
+Final release profile at `3e75bda22` stopped before tests at lint:cleanup. Four
+modified callables exceed 35 lines: generation responseContent, replayGeneration,
+runProgram, and AI assertAiOutcomeContext. The prior reported cheap preflight
+omitted this deterministic cleanup gate; it was not complete for this branch.
+No coverage result, audit, package preparation or publication trial was produced.
+Report `/tmp/anthropic-three-round-verification.md`; output
+`/tmp/anthropic-three-round-release.txt`. GitHub Security passed on this code
+checkpoint (run 37811031498). Return one mechanical correction batch to the
+same implementer, preserving behavior. The entire actual cheap preflight,
+including lint:cleanup, must pass before retrying the full release profile.
+
+Deterministic cleanup correction is complete: only generation.ts and AI execution
+validation were split into cohesive helpers. Explicit lint:cleanup passed twice,
+all 331 focused tests pass, and affected builds, four tooling typechecks, scoped
+ESLint, TSDoc, formatting, docs/API/snippets, Proto lint/current output, copyright,
+time-read/logging/production-dependency policies, release readiness and diff checks
+all pass. Report `/tmp/anthropic-release-cleanup-fix.md`. No behavior, contract or
+policy change; this mechanical correction does not reopen reviewer lanes. Source
+is frozen for the existing explicit Luna/low mechanical function to retry the
+full release profile, then audits, package-consumer checks and offline trial.

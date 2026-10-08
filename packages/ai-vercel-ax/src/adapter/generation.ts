@@ -466,16 +466,24 @@ const responseContent = (
       ? { actualModel: create(ProviderNameSchema, { value: partial.actualModelId }) }
       : {}),
     ...(semanticUsage(partial.usage) ? { usage: semanticUsage(partial.usage) } : {}),
-    digest: digest(
-      JSON.stringify({
-        text: partial.text,
-        toolCalls: partial.toolCalls,
-        ...(partial.anthropicContent !== undefined
-          ? { anthropicContent: partial.anthropicContent }
-          : {}),
-      }),
-    ),
+    digest: responseDigest(partial),
   });
+
+/**
+ * Computes the stable journal digest from the received provider projection.
+ * @param partial Received content.
+ * @returns Digest of the provider-facing response fields.
+ */
+const responseDigest = (partial: StreamedPartialResult): ReturnType<typeof digest> =>
+  digest(
+    JSON.stringify({
+      text: partial.text,
+      toolCalls: partial.toolCalls,
+      ...(partial.anthropicContent !== undefined
+        ? { anthropicContent: partial.anthropicContent }
+        : {}),
+    }),
+  );
 
 /**
  * @param candidate Provider text.
@@ -843,19 +851,7 @@ const replayGeneration = (
   if (response.$typeName !== "spine.ts.agent.GenerationResponse")
     throw new TypeError("Saved attempt response kind mismatch");
   assertAiOutcomeContext(response);
-  if (providerConnection(request.model).capabilities.id === "anthropic-messages-v1") {
-    if (!response.anthropicContent) throw new TypeError("Saved Anthropic content missing");
-    if (
-      (response.outcome === AiOutcome.TOOL_REQUESTED ||
-        response.outcome === AiOutcome.INVALID_OUTPUT) &&
-      response.anthropicContent.blocks.some(
-        (block) =>
-          (block.content.case === "thinking" && !block.content.value.signature) ||
-          (block.content.case === "redactedThinking" && !block.content.value.data),
-      )
-    )
-      throw new TypeError("Saved Anthropic content incomplete");
-  }
+  assertSavedAnthropicContent(request, response);
   if (response.outcome === AiOutcome.ADMITTED)
     return replayAdmittedGeneration(request, state, response);
   const partial: StreamedPartialResult = {
@@ -876,6 +872,29 @@ const replayGeneration = (
   return {
     results: [{ index: 0, content: axCandidate(response.rawOutput), finishReason: "stop" }],
   };
+};
+
+/**
+ * Checks whether saved Anthropic blocks are complete enough to resume.
+ * @param request Selected typed capability.
+ * @param response Saved generation response.
+ */
+const assertSavedAnthropicContent = (
+  request: AiBackendExecution,
+  response: GenerationResponse,
+): void => {
+  if (providerConnection(request.model).capabilities.id !== "anthropic-messages-v1") return;
+  if (!response.anthropicContent) throw new TypeError("Saved Anthropic content missing");
+  if (
+    (response.outcome === AiOutcome.TOOL_REQUESTED ||
+      response.outcome === AiOutcome.INVALID_OUTPUT) &&
+    response.anthropicContent.blocks.some(
+      (block) =>
+        (block.content.case === "thinking" && !block.content.value.signature) ||
+        (block.content.case === "redactedThinking" && !block.content.value.data),
+    )
+  )
+    throw new TypeError("Saved Anthropic content incomplete");
 };
 
 /**
@@ -1125,16 +1144,7 @@ const runProgram = async (
 ): Promise<void> => {
   const definition = request.definition;
   if (definition.kind !== "generation") throw new TypeError("Generation capability required");
-  const generator = new AxGen<{ facts: string }, { answer: object }>(
-    "facts: string -> answer: json",
-  );
-  generator.addAssert(() => {
-    if (state.admission?.ok) return true;
-    const feedback = state.admission?.issues
-      .map((issue) => `${issue.path}: ${issue.message}`)
-      .join("; ");
-    return feedback !== undefined && feedback.length > 0 ? feedback : false;
-  });
+  const generator = correctionGenerator(state);
   const service = AxVercelBridge.createControlled(model, {
     maxRequests: definition.limits.modelRequests,
     onChat: (_model, prepared) => chat(request, state, prepared, schema),
@@ -1157,6 +1167,27 @@ const runProgram = async (
       abortSignal: request.control.signal,
     },
   );
+};
+
+/**
+ * Configures the bounded Ax correction feedback for one execution.
+ * @param state Current admission and validation state.
+ * @returns Generator with local validation feedback.
+ */
+const correctionGenerator = (
+  state: GenerationState,
+): AxGen<{ facts: string }, { answer: object }> => {
+  const generator = new AxGen<{ facts: string }, { answer: object }>(
+    "facts: string -> answer: json",
+  );
+  generator.addAssert(() => {
+    if (state.admission?.ok) return true;
+    const feedback = state.admission?.issues
+      .map((issue) => `${issue.path}: ${issue.message}`)
+      .join("; ");
+    return feedback !== undefined && feedback.length > 0 ? feedback : false;
+  });
+  return generator;
 };
 
 /**
