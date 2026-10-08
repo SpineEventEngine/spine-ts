@@ -14,7 +14,7 @@
 
 import { create } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { EventIdSchema } from "@spine-event-engine/proto";
+import { CommandIdSchema, EventIdSchema } from "@spine-event-engine/proto";
 import {
   AgentExecutionHeadSchema,
   AgentExecutionRecordSchema,
@@ -113,6 +113,44 @@ describe("Agent execution physical keys", () => {
     expect(() =>
       AgentExecutionRecords.invocationSpec((value) => value).materialize(record),
     ).toThrow(/Inbox order/i);
+  });
+
+  it("rejects corrupt persisted keys before an index can hide their missing identity", () => {
+    expect(() =>
+      AgentExecutionRecords.scope(create(AgentExecutionScopeSchema, { agentKey: "T-1" })),
+    ).toThrow(/complete state type/i);
+    expect(() =>
+      AgentExecutionRecords.scope(
+        create(AgentExecutionScopeSchema, { stateType: "support.Agent" }),
+      ),
+    ).toThrow(/Agent key/i);
+    const invocation = accepted("source");
+    const key = invocation.key;
+    if (key === undefined) throw new Error("Accepted fixture lacks invocation key.");
+    key.sourceSignal = undefined;
+    expect(() => AgentExecutionRecords.invocation(key)).toThrow(/original source ID/i);
+    const record = create(AgentExecutionRecordSchema, { accepted: invocation });
+    expect(() =>
+      AgentExecutionRecords.invocationSpec((value) => value).materialize(record),
+    ).toThrow(/original invocation key/i);
+    expect(() =>
+      AgentExecutionRecords.headSpec((value) => value).materialize(
+        create(AgentExecutionHeadSchema),
+      ),
+    ).toThrow(/requires its scope/i);
+  });
+
+  it("keeps Command and Event source identities distinct in native keys", () => {
+    const command = create(AgentSignalKeySchema, {
+      id: { case: "command", value: create(CommandIdSchema, { uuid: "same" }) },
+    });
+    const event = create(AgentSignalKeySchema, {
+      id: { case: "event", value: create(EventIdSchema, { value: "same" }) },
+    });
+    expect(AgentExecutionRecords.signal(command)).not.toBe(AgentExecutionRecords.signal(event));
+    if (command.id.case !== "command") throw new Error("Fixture requires a Command ID.");
+    command.id.value.uuid = "";
+    expect(() => AgentExecutionRecords.signal(command)).toThrow(/original Command or Event ID/i);
   });
 
   it("keeps eligibility before the fixed as-of boundary and orders full UTF-8 scopes", () => {

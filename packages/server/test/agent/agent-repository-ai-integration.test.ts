@@ -12,14 +12,17 @@
  * the License.
  */
 
-import { create, equals, isMessage } from "@bufbuild/protobuf";
+import { clone, create, equals, isMessage } from "@bufbuild/protobuf";
 import { AiModel, AiRegistry, ModelRef } from "@spine-event-engine/ai";
 import { createBackendRegistration } from "@spine-event-engine/ai/spi/adapter";
 import { AnyMessages, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import {
   AgentAiResultAdmittedSchema,
   AgentAiOperationFailedSchema,
+  AgentModelSelectionChangedSchema,
+  AgentInvocationTerminatedSchema,
   AiContentDigestSchema,
+  AiModelKind,
   AiOutcome,
   ConversationIdSchema,
   GenerationRequestSchema,
@@ -37,7 +40,13 @@ import type {
   AgentExecutionStorage,
   AgentExecutionStorageInput,
 } from "@spine-event-engine/storage/provider";
-import type { AgentInvocationKey } from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
+import {
+  AgentAcceptedInvocationSchema,
+  AgentCodeRevisionSchema,
+  AgentInvocationStatus,
+  type AgentExecutionRecord,
+  type AgentInvocationKey,
+} from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
 import type { Message } from "@bufbuild/protobuf";
 import { describe, expect, it, vi } from "vitest";
 import { Agent } from "../../src/entity/entity.js";
@@ -84,9 +93,20 @@ const proposal = AiModel.define({
     maxOutputTokens: 100,
   },
 });
+const alternateRef = ModelRef.of("source-support-alternate", "v1");
 
 class DraftingAgent extends Agent<SupportReplyAgentId, typeof SupportReplyAgentStateSchema> {
+  static historyCount = 0;
+  static stateHistoryCount = 0;
+
   async draft(command: DraftSupportReply) {
+    if (command.question === "Prefer alternate")
+      this.ai.select(AiModelKind.GENERATION, alternateRef);
+    if (command.question === "Inspect history") {
+      const page = await this.fullHistory({ pageSize: 2 });
+      DraftingAgent.historyCount = page.items.length;
+      DraftingAgent.stateHistoryCount = (await this.stateHistoryBackward(2)).length;
+    }
     const result = await this.ai.invoke(proposal, {
       call: "draft",
       conversation: create(ConversationIdSchema, { value: "support-draft" }),
@@ -116,6 +136,7 @@ function draftingRepository() {
     entityType: DraftingAgent,
     schema: SupportReplyAgentStateSchema,
     agentCodeRevision: "source-drafting-v1",
+    stateHistory: true,
     ai: { models: [proposal] },
     handlers: new HandlerRegistryIngestor().ingest({
       receivers: [
@@ -141,6 +162,8 @@ function draftingRepository() {
 
 class CapturingExecutionFactory extends InMemoryStorageFactory {
   key?: AgentInvocationKey;
+  corruptNextRevision = false;
+  readAccepted?: (key: AgentInvocationKey) => Promise<AgentExecutionRecord | undefined>;
 
   protected override createAgentExecutionStorage<I, S extends Message>(
     input: AgentExecutionStorageInput<I, S>,
@@ -148,10 +171,16 @@ class CapturingExecutionFactory extends InMemoryStorageFactory {
     const storage = super.createAgentExecutionStorage(input);
     const admit = storage.admit.bind(storage);
     storage.admit = async (accepted) => {
-      const result = await admit(accepted);
+      const saved = clone(AgentAcceptedInvocationSchema, accepted);
+      if (this.corruptNextRevision) {
+        this.corruptNextRevision = false;
+        saved.codeRevision = create(AgentCodeRevisionSchema, { value: "retired-agent-code" });
+      }
+      const result = await admit(saved);
       if (accepted.key !== undefined) this.key = accepted.key;
       return result;
     };
+    this.readAccepted ??= (key) => storage.read(key);
     return storage;
   }
 }
@@ -161,13 +190,14 @@ describe("Agent repository source integration", () => {
     const ref = ModelRef.of("source-support", "v1");
     const response = create(ProposedSupportReplySchema, { replyText: "We can help." });
     const physical = vi.fn(() => response);
+    const alternatePhysical = vi.fn(() => response);
     const registry = AiRegistry.create({
       defaultModels: { generation: ref },
       invocationLimits: {
         operations: 1,
         modelRequests: 1,
         toolCalls: 0,
-        recordedReads: 0,
+        recordedReads: 1,
         deadlineMs: 2_000,
         totalInputBytes: 4_000,
         totalOutputBytes: 4_000,
@@ -176,61 +206,63 @@ describe("Agent repository source integration", () => {
       concurrentOperations: 1,
       queuedOperations: 1,
     });
-    registry.register(
-      createBackendRegistration({
-        ref,
-        kind: "generation",
-        supports: () => true,
-        resolveIdentity: () => ({
-          provider: "source-script",
-          account: "support",
-          endpoint: "local",
-          model: "draft-v1",
-        }),
-        authorizeUse: () => true,
-        connect: (_scope, identity) => ({ model: {}, identity }),
-        execute: async (execution) => {
-          if (!isMessage(execution.input, SupportTicketFactsSchema))
-            throw new TypeError("Expected support ticket facts for drafting.");
-          const prepared = create(GenerationRequestSchema, {
-            input: AnyMessages.pack(SupportTicketFactsSchema, execution.input),
-            instructions: "Draft a support reply for review.",
-            outputSchemaJson: "{}",
-            promptJson: "{}",
-            digest: create(AiContentDigestSchema, { value: "0".repeat(64) }),
-          });
-          const attempt = await execution.control.beginAttempt({
-            kind: "generation",
-            content: prepared,
-          });
-          if ("kind" in attempt) throw new Error("Fresh execution unexpectedly replayed a result.");
-          await execution.control.reserveTransport(attempt.id, 128, 1_024);
-          if (execution.input.customerQuestion === "Unavailable") {
-            const failure = await execution.control.recordFailure("UNAVAILABLE", true);
+    for (const selected of [ref, alternateRef])
+      registry.register(
+        createBackendRegistration({
+          ref: selected,
+          kind: "generation",
+          supports: () => true,
+          resolveIdentity: () => ({
+            provider: "source-script",
+            account: "support",
+            endpoint: "local",
+            model: selected === ref ? "draft-v1" : "draft-v2",
+          }),
+          authorizeUse: () => true,
+          connect: (_scope, identity) => ({ model: {}, identity }),
+          execute: async (execution) => {
+            if (!isMessage(execution.input, SupportTicketFactsSchema))
+              throw new TypeError("Expected support ticket facts for drafting.");
+            const prepared = create(GenerationRequestSchema, {
+              input: AnyMessages.pack(SupportTicketFactsSchema, execution.input),
+              instructions: "Draft a support reply for review.",
+              outputSchemaJson: "{}",
+              promptJson: "{}",
+              digest: create(AiContentDigestSchema, { value: "0".repeat(64) }),
+            });
+            const attempt = await execution.control.beginAttempt({
+              kind: "generation",
+              content: prepared,
+            });
+            if ("kind" in attempt)
+              throw new Error("Fresh execution unexpectedly replayed a result.");
+            await execution.control.reserveTransport(attempt.id, 128, 1_024);
+            if (execution.input.customerQuestion === "Unavailable") {
+              const failure = await execution.control.recordFailure("UNAVAILABLE", true);
+              await execution.control.finishAttempt({
+                ticketId: attempt.id,
+                receivedBytes: 24,
+                response: create(GenerationResponseSchema, {
+                  outcome: AiOutcome.FAILED,
+                  diagnosticId: { value: failure.diagnosticId },
+                }),
+              });
+              return { ok: false, failure };
+            }
+            const value = selected === ref ? physical() : alternatePhysical();
             await execution.control.finishAttempt({
               ticketId: attempt.id,
-              receivedBytes: 24,
+              receivedBytes: 64,
               response: create(GenerationResponseSchema, {
-                outcome: AiOutcome.FAILED,
-                diagnosticId: { value: failure.diagnosticId },
+                outcome: AiOutcome.ADMITTED,
+                rawOutput: JSON.stringify({ replyText: value.replyText }),
+                admittedOutput: AnyMessages.pack(ProposedSupportReplySchema, value),
               }),
             });
-            return { ok: false, failure };
-          }
-          const value = physical();
-          await execution.control.finishAttempt({
-            ticketId: attempt.id,
-            receivedBytes: 64,
-            response: create(GenerationResponseSchema, {
-              outcome: AiOutcome.ADMITTED,
-              rawOutput: JSON.stringify({ replyText: value.replyText }),
-              admittedOutput: AnyMessages.pack(ProposedSupportReplySchema, value),
-            }),
-          });
-          return { ok: true, value };
-        },
-      }),
-    );
+            return { ok: true, value };
+          },
+        }),
+      );
     const repository = draftingRepository();
     const factory = new CapturingExecutionFactory();
     const context = BoundedContext.singleTenant("SourceDrafting")
@@ -342,6 +374,74 @@ describe("Agent repository source integration", () => {
         },
         { timeout: 10_000 },
       );
+      const runNext = async (question: string, suffix: string, version: bigint) => {
+        const next = SignalEnvelopes.command({
+          schema: DraftSupportReplySchema,
+          message: create(DraftSupportReplySchema, { agent: id, question }),
+          context: create(CommandContextSchema, {
+            actorContext: create(ActorContextSchema, {
+              actor: create(UserIdSchema, { value: "support-user" }),
+            }),
+          }),
+        });
+        await repositoryAccess.entityInboxTarget(repository)?.replay({
+          ...createMessage(suffix, next.id?.uuid ?? "", version),
+          inboxId: {
+            targetId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+            targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
+          },
+          signal: AnyMessages.pack(CommandSchema, next, { validate: false }),
+          label: "HANDLE_COMMAND",
+          status: "TO_DELIVER",
+        });
+        const key = factory.key;
+        if (key === undefined) throw new Error("Expected durable Agent admission.");
+        await repositoryAccess.runAcceptedAgent(repository, undefined, key);
+        return key;
+      };
+      await runNext("Prefer alternate", "source-select", 3n);
+      expect(physical).toHaveBeenCalledTimes(2);
+      expect(alternatePhysical).not.toHaveBeenCalled();
+      expect(
+        (await readAgentHistoryPage(context, repository, id, { pageSize: 50 })).items.some(
+          (entry) =>
+            entry.item.case === "systemEvent" &&
+            entry.item.value.message?.typeUrl === TypeUrls.derive(AgentModelSelectionChangedSchema),
+        ),
+      ).toBe(true);
+      await runNext("Inspect history", "source-history", 4n);
+      expect(alternatePhysical).toHaveBeenCalledTimes(1);
+      expect(DraftingAgent.historyCount).toBeGreaterThan(0);
+      expect(DraftingAgent.stateHistoryCount).toBe(1);
+      expect(
+        (await context.stand().readVersioned(SupportReplyAgentStateSchema, id))?.version?.number,
+      ).toBe(1);
+      await vi.waitFor(() => {
+        expect(produced).toHaveLength(3);
+      });
+      factory.corruptNextRevision = true;
+      const outdated = await runNext("Outdated source", "source-outdated", 5n);
+      expect((await factory.readAccepted?.(outdated))?.status).toBe(
+        AgentInvocationStatus.AGENT_INVOCATION_TERMINATED,
+      );
+      expect(physical).toHaveBeenCalledTimes(2);
+      expect(alternatePhysical).toHaveBeenCalledTimes(1);
+      const terminated = (
+        await readAgentHistoryPage(context, repository, id, { pageSize: 50 })
+      ).items.flatMap((entry) =>
+        entry.item.case === "systemEvent" &&
+        entry.item.value.message?.typeUrl === TypeUrls.derive(AgentInvocationTerminatedSchema)
+          ? [entry.item.value]
+          : [],
+      );
+      expect(terminated).toHaveLength(1);
+      const terminatedMessage = terminated[0]?.message;
+      if (terminatedMessage === undefined) throw new Error("Expected termination payload.");
+      expect(AnyMessages.unpack(terminatedMessage, AgentInvocationTerminatedSchema)?.reason).toBe(
+        "REVISION_CHANGED",
+      );
+      await runNext("Continue after revision failure", "source-after-outdated", 6n);
+      expect(alternatePhysical).toHaveBeenCalledTimes(2);
     } finally {
       observation.close();
       await context.close();

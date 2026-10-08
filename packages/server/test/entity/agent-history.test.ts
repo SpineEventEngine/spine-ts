@@ -87,6 +87,9 @@ describe("Agent history binding", () => {
     await expect(agent.readFull({ pageSize: 1 })).rejects.toThrow(
       "Agent history is available only from repository execution.",
     );
+    expect(() =>
+      AgentHistoryReads.withJournal(agent, async (_scope, _view, _request, live) => live()),
+    ).toThrow("Agent history is available only from repository execution.");
     let readCount = 0;
     const storage: AgentHistoryStorage<SupportReplyAgentId> = {
       append: () => Promise.resolve(),
@@ -571,5 +574,28 @@ describe("Agent history binding", () => {
     await expect(
       agent.readConversation(create(ConversationIdSchema, { value: "c-1" })),
     ).rejects.toThrow("wrong category");
+    AgentHistoryReads.bind(agent, {
+      entityId: id,
+      scope: {
+        context: "Support",
+        tenant: "null",
+        repository: SupportReplyAgentStateSchema.typeName,
+        entity: id.ticketNumber,
+      },
+      storage: {
+        append: () => Promise.resolve(),
+        read: () =>
+          Promise.resolve({
+            entries: [
+              create(AgentHistoryEntrySchema, {
+                item: { case: "systemEvent", value: create(EventSchema) },
+              }),
+            ],
+            hasMore: false,
+          }),
+        close: () => undefined,
+      },
+    });
+    await expect(agent.readDomain({ pageSize: 1 })).rejects.toThrow("wrong category");
   });
 });

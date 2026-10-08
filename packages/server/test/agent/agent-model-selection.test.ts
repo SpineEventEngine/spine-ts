@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { create } from "@bufbuild/protobuf";
+import { clone, create } from "@bufbuild/protobuf";
 import { AiModel, AiRegistry, ModelRef } from "@spine-event-engine/ai";
 import { createBackendRegistration } from "@spine-event-engine/ai/spi/adapter";
 import { AnyMessages, Time, TypeUrls } from "@spine-event-engine/core";
@@ -276,8 +276,8 @@ describe("Agent model authorization scope", () => {
         actor,
         signal:
           signal === "command"
-            ? { case: "command", value: command }
-            : { case: "event", value: event },
+            ? { case: "command", value: clone(CommandSchema, command) }
+            : { case: "event", value: clone(EventSchema, event) },
       });
     expect(AgentModelSelection.scope(accepted("command"), ProjectStateSchema).source.typeUrl).toBe(
       TypeUrls.derive(AssignReviewTaskSchema),
@@ -297,5 +297,41 @@ describe("Agent model authorization scope", () => {
     if (incomplete.signal.case !== "command") throw new Error("Expected Command signal.");
     incomplete.signal.value.message = undefined;
     expect(() => AgentModelSelection.scope(incomplete, ProjectStateSchema)).toThrow("payload type");
+    const missingRecipient = accepted("command");
+    missingRecipient.recipientId = undefined;
+    expect(() => AgentModelSelection.scope(missingRecipient, ProjectStateSchema)).toThrow(
+      "typed recipient",
+    );
+    const missingSignal = create(Records.AgentAcceptedInvocationSchema, { recipientId, actor });
+    expect(() => AgentModelSelection.scope(missingSignal, ProjectStateSchema)).toThrow(
+      "original source signal",
+    );
+    const missingCommandId = accepted("command");
+    if (missingCommandId.signal.case !== "command") throw new Error("Expected Command signal.");
+    missingCommandId.signal.value.id = undefined;
+    expect(() => AgentModelSelection.scope(missingCommandId, ProjectStateSchema)).toThrow(
+      "source ID",
+    );
+    const missingEventId = accepted("event");
+    if (missingEventId.signal.case !== "event") throw new Error("Expected Event signal.");
+    missingEventId.signal.value.id = undefined;
+    expect(() => AgentModelSelection.scope(missingEventId, ProjectStateSchema)).toThrow(
+      "source ID",
+    );
+    const missingActor = accepted("command");
+    missingActor.actor = undefined;
+    expect(() => AgentModelSelection.scope(missingActor, ProjectStateSchema)).toThrow(
+      "accepted actor",
+    );
+    const blankPayloadType = accepted("event");
+    if (
+      blankPayloadType.signal.case !== "event" ||
+      blankPayloadType.signal.value.message === undefined
+    )
+      throw new Error("Expected Event payload.");
+    blankPayloadType.signal.value.message.typeUrl = " ";
+    expect(() => AgentModelSelection.scope(blankPayloadType, ProjectStateSchema)).toThrow(
+      "payload type",
+    );
   });
 });

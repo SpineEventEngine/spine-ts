@@ -2292,3 +2292,77 @@ preflight352/352affectedtests29files,allfourtoolingtypeprofiles,wholeformat,
 cleanup,TSDoc,audience,diff checks pass. Auditfull+productionzerovulnerabilities.
 Commit/push fourtoolingfiles+ledger, thenunchangedverify:releasewithreportOnFailure
 forreportvisibility only. Fullcoverageacceptance remainspendingthisrun.
+
+Final release at af9aff0a7: all 5,800 tests pass (one skipped), but branch coverage
+is 89.01% (18,343/20,607); statements 93.33%, functions 95.51%, lines 95.11%.
+All preceding release gates pass. No threshold or collection changes permitted
+for this correction. Add behavior tests for uncovered Agent execution, repository,
+and model boundaries. Reuse main implementer for server repository tests; two
+bounded implementer assignments for native storage and AI/runtime tests. Each
+explicit gpt-6-sol/medium, no grandchildren, disjoint test paths, no commits.
+Actual runtime profile introspection is unavailable; configured dispatch is recorded.
+Acceptance: meaningful assertions on persisted consequences, failure behavior, and
+protocol boundaries; complete cheap preflight, focused independent review, then
+full release rerun. Estimate 0.5–1 hour including verification waiting.
+
+Coverage correction is test-only. Initial focused slices pass type, lint and format
+checks. The first native storage slice adds 35 exact branch hits over the frozen
+release report; repository/session adds four. Existing implementers continue
+with completion writes, provider failures, accepted-signal metadata, history and
+capacity boundaries. Expected configured profile remains gpt-6-sol/medium for
+all three assignments; no new architecture or production changes. The full
+release suite will not run again until combined measured coverage is sufficient.
+
+The same three configured Sol/medium implementers extended their disjoint test
+assignments: main implementer covers server failure boundaries and common
+storage tests; native implementer covers only the three native execution test
+files; AI implementer covers runtime and adapter tests plus facade validation.
+No production changes were needed. The frozen baseline remains af9aff0a7.
+Initial combined reports now recover 188 distinct missed branches; final
+capacity and validation tests must close the remaining 16 and provide margin.
+Common storage now passes 51 focused tests and all scoped mechanical checks;
+AI runtime/adapter passes 177. Final combined preflight and independent test
+fidelity review remain required before release verification.
+
+Final test correction preflight passes 279 tests across 19 changed suites, all
+four tooling typechecks, scoped ESLint/format, cleanup, TSDoc, audience and diff
+checks. Parent merged exact branch-hit keys from five focused reports against
+the frozen release report: 211 previously missed branches, projecting 90.0374%
+branch coverage; this does not substitute for the final release run. No runtime,
+package, generated, or coverage configuration changed. All three configured
+Sol/medium implementation assignments accepted; runtime metadata unavailable.
+
+Independent test-fidelity review assignment: existing performance/reliability
+reviewer role, fresh subagent with no inherited history, explicit gpt-6-sol and
+medium reasoning, no children. Scope is the 19 uncommitted test-file diffs: real
+assertions, fixture meaning, provider fake fidelity, async cleanup and failure
+isolation. Types/API and documentation concern dispositions are unchanged
+public contracts and mechanically checked test types/docs; style is scoped
+ESLint/format/cleanup plus reviewer test-maintainability checks. Security is N/A
+for test-only changes, retaining the clean production security review and audit.
+Collect findings before any fixes; full release remains pending review closure.
+
+Fresh independent Sol/medium test review found three P2 test-fidelity gaps, all
+in the native provider test slice: SQL delivery mocks share mutable read/write
+images; pending-query mocks do not verify complete positional predicates; the
+Datastore continuation assertion allows a repeated page. Findings accepted.
+Return one correction batch to the same native implementer, retaining the
+explicit Sol/medium configuration. Fix before release verification and request
+a narrow follow-up from the same reviewer. No production defect was reported.
+
+Native test-fidelity corrections pass all nine focused tests, full tooling
+typechecks and scoped lint/format/line-length checks. SQL delivery uses detached
+read images updated only by writes and rejects stale CAS images. Pending-query
+fakes assert complete SQL and positional values and apply their filters.
+Datastore pagination checks exact ordered pages and exhaustion. Corrected native
+coverage adds 115 missed baseline branches, retaining all prior hits. Request
+the same independent reviewer's narrow follow-up; repeat the combined cheap
+preflight after these substantive test corrections.
+
+Independent follow-up resolves all three P2 findings with no remaining confirmed
+issue. Configured reviewer profile Sol/medium accepted; actual runtime profile
+metadata unavailable. Final parent preflight passes 279 tests in 19 files, all
+four tooling typechecks, scoped ESLint/format, cleanup, TSDoc, audience and diff
+checks. Corrected focused reports cover 212 formerly missed branch keys with
+unchanged source and thresholds. Commit/push the reviewed tests and this record,
+then run the full release profile. No further implementation changes are planned.

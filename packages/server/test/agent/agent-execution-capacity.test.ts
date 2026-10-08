@@ -35,6 +35,33 @@ function registry(concurrentOperations: number, queuedOperations: number) {
 }
 
 describe("shared Agent execution capacity", () => {
+  it("rejects cancelled admission and releases a slot after execution fails", async () => {
+    const capacity = AgentExecutionCapacity.for(registry(1, 0));
+    const cancelled = new AbortController();
+    cancelled.abort();
+    expect(
+      capacity.trySubmit({
+        key: "cancelled-before-admission",
+        signal: cancelled.signal,
+        run: () => Promise.reject(new Error("Cancelled request ran.")),
+      }),
+    ).toBeUndefined();
+    const failure = new Error("Provider claim failed.");
+    const failed = capacity.trySubmit({
+      key: "failed-claim",
+      signal: new AbortController().signal,
+      run: () => Promise.reject(failure),
+    });
+    await expect(failed).rejects.toBe(failure);
+    await expect(
+      capacity.trySubmit({
+        key: "after-failure",
+        signal: new AbortController().signal,
+        run: () => Promise.resolve(),
+      }),
+    ).resolves.toBeUndefined();
+  });
+
   it("limits active transitions and retains one FIFO waiting descriptor across contexts", async () => {
     const ai = registry(1, 1);
     const firstContext = AgentExecutionCapacity.for(ai);

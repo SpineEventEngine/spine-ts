@@ -39,6 +39,46 @@ const record = (name: string) =>
   });
 
 describe("Agent indexed scheduler", () => {
+  it("coalesces an in-flight scan and retries provider errors without losing a sweep", async () => {
+    let reads = 0;
+    let release: (() => void) | undefined;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const failure = new Error("Pending index temporarily unavailable.");
+    const scope: AgentScanScope = {
+      id: "provider-retry",
+      pending: async () => {
+        reads += 1;
+        if (reads === 1) {
+          await blocked;
+          throw failure;
+        }
+        if (reads === 2) return { records: [], hasMore: true };
+        return { records: [], hasMore: false };
+      },
+      run: () => Promise.resolve(),
+    };
+    const scheduler = new AgentScheduler(
+      () => Promise.resolve([scope]),
+      new AgentExecutionCapacity(1, 0),
+      () => undefined,
+    );
+    const first = scheduler.turn();
+    const concurrent = scheduler.turn();
+    release?.();
+    const attempts = await Promise.allSettled([first, concurrent]);
+    expect(attempts).toEqual([
+      { status: "rejected", reason: failure },
+      { status: "rejected", reason: failure },
+    ]);
+    expect(reads).toBe(1);
+    await expect(scheduler.turn()).rejects.toThrow("continuation");
+    await scheduler.turn();
+    expect(reads).toBe(3);
+    await scheduler.close();
+  });
+
   it("rediscovers a durable record skipped when resident capacity is full", async () => {
     const seen: string[] = [];
     let release: (() => void) | undefined;

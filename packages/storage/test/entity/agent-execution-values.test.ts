@@ -36,6 +36,9 @@ import { accepted } from "./agent-execution-fixtures.js";
 
 describe("Agent execution value boundaries", () => {
   it("requires the configured state and the complete original source identity", () => {
+    expect(() => {
+      AgentExecutionValues.require(undefined);
+    }).toThrow(/value is missing/i);
     const source = accepted("source-id");
     const key = source.key;
     const scope = key?.scope;
@@ -45,6 +48,8 @@ describe("Agent execution value boundaries", () => {
     expect(() => AgentExecutionValues.requiredKey(key, "other.State")).toThrow(/configured state/i);
     key.sourceSignal = undefined;
     expect(() => AgentExecutionValues.requiredKey(key, scope.stateType)).toThrow(/source ID/i);
+    expect(AgentExecutionValues.compareText("a", "b")).toBeLessThan(0);
+    expect(AgentExecutionValues.compareText("b", "a")).toBeGreaterThan(0);
   });
 
   it("compares complete accepted images and clones independently", () => {
@@ -251,5 +256,26 @@ describe("Agent execution decoded record validation", () => {
     );
     expect(head.pending).toEqual(original.key);
     expect(head.eligibleAt).toEqual(create(TimestampSchema, { seconds: 100n }));
+  });
+
+  it("refuses an active head without a lease expiry before offering earlier work", () => {
+    const later = accepted("later");
+    const earlier = accepted("earlier");
+    const scope = later.key?.scope;
+    if (scope === undefined || earlier.order === undefined)
+      throw new Error("Fixture lacks Agent scope or Inbox order.");
+    earlier.order.inboxVersion = 0n;
+    const head = create(AgentExecutionHeadSchema, {
+      scope,
+      active: later.key,
+      pending: later.key,
+      pendingOrder: later.order,
+    });
+    expect(() => {
+      AgentExecutionValues.offerCandidate(
+        head,
+        create(AgentExecutionRecordSchema, { accepted: earlier }),
+      );
+    }).toThrow(/active head requires lease expiry/i);
   });
 });

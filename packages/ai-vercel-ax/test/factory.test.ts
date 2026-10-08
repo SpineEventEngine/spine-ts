@@ -674,6 +674,17 @@ describe("Vercel connection registration", () => {
     expect(started.content.digest?.value).not.toBe(original.content.digest?.value);
   });
 
+  it("rejects an oversized discovered tool output schema before provider dispatch", async () => {
+    const fixture = generationFixture([], 1, true);
+    const catalog = [{ ...advertisedLookup, outputSchemaJson: "x".repeat(16_385) }];
+    expect(await fixture.run(catalog)).toMatchObject({
+      ok: false,
+      failure: { code: "INVALID_OUTPUT" },
+    });
+    expect(fixture.runtime.beginAttempt).not.toHaveBeenCalled();
+    expect(fixture.providerCalls).toHaveLength(0);
+  });
+
   it("rejects missing and unexpected tool catalogs before a provider attempt", async () => {
     const missing = generationFixture([], 1, true);
     await expect(missing.run([])).resolves.toMatchObject({ ok: false });
@@ -940,6 +951,38 @@ describe("Vercel connection registration", () => {
     });
     expect(doDecide).not.toHaveBeenCalled();
     expect(fixture.runtime.finishAttempt).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["before provider entry", 3],
+    ["after provider entry", 6],
+  ] as const)("journals decision expiry %s", async (_phase, validReads) => {
+    const doDecide = vi.fn(() => new Promise<never>(() => undefined));
+    const fixture = decisionFixture({
+      specificationVersion: "v4",
+      provider: "fixture",
+      modelId: identity.model,
+      supportedQuestionTypes: ["boolean"],
+      doDecide,
+    });
+    let reads = 0;
+    const runtime = { ...fixture.runtime, nowEpochMs: () => (++reads <= validReads ? 99 : 100) };
+    vi.mocked(fixture.runtime.beginAttempt).mockImplementation(() => {
+      reads = 0;
+      return Promise.resolve({
+        id: "decision-crossing",
+        maxInputBytes: 2000,
+        maxOutputBytes: 2000,
+        deadlineEpochMs: 100,
+        signal: runtime.signal,
+      });
+    });
+    expect(await fixture.run(runtime)).toMatchObject({
+      ok: false,
+      failure: { code: "DEADLINE_EXCEEDED", retryableByNewSignal: false },
+    });
+    expect(fixture.runtime.finishAttempt).toHaveBeenCalledTimes(1);
+    expect(doDecide).toHaveBeenCalledTimes(validReads === 3 ? 0 : 1);
   });
 
   it("uses the earlier decision ticket deadline for a stalled provider", async () => {
@@ -1369,6 +1412,34 @@ describe("Vercel connection registration", () => {
     expect(await fixture.run()).toMatchObject({
       ok: false,
       failure: { code: "DEADLINE_EXCEEDED" },
+    });
+    expect(fixture.model.doStreamCalls).toHaveLength(0);
+    expect(fixture.runtime.finishAttempt).toHaveBeenCalledTimes(1);
+  });
+
+  it("journals cancellation that crosses generation gate admission", async () => {
+    const fixture = generationFixture([[]]);
+    const controller = new AbortController();
+    let reads = 0;
+    Object.defineProperty(fixture.runtime, "nowEpochMs", {
+      value: () => {
+        if (++reads === 2) controller.abort();
+        return 99;
+      },
+    });
+    vi.mocked(fixture.runtime.beginAttempt).mockImplementation(() => {
+      reads = 0;
+      return Promise.resolve({
+        id: "generation-racing-cancel",
+        maxInputBytes: 2000,
+        maxOutputBytes: 2000,
+        deadlineEpochMs: 1000,
+        signal: controller.signal,
+      });
+    });
+    expect(await fixture.run()).toMatchObject({
+      ok: false,
+      failure: { code: "CANCELLED", retryableByNewSignal: false },
     });
     expect(fixture.model.doStreamCalls).toHaveLength(0);
     expect(fixture.runtime.finishAttempt).toHaveBeenCalledTimes(1);

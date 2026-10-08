@@ -12,6 +12,8 @@
  * the License.
  */
 
+import { create } from "@bufbuild/protobuf";
+import { ModelRefSchema } from "@spine-event-engine/proto/agent";
 import { describe, expect, it } from "vitest";
 import {
   ProposedSupportReplySchema,
@@ -84,6 +86,41 @@ describe("application AI registry", () => {
         queuedOperations: 0,
       }),
     ).toThrow("totalOutputBytes");
+    expect(() =>
+      AiRegistry.create({
+        defaultModels: {},
+        invocationLimits: undefined,
+        concurrentOperations: 1,
+        queuedOperations: 0,
+      } as never),
+    ).toThrow("invocationLimits are required");
+    expect(() =>
+      AiRegistry.create({
+        defaultModels: undefined,
+        invocationLimits: limits,
+        concurrentOperations: 1,
+        queuedOperations: 0,
+      } as never),
+    ).toThrow("defaultModels are required");
+    expect(() =>
+      AiRegistry.create({
+        defaultModels: { generation: create(ModelRefSchema, { revision: { value: "v1" } }) },
+        invocationLimits: limits,
+        concurrentOperations: 1,
+        queuedOperations: 0,
+      }),
+    ).toThrow("name must be nonblank");
+    expect(() =>
+      AiRegistry.create({
+        defaultModels: { generation: create(ModelRefSchema, { name: { value: "writer" } }) },
+        invocationLimits: limits,
+        concurrentOperations: 1,
+        queuedOperations: 0,
+      }),
+    ).toThrow("revision must be nonblank");
+    const deploymentOnce = deployment("same");
+    registry.register(deploymentOnce);
+    expect(() => registry.register(deployment("same"))).toThrow("Duplicate deployment");
   });
 
   it("compares Proto references by value, applies precedence, and freezes configuration", () => {

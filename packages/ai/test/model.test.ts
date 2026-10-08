@@ -69,6 +69,9 @@ describe("typed AI capability declarations", () => {
     expect(() =>
       AiModel.define({ ...definition, limits: { ...limits, maxOutputTokens: 0 } }),
     ).toThrow("maxOutputTokens");
+    expect(() => AiModel.define({ ...definition, limits: undefined } as never)).toThrow(
+      "limits are required",
+    );
   });
 
   it("creates a Proto reference with nonblank semantic parts", () => {
@@ -132,6 +135,9 @@ describe("typed AI capability declarations", () => {
     expect(isAiModel(null)).toBe(false);
     expect(() => modelRefKey({} as never)).toThrow("Protobuf");
     expect(() => modelRefKey(create(ModelRefSchema))).toThrow("name");
+    expect(() => modelRefKey(create(ModelRefSchema, { name: { value: "writer" } }))).toThrow(
+      "revision",
+    );
     const base = {
       name: "writer",
       version: "v1",
@@ -158,6 +164,7 @@ describe("typed AI capability declarations", () => {
       AiModel.define({ ...base, limits: { ...limits, maxOutputTokens: undefined } } as never),
     ).toThrow("maxOutputTokens");
     expect(() => AiModel.define({ ...base, outputMode: "unknown" as never })).toThrow("outputMode");
+    expect(() => AiModel.define({ ...base, kind: "unknown" as never })).toThrow("model kind");
     expect(() => AiModel.define({ ...base, instructions: " " })).toThrow("instructions");
     expect(() =>
       AiModel.define({

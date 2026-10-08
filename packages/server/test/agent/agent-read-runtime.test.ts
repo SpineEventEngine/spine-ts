@@ -14,7 +14,11 @@
 
 import { clone, create } from "@bufbuild/protobuf";
 import { AnyMessages, Time } from "@spine-event-engine/core";
-import { AgentHistoryEntrySchema } from "@spine-event-engine/proto/agent";
+import {
+  AgentHistoryCursorSchema,
+  AgentHistoryEntrySchema,
+  ConversationIdSchema,
+} from "@spine-event-engine/proto/agent";
 import { EventContextSchema, EventSchema } from "@spine-event-engine/proto";
 import {
   AgentAcceptedInvocationSchema,
@@ -23,6 +27,7 @@ import {
   AgentExecutionStartSchema,
   AgentInvocationBoundsSchema,
   AgentInvocationKeySchema,
+  AgentProjectionReadResultSchema,
   type AgentExecutionRecord,
 } from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
 import { describe, expect, it } from "vitest";
@@ -31,7 +36,10 @@ import { ActorContextSchema, UserIdSchema } from "@spine-event-engine/proto";
 import { TypeUrls } from "@spine-event-engine/core";
 import { AgentReadRuntime } from "../../src/agent/agent-read-runtime.js";
 import { ReviewStartedSchema } from "../../test-fixtures/generated/handler-registry/events_pb.js";
-import { ProjectStateSchema } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
+import {
+  ProjectOverviewStateSchema,
+  ProjectStateSchema,
+} from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 
 const scope = { context: "Support", tenant: "null", repository: "support.Agent", entity: "A" };
 
@@ -57,6 +65,172 @@ function readSession(recordedReads: bigint, maxRecoveryBytes: bigint) {
 }
 
 describe("Agent saved history reads", () => {
+  it("retains a conversation cursor and rejects a changed cursor on replay", async () => {
+    const session = readSession(1n, 10_000n);
+    const conversation = create(ConversationIdSchema, { value: "ticket-T-1" });
+    const cursor = create(AgentHistoryCursorSchema, { value: "page-2" });
+    const view = { kind: "conversation" as const, conversation };
+    const first = new AgentReadRuntime(session, 0);
+    const page = { entries: [], hasMore: false };
+    expect(
+      await first.history(scope, view, { pageSize: 2, cursor }, () => Promise.resolve(page), 1_024),
+    ).toEqual(page);
+    first.finish();
+    const replay = new AgentReadRuntime(session, 0);
+    expect(
+      await replay.history(
+        scope,
+        view,
+        { pageSize: 2, cursor },
+        () => Promise.reject(new Error("Live history was queried.")),
+        1_024,
+      ),
+    ).toEqual(page);
+    replay.finish();
+    await expect(
+      new AgentReadRuntime(session, 0).history(
+        scope,
+        view,
+        { pageSize: 2, cursor: create(AgentHistoryCursorSchema, { value: "page-3" }) },
+        () => Promise.reject(new Error("Live history was queried.")),
+        1_024,
+      ),
+    ).rejects.toMatchObject({ reason: "REPLAY_DIVERGENCE" });
+  });
+
+  it("does not finish while an ordered live read is pending", async () => {
+    const session = readSession(1n, 10_000n);
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const runtime = new AgentReadRuntime(session, 0);
+    const pending = runtime.history(
+      scope,
+      { kind: "full" },
+      { pageSize: 1 },
+      async () => {
+        await gate;
+        return { entries: [], hasMore: false };
+      },
+      1_024,
+    );
+    expect(() => {
+      runtime.finish();
+    }).toThrow("in progress");
+    if (release === undefined) throw new Error("Expected live read gate.");
+    release();
+    await pending;
+    runtime.finish();
+  });
+
+  it.each(["missing request", "missing result", "different state type"] as const)(
+    "rejects a saved projection with %s before querying live storage",
+    async (corruption) => {
+      const session = readSession(1n, 10_000n);
+      const query = create(QuerySchema, {
+        id: { value: "q-first" },
+        target: {
+          type: TypeUrls.derive(ProjectStateSchema),
+          criterion: { case: "includeAll", value: true },
+        },
+        context: create(ActorContextSchema, {
+          actor: create(UserIdSchema, { value: "reviewer-1" }),
+          timestamp: Time.currentTime(),
+        }),
+      });
+      await new AgentReadRuntime(session, 0).query(ProjectStateSchema, query, () =>
+        Promise.resolve([create(ProjectStateSchema, { id: "project-1" })]),
+      );
+      await session.update((record) => {
+        const evidence = record.journal[0]?.evidence;
+        if (evidence?.case !== "read") throw new Error("Expected a saved projection read.");
+        if (corruption === "missing request") evidence.value.request = undefined;
+        else if (corruption === "missing result") evidence.value.result = undefined;
+        else {
+          const saved =
+            evidence.value.result &&
+            AnyMessages.unpack(evidence.value.result, AgentProjectionReadResultSchema);
+          if (saved === undefined) throw new Error("Expected a saved projection result.");
+          saved.states[0] = AnyMessages.pack(
+            ProjectOverviewStateSchema,
+            create(ProjectOverviewStateSchema),
+          );
+          evidence.value.result = AnyMessages.pack(AgentProjectionReadResultSchema, saved);
+        }
+        return record;
+      });
+      await expect(
+        new AgentReadRuntime(session, 0).query(ProjectStateSchema, query, () =>
+          Promise.reject(new Error("Live projection was queried.")),
+        ),
+      ).rejects.toMatchObject({ reason: "REPLAY_DIVERGENCE" });
+    },
+  );
+
+  it("rejects a different Agent scope before querying live history", async () => {
+    const session = readSession(1n, 10_000n);
+    let queried = false;
+    await expect(
+      new AgentReadRuntime(session, 0).history(
+        { ...scope, entity: "B" },
+        { kind: "full" },
+        { pageSize: 1 },
+        () => {
+          queried = true;
+          return Promise.resolve({ entries: [], hasMore: false });
+        },
+        1_024,
+      ),
+    ).rejects.toMatchObject({ reason: "REPLAY_DIVERGENCE" });
+    expect(queried).toBe(false);
+    expect(session.record().journal).toHaveLength(0);
+  });
+
+  it("rejects exhausted read credit before querying live history", async () => {
+    const session = readSession(0n, 10_000n);
+    let queried = false;
+    await expect(
+      new AgentReadRuntime(session, 0).history(
+        scope,
+        { kind: "full" },
+        { pageSize: 1 },
+        () => {
+          queried = true;
+          return Promise.resolve({ entries: [], hasMore: false });
+        },
+        1_024,
+      ),
+    ).rejects.toMatchObject({ reason: "READ_BUDGET_EXCEEDED" });
+    expect(queried).toBe(false);
+  });
+
+  it("rejects a missing saved page instead of falling back to live storage", async () => {
+    const session = readSession(1n, 10_000n);
+    await new AgentReadRuntime(session, 0).history(
+      scope,
+      { kind: "full" },
+      { pageSize: 1 },
+      () => Promise.resolve({ entries: [], hasMore: false }),
+      1_024,
+    );
+    await session.update((record) => {
+      const evidence = record.journal[0]?.evidence;
+      if (evidence?.case !== "read") throw new Error("Expected saved read.");
+      evidence.value.result = undefined;
+      return record;
+    });
+    await expect(
+      new AgentReadRuntime(session, 0).history(
+        scope,
+        { kind: "full" },
+        { pageSize: 1 },
+        () => Promise.reject(new Error("Live storage was queried.")),
+        1_024,
+      ),
+    ).rejects.toThrow("Saved Agent history page");
+  });
+
   it("replays exact projection states while ignoring only a regenerated Query ID", async () => {
     const session = readSession(1n, 10_000n);
     const acceptedAt = Time.currentTime();

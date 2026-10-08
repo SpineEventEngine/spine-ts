@@ -31,6 +31,7 @@ import type { AgentExecutionStorage } from "@spine-event-engine/storage/provider
 import type { Message } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 import { AgentExecutionSession } from "../../src/agent/agent-execution-session.js";
+import { AgentExecutionFault } from "../../src/agent/agent-execution-fault.js";
 
 describe("Agent execution fence queue", () => {
   it("refreshes the exact record image after a serialized renewal", async () => {
@@ -51,12 +52,14 @@ describe("Agent execution fence queue", () => {
       release = resolve;
     });
     const observations: Uint8Array[] = [];
+    let mutationError: Error | undefined;
     const port: Pick<
       AgentExecutionStorage<unknown, Message>,
       "capacity" | "update" | "renew" | "read" | "complete" | "markDelivered"
     > = {
       capacity: {},
       update: async (input) => {
+        if (mutationError !== undefined) throw mutationError;
         observations.push(input.expectedRecordBytes);
         expect(input.expectedRecordBytes).toEqual(toBinary(AgentExecutionRecordSchema, stored));
         await blocked;
@@ -95,9 +98,27 @@ describe("Agent execution fence queue", () => {
     expect(session.preferences()[0]?.selection.case).toBe("inheritRepositoryDefault");
     session.discardPreferenceChanges();
     expect(session.preferences()).toEqual([]);
-    session.stop();
+    mutationError = new AgentExecutionFault("READ_BUDGET_EXCEEDED", "Read limit reached.");
+    await expect(
+      session.update((record) => clone(AgentExecutionRecordSchema, record)),
+    ).rejects.toBe(mutationError);
+    expect(session.signal.aborted).toBe(false);
+    mutationError = new Error("Provider write unavailable.");
+    await expect(
+      session.update((record) => clone(AgentExecutionRecordSchema, record)),
+    ).rejects.toBe(mutationError);
+    expect(session.signal.aborted).toBe(true);
     expect(() => {
       session.stagePreference(AiModelKind.DECISION, undefined);
     }).toThrow("active");
+    const lostClaim = new AgentExecutionSession(
+      { ...port, renew: () => Promise.resolve(false) },
+      stored,
+      "claim",
+    );
+    await expect(lostClaim.renew(create(TimestampSchema, { seconds: 30n }))).rejects.toThrow(
+      "lost its provider claim",
+    );
+    expect(lostClaim.signal.aborted).toBe(true);
   });
 });

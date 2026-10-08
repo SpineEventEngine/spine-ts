@@ -56,6 +56,29 @@ function required<T>(value: T | undefined): T {
 }
 
 describe("in-memory Agent execution", () => {
+  it("discovers equal-time, equal-version support Commands by complete source ID", async () => {
+    let now = create(TimestampSchema, { seconds: 100n });
+    const previous = Time.setProvider({ currentTime: () => now });
+    const handle = AgentExecutionStorageFactories.create(new InMemoryStorageFactory(), {
+      entity: entityInput(),
+      stateType: "spine.server.testing.SupportReplyAgentState",
+    });
+    try {
+      await handle.admit(accepted("z-later"));
+      await handle.admit(accepted("a-earlier"));
+      await handle.admit(accepted("z-later-more"));
+      now = create(TimestampSchema, { seconds: 101n });
+      const first = await handle.pending({ count: 1 });
+      expect(first.records[0]?.accepted?.key?.sourceSignal?.id).toEqual(
+        accepted("a-earlier").key?.sourceSignal?.id,
+      );
+      expect(first.records).toHaveLength(1);
+    } finally {
+      handle.close();
+      Time.setProvider(previous);
+    }
+  });
+
   it("pages eligible instance heads while later work behind a live claim stays hidden", async () => {
     let now = create(TimestampSchema, { seconds: 100n });
     const previous = Time.setProvider({ currentTime: () => now });

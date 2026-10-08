@@ -137,6 +137,12 @@ describe("in-memory Agent execution request boundaries", () => {
   it("cannot acknowledge output before completion", async () => {
     await withClaim(async (handle, key, record) => {
       await expect(
+        handle.markDelivered(key, "other-token", toBinary(AgentExecutionRecordSchema, record), []),
+      ).rejects.toThrow(/claim|current/i);
+      await expect(handle.markDelivered(key, "token", new Uint8Array(), [])).rejects.toThrow(
+        /claim|current/i,
+      );
+      await expect(
         handle.markDelivered(key, "token", toBinary(AgentExecutionRecordSchema, record), []),
       ).rejects.toThrow(/no completed output/i);
       expect(await handle.read(key)).toEqual(record);

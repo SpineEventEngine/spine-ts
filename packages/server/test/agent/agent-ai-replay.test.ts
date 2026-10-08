@@ -48,7 +48,10 @@ import {
   AgentSelectedModelSchema,
   AgentSignalKeySchema,
 } from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
-import type { AgentExecutionStorage } from "@spine-event-engine/storage/provider";
+import type {
+  AgentExecutionCapacity,
+  AgentExecutionStorage,
+} from "@spine-event-engine/storage/provider";
 import { describe, expect, it } from "vitest";
 import { AgentAiRuntime } from "../../src/agent/agent-ai-runtime.js";
 import { AgentExecutionSession } from "../../src/agent/agent-execution-session.js";
@@ -125,7 +128,15 @@ const decision = AiModel.define({
 
 type Kind = "generation" | "decision";
 
-function harness(kind: Kind, correction = false, fail = false) {
+type BoundaryFault =
+  | "invalid-credit"
+  | "unknown-ticket"
+  | "duplicate-reservation"
+  | "missing-reservation"
+  | "receipt-mismatch"
+  | "over-credit";
+
+function harness(kind: Kind, correction = false, fail = false, boundaryFault?: BoundaryFault) {
   const model = kind === "decision" ? decision : correction ? correctiveGeneration : generation;
   const ref = ModelRef.of(`scripted-${kind}`, "v1");
   let physicalRequests = 0;
@@ -137,6 +148,8 @@ function harness(kind: Kind, correction = false, fail = false) {
   let identityChanged = false;
   let connectionChanged = false;
   let authorizationDenied = false;
+  let boundaryError: unknown;
+  const capacity: AgentExecutionCapacity = {};
   const backend = createBackendRegistration({
     ref,
     kind,
@@ -263,8 +276,35 @@ function harness(kind: Kind, correction = false, fail = false) {
         }
         return { ok: true, value: kind === "generation" ? reply : routed };
       }
-      physicalRequests++;
+      if (boundaryFault !== undefined) {
+        try {
+          if (boundaryFault === "invalid-credit")
+            await execution.control.reserveTransport(attempt.id, -1, 200);
+          if (boundaryFault === "unknown-ticket")
+            await execution.control.reserveTransport("unknown", 20, 200);
+          if (
+            boundaryFault !== "invalid-credit" &&
+            boundaryFault !== "unknown-ticket" &&
+            boundaryFault !== "missing-reservation"
+          )
+            await execution.control.reserveTransport(attempt.id, 20, 200);
+          if (boundaryFault === "duplicate-reservation")
+            await execution.control.reserveTransport(attempt.id, 20, 200);
+          if (boundaryFault === "receipt-mismatch") execution.control.onReceived(attempt.id, 3);
+          await execution.control.finishAttempt({
+            ticketId: attempt.id,
+            receivedBytes:
+              boundaryFault === "receipt-mismatch" ? 4 : boundaryFault === "over-credit" ? 201 : 1,
+            response: create(GenerationResponseSchema, { outcome: AiOutcome.ADMITTED }),
+          });
+          throw new Error("Expected Agent attempt boundary to reject invalid work.");
+        } catch (error) {
+          boundaryError = error;
+          throw error;
+        }
+      }
       await execution.control.reserveTransport(attempt.id, 20, 200);
+      physicalRequests++;
       if (fail) {
         const failure = await execution.control.recordFailure("UNAVAILABLE", true);
         const response =
@@ -357,7 +397,7 @@ function harness(kind: Kind, correction = false, fail = false) {
     AgentExecutionStorage<unknown, Message>,
     "capacity" | "update" | "renew" | "read" | "complete" | "markDelivered"
   > = {
-    capacity: {},
+    capacity,
     update: ({ expectedRecordBytes, next }) => {
       expect(expectedRecordBytes).toEqual(toBinary(AgentExecutionRecordSchema, saved));
       if (
@@ -411,6 +451,9 @@ function harness(kind: Kind, correction = false, fail = false) {
     model,
     runtime,
     saved: () => clone(AgentExecutionRecordSchema, saved),
+    changeSaved: (change: (record: typeof saved) => void) => {
+      change(saved);
+    },
     interruptTerminalWrite: () => {
       rejectTerminalWrite = true;
     },
@@ -442,10 +485,185 @@ function harness(kind: Kind, correction = false, fail = false) {
       };
     },
     counts: () => ({ physicalRequests, executeCalls }),
+    boundaryError: () => boundaryError,
+    setCapacity: (limits: AgentExecutionCapacity) => {
+      Object.assign(capacity, limits);
+    },
   };
 }
 
 describe("Agent AI replay from a persisted execution journal", () => {
+  it("rejects a missing saved deployment before executing the backend", async () => {
+    const fixture = harness("generation");
+    fixture.changeSaved((record) => {
+      const started = record.started;
+      if (started === undefined) throw new Error("Expected accepted start.");
+      started.models = [];
+    });
+    await expect(
+      fixture.runtime().invoke(generation, { call: "draft", conversation, input }),
+    ).rejects.toThrow("no saved authenticated deployment");
+    expect(fixture.counts()).toEqual({ physicalRequests: 0, executeCalls: 0 });
+  });
+
+  it.each(["operation", "invocation"] as const)(
+    "rejects a missing saved %s deadline before replaying a physical response",
+    async (missing) => {
+      const fixture = harness("generation");
+      const request = { call: "draft", conversation, input };
+      fixture.interruptTerminalWrite();
+      await expect(fixture.runtime().invoke(generation, request)).rejects.toThrow(
+        "interrupted before result persistence",
+      );
+      fixture.changeSaved((record) => {
+        if (missing === "invocation") {
+          const started = record.started;
+          if (started === undefined) throw new Error("Expected accepted start.");
+          started.deadline = undefined;
+        } else {
+          const entry = record.journal.find((item) => item.evidence.case === "operation");
+          if (entry?.evidence.case !== "operation") throw new Error("Expected saved operation.");
+          entry.evidence.value.deadline = undefined;
+        }
+      });
+      await expect(fixture.runtime().invoke(generation, request)).rejects.toThrow(
+        "deadline was not saved",
+      );
+      expect(fixture.counts().physicalRequests).toBe(1);
+    },
+  );
+
+  it.each(["provider", "account", "endpoint", "model"] as const)(
+    "rejects a saved deployment missing %s before provider execution",
+    async (field) => {
+      const fixture = harness("generation");
+      fixture.changeSaved((record) => {
+        const connection = record.started?.models[0]?.connection;
+        if (connection === undefined) throw new Error("Expected saved deployment.");
+        connection[field] = undefined;
+      });
+      await expect(
+        fixture.runtime().invoke(generation, { call: "draft", conversation, input }),
+      ).rejects.toMatchObject({ reason: "REVISION_CHANGED" });
+      expect(fixture.counts()).toEqual({ physicalRequests: 0, executeCalls: 0 });
+    },
+  );
+
+  it.each([
+    [{ executionRecordBytes: 1 }, "execution record"],
+    [{ executionHeadBytes: 1 }, "execution head"],
+    [{ historyRecordBytes: 1 }, "conversation history"],
+    [{ transactionPayloadBytes: 1 }, "transaction payload"],
+  ] as const)("rejects provider capacity %o before dispatch", async (capacity, message) => {
+    const fixture = harness("generation");
+    fixture.setCapacity(capacity);
+    await expect(
+      fixture.runtime().invoke(generation, { call: "draft", conversation, input }),
+    ).rejects.toThrow(message);
+    expect(fixture.counts().physicalRequests).toBe(0);
+  });
+
+  it.each([
+    ["invalid-credit", "byte bounds"],
+    ["unknown-ticket", "ticket is unknown"],
+    ["duplicate-reservation", "already reserved"],
+    ["missing-reservation", "no live reservation"],
+    ["receipt-mismatch", "byte counts disagree"],
+    ["over-credit", "exceeded reserved bytes"],
+  ] as const)("rejects %s at the durable physical-attempt boundary", async (fault, message) => {
+    const fixture = harness("generation", false, false, fault);
+    await expect(
+      fixture.runtime().invoke(generation, { call: "draft", conversation, input }),
+    ).rejects.toThrow(
+      fault === "invalid-credit" || fault === "unknown-ticket" ? message : "cancelled",
+    );
+    const boundaryError = fixture.boundaryError();
+    if (!(boundaryError instanceof Error)) throw new Error("Expected Agent boundary failure.");
+    expect(boundaryError.message).toContain(message);
+    expect(fixture.counts()).toEqual({ physicalRequests: 0, executeCalls: 1 });
+    expect(
+      fixture.saved().journal.filter((entry) => entry.evidence.case === "attempt"),
+    ).toHaveLength(1);
+  });
+
+  it("requires unique call names and respects the accepted operation count", async () => {
+    const fixture = harness("generation");
+    const runtime = fixture.runtime();
+    const request = { call: "draft", conversation, input };
+    expect((await runtime.invoke(generation, request)).ok).toBe(true);
+    await expect(runtime.invoke(generation, request)).rejects.toThrow("unique");
+    await expect(runtime.invoke(generation, { ...request, call: "second" })).rejects.toMatchObject({
+      reason: "MODEL_BUDGET_EXCEEDED",
+    });
+    runtime.finish();
+    expect(fixture.counts()).toEqual({ physicalRequests: 1, executeCalls: 2 });
+  });
+
+  it("rejects unsupported preferences and callbacks after the handler closes", async () => {
+    const fixture = harness("generation");
+    const runtime = fixture.runtime();
+    expect(() => {
+      runtime.select(0, undefined);
+    }).toThrow("supported kind");
+    runtime.select(1, ModelRef.of("scripted-generation", "v1"));
+    runtime.close();
+    expect(() => {
+      runtime.select(1, undefined);
+    }).toThrow("closed");
+    await expect(
+      runtime.invoke(generation, { call: "draft", conversation, input }),
+    ).rejects.toThrow("closed");
+    expect(fixture.counts()).toEqual({ physicalRequests: 0, executeCalls: 0 });
+  });
+
+  it("rejects an invalid saved terminal failure before backend execution", async () => {
+    const fixture = harness("generation", false, true);
+    const request = { call: "draft", conversation, input };
+    expect((await fixture.runtime().invoke(generation, request)).ok).toBe(false);
+    fixture.changeSaved((record) => {
+      const entry = record.journal.find((item) => item.evidence.case === "operation");
+      if (entry?.evidence.case !== "operation" || entry.evidence.value.result.case !== "failure")
+        throw new Error("Expected saved failure.");
+      entry.evidence.value.result.value.diagnostic = undefined;
+    });
+    await expect(fixture.runtime().invoke(generation, request)).rejects.toThrow("failure category");
+    expect(fixture.counts()).toEqual({ physicalRequests: 1, executeCalls: 1 });
+  });
+
+  it("refuses to resend an attempt whose durable response is absent", async () => {
+    const fixture = harness("generation");
+    const request = { call: "draft", conversation, input };
+    fixture.interruptTerminalWrite();
+    await expect(fixture.runtime().invoke(generation, request)).rejects.toThrow(
+      "interrupted before result persistence",
+    );
+    fixture.changeSaved((record) => {
+      const entry = record.journal.find((item) => item.evidence.case === "attempt");
+      if (entry?.evidence.case !== "attempt") throw new Error("Expected saved attempt.");
+      entry.evidence.value.response = { case: undefined };
+    });
+    await expect(fixture.runtime().invoke(generation, request)).rejects.toThrow("cannot be resent");
+    expect(fixture.counts()).toEqual({ physicalRequests: 1, executeCalls: 2 });
+  });
+
+  it("rejects a response referencing a missing saved diagnostic", async () => {
+    const fixture = harness("generation", false, true);
+    const request = { call: "draft", conversation, input };
+    fixture.interruptTerminalWrite();
+    await expect(fixture.runtime().invoke(generation, request)).rejects.toThrow(
+      "interrupted before result persistence",
+    );
+    fixture.changeSaved((record) => {
+      const entry = record.journal.find((item) => item.evidence.case === "operation");
+      if (entry?.evidence.case !== "operation") throw new Error("Expected saved operation.");
+      entry.evidence.value.diagnostics = [];
+    });
+    await expect(fixture.runtime().invoke(generation, request)).rejects.toThrow(
+      "unknown diagnostic",
+    );
+    expect(fixture.counts()).toEqual({ physicalRequests: 1, executeCalls: 2 });
+  });
+
   it("rejects a saved output with the wrong domain type before backend execution", async () => {
     const fixture = harness("generation");
     const request = { call: "draft", conversation, input };
