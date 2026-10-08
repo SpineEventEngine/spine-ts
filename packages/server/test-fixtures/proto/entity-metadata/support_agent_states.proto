@@ -40,6 +40,21 @@ message SupportReplyAgentState {
   string proposed_reply = 2;
 }
 
+// Records human review progress for the same support reply work item.
+message SupportReplyReviewAgentState {
+  option (entity).kind = ENTITY;
+
+  // Identifies the support reply being reviewed.
+  SupportReplyAgentId id = 1 [
+    (required) = true,
+    (validate) = true,
+    (set_once) = true
+  ];
+
+  // Records the reviewer's decision on the proposed reply.
+  string review_decision = 2;
+}
+
 // Identifies one support article available to reply drafting.
 message SupportKnowledgeId {
   // Distinguishes the article in the support library.

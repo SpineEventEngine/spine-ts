@@ -159,10 +159,10 @@ logical deletion. System dispatch audit and emitted domain Events use their
 original Event envelopes in repository history.
 
 Declare the Agent ID and state in Proto, with `option (entity).kind = ENTITY;`
-on the state. The [Support example](../../examples/support/README.md) includes
-complete [domain Protos](../../examples/support/proto/spine/examples/support/states.proto),
-[a model definition](../../examples/support/src/model.ts), and
-[an Agent implementation](../../examples/support/src/index.ts).
+on the state. The [Support example](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/README.md) includes
+complete [domain Protos](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/proto/spine/examples/support/states.proto),
+[a model definition](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/src/model.ts), and
+[an Agent implementation](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/src/index.ts).
 
 The handler invokes a typed model operation, updates its draft only on success,
 and emits a domain outcome. This abbreviated declaration uses the example's
@@ -222,7 +222,7 @@ class SupportDraftAgent extends Agent<SupportTicketId, typeof SupportDraftStateS
 
 Configure the registry outside the Entity. The context requires persisted System
 Events, and the Agent registration supplies its code revision and permitted
-capabilities. The [example context factory](../../examples/support/src/index.ts)
+capabilities. The [example context factory](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/src/index.ts)
 assembles these settings with the generated handler registry. A server-wide
 `withAi()` default can be supplied when building contexts through `Server`;
 context configuration can provide its registry directly.

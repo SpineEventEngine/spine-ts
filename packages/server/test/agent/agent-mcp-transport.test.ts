@@ -30,9 +30,9 @@ import {
   AgentNamedOperationSchema,
 } from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
 import { describe, expect, it, vi } from "vitest";
-import type { AgentMcpHost } from "../../server/src/agent/agent-mcp-host.js";
-import { AgentMcpRuntime } from "../../server/src/agent/agent-mcp-runtime.js";
-import { SupportReplyAgentIdSchema } from "../generated/spine/server/testing/support_agent_states_pb.js";
+import type { AgentMcpHost } from "../../src/agent/agent-mcp-host.js";
+import { AgentMcpRuntime } from "../../src/agent/agent-mcp-runtime.js";
+import { SupportReplyAgentIdSchema } from "../../test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
 
 const limits = {
   operations: 1,

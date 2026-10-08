@@ -21,18 +21,15 @@ import {
   AgentExecutionRecordSchema,
 } from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
 import { describe, expect, it } from "vitest";
-// prettier-ignore
-import {
-  SupportRecoveryStateSchema,
-} from "../../../server-blackbox-tests/generated/spine/server/testing/support_recovery_states_pb.js";
-// prettier-ignore
-import {
-  DraftRecoverySupportReplySchema,
-} from "../../../server-blackbox-tests/generated/spine/server/testing/support_recovery_commands_pb.js";
 import {
   SupportReplyAgentIdSchema,
   SupportReplyAgentStateSchema,
+  SupportReplyReviewAgentStateSchema,
 } from "../../../server/test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
+// prettier-ignore
+import {
+  ReviewSupportReplySchema,
+} from "../../../server/test-fixtures/generated/entity-metadata/support_agent_commands_pb.js";
 import { AgentExecutionStorageFactories } from "../../src/internal/agent-execution.js";
 import { AgentHistoryStorageFactories } from "../../src/internal/agent-history.js";
 import { InMemoryStorageFactory } from "../../src/memory/in-memory-storage-factory.js";
@@ -49,10 +46,10 @@ function recoveryInput() {
   const original = entityInput();
   return {
     ...original,
-    sourceType: SupportRecoveryStateSchema,
-    stateSchema: SupportRecoveryStateSchema,
+    sourceType: SupportReplyReviewAgentStateSchema,
+    stateSchema: SupportReplyReviewAgentStateSchema,
     recordSpec: new RecordSpec({
-      sourceType: SupportRecoveryStateSchema,
+      sourceType: SupportReplyReviewAgentStateSchema,
       recordType: EntityRecordSchema,
       idSchema: SupportReplyAgentIdSchema,
       extractId: (record) => required(original.id.unpack(required(record.entityId))),
@@ -62,18 +59,17 @@ function recoveryInput() {
 
 function recoveryAccepted() {
   const result = accepted("recovery-source", "shared-ticket");
-  required(required(result.key).scope).stateType = SupportRecoveryStateSchema.typeName;
+  required(required(result.key).scope).stateType = SupportReplyReviewAgentStateSchema.typeName;
   if (result.signal.case !== "command") throw new Error("Expected fixture Command.");
   result.signal.value.message = AnyMessages.pack(
-    DraftRecoverySupportReplySchema,
-    create(DraftRecoverySupportReplySchema, {
+    ReviewSupportReplySchema,
+    create(ReviewSupportReplySchema, {
       agent: create(SupportReplyAgentIdSchema, { ticketNumber: "shared-ticket" }),
-      question: "When will my order arrive?",
     }),
   );
   const handler = required(result.handlers[0]);
-  handler.receiverType = SupportRecoveryStateSchema.typeName;
-  handler.signalType = DraftRecoverySupportReplySchema.typeName;
+  handler.receiverType = SupportReplyReviewAgentStateSchema.typeName;
+  handler.signalType = ReviewSupportReplySchema.typeName;
   return result;
 }
 
@@ -86,7 +82,7 @@ describe("in-memory Agent repository separation", () => {
     });
     const recovery = AgentExecutionStorageFactories.create(factory, {
       entity: recoveryInput(),
-      stateType: SupportRecoveryStateSchema.typeName,
+      stateType: SupportReplyReviewAgentStateSchema.typeName,
     });
     try {
       const first = accepted("reply-source", "shared-ticket");
@@ -115,12 +111,12 @@ describe("in-memory Agent repository separation", () => {
     });
     const recovery = AgentExecutionStorageFactories.create(factory, {
       entity: recoveryInput(),
-      stateType: SupportRecoveryStateSchema.typeName,
+      stateType: SupportReplyReviewAgentStateSchema.typeName,
     });
     const replyHistory = AgentHistoryStorageFactories.create(factory, historyScope);
     const recoveryHistory = AgentHistoryStorageFactories.create(factory, {
       ...historyScope,
-      stateType: SupportRecoveryStateSchema.typeName,
+      stateType: SupportReplyReviewAgentStateSchema.typeName,
     });
     try {
       const pairs = [

@@ -25,11 +25,15 @@ import {
   ToolRequestSchema,
   ToolResponseSchema,
 } from "@spine-event-engine/proto/agent";
-import { BoundedContext, Repository } from "@spine-event-engine/server";
+import {
+  BoundedContext,
+  HandlerRegistryIngestor,
+  Repository,
+  type EntityHandlersMetadata,
+} from "@spine-event-engine/server";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { BlackBox } from "@spine-event-engine/testing";
 import { describe, expect, it } from "vitest";
-import { HandlerMetadataValues } from "../../server/dist/handler/handler-metadata.js";
 import { DraftRecoverySupportReplySchema } from "../generated/spine/server/testing/support_recovery_commands_pb.js";
 import { SupportReplyDraftedSchema } from "../generated/spine/server/testing/support_agent_events_pb.js";
 import { SupportRecoveryStateSchema } from "../generated/spine/server/testing/support_recovery_states_pb.js";
@@ -220,20 +224,24 @@ const supportRepository = () =>
     schema: SupportRecoveryStateSchema,
     agentCodeRevision: "support-mcp-v1",
     ai: { models: [mcpSupportModel] },
-    handlers: HandlerMetadataValues.defineArity(
-      McpSupportAgent,
-      SupportRecoveryStateSchema,
-      (builder) => [builder.assign(DraftRecoverySupportReplySchema, "draft")],
-      [
+    handlers: new HandlerRegistryIngestor().ingest({
+      receivers: [
         {
-          kind: "command-assignment",
-          methodName: "draft",
-          parameterCount: 1,
-          origin: "domestic",
-          outcomes: { returned: [SupportReplyDraftedSchema], thrown: [] },
+          receiverKind: "entity",
+          receiverType: McpSupportAgent,
+          stateSchema: SupportRecoveryStateSchema,
+          handlers: [
+            {
+              kind: "command-assignment",
+              methodName: "draft",
+              input: { schema: DraftRecoverySupportReplySchema, origin: "domestic" },
+              outcomes: { returned: [SupportReplyDraftedSchema], thrown: [] },
+              parameterCount: 1,
+            },
+          ],
         },
       ],
-    ),
+    })[0] as EntityHandlersMetadata<McpSupportAgent, typeof SupportRecoveryStateSchema>,
     events: [SupportReplyDraftedSchema],
   });
 

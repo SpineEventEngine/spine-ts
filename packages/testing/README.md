@@ -42,7 +42,7 @@ See [REFERENCE.md](REFERENCE.md) for its exact queue and failure behavior.
 
 ## Test an Agent outcome
 
-The [warehouse support test](../../examples/support/test/support-blackbox.test.ts)
+The [warehouse support test](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/test/support-blackbox.test.ts)
 shows the complete setup. Once its context has a registered `AiTestBackend`, the
 test supplies a typed reply and posts the same Command that an application would:
 

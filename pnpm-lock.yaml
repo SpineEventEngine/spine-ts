@@ -406,6 +406,9 @@ importers:
       '@spine-event-engine/proto':
         specifier: 2.0.0-snapshot.23
         version: link:../proto
+      '@types/json-schema':
+        specifier: 7.0.15
+        version: 7.0.15
       ai:
         specifier: 7.0.128
         version: 7.0.128(zod@4.6.5)
@@ -729,6 +732,9 @@ importers:
       '@google-cloud/datastore':
         specifier: 10.1.1
         version: 10.1.1
+      '@spine-event-engine/ai-vercel-ax':
+        specifier: 2.0.0-snapshot.23
+        version: link:../ai-vercel-ax
       '@spine-event-engine/delivery-server':
         specifier: workspace:*
         version: link:../delivery-server

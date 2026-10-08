@@ -270,6 +270,7 @@ function createFixtureCompilerOptions(): CompilerOptions {
   return {
     ...parsed.options,
     noEmit: true,
+    types: ["node"],
   };
 }
 

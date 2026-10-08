@@ -18,7 +18,13 @@ import { AiModel, AiRegistry, ModelRef } from "@spine-event-engine/ai";
 import { backendDefinition, createBackendRegistration } from "@spine-event-engine/ai/spi/adapter";
 import { AnyMessages, Time } from "@spine-event-engine/core";
 import { AiModelKind, ConversationIdSchema } from "@spine-event-engine/proto/agent";
-import { Agent, BoundedContext, Repository } from "@spine-event-engine/server";
+import {
+  Agent,
+  BoundedContext,
+  HandlerRegistryIngestor,
+  Repository,
+  type EntityHandlersMetadata,
+} from "@spine-event-engine/server";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import type {
   AgentExecutionStorage,
@@ -27,7 +33,6 @@ import type {
 import type * as Records from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
 import { describe, expect, it } from "vitest";
 import { AiTestBackend, BlackBox } from "../src/index.js";
-import { HandlerMetadataValues } from "../../server/dist/handler/handler-metadata.js";
 import {
   SupportReplyAgentIdSchema,
   SupportReplyAgentStateSchema,
@@ -130,20 +135,24 @@ function repository(entityType: typeof CapacityAgent = CapacityAgent) {
     schema: SupportReplyAgentStateSchema,
     agentCodeRevision: "capacity-v1",
     ai: { models: [model] },
-    handlers: HandlerMetadataValues.defineArity(
-      entityType,
-      SupportReplyAgentStateSchema,
-      (builder) => [builder.assign(DraftSupportReplySchema, "draft")],
-      [
+    handlers: new HandlerRegistryIngestor().ingest({
+      receivers: [
         {
-          kind: "command-assignment",
-          methodName: "draft",
-          parameterCount: 1,
-          origin: "domestic",
-          outcomes: { returned: [SupportReplyProposedSchema], thrown: [] },
+          receiverKind: "entity",
+          receiverType: entityType,
+          stateSchema: SupportReplyAgentStateSchema,
+          handlers: [
+            {
+              kind: "command-assignment",
+              methodName: "draft",
+              input: { schema: DraftSupportReplySchema, origin: "domestic" },
+              outcomes: { returned: [SupportReplyProposedSchema], thrown: [] },
+              parameterCount: 1,
+            },
+          ],
         },
       ],
-    ),
+    })[0] as EntityHandlersMetadata<CapacityAgent, typeof SupportReplyAgentStateSchema>,
     events: [SupportReplyProposedSchema],
   });
 }

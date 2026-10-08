@@ -2091,3 +2091,60 @@ pending invocation according to meaning; no policy waiver/runtimechange. Return
 to mandatory cheap preflight including direct readiness before rerunning release.
 Fullcoverage has not run yet; no passing release claim. This deterministic prose
 correction does not reopen specialist review lanes.
+
+Release rerun34aeb9493:5715 tests passed,13 failed,1 skipped across359 files in
+622.85s. All preceding release gates passed; coverage report not emitted on test
+failure. Mechanical failure batch: missing clean-build targets for ai/adapter/
+privateBlackBox/support; expected generated/native-test/Proto/server/testing
+inventories outdated; eight sibling package implementation-tree reaches; packed
+AI README link escapes tarball; decorator semantic compiler fixture lacks Node/
+AbortSignal types; older Agent routing fixture lacks required AI configuration.
+No routing production regression established: failure occurs at new readiness.
+Same main Sol/medium implementer receives runtime/testing/boundary fixes; parent
+handles bounded build/inventory/prose corrections only. No thresholds weakened,
+no package-boundary suppressions, no blanket testing exports or skipLibCheck.
+Estimate1–2hours for correction, focused checks and fullrelease rerun. Continue
+mechanical preflight before any next full profile. No final release acceptance.
+
+Package consumer progression: README link repair reveals pinned provider4.0.22
+.d.ts imports json-schema while its @types/json-schema is only a devDependency.
+Authorize exact @types/json-schema7.0.15 dependency in optional ai-vercel-ax plus
+lock update to make shipped declarations compile for a clean strict consumer.
+No consumer workaround, skipLibCheck or broad upgrade. Existing public generated
+handler-registry ingestor is preferred for fixture metadata, avoiding any new
+framework testing API merely to replace prohibited private imports. Parent has
+no source edits; same implementer handles complete correction and frozen install.
+
+Boundary correction details: move the private MCP-host integration test into the
+server package; keep cross-package tests on existing exported generated registry
+contracts. Allow a narrow fixture-only Proto addition under existing shared
+server/test-fixtures for the second support-reply Agent repository; preserve
+same-ID/two-state-type isolation proof with domain-correct states/commands. This
+authorizes no production serialized contract change, private test dependency,
+new fixture-generation subsystem or package-boundary exception. Canonical fixture
+generation is allowed after writer coordinates its own freeze.
+
+Release correction frozen: original failure batch399/399 across12files; changed
+BlackBox/all artifact consumer checks45/45 across4files; moved actual MCP transport
+passes. Same explicit configured Sol/medium implementer accepted, actual runtime
+metadata unavailable. All eight boundary violations resolved without exceptions
+or added framework testing API: public HandlerRegistryIngestor retains explicit
+return/rejection schemas; exact native Inbox RecordSpec is a read-only test probe.
+Shared fixture SupportReplyReviewAgentState+ReviewSupportReply preserves same-ID,
+two-Agent-state isolation. Node compiler fixture now requests Node types, no
+skipLibCheck. Four cleanup targets and exact inventories corrected. Declaration
+dependency and frozen lock install pass; canonicalgen/build/type/lint/API/format
+and boundary gates pass. Reviewer dispositions remain clean: no runtime behavior,
+public/serialized production contract, credential or lifecycle change in batch;
+package closure/inventory/prose changes are mechanically verified. Test-probe
+reliability proof is delegated to existing foundation Sol/medium, no subagents,
+three-provider Inbox-admission recovery selection. Full release remains pending.
+
+Corrected native Inbox probe passes3/3 acrossPG16/MySQL8.4/Datastore; child/scoped
+SQL cleanup confirmed. Full correction preflight passes combined Agent130 tests,
+toolingTypeScript,cleanup,TSDoc,format,audience and readiness117 imports/60 assets/
+465 links; scoped coverage has not replaced global thresholds. Source frozen;
+commit/push correction now, then rerun verify:release with Vitest's documented
+--coverage.reportOnFailure flag so any failure still emits diagnostic coverage.
+This changes reporting only, not tests, exclusions or90% thresholds. Readiness
+and targeted package consumer failures are resolved; fullprofile remains pending.

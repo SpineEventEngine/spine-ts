@@ -45,7 +45,7 @@ const draftReply = AiModel.define({
 `AiModel.define()` validates the capability and snapshots its settings before a model request. To check the facade in this repository without credentials or network access, run `pnpm exec vitest run packages/ai/test` from the root. See [REFERENCE.md](REFERENCE.md) for supported contracts and limits.
 
 For an Agent that uses the capability through an actual Command handler, see the
-[warehouse support example](../../examples/support/README.md). Its BlackBox test
+[warehouse support example](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/README.md). Its BlackBox test
 registers a scripted deployment, submits a ticket, and checks the resulting
 domain Event, query state, and recorded conversation. Application handlers use
 `this.ai.invoke(...)`; provider authentication and SDK setup belong in the

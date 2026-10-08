@@ -13,6 +13,7 @@
  */
 
 import { Time } from "@spine-event-engine/core/time";
+import { AiRegistry } from "@spine-event-engine/ai";
 import { clone, create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import {
@@ -8403,13 +8404,33 @@ describe("repository signal routing", () => {
     const repository = createGuardedSupportAgentRepository(agent, false);
     const context = BoundedContext.singleTenant("SupportGuard")
       .add(repository)
+      .withAi(
+        AiRegistry.create({
+          defaultModels: {},
+          invocationLimits: {
+            operations: 1,
+            modelRequests: 1,
+            toolCalls: 0,
+            recordedReads: 0,
+            deadlineMs: 1_000,
+            totalInputBytes: 4_000,
+            totalOutputBytes: 4_000,
+            maxRecoveryBytes: 32_000,
+          },
+          concurrentOperations: 1,
+          queuedOperations: 0,
+        }),
+      )
+      .persistSystemEvents()
       .withStorageFactory(factory)
       .build();
     try {
       const dispatcher = repositoryAccess.eventDispatcher(repository);
       if (dispatcher === undefined) throw new Error("Expected Agent Event dispatcher.");
       await dispatcher.dispatch(event);
+      await waitForCondition(() => GuardedSupportAgent.reactions === 1);
       await dispatcher.dispatch(event);
+      await delay(50);
     } finally {
       await context.close();
     }
@@ -13793,6 +13814,8 @@ function createGuardedSupportAgentRepository(
     entityType: GuardedSupportAgent,
     schema: SupportReplyAgentStateSchema,
     handlers,
+    agentCodeRevision: "guarded-support-v1",
+    ai: { models: [] },
     events: [SupportReplyDraftedSchema],
     eventRouting: EventRouting.create<SupportReplyAgentId>().route(
       SupportTicketUpdatedSchema,

@@ -49,8 +49,10 @@ import {
   Agent,
   BoundedContext,
   EntityHandlers,
+  HandlerRegistryIngestor,
   Projection,
   Repository,
+  type EntityHandlersMetadata,
 } from "@spine-event-engine/server";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { agentHistoryView } from "@spine-event-engine/server/testing";
@@ -67,7 +69,6 @@ import {
 } from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
 import { describe, expect, it } from "vitest";
 import { AiTestBackend, BlackBox } from "../src/index.js";
-import { HandlerMetadataValues } from "../../server/dist/handler/handler-metadata.js";
 import {
   SupportReplyAgentIdSchema,
   SupportReplyAgentStateSchema,
@@ -268,23 +269,27 @@ function draftingRepository() {
     schema: SupportReplyAgentStateSchema,
     agentCodeRevision: "drafting-v1",
     ai: { models: [proposal, toolProposal] },
-    handlers: HandlerMetadataValues.defineArity(
-      DraftingAgent,
-      SupportReplyAgentStateSchema,
-      (builder) => [builder.assign(DraftSupportReplySchema, "draft")],
-      [
+    handlers: new HandlerRegistryIngestor().ingest({
+      receivers: [
         {
-          kind: "command-assignment",
-          methodName: "draft",
-          parameterCount: 1,
-          origin: "domestic",
-          outcomes: {
-            returned: [SupportReplyProposedSchema, SupportReplyDraftFailedSchema],
-            thrown: [],
-          },
+          receiverKind: "entity",
+          receiverType: DraftingAgent,
+          stateSchema: SupportReplyAgentStateSchema,
+          handlers: [
+            {
+              kind: "command-assignment",
+              methodName: "draft",
+              input: { schema: DraftSupportReplySchema, origin: "domestic" },
+              outcomes: {
+                returned: [SupportReplyProposedSchema, SupportReplyDraftFailedSchema],
+                thrown: [],
+              },
+              parameterCount: 1,
+            },
+          ],
         },
       ],
-    ),
+    })[0] as EntityHandlersMetadata<DraftingAgent, typeof SupportReplyAgentStateSchema>,
     events: [SupportReplyProposedSchema, SupportReplyDraftFailedSchema],
   });
 }
@@ -325,20 +330,24 @@ async function configuredBox(
       new Repository({
         entityType: ProjectAggregate,
         schema: ProjectSchema,
-        handlers: HandlerMetadataValues.defineArity(
-          ProjectAggregate,
-          ProjectSchema,
-          (handlers) => [handlers.assign(CreateProjectSchema, "registerProject")],
-          [
+        handlers: new HandlerRegistryIngestor().ingest({
+          receivers: [
             {
-              kind: "command-assignment",
-              methodName: "registerProject",
-              parameterCount: 1,
-              origin: "domestic",
-              outcomes: { returned: [ProjectCreatedSchema], thrown: [] },
+              receiverKind: "entity",
+              receiverType: ProjectAggregate,
+              stateSchema: ProjectSchema,
+              handlers: [
+                {
+                  kind: "command-assignment",
+                  methodName: "registerProject",
+                  input: { schema: CreateProjectSchema, origin: "domestic" },
+                  outcomes: { returned: [ProjectCreatedSchema], thrown: [] },
+                  parameterCount: 1,
+                },
+              ],
             },
           ],
-        ),
+        })[0] as EntityHandlersMetadata<ProjectAggregate, typeof ProjectSchema>,
         events: [ProjectCreatedSchema],
       }),
     );

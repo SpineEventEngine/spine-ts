@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { create, equals, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { create, equals, fromBinary, ScalarType, toBinary } from "@bufbuild/protobuf";
 import { createOpenAI } from "@ai-sdk/openai";
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
@@ -28,7 +28,7 @@ import { AnyMessages, StringifierRegistry, TypeRegistry } from "@spine-event-eng
 import { EventSchema, TenantIdSchema } from "@spine-event-engine/proto";
 import { AgentInvocationTerminatedSchema } from "@spine-event-engine/proto/agent";
 import { BoundedContext, EventRouting } from "@spine-event-engine/server";
-import { StorageFactory } from "@spine-event-engine/storage";
+import { ColumnTypes, RecordColumn, RecordSpec, StorageFactory } from "@spine-event-engine/storage";
 import {
   AgentExecutionStorageFactories,
   AgentHistoryStorageFactories,
@@ -76,7 +76,56 @@ import {
   SupportDraftProjection,
   SupportDraftReceiptObserver,
 } from "../../dist/src/agent/support-draft-receivers.js";
-import { inboxRecordSpec } from "../../../server/dist/delivery/inbox-records.js";
+
+// This read-only probe describes the persisted Inbox record through the public storage API.
+const inboxProbeSpec = new RecordSpec({
+  sourceType: InboxMessageSchema,
+  recordType: InboxMessageSchema,
+  idSchema: InboxMessageIdSchema,
+  extractId: (record) => record.id,
+  columns: [
+    new RecordColumn(
+      "inbox_id",
+      ColumnTypes.fromField(InboxMessageSchema.field.inboxId),
+      (record) => record.inboxId,
+    ),
+    new RecordColumn(
+      "signal_id",
+      ColumnTypes.fromField(InboxMessageSchema.field.signalId),
+      (record) => record.signalId,
+    ),
+    new RecordColumn(
+      "shard_index",
+      ColumnTypes.scalar(ScalarType.INT32),
+      (record) => record.id?.index?.index,
+    ),
+    new RecordColumn(
+      "shard_total",
+      ColumnTypes.scalar(ScalarType.INT32),
+      (record) => record.id?.index?.ofTotal,
+    ),
+    new RecordColumn(
+      "status",
+      ColumnTypes.fromField(InboxMessageSchema.field.status),
+      (record) => record.status,
+    ),
+    new RecordColumn(
+      "when_received",
+      ColumnTypes.fromField(InboxMessageSchema.field.whenReceived),
+      (record) => record.whenReceived,
+    ),
+    new RecordColumn(
+      "version",
+      ColumnTypes.fromField(InboxMessageSchema.field.version),
+      (record) => record.version,
+    ),
+    new RecordColumn(
+      "message_id",
+      ColumnTypes.scalar(ScalarType.STRING),
+      (record) => record.id?.uuid,
+    ),
+  ],
+});
 
 const [
   provider,
@@ -404,7 +453,7 @@ class RecoveryCutStorageFactory extends StorageFactory {
     if (!expectedInbox) return undefined;
     const inbox = this.native.createRecordStorage(
       { name: contextName, multitenant: false },
-      inboxRecordSpec,
+      inboxProbeSpec,
     );
     const id = fromBinary(InboxMessageIdSchema, Buffer.from(expectedInbox, "base64"));
     try {

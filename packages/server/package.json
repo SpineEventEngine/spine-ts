@@ -61,6 +61,7 @@
     }
   },
   "devDependencies": {
+    "@spine-event-engine/ai-vercel-ax": "2.0.0-snapshot.23",
     "@spine-event-engine/storage-datastore": "2.0.0-snapshot.23",
     "@spine-event-engine/storage-postgres": "2.0.0-snapshot.23",
     "@spine-event-engine/storage-mysql": "2.0.0-snapshot.23",
