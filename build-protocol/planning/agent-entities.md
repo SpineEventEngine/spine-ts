@@ -2255,3 +2255,40 @@ Sol/mediumaccepted(runtimeintrospectionunavailable). ArchitectureAstra/high
 formaldecision accepted at/tmp/agent-coverage-verification-decision.md; no
 architectureproductionchange. Tests correction checkpointmaycommit/push now;
 verification-tooling implementation remains separate andfullreleasepending.
+
+Verification-tooling preflight passes:5permanent transform/standardV8 regression
+tests,18selectedAgent tests,97React/decorator/Todo tests; globaltest-inclusive
+tsc,scopedESLint/format,copyright,TSDoc,cleanup,diff checks clean. Production
+helper/config broadcomparison399commonfiles exactmaps/hitunion; Todo index now
+included (0branches), all90% thresholds unchanged. ExplicitconfiguredSol/medium
+implementation accepted; actualruntime metadata unavailable. Fourtoolingfiles
+frozen. Reopen existing maintainability,TypeScript/API andboundedperformance
+review concerns; threefresh reviewers explicitSol/medium,nochildren. DocsNA
+(no readerclaims/publicruntimeAPIchange;helperdocs mechanicallychecked);security
+NA productionruntime/dependencies/credentialboundariesunchanged. Fullrelease
+requiredafter review convergence; no new architecturepass needed.
+
+Verification-tooling review wave collected. Types/API no findings. StyleP2:
+permanent regressionmustrequirepositive compiled-only contribution (zero-built
+controlotherwisevacuous). Reliability: broad399filemaps andbranch/statement/
+functionhitunions arecorrect; permanenttestmustalsocheckstatement/functionunion.
+Reportwasreturnedinline (reviewermisreadnoeditsasincludingrequested/tmpreport),
+acceptedconfiguredSol/medium; recordsubstancehere. Narrowrisk: pnpmspawnSync
+timeoutkillswrapper only and3*45s exceeds90s outerdeadline. Sameimplementer
+receivesonebatch: nonvacuouscontribution,alldimensionsunion,bounded directNode
+Vitestthread-poolsubprocesshandling. No production/compilerhelperchangesneeded.
+
+Verificationreviewcorrection test5/5 androottypes/lint/format/cleanup/TSDoc/diff
+checks pass. Permanenttest requiresdistinctpositive source/compiledAgentbranches
+andcombinedcontribution; s/f/b hitunions checked. Controls invokeNode directly
+withVitestthreads(oneworker),25s eachwithin90s outerbudget. No compiler/config
+change inthiscorrection. Returnstyle/reliabilityfindings tosameexplicitSol/medium
+reviewers only; Types/API remainsclean. Fullreleasependingnarrowreviewclosure.
+
+Verification-tooling follow-upsclean: styleP2resolved; reliabilitys/funionand
+subprocessconcernsresolved(inlinereportaccepted); Types/APIclean. Allconfigured
+Sol/medium metadataaccepted,actualruntimeintrospectionunavailable. Parentfinal
+preflight352/352affectedtests29files,allfourtoolingtypeprofiles,wholeformat,
+cleanup,TSDoc,audience,diff checks pass. Auditfull+productionzerovulnerabilities.
+Commit/push fourtoolingfiles+ledger, thenunchangedverify:releasewithreportOnFailure
+forreportvisibility only. Fullcoverageacceptance remainspendingthisrun.
