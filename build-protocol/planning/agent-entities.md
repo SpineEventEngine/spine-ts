@@ -2366,3 +2366,39 @@ four tooling typechecks, scoped ESLint/format, cleanup, TSDoc, audience and diff
 checks. Corrected focused reports cover 212 formerly missed branch keys with
 unchanged source and thresholds. Commit/push the reviewed tests and this record,
 then run the full release profile. No further implementation changes are planned.
+
+## Final acceptance — 8 October 2026
+
+Implementation and independent reviews are complete. The reviewed source and
+test checkpoint is `6959b3677dfb027524db44d2e4b9f2accc58e859`, pushed to
+`origin/agent-entities`. No production changes followed `af9aff0a7`; the final
+correction added meaningful failure and persistence tests with three reviewed
+test-fidelity findings resolved. The final documentation commit only records
+these results.
+
+- `pnpm verify:release --coverage.reportOnFailure` passes: 364 test files passed,
+  one skipped; 5,857 tests passed, one skipped. Statements 93.84% (31,457/33,519),
+  branches 90.04% (18,555/20,607), functions 95.62% (8,015/8,382), and lines 95.59%
+  (28,873/30,202). All thresholds remain 90%. Evidence is
+  `/tmp/agent-verify-release-6959b3677.txt`.
+- All preceding release gates pass, including generated outputs, TypeScript,
+  lint, formatting, Time reads, documentation and package readiness.
+- All 21 archives prepared from this exact checkpoint pass external strict
+  consumer checks. Manifest and artifacts: `/tmp/spine-agent-release-6959b3677`.
+  The offline publication trial passes normal publication, partial failure,
+  rerun, delayed reads, fatal reads and read-only scenarios for all 21 packages:
+  `/tmp/spine-agent-release-trial-6959b3677`. Nothing was published to NPM.
+- GitHub Security run `37715642715` passes for the exact code checkpoint. The
+  earlier local full and production dependency audits found no vulnerabilities.
+- Native SIGKILL/recovery checks and their subsequent correction checks remain
+  valid; runtime code has not changed since those checks. They cover PostgreSQL,
+  MySQL and Datastore, plus the additional SQL versions recorded above.
+- All accepted review findings are resolved. The final independent test-fidelity
+  follow-up is `/tmp/agent-final-test-fidelity-followup.md`.
+- The six task-created PostgreSQL, MySQL, MariaDB and Datastore containers were
+  removed. Unrelated containers and the feature worktree were preserved.
+
+The branch is ready for human review. GitHub Build runs only on pull requests
+and therefore awaits a human-created PR; none was created or merged. General
+physical Entity deletion remains deferred to its separate task. The next step
+is human review and, if requested, PR preparation.

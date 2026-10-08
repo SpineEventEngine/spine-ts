@@ -14,13 +14,21 @@ evidence of completed work and are not current operating instructions. Every
 future `master` merge triggers NPM publication and therefore carries a new
 common workspace version under D-0115.
 
-Current approved work: [Signal-driven Agent entities](planning/agent-entities.md),
-on `agent-entities`, based on official master `658da1cdd`. The Time prerequisite
-is merged. Implement the accepted AI facade, mandatory indexed history, durable
+Current completed work: [Signal-driven Agent entities](planning/agent-entities.md),
+on `agent-entities`, based on official master `658da1cdd`. The implementation,
+independent reviews, full release verification and package checks are complete
+at code checkpoint `6959b3677`. The release suite passes 5,857 tests with one
+skipped; all four coverage thresholds pass. All 21 package archives pass external
+consumer checks and the offline publication trial. GitHub Security is green for
+that code checkpoint. GitHub Build awaits a human-created PR; no PR was created.
+
+The feature includes the Spine AI facade, mandatory indexed history, durable
 signal-triggered execution, Vercel/Ax integration, MCP and BlackBox support.
 History uses full occurrence timestamps and existing category/record IDs for
-ties. General physical Entity deletion is a separate deferred task and does not
-block this work. Implementation and verification are in progress.
+ties. Native recovery checks passed for PostgreSQL, MySQL and Datastore, with
+additional SQL version checks recorded in the task log. Temporary Agent test
+containers were removed. General physical Entity deletion remains a separate
+deferred task. The feature worktree remains available for human review.
 
 Previous completed work: [Process Manager queries across contexts](planning/cross-context-queries.md)
 on `cross-context-queries`, based on official master `2324311be8`. Preserve the
