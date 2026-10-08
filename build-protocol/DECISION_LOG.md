@@ -6052,3 +6052,25 @@ Amortizing full enumeration every five seconds did not bound the refresh itself.
 No domain Proto, history retention, deletion or Entity transaction contract
 changes. See [the Agent task](planning/agent-entities.md) and the
 [provider contract](../packages/storage/REFERENCE.md#tenant-catalog-paging).
+
+## D-0130: Add Anthropic Messages To The Initial Agent Adapter
+
+Status: Accepted; implementation in progress
+
+Date: 2026-10-08
+
+Add the immutable anthropicMessages provider profile to VercelAx with
+@ai-sdk/anthropic 4.0.72, matching the existing AI SDK dependency set. Retain
+Agent, AiModel, adapter SPI and Proto contracts. Use the existing guarded direct
+provider stream and journal-before-tool/continuation boundaries.
+
+Native schema mode forces outputFormat and admits an explicit documented model
+set. Prompted validation remains available for other Anthropic model IDs.
+Record Anthropic-specific lowering metadata in existing prepared request JSON;
+retain the original schema for local validation because the SDK simplifies its
+wire representation. Keep existing OpenAI prepared requests unchanged. No
+provider login flow, SDK retry loop, hosted tools or additional Entity API is
+introduced. Supported model data can expand with package/documentation evidence
+and actual-SDK request fixtures without repeating the architecture pass.
+
+See [the Agent task](planning/agent-entities.md).

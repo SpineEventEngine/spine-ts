@@ -14,10 +14,12 @@ evidence of completed work and are not current operating instructions. Every
 future `master` merge triggers NPM publication and therefore carries a new
 common workspace version under D-0115.
 
-Current completed work: [Signal-driven Agent entities](planning/agent-entities.md),
-on `agent-entities`, based on official master `658da1cdd`. The implementation,
-independent reviews, full release verification and package checks are complete
-at code checkpoint `b097c420c`. Three additional consecutive standalone review
+Current work: [Signal-driven Agent entities](planning/agent-entities.md),
+on `agent-entities`, based on official master `658da1cdd`. The human requires
+Anthropic model support in the first snapshot; that adapter integration and its
+focused review are in progress. The earlier implementation, independent reviews,
+full release verification and package checks completed at code checkpoint
+`b097c420c`; those results do not cover the Anthropic addition. Three additional consecutive standalone review
 and correction rounds are closed; each used a fresh reviewer without inherited
 conversation or memory. The release suite passes 5,890 tests with one skipped;
 all four coverage thresholds pass. Both dependency audits pass. All 21 package

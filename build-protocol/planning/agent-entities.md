@@ -2719,3 +2719,133 @@ record the requested problem-first, non-redundant wording and example layout in
 AGENTS.md. No runtime changes. Provider inspection confirms that VercelAx.model
 accepts only the OpenAI Responses profile; Anthropic support is an implementation
 gap despite the upstream SDK providing it. Do not describe it as supported.
+
+## Anthropic integration in the first Agent snapshot
+
+The human requires Anthropic models in the initial Agent snapshot. Continue the
+existing unmerged agent-entities worktree and branch; retain snapshot.23 and its
+version-only commit. Estimated uninterrupted work: 1–2 hours for dependency/API
+inspection, adapter integration, behavior tests, authentication examples,
+independent review, mechanical preflight and full release/package checks.
+
+Class: high-risk, because the added public provider profile participates in
+request authorization, native structured output, tool execution and durable
+attempt accounting. Reuse the existing execution contracts and generic provider
+stream path; do not create an alternate Agent API or bypass guarded fetch.
+Acceptance: a supported pinned Anthropic provider performs native and prompted
+structured generation through actual protocol fixtures, bounded corrective
+requests, permitted MCP calls, usage/model recording, refusal/truncation/error
+handling and cancellation. Credentials use trusted connection callbacks and
+remain outside recorded content. BlackBox demonstrates the Anthropic path from
+signal through domain event and audit. Existing OpenAI and Jev behavior remains.
+README/REFERENCE show API-key and supported token setup and clearly describe
+model/version limits. No claim of subscription login or unsupported providers.
+
+Desktop supports all required explicit child profiles. First assignments:
+
+- Existing requirements_splitter, explicit gpt-6-astra/high: one read-only
+  architecture pass for the provider contract addition, reuse and risk boundary.
+- Orchestrator-dispatched package/API inspection, explicit gpt-6-luna/medium:
+  read-only compatible published Anthropic dependency and exact API/protocol
+  evidence. Reports under /tmp; no child spawning or repository edits.
+- Existing implementer, explicit gpt-6-sol/medium: single writer for the adapter,
+  related BlackBox test, dependency pins, scoped docs and focused behavior tests
+  after the boundary decisions are established. Parent edits canonical records.
+  Acceptance uses explicit dispatch and configured role metadata; record actual
+  runtime metadata if available, otherwise its absence does not invalidate work.
+
+Fresh origin/master remains 658da1cdddcb8fd40f9205b1c200abc3a58dd62e;
+this is a correction within the existing feature worktree, not a separate
+feature branch. Implementation recorded the expected fail-first factory test:
+anthropicMessages() is absent (one failed, 106 skipped). Dependency/production
+edits wait for the single architecture pass and actual package inspection.
+
+Package inspection accepted from explicit Luna/medium dispatch (runtime
+self-introspection unavailable): @ai-sdk/anthropic 4.0.72 exactly matches the
+frozen provider 4.0.22 and provider-utils 5.0.54 dependencies. Actual SDK
+injected-fetch smoke proves API-key/token header, endpoint and basic SSE
+handling without an external model request. Report:
+`/tmp/anthropic-package-inspection.md`. The existing Sol/medium implementer
+installed only this pin in adapter/BlackBox development dependencies and lock.
+Native mode must force outputFormat, admit only the documented supported model
+IDs, preserve complete local schema validation despite the SDK wire sanitizer,
+and record the Anthropic lowering contract in prepared request evidence.
+Prompted generation remains usable for other Anthropic model IDs.
+
+The single architecture pass is accepted from explicit Astra/high dispatch;
+configured requirements-splitter metadata is confirmed, runtime introspection
+is unavailable. `/tmp/anthropic-contract-plan.md` has the frozen seams and
+acceptance criteria. D-0130 records the decision. Additional positively supported
+modern model IDs are being verified by the existing Luna/medium inspector so
+native support is not arbitrarily confined to the initial six 4.5 IDs.
+Implementation started after the expected failing tests and accepted seam
+choices; no architecture blocker remains.
+
+Native-support data now covers 16 exact IDs documented by the pinned package
+and official API compatibility page; unknown and unsupported IDs remain
+prompt-mode eligible but reject native mode before a physical attempt. The
+focused 22-case Anthropic registration/admission suite passes. Parent ran
+pnpm audit:release after pinning the provider: full and production graphs both
+report no known vulnerabilities. Actual SDK SSE and BlackBox coverage is in
+progress; these focused results are not final release acceptance.
+
+The existing implementer reports actual-SDK wire and BlackBox paths passing:
+signal-to-Anthropic-to-local-MCP-to-correction-to-domain-event, recorded calls,
+model/cache-normalized usage, refusal/truncation, incomplete stream, bounded
+bytes/cancellation and 401/403/429/529 without hidden SDK retries. Final scoped
+preflight and documentation are pending. Review assignments after preflight:
+
+- Existing performance_reliability_reviewer, explicit gpt-6-sol/medium:
+  attempt/journal/replay, MCP continuation and cancellation/resource boundaries.
+- Existing typescript_api_docs_reviewer, explicit gpt-6-sol/medium:
+  public profile/options, identity/model admission and compiled usage contracts.
+- Existing style_maintainability_reviewer, explicit gpt-6-sol/medium:
+  changed adapter structure and narrow tests only.
+- Existing documentation_reviewer, explicit gpt-6-luna/medium:
+  current README/REFERENCE claims, authentication and supported models.
+  Collect the complete concern wave before returning one correction batch to the
+  same implementer. Child reviewers have no inherited chat or memory and may not
+  spawn children. Final security disposition will cover the new credential/profile
+  path separately from unchanged Agent storage and Entity behavior.
+
+Initial concern reviews: API and reliability reviewers each returned one P2 test
+acceptance gap; style found no actionable issue. API needs all 16 admitted native
+IDs exercised with actual createAnthropic wire fixtures, not just a mock model.
+Reliability needs persisted recovery with changed Anthropic lowering metadata
+and REPLAY_DIVERGENCE before any model/tool work; generic request comparison is
+not enough as the dedicated acceptance example. No production defect confirmed.
+Documentation review is pending; collect its result before one fix batch.
+
+Final release-readiness security assignment: existing security_reviewer,
+explicit gpt-6-sol/high, bounded to the new Anthropic profile, scoped credential
+construction, output admission and provider/tool dispatch. Existing Agent storage
+and authorization architecture are unchanged. Fresh context, no memory/history
+or children. Actual runtime introspection availability recorded on acceptance.
+
+Complete review wave accepted: runtime, API and documentation returned three P2
+acceptance gaps; style returned no actionable findings. All dispatches used the
+recorded explicit role/model/reasoning and no inherited context or memory;
+actual runtime introspection is unavailable. The same implementer corrected
+only tests/docs: actual SDK matrix for every native ID, three persisted replay
+metadata-divergence cases, and a compiled async scoped-token example. No
+production changes were needed. Final security reviewer (explicit Sol/high)
+found no concrete issue in new profile/auth/route/output/tool boundaries;
+report `/tmp/anthropic-security-review.md`. Scoped preflight is running again.
+
+All three P2 findings are independently confirmed closed by their original
+concern reviewers. Correction source stayed unchanged; only tests/docs changed.
+Final focused suite: 314/314 tests. Affected builds, all four root tooling
+typechecks, scoped ESLint, cleanup/TSDoc, production dependency policy, API docs,
+audience/snippets, formatting and diff checks pass. An optional-field narrowing
+error in a new test assertion was corrected before the final successful tooling
+run. The existing implementer remains available if final verification finds a
+real issue. No runtime introspection metadata is exposed; all role profiles were
+explicit and matched their configured assignments.
+
+Final mechanical assignment: resume existing orchestrator-dispatched
+agent_final_review_verification, configured explicit gpt-6-luna/low, no children
+or repository edits. After the converged change is committed and pushed, run one
+full verify:release profile; on success, full/prod audits, 21-package prepare and
+strict external consumer, then offline publication trial. Preserve evidence under
+/tmp; never publish or create a PR. A failure stops the sequence for scripts-first
+classification and correction before repeating the full cheap preflight.

@@ -24,6 +24,7 @@ import { MockLanguageModelV3 } from "ai/test";
 import type { LanguageModelV3CallOptions, LanguageModelV3StreamPart } from "@ai-sdk/provider";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { createOpenAI } from "@ai-sdk/openai";
+import { createAnthropic } from "@ai-sdk/anthropic";
 import { create } from "@bufbuild/protobuf";
 import {
   AiOperationIdSchema,
@@ -115,16 +116,28 @@ function generationFixture(
   streams: readonly (readonly LanguageModelV3StreamPart[])[],
   maxRequests = streams.length,
   withTool = false,
+  provider: "openai" | "anthropic" = "openai",
+  modelId = "claude-sonnet-4-5",
+  outputMode: "native-schema" | "prompt-and-validate" = "native-schema",
 ) {
   let scopedFetch!: typeof fetch;
   let nextStream = 0;
   const providerCalls: LanguageModelV3CallOptions[] = [];
   const network = vi.fn<typeof fetch>().mockResolvedValue(new Response("ok"));
+  const selectedIdentity =
+    provider === "anthropic" ? { ...identity, provider, model: modelId } : identity;
   const model = new MockLanguageModelV3({
+    modelId: selectedIdentity.model,
     doStream: async (options) => {
       providerCalls.push(options);
       await (
-        await scopedFetch("https://provider.example/v1/responses", { method: "POST", body: "{}" })
+        await scopedFetch(
+          `https://provider.example/v1/${provider === "anthropic" ? "messages" : "responses"}`,
+          {
+            method: "POST",
+            body: "{}",
+          },
+        )
       ).text();
       const parts = streams[nextStream++] ?? [];
       return {
@@ -139,13 +152,16 @@ function generationFixture(
   });
   const registration = VercelAx.model({
     ref: ModelRef.of("draft-support-reply", "r1"),
-    capabilities: VercelAx.capabilities.openAIResponses(),
+    capabilities:
+      provider === "anthropic"
+        ? VercelAx.capabilities.anthropicMessages()
+        : VercelAx.capabilities.openAIResponses(),
     platformFetch: network,
-    resolveIdentity: () => identity,
+    resolveIdentity: () => selectedIdentity,
     authorizeUse: () => true,
     connect: (_scope, _expected, runtime) => {
       scopedFetch = runtime.fetch;
-      return { model, identity };
+      return { model, identity: selectedIdentity };
     },
   });
   const definition = executionDefinition(
@@ -156,7 +172,7 @@ function generationFixture(
       input: SupportTicketFactsSchema,
       output: ProposedSupportReplySchema,
       instructions: "Draft a reply",
-      outputMode: "native-schema",
+      outputMode,
       ...(withTool ? { tools: [{ server: "support", tool: "lookup" }] } : {}),
       limits: {
         modelRequests: maxRequests,
@@ -181,12 +197,16 @@ function generationFixture(
   const run = async (
     advertisedTools: readonly AiMcpAdvertisedTool[] = withTool ? [advertisedLookup] : [],
   ) => {
-    const selected = await backendDefinition(registration).connect(scope, identity, runtime);
+    const selected = await backendDefinition(registration).connect(
+      scope,
+      selectedIdentity,
+      runtime,
+    );
     return backendDefinition(registration).execute({
       operationId: create(AiOperationIdSchema, { value: "generation-case" }),
       call: "support-request",
       scope,
-      identity,
+      identity: selectedIdentity,
       model: selected.model,
       definition,
       advertisedTools,
@@ -198,6 +218,129 @@ function generationFixture(
     });
   };
   return { run, runtime, model, network, registration, providerCalls };
+}
+
+const anthropicEvents = (text: string, stopReason = "end_turn") =>
+  [
+    {
+      type: "message_start",
+      message: {
+        id: "msg-fixture",
+        type: "message",
+        role: "assistant",
+        model: "claude-sonnet-4-5-20250929",
+        content: [],
+        stop_reason: null,
+        stop_sequence: null,
+        usage: {
+          input_tokens: 4,
+          output_tokens: 0,
+          cache_read_input_tokens: 2,
+          cache_creation_input_tokens: 1,
+        },
+      },
+    },
+    { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+    { type: "content_block_delta", index: 0, delta: { type: "text_delta", text } },
+    { type: "content_block_stop", index: 0 },
+    { type: "message_delta", delta: { stop_reason: stopReason }, usage: { output_tokens: 2 } },
+    { type: "message_stop" },
+  ]
+    .map((event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`)
+    .join("");
+
+const nativeAnthropicIds = [
+  "claude-sonnet-4-5",
+  "claude-sonnet-4-5-20250929",
+  "claude-haiku-4-5",
+  "claude-haiku-4-5-20251001",
+  "claude-opus-4-5",
+  "claude-opus-4-5-20251101",
+  "claude-sonnet-4-6",
+  "claude-opus-4-6",
+  "claude-opus-4-7",
+  "claude-opus-4-8",
+  "claude-sonnet-5",
+  "claude-opus-5",
+  "claude-sonnet-5-5",
+  "claude-opus-5-5",
+  "claude-fable-5",
+  "claude-fable-5-1",
+] as const;
+
+function realAnthropicFixture(
+  wire: string,
+  outputMode: "native-schema" | "prompt-and-validate" = "native-schema",
+  modelId = "claude-sonnet-4-5",
+  settings: { signal?: AbortSignal; maxOutputBytes?: number; authToken?: string } = {},
+) {
+  const selectedIdentity = { ...identity, provider: "anthropic", model: modelId };
+  const network = vi
+    .fn<typeof fetch>()
+    .mockResolvedValue(new Response(wire, { headers: { "content-type": "text/event-stream" } }));
+  const registration = VercelAx.model({
+    ref: ModelRef.of("draft-support-reply", "r1"),
+    capabilities: VercelAx.capabilities.anthropicMessages(),
+    platformFetch: network,
+    resolveIdentity: () => selectedIdentity,
+    authorizeUse: () => true,
+    connect: (_scope, _expected, runtime) => ({
+      model: createAnthropic({
+        ...(settings.authToken ? { authToken: settings.authToken } : { apiKey: "fixture-only" }),
+        baseURL: selectedIdentity.endpoint,
+        fetch: runtime.fetch,
+      }).messages(modelId),
+      identity: selectedIdentity,
+    }),
+  });
+  const definition = executionDefinition(
+    AiModel.define({
+      name: "draft-support-reply",
+      version: "v1",
+      kind: "generation",
+      input: SupportTicketFactsSchema,
+      output: ProposedSupportReplySchema,
+      instructions: "Draft a reply",
+      outputMode,
+      limits: {
+        modelRequests: 1,
+        toolCalls: 0,
+        deadlineMs: 900,
+        maxInputBytes: 2000,
+        maxOutputBytes: 4000,
+        maxOutputTokens: 100,
+      },
+    }).definition,
+  );
+  const runtime = { ...control(), ...(settings.signal ? { signal: settings.signal } : {}) };
+  vi.mocked(runtime.beginAttempt).mockResolvedValue({
+    id: "anthropic-attempt",
+    maxInputBytes: 2000,
+    maxOutputBytes: settings.maxOutputBytes ?? 4000,
+    deadlineEpochMs: 1000,
+    signal: runtime.signal,
+  });
+  const run = async () => {
+    const selected = await backendDefinition(registration).connect(
+      scope,
+      selectedIdentity,
+      runtime,
+    );
+    return backendDefinition(registration).execute({
+      operationId: create(AiOperationIdSchema, { value: "anthropic-operation" }),
+      call: "support-request",
+      scope,
+      identity: selectedIdentity,
+      model: selected.model,
+      definition,
+      input: create(SupportTicketFactsSchema, {
+        ticketNumber: { value: "T-1" },
+        customerQuestion: "Where is my order?",
+      }),
+      control: runtime,
+    });
+  };
+  return { run, runtime, network };
 }
 
 function decisionFixture(model: VercelDecisionModel) {
@@ -261,6 +404,380 @@ function decisionFixture(model: VercelDecisionModel) {
 }
 
 describe("Vercel connection registration", () => {
+  it("registers the pinned Anthropic Messages route as a generation provider", () => {
+    const capabilities = VercelAx.capabilities.anthropicMessages();
+    const anthropicIdentity = { ...identity, provider: "anthropic", model: "claude-sonnet-4-5" };
+    expect(capabilities).toMatchObject({
+      id: "anthropic-messages-v1",
+      routeSuffix: "/messages",
+      providerProtocol: "anthropic-messages-stream-v1",
+      outputContract: "native-json-or-prompt-validate-v1",
+      retryContract: "one-provider-call-per-ticket-v1",
+    });
+    expect(() =>
+      VercelAx.model({
+        ref: ModelRef.of("draft-support-reply", "r1"),
+        capabilities,
+        resolveIdentity: () => anthropicIdentity,
+        authorizeUse: () => true,
+        connect: () => ({
+          model: new MockLanguageModelV3({ modelId: anthropicIdentity.model }),
+          identity: anthropicIdentity,
+        }),
+      }),
+    ).not.toThrow();
+    expect(() =>
+      VercelAx.model({
+        ref: ModelRef.of("draft-support-reply", "r1"),
+        capabilities: { ...capabilities, routeSuffix: "/responses" },
+        resolveIdentity: () => anthropicIdentity,
+        authorizeUse: () => true,
+        connect: () => ({
+          model: new MockLanguageModelV3({ modelId: anthropicIdentity.model }),
+          identity: anthropicIdentity,
+        }),
+      }),
+    ).toThrow("capabilities");
+  });
+
+  it("rejects an Anthropic model that differs from the authorized identity", async () => {
+    const selectedIdentity = { ...identity, provider: "anthropic", model: "claude-sonnet-4-5" };
+    const network = vi.fn<typeof fetch>();
+    const registration = VercelAx.model({
+      ref: ModelRef.of("draft-support-reply", "r1"),
+      capabilities: VercelAx.capabilities.anthropicMessages(),
+      platformFetch: network,
+      resolveIdentity: () => selectedIdentity,
+      authorizeUse: () => true,
+      connect: () => ({
+        model: new MockLanguageModelV3({ modelId: "different-model" }),
+        identity: selectedIdentity,
+      }),
+    });
+    await expect(
+      backendDefinition(registration).connect(scope, selectedIdentity, control()),
+    ).rejects.toThrow("model identity changed");
+    expect(network).not.toHaveBeenCalled();
+  });
+
+  it("forces native Anthropic output format without a JSON tool fallback", async () => {
+    const fixture = generationFixture(
+      [
+        [
+          { type: "text-delta", id: "text", delta: '{"replyText":"Hello"}' },
+          {
+            type: "finish",
+            finishReason: { unified: "stop", raw: "end_turn" },
+            usage: sdkUsage(3, 2),
+          },
+        ],
+      ],
+      1,
+      false,
+      "anthropic",
+    );
+    vi.mocked(fixture.runtime.admitGeneration).mockReturnValue({
+      ok: true,
+      value: create(ProposedSupportReplySchema, { replyText: "Hello" }),
+    });
+    await expect(fixture.run()).resolves.toMatchObject({ ok: true });
+    expect(fixture.providerCalls).toHaveLength(1);
+    expect(fixture.providerCalls[0]).toMatchObject({
+      responseFormat: { type: "json" },
+      providerOptions: { anthropic: { structuredOutputMode: "outputFormat" } },
+    });
+    expect(fixture.network).toHaveBeenCalledTimes(1);
+    const response = vi.mocked(fixture.runtime.finishAttempt).mock.calls[0]?.[0].response;
+    expect(response).toMatchObject({ outcome: AiOutcome.ADMITTED });
+    if (response?.$typeName !== "spine.ts.agent.GenerationResponse")
+      throw new Error("Expected generation response");
+    expect(response.actualModel).toBeUndefined();
+  });
+
+  it.each(["claude-3-haiku-20240307", "claude-sonnet-4-5-unlisted", "unknown-future-model"])(
+    "rejects unsupported Anthropic native model %s before an attempt",
+    async (modelId) => {
+      const fixture = generationFixture([], 1, false, "anthropic", modelId);
+      await expect(fixture.run()).resolves.toMatchObject({
+        ok: false,
+        failure: { code: "UNSUPPORTED_CAPABILITY" },
+      });
+      expect(fixture.runtime.beginAttempt).not.toHaveBeenCalled();
+      expect(fixture.network).not.toHaveBeenCalled();
+    },
+  );
+
+  it("allows an older Anthropic model through prompt validation", async () => {
+    const fixture = generationFixture(
+      [
+        [
+          { type: "text-delta", id: "text", delta: '{"replyText":"Hello"}' },
+          {
+            type: "finish",
+            finishReason: { unified: "stop", raw: "end_turn" },
+            usage: sdkUsage(1, 1),
+          },
+        ],
+      ],
+      1,
+      false,
+      "anthropic",
+      "claude-3-haiku-20240307",
+      "prompt-and-validate",
+    );
+    vi.mocked(fixture.runtime.admitGeneration).mockReturnValue({
+      ok: true,
+      value: create(ProposedSupportReplySchema, { replyText: "Hello" }),
+    });
+    await expect(fixture.run()).resolves.toMatchObject({ ok: true });
+    expect(fixture.providerCalls[0]?.responseFormat).toEqual({ type: "text" });
+    expect(fixture.providerCalls[0]?.providerOptions).toBeUndefined();
+    const attempt = vi.mocked(fixture.runtime.beginAttempt).mock.calls[0]?.[0];
+    if (attempt?.kind !== "generation") throw new Error("Expected generation request");
+    expect(JSON.parse(attempt.content.promptJson)).toMatchObject({
+      provider: {
+        profile: "anthropic-messages-v1",
+        lowering: "anthropic-4.0.72-v1",
+        outputMode: "prompt-and-validate",
+        providerOptions: null,
+      },
+    });
+  });
+
+  it.each(nativeAnthropicIds)(
+    "journals native Anthropic SSE model %s with a real SDK request",
+    async (modelId) => {
+      const fixture = realAnthropicFixture(
+        anthropicEvents('{"replyText":"Hello"}'),
+        "native-schema",
+        modelId,
+      );
+      vi.mocked(fixture.runtime.admitGeneration).mockReturnValue({
+        ok: true,
+        value: create(ProposedSupportReplySchema, { replyText: "Hello" }),
+      });
+      await expect(fixture.run()).resolves.toMatchObject({ ok: true });
+      expect(fixture.network).toHaveBeenCalledTimes(1);
+      const [url, init] = vi.mocked(fixture.network).mock.calls[0] ?? [];
+      expect(url).toBe("https://provider.example/v1/messages");
+      const body: unknown = JSON.parse(
+        typeof init?.body === "string"
+          ? init.body
+          : Buffer.from(init?.body as Uint8Array).toString("utf8"),
+      );
+      expect(body).toMatchObject({
+        model: modelId,
+        stream: true,
+        output_config: { format: { type: "json_schema" } },
+      });
+      expect(JSON.stringify(body)).not.toContain('"name":"json"');
+      const completion = vi.mocked(fixture.runtime.finishAttempt).mock.calls[0]?.[0];
+      expect(completion?.response).toMatchObject({
+        outcome: AiOutcome.ADMITTED,
+        rawOutput: '{"replyText":"Hello"}',
+        actualModel: { value: "claude-sonnet-4-5-20250929" },
+        usage: create(AiUsageSchema, {
+          inputTokens: { value: 7n },
+          outputTokens: { value: 2n },
+        }),
+      });
+      const request = vi.mocked(fixture.runtime.beginAttempt).mock.calls[0]?.[0];
+      if (request?.kind !== "generation") throw new Error("Expected generation request");
+      expect(JSON.parse(request.content.promptJson)).toMatchObject({
+        provider: {
+          profile: "anthropic-messages-v1",
+          lowering: "anthropic-4.0.72-v1",
+          outputMode: "native-schema",
+          providerOptions: { anthropic: { structuredOutputMode: "outputFormat" } },
+        },
+      });
+    },
+  );
+
+  it("uses a trusted Anthropic token for prompted text without recording it", async () => {
+    const fixture = realAnthropicFixture(
+      anthropicEvents('{"replyText":"Hello"}'),
+      "prompt-and-validate",
+      "claude-3-haiku-20240307",
+      { authToken: "fixture-bearer-secret" },
+    );
+    vi.mocked(fixture.runtime.admitGeneration).mockReturnValue({
+      ok: true,
+      value: create(ProposedSupportReplySchema, { replyText: "Hello" }),
+    });
+    await expect(fixture.run()).resolves.toMatchObject({ ok: true });
+    const [, init] = vi.mocked(fixture.network).mock.calls[0] ?? [];
+    expect(new Headers(init?.headers).get("authorization")).toBe("Bearer fixture-bearer-secret");
+    const body: unknown = JSON.parse(
+      typeof init?.body === "string"
+        ? init.body
+        : Buffer.from(init?.body as Uint8Array).toString("utf8"),
+    );
+    expect(body).toMatchObject({ model: "claude-3-haiku-20240307", stream: true });
+    expect(body).not.toHaveProperty("output_config");
+    const request = vi.mocked(fixture.runtime.beginAttempt).mock.calls[0]?.[0];
+    if (request?.kind !== "generation") throw new Error("Expected generation request");
+    expect(request.content.instructions).toContain("replyText");
+    expect(JSON.stringify(request)).not.toContain("fixture-bearer-secret");
+    expect(JSON.parse(request.content.promptJson)).toMatchObject({
+      provider: { outputMode: "prompt-and-validate", providerOptions: null },
+    });
+  });
+
+  it.each([
+    { stopReason: "refusal", code: "REFUSED", outcome: AiOutcome.REFUSED },
+    { stopReason: "max_tokens", code: "INVALID_OUTPUT", outcome: AiOutcome.INVALID_OUTPUT },
+  ])("journals Anthropic $stopReason without admitting its partial text", async (failure) => {
+    const fixture = realAnthropicFixture(anthropicEvents("partial", failure.stopReason));
+    await expect(fixture.run()).resolves.toMatchObject({
+      ok: false,
+      failure: { code: failure.code },
+    });
+    expect(fixture.network).toHaveBeenCalledTimes(1);
+    expect(fixture.runtime.admitGeneration).not.toHaveBeenCalled();
+    expect(vi.mocked(fixture.runtime.finishAttempt).mock.calls[0]?.[0].response).toMatchObject({
+      outcome: failure.outcome,
+      rawOutput: "partial",
+      actualModel: { value: "claude-sonnet-4-5-20250929" },
+    });
+  });
+
+  it.each([
+    { status: 401, type: "authentication_error", code: "AUTHENTICATION_REQUIRED", retry: false },
+    { status: 403, type: "permission_error", code: "AUTHENTICATION_REQUIRED", retry: false },
+    { status: 429, type: "rate_limit_error", code: "RATE_LIMITED", retry: true },
+    { status: 529, type: "overloaded_error", code: "UNAVAILABLE", retry: true },
+  ])("journals one safe Anthropic HTTP $status failure", async (failure) => {
+    const fixture = realAnthropicFixture("");
+    fixture.network.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          type: "error",
+          error: { type: failure.type, message: "private provider diagnostic" },
+        }),
+        {
+          status: failure.status,
+          headers: { "content-type": "application/json" },
+        },
+      ),
+    );
+    await expect(fixture.run()).resolves.toMatchObject({
+      ok: false,
+      failure: { code: failure.code, retryableByNewSignal: failure.retry },
+    });
+    expect(fixture.network).toHaveBeenCalledTimes(1);
+    const completion = vi.mocked(fixture.runtime.finishAttempt).mock.calls[0]?.[0];
+    expect(completion?.response).toMatchObject({ outcome: AiOutcome.FAILED });
+    expect(JSON.stringify(completion)).not.toContain("private provider diagnostic");
+  });
+
+  it("rejects an incomplete Anthropic SSE without admitting a candidate", async () => {
+    const partial = anthropicEvents("partial").replace(/event: message_stop[\s\S]*$/, "");
+    const fixture = realAnthropicFixture(partial);
+    await expect(fixture.run()).resolves.toMatchObject({ ok: false });
+    expect(fixture.runtime.admitGeneration).not.toHaveBeenCalled();
+    expect(vi.mocked(fixture.runtime.finishAttempt).mock.calls[0]?.[0].response).toMatchObject({
+      outcome: AiOutcome.FAILED,
+      rawOutput: "partial",
+    });
+  });
+
+  it("bounds an actual Anthropic SSE body before candidate admission", async () => {
+    const fixture = realAnthropicFixture(
+      anthropicEvents('{"replyText":"Hello"}'),
+      "native-schema",
+      "claude-sonnet-4-5",
+      { maxOutputBytes: 100 },
+    );
+    await expect(fixture.run()).resolves.toMatchObject({ ok: false });
+    expect(fixture.network).toHaveBeenCalledTimes(1);
+    expect(fixture.runtime.admitGeneration).not.toHaveBeenCalled();
+    expect(vi.mocked(fixture.runtime.finishAttempt).mock.calls[0]?.[0].response.outcome).toBe(
+      AiOutcome.FAILED,
+    );
+  });
+
+  it("cancels a pending Anthropic fetch and journals one cancelled attempt", async () => {
+    const controller = new AbortController();
+    const fixture = realAnthropicFixture("", "native-schema", "claude-sonnet-4-5", {
+      signal: controller.signal,
+    });
+    fixture.network.mockImplementation(
+      (_input, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            "abort",
+            () => {
+              reject(new Error("network aborted"));
+            },
+            { once: true },
+          );
+        }),
+    );
+    const pending = fixture.run();
+    await vi.waitFor(() => {
+      expect(fixture.network).toHaveBeenCalledTimes(1);
+    });
+    controller.abort();
+    await expect(pending).resolves.toMatchObject({
+      ok: false,
+      failure: { code: "CANCELLED" },
+    });
+    expect(fixture.runtime.admitGeneration).not.toHaveBeenCalled();
+    expect(vi.mocked(fixture.runtime.finishAttempt).mock.calls[0]?.[0].response.outcome).toBe(
+      AiOutcome.FAILED,
+    );
+  });
+
+  it("replays a recorded Anthropic generation without another physical fetch", async () => {
+    const fixture = generationFixture([], 1, false, "anthropic");
+    const saved = create(ProposedSupportReplySchema, { replyText: "Saved" });
+    vi.mocked(fixture.runtime.beginAttempt).mockResolvedValue({
+      kind: "replay",
+      id: "anthropic-saved",
+      response: create(GenerationResponseSchema, {
+        outcome: AiOutcome.ADMITTED,
+        rawOutput: '{"replyText":"Saved"}',
+        admittedOutput: AnyMessages.pack(ProposedSupportReplySchema, saved),
+      }),
+    });
+    await expect(fixture.run()).resolves.toMatchObject({ ok: true, value: saved });
+    expect(fixture.network).not.toHaveBeenCalled();
+    expect(fixture.runtime.finishAttempt).not.toHaveBeenCalled();
+    const request = vi.mocked(fixture.runtime.beginAttempt).mock.calls[0]?.[0];
+    if (request?.kind !== "generation") throw new Error("Expected generation request");
+    expect(JSON.parse(request.content.promptJson)).toMatchObject({
+      provider: { profile: "anthropic-messages-v1", lowering: "anthropic-4.0.72-v1" },
+    });
+  });
+
+  it("does not call an Anthropic proposed tool after journal persistence fails", async () => {
+    const fixture = generationFixture(
+      [
+        [
+          {
+            type: "tool-call",
+            toolCallId: "provider-call-1",
+            toolName: "tool_0",
+            input: '{"ticket":"T-1"}',
+          },
+          {
+            type: "finish",
+            finishReason: { unified: "tool-calls", raw: "tool_use" },
+            usage: sdkUsage(2, 1),
+          },
+        ],
+      ],
+      2,
+      true,
+      "anthropic",
+    );
+    vi.mocked(fixture.runtime.finishAttempt).mockRejectedValue(new Error("journal unavailable"));
+    await expect(fixture.run()).rejects.toThrow("journal unavailable");
+    expect(fixture.network).toHaveBeenCalledTimes(1);
+    expect(fixture.runtime.callTool).not.toHaveBeenCalled();
+  });
+
   it("reuses a saved admitted decision without a second provider call", async () => {
     const doDecide = vi.fn().mockRejectedValue(new Error("provider must not run"));
     const fixture = decisionFixture({

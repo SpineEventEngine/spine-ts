@@ -136,13 +136,33 @@ type BoundaryFault =
   | "receipt-mismatch"
   | "over-credit";
 
-function harness(kind: Kind, correction = false, fail = false, boundaryFault?: BoundaryFault) {
+function harness(
+  kind: Kind,
+  correction = false,
+  fail = false,
+  boundaryFault?: BoundaryFault,
+  anthropicPrepared = false,
+) {
   const model = kind === "decision" ? decision : correction ? correctiveGeneration : generation;
   const ref = ModelRef.of(`scripted-${kind}`, "v1");
+  const selectedIdentity = anthropicPrepared
+    ? { ...identity, provider: "anthropic", model: "claude-sonnet-4-5" }
+    : identity;
   let physicalRequests = 0;
   let executeCalls = 0;
   let rejectTerminalWrite = false;
-  let promptJson = '{"messages":[],"tools":[]}';
+  let promptJson = anthropicPrepared
+    ? JSON.stringify({
+        messages: [],
+        tools: [],
+        provider: {
+          profile: "anthropic-messages-v1",
+          lowering: "anthropic-4.0.72-v1",
+          outputMode: "native-schema",
+          providerOptions: { anthropic: { structuredOutputMode: "outputFormat" } },
+        },
+      })
+    : '{"messages":[],"tools":[]}';
   let correctionDetails = "not json";
   let decisionInstruction = "Is this ticket safe to route?";
   let identityChanged = false;
@@ -155,11 +175,13 @@ function harness(kind: Kind, correction = false, fail = false, boundaryFault?: B
     kind,
     supports: () => true,
     resolveIdentity: () =>
-      identityChanged ? { ...identity, model: "unexpected-deployment" } : identity,
+      identityChanged ? { ...selectedIdentity, model: "unexpected-deployment" } : selectedIdentity,
     authorizeUse: () => !authorizationDenied,
     connect: () => ({
       model: {},
-      identity: connectionChanged ? { ...identity, model: "unexpected-connection" } : identity,
+      identity: connectionChanged
+        ? { ...selectedIdentity, model: "unexpected-connection" }
+        : selectedIdentity,
     }),
     execute: async (execution: AiBackendExecution) => {
       executeCalls++;
@@ -388,7 +410,13 @@ function harness(kind: Kind, correction = false, fail = false, boundaryFault?: B
         create(AgentSelectedModelSchema, {
           kind: kind === "generation" ? 1 : 2,
           model: ref,
-          connection,
+          connection: anthropicPrepared
+            ? {
+                ...connection,
+                provider: { value: selectedIdentity.provider },
+                model: { value: selectedIdentity.model },
+              }
+            : connection,
         }),
       ],
     }),
@@ -459,6 +487,15 @@ function harness(kind: Kind, correction = false, fail = false, boundaryFault?: B
     },
     changePreparedPrompt: () => {
       promptJson = '{"messages":["changed"],"tools":[]}';
+    },
+    preparedPrompt: () => promptJson,
+    changeAnthropicMetadata: (field: "lowering" | "outputMode" | "providerOptions") => {
+      const prepared = JSON.parse(promptJson) as { provider: Record<string, unknown> };
+      prepared.provider[field] =
+        field === "providerOptions"
+          ? { anthropic: { structuredOutputMode: "jsonTool" } }
+          : "changed";
+      promptJson = JSON.stringify(prepared);
     },
     changeCorrectionDetails: () => {
       correctionDetails = "different prior output";
@@ -784,6 +821,36 @@ describe("Agent AI replay from a persisted execution journal", () => {
     });
     expect(fixture.counts()).toEqual({ physicalRequests: 1, executeCalls: 2 });
   });
+
+  it.each(["lowering", "outputMode", "providerOptions"] as const)(
+    "rejects changed Anthropic %s metadata before replay or external effects",
+    async (field) => {
+      const fixture = harness("generation", false, false, undefined, true);
+      const request = { call: "draft", conversation, input };
+      fixture.interruptTerminalWrite();
+      await expect(fixture.runtime().invoke(generation, request)).rejects.toThrow(
+        "interrupted before result persistence",
+      );
+      const before = JSON.parse(fixture.preparedPrompt()) as Record<string, unknown>;
+      fixture.changeAnthropicMetadata(field);
+      const after = JSON.parse(fixture.preparedPrompt()) as Record<string, unknown>;
+      const originalProvider = before.provider as Record<string, unknown>;
+      const changedProvider = after.provider as Record<string, unknown>;
+      expect(changedProvider[field]).not.toEqual(originalProvider[field]);
+      expect({
+        ...after,
+        provider: { ...changedProvider, [field]: originalProvider[field] },
+      }).toEqual(before);
+      await expect(fixture.runtime().invoke(generation, request)).rejects.toMatchObject({
+        reason: "REPLAY_DIVERGENCE",
+        message: "Saved Agent provider request changed on recovery.",
+      });
+      expect(fixture.counts()).toEqual({ physicalRequests: 1, executeCalls: 2 });
+      expect(
+        fixture.saved().journal.filter((entry) => entry.evidence.case?.startsWith("tool")),
+      ).toEqual([]);
+    },
+  );
 
   it("rejects a changed decision question before reusing a saved answer", async () => {
     const fixture = harness("decision");

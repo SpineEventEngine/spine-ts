@@ -14,6 +14,7 @@
 
 import { createServer, type Server } from "node:http";
 import { createOpenAI } from "@ai-sdk/openai";
+import { createAnthropic } from "@ai-sdk/anthropic";
 import { create } from "@bufbuild/protobuf";
 import { AiRegistry, Mcp, ModelRef } from "@spine-event-engine/ai";
 import { VercelAx } from "@spine-event-engine/ai-vercel-ax";
@@ -126,6 +127,57 @@ const replyStream = (requestNumber: number): string =>
   ]);
 
 /**
+ * Encodes a real Anthropic Messages stream with a typed tool proposal.
+ * @param requestNumber Physical provider request sequence.
+ * @returns Anthropic SSE for the selected support step.
+ */
+const anthropicStream = (requestNumber: number): string => {
+  const tool = requestNumber === 1;
+  const text =
+    requestNumber === 2 ? '{"replyText":""}' : '{"replyText":"Ticket found; we can help."}';
+  const events = [
+    {
+      type: "message_start",
+      message: {
+        id: `msg-${String(requestNumber)}`,
+        type: "message",
+        role: "assistant",
+        model: "claude-sonnet-4-5-20250929",
+        content: [],
+        stop_reason: null,
+        stop_sequence: null,
+        usage: { input_tokens: 5, output_tokens: 0 },
+      },
+    },
+    ...(tool
+      ? [
+          {
+            type: "content_block_start",
+            index: 0,
+            content_block: { type: "tool_use", id: "provider-call-1", name: "tool_0", input: {} },
+          },
+          {
+            type: "content_block_delta",
+            index: 0,
+            delta: { type: "input_json_delta", partial_json: '{"ticket":"T-47"}' },
+          },
+        ]
+      : [
+          { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+          { type: "content_block_delta", index: 0, delta: { type: "text_delta", text } },
+        ]),
+    { type: "content_block_stop", index: 0 },
+    {
+      type: "message_delta",
+      delta: { stop_reason: tool ? "tool_use" : "end_turn" },
+      usage: { output_tokens: 3 },
+    },
+    { type: "message_stop" },
+  ];
+  return events.map((event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join("");
+};
+
+/**
  * Starts local Responses and MCP endpoints without paid external access.
  */
 const startEndpoints = async (invalidToolOutput = false) => {
@@ -142,6 +194,12 @@ const startEndpoints = async (invalidToolOutput = false) => {
         response.end(
           providerBodies.length === 1 ? toolProposalStream() : replyStream(providerBodies.length),
         );
+        return;
+      }
+      if (request.url === "/v1/messages") {
+        providerBodies.push(body);
+        response.setHeader("content-type", "text/event-stream");
+        response.end(anthropicStream(providerBodies.length));
         return;
       }
       const rpc = body as RpcRequest;
@@ -250,24 +308,34 @@ const supportRepository = () =>
  * @param base Local fixture address.
  * @returns BlackBox and repository for checking the persisted outcome.
  */
-const supportBox = async (base: string) => {
+const supportBox = async (base: string, provider: "openai" | "anthropic" = "openai") => {
   const identity = {
-    provider: "openai",
+    provider,
     account: "fixture",
     endpoint: `${base}/v1`,
-    model: "fixture-model",
+    model: provider === "anthropic" ? "claude-sonnet-4-5" : "fixture-model",
   };
   const registration = VercelAx.model({
     ref: ModelRef.of("support-vercel", "v1"),
-    capabilities: VercelAx.capabilities.openAIResponses(),
+    capabilities:
+      provider === "anthropic"
+        ? VercelAx.capabilities.anthropicMessages()
+        : VercelAx.capabilities.openAIResponses(),
     resolveIdentity: () => identity,
     authorizeUse: () => true,
     connect: (_scope, _expected, control) => ({
-      model: createOpenAI({
-        apiKey: "fixture-only",
-        baseURL: identity.endpoint,
-        fetch: control.fetch,
-      }).responses(identity.model),
+      model:
+        provider === "anthropic"
+          ? createAnthropic({
+              apiKey: "fixture-only",
+              baseURL: identity.endpoint,
+              fetch: control.fetch,
+            }).messages(identity.model)
+          : createOpenAI({
+              apiKey: "fixture-only",
+              baseURL: identity.endpoint,
+              fetch: control.fetch,
+            }).responses(identity.model),
       identity,
     }),
   });
@@ -315,6 +383,60 @@ const supportBox = async (base: string) => {
 };
 
 describe("Agent with real Vercel Responses and MCP transports", () => {
+  it("persists Anthropic tool use, correction, and the drafted domain event", async () => {
+    const endpoint = await startEndpoints();
+    const { box, repository } = await supportBox(endpoint.base, "anthropic");
+    const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-47" });
+    try {
+      const posted = await box
+        .asGuest()
+        .post(
+          DraftRecoverySupportReplySchema,
+          create(DraftRecoverySupportReplySchema, { agent: id, question: "Where is my order?" }),
+        );
+      expect(posted.kind).toBe("ok");
+      const events = await box.eventually(
+        () => box.assertEvents(),
+        (items) => items.length === 1,
+      );
+      const published = events[0]?.message;
+      if (!published) throw new Error("Expected drafted reply event");
+      expect(AnyMessages.unpack(published, SupportReplyDraftedSchema)?.reply).toBe(
+        "Ticket found; we can help.",
+      );
+      expect(endpoint.providerBodies).toHaveLength(3);
+      expect(JSON.stringify(endpoint.providerBodies[0])).toContain('"name":"tool_0"');
+      expect(JSON.stringify(endpoint.providerBodies[1])).toContain('"type":"tool_result"');
+      expect(JSON.stringify(endpoint.providerBodies[1])).toContain("provider-call-1");
+      expect(endpoint.methods.filter((method) => method === "tools/call")).toHaveLength(1);
+      const page = await box.readAgentHistory(repository, id, { pageSize: 30 });
+      const content = page.items.flatMap((entry) =>
+        entry.item.case === "conversationRecord" && entry.item.value.content
+          ? [entry.item.value.content]
+          : [],
+      );
+      const responses = content.flatMap((item) => {
+        const response = AnyMessages.unpack(item, GenerationResponseSchema);
+        return response ? [response] : [];
+      });
+      expect(responses.map((response) => response.outcome)).toEqual([
+        AiOutcome.ADMITTED,
+        AiOutcome.INVALID_OUTPUT,
+        AiOutcome.TOOL_REQUESTED,
+      ]);
+      expect(
+        content.flatMap((item) => AnyMessages.unpack(item, ToolResponseSchema) ?? []),
+      ).toMatchObject([{ outcome: AiOutcome.ADMITTED, text: ["Ticket found"] }]);
+    } finally {
+      await box.close();
+      await new Promise<void>((resolve) =>
+        endpoint.server.close(() => {
+          resolve();
+        }),
+      );
+    }
+  }, 20_000);
+
   it("does not admit malformed successful MCP structure or resume the model", async () => {
     const endpoint = await startEndpoints(true);
     const { box, repository } = await supportBox(endpoint.base);

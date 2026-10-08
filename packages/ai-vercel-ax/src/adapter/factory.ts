@@ -47,17 +47,18 @@ export interface VercelProviderCapabilities {
   /**
    * Versioned integration profile.
    */
-  readonly id: "openai-responses-v1" | "openrouter-decisions-v1";
+  readonly id: "openai-responses-v1" | "anthropic-messages-v1" | "openrouter-decisions-v1";
 
   /**
    * Exact route relative to the credential-free endpoint identity.
    */
-  readonly routeSuffix: "/responses" | "/decisions";
+  readonly routeSuffix: "/responses" | "/messages" | "/decisions";
 
   /**
    * Tested provider request and response protocol.
    */
-  readonly providerProtocol: "openai-responses-stream-v1" | "openrouter-jev-decisions-v1";
+  readonly providerProtocol:
+    "openai-responses-stream-v1" | "anthropic-messages-stream-v1" | "openrouter-jev-decisions-v1";
 
   /**
    * Exact guarded-fetch accounting and route contract.
@@ -84,6 +85,16 @@ const openAIProfile = Object.freeze({
   id: "openai-responses-v1",
   routeSuffix: "/responses",
   providerProtocol: "openai-responses-stream-v1",
+  boundedFetchRevision: "spine-bounded-fetch-v1",
+  outputContract: "native-json-or-prompt-validate-v1",
+  cancellationContract: "ticket-abort-and-deadline-v1",
+  retryContract: "one-provider-call-per-ticket-v1",
+} as const satisfies VercelProviderCapabilities);
+
+const anthropicProfile = Object.freeze({
+  id: "anthropic-messages-v1",
+  routeSuffix: "/messages",
+  providerProtocol: "anthropic-messages-stream-v1",
   boundedFetchRevision: "spine-bounded-fetch-v1",
   outputContract: "native-json-or-prompt-validate-v1",
   cancellationContract: "ticket-abort-and-deadline-v1",
@@ -209,6 +220,11 @@ export interface ProviderConnection<M> {
   readonly model: M;
 
   /**
+   * Tested protocol selected for this connection.
+   */
+  readonly capabilities: VercelProviderCapabilities;
+
+  /**
    * Fetch gate admitting one durable attempt at a time.
    */
   readonly gate: BoundedProviderFetch;
@@ -254,6 +270,23 @@ const checkIdentity = (expected: AiConnectionIdentity, actual: AiConnectionIdent
     )
   )
     throw new Error("Provider connection identity changed");
+};
+
+/**
+ * Checks the trusted callback's deployment and Anthropic model identity.
+ * @param expected Previously authorized identity.
+ * @param result Constructed provider connection.
+ * @param capabilities Canonical selected provider profile.
+ * @typeParam M Published provider model type.
+ */
+const checkConnectionIdentity = <M extends StreamModel | VercelDecisionModel>(
+  expected: AiConnectionIdentity,
+  result: VercelConnection<M>,
+  capabilities: VercelProviderCapabilities,
+): void => {
+  checkIdentity(expected, result.identity);
+  if (capabilities.id === anthropicProfile.id && result.model.modelId !== expected.model)
+    throw new Error("Provider model identity changed");
 };
 
 /**
@@ -360,11 +393,12 @@ const connect = async <M extends StreamModel | VercelDecisionModel>(
       ),
       control,
     );
-    checkIdentity(expected, result.identity);
+    checkConnectionIdentity(expected, result, options.capabilities);
     assertConnectionActive(control);
     const handle = Object.freeze({});
     connections.set(handle, {
       model: result.model,
+      capabilities: options.capabilities,
       gate,
       receivedBytes: (ticketId) => received.get(ticketId),
     });
@@ -376,7 +410,7 @@ const connect = async <M extends StreamModel | VercelDecisionModel>(
 };
 
 /**
- * Factory for tested OpenAI Responses generation connections.
+ * Factory for tested OpenAI Responses and Anthropic Messages connections.
  */
 export const VercelAx = {
   /**
@@ -388,6 +422,12 @@ export const VercelAx = {
      * @returns Pinned Vercel OpenAI Responses streaming protocol profile.
      */
     openAIResponses: (): VercelProviderCapabilities => openAIProfile,
+
+    /**
+     * Returns the pinned Anthropic Messages protocol.
+     * @returns Pinned Vercel Anthropic Messages streaming protocol profile.
+     */
+    anthropicMessages: (): VercelProviderCapabilities => anthropicProfile,
   },
 
   /**
@@ -396,15 +436,18 @@ export const VercelAx = {
    * @returns Immutable SDK-free registration.
    */
   model(options: VercelModelOptions<StreamModel>): AiBackendRegistration {
-    assertProfile(options.capabilities, openAIProfile);
+    const expected =
+      options.capabilities.id === anthropicProfile.id ? anthropicProfile : openAIProfile;
+    assertProfile(options.capabilities, expected);
+    const selected = { ...options, capabilities: expected };
     return createBackendRegistration({
-      ref: options.ref,
+      ref: selected.ref,
       kind: "generation",
       mcp: createMcpProtocolFactory(),
       supports: (definition) => definition.kind === "generation",
-      resolveIdentity: options.resolveIdentity,
-      authorizeUse: options.authorizeUse,
-      connect: (scope, expected, control) => connect(options, scope, expected, control),
+      resolveIdentity: selected.resolveIdentity,
+      authorizeUse: selected.authorizeUse,
+      connect: (scope, expected, control) => connect(selected, scope, expected, control),
       execute: executeGeneration,
     });
   },

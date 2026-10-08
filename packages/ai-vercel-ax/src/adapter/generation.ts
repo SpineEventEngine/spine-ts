@@ -19,7 +19,12 @@ import {
   axMCPToolInputSchemaToFunctionSchema as axToolSchema,
   type AxChatResponse,
 } from "@ax-llm/ax";
-import type { JSONSchema7, LanguageModelV3Message, LanguageModelV3Prompt } from "@ai-sdk/provider";
+import type {
+  JSONSchema7,
+  LanguageModelV3CallOptions as V3Options,
+  LanguageModelV3Message,
+  LanguageModelV3Prompt,
+} from "@ai-sdk/provider";
 import { AnyMessages, type MessageSchema } from "@spine-event-engine/core";
 import type { AiFailure } from "@spine-event-engine/ai";
 import {
@@ -53,6 +58,39 @@ import {
   type StreamModel,
   type StreamedPartialResult,
 } from "./streamed-model.js";
+
+const nativeAnthropicModels = new Set([
+  "claude-sonnet-4-5",
+  "claude-sonnet-4-5-20250929",
+  "claude-haiku-4-5",
+  "claude-haiku-4-5-20251001",
+  "claude-opus-4-5",
+  "claude-opus-4-5-20251101",
+  "claude-sonnet-4-6",
+  "claude-opus-4-6",
+  "claude-opus-4-7",
+  "claude-opus-4-8",
+  "claude-sonnet-5",
+  "claude-opus-5",
+  "claude-sonnet-5-5",
+  "claude-opus-5-5",
+  "claude-fable-5",
+  "claude-fable-5-1",
+]);
+
+/**
+ * Returns the exact Anthropic options bound to the recorded output mode.
+ * @param request Selected generation execution.
+ * @returns Provider options for native output or undefined for prompted text.
+ */
+const anthropicOptions = (request: AiBackendExecution) =>
+  providerConnection(request.model).capabilities.id === "anthropic-messages-v1" &&
+  request.definition.kind === "generation" &&
+  request.definition.outputMode === "native-schema"
+    ? { anthropic: { structuredOutputMode: "outputFormat" as const } }
+    : undefined;
+
+type AnthropicOptions = ReturnType<typeof anthropicOptions>;
 
 /**
  * @param value Exact bounded content.
@@ -258,22 +296,21 @@ const admitGenerationTicket = async (
 };
 
 /**
- * @param request Selected execution.
- * @param prepared Actual prompt.
- * @param schema Native schema.
- * @param previous Correction target.
- * @returns Persistable exact request.
+ * Records the selected Anthropic lowering beside the exact prepared messages.
+ * @param request Selected generation execution.
+ * @param prepared Actual Ax prompt.
+ * @param instructions Exact provider instructions.
+ * @param settings Selected provider options for this physical attempt.
+ * @returns Serialized prompt for durable comparison.
  */
-const requestContent = (
+const preparedPromptJson = (
   request: AiBackendExecution,
   prepared: PreparedRequest,
-  schema: JSONSchema7,
-  previous: Pick<AiAttemptTicket, "id"> | undefined,
-) => {
-  const definition = request.definition;
-  if (definition.kind !== "generation") throw new TypeError("Generation capability required");
-  const instructions = outputInstructions(definition.instructions, definition.outputMode, schema);
-  const outputSchemaJson = JSON.stringify(schema);
+  instructions: string,
+  settings: AnthropicOptions,
+): string => {
+  if (request.definition.kind !== "generation")
+    throw new TypeError("Generation capability required");
   const tools = advertisedFunctions(request).map((tool) => ({
     modelName: tool.modelName,
     server: tool.server,
@@ -282,7 +319,42 @@ const requestContent = (
     inputSchemaJson: tool.inputSchemaJson,
     ...(tool.outputSchemaJson === undefined ? {} : { outputSchemaJson: tool.outputSchemaJson }),
   }));
-  const promptJson = JSON.stringify({ messages: modelPrompt(prepared, instructions), tools });
+  const prompt = { messages: modelPrompt(prepared, instructions), tools };
+  return JSON.stringify(
+    providerConnection(request.model).capabilities.id === "anthropic-messages-v1"
+      ? {
+          ...prompt,
+          provider: {
+            profile: "anthropic-messages-v1",
+            lowering: "anthropic-4.0.72-v1",
+            outputMode: request.definition.outputMode,
+            providerOptions: settings ?? null,
+          },
+        }
+      : prompt,
+  );
+};
+
+/**
+ * @param request Selected execution.
+ * @param prepared Actual prompt.
+ * @param schema Native schema.
+ * @param previous Correction target.
+ * @param settings Selected provider options for this physical attempt.
+ * @returns Persistable exact request.
+ */
+const requestContent = (
+  request: AiBackendExecution,
+  prepared: PreparedRequest,
+  schema: JSONSchema7,
+  previous: Pick<AiAttemptTicket, "id"> | undefined,
+  settings: AnthropicOptions,
+) => {
+  const definition = request.definition;
+  if (definition.kind !== "generation") throw new TypeError("Generation capability required");
+  const instructions = outputInstructions(definition.instructions, definition.outputMode, schema);
+  const outputSchemaJson = JSON.stringify(schema);
+  const promptJson = preparedPromptJson(request, prepared, instructions, settings);
   return create(GenerationRequestSchema, {
     input: AnyMessages.pack(definition.input, request.input),
     instructions,
@@ -769,6 +841,7 @@ const runtimeFunctions = (request: AiBackendExecution, state: GenerationState) =
  * @param prepared Ax-rendered prompt.
  * @param schema Descriptor-derived application output schema.
  * @param ticket Durable physical attempt.
+ * @param settings Provider options already bound to the prepared request.
  * @returns Published provider call options.
  */
 const providerOptions = (
@@ -776,11 +849,12 @@ const providerOptions = (
   prepared: PreparedRequest,
   schema: JSONSchema7,
   ticket: AiAttemptTicket,
-) => {
+  settings: AnthropicOptions,
+): V3Options => {
   const definition = request.definition;
   if (definition.kind !== "generation") throw new TypeError("Generation capability required");
   const instructions = outputInstructions(definition.instructions, definition.outputMode, schema);
-  return {
+  const options = {
     prompt: modelPrompt(prepared, instructions),
     tools: advertisedFunctions(request).map((tool) => ({
       type: "function" as const,
@@ -797,6 +871,7 @@ const providerOptions = (
         ? { type: "json" as const, schema }
         : { type: "text" as const },
   };
+  return settings ? { ...options, providerOptions: settings } : options;
 };
 
 /**
@@ -816,7 +891,8 @@ const chat = async (
   if (definition.kind !== "generation") throw new TypeError("Generation capability required");
   const connection = providerConnection(request.model);
   if (!("doStream" in connection.model)) throw new TypeError("Streaming generation model required");
-  const content = requestContent(request, prepared, schema, state.previous);
+  const settings = anthropicOptions(request);
+  const content = requestContent(request, prepared, schema, state.previous, settings);
   const attempt = await runtimeBarrier(state, () =>
     request.control.beginAttempt({ kind: "generation", content }),
   );
@@ -832,7 +908,7 @@ const chat = async (
   const ticket = attempt;
   state.previous = ticket;
   await admitGenerationTicket(request, state, ticket);
-  return collectAttempt(request, state, prepared, schema, ticket);
+  return collectAttempt(request, state, prepared, schema, ticket, settings);
 };
 
 /**
@@ -844,10 +920,11 @@ const collectAttempt = async (
   prepared: PreparedRequest,
   schema: JSONSchema7,
   ticket: AiAttemptTicket,
+  settings: AnthropicOptions,
 ): Promise<AxChatResponse> => {
   const connection = providerConnection(request.model);
   if (!("doStream" in connection.model)) throw new TypeError("Streaming generation model required");
-  const options = providerOptions(request, prepared, schema, ticket);
+  const options = providerOptions(request, prepared, schema, ticket, settings);
   let partial: StreamedPartialResult;
   try {
     partial = await collectModelStream(connection.model, options, ticket.maxOutputBytes, {
@@ -920,6 +997,14 @@ export const executeGeneration = async (request: AiBackendExecution): Promise<Ai
   const state: GenerationState = { pendingCalls: new Map() };
   try {
     advertisedFunctions(request);
+    if (
+      connection.capabilities.id === "anthropic-messages-v1" &&
+      definition.outputMode === "native-schema" &&
+      !nativeAnthropicModels.has(request.identity.model)
+    ) {
+      state.failure = await recordFailure(request, state, "UNSUPPORTED_CAPABILITY", false);
+      return { ok: false, failure: state.failure };
+    }
     await runProgram(request, connection.model, schema, state);
     if (state.admission?.ok) return { ok: true, value: state.admission.value };
   } catch (error) {
