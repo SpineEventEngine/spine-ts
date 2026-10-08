@@ -64,6 +64,35 @@ message ModelToolCall {
   string arguments_json = 3;
 }
 
+// Exact assistant content returned by the Anthropic Messages profile.
+message AnthropicAssistantContent {
+  // Blocks in provider order, including incomplete blocks on a failed receipt.
+  repeated AnthropicContentBlock blocks = 1 [(validate) = true];
+}
+
+// One typed Anthropic assistant block before any tool result is sent.
+message AnthropicContentBlock {
+  oneof content {
+    option (choice).required = true;
+
+    string text = 1;
+    ModelToolCall tool_call = 2 [(validate) = true];
+    AnthropicThinking thinking = 3 [(validate) = true];
+    AnthropicRedactedThinking redacted_thinking = 4 [(validate) = true];
+  }
+}
+
+// Provider reasoning text and its opaque signature.
+message AnthropicThinking {
+  string text = 1;
+  string signature = 2;
+}
+
+// Provider-encrypted reasoning retained without transformation.
+message AnthropicRedactedThinking {
+  string data = 1;
+}
+
 // Provider generation content, admitted or rejected after local validation.
 message GenerationResponse {
   // Exact received assistant text, including text accompanying tool proposals.
@@ -90,6 +119,9 @@ message GenerationResponse {
   // Received model proposals in order, including malformed or denied proposals.
   // Presence does not imply authorization or execution.
   repeated ModelToolCall tool_calls = 8 [(validate) = true];
+
+  // Ordered Anthropic assistant content, present for Anthropic Messages receipts.
+  AnthropicAssistantContent anthropic_content = 9 [(validate) = true];
 }
 
 // Application-assigned identity of one non-generative question.

@@ -16,6 +16,7 @@ import { describe, expect, it } from "vitest";
 import { create, fromBinary, fromJson, toBinary, toJson } from "@bufbuild/protobuf";
 import { AnyMessages } from "@spine-event-engine/core";
 import { assertAiOutcomeContext } from "../src/spi/adapter.js";
+import { AnthropicAssistantContentSchema } from "@spine-event-engine/proto/agent";
 import {
   ProposedSupportReplySchema,
   SupportTicketFactsSchema,
@@ -122,6 +123,85 @@ describe("public SDK-free facade inventory", () => {
       expect(restored.usage?.inputTokens?.value).toBe(0n);
       expect(restored.usage?.outputTokens).toBeUndefined();
     }
+  });
+
+  it("preserves ordered Anthropic reasoning and exact projections across both wire forms", () => {
+    const toolCall = create(ModelToolCallSchema, {
+      providerCallId: "call-1",
+      toolName: "lookup",
+      argumentsJson: "{}",
+    });
+    const response = create(GenerationResponseSchema, {
+      rawOutput: "beforeafter",
+      outcome: AiOutcome.TOOL_REQUESTED,
+      toolCalls: [toolCall],
+      anthropicContent: create(AnthropicAssistantContentSchema, {
+        blocks: [
+          { content: { case: "text", value: "before" } },
+          { content: { case: "thinking", value: { text: "", signature: "signed" } } },
+          { content: { case: "toolCall", value: toolCall } },
+          { content: { case: "redactedThinking", value: { data: "opaque" } } },
+          { content: { case: "text", value: "after" } },
+        ],
+      }),
+    });
+    for (const restored of [
+      fromBinary(GenerationResponseSchema, toBinary(GenerationResponseSchema, response)),
+      fromJson(GenerationResponseSchema, toJson(GenerationResponseSchema, response)),
+    ]) {
+      expect(restored.anthropicContent?.blocks.map((block) => block.content.case)).toEqual([
+        "text",
+        "thinking",
+        "toolCall",
+        "redactedThinking",
+        "text",
+      ]);
+      const thinking = restored.anthropicContent?.blocks[1]?.content;
+      expect(thinking?.case).toBe("thinking");
+      if (thinking?.case !== "thinking") throw new Error("Expected thinking block");
+      expect(thinking.value.text).toBe("");
+      expect(thinking.value.signature).toBe("signed");
+      expect(() => {
+        assertAiOutcomeContext(restored);
+      }).not.toThrow();
+      restored.rawOutput = "contradiction";
+      expect(() => {
+        assertAiOutcomeContext(restored);
+      }).toThrow("text projection");
+    }
+  });
+
+  it("records incomplete failed reasoning but rejects incomplete tool continuations", () => {
+    const partial = create(AnthropicAssistantContentSchema, {
+      blocks: [{ content: { case: "thinking", value: { text: "partial", signature: "" } } }],
+    });
+    expect(() => {
+      assertAiOutcomeContext(
+        create(GenerationResponseSchema, {
+          outcome: AiOutcome.FAILED,
+          anthropicContent: partial,
+        }),
+      );
+    }).not.toThrow();
+    expect(() => {
+      assertAiOutcomeContext(
+        create(GenerationResponseSchema, {
+          outcome: AiOutcome.TOOL_REQUESTED,
+          toolCalls: [{ providerCallId: "call", toolName: "tool_0", argumentsJson: "{}" }],
+          anthropicContent: create(AnthropicAssistantContentSchema, {
+            blocks: [
+              ...partial.blocks,
+              {
+                content: {
+                  case: "toolCall",
+                  value: { providerCallId: "call", toolName: "tool_0", argumentsJson: "{}" },
+                },
+              },
+            ],
+          }),
+        }),
+      );
+    }).toThrow("signature");
   });
 
   it("round-trips absent, zero and nonzero decision precision", () => {

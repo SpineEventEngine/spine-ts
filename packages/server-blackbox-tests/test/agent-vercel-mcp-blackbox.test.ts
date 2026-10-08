@@ -131,8 +131,12 @@ const replyStream = (requestNumber: number): string =>
  * @param requestNumber Physical provider request sequence.
  * @returns Anthropic SSE for the selected support step.
  */
-const anthropicStream = (requestNumber: number): string => {
+const anthropicStream = (
+  requestNumber: number,
+  thinking: false | "signed" | "redacted" = false,
+): string => {
   const tool = requestNumber === 1;
+  const index = thinking ? 1 : 0;
   const text =
     requestNumber === 2 ? '{"replyText":""}' : '{"replyText":"Ticket found; we can help."}';
   const events = [
@@ -142,31 +146,61 @@ const anthropicStream = (requestNumber: number): string => {
         id: `msg-${String(requestNumber)}`,
         type: "message",
         role: "assistant",
-        model: "claude-sonnet-4-5-20250929",
+        model: "claude-fable-5",
         content: [],
         stop_reason: null,
         stop_sequence: null,
         usage: { input_tokens: 5, output_tokens: 0 },
       },
     },
-    ...(tool
+    ...(thinking
       ? [
           {
             type: "content_block_start",
             index: 0,
+            content_block:
+              thinking === "redacted"
+                ? { type: "redacted_thinking", data: "opaque-fixture-thought" }
+                : { type: "thinking", thinking: "" },
+          },
+          ...(thinking === "signed"
+            ? [
+                {
+                  type: "content_block_delta",
+                  index: 0,
+                  delta: { type: "thinking_delta", thinking: "Check the ticket first." },
+                },
+                {
+                  type: "content_block_delta",
+                  index: 0,
+                  delta: {
+                    type: "signature_delta",
+                    signature: `signed-fixture-thought-${String(requestNumber)}`,
+                  },
+                },
+              ]
+            : []),
+          { type: "content_block_stop", index: 0 },
+        ]
+      : []),
+    ...(tool
+      ? [
+          {
+            type: "content_block_start",
+            index,
             content_block: { type: "tool_use", id: "provider-call-1", name: "tool_0", input: {} },
           },
           {
             type: "content_block_delta",
-            index: 0,
+            index,
             delta: { type: "input_json_delta", partial_json: '{"ticket":"T-47"}' },
           },
         ]
       : [
-          { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
-          { type: "content_block_delta", index: 0, delta: { type: "text_delta", text } },
+          { type: "content_block_start", index, content_block: { type: "text", text: "" } },
+          { type: "content_block_delta", index, delta: { type: "text_delta", text } },
         ]),
-    { type: "content_block_stop", index: 0 },
+    { type: "content_block_stop", index },
     {
       type: "message_delta",
       delta: { stop_reason: tool ? "tool_use" : "end_turn" },
@@ -180,7 +214,10 @@ const anthropicStream = (requestNumber: number): string => {
 /**
  * Starts local Responses and MCP endpoints without paid external access.
  */
-const startEndpoints = async (invalidToolOutput = false) => {
+const startEndpoints = async (
+  invalidToolOutput = false,
+  thinking: false | "signed" | "redacted" = false,
+) => {
   const methods: string[] = [];
   const providerBodies: unknown[] = [];
   const server: Server = createServer((request, response) => {
@@ -199,7 +236,7 @@ const startEndpoints = async (invalidToolOutput = false) => {
       if (request.url === "/v1/messages") {
         providerBodies.push(body);
         response.setHeader("content-type", "text/event-stream");
-        response.end(anthropicStream(providerBodies.length));
+        response.end(anthropicStream(providerBodies.length, thinking));
         return;
       }
       const rpc = body as RpcRequest;
@@ -313,7 +350,7 @@ const supportBox = async (base: string, provider: "openai" | "anthropic" = "open
     provider,
     account: "fixture",
     endpoint: `${base}/v1`,
-    model: provider === "anthropic" ? "claude-sonnet-4-5" : "fixture-model",
+    model: provider === "anthropic" ? "claude-fable-5" : "fixture-model",
   };
   const registration = VercelAx.model({
     ref: ModelRef.of("support-vercel", "v1"),
@@ -383,6 +420,47 @@ const supportBox = async (base: string, provider: "openai" | "anthropic" = "open
 };
 
 describe("Agent with real Vercel Responses and MCP transports", () => {
+  it.each([
+    ["signed", '"type":"thinking"', '"signature":"signed-fixture-thought-1"'],
+    ["redacted", '"type":"redacted_thinking"', '"data":"opaque-fixture-thought"'],
+  ] as const)(
+    "returns %s Anthropic thinking with a tool result in the same turn",
+    async (kind, block, detail) => {
+      const endpoint = await startEndpoints(false, kind);
+      const { box } = await supportBox(endpoint.base, "anthropic");
+      const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-47" });
+      try {
+        const posted = await box
+          .asGuest()
+          .post(
+            DraftRecoverySupportReplySchema,
+            create(DraftRecoverySupportReplySchema, { agent: id, question: "Where is my order?" }),
+          );
+        expect(posted.kind).toBe("ok");
+        await box.eventually(
+          () => box.assertEvents(),
+          (events) => events.length === 1,
+        );
+        const continuation = JSON.stringify(endpoint.providerBodies[1]);
+        expect(continuation).toContain(block);
+        expect(continuation).toContain(detail);
+        expect(continuation).toContain('"type":"tool_result"');
+        const correction = JSON.stringify(endpoint.providerBodies[2]);
+        expect(correction).toContain(
+          kind === "signed" ? '"signature":"signed-fixture-thought-2"' : detail,
+        );
+      } finally {
+        await box.close();
+        await new Promise<void>((resolve) =>
+          endpoint.server.close(() => {
+            resolve();
+          }),
+        );
+      }
+    },
+    20_000,
+  );
+
   it("persists Anthropic tool use, correction, and the drafted domain event", async () => {
     const endpoint = await startEndpoints();
     const { box, repository } = await supportBox(endpoint.base, "anthropic");

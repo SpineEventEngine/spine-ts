@@ -1330,14 +1330,21 @@ export class AgentAiRuntime implements AgentAi {
       throw new Error("Agent model credit exceeds invocation recovery bytes.");
     const projected = this.#projectedRecord(record, 1, model);
     const creditBytes = BigInt(credit);
+    // The generation envelope can add one ordered Anthropic content copy.
+    const orderedContent = model.definition.kind === "generation" ? creditBytes + 64n : 0n;
     // Three response copies: raw/decoded content, typed attempt output, named result.
     // One more credit covers bounded usage, issues, model identity, and proposal metadata.
     const recordBytes =
-      BigInt(AgentExecutionSizes.record(projected)) + 3n * (creditBytes - 1n) + creditBytes + 240n;
+      BigInt(AgentExecutionSizes.record(projected)) +
+      3n * (creditBytes - 1n) +
+      creditBytes +
+      orderedContent +
+      240n;
     const headBytes = this.#projectedHead(record);
     const history = this.#historyBytes(record, 1, model);
     // The response row retains raw/decoded content and typed output, plus metadata credit.
-    const responseBytes = BigInt(history.response) + 2n * (creditBytes - 1n) + creditBytes + 120n;
+    const responseBytes =
+      BigInt(history.response) + 2n * (creditBytes - 1n) + creditBytes + orderedContent + 120n;
     const auditBytes = this.#capacityAuditBytes(record, model);
     this.#checkProjectedBounds(recoveryLimit, recordBytes, headBytes, [
       BigInt(history.request),

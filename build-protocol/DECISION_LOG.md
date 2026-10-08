@@ -6074,3 +6074,27 @@ introduced. Supported model data can expand with package/documentation evidence
 and actual-SDK request fixtures without repeating the architecture pass.
 
 See [the Agent task](planning/agent-entities.md).
+
+## D-0131: Preserve Anthropic Thinking In Recorded Continuations
+
+Status: Accepted; correction in progress
+
+Date: 2026-10-08
+
+Anthropic tool continuations must carry the complete ordered assistant content,
+including signed and redacted thinking. Disabling thinking is unsupported by
+some admitted models. Ax separates text, thoughts and tool calls, so its response
+projection alone cannot preserve the order required by the provider.
+
+Add typed ordered Anthropic content to GenerationResponse. Preserve its text and
+tool-call fields as checked projections. Collect content within the existing
+output bounds, include the new content in digest and storage-capacity accounting,
+and reconstruct provider assistant turns only from journaled or replayed
+responses. A package-internal bridge resolver checks the Ax projection before
+replacing it with recorded ordered content. Both tool and correction turns use
+the same reconstruction. Incomplete content never permits tool continuation.
+
+Agent and AiModel application APIs remain unchanged. This unreleased serialized
+contract needs no migration shim. The bounded architecture assessment is recorded
+in the [Agent task](planning/agent-entities.md); correction tests cover real pinned
+SDK requests, signature fragments, redacted content, bounds and recorded recovery.

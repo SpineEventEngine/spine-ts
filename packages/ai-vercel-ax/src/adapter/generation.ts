@@ -18,7 +18,9 @@ import {
   AxGen,
   axMCPToolInputSchemaToFunctionSchema as axToolSchema,
   type AxChatResponse,
+  type AxChatRequest,
 } from "@ax-llm/ax";
+import type { ModelMessage } from "ai";
 import type {
   JSONSchema7,
   LanguageModelV3CallOptions as V3Options,
@@ -46,7 +48,9 @@ import {
   AiUsageSchema,
   GenerationRequestSchema,
   GenerationResponseSchema,
+  AnthropicAssistantContentSchema,
   type GenerationResponse,
+  type AnthropicAssistantContent,
 } from "@spine-event-engine/proto/agent";
 import { AxVercelBridge, type PreparedRequest } from "./bridge.js";
 import { providerConnection } from "./factory.js";
@@ -57,6 +61,7 @@ import {
   StreamCollectionError,
   type StreamModel,
   type StreamedPartialResult,
+  type AnthropicBlock,
 } from "./streamed-model.js";
 
 const nativeAnthropicModels = new Set([
@@ -215,6 +220,19 @@ const assistantPrompt = (
     return { role: "assistant", content: [{ type: "text", text: message.content }] };
   const parts = message.content.map((part) => {
     if (part.type === "text") return { type: "text" as const, text: part.text };
+    if (part.type === "reasoning") {
+      const options = part.providerOptions?.anthropic;
+      if (
+        !options ||
+        (typeof options.signature !== "string" && typeof options.redactedData !== "string")
+      )
+        throw new TypeError("Anthropic reasoning metadata missing");
+      return {
+        type: "reasoning" as const,
+        text: part.text,
+        providerOptions: { anthropic: options },
+      };
+    }
     if (part.type === "tool-call")
       return {
         type: "tool-call" as const,
@@ -326,7 +344,7 @@ const preparedPromptJson = (
           ...prompt,
           provider: {
             profile: "anthropic-messages-v1",
-            lowering: "anthropic-4.0.72-v1",
+            lowering: "anthropic-4.0.72-v2",
             outputMode: request.definition.outputMode,
             providerOptions: settings ?? null,
           },
@@ -382,6 +400,39 @@ const semanticUsage = (usage: StreamedPartialResult["usage"]) =>
     : undefined;
 
 /**
+ * Converts one bounded ordered receipt to its typed journal envelope.
+ * @param blocks Received provider blocks, when Anthropic was selected.
+ * @returns Typed ordered blocks or undefined for another provider.
+ */
+const typedAnthropicContent = (
+  blocks: readonly AnthropicBlock[] | undefined,
+): AnthropicAssistantContent | undefined =>
+  blocks === undefined
+    ? undefined
+    : create(AnthropicAssistantContentSchema, {
+        blocks: blocks.map((block) => ({
+          content:
+            block.type === "text"
+              ? { case: "text" as const, value: block.text }
+              : block.type === "tool-call"
+                ? {
+                    case: "toolCall" as const,
+                    value: {
+                      providerCallId: block.call.id,
+                      toolName: block.call.name,
+                      argumentsJson: block.call.input,
+                    },
+                  }
+                : block.type === "thinking"
+                  ? {
+                      case: "thinking" as const,
+                      value: { text: block.text, signature: block.signature },
+                    }
+                  : { case: "redactedThinking" as const, value: { data: block.data } },
+        })),
+      });
+
+/**
  * @param partial Received content.
  * @param outcome Local outcome.
  * @param failure Safe failure.
@@ -404,6 +455,9 @@ const responseContent = (
       toolName: call.name,
       argumentsJson: call.input,
     })),
+    ...(partial.anthropicContent !== undefined
+      ? { anthropicContent: typedAnthropicContent(partial.anthropicContent) }
+      : {}),
     ...(output ? { admittedOutput: AnyMessages.pack(schema, output) } : {}),
     ...(failure
       ? { diagnosticId: create(AiDiagnosticIdSchema, { value: failure.diagnosticId }) }
@@ -412,7 +466,15 @@ const responseContent = (
       ? { actualModel: create(ProviderNameSchema, { value: partial.actualModelId }) }
       : {}),
     ...(semanticUsage(partial.usage) ? { usage: semanticUsage(partial.usage) } : {}),
-    digest: digest(JSON.stringify({ text: partial.text, toolCalls: partial.toolCalls })),
+    digest: digest(
+      JSON.stringify({
+        text: partial.text,
+        toolCalls: partial.toolCalls,
+        ...(partial.anthropicContent !== undefined
+          ? { anthropicContent: partial.anthropicContent }
+          : {}),
+      }),
+    ),
   });
 
 /**
@@ -431,6 +493,11 @@ const axCandidate = (candidate: string): string => {
  * * Mutable state for one bounded Ax program; runtime persists every attempt separately.
  */
 interface GenerationState {
+  /**
+   * Journaled assistant responses in the same order Ax emits their turns.
+   */
+  readonly assistantTurns: { response: GenerationResponse; axContent: string }[];
+
   /**
    * * Most recent physical attempt for correction correlation.
    */
@@ -456,6 +523,67 @@ interface GenerationState {
    */
   barrierFailed?: boolean;
 }
+
+/**
+ * Restores exact provider block order after checking Ax's projected assistant turn.
+ * @param state Current durable response projections.
+ * @param message Ax's assistant turn to correlate.
+ * @param index Zero-based assistant turn position.
+ * @returns Exact provider assistant message.
+ */
+const recordedAssistant = (
+  state: GenerationState,
+  message: Extract<AxChatRequest["chatPrompt"][number], { role: "assistant" }>,
+  index: number,
+): ModelMessage => {
+  const recorded = state.assistantTurns[index];
+  const content = recorded?.response.anthropicContent;
+  if (!recorded || !content) throw new TypeError("Anthropic assistant journal turn missing");
+  if ((message.content ?? "") !== recorded.axContent)
+    throw new TypeError("Anthropic assistant text diverged from journal");
+  const calls = message.functionCalls ?? [];
+  if (
+    calls.length !== recorded.response.toolCalls.length ||
+    calls.some((call, callIndex) => {
+      const saved = recorded.response.toolCalls[callIndex];
+      if (!saved) return true;
+      return (
+        call.id !== saved.providerCallId ||
+        call.function.name !== saved.toolName ||
+        JSON.stringify(canonicalJsonValue(call.function.params)) !==
+          JSON.stringify(canonicalJsonValue(JSON.parse(saved.argumentsJson) as unknown))
+      );
+    })
+  )
+    throw new TypeError("Anthropic assistant tools diverged from journal");
+  return {
+    role: "assistant",
+    content: content.blocks.map((block) => {
+      const part = block.content;
+      if (part.case === "text") return { type: "text" as const, text: part.value };
+      if (part.case === "thinking")
+        return {
+          type: "reasoning" as const,
+          text: part.value.text,
+          providerOptions: { anthropic: { signature: part.value.signature } },
+        };
+      if (part.case === "redactedThinking")
+        return {
+          type: "reasoning" as const,
+          text: "",
+          providerOptions: { anthropic: { redactedData: part.value.data } },
+        };
+      if (part.case === "toolCall")
+        return {
+          type: "tool-call" as const,
+          toolCallId: part.value.providerCallId,
+          toolName: part.value.toolName,
+          input: JSON.parse(part.value.argumentsJson) as unknown,
+        };
+      throw new TypeError("Anthropic assistant block missing");
+    }),
+  };
+};
 
 /**
  * Preserves a failed runtime barrier without recategorizing it as model output.
@@ -557,6 +685,7 @@ const journalCandidate = async (
     ...(!admitted.ok ? { issues: admitted.issues } : {}),
     ...(response.usage ? { usage: response.usage } : {}),
   });
+  state.assistantTurns.push({ response, axContent: axCandidate(partial.text) });
   return { results: [{ index: 0, content: axCandidate(partial.text), finishReason: "stop" }] };
 };
 
@@ -698,6 +827,19 @@ const replayGeneration = (
   if (response.$typeName !== "spine.ts.agent.GenerationResponse")
     throw new TypeError("Saved attempt response kind mismatch");
   assertAiOutcomeContext(response);
+  if (providerConnection(request.model).capabilities.id === "anthropic-messages-v1") {
+    if (!response.anthropicContent) throw new TypeError("Saved Anthropic content missing");
+    if (
+      (response.outcome === AiOutcome.TOOL_REQUESTED ||
+        response.outcome === AiOutcome.INVALID_OUTPUT) &&
+      response.anthropicContent.blocks.some(
+        (block) =>
+          (block.content.case === "thinking" && !block.content.value.signature) ||
+          (block.content.case === "redactedThinking" && !block.content.value.data),
+      )
+    )
+      throw new TypeError("Saved Anthropic content incomplete");
+  }
   if (response.outcome === AiOutcome.ADMITTED)
     return replayAdmittedGeneration(request, state, response);
   const partial: StreamedPartialResult = {
@@ -709,11 +851,12 @@ const replayGeneration = (
     })),
   };
   if (response.outcome === AiOutcome.TOOL_REQUESTED)
-    return replayToolProposals(request, state, replay.id, partial);
+    return replayToolProposals(request, state, replay.id, partial, response);
   state.failure = replayFailure(replay);
   if (response.outcome !== AiOutcome.INVALID_OUTPUT || !replay.issues?.length)
     throw new Error("Saved generation failure terminates this attempt");
   state.admission = { ok: false, issues: replay.issues };
+  state.assistantTurns.push({ response, axContent: axCandidate(response.rawOutput) });
   return {
     results: [{ index: 0, content: axCandidate(response.rawOutput), finishReason: "stop" }],
   };
@@ -755,6 +898,7 @@ const replayToolProposals = (
   state: GenerationState,
   ticketId: string,
   partial: StreamedPartialResult,
+  response: GenerationResponse,
 ): AxChatResponse => {
   if (!coherentProposals(partial, request)) throw new TypeError("Saved tool proposals invalid");
   for (const call of partial.toolCalls) {
@@ -762,6 +906,7 @@ const replayToolProposals = (
     queue.push({ ticketId, providerCallId: call.id, input: call.input });
     state.pendingCalls.set(call.name, queue);
   }
+  state.assistantTurns.push({ response, axContent: partial.text });
   return toolContinuation(partial);
 };
 
@@ -794,6 +939,7 @@ const journalToolProposals = async (
     ...(response.usage ? { usage: response.usage } : {}),
   });
   if (!coherent) throw new Error("Invalid provider tool proposals");
+  state.assistantTurns.push({ response, axContent: partial.text });
   for (const call of partial.toolCalls) {
     const queue = state.pendingCalls.get(call.name) ?? [];
     queue.push({ ticketId: ticket.id, providerCallId: call.id, input: call.input });
@@ -927,10 +1073,16 @@ const collectAttempt = async (
   const options = providerOptions(request, prepared, schema, ticket, settings);
   let partial: StreamedPartialResult;
   try {
-    partial = await collectModelStream(connection.model, options, ticket.maxOutputBytes, {
-      deadlineEpochMs: ticket.deadlineEpochMs,
-      nowEpochMs: request.control.nowEpochMs,
-    });
+    partial = await collectModelStream(
+      connection.model,
+      options,
+      ticket.maxOutputBytes,
+      {
+        deadlineEpochMs: ticket.deadlineEpochMs,
+        nowEpochMs: request.control.nowEpochMs,
+      },
+      connection.capabilities.id === "anthropic-messages-v1",
+    );
   } catch (error) {
     if (!(error instanceof StreamCollectionError)) throw error;
     await journalFailure(request, state, error, ticket);
@@ -970,6 +1122,14 @@ const runProgram = async (
   const service = AxVercelBridge.createControlled(model, {
     maxRequests: definition.limits.modelRequests,
     onChat: (_model, prepared) => chat(request, state, prepared, schema),
+    ...(providerConnection(request.model).capabilities.id === "anthropic-messages-v1"
+      ? {
+          onAssistant: (
+            message: Extract<AxChatRequest["chatPrompt"][number], { role: "assistant" }>,
+            index: number,
+          ) => recordedAssistant(state, message, index),
+        }
+      : {}),
   });
   await generator.forward(
     service,
@@ -994,7 +1154,7 @@ export const executeGeneration = async (request: AiBackendExecution): Promise<Ai
   const connection = providerConnection(request.model);
   if (!("doStream" in connection.model)) throw new TypeError("Streaming generation model required");
   const schema = deriveOutputSchema(definition.output) as JSONSchema7;
-  const state: GenerationState = { pendingCalls: new Map() };
+  const state: GenerationState = { pendingCalls: new Map(), assistantTurns: [] };
   try {
     advertisedFunctions(request);
     if (

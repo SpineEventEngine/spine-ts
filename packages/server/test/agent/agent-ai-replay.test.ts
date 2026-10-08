@@ -600,6 +600,15 @@ describe("Agent AI replay from a persisted execution journal", () => {
     expect(fixture.counts().physicalRequests).toBe(0);
   });
 
+  it("reserves the bounded ordered generation envelope before provider dispatch", async () => {
+    const fixture = harness("generation");
+    fixture.setCapacity({ executionRecordBytes: 2_100 });
+    await expect(
+      fixture.runtime().invoke(generation, { call: "draft", conversation, input }),
+    ).rejects.toThrow("execution record");
+    expect(fixture.counts().physicalRequests).toBe(0);
+  });
+
   it.each([
     ["invalid-credit", "byte bounds"],
     ["unknown-ticket", "ticket is unknown"],

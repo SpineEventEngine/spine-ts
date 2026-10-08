@@ -2872,3 +2872,105 @@ A fresh NPM availability check confirms `2.0.0-snapshot.23` remains unpublished
 for all 21 packages. No package was published and no PR was created. General
 physical Entity deletion remains a separate deferred task. The implementation
 and review corrections are pushed; the remaining update records these results.
+
+## Three additional Anthropic review rounds — 2026-10-08
+
+The human requests three sequential independent review-and-fix rounds. Scope:
+the Anthropic integration from `0dbe80b5d` through the current `agent-entities`
+HEAD, plus corrections arising in these rounds. This is a standard correction
+cycle within the existing feature worktree. Acceptance requires all confirmed
+findings fixed, focused checks after corrections, and three fresh reviewers
+without inherited conversation, memory access, or child agents. Public Agent
+contracts and unrelated baseline behavior remain outside redesign scope.
+
+Desktop supports explicit child model/reasoning dispatch. Each round will use a
+fresh existing performance_reliability_reviewer, explicit gpt-6-sol/medium,
+covering adapter correctness and integration, with API, documentation and
+maintainability dispositions included. Runtime self-introspection is not exposed;
+acceptance checks the immutable configured profile and explicit dispatch fields.
+No new architecture pass is needed unless a demonstrated contract blocker arises.
+Existing release evidence at `a83d2bac0` remains applicable until code changes.
+
+Skill applicability: exposed session catalog and readable task-provided paths
+select requesting-code-review and receiving-code-review from
+`/Users/armiol/.agents/skills`; both were read. Existing task skill inventory and
+expected-skill manifest apply. Reviewers receive work products, not prior review
+conclusions. Final verification uses the existing release profile only if runtime,
+tests, contracts or dependencies change; record-only updates use focused checks.
+Round 1 assignment: existing performance_reliability_reviewer, explicit
+`gpt-6-sol` / `medium`; read-only source inspection and focused tests, report in
+`/tmp/anthropic-extra-round-1.md`. No repository evidence files are added.
+
+Round 1 completed: no confirmed reliability findings. The reviewer ran 182
+focused adapter, persisted-replay and MCP BlackBox tests successfully. API,
+documentation and style were examined only where they affect runtime behavior;
+previous specialist dispositions remain valid because source is unchanged.
+Explicit Sol/medium dispatch and configured role matched; runtime introspection
+was unavailable. Report: `/tmp/anthropic-extra-round-1.md`. No fixes required.
+Round 2 assignment: fresh existing typescript_api_docs_reviewer, explicit
+`gpt-6-sol` / `medium`, no inherited context, memory or child agents. Review the
+same complete Anthropic diff with emphasis on public contracts, provider
+compatibility, auth examples and supported-model claims. Report:
+`/tmp/anthropic-extra-round-2.md`.
+
+Round 2 returned one confirmed P1: default-thinking Anthropic models can emit
+thinking metadata with an MCP tool call, but the existing stream/continuation
+path drops those blocks. The next Messages request therefore cannot preserve
+the provider's tool-turn contract. Adapter tests passed 141 cases but did not
+cover this response. Report: `/tmp/anthropic-extra-round-2.md`. Other public API,
+auth example, Proto and documentation checks found no additional defect.
+Explicit Sol/medium dispatch matched the configured API reviewer.
+
+Correction assignment returns to the existing Anthropic implementer, configured
+`gpt-6-sol` / `medium`, without child agents. Establish the smallest supported
+provider setting or response-preservation correction with pinned SDK evidence;
+add a fail-first actual-SDK tool-turn regression and recovery coverage as needed.
+Do not introduce public APIs or serialized contracts without an architecture
+assessment. Parent retains canonical task records. Round 3 waits for corrected
+behavior, focused preflight and independent closure of this finding.
+
+Pinned SDK and official Anthropic thinking documentation rule out disabling
+thinking across the supported model set: some admitted models ignore or reject
+that option. The correction therefore reaches the persisted adapter response
+contract. This demonstrated blocker triggers one bounded architecture assessment:
+existing requirements_splitter, explicit `gpt-6-astra` / `high`, fresh context,
+no memory or child agents. Determine minimal internal response preservation and
+replay handling; keep application-facing Agent/AiModel and Proto APIs unchanged.
+Implementation prepares the failing regression while the assessment runs.
+
+The bounded architecture assessment is accepted from explicit Astra/high dispatch;
+configured role metadata matches, runtime introspection unavailable. Its plan
+(`/tmp/anthropic-thinking-contract.md`) establishes additive typed ordered
+Anthropic content in GenerationResponse, contextual projection validation,
+stream byte bounds, digest inclusion, storage capacity accounting and internal
+Ax assistant-turn reconstruction from journaled responses. D-0131 records the
+contract. Agent/AiModel application methods are unchanged. No migration shim,
+model support restriction or generic provider metadata subsystem is introduced.
+The existing implementer proceeds on these files; parent edits canonical records.
+Estimate revised to 1.5–2.5 hours total including this correction, remaining fresh
+review, preflight and the final full release profile.
+
+Round 2 correction completed by the existing explicit Sol/medium implementer.
+The fail-first real-SDK fixture now preserves signed and redacted thinking in
+tool and corrective requests. Typed content survives binary/JSON round trips;
+fresh adapter replay restores it. Server journal replay is covered separately,
+not by a combined live-provider process-restart test. The additional storage
+reservation rejects small-capacity requests before dispatch. Existing stream
+tests were restored unchanged after a temporary file overlap; added tests are
+in a separate Anthropic stream test file.
+
+All 329 focused tests, affected builds, four tooling typechecks, scoped ESLint,
+TSDoc, docs/API/snippets, Proto lint/generated cleanliness, format and diff
+checks pass. Focused coverage exits 1 at selected-file aggregate 82.96% branches;
+it excludes suites for broad shared server files. No threshold was weakened.
+Changed-file coverage was inspected; final global coverage remains mandatory.
+Report: `/tmp/anthropic-extra-fix-2.md`. The original API reviewer independently
+closed P1 and found no further contract issue, with 146 focused tests passing:
+`/tmp/anthropic-extra-round-2-closure.md`. Its explicit Sol/medium profile matches.
+
+Round 3 assignment: a fresh existing performance_reliability_reviewer, explicit
+`gpt-6-sol` / `medium`, no inherited conversation, memory access or child agents.
+Review the complete Anthropic diff plus this correction, emphasizing ordered
+stream bounds, journaling/recovery, Ax correlation and capacity. Report under
+`/tmp/anthropic-extra-round-3.md`. Source is frozen for this review. No final
+release profile has been repeated yet; it follows convergence.

@@ -49,6 +49,60 @@ export interface StreamToolCall {
 }
 
 /**
+ * Ordered Anthropic content retained independently of Ax's response projection.
+ */
+export type AnthropicBlock =
+  | {
+      /**
+       * Text block discriminator.
+       */
+      type: "text";
+
+      /**
+       * Exact provider text, including an empty block.
+       */
+      text: string;
+    }
+  | {
+      /**
+       * Tool block discriminator.
+       */
+      type: "tool-call";
+
+      /**
+       * Provider tool proposal at this block position.
+       */
+      call: StreamToolCall;
+    }
+  | {
+      /**
+       * Signed thinking block discriminator.
+       */
+      type: "thinking";
+
+      /**
+       * Exact thinking text, which may be empty.
+       */
+      text: string;
+
+      /**
+       * Opaque provider signature assembled from stream fragments.
+       */
+      signature: string;
+    }
+  | {
+      /**
+       * Redacted thinking block discriminator.
+       */
+      type: "redacted-thinking";
+
+      /**
+       * Opaque encrypted provider data.
+       */
+      data: string;
+    };
+
+/**
  * Bounded parsed output and provider-reported usage.
  */
 export interface StreamedModelResult {
@@ -61,6 +115,11 @@ export interface StreamedModelResult {
    * Complete client-executed calls, if emitted.
    */
   readonly toolCalls: readonly StreamToolCall[];
+
+  /**
+   * Present for a stream collected through the Anthropic Messages profile.
+   */
+  readonly anthropicContent?: readonly AnthropicBlock[];
 
   /**
    * Complete provider stop state.
@@ -159,6 +218,19 @@ interface State {
   finishReason?: string;
   usage?: { inputTokens?: number; outputTokens?: number };
   actualModelId?: string;
+  anthropic?: {
+    blocks: AnthropicBlock[];
+    open: Map<
+      string,
+      {
+        index: number;
+        kind: "text" | "thinking" | "redacted-thinking" | "tool-call";
+        inputEnded?: boolean;
+        inputBytes?: number;
+      }
+    >;
+    closed: Set<string>;
+  };
 }
 
 /**
@@ -168,6 +240,7 @@ interface State {
 const partial = (state: State): StreamedPartialResult => ({
   text: state.text,
   toolCalls: [...state.toolCalls],
+  ...(state.anthropic ? { anthropicContent: [...state.anthropic.blocks] } : {}),
   ...(state.finishReason ? { finishReason: state.finishReason } : {}),
   ...(state.usage ? { usage: state.usage } : {}),
   ...(state.actualModelId ? { actualModelId: state.actualModelId } : {}),
@@ -227,6 +300,7 @@ const openBoundedStream = async (
  * @param options Provider-native prompt, schema and cancellation settings.
  * @param maxParsedBytes Bound for retained decoded text and tool input.
  * @param deadline Optional runtime ticket deadline for ignored provider cancellation.
+ * @param anthropic Whether the authenticated connection uses Anthropic Messages.
  * @returns Complete text, tool calls, finish state and known usage.
  */
 export const collectModelStream = async (
@@ -234,12 +308,18 @@ export const collectModelStream = async (
   options: Options,
   maxParsedBytes: number,
   deadline?: StreamDeadline,
+  anthropic = false,
 ): Promise<StreamedModelResult> => {
   if (!Number.isSafeInteger(maxParsedBytes) || maxParsedBytes < 1)
     throw new TypeError("Parsed output limit is invalid");
   const guard = deadline ? deadlineSignal(options.abortSignal, deadline) : undefined;
   const signal = guard?.signal ?? options.abortSignal;
-  const state: State = { text: "", toolCalls: [], bytes: 0 };
+  const state: State = {
+    text: "",
+    toolCalls: [],
+    bytes: 0,
+    ...(anthropic ? { anthropic: { blocks: [], open: new Map(), closed: new Set() } } : {}),
+  };
   try {
     if (signal?.aborted) fail(state, failureReason(signal, guard?.expired() ?? false));
     const result = await openBoundedStream(
@@ -281,9 +361,10 @@ const readModelStream = async (
       if (next.done) break;
       acceptPart(state, next.value, maxParsedBytes);
     }
-    if (!state.finishReason) fail(state, "Provider stream incomplete");
+    if (!state.finishReason || state.anthropic?.open.size)
+      fail(state, "Provider stream incomplete");
     complete = true;
-    return state as StreamedModelResult;
+    return { ...partial(state), finishReason: state.finishReason as "stop" | "tool-calls" };
   } catch (error) {
     if (error instanceof StreamCollectionError) throw error;
     return fail(
@@ -344,21 +425,151 @@ const openStream = async (model: StreamModel, options: Options) => {
  * @param limit Maximum parsed output bytes.
  */
 const acceptPart = (state: State, part: Part, limit: number): void => {
+  if (state.anthropic) acceptAnthropicPart(state, part, limit);
   if (part.type === "text-delta") {
-    addBytes(state, part.delta, limit);
+    if (!state.anthropic) addBytes(state, part.delta, limit);
     state.text += part.delta;
   } else if (part.type === "tool-call") {
     if (part.providerExecuted || part.dynamic) fail(state, "Provider tool execution unsupported");
     if ([part.toolCallId, part.toolName, part.input].some((value) => typeof value !== "string"))
       fail(state, "Provider tool proposal invalid");
-    addBytes(state, part.toolCallId, limit);
-    addBytes(state, part.toolName, limit);
-    addBytes(state, part.input, limit);
+    if (!state.anthropic) {
+      addBytes(state, part.toolCallId, limit);
+      addBytes(state, part.toolName, limit);
+      addBytes(state, part.input, limit);
+    }
     state.toolCalls.push({ id: part.toolCallId, name: part.toolName, input: part.input });
   } else if (part.type === "response-metadata") {
     if (part.modelId) state.actualModelId = part.modelId;
   } else if (part.type === "finish") acceptFinish(state, part);
   else if (part.type === "error") fail(state, "Provider stream error");
+};
+
+/**
+ * Retains typed Anthropic blocks in start order, with every byte reserved first.
+ * @param state Bounded provider state.
+ * @param part One SDK stream part.
+ * @param limit Full retained-content allowance.
+ */
+const acceptAnthropicPart = (state: State, part: Part, limit: number): void => {
+  const content = state.anthropic;
+  if (!content) return;
+  if (
+    (part.type === "text-start" || part.type === "text-delta" || part.type === "text-end") &&
+    part.providerMetadata !== undefined
+  )
+    fail(state, "Unsupported Anthropic text metadata");
+  if (
+    part.type === "text-start" ||
+    part.type === "reasoning-start" ||
+    part.type === "tool-input-start"
+  ) {
+    if (content.open.has(part.id) || content.closed.has(part.id))
+      fail(state, "Duplicate Anthropic content start");
+    addBytes(state, "x".repeat(64), limit);
+    const index = content.blocks.length;
+    if (part.type === "text-start") {
+      content.blocks.push({ type: "text", text: "" });
+      content.open.set(part.id, { index, kind: "text" });
+    } else if (part.type === "tool-input-start") {
+      addBytes(state, part.id, limit);
+      addBytes(state, part.toolName, limit);
+      content.blocks.push({
+        type: "tool-call",
+        call: { id: part.id, name: part.toolName, input: "" },
+      });
+      content.open.set(part.id, { index, kind: "tool-call", inputBytes: 0 });
+    } else {
+      const metadata = part.providerMetadata?.anthropic;
+      const redacted = metadata?.redactedData;
+      if (metadata?.signature !== undefined)
+        fail(state, "Anthropic reasoning start metadata invalid");
+      if (redacted !== undefined && typeof redacted !== "string")
+        fail(state, "Anthropic reasoning metadata invalid");
+      if (typeof redacted === "string") {
+        addBytes(state, redacted, limit);
+        content.blocks.push({ type: "redacted-thinking", data: redacted });
+        content.open.set(part.id, { index, kind: "redacted-thinking" });
+      } else {
+        content.blocks.push({ type: "thinking", text: "", signature: "" });
+        content.open.set(part.id, { index, kind: "thinking" });
+      }
+    }
+    return;
+  }
+  if (part.type === "text-delta" || part.type === "reasoning-delta") {
+    const opened = content.open.get(part.id);
+    if (!opened) return fail(state, "Orphan Anthropic content delta");
+    if (part.type === "text-delta" ? opened.kind !== "text" : opened.kind !== "thinking")
+      fail(state, "Orphan Anthropic content delta");
+    const block = content.blocks[opened.index];
+    if (part.type === "text-delta" && block?.type === "text") {
+      addBytes(state, part.delta, limit);
+      block.text += part.delta;
+    } else if (part.type === "reasoning-delta" && block?.type === "thinking") {
+      const signature = part.providerMetadata?.anthropic?.signature;
+      if (part.providerMetadata?.anthropic?.redactedData !== undefined)
+        fail(state, "Anthropic reasoning delta metadata invalid");
+      if (signature !== undefined && typeof signature !== "string")
+        fail(state, "Anthropic signature metadata invalid");
+      addBytes(state, part.delta, limit);
+      if (typeof signature === "string") addBytes(state, signature, limit);
+      block.text += part.delta;
+      if (typeof signature === "string") block.signature += signature;
+    } else fail(state, "Anthropic content kind mismatch");
+    return;
+  }
+  if (part.type === "tool-input-delta" || part.type === "tool-input-end") {
+    const opened = content.open.get(part.id);
+    if (opened?.kind !== "tool-call" || opened.inputEnded)
+      return fail(state, "Orphan Anthropic tool input");
+    if (part.type === "tool-input-end") opened.inputEnded = true;
+    else {
+      addBytes(state, part.delta, limit);
+      opened.inputBytes = (opened.inputBytes ?? 0) + Buffer.byteLength(part.delta);
+    }
+    return;
+  }
+  if (part.type === "text-end" || part.type === "reasoning-end" || part.type === "tool-call") {
+    const id = part.type === "tool-call" ? part.toolCallId : part.id;
+    const opened = content.open.get(id);
+    const expected =
+      part.type === "tool-call" ? "tool-call" : part.type === "text-end" ? "text" : undefined;
+    if (!opened) return fail(state, "Orphan Anthropic content end");
+    if (
+      expected
+        ? opened.kind !== expected
+        : opened.kind !== "thinking" && opened.kind !== "redacted-thinking"
+    )
+      fail(state, "Orphan Anthropic content end");
+    const block = content.blocks[opened.index];
+    if (part.type === "tool-call") {
+      if (block?.type !== "tool-call" || block.call.name !== part.toolName || !opened.inputEnded)
+        return fail(state, "Anthropic tool content changed");
+      const remaining = Buffer.byteLength(part.input) - (opened.inputBytes ?? 0);
+      if (remaining > 0) addByteCount(state, remaining, limit);
+      block.call = { id, name: part.toolName, input: part.input };
+    } else if (opened.kind === "thinking" && (block?.type !== "thinking" || !block.signature))
+      fail(state, "Anthropic thinking signature missing");
+    else if (
+      opened.kind === "redacted-thinking" &&
+      (block?.type !== "redacted-thinking" || !block.data)
+    )
+      fail(state, "Anthropic redacted thinking missing");
+    content.open.delete(id);
+    content.closed.add(id);
+    return;
+  }
+  if (
+    part.type === "response-metadata" ||
+    part.type === "finish" ||
+    part.type === "error" ||
+    part.type === "stream-start" ||
+    part.type === "raw" ||
+    (part.type === "custom" && part.kind === "anthropic.message_start")
+  )
+    return;
+  fail(state, "Unsupported Anthropic stream content");
 };
 
 /**
@@ -369,7 +580,16 @@ const acceptPart = (state: State, part: Part, limit: number): void => {
  * @param limit Maximum retained bytes.
  */
 const addBytes = (state: State, value: string, limit: number): void => {
-  const bytes = new TextEncoder().encode(value).byteLength;
+  addByteCount(state, new TextEncoder().encode(value).byteLength, limit);
+};
+
+/**
+ * Reserves a known encoded byte count before a provider part is retained.
+ * @param state Current bounded stream.
+ * @param bytes Exact additional encoded bytes.
+ * @param limit Ticket output allowance.
+ */
+const addByteCount = (state: State, bytes: number, limit: number): void => {
   if (bytes > limit - state.bytes) fail(state, "Parsed output limit exceeded");
   state.bytes += bytes;
 };

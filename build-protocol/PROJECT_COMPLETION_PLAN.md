@@ -16,7 +16,11 @@ common workspace version under D-0115.
 
 Current work: [Signal-driven Agent entities](planning/agent-entities.md),
 on `agent-entities`, based on official master `658da1cdd`. Anthropic model
-support is included in the first snapshot. Implementation, independent reviews,
+support is included in the first snapshot. Three additional human-requested
+review rounds are in progress. Round 2 identified missing signed thinking content
+in Anthropic tool continuations; the correction preserves ordered provider content
+in recorded responses (D-0131). Final acceptance is pending this correction and
+round 3. The preceding implementation, independent reviews,
 full release verification and package checks completed at code checkpoint
 `a83d2bac0`. The three additional consecutive standalone Agent review rounds
 remain closed. The Anthropic concern reviews and final security review are also

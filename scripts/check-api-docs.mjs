@@ -1117,6 +1117,14 @@ const expectedVercelAxExports = [
   "VercelProviderCapabilities",
 ];
 const expectedAgentProtoExports = [
+  "AnthropicAssistantContent",
+  "AnthropicAssistantContentSchema",
+  "AnthropicContentBlock",
+  "AnthropicContentBlockSchema",
+  "AnthropicRedactedThinking",
+  "AnthropicRedactedThinkingSchema",
+  "AnthropicThinking",
+  "AnthropicThinkingSchema",
   "AgentAiOperationFailed",
   "AgentAiOperationFailedSchema",
   "AgentAiOperationStarted",

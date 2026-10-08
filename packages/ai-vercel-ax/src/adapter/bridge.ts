@@ -95,6 +95,17 @@ export interface PreparedRequest {
  */
 export interface AxRequestControl {
   /**
+   * Restores a journaled assistant turn in a controlled stream.
+   * @param message Ax's assistant projection.
+   * @param index Zero-based assistant turn position.
+   * @returns Exact recorded provider assistant message.
+   */
+  readonly onAssistant?: (
+    message: Extract<AxChatRequest["chatPrompt"][number], { role: "assistant" }>,
+    index: number,
+  ) => ModelMessage;
+
+  /**
    * Maximum physical requests, including corrections and tool continuations.
    */
   readonly maxRequests: number;
@@ -171,7 +182,7 @@ export const AxVercelBridge = {
       getLastUsedChatModel: () => modelId,
       chat: async (request: Readonly<AxChatRequest>, options?: { abortSignal?: AbortSignal }) => {
         if (options?.abortSignal?.aborted) throw new Error("Request aborted");
-        const prepared = AxVercelBridge.prepare(request);
+        const prepared = AxVercelBridge.prepare(request, control.onAssistant);
         if (attempts >= control.maxRequests) throw new Error("Request budget exhausted");
         attempts += 1;
         await control.onAttempt?.(attempts);
@@ -185,9 +196,13 @@ export const AxVercelBridge = {
   /**
    * Validates and materializes a native request before reserving transport.
    * @param request Ax request containing prompt, schema, and tool state.
+   * @param onAssistant Optional journal-backed assistant turn resolver.
    * @returns Request ready for one physical Vercel call.
    */
-  prepare(request: Readonly<AxChatRequest>): PreparedRequest {
+  prepare(
+    request: Readonly<AxChatRequest>,
+    onAssistant?: AxControlledRequestControl["onAssistant"],
+  ): PreparedRequest {
     const schema: unknown = request.responseFormat?.schema;
     if (request.responseFormat?.type !== "json_schema" || !schema) {
       throw new Error("Native JSON schema is required");
@@ -197,7 +212,7 @@ export const AxVercelBridge = {
         .filter((message) => message.role === "system")
         .map((message) => message.content)
         .join("\n"),
-      messages: AxVercelBridge.mapMessages(request),
+      messages: AxVercelBridge.mapMessages(request, onAssistant),
       tools: AxVercelBridge.mapTools(request),
       output: Output.object({ schema: jsonSchema(schema) }),
     };
@@ -257,9 +272,13 @@ export const AxVercelBridge = {
   /**
    * Maps assistant tool calls and results across an Ax continuation.
    * @param request Ax request containing all conversation turns.
+   * @param onAssistant Optional journal-backed assistant turn resolver.
    * @returns Vercel messages in the same order.
    */
-  mapMessages(request: Readonly<AxChatRequest>): ModelMessage[] {
+  mapMessages(
+    request: Readonly<AxChatRequest>,
+    onAssistant?: AxControlledRequestControl["onAssistant"],
+  ): ModelMessage[] {
     const toolNames = new Map<string, string>();
     for (const message of request.chatPrompt) {
       if (message.role !== "assistant") continue;
@@ -268,9 +287,14 @@ export const AxVercelBridge = {
         toolNames.set(call.id, call.function.name);
       }
     }
+    let assistantIndex = 0;
     return request.chatPrompt
       .filter((message) => message.role !== "system")
-      .map((message) => AxVercelBridge.mapMessage(message, toolNames));
+      .map((message) =>
+        message.role === "assistant" && onAssistant
+          ? onAssistant(message, assistantIndex++)
+          : AxVercelBridge.mapMessage(message, toolNames),
+      );
   },
 
   /**

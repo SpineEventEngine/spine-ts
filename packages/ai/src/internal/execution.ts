@@ -94,6 +94,44 @@ export const assertAiOutcomeContext = (
     throw new TypeError("ADMITTED requires output without outstanding proposals");
   if (content.outcome !== AiOutcome.ADMITTED && hasOutput)
     throw new TypeError("Only ADMITTED may carry application output");
+  if (content.anthropicContent) {
+    const text: string[] = [];
+    const calls: typeof content.toolCalls = [];
+    for (const block of content.anthropicContent.blocks) {
+      if (block.content.case === "text") text.push(block.content.value);
+      else if (block.content.case === "toolCall") calls.push(block.content.value);
+      else if (block.content.case === "thinking") {
+        if (
+          (content.outcome === AiOutcome.TOOL_REQUESTED ||
+            content.outcome === AiOutcome.ADMITTED) &&
+          !block.content.value.signature
+        )
+          throw new TypeError("Complete Anthropic thinking requires a signature");
+      } else if (block.content.case === "redactedThinking") {
+        if (
+          (content.outcome === AiOutcome.TOOL_REQUESTED ||
+            content.outcome === AiOutcome.ADMITTED) &&
+          !block.content.value.data
+        )
+          throw new TypeError("Complete Anthropic redacted thinking requires data");
+      } else throw new TypeError("Anthropic content block kind missing");
+    }
+    if (text.join("") !== content.rawOutput)
+      throw new TypeError("Anthropic text projection differs from raw output");
+    if (
+      calls.length !== content.toolCalls.length ||
+      calls.some((call, index) => {
+        const saved = content.toolCalls[index];
+        if (!saved) return true;
+        return (
+          call.providerCallId !== saved.providerCallId ||
+          call.toolName !== saved.toolName ||
+          call.argumentsJson !== saved.argumentsJson
+        );
+      })
+    )
+      throw new TypeError("Anthropic tool projection differs from proposals");
+  }
 };
 
 /**
