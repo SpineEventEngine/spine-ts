@@ -539,6 +539,19 @@ const recordedAssistant = (
   const recorded = state.assistantTurns[index];
   const content = recorded?.response.anthropicContent;
   if (!recorded || !content) throw new TypeError("Anthropic assistant journal turn missing");
+  verifyAxAssistant(recorded, message);
+  return { role: "assistant", content: content.blocks.map(anthropicAssistantBlock) };
+};
+
+/**
+ * Rejects an Ax turn that cannot be correlated with its journaled response.
+ * @param recorded Exact saved response and its Ax projection.
+ * @param message Ax's observed assistant turn.
+ */
+const verifyAxAssistant = (
+  recorded: GenerationState["assistantTurns"][number],
+  message: Extract<AxChatRequest["chatPrompt"][number], { role: "assistant" }>,
+): void => {
   if ((message.content ?? "") !== recorded.axContent)
     throw new TypeError("Anthropic assistant text diverged from journal");
   const calls = message.functionCalls ?? [];
@@ -556,33 +569,36 @@ const recordedAssistant = (
     })
   )
     throw new TypeError("Anthropic assistant tools diverged from journal");
-  return {
-    role: "assistant",
-    content: content.blocks.map((block) => {
-      const part = block.content;
-      if (part.case === "text") return { type: "text" as const, text: part.value };
-      if (part.case === "thinking")
-        return {
-          type: "reasoning" as const,
-          text: part.value.text,
-          providerOptions: { anthropic: { signature: part.value.signature } },
-        };
-      if (part.case === "redactedThinking")
-        return {
-          type: "reasoning" as const,
-          text: "",
-          providerOptions: { anthropic: { redactedData: part.value.data } },
-        };
-      if (part.case === "toolCall")
-        return {
-          type: "tool-call" as const,
-          toolCallId: part.value.providerCallId,
-          toolName: part.value.toolName,
-          input: JSON.parse(part.value.argumentsJson) as unknown,
-        };
-      throw new TypeError("Anthropic assistant block missing");
-    }),
-  };
+};
+
+/**
+ * Restores one typed provider block in its journaled position.
+ * @param block Saved Anthropic assistant block.
+ * @returns Published Vercel assistant content part.
+ */
+const anthropicAssistantBlock = (block: AnthropicAssistantContent["blocks"][number]) => {
+  const part = block.content;
+  if (part.case === "text") return { type: "text" as const, text: part.value };
+  if (part.case === "thinking")
+    return {
+      type: "reasoning" as const,
+      text: part.value.text,
+      providerOptions: { anthropic: { signature: part.value.signature } },
+    };
+  if (part.case === "redactedThinking")
+    return {
+      type: "reasoning" as const,
+      text: "",
+      providerOptions: { anthropic: { redactedData: part.value.data } },
+    };
+  if (part.case === "toolCall")
+    return {
+      type: "tool-call" as const,
+      toolCallId: part.value.providerCallId,
+      toolName: part.value.toolName,
+      input: JSON.parse(part.value.argumentsJson) as unknown,
+    };
+  throw new TypeError("Anthropic assistant block missing");
 };
 
 /**

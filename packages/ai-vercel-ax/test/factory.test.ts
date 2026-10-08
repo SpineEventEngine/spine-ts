@@ -1304,6 +1304,85 @@ describe("Vercel connection registration", () => {
     expect(corrected.content.corrects?.value).toBe("saved-invalid");
   });
 
+  it.each(["signed", "redacted"] as const)(
+    "replays saved invalid Anthropic output with %s thinking into a correction",
+    async (kind) => {
+      const fixture = generationFixture(
+        [
+          [
+            { type: "text-start", id: "t" },
+            { type: "text-delta", id: "t", delta: '{"replyText":"Fixed"}' },
+            { type: "text-end", id: "t" },
+            {
+              type: "finish",
+              finishReason: { unified: "stop", raw: "end_turn" },
+              usage: sdkUsage(2, 1),
+            },
+          ],
+        ],
+        2,
+        false,
+        "anthropic",
+      );
+      const saved = create(GenerationResponseSchema, {
+        rawOutput: "not-json",
+        outcome: AiOutcome.INVALID_OUTPUT,
+        diagnosticId: { value: "diagnostic-saved" },
+        anthropicContent: create(AnthropicAssistantContentSchema, {
+          blocks: [
+            kind === "signed"
+              ? { content: { case: "thinking", value: { text: "", signature: "saved-signature" } } }
+              : { content: { case: "redactedThinking", value: { data: "saved-ciphertext" } } },
+            { content: { case: "text", value: "not-json" } },
+          ],
+        }),
+      });
+      vi.mocked(fixture.runtime.beginAttempt)
+        .mockResolvedValueOnce({
+          kind: "replay",
+          id: "saved-invalid-anthropic",
+          response: fromBinary(GenerationResponseSchema, toBinary(GenerationResponseSchema, saved)),
+          failure: {
+            code: "INVALID_OUTPUT",
+            retryableByNewSignal: false,
+            diagnosticId: "diagnostic-saved",
+          },
+          issues: [{ code: "INVALID_OUTPUT", path: "replyText", message: "A reply is required" }],
+        })
+        .mockResolvedValueOnce({
+          id: "correction",
+          maxInputBytes: 2000,
+          maxOutputBytes: 2000,
+          deadlineEpochMs: 1000,
+          signal: fixture.runtime.signal,
+        });
+      const output = create(ProposedSupportReplySchema, { replyText: "Fixed" });
+      vi.mocked(fixture.runtime.admitGeneration).mockReturnValue({ ok: true, value: output });
+      await expect(fixture.run()).resolves.toMatchObject({ ok: true, value: output });
+      expect(fixture.network).toHaveBeenCalledTimes(1);
+      expect(fixture.runtime.finishAttempt).toHaveBeenCalledTimes(1);
+      const correction = vi.mocked(fixture.runtime.beginAttempt).mock.calls[1]?.[0];
+      if (correction?.kind !== "generation") throw new Error("Expected correction request");
+      expect(correction.content.corrects?.value).toBe("saved-invalid-anthropic");
+      expect(correction.content.promptJson).toContain(
+        kind === "signed" ? "saved-signature" : "saved-ciphertext",
+      );
+      const assistant = fixture.providerCalls[0]?.prompt.find(
+        (message) => message.role === "assistant",
+      );
+      if (assistant?.role !== "assistant") throw new Error("Expected saved assistant turn");
+      const reasoning = assistant.content.find((part) => part.type === "reasoning");
+      if (reasoning?.type !== "reasoning") throw new Error("Expected saved reasoning block");
+      expect(reasoning.text).toBe("");
+      expect(reasoning.providerOptions?.anthropic).toEqual(
+        kind === "signed" ? { signature: "saved-signature" } : { redactedData: "saved-ciphertext" },
+      );
+      expect(
+        assistant.content.some((part) => part.type === "text" && part.text === "not-json"),
+      ).toBe(true);
+    },
+  );
+
   it("records the exact discovered tool schema and mapping in prepared generation input", async () => {
     const outputSchemaJson = JSON.stringify({
       additionalProperties: false,

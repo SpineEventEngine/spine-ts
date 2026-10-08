@@ -2974,3 +2974,55 @@ Review the complete Anthropic diff plus this correction, emphasizing ordered
 stream bounds, journaling/recovery, Ax correlation and capacity. Report under
 `/tmp/anthropic-extra-round-3.md`. Source is frozen for this review. No final
 release profile has been repeated yet; it follows convergence.
+
+Round 3 completed with no confirmed runtime defect. Its 146 focused tests and a
+temporary correction probe pass; configured explicit Sol/medium profile matches.
+Report `/tmp/anthropic-extra-round-3.md` suggests P3 correction/replay coverage.
+The existing BlackBox fixture already retains signed/redacted fresh corrective
+requests, so that portion of the finding is rejected with test evidence. Saved
+INVALID_OUTPUT signed/redacted replay lacks a dedicated case; accept that narrow
+coverage improvement and return it to the existing Sol/medium implementer.
+Only tests should change unless they reproduce a real defect. No fourth whole
+review round is planned. Final release verification follows this correction.
+
+Final concern dispositions for the substantive round-2 correction: API/Proto
+review closed in round 2; reliability review closed in round 3; documentation
+claims are covered by the API reviewer and deterministic documentation checks.
+The new collector/bridge structure receives a bounded existing
+style_maintainability_reviewer pass (explicit `gpt-6-sol` / `medium`). Final
+release-readiness security review covers the new response persistence and
+provider-content boundary with the existing security_reviewer (explicit
+`gpt-6-sol` / `high`). Both receive fresh contexts, no memory or children,
+read-only source scope and reports under /tmp. These concern checks do not
+restart whole-change review rounds. Only the test addition proceeds in parallel.
+
+Round 3 narrow coverage correction passed: signed/redacted saved INVALID_OUTPUT
+responses binary-roundtrip into fresh corrective execution with metadata intact,
+correct saved-attempt correlation and exactly one new fetch. Two test files pass
+148 cases; scoped lint/format, four tooling typechecks and diff checks pass.
+No production change was required. Report `/tmp/anthropic-extra-fix-3.md`.
+
+Final concern wave complete: security reviewer (explicit Sol/high) found no
+concrete issue; style reviewer (explicit Sol/medium) identified one P2 covering
+two new functions above the documented 35-line limit. Reports:
+`/tmp/anthropic-thinking-security.md`, `/tmp/anthropic-thinking-style.md`.
+Accept the bounded refactor of stream transitions and recorded assistant
+projection/mapping; return it to the same implementer as one correction batch.
+No public behavior or contract change. Runtime introspection unavailable;
+configured explicit profiles match both accepted assignments.
+
+The final style correction is independently closed. Stream transition handlers
+and recorded-assistant projection/mapping now meet the 35-line rule without
+behavior changes; the style reviewer found no new issue. Reports:
+`/tmp/anthropic-extra-fix-style.md`, `/tmp/anthropic-thinking-style-closure.md`.
+All 331 focused tests and the complete cheap preflight pass after this refactor.
+Three requested sequential rounds and all accepted findings are closed; final
+security, API, reliability, documentation and style dispositions are complete.
+
+Final mechanical assignment: existing orchestrator-dispatched
+agent_final_review_verification, explicit configured `gpt-6-luna` / `low`.
+No source edits, memory use or children. Run one full verify:release profile on
+the pushed correction, then full/prod audits, prepare all 21 package archives
+with strict external consumer checks, and offline publication trial. Save
+command output and report under /tmp. Never publish packages or create a PR.
+Stop on any failure, preserve output, and classify before further commands.

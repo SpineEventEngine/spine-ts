@@ -220,17 +220,18 @@ interface State {
   actualModelId?: string;
   anthropic?: {
     blocks: AnthropicBlock[];
-    open: Map<
-      string,
-      {
-        index: number;
-        kind: "text" | "thinking" | "redacted-thinking" | "tool-call";
-        inputEnded?: boolean;
-        inputBytes?: number;
-      }
-    >;
+    open: Map<string, AnthropicOpenBlock>;
     closed: Set<string>;
   };
+}
+
+type AnthropicState = NonNullable<State["anthropic"]>;
+
+interface AnthropicOpenBlock {
+  index: number;
+  kind: "text" | "thinking" | "redacted-thinking" | "tool-call";
+  inputEnded?: boolean;
+  inputBytes?: number;
 }
 
 /**
@@ -464,112 +465,229 @@ const acceptAnthropicPart = (state: State, part: Part, limit: number): void => {
     part.type === "reasoning-start" ||
     part.type === "tool-input-start"
   ) {
-    if (content.open.has(part.id) || content.closed.has(part.id))
-      fail(state, "Duplicate Anthropic content start");
-    addBytes(state, "x".repeat(64), limit);
-    const index = content.blocks.length;
-    if (part.type === "text-start") {
-      content.blocks.push({ type: "text", text: "" });
-      content.open.set(part.id, { index, kind: "text" });
-    } else if (part.type === "tool-input-start") {
-      addBytes(state, part.id, limit);
-      addBytes(state, part.toolName, limit);
-      content.blocks.push({
-        type: "tool-call",
-        call: { id: part.id, name: part.toolName, input: "" },
-      });
-      content.open.set(part.id, { index, kind: "tool-call", inputBytes: 0 });
-    } else {
-      const metadata = part.providerMetadata?.anthropic;
-      const redacted = metadata?.redactedData;
-      if (metadata?.signature !== undefined)
-        fail(state, "Anthropic reasoning start metadata invalid");
-      if (redacted !== undefined && typeof redacted !== "string")
-        fail(state, "Anthropic reasoning metadata invalid");
-      if (typeof redacted === "string") {
-        addBytes(state, redacted, limit);
-        content.blocks.push({ type: "redacted-thinking", data: redacted });
-        content.open.set(part.id, { index, kind: "redacted-thinking" });
-      } else {
-        content.blocks.push({ type: "thinking", text: "", signature: "" });
-        content.open.set(part.id, { index, kind: "thinking" });
-      }
-    }
+    anthropicStart(state, content, part, limit);
     return;
   }
   if (part.type === "text-delta" || part.type === "reasoning-delta") {
-    const opened = content.open.get(part.id);
-    if (!opened) return fail(state, "Orphan Anthropic content delta");
-    if (part.type === "text-delta" ? opened.kind !== "text" : opened.kind !== "thinking")
-      fail(state, "Orphan Anthropic content delta");
-    const block = content.blocks[opened.index];
-    if (part.type === "text-delta" && block?.type === "text") {
-      addBytes(state, part.delta, limit);
-      block.text += part.delta;
-    } else if (part.type === "reasoning-delta" && block?.type === "thinking") {
-      const signature = part.providerMetadata?.anthropic?.signature;
-      if (part.providerMetadata?.anthropic?.redactedData !== undefined)
-        fail(state, "Anthropic reasoning delta metadata invalid");
-      if (signature !== undefined && typeof signature !== "string")
-        fail(state, "Anthropic signature metadata invalid");
-      addBytes(state, part.delta, limit);
-      if (typeof signature === "string") addBytes(state, signature, limit);
-      block.text += part.delta;
-      if (typeof signature === "string") block.signature += signature;
-    } else fail(state, "Anthropic content kind mismatch");
+    anthropicDelta(state, content, part, limit);
     return;
   }
   if (part.type === "tool-input-delta" || part.type === "tool-input-end") {
-    const opened = content.open.get(part.id);
-    if (opened?.kind !== "tool-call" || opened.inputEnded)
-      return fail(state, "Orphan Anthropic tool input");
-    if (part.type === "tool-input-end") opened.inputEnded = true;
-    else {
-      addBytes(state, part.delta, limit);
-      opened.inputBytes = (opened.inputBytes ?? 0) + Buffer.byteLength(part.delta);
-    }
+    anthropicToolInput(state, content, part, limit);
     return;
   }
   if (part.type === "text-end" || part.type === "reasoning-end" || part.type === "tool-call") {
-    const id = part.type === "tool-call" ? part.toolCallId : part.id;
-    const opened = content.open.get(id);
-    const expected =
-      part.type === "tool-call" ? "tool-call" : part.type === "text-end" ? "text" : undefined;
-    if (!opened) return fail(state, "Orphan Anthropic content end");
-    if (
-      expected
-        ? opened.kind !== expected
-        : opened.kind !== "thinking" && opened.kind !== "redacted-thinking"
-    )
-      fail(state, "Orphan Anthropic content end");
-    const block = content.blocks[opened.index];
-    if (part.type === "tool-call") {
-      if (block?.type !== "tool-call" || block.call.name !== part.toolName || !opened.inputEnded)
-        return fail(state, "Anthropic tool content changed");
-      const remaining = Buffer.byteLength(part.input) - (opened.inputBytes ?? 0);
-      if (remaining > 0) addByteCount(state, remaining, limit);
-      block.call = { id, name: part.toolName, input: part.input };
-    } else if (opened.kind === "thinking" && (block?.type !== "thinking" || !block.signature))
-      fail(state, "Anthropic thinking signature missing");
-    else if (
-      opened.kind === "redacted-thinking" &&
-      (block?.type !== "redacted-thinking" || !block.data)
-    )
-      fail(state, "Anthropic redacted thinking missing");
-    content.open.delete(id);
-    content.closed.add(id);
+    anthropicEnd(state, content, part, limit);
     return;
   }
-  if (
-    part.type === "response-metadata" ||
-    part.type === "finish" ||
-    part.type === "error" ||
-    part.type === "stream-start" ||
-    part.type === "raw" ||
-    (part.type === "custom" && part.kind === "anthropic.message_start")
-  )
-    return;
+  if (isAnthropicControlPart(part)) return;
   fail(state, "Unsupported Anthropic stream content");
+};
+
+/**
+ * Recognizes SDK framing parts that carry no assistant content.
+ * @param part Provider stream part.
+ * @returns Whether this part is admitted control framing.
+ */
+const isAnthropicControlPart = (part: Part): boolean =>
+  part.type === "response-metadata" ||
+  part.type === "finish" ||
+  part.type === "error" ||
+  part.type === "stream-start" ||
+  part.type === "raw" ||
+  (part.type === "custom" && part.kind === "anthropic.message_start");
+
+/**
+ * Reserves a block position before any provider content is accumulated.
+ * @param state Bounded stream state.
+ * @param content Anthropic block state.
+ * @param part Block start event.
+ * @param limit Retained-output allowance.
+ */
+const anthropicStart = (
+  state: State,
+  content: AnthropicState,
+  part: Extract<Part, { type: "text-start" | "reasoning-start" | "tool-input-start" }>,
+  limit: number,
+): void => {
+  if (content.open.has(part.id) || content.closed.has(part.id))
+    fail(state, "Duplicate Anthropic content start");
+  addByteCount(state, 64, limit);
+  const index = content.blocks.length;
+  if (part.type === "text-start") {
+    content.blocks.push({ type: "text", text: "" });
+    content.open.set(part.id, { index, kind: "text" });
+  } else if (part.type === "tool-input-start") {
+    addBytes(state, part.id, limit);
+    addBytes(state, part.toolName, limit);
+    content.blocks.push({
+      type: "tool-call",
+      call: { id: part.id, name: part.toolName, input: "" },
+    });
+    content.open.set(part.id, { index, kind: "tool-call", inputBytes: 0 });
+  } else anthropicReasoningStart(state, content, part, index, limit);
+};
+
+/**
+ * Starts signed or encrypted reasoning without transforming provider data.
+ * @param state Bounded stream state.
+ * @param content Anthropic block state.
+ * @param part Reasoning start event.
+ * @param index Reserved block position.
+ * @param limit Retained-output allowance.
+ */
+const anthropicReasoningStart = (
+  state: State,
+  content: AnthropicState,
+  part: Extract<Part, { type: "reasoning-start" }>,
+  index: number,
+  limit: number,
+): void => {
+  const metadata = part.providerMetadata?.anthropic;
+  const redacted = metadata?.redactedData;
+  if (metadata?.signature !== undefined) fail(state, "Anthropic reasoning start metadata invalid");
+  if (redacted !== undefined && typeof redacted !== "string")
+    fail(state, "Anthropic reasoning metadata invalid");
+  if (typeof redacted === "string") {
+    addBytes(state, redacted, limit);
+    content.blocks.push({ type: "redacted-thinking", data: redacted });
+    content.open.set(part.id, { index, kind: "redacted-thinking" });
+  } else {
+    content.blocks.push({ type: "thinking", text: "", signature: "" });
+    content.open.set(part.id, { index, kind: "thinking" });
+  }
+};
+
+/**
+ * Adds one text or reasoning delta to its open block.
+ * @param state Bounded stream state.
+ * @param content Anthropic block state.
+ * @param part Provider delta event.
+ * @param limit Retained-output allowance.
+ */
+const anthropicDelta = (
+  state: State,
+  content: AnthropicState,
+  part: Extract<Part, { type: "text-delta" | "reasoning-delta" }>,
+  limit: number,
+): void => {
+  const opened = content.open.get(part.id);
+  if (!opened) return fail(state, "Orphan Anthropic content delta");
+  if (part.type === "text-delta" ? opened.kind !== "text" : opened.kind !== "thinking")
+    fail(state, "Orphan Anthropic content delta");
+  const block = content.blocks[opened.index];
+  if (part.type === "text-delta" && block?.type === "text") {
+    addBytes(state, part.delta, limit);
+    block.text += part.delta;
+  } else if (part.type === "reasoning-delta" && block?.type === "thinking") {
+    anthropicReasoningDelta(state, block, part, limit);
+  } else fail(state, "Anthropic content kind mismatch");
+};
+
+/**
+ * Appends reasoning text and all signature fragments in arrival order.
+ * @param state Bounded stream state.
+ * @param block Open signed-thinking block.
+ * @param part Provider reasoning delta.
+ * @param limit Retained-output allowance.
+ */
+const anthropicReasoningDelta = (
+  state: State,
+  block: Extract<AnthropicBlock, { type: "thinking" }>,
+  part: Extract<Part, { type: "reasoning-delta" }>,
+  limit: number,
+): void => {
+  const signature = part.providerMetadata?.anthropic?.signature;
+  if (part.providerMetadata?.anthropic?.redactedData !== undefined)
+    fail(state, "Anthropic reasoning delta metadata invalid");
+  if (signature !== undefined && typeof signature !== "string")
+    fail(state, "Anthropic signature metadata invalid");
+  addBytes(state, part.delta, limit);
+  if (typeof signature === "string") addBytes(state, signature, limit);
+  block.text += part.delta;
+  if (typeof signature === "string") block.signature += signature;
+};
+
+/**
+ * Reserves tool input fragments until the complete proposal arrives.
+ * @param state Bounded stream state.
+ * @param content Anthropic block state.
+ * @param part Provider tool input event.
+ * @param limit Retained-output allowance.
+ */
+const anthropicToolInput = (
+  state: State,
+  content: AnthropicState,
+  part: Extract<Part, { type: "tool-input-delta" | "tool-input-end" }>,
+  limit: number,
+): void => {
+  const opened = content.open.get(part.id);
+  if (opened?.kind !== "tool-call" || opened.inputEnded)
+    return fail(state, "Orphan Anthropic tool input");
+  if (part.type === "tool-input-end") opened.inputEnded = true;
+  else {
+    addBytes(state, part.delta, limit);
+    opened.inputBytes = (opened.inputBytes ?? 0) + Buffer.byteLength(part.delta);
+  }
+};
+
+/**
+ * Completes only the block previously reserved for this provider ID.
+ * @param state Bounded stream state.
+ * @param content Anthropic block state.
+ * @param part Provider block end or complete tool call.
+ * @param limit Retained-output allowance.
+ */
+const anthropicEnd = (
+  state: State,
+  content: AnthropicState,
+  part: Extract<Part, { type: "text-end" | "reasoning-end" | "tool-call" }>,
+  limit: number,
+): void => {
+  const id = part.type === "tool-call" ? part.toolCallId : part.id;
+  const opened = content.open.get(id);
+  if (!opened) return fail(state, "Orphan Anthropic content end");
+  const expected =
+    part.type === "tool-call" ? "tool-call" : part.type === "text-end" ? "text" : undefined;
+  if (
+    expected
+      ? opened.kind !== expected
+      : opened.kind !== "thinking" && opened.kind !== "redacted-thinking"
+  )
+    fail(state, "Orphan Anthropic content end");
+  const block = content.blocks[opened.index];
+  if (part.type === "tool-call") anthropicToolEnd(state, block, opened, part, limit);
+  else if (opened.kind === "thinking" && (block?.type !== "thinking" || !block.signature))
+    fail(state, "Anthropic thinking signature missing");
+  else if (
+    opened.kind === "redacted-thinking" &&
+    (block?.type !== "redacted-thinking" || !block.data)
+  )
+    fail(state, "Anthropic redacted thinking missing");
+  content.open.delete(id);
+  content.closed.add(id);
+};
+
+/**
+ * Verifies and completes one already reserved local tool proposal.
+ * @param state Bounded stream state.
+ * @param block Reserved content block.
+ * @param opened Open-block tracking state.
+ * @param part Complete SDK tool call.
+ * @param limit Retained-output allowance.
+ */
+const anthropicToolEnd = (
+  state: State,
+  block: AnthropicBlock | undefined,
+  opened: AnthropicOpenBlock,
+  part: Extract<Part, { type: "tool-call" }>,
+  limit: number,
+): void => {
+  if (block?.type !== "tool-call" || block.call.name !== part.toolName || !opened.inputEnded)
+    return fail(state, "Anthropic tool content changed");
+  const remaining = Buffer.byteLength(part.input) - (opened.inputBytes ?? 0);
+  if (remaining > 0) addByteCount(state, remaining, limit);
+  block.call = { id: part.toolCallId, name: part.toolName, input: part.input };
 };
 
 /**
