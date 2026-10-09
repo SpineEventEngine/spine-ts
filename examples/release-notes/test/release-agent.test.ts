@@ -37,6 +37,7 @@ import {
 import {
   ReleaseGenerationAlreadyRequestedSchema,
   ReleaseGenerationFailedSchema,
+  ReleaseGenerationRequestedSchema,
   ReleaseNotesStagedSchema,
 } from "../generated/spine/examples/releasenotes/events_pb.js";
 import { ReleaseDraftStateSchema } from "../generated/spine/examples/releasenotes/states_pb.js";
@@ -299,7 +300,21 @@ it("uses the real Agent, plan Responses, and local Git tool before staging evide
     expect(staged[0]?.document?.sections[0]?.entries[0]?.evidence[0]?.path).toBe("notes.txt");
     expect(providerBodies).toHaveLength(3);
     expect(JSON.stringify(providerBodies[1])).toContain('"type":"function_call_output"');
+    const requested = box
+      .assertEvents()
+      .find(
+        (event) =>
+          event.message && AnyMessages.unpack(event.message, ReleaseGenerationRequestedSchema),
+      );
+    if (!requested?.id) throw new Error("Accepted generation Event was not recorded.");
+    const registeredAgent = context.getRepository(ReleaseNotesAgent);
+    expect(await registeredAgent.agentExecution(id, requested.id, {})).toBe("completed");
+    const registeredHistory = await registeredAgent
+      .agentHistory(id, {})
+      .fullHistory({ pageSize: 40 });
+    expect(registeredHistory.items.length).toBeGreaterThan(0);
     const history = await box.readAgentHistory(ReleaseNotesAgent, id, { pageSize: 40 });
+    expect(registeredHistory.items).toEqual(history.items);
     const outcomes = history.items.flatMap((entry) => {
       if (entry.item.case !== "conversationRecord" || !entry.item.value.content) return [];
       const response = AnyMessages.unpack(entry.item.value.content, GenerationResponseSchema);

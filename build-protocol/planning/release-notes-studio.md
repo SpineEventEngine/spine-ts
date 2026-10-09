@@ -105,6 +105,13 @@ Use the existing public in-process transport: register `SpineServices` with
 Connect's `createRouterTransport`, then construct the client with
 `Client.usingTransport`. No local HTTP listener is needed.
 
+Register the Agent through `.add(ReleaseNotesAgent, options)`. The trusted
+application obtains its already registered repository through
+`boundedContext.getRepository(ReleaseNotesAgent)` for production history and
+execution reads (D-0139). It must not manually assemble repositories or ingest
+handler metadata. This server-side access does not add an IPC endpoint or
+perform application authorization automatically.
+
 The execution sequence is:
 
 | Step | Operation                                                     | Timing                                                                    |

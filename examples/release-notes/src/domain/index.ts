@@ -25,6 +25,7 @@ import {
   React,
   Subscribe,
   Throws,
+  type RepositoryOptions,
 } from "@spine-event-engine/server";
 import type { StorageFactory } from "@spine-event-engine/storage";
 
@@ -489,27 +490,56 @@ export class ReleaseDraftProjection extends Projection<
 }
 
 /**
+ * Private application inputs for assembling the Agent repository.
+ */
+export interface ReleaseContextOptions {
+  /**
+   * Generated registry root in the current executable layout.
+   */
+  readonly registryRoot?: URL;
+
+  /**
+   * Resolves only the deployment bound to an accepted generation Event.
+   */
+  readonly resolveModel?: NonNullable<
+    RepositoryOptions<typeof ReleaseNotesAgent>["ai"]
+  >["resolveModel"];
+}
+
+/**
  * Builds the local ReleaseNotes Bounded Context with a trusted AI registry.
  */
 export const ReleaseNotesContext: Readonly<{
-  create(ai: AiRegistry, storage?: StorageFactory): Promise<BoundedContext>;
+  create(
+    ai: AiRegistry,
+    storage?: StorageFactory,
+    options?: ReleaseContextOptions,
+  ): Promise<BoundedContext>;
 }> = Object.freeze({
   /**
    * Builds the in-memory-capable release-notes Bounded Context.
    *
    * @param ai Registry with an authorized concrete generation deployment.
    * @param storage Optional storage factory for tests and local runtime.
+   * @param options Application model resolver and generated registry path.
    * @returns Built Bounded Context; the caller closes it after use.
    */
-  async create(ai: AiRegistry, storage?: StorageFactory): Promise<BoundedContext> {
+  async create(
+    ai: AiRegistry,
+    storage?: StorageFactory,
+    options: ReleaseContextOptions = {},
+  ): Promise<BoundedContext> {
     const builder = BoundedContext.singleTenant("ReleaseNotes")
-      .withGeneratedRegistryRoot(new URL("../..", import.meta.url))
+      .withGeneratedRegistryRoot(options.registryRoot ?? new URL("../..", import.meta.url))
       .withAi(ai)
       .persistSystemEvents()
       .add(ReleaseDraft)
       .add(ReleaseNotesAgent, {
         agentCodeRevision: "release-notes-draft-v1",
-        ai: { models: [draftReleaseNotes] },
+        ai: {
+          models: [draftReleaseNotes],
+          ...(options.resolveModel === undefined ? {} : { resolveModel: options.resolveModel }),
+        },
       })
       .add(ReleaseDraftProjection);
     if (storage !== undefined) builder.withStorageFactory(storage);

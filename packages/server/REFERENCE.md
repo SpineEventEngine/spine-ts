@@ -545,6 +545,11 @@ handler registry for classes registered with `add(EntityClass)`;
 `buildAsync()` performs that discovery and assembly. `build()` remains for
 explicit `Repository` registration. A built context contains `CommandBus`,
 `EventBus`, `Stand`, repositories, and its storage lifecycle.
+Trusted server-side code can call `context.getRepository(EntityClass)` to obtain
+the already registered repository for that exact constructor. The lookup does
+not create a repository or read Entity state; an absent class or closing
+Bounded Context fails explicitly. Application code must authorize users before
+exposing repository reads through a client bridge.
 
 Generated writer output is an unversioned receiver collection and records
 command substitutions explicitly. The ingestor rejects retired versioned
@@ -786,7 +791,8 @@ history in an application test. `BlackBox.readSystemEvents(ids)` reads the paire
 System store by exact Event IDs. See the [testing reference](../testing/REFERENCE.md)
 and [complete support tests](../../examples/support/test/support-blackbox.test.ts).
 
-For a trusted application bridge, a registered Agent `Repository` exposes
+For a trusted application bridge, `context.getRepository(AgentClass)` returns
+the registered Agent `Repository`, which exposes
 `agentHistory(id, scope)` with the same four history methods and page contracts.
 The scope is explicit: pass `{}` in a single-tenant Bounded Context or
 `{ tenantId }` in a multitenant Bounded Context. The repository also exposes

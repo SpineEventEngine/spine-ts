@@ -4925,3 +4925,49 @@ effect/limits remain checked. No confirmed missed reachable policy or persistenc
 issue. Narrow tests support this correction; revision-only coverage58.33% branches
 is not full release evidence. No new public API or business policy was added.
 Commit only two recovery files and this parent record; service WIP remains out.
+
+Public access decision D0139 accepted from bounded existing Astra/high follow-up.
+Add one typed BoundedContext.getRepository(EntityClass) lookup over the existing
+registered repository, no construction/storage read/Entity restoration. Exact
+constructor/Bounded Context match and existing closure/Agent/tenant constraints
+apply; metadata enumeration unchanged. JVM counterpart is internal, and TS public
+exposure is explicit. Same Sol/medium implementer handles bounded runtime/API
+slice plus replacing example manual assembly; estimate0.4–0.8h including focused
+tests, declarations/docs, mechanical gates and relevant review. No new facade or
+application-policy mechanism. Then resume the full desktop service/UI plan.
+
+D0139 review plan after frozen cheap preflight: fresh performance/reliability
+reviewer Sol/medium for lookup scope, existing identity/lifecycle/read behavior
+and real Agent access; fresh TypeScript/API reviewer Sol/medium for constructor
+and ID/schema inference, Agent-only methods, generated-registration ergonomics
+and public docs. Documentation reviewer Luna/medium checks the narrow reference
+usage/authorization/closure claims when capacity permits. All explicit model
+and reasoning, fork none/no memory/no edits/no children. Parent handles small
+accessor style and deterministic naming/format checks; a new style lane is N/A
+unless the correction grows beyond existing delegation patterns. Security remains
+the coordinated final gate. Collect complete relevant findings before one batch
+to the same implementation context; only affected concerns reopen. No review
+starts before the source is frozen and cheap checks pass.
+
+D0139 frozen pre-review: 92 focused tests (full Bounded Context suite, private
+domain and real pinned-provider/MCP Agent) pass. Server and exact tooling
+checks, cleanup/TSDoc/copyright/time, targeted ESLint/Prettier, API inventory/
+audience and diff pass. Example uses normal registration and lookup, no manual
+metadata assembly. Fresh explicit Sol/medium reliability and API reviewers now
+running with separate concerns and no memory/edits/children. The narrow docs
+review follows as a slot opens. Package/lockfile service additions remain outside
+this frozen review/commit. Complete wave precedes any correction batch.
+
+D0139 review wave complete and accepted. Fresh explicit Sol/medium reliability
+and API reviews are clean; fresh explicit Luna/medium documentation review is
+clean. Runtime metadata unavailable, configured profiles confirmed. Exact typed
+Repository return preserves Agent-only read restrictions; the API reviewer notes
+negative compile assertions through this accessor could strengthen tests but
+finds no defect (existing Repository tests cover those restrictions). No extra
+API or speculative test cycle follows. Parent style disposition: bounded accessor
+uses existing lookup/lifecycle patterns, ordinary errors, meaningful TSDoc with
+blank tag separator and Bounded Context wording; mechanical style gates pass.
+92 focused tests and recorded cheap gates remain current; full release pending.
+Commit source/API/docs and example lookup integration with parent records. Keep
+future service dependency additions unstaged. Same implementer resumes trusted
+service/IPC/UI afterward; no remaining decision or user-dependent blocker here.

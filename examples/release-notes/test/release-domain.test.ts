@@ -15,7 +15,12 @@
 import { create } from "@bufbuild/protobuf";
 import { AiRegistry, ModelRef } from "@spine-event-engine/ai";
 import { AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
-import { ActorContextSchema, EventContextSchema, VersionSchema } from "@spine-event-engine/proto";
+import {
+  ActorContextSchema,
+  EventContextSchema,
+  EventIdSchema,
+  VersionSchema,
+} from "@spine-event-engine/proto";
 import { QueryIdSchema } from "@spine-event-engine/proto/client";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { AiTestBackend, BlackBox } from "@spine-event-engine/testing";
@@ -69,7 +74,7 @@ import {
   RepositorySelectionIdSchema,
 } from "../generated/spine/examples/releasenotes/types_pb.js";
 import { AiOperationIdSchema, ConversationIdSchema } from "@spine-event-engine/proto/agent";
-import { ReleaseNotesContext } from "../dist/src/domain/index.js";
+import { ReleaseNotesAgent, ReleaseNotesContext } from "../dist/src/domain/index.js";
 import { ReleaseMarkdown } from "../dist/src/domain/markdown.js";
 import { createHash } from "node:crypto";
 
@@ -110,6 +115,23 @@ function registry(): AiRegistry {
 }
 
 describe("release notes through BlackBox", () => {
+  it("assembles a registered Agent repository for trusted history and execution reads", async () => {
+    const context = await ReleaseNotesContext.create(registry(), new InMemoryStorageFactory());
+    try {
+      const agentRepository = context.getRepository(ReleaseNotesAgent);
+      const history = await agentRepository.agentHistory(id, {}).fullHistory({ pageSize: 1 });
+      expect(history.items).toEqual([]);
+      expect(
+        await agentRepository.agentExecution(
+          id,
+          create(EventIdSchema, { value: "unseen-event" }),
+          {},
+        ),
+      ).toBeUndefined();
+    } finally {
+      await context.close();
+    }
+  });
   it("rejects duplicate opening without replacing the repository or accepted generation receipt", async () => {
     const context = await ReleaseNotesContext.create(registry(), new InMemoryStorageFactory());
     const box = await BlackBox.from(context, { timeoutMs: 5_000 });

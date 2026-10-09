@@ -1287,6 +1287,25 @@ export class BoundedContext {
   }
 
   /**
+   * Returns the repository already registered for an exact Entity constructor.
+   * This trusted server-side lookup does not load Entity state or open storage.
+   *
+   * @typeParam EntityType Concrete Entity constructor registered in this Bounded Context.
+   * @param entityType Exact Entity class supplied to this Bounded Context's builder.
+   * @returns The existing typed repository for that Entity class.
+   * @throws When the constructor is absent or the Bounded Context is closing.
+   */
+  getRepository<EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>>(
+    entityType: EntityType,
+  ): Repository<EntityType> {
+    if (closingContexts.has(this)) throw new Error("Bounded Context is closing.");
+    for (const repository of this.#repositoryViews) {
+      if (repository.entityType === entityType) return repository as Repository<EntityType>;
+    }
+    throw new Error("Entity constructor is not registered in this Bounded Context.");
+  }
+
+  /**
    * Clears and locally replays every registered Projection from already-stored events.
    *
    * Despite its legacy name, this method is not Projection catch-up. It is a

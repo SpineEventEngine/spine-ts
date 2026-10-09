@@ -6355,9 +6355,15 @@ denial, unsupported schemas, saved-result replay and infrastructure exceptions.
 
 ## D-0138: Entity Versions in Release Notes Studio
 
-Status: Accepted; implementation in progress
+Status: Implemented in the example application
 
 Date: 2026-10-09
+
+These are Release Notes Studio application rules. The framework must not retain
+or propagate an originating Aggregate's Version through AI input/results or
+decide whether the result applies. The application explicitly models the facts
+and evaluates them in its own handlers. This responsibility boundary was
+clarified by the human after the initial decision.
 
 Human correction: use existing Entity versions, not an application revision
 mechanism, and name Commands, Events, Rejections and Queries precisely. Remove
@@ -6400,3 +6406,35 @@ producer Version in both inspected runtimes. Do not mistake it for the current
 committed Aggregate Version, synthesize a next Version, or use the Projection's
 independent Version to target the Aggregate. The existing Event Proto comment
 is not sufficient evidence for post-commit version semantics.
+
+## D-0139: Access to an already registered repository
+
+Status: Implemented and independently reviewed
+
+Date: 2026-10-09
+
+Normal `.add(EntityClass, options)` registration creates the repository, while
+`registeredRepositories()` exposes immutable metadata. Agent history and execution
+reads already exist on Repository, but application code cannot reach them through
+normal generated registration. Manually assembling Repository/handler metadata
+is prohibited in end-user examples and is not a suitable workaround.
+
+Add `BoundedContext.getRepository(EntityClass)` returning the existing typed
+Repository for that exact constructor in this Bounded Context. Preserve Entity
+ID/schema inference and Agent-only read constraints. Do not construct another
+repository, restore an Entity, perform a storage read, match class names, or
+search other Bounded Contexts. Missing registration throws a descriptive error.
+New lookup fails when closing begins; retained handles preserve their existing
+runtime lifecycle checks. Metadata enumeration stays unchanged.
+
+This is trusted server-side access to the existing Repository API, including its
+existing administration/routing operations. It is not a remote endpoint or an
+authorization mechanism. Add no reader facade, Agent service, storage format,
+application-policy hook, or cleanup-checker exception. Replace the example's
+unfinished manual assembly with normal registration plus this lookup.
+
+The bounded architecture pass confirmed JVM's InternalAccess.getRepository uses
+this lookup idiom internally. This decision deliberately makes a typed lookup
+public in TypeScript; it does not claim identical JVM public API. Tests cover
+explicit/generated registration, exact constructor and Bounded Context scope,
+typed Agent history/status use, no lookup side effects, and closure.
