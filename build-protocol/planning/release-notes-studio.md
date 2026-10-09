@@ -143,6 +143,13 @@ that same snapshot. Do not combine stale Projection content with a newly read
 Aggregate version. Handlers compare the supplied Version with `this.version`;
 the application never increments a version itself. See D-0138.
 
+The following pending-generation and result-applicability rules belong only to
+this example application. They are not Agent framework behavior. The application
+explicitly chooses which facts to retain, includes them in its domain messages,
+and checks them in its Aggregate handlers. The framework does not copy an
+originating Aggregate's Version into Agent inputs or results and does not decide
+whether a proposal remains applicable to another Entity.
+
 | Message or Entity                                         | Meaning                                                                                                                                                      |
 | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `ReleaseComparison`                                       | Selected repository, full base/target commit IDs and comparison policy.                                                                                      |

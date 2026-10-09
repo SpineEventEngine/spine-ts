@@ -13,13 +13,13 @@
  */
 syntax = "proto3";
 
-package spine.examples.release_notes;
+package spine.examples.releasenotes;
 
 import "spine/options.proto";
 import "spine/core/version.proto";
 import "spine/ts/agent/model.proto";
 
-option (type_url_prefix) = "type.spine.examples.release_notes";
+option (type_url_prefix) = "type.spine.examples.releasenotes";
 
 // Identifies one editable release draft.
 message ReleaseDraftId {
@@ -63,7 +63,7 @@ enum ReleaseComparisonPolicy {
   RELEASE_COMPARISON_POLICY_UNSPECIFIED = 0;
 
   // Target-not-base commits and the net committed tree difference.
-  ANCESTOR_COMMITS_AND_NET_TREE = 1;
+  ANCESTOR_NET_TREE = 1;
 }
 
 // Pinned comparison for one selected local repository.
@@ -71,10 +71,10 @@ message ReleaseComparison {
   // Fixed repository selection for the draft.
   RepositorySelectionId repository = 1 [(required) = true, (validate) = true];
 
-  // Resolved ancestor commit.
+  // Identifies the ancestor commit used as the comparison baseline.
   GitCommitId base = 2 [(required) = true, (validate) = true];
 
-  // Resolved target commit.
+  // Identifies the target commit whose changes are summarized.
   GitCommitId target = 3 [(required) = true, (validate) = true];
 
   // Explicit committed-object comparison policy.
@@ -83,7 +83,7 @@ message ReleaseComparison {
 
 // One target-not-base commit visible to the model.
 message ReleaseCommit {
-  // Full commit object identifier.
+  // Identifies the release draft to which this domain outcome applies.
   GitCommitId id = 1 [(required) = true, (validate) = true];
 
   // Full parent object identifiers, including both sides of merges.
@@ -95,10 +95,10 @@ message ReleaseCommit {
 
 // One changed path in the net committed tree comparison.
 message ReleaseChange {
-  // Literal target-side path.
+  // Records a literal repository-relative path from the verified catalog.
   string path = 1 [(required) = true];
 
-  // Git change status.
+  // Records the Git path change type from a verified committed diff.
   string status = 2 [(required) = true];
 
   // Literal source-side path when renamed.
@@ -113,10 +113,10 @@ message ReleaseEvidence {
   // Exact parent whose diff includes the change.
   GitCommitId parent = 2 [(required) = true, (validate) = true];
 
-  // Literal cataloged path.
+  // Records a literal repository-relative path from the verified catalog.
   string path = 3 [(required) = true];
 
-  // Git change status.
+  // Records the Git path change type from a verified committed diff.
   string status = 4 [(required) = true];
 
   // Literal source-side path when renamed.
@@ -128,7 +128,7 @@ message ReleaseEvidenceCatalog {
   // Target-not-base commits.
   repeated ReleaseCommit commits = 1 [(validate) = true];
 
-  // Net changed paths.
+  // Lists net committed-tree changes between base and target.
   repeated ReleaseChange changes = 2 [(validate) = true];
 
   // Exact per-parent evidence references.
@@ -155,7 +155,7 @@ message ReleaseEvidenceReference {
   // Exact parent used for the cited diff.
   GitCommitId parent = 2 [(required) = true, (validate) = true];
 
-  // Literal changed path.
+  // Records a literal repository-relative path from the verified catalog.
   string path = 3 [(required) = true];
 }
 
@@ -179,13 +179,13 @@ message ReleaseNotesSection {
 
 // Structured release notes; Markdown is rendered from these entries.
 message ReleaseNotesDocument {
-  // Ordered editable sections.
+  // Orders document sections for rendering into approved Markdown.
   repeated ReleaseNotesSection sections = 1 [(validate) = true];
 }
 
 // Exact approved bytes and their content digest.
 message ReleaseApproval {
-  // Framework-managed Aggregate Version reviewed by the editor.
+  // Entity Version reviewed by the editor.
   spine.core.Version reviewed_version = 1 [(required) = true, (validate) = true];
 
   // SHA-256 of the approved Markdown bytes.
@@ -197,7 +197,7 @@ message ReleaseApproval {
 
 // Session-retained generation identity preventing duplicate model work.
 message ReleaseGenerationReceipt {
-  // Generation identifier originally accepted.
+  // Correlates this outcome with one accepted model generation.
   ReleaseGenerationId generation = 1 [(required) = true, (validate) = true];
 
   // SHA-256 of the accepted input snapshot.

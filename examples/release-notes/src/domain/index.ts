@@ -36,7 +36,7 @@ import {
   type OpenReleaseDraft,
   type PrepareReleaseNotesExport,
   type RequestReleaseGeneration,
-} from "../../generated/spine/examples/release_notes/commands_pb.js";
+} from "../../generated/spine/examples/releasenotes/commands_pb.js";
 import {
   ReleaseInputsChangedSchema,
   ReleaseGenerationStatusChangedSchema as GenerationStatusSchema,
@@ -62,7 +62,7 @@ import {
   type ReleaseNotesProposed,
   type ReleaseNotesStaged,
   type ReleaseProposalDiscarded,
-} from "../../generated/spine/examples/release_notes/events_pb.js";
+} from "../../generated/spine/examples/releasenotes/events_pb.js";
 import {
   ReleaseDraftAlreadyOpen,
   ReleaseGenerationConflict,
@@ -70,18 +70,18 @@ import {
   ReleaseInputsConflict,
   StaleReleaseApproval,
   StaleReleaseEdit,
-} from "../../generated/spine/examples/release_notes/rejections.js";
+} from "../../generated/spine/examples/releasenotes/rejections.js";
 import {
   ReleaseDraftStateSchema,
   ReleaseDraftViewSchema,
   ReleaseNotesAgentStateSchema as AgentStateSchema,
-} from "../../generated/spine/examples/release_notes/states_pb.js";
+} from "../../generated/spine/examples/releasenotes/states_pb.js";
 import {
   ReleaseApprovalSchema,
   ReleaseGenerationReceiptSchema,
   ReleaseNotesDocumentSchema,
   type ReleaseDraftId,
-} from "../../generated/spine/examples/release_notes/types_pb.js";
+} from "../../generated/spine/examples/releasenotes/types_pb.js";
 import { ReleaseMarkdown } from "./markdown.js";
 import { draftReleaseNotes } from "./model.js";
 

@@ -29,7 +29,7 @@ import {
   OpenReleaseDraftSchema,
   PrepareReleaseNotesExportSchema,
   RequestReleaseGenerationSchema,
-} from "../generated/spine/examples/release_notes/commands_pb.js";
+} from "../generated/spine/examples/releasenotes/commands_pb.js";
 import {
   ReleaseDraftOpenedSchema,
   ReleaseGenerationAlreadyRequestedSchema,
@@ -43,12 +43,12 @@ import {
   ReleaseNotesProposedSchema,
   ReleaseNotesStagedSchema,
   ReleaseProposalDiscardedSchema,
-} from "../generated/spine/examples/release_notes/events_pb.js";
+} from "../generated/spine/examples/releasenotes/events_pb.js";
 import {
   ReleaseDraftStateSchema,
   ReleaseDraftViewSchema,
-} from "../generated/spine/examples/release_notes/states_pb.js";
-import { ReleaseDraftViewQuery } from "../generated/spine/examples/release_notes/states_query.js";
+} from "../generated/spine/examples/releasenotes/states_pb.js";
+import { ReleaseDraftViewQuery } from "../generated/spine/examples/releasenotes/states_query.js";
 import {
   GitCommitIdSchema,
   ReleaseComparisonPolicy,
@@ -67,7 +67,7 @@ import {
   ReleaseNotesSectionSchema,
   ReleaseTitleSchema,
   RepositorySelectionIdSchema,
-} from "../generated/spine/examples/release_notes/types_pb.js";
+} from "../generated/spine/examples/releasenotes/types_pb.js";
 import { AiOperationIdSchema, ConversationIdSchema } from "@spine-event-engine/proto/agent";
 import { ReleaseNotesContext } from "../dist/src/domain/index.js";
 import { ReleaseMarkdown } from "../dist/src/domain/markdown.js";
@@ -78,7 +78,7 @@ const comparison = create(ReleaseComparisonSchema, {
   repository: create(RepositorySelectionIdSchema, { value: "selected-repository" }),
   base: create(GitCommitIdSchema, { value: "a".repeat(40) }),
   target: create(GitCommitIdSchema, { value: "b".repeat(40) }),
-  policy: ReleaseComparisonPolicy.ANCESTOR_COMMITS_AND_NET_TREE,
+  policy: ReleaseComparisonPolicy.ANCESTOR_NET_TREE,
 });
 
 async function currentVersion(context: BoundedContext) {

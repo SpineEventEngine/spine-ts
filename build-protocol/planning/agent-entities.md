@@ -45,6 +45,11 @@ no dependency on future physical deletion. Historical proposals are superseded.
   same delivery shard. Late execution cannot commit after losing authority.
 - Entity transactions are not database transactions held across model calls.
   No new recovery protocol for copies in Bounded Context-wide and repository event stores.
+- Result applicability is an application rule. The framework must not retain or
+  propagate an originating Aggregate's Version through AI inputs/results, reject
+  a proposal as stale on that basis, or introduce generic draft/generation
+  concepts for example-specific policy. Applications may explicitly model those
+  facts in their own messages and handlers.
 - Use documented production-style Protos and domain-correct fixtures. No proto3
   optional/readonly, invented Money or wire-compatible substitute domain types.
 - BlackBox is the domain-test entry point. Deliver a warehouse support-ticket
@@ -4757,3 +4762,133 @@ concerns remain accepted from the complete wave. Explicit Sol/medium writer and
 reviewer profiles were confirmed in dispatch; runtime metadata unavailable.
 This is a domain checkpoint only. Full UI, final coordinated reviews/security,
 repository-wide release verification and real subscription acceptance remain.
+
+Domain checkpoint bd4f2cd3e pushed to origin/agent-entities. Same explicitly
+configured Sol/medium implementer began trusted service and UI integration,
+with parent-only record edits. Fresh read-only orchestrator-dispatched mechanical
+scan uses gpt-6-luna / medium: inspect existing coverage reports and current
+example tests, identify meaningful untested behavior within the upcoming service/
+UI integration, and return a concise checklist. No new role, no edits, no tests,
+no children, no private memory. Avoid duplicate source exploration and do not
+propose coverage exclusions or percentage-only tests. Acceptance uses explicit
+configured profile; runtime self-introspection remains unavailable.
+
+Read-only integration test scan accepted under explicit Luna/medium dispatch;
+no runtime metadata exposed. It found no usable current coverage report, so it
+made no measured-coverage claim. Its source-based checklist confirms planned
+integration requirements: packaged Bounded Context/registry startup, actual
+editor-to-Agent workflow, account refresh/catalog failures, delayed renderer
+responses and reload, exact export bytes/write failure, operation-scoped MCP
+cancellation, and separate draft histories. Sent to existing implementer; no
+new framework contract or expanded review wave follows from this scan.
+
+Human boundary clarification (2026-10-09): retaining an originating Aggregate's
+Version or application revision, carrying it through Agent input/result Events,
+and deciding whether the result applies are application responsibilities. The
+framework must not automate these decisions or introduce generic concepts merely
+to implement example business policy. The Release Notes Studio pending pair is
+private application state; no corresponding generic framework mechanism is
+intended. The implementer confirms no framework change is currently needed for
+the desktop service and continues only in the private example.
+
+The human asked for an audit of other invented concepts. Estimate 0.3–0.7h for
+source/spec comparison and concrete findings, concurrent with private UI work.
+Dispatch existing requirements splitter with explicit gpt-6-astra / high, fresh
+fork/no memory, read-only/no children. This bounded architecture audit is justified
+by the explicit responsibility-boundary correction, not routine milestone review.
+Compare framework additions against the approved task and identify application
+policy wrongly generalized; distinguish necessary execution/audit mechanics from
+business freshness/approval/admission choices. Return concrete file/API evidence
+and simplifications, not speculative new mechanisms. Parent records the outcome
+and does not silently remove approved recovery/audit behavior. Desktop supports
+explicit profiles; runtime metadata beyond configured profile is unavailable.
+
+Independent application-boundary audit completed with explicit fresh Astra/high
+profile. No upstream Aggregate Version propagation or business applicability rule
+exists in generic Agent APIs/runtime. Agent initialVersion is its own Entity
+Version. One confirmed P2: compatibility digest includes registry concurrency/
+queue capacity and all MCP tools, including tools inaccessible to the repository.
+Changing unrelated operational configuration can therefore terminate accepted
+work with REVISION_CHANGED. The compatibility guarantee is approved; this broad
+invalidation is an implementation overreach. Narrow digest to relevant policies
+and referenced MCP tools, omit capacity, preserve identity/limits/authorization
+and meaningful incompatibility checks. Other named-call, saved-read and revision
+contracts have explicit specification provenance. D0134/D0135 APIs follow actual
+integration needs; decision records are not separate human approval of each API.
+
+CI bd4f2cd3e run37967536514 failed during proto:generate semantic checks before
+tests: release_notes namespace/type-prefix conventions, placeholder field docs,
+unrelated-framework-jargon and five-component enum value. Audits both passed.
+Raw log /tmp/spine-release-notes-ci-bd4.log. Earlier local generation had been
+reported green with these files untracked; investigate checker discovery rather
+than exempt new files. This missed gate must be corrected before continuing.
+
+Same Sol/medium implementer pauses new service edits at a safe checkpoint and
+preserves them. Correction estimate 0.5–1.0h: fix Proto quality/discovery and
+regenerate/check affected domain separately, then narrow execution compatibility
+with behavior regressions and focused reliability review. No broad framework API
+or unrelated policy changes. Parent stages each coherent correction separately
+from unfinished service integration, commits and pushes immediately. The overall
+UI and final release work remains active after corrections.
+
+Older CI67916c6c9 run37965186845 completed: 376 test files/6069 tests passed,
+one file/test skipped; global branch coverage 89.57% remains below mandatory90%.
+Raw log /tmp/spine-release-notes-ci-679.log. This does not qualify current source;
+newer bd4 failed earlier on Proto semantics. Coverage remains for meaningful
+integration tests/final convergence, never exclusions or threshold changes.
+
+Proto mismatch root cause established by implementer: semantic quality inventory
+uses tracked-only Git files, missing new authored Protos before commit. Correction
+must include untracked authored sources, keep generated/ignored output excluded,
+and prove the discovery behavior with the existing tooling-test pattern. Merely
+staging files before rerunning is insufficient. The example receives its normal
+domain mapping using the conventional releasenotes namespace and matching source
+paths/imports, plus substantive field documentation; no checker exception for
+bad comments or naming. Service WIP is preserved separately.
+
+Proto correction checkpoint: regression first proved untracked authored Proto
+was skipped; corrected discovery includes untracked non-ignored sources while
+preserving the tracked-Proto/manifest authorization rule. All25 checker tests
+pass. New releasenotes namespace, paths, type prefix, field documentation and
+shortened enum pass semantic quality checks before staging. Dependent generation/
+build remains in progress; no checkpoint acceptance yet.
+
+Existing explicit Luna/medium scan was reused for the now-available CI679 report.
+It measured Release Notes source44.30% branches, trusted75.72%; concrete source
+holes include account selection, renderer failures, IPC rejection and Git bound
+failure. Electron/worker zero coverage is missing parent-process measurement,
+not proof those behaviors never run. Treat as input to meaningful service/UI
+integration and complete release coverage, not permission to exclude files.
+
+Proto correction frozen: actual semantic checker, Proto generation, example
+build, exact tooling typecheck, generated-current check, Buf lint, targeted
+ESLint and diff pass; 26 checker tests and 38 combined script/domain/Agent/model
+tests pass. Helper/local names now distinguish candidate files from indexed files.
+Five authored Protos move release_notes to releasenotes; imports and enum name
+follow the convention. index.ts and release-domain.test.ts also contain earlier
+service assembly WIP; package.json/lockfile changes are service-only. Parent will
+stage only the namespace/test-discovery correction, preserving WIP in the tree.
+
+Narrow Proto documentation closure: fresh documentation_reviewer explicit
+Luna/medium, fork none/no memory/no edits/no children. Review new comments and
+application-vs-framework wording only, mechanical namespace/format/checker
+findings already green. No public framework contract change; TypeScript/API
+concern is deterministic imports/regeneration. Parent inspected inventory scope
+and its regression; no separate broad maintainability/reliability wave for that
+bounded script correction. Shared-runtime compatibility correction receives its
+own focused reliability review after tests. Runtime metadata unavailable; use
+explicit configured profiles for acceptance.
+
+Narrow Proto documentation review completed under explicit fresh Luna/medium.
+One deterministic finding: six Command ID comments described a domain outcome
+instead of the targeted draft. Same writer corrects that wording and reruns
+semantic/generation checks. Other Proto comments are accepted and distinguish
+application proposal rules from framework behavior. Parent staged only namespace
+substitutions in domain index and domain test, leaving service assembly WIP,
+its test and dependency changes unstaged. Parent record formatting/diff passes.
+
+Proto correction accepted: all six Command ID comments now describe their target;
+semantic quality and full Proto generation pass again. Documentation finding
+closed by direct wording correction, no runtime change. Commit contains only
+Proto/domain naming and documentation, checker discovery/regressions, and parent
+records. Unfinished assembly test/API and dependency additions remain unstaged.

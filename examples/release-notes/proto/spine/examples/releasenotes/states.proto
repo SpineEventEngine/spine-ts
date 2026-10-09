@@ -13,41 +13,41 @@
  */
 syntax = "proto3";
 
-package spine.examples.release_notes;
+package spine.examples.releasenotes;
 
-import "spine/examples/release_notes/types.proto";
+import "spine/examples/releasenotes/types.proto";
 import "spine/core/version.proto";
 import "spine/options.proto";
 import "spine/ts/agent/model.proto";
 
-option (type_url_prefix) = "type.spine.examples.release_notes";
+option (type_url_prefix) = "type.spine.examples.releasenotes";
 
 // Transactional draft and session-retained generation receipts.
 message ReleaseDraftState {
   option (entity).kind = AGGREGATE;
 
-  // Draft identifier; the framework supplies its required identity.
+  // Identifies the release draft to which this domain outcome applies.
   ReleaseDraftId id = 1;
 
-  // Editor-supplied title.
+  // Names the release represented by this editable draft.
   ReleaseTitle title = 2 [(validate) = true];
 
-  // Fixed repository and current comparison.
+  // Pins the selected repository and its base and target commits.
   ReleaseComparison comparison = 3 [(validate) = true];
 
-  // Intended readers.
+  // Names the readers whose needs shape these release notes.
   string audience = 4;
 
-  // Current structured document.
+  // Carries structured release note entries with catalog citations.
   ReleaseNotesDocument document = 5 [(validate) = true];
 
-  // Exact approval, cleared on every content or input change.
+  // Carries the reviewed Markdown bytes and digest accepted for export.
   ReleaseApproval approval = 7 [(validate) = true];
 
   // Latest generation still eligible to stage a proposal.
   ReleaseGenerationId pending_generation = 8 [(validate) = true];
 
-  // Historical Aggregate Version at acceptance of the pending generation.
+  // Historical Entity Version at acceptance of the pending generation.
   spine.core.Version pending_input_version = 9 [(validate) = true];
 
   // Session-retained accepted generation identities.
@@ -56,7 +56,7 @@ message ReleaseDraftState {
   // Conversation used across later generations.
   spine.ts.agent.ConversationId conversation = 11 [(validate) = true];
 
-  // Safe status of the latest generation.
+  // Shows a safe visible status for the latest accepted generation.
   string generation_status = 12;
 }
 
@@ -64,42 +64,42 @@ message ReleaseDraftState {
 message ReleaseNotesAgentState {
   option (entity).kind = ENTITY;
 
-  // Draft identifier; the framework supplies its required identity.
+  // Identifies the release draft to which this domain outcome applies.
   ReleaseDraftId id = 1;
 
   // Conversation retained for generations for this draft.
   spine.ts.agent.ConversationId conversation = 2 [(validate) = true];
 
-  // Most recently handled generation identity.
+  // Correlates this outcome with one accepted model generation.
   ReleaseGenerationId generation = 3 [(validate) = true];
 }
 
-// Queryable editor summary driven only by Aggregate outcomes.
+// Queryable editor summary driven only by accepted draft outcomes.
 message ReleaseDraftView {
   option (entity).kind = PROJECTION;
   option (entity).visibility = QUERY;
 
-  // Draft identifier; the framework supplies its required identity.
+  // Identifies the release draft to which this domain outcome applies.
   ReleaseDraftId id = 1;
 
-  // Current title.
+  // Names the release represented by this editable draft.
   ReleaseTitle title = 2 [(validate) = true];
 
-  // Current comparison.
+  // Pins the selected repository and its base and target commits.
   ReleaseComparison comparison = 3 [(validate) = true];
 
-  // Intended readers.
+  // Names the readers whose needs shape these release notes.
   string audience = 4;
 
-  // Current structured document.
+  // Carries structured release note entries with catalog citations.
   ReleaseNotesDocument document = 5 [(validate) = true];
 
-  // Current approval if still valid.
+  // Carries the reviewed Markdown bytes and digest accepted for export.
   ReleaseApproval approval = 7 [(validate) = true];
 
-  // Latest generation status.
+  // Shows a safe visible status for the latest accepted generation.
   string generation_status = 8;
 
-  // Latest requested generation identity.
+  // Correlates this outcome with one accepted model generation.
   ReleaseGenerationId generation = 9 [(validate) = true];
 }

@@ -16,7 +16,7 @@ import type {
   ReleaseEvidenceReference,
   ReleaseNotesDocument,
   ReleaseTitle,
-} from "../../generated/spine/examples/release_notes/types_pb.js";
+} from "../../generated/spine/examples/releasenotes/types_pb.js";
 import { createHash } from "node:crypto";
 
 const escapeHtml = (value: string): string =>

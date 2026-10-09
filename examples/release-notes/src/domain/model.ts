@@ -21,12 +21,12 @@ import {
 import {
   ReleaseGenerationRequestedSchema,
   type ReleaseGenerationRequested,
-} from "../../generated/spine/examples/release_notes/events_pb.js";
+} from "../../generated/spine/examples/releasenotes/events_pb.js";
 import {
   ReleaseNotesDocumentSchema,
   type ReleaseNoteEntry,
   type ReleaseNotesDocument,
-} from "../../generated/spine/examples/release_notes/types_pb.js";
+} from "../../generated/spine/examples/releasenotes/types_pb.js";
 
 /**
  * Checks model claims against the accepted immutable evidence catalog.

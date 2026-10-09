@@ -33,13 +33,13 @@ import { expect, it } from "vitest";
 import {
   OpenReleaseDraftSchema,
   RequestReleaseGenerationSchema,
-} from "../generated/spine/examples/release_notes/commands_pb.js";
+} from "../generated/spine/examples/releasenotes/commands_pb.js";
 import {
   ReleaseGenerationAlreadyRequestedSchema,
   ReleaseGenerationFailedSchema,
   ReleaseNotesStagedSchema,
-} from "../generated/spine/examples/release_notes/events_pb.js";
-import { ReleaseDraftStateSchema } from "../generated/spine/examples/release_notes/states_pb.js";
+} from "../generated/spine/examples/releasenotes/events_pb.js";
+import { ReleaseDraftStateSchema } from "../generated/spine/examples/releasenotes/states_pb.js";
 import {
   GitCommitIdSchema,
   ReleaseComparisonPolicy,
@@ -54,7 +54,7 @@ import {
   ReleaseModelSelectionSchema,
   ReleaseTitleSchema,
   RepositorySelectionIdSchema,
-} from "../generated/spine/examples/release_notes/types_pb.js";
+} from "../generated/spine/examples/releasenotes/types_pb.js";
 import { ReleaseNotesAgent, ReleaseNotesContext } from "../dist/src/domain/index.js";
 import { GitReleaseComparison } from "../src/trusted/git-release.js";
 import { ReleaseGitRegistration } from "../src/trusted/git-mcp-registration.js";
@@ -241,7 +241,7 @@ it("uses the real Agent, plan Responses, and local Git tool before staging evide
               repository: create(RepositorySelectionIdSchema, { value: "selected-repository" }),
               base: create(GitCommitIdSchema, { value: base }),
               target: create(GitCommitIdSchema, { value: target }),
-              policy: ReleaseComparisonPolicy.ANCESTOR_COMMITS_AND_NET_TREE,
+              policy: ReleaseComparisonPolicy.ANCESTOR_NET_TREE,
             }),
             audience: "SDK users",
           }),

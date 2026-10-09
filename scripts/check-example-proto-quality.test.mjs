@@ -57,6 +57,34 @@ function protoDebt(name = "Model") {
 }
 
 describe("check-example-proto-quality", () => {
+  it("checks untracked authored Proto files before a commit", () => {
+    const root = fixture();
+    writeModel(
+      root,
+      "todo",
+      `syntax = "proto3";\n// Describes an existing task in the list.\nmessage Task {}\n`,
+    );
+    const path = join(root, "examples/todo/proto/spine/example/todo/v1/new.proto");
+    writeFileSync(path, `syntax = "proto3";\nmessage Unreviewed {}\n`);
+    expect(checkExampleProtoQuality(root)).toContain(
+      "examples/todo/proto/spine/example/todo/v1/new.proto invalid-provenance unlisted-file",
+    );
+  });
+
+  it("accepts the release-notes package only under its compact domain namespace", () => {
+    const file = "examples/release-notes/proto/spine/examples/releasenotes/types.proto";
+    const source = `syntax = "proto3";
+package spine.examples.releasenotes;
+option (type_url_prefix) = "type.spine.examples.releasenotes";
+// Identifies a release draft in editor and export events.
+message ReleaseDraftId {}
+`;
+    expect(scanExampleProtoContract(file, source)).toEqual([]);
+    expect(
+      scanExampleProtoContract(file, source.replaceAll("releasenotes", "release_notes")),
+    ).toContain(`${file} namespace spine.examples.<domain>`);
+  });
+
   it("enforces plural domains, owned-version removal, exact prefixes, spacing, and relevant prose", () => {
     const valid = `syntax = "proto3";
 

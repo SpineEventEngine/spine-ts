@@ -15,7 +15,7 @@
 import { create } from "@bufbuild/protobuf";
 import { expect, it } from "vitest";
 
-import { ReleaseGenerationRequestedSchema } from "../generated/spine/examples/release_notes/events_pb.js";
+import { ReleaseGenerationRequestedSchema } from "../generated/spine/examples/releasenotes/events_pb.js";
 import {
   GitCommitIdSchema,
   ReleaseEvidenceCatalogSchema,
@@ -25,7 +25,7 @@ import {
   ReleaseNotesDocumentSchema,
   ReleaseNotesSectionSchema,
   ReleaseTitleSchema,
-} from "../generated/spine/examples/release_notes/types_pb.js";
+} from "../generated/spine/examples/releasenotes/types_pb.js";
 import { ReleaseDocumentValidation } from "../src/domain/model.js";
 import { ReleaseMarkdown } from "../src/domain/markdown.js";
 

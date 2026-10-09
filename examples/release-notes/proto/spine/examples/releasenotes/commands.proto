@@ -13,60 +13,60 @@
  */
 syntax = "proto3";
 
-package spine.examples.release_notes;
+package spine.examples.releasenotes;
 
-import "spine/examples/release_notes/types.proto";
+import "spine/examples/releasenotes/types.proto";
 import "spine/core/version.proto";
 import "spine/options.proto";
 import "spine/ts/agent/model.proto";
 
-option (type_url_prefix) = "type.spine.examples.release_notes";
+option (type_url_prefix) = "type.spine.examples.releasenotes";
 
 // Opens one draft for a fixed repository selection and resolved comparison.
 message OpenReleaseDraft {
-  // New draft identifier.
+  // Identifies the release draft targeted by this Command.
   ReleaseDraftId id = 1 [(required) = true, (validate) = true];
 
-  // Editor-supplied title.
+  // Names the release represented by this editable draft.
   ReleaseTitle title = 2 [(required) = true, (validate) = true];
 
-  // Pinned committed-object comparison.
+  // Pins the selected repository and its base and target commits.
   ReleaseComparison comparison = 3 [(required) = true, (validate) = true];
 
-  // Intended readers of the release notes.
+  // Names the readers whose needs shape these release notes.
   string audience = 4 [(required) = true];
 }
 
 // Changes the comparison or audience of an existing draft.
 message ChangeReleaseInputs {
-  // Draft to update.
+  // Identifies the release draft targeted by this Command.
   ReleaseDraftId id = 1 [(required) = true, (validate) = true];
 
-  // Current framework-managed Aggregate Version read with the draft state.
+  // Current Entity Version read with the draft state.
   spine.core.Version expected_version = 2 [(required) = true, (validate) = true];
 
-  // New pinned comparison within the same repository selection.
+  // Pins the selected repository and its base and target commits.
   ReleaseComparison comparison = 3 [(required) = true, (validate) = true];
 
-  // New intended readers.
+  // Names the readers whose needs shape these release notes.
   string audience = 4 [(required) = true];
 }
 
 // Requests one model operation for the complete accepted draft snapshot.
 message RequestReleaseGeneration {
-  // Draft being revised.
+  // Identifies the release draft targeted by this Command.
   ReleaseDraftId id = 1 [(required) = true, (validate) = true];
 
-  // Stable application generation identity.
+  // Correlates this outcome with one accepted model generation.
   ReleaseGenerationId generation = 2 [(required) = true, (validate) = true];
 
-  // Current framework-managed Aggregate Version read with the draft state.
+  // Current Entity Version read with the draft state.
   spine.core.Version expected_version = 3 [(required) = true, (validate) = true];
 
-  // Complete verified evidence catalog for the pinned comparison.
+  // Contains verified committed changes the model may cite.
   ReleaseEvidenceCatalog catalog = 4 [(validate) = true];
 
-  // Human instruction for this generation.
+  // Conveys the editor’s requested emphasis for this generation.
   ReleaseInstruction instruction = 5 [(required) = true, (validate) = true];
 
   // Conversation reused for later generations on this draft.
@@ -78,22 +78,22 @@ message RequestReleaseGeneration {
 
 // Replaces the structured release notes the editor reviewed.
 message EditReleaseNotes {
-  // Draft to edit.
+  // Identifies the release draft targeted by this Command.
   ReleaseDraftId id = 1 [(required) = true, (validate) = true];
 
-  // Current framework-managed Aggregate Version read with the draft state.
+  // Current Entity Version read with the draft state.
   spine.core.Version expected_version = 2 [(required) = true, (validate) = true];
 
-  // Replacement structured document retaining evidence citations.
+  // Carries structured release note entries with catalog citations.
   ReleaseNotesDocument document = 3 [(validate) = true];
 }
 
 // Approves one exact rendered document for export.
 message ApproveReleaseNotes {
-  // Draft to approve.
+  // Identifies the release draft targeted by this Command.
   ReleaseDraftId id = 1 [(required) = true, (validate) = true];
 
-  // Current framework-managed Aggregate Version read with the draft state.
+  // Current Entity Version read with the draft state.
   spine.core.Version expected_version = 2 [(required) = true, (validate) = true];
 
   // Digest displayed for the exact Markdown bytes.
@@ -105,9 +105,9 @@ message ApproveReleaseNotes {
 
 // Requests an immutable approved snapshot for a trusted file export.
 message PrepareReleaseNotesExport {
-  // Draft to export.
+  // Identifies the release draft targeted by this Command.
   ReleaseDraftId id = 1 [(required) = true, (validate) = true];
 
-  // Current framework-managed Aggregate Version read with the draft state.
+  // Current Entity Version read with the draft state.
   spine.core.Version expected_version = 2 [(required) = true, (validate) = true];
 }

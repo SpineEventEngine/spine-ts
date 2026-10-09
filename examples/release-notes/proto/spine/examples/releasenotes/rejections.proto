@@ -13,48 +13,48 @@
  */
 syntax = "proto3";
 
-package spine.examples.release_notes;
+package spine.examples.releasenotes;
 
-import "spine/examples/release_notes/types.proto";
+import "spine/examples/releasenotes/types.proto";
 import "spine/options.proto";
 
-option (type_url_prefix) = "type.spine.examples.release_notes";
+option (type_url_prefix) = "type.spine.examples.releasenotes";
 
-// Rejects opening a draft whose Aggregate already exists.
+// Rejects opening a draft whose draft already exists.
 message ReleaseDraftAlreadyOpen {
-  // Draft identifier whose original state remains authoritative.
+  // Identifies the release draft to which this domain outcome applies.
   ReleaseDraftId id = 1 [(required) = true, (validate) = true];
 }
 
 // Rejects an edit based on an older Entity Version.
 message StaleReleaseEdit {
-  // Draft identifier.
+  // Identifies the release draft to which this domain outcome applies.
   ReleaseDraftId id = 1 [(required) = true, (validate) = true];
 }
 
 // Rejects approval of an older Entity Version or different Markdown bytes.
 message StaleReleaseApproval {
-  // Draft identifier.
+  // Identifies the release draft to which this domain outcome applies.
   ReleaseDraftId id = 1 [(required) = true, (validate) = true];
 }
 
 // Rejects a generation identifier reused with different accepted input.
 message ReleaseGenerationConflict {
-  // Draft identifier.
+  // Identifies the release draft to which this domain outcome applies.
   ReleaseDraftId id = 1 [(required) = true, (validate) = true];
 
-  // Conflicting generation identity.
+  // Correlates this outcome with one accepted model generation.
   ReleaseGenerationId generation = 2 [(required) = true, (validate) = true];
 }
 
 // Rejects a stale Command or forbidden repository selection change.
 message ReleaseInputsConflict {
-  // Draft identifier.
+  // Identifies the release draft to which this domain outcome applies.
   ReleaseDraftId id = 1 [(required) = true, (validate) = true];
 }
 
 // Rejects export when current content lacks exact approval.
 message ReleaseExportUnavailable {
-  // Draft identifier.
+  // Identifies the release draft to which this domain outcome applies.
   ReleaseDraftId id = 1 [(required) = true, (validate) = true];
 }
