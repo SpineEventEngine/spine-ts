@@ -6187,7 +6187,7 @@ published openid-client 6.8.8/oauth4webapi 3.8.8 code path documented in
 
 ## D-0134: Production Agent History And Execution Reads
 
-Status: Accepted; planned for Release Notes Studio domain integration
+Status: Implemented and reviewed; coordinated release qualification pending
 
 Date: 2026-10-09
 

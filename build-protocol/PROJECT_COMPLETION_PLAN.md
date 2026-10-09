@@ -20,7 +20,7 @@ support is included in the first snapshot. PR #18 now includes implementation of
 human-approved [Release Notes Studio desktop example](planning/release-notes-studio.md).
 The ChatGPT subscription adapter checkpoint is implemented, reviewed, and pushed
 (D-0132). Desktop sign-in and protected credentials are implemented and reviewed (D-0133);
-production history/execution read contracts are accepted for domain integration
+production history/execution reads are implemented and reviewed for domain integration
 (D-0134). Append-only deployment registration and accepted-signal model selection
 are implemented and reviewed as domain-integration prerequisites (D-0135). The first version uses existing in-memory storage; persistent domain
 storage is deferred. Final desktop release/security qualification is pending.

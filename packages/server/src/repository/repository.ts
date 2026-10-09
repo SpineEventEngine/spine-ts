@@ -48,9 +48,11 @@ import {
   CommandContextSchema,
   ActorContextSchema,
   CommandIdSchema,
+  type CommandId,
   CommandSchema,
   EventContextSchema,
   EventIdSchema,
+  type EventId,
   EventSchema,
   MessageIdSchema,
   TenantIdSchema,
@@ -102,6 +104,7 @@ import {
   type AgentPendingPage,
 } from "@spine-event-engine/storage/provider";
 import {
+  AgentHistoryCursorSchema,
   AgentHistoryEntrySchema,
   AgentInvocationTerminatedSchema,
   AgentModelSelectionChangedSchema as SelectionChangedSchema,
@@ -111,9 +114,12 @@ import {
   ModelRefSchema,
   ToolEffect,
   type AgentHistoryEntry,
+  type ConversationRecord,
+  ConversationIdSchema,
 } from "@spine-event-engine/proto/agent";
 import {
   AgentExecutionRecordSchema,
+  AgentInvocationKeySchema,
   AgentExecutionStartSchema,
   type AgentExecutionStart,
   AgentExecutionCompletionSchema,
@@ -140,6 +146,7 @@ import type {
   AiModel,
   AiRegistry,
   AiScope,
+  ConversationHistoryRead,
   HistoryPage,
   HistoryRead,
 } from "@spine-event-engine/ai";
@@ -172,7 +179,7 @@ import {
 } from "../bus/saved-dispatcher-binding.js";
 import { Delivery } from "../delivery/delivery.js";
 import { commitFenced } from "./commit-fence.js";
-import { AgentHistoryReads } from "../agent/agent-history.js";
+import { AgentHistoryReads, type AgentHistoryScope } from "../agent/agent-history.js";
 import { AgentReadRuntime } from "../agent/agent-read-runtime.js";
 import { AgentAdmission, type AgentAdmissionInput } from "../agent/agent-admission.js";
 import { AgentRevisions } from "../agent/agent-revisions.js";
@@ -288,6 +295,61 @@ export type RepositoryEntityId<EntityType extends RepositoryEntityType> =
         : EntityType["prototype"] extends Agent<infer Id, DescriptorMessageSchema>
           ? Id
           : never;
+
+/**
+ * Selects the tenant boundary for a trusted Agent repository read.
+ */
+export interface AgentReadScope {
+  /**
+   * Required for a multitenant Bounded Context; omitted for a single-tenant Bounded Context.
+   */
+  readonly tenantId?: TenantId;
+}
+
+/**
+ * Public projection of one recorded Agent invocation phase.
+ * Missing records are represented by `undefined`, not a terminal phase.
+ */
+export type AgentExecutionStatus =
+  "accepted" | "active" | "completed-pending-delivery" | "completed" | "terminated";
+
+/**
+ * Indexed, newest-first reads of retained Agent history.
+ * The trusted application authorizes callers before obtaining this reader.
+ */
+export interface AgentHistoryReader {
+  /**
+   * Returns all history categories with their original Proto oneof.
+   *
+   * @param request Page size and optional opaque continuation.
+   * @returns A detached page of complete entries.
+   */
+  fullHistory(request: HistoryRead): Promise<HistoryPage<AgentHistoryEntry>>;
+
+  /**
+   * Returns records for the explicitly identified conversation.
+   *
+   * @param request Conversation, page size, and optional opaque continuation.
+   * @returns A detached page of conversation records.
+   */
+  conversationHistory(request: ConversationHistoryRead): Promise<HistoryPage<ConversationRecord>>;
+
+  /**
+   * Returns the original System Event envelopes.
+   *
+   * @param request Page size and optional opaque continuation.
+   * @returns A detached page of System Events.
+   */
+  systemEventHistory(request: HistoryRead): Promise<HistoryPage<Event>>;
+
+  /**
+   * Returns the original domain Event envelopes.
+   *
+   * @param request Page size and optional opaque continuation.
+   * @returns A detached page of domain Events.
+   */
+  domainEventHistory(request: HistoryRead): Promise<HistoryPage<Event>>;
+}
 
 /**
  * Read operations available for one receiving repository and incoming signal tenant.
@@ -943,6 +1005,52 @@ export class Repository<
   }
 
   /**
+   * Opens retained history for one Agent without restoring an Entity.
+   * The trusted application must authorize the caller before using this read.
+   *
+   * @param this Registered Agent repository.
+   * @param id Typed Agent identifier.
+   * @param scope Explicit tenant boundary; pass `{}` in a single-tenant Bounded Context.
+   * @returns Reader for indexed history categories.
+   */
+  agentHistory(
+    this: EntityType["prototype"] extends Agent<
+      RepositoryEntityId<EntityType>,
+      RepositoryStateSchema<EntityType>
+    >
+      ? Repository<EntityType>
+      : never,
+    id: NoInfer<RepositoryEntityId<EntityType>>,
+    scope: AgentReadScope,
+  ): AgentHistoryReader {
+    return RepositoryAgentReads.history(this, id, scope);
+  }
+
+  /**
+   * Reads the exact recorded phase for one accepted Command or Event.
+   * The trusted application must authorize the caller before using this read.
+   *
+   * @param this Registered Agent repository.
+   * @param id Typed Agent identifier.
+   * @param source Original Command or Event ID.
+   * @param scope Explicit tenant boundary; pass `{}` in a single-tenant Bounded Context.
+   * @returns Recorded phase, or `undefined` when no invocation was recorded.
+   */
+  agentExecution(
+    this: EntityType["prototype"] extends Agent<
+      RepositoryEntityId<EntityType>,
+      RepositoryStateSchema<EntityType>
+    >
+      ? Repository<EntityType>
+      : never,
+    id: NoInfer<RepositoryEntityId<EntityType>>,
+    source: CommandId | EventId,
+    scope: AgentReadScope,
+  ): Promise<AgentExecutionStatus | undefined> {
+    return RepositoryAgentReads.execution(this, id, source, scope);
+  }
+
+  /**
    * Routes a command to one entity ID without invoking a handler.
    *
    * @param command The command envelope to route.
@@ -981,6 +1089,238 @@ export class Repository<
     });
   }
 }
+
+interface CapturedAgentRead {
+  readonly runtime: RepositoryRuntime;
+  readonly context: StorageContext;
+  readonly id: unknown;
+}
+
+const RepositoryAgentReads = {
+  /**
+   * Captures a validated Agent and tenant boundary without opening Entity storage.
+   *
+   * @param repository Registered Agent repository.
+   * @param id Typed Agent identifier.
+   * @param scope Explicit tenant selection.
+   * @returns Detached read identity and active runtime.
+   */
+  capture(repository: RepositoryView, id: unknown, scope: AgentReadScope) {
+    if (repository.entityFamily !== "agent")
+      throw new TypeError("Agent read requires an Agent repository.");
+    const scopeValue: unknown = scope;
+    if (scopeValue === null || typeof scopeValue !== "object")
+      throw new TypeError("Agent read requires an explicit scope.");
+    const runtime = repositoryRuntimes.get(repository);
+    if (runtime === undefined) throw new Error("Agent read requires an active repository.");
+    const validated = RepositoryRoutes.readRouteId(id, repository.idField, "command");
+    const field = repository.idField.descriptor;
+    const copiedId =
+      field.fieldKind === "message"
+        ? clone(field.message as MessageSchema, validated as Message)
+        : validated;
+    const tenant =
+      scope.tenantId === undefined ? undefined : RepositoryTenants.require(scope.tenantId);
+    const context = RepositoryTenants.storageContextForTenant(runtime.context, tenant);
+    return { runtime, context, id: copiedId };
+  },
+
+  /**
+   * Returns a detached public history request before provider access.
+   *
+   * @param request Page request and opaque cursor.
+   * @returns Independent request values.
+   */
+  request(request: HistoryRead): HistoryRead {
+    return {
+      pageSize: request.pageSize,
+      ...(request.cursor === undefined
+        ? {}
+        : { cursor: clone(AgentHistoryCursorSchema, request.cursor) }),
+    };
+  },
+
+  /**
+   * Creates the four scoped history views for one captured Agent identity.
+   *
+   * @param repository Registered Agent repository.
+   * @param id Typed Agent identifier.
+   * @param scope Explicit tenant selection.
+   * @returns Reader using indexed provider history.
+   */
+  history(repository: RepositoryView, id: unknown, scope: AgentReadScope): AgentHistoryReader {
+    const captured = this.capture(repository, id, scope);
+    const read = (view: AgentHistoryView, request: HistoryRead) =>
+      this.historyPage(repository, captured, view, this.request(request));
+    return Object.freeze({
+      fullHistory: (request: HistoryRead) => read({ kind: "full" }, request),
+      conversationHistory: async (request: ConversationHistoryRead) => {
+        const conversationValue: unknown = request.conversation;
+        if (
+          conversationValue === null ||
+          typeof conversationValue !== "object" ||
+          !("$typeName" in conversationValue) ||
+          conversationValue.$typeName !== ConversationIdSchema.typeName ||
+          !("value" in conversationValue) ||
+          typeof conversationValue.value !== "string" ||
+          conversationValue.value.length === 0
+        )
+          throw new TypeError("Agent conversation history requires a ConversationId.");
+        const conversation = clone(ConversationIdSchema, request.conversation);
+        const page = await read({ kind: "conversation", conversation }, request);
+        return this.project(page, "conversationRecord");
+      },
+      systemEventHistory: async (request: HistoryRead) =>
+        this.project(await read({ kind: "system" }, request), "systemEvent"),
+      domainEventHistory: async (request: HistoryRead) =>
+        this.project(await read({ kind: "domain" }, request), "domainEvent"),
+    });
+  },
+
+  /**
+   * Reads one category from the existing indexed history provider.
+   *
+   * @param repository Registered Agent repository.
+   * @param captured Detached Agent and tenant identity.
+   * @param view Indexed category and optional conversation.
+   * @param request Detached page request.
+   * @returns Detached history entries and opaque continuation.
+   */
+  async historyPage(
+    repository: RepositoryView,
+    captured: CapturedAgentRead,
+    view: AgentHistoryView,
+    request: HistoryRead,
+  ): Promise<HistoryPage<AgentHistoryEntry>> {
+    if (repositoryRuntimes.get(repository) !== captured.runtime)
+      throw new Error("Agent read requires an active repository.");
+    const input = RepositoryStorage.entityStorageInput(repository, captured.context);
+    const history = AgentHistoryStorageFactories.create(captured.runtime.storageFactory, {
+      context: captured.context,
+      stateType: repository.stateSchema.typeName,
+      id: { key: input.id.key },
+    });
+    try {
+      const page = await AgentHistoryReads.readBound(
+        {
+          storage: history,
+          entityId: captured.id,
+          scope: repositoryAccess.agentHistoryScope(captured.context, input, captured.id),
+        },
+        view,
+        request,
+      );
+      return {
+        items: page.items.map((entry) => clone(AgentHistoryEntrySchema, entry)),
+        ...(page.nextCursor === undefined
+          ? {}
+          : { nextCursor: clone(AgentHistoryCursorSchema, page.nextCursor) }),
+      };
+    } finally {
+      history.close();
+    }
+  },
+
+  /**
+   * Returns one typed category from the full Proto history oneof.
+   *
+   * @typeParam K Selected history oneof category.
+   * @param page Complete indexed history page.
+   * @param kind Expected oneof category.
+   * @returns Category values and the original continuation.
+   */
+  project<K extends "conversationRecord" | "systemEvent" | "domainEvent">(
+    page: HistoryPage<AgentHistoryEntry>,
+    kind: K,
+  ): HistoryPage<K extends "conversationRecord" ? ConversationRecord : Event> {
+    const items = page.items.map((entry) => {
+      if (entry.item.case !== kind)
+        throw new Error("Agent history provider returned the wrong category.");
+      return entry.item.value;
+    });
+    return {
+      items,
+      ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }),
+    } as unknown as HistoryPage<K extends "conversationRecord" ? ConversationRecord : Event>;
+  },
+
+  /**
+   * Reads the exact saved invocation and exposes only its phase.
+   *
+   * @param repository Registered Agent repository.
+   * @param id Typed Agent identifier.
+   * @param source Original Command or Event ID.
+   * @param scope Explicit tenant selection.
+   * @returns Current phase, or `undefined` for no saved invocation.
+   */
+  async execution(
+    repository: RepositoryView,
+    id: unknown,
+    source: CommandId | EventId,
+    scope: AgentReadScope,
+  ): Promise<AgentExecutionStatus | undefined> {
+    const captured = this.capture(repository, id, scope);
+    const sourceSignal = this.source(source);
+    const input = RepositoryStorage.entityStorageInput(repository, captured.context);
+    const key = create(AgentInvocationKeySchema, {
+      scope: { stateType: repository.stateSchema.typeName, agentKey: input.id.key(captured.id) },
+      sourceSignal,
+    });
+    if (repositoryRuntimes.get(repository) !== captured.runtime)
+      throw new Error("Agent read requires an active repository.");
+    const storage = AgentExecutionStorageFactories.create(captured.runtime.storageFactory, {
+      entity: input,
+      stateType: repository.stateSchema.typeName,
+    });
+    try {
+      const record = await storage.read(key);
+      return record === undefined ? undefined : this.status(record.status);
+    } finally {
+      storage.close();
+    }
+  },
+
+  /**
+   * Copies an original signal identifier into the private execution key.
+   *
+   * @param source Original Command or Event ID.
+   * @returns Typed private source key.
+   */
+  source(source: CommandId | EventId): AgentSignalKey {
+    if (source.$typeName === CommandIdSchema.typeName && source.uuid.length > 0)
+      return create(AgentSignalKeySchema, {
+        id: { case: "command", value: clone(CommandIdSchema, source) },
+      });
+    if (source.$typeName === EventIdSchema.typeName && source.value.length > 0)
+      return create(AgentSignalKeySchema, {
+        id: { case: "event", value: clone(EventIdSchema, source) },
+      });
+    throw new TypeError("Agent execution requires an original CommandId or EventId.");
+  },
+
+  /**
+   * Returns the public status for a private execution phase.
+   *
+   * @param status Saved private phase.
+   * @returns Public phase string.
+   */
+  status(status: AgentInvocationStatus): AgentExecutionStatus {
+    switch (status) {
+      case AgentInvocationStatus.AGENT_INVOCATION_ACCEPTED:
+        return "accepted";
+      case AgentInvocationStatus.AGENT_INVOCATION_ACTIVE:
+        return "active";
+      case AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_DELIVERY:
+        return "completed-pending-delivery";
+      case AgentInvocationStatus.AGENT_INVOCATION_COMPLETED:
+        return "completed";
+      case AgentInvocationStatus.AGENT_INVOCATION_TERMINATED:
+        return "terminated";
+      default:
+        throw new Error("Agent execution provider returned an unsupported phase.");
+    }
+  },
+};
 
 /**
  * Route-only invocation marker returned by direct repository routing APIs.
@@ -1484,6 +1824,20 @@ export interface RepositoryAccess {
     request: HistoryRead,
     tenantId?: TenantId,
   ): Promise<HistoryPage<AgentHistoryEntry>>;
+
+  /**
+   * Returns the opaque cursor scope for a registered Agent history read.
+   *
+   * @param context Tenant-aware storage context.
+   * @param input Repository Entity storage descriptor.
+   * @param entityId Typed Agent identifier.
+   * @returns Complete repository and Agent cursor scope.
+   */
+  agentHistoryScope(
+    context: StorageContext,
+    input: EntityStorageInput<unknown, Message>,
+    entityId: unknown,
+  ): AgentHistoryScope;
 
   /**
    * Returns the repository command dispatcher when it has command routing.

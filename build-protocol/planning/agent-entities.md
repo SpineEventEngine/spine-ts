@@ -4013,3 +4013,106 @@ edits were reverted; preserve original canonical tests. Parent checkpoints the
 three minimal inventory/policy files plus record, then writer reruns exact five
 tests against that new committed snapshot. This commit is required for the
 tests' actual fixture source; no claim of complete test success before rerun.
+
+Workspace checkpointfd02f70a5 pushed; exact five formerly failing files pass
+139/139 tests in68.63s against committed HEAD, canonical installs unchanged.
+Inventory subset17/17 and targeted script ESLint/diff also pass. Mechanical
+correction closed; latest CI still must confirm full branch including coverage.
+
+Start D-0134 public Repository Agent history/execution reads. High-risk public
+contract and tenant-scoped storage reads; architecture already accepted, no new
+deep pass. Estimate0.75–1.5h for implementation, behavior tests, narrow docs,
+focused review/fixes and integration. Existing explicit Sol/medium implementer
+continues alone, no children. Reuse exact indexed history/execution storage;
+never restore/create Entity, scan system store, add cursor position/counter or
+expose private execution records. Explicit typed ID/scope/lifecycle validation,
+detached results, all four newest-first history views and exact status read.
+Use D-0134 contract and approved plan acceptance. Cheap preflight before relevant
+four concern reviews; final verify:release/security at whole deliverable closure.
+Domain/Git MCP, full UI/tutorial and authorized live check remain afterward.
+
+D-0134 first public behavior test RED (missing method), then GREEN after indexed
+read implementation: completed accepted Command, page size above100 accepted,
+category separation, empty conversation and cursor view/Agent isolation. The
+initial fixture contains few records; it does not establish traversal beyond100.
+Server build passes. Detached scope/source, tenant and closed-lifecycle tests
+continue. Latest CI37947017781 targetsfd02f70a5 and is running; cancellation was
+requested for obsolete cc451ad40 run37946740167, which lacks the inventory/policy
+fix already present in the latest SHA. Latest exact-SHA result remains authority.
+
+D-0134 Agent registration suite passes21/21; server build passes. All five public
+execution phases are asserted from real runtime/provider records (including
+active claim, pending delivery and termination), unknown/source-kind mismatch
+returns undefined. History covers all categories, typed conversation records,
+paging, cursor boundaries and tenant isolation. Instrumented provider confirms
+zero Entity storage handles opened by public reads. Detached ID/source/scope/
+result and closed-reader cases pass. Narrow public exports/docs and cheap gates
+continue before frozen review; no final coverage claim.
+
+While D-0134 finishes, reuse explicit Luna/medium read-only scanning function for
+one upcoming integration question: exact stdio MCP transport scope/environment
+and connection lifecycle, to bind a packaged Git worker to the accepted immutable
+comparison without accepting model-provided repository paths. Prior scan already
+established public Mcp.server and stdio support; do not repeat broad discovery.
+No source edits, children, new architecture or security review. Return concrete
+existing API/lifecycle/source evidence to the same domain implementer later.
+
+MCP scan accepted from explicit Luna/medium, no edits/tests. Public stdio transport
+has fixed absolute executable, args/cwd and environment(scope, control); runtime
+resolves environment per server connection within an operation, shares that
+session across its tools, then closes it. Fresh operation creates fresh runtime;
+no cross-signal session reuse. Adapter spawn uses shell:false and exact supplied
+environment, not inherited process.env. Bind trusted worker repository/range
+through accepted source lookup already established by resolveModel. Worker/tool
+validation still constrains supplied commit/path arguments to the accepted range.
+Electron process.execPath + ELECTRON_RUN_AS_NODE=1 can avoid external Node; prove
+enabled fuse and actual packaged worker launch, add staged worker artifact (current
+packager copies only app assets). No new MCP transport or model-provided executable/
+repository path. Sources are current public contracts/runtime/transport and
+Electron environment/process docs; actual package behavior remains a test gate.
+
+D-0134 source frozen overfd02f70a5: repository.ts, server index/reference,
+agent-registration and repository tests.3files/53tests pass, server build,
+tooling tsc, repository ESLint and cleanup/TSDoc/copyright/time/docs/format/diff
+pass. Focused new-helper branch coverage45/49; narrow global coverage threshold
+exit1 is not a release result. Remaining paths are defensive/private-status or
+primitive-ID handling; no acceptance case intentionally omitted.
+Independent fresh review dispatches: performance/reliability, TypeScript/API,
+style gpt-6-sol/medium; documentation gpt-6-luna/medium; fork none, no memory,
+children or writes. Review D-0134 diff only against accepted decision/human
+ledger; collect complete four-concern wave before corrections. Actual runtime
+introspection unavailable; explicit immutable configured profiles required.
+
+D-0134 four-concern wave complete. Explicit Sol/medium reliability/API/style and
+Luna/medium docs accepted; no runtime introspection available. Accept P2 API:
+Agent-only methods are offered on every Repository generic although runtime
+rejects non-Agent types; constrain their TypeScript receiver without a new public
+repository abstraction. Accept P2 test gap: prior evidence/log/chat incorrectly
+said traversal beyond100 entries was tested; the test only requested pageSize1001
+with few records. Correct this claim by adding >100 actual retained entries and
+complete duplicate-free newest-first traversal, including category ordering.
+This paragraph supersedes the earlier overstatement. Add direct cross-tenant
+cursor rejection and failing-provider handle-close tests as relevant accepted
+error/isolation cases, not percentage-only assertions. Style's repeated
+provider setup is advisory: current paths agree, no generic refactor required.
+Documentation otherwise clean. One batch to same writer, estimate0.25–0.5h,
+then focused checks and affected API/reliability closure only.
+
+D-0134 corrections frozen: TypeScript negative fixtures RED before conditional
+Agent-only receiver, GREEN afterward for Aggregate/Projection/Process Manager
+rejection and positive Agent calls. Actual retained fixture now has363 typed
+entries,121 per category, with Time timestamps; all four views traverse pages
+and match exact newest-first IDs without duplicates. Cross-tenant cursor and
+read-failure handle closure cases pass.3files/55tests, server/tooling typechecks,
+repository ESLint and all cheap docs/style/time/format/diff gates pass. Helper
+branch evidence remains45/49; narrow global coverage not a release claim.
+Existing explicit Sol/medium API and reliability reviewers receive only corrected
+findings for closure, no broad review restart. Source remains frozen.
+
+D-0134 targeted API and reliability closures both clean. Exported conditional
+receivers reject non-Agent repositories; actual363-entry fixture proves all-view
+ordered complete paging and direct failure/isolation tests close the prior gaps.
+Four concerns now accepted: API/reliability fixed and clean, docs clean, style
+advisory only. Explicit retained Sol/medium profiles confirmed, runtime metadata
+not exposed. Parent checkpoints and pushes reviewed API/docs/tests; whole-plan
+release/coverage/security/live-account gates remain pending.

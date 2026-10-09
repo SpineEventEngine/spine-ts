@@ -12,26 +12,43 @@
  * the License.
  */
 
-import { create, type Message } from "@bufbuild/protobuf";
-import { TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { AiModel, AiRegistry, ModelRef } from "@spine-event-engine/ai";
+import { clone, create, toBinary, type Message } from "@bufbuild/protobuf";
+import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { AiModel, AiRegistry, ModelRef, type HistoryPage } from "@spine-event-engine/ai";
 import { createBackendRegistration } from "@spine-event-engine/ai/spi/adapter";
 import { AnyMessages, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import { Time } from "@spine-event-engine/core/time";
+// prettier-ignore
 import {
+  CommandDispatchedToHandlerSchema,
+} from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
+import { EntityTypeNameSchema } from "@spine-event-engine/proto/generated/spine/system/server/entity_type_pb.js";
+import {
+  AgentHistoryEntrySchema,
+  type AgentHistoryCursor,
   AgentInvocationTerminatedSchema,
+  AiContentDigestSchema,
+  AiOperationIdSchema,
   ConversationIdSchema,
+  ConversationRecordIdSchema,
+  ConversationRecordSchema,
+  GenerationRequestSchema,
 } from "@spine-event-engine/proto/agent";
 import {
   ActorContextSchema,
+  CommandIdSchema,
+  EventIdSchema,
   CommandContextSchema,
   CommandSchema,
   EventContextSchema,
   EventSchema,
+  MessageIdSchema,
+  TenantIdSchema,
   UserIdSchema,
   VersionSchema,
 } from "@spine-event-engine/proto";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
+import { AgentHistoryStorageFactories } from "@spine-event-engine/storage/provider";
 import type {
   AgentInvocationKey,
   AgentExecutionRecord,
@@ -40,6 +57,8 @@ import { AgentInvocationStatus } from "@spine-event-engine/proto/generated/spine
 import type {
   AgentExecutionStorage,
   AgentExecutionStorageInput,
+  AgentHistoryStorage,
+  AgentHistoryStorageInput,
   AgentPendingPage,
 } from "@spine-event-engine/storage/provider";
 import { describe, expect, it } from "vitest";
@@ -194,6 +213,7 @@ function waitingRepository(withModel = false) {
 }
 
 class RecordingExecutionFactory extends InMemoryStorageFactory {
+  entityStorageOpens = 0;
   failAdmission = false;
   failUpdateOnce = false;
   failMarkDeliveryOnce = false;
@@ -201,6 +221,11 @@ class RecordingExecutionFactory extends InMemoryStorageFactory {
   admittedKeys: AgentInvocationKey[] = [];
   pendingPage?: () => Promise<AgentPendingPage>;
   readAccepted?: (key: AgentInvocationKey) => Promise<AgentExecutionRecord | undefined>;
+
+  override createEntityStorage(input: unknown): unknown {
+    this.entityStorageOpens += 1;
+    return super.createEntityStorage(input);
+  }
 
   protected override createAgentExecutionStorage<I, S extends Message>(
     input: AgentExecutionStorageInput<I, S>,
@@ -236,6 +261,37 @@ class RecordingExecutionFactory extends InMemoryStorageFactory {
         : pending(read);
     this.pendingPage ??= () => storage.pending({ count: 10 });
     this.readAccepted ??= (key) => storage.read(key);
+    return storage;
+  }
+}
+
+class FailingAgentReadFactory extends InMemoryStorageFactory {
+  closedHistory = 0;
+  closedExecution = 0;
+
+  protected override createAgentHistoryStorage<Id>(
+    input: AgentHistoryStorageInput<Id>,
+  ): AgentHistoryStorage<Id> {
+    const storage = super.createAgentHistoryStorage(input);
+    const close = storage.close.bind(storage);
+    storage.read = () => Promise.reject(new Error("history provider unavailable"));
+    storage.close = () => {
+      this.closedHistory += 1;
+      close();
+    };
+    return storage;
+  }
+
+  protected override createAgentExecutionStorage<I, S extends Message>(
+    input: AgentExecutionStorageInput<I, S>,
+  ): AgentExecutionStorage<I, S> {
+    const storage = super.createAgentExecutionStorage(input);
+    const close = storage.close.bind(storage);
+    storage.read = () => Promise.reject(new Error("execution provider unavailable"));
+    storage.close = () => {
+      this.closedExecution += 1;
+      close();
+    };
     return storage;
   }
 }
@@ -283,7 +339,440 @@ const proposal = AiModel.define({
   },
 });
 
+async function collectHistoryIds<T>(
+  read: (cursor?: AgentHistoryCursor) => Promise<HistoryPage<T>>,
+  key: (item: T) => string,
+): Promise<string[]> {
+  const ids: string[] = [];
+  let cursor: AgentHistoryCursor | undefined;
+  for (let pageNumber = 0; pageNumber < 10; pageNumber += 1) {
+    const page = await read(cursor);
+    ids.push(...page.items.map(key));
+    if (page.nextCursor === undefined) return ids;
+    expect(page.nextCursor.value).not.toBe(cursor?.value);
+    cursor = page.nextCursor;
+  }
+  throw new Error("Agent history did not reach an older-page boundary.");
+}
+
 describe("Agent registration readiness", () => {
+  it("closes Agent provider handles when public history or execution reads fail", async () => {
+    const factory = new FailingAgentReadFactory();
+    const configured = waitingRepository();
+    const context = BoundedContext.singleTenant("FailingAgentReads")
+      .withAi(ai())
+      .persistSystemEvents()
+      .withStorageFactory(factory)
+      .add(configured)
+      .build();
+    const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-failing" });
+    try {
+      const historyCloses = factory.closedHistory;
+      await expect(configured.agentHistory(id, {}).fullHistory({ pageSize: 1 })).rejects.toThrow(
+        "history provider unavailable",
+      );
+      expect(factory.closedHistory).toBe(historyCloses + 1);
+      const executionCloses = factory.closedExecution;
+      await expect(
+        configured.agentExecution(id, create(CommandIdSchema, { uuid: "source" }), {}),
+      ).rejects.toThrow("execution provider unavailable");
+      expect(factory.closedExecution).toBe(executionCloses + 1);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("isolates public Agent history by tenant and detaches returned entries", async () => {
+    const factory = new InMemoryStorageFactory();
+    const configured = waitingRepository();
+    const context = BoundedContext.multitenant("TenantAgentReads")
+      .withAi(ai())
+      .persistSystemEvents()
+      .withStorageFactory(factory)
+      .add(configured)
+      .build();
+    const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-shared" });
+    const tenantA = create(TenantIdSchema, { kind: { case: "value", value: "tenant-A" } });
+    const tenantB = create(TenantIdSchema, { kind: { case: "value", value: "tenant-B" } });
+    const scope = { tenantId: tenantA };
+    const reader = configured.agentHistory(id, scope);
+    scope.tenantId = tenantB;
+    const storage = AgentHistoryStorageFactories.create(factory, {
+      context: { name: "TenantAgentReads", multitenant: true, tenantId: tenantA },
+      stateType: SupportReplyAgentStateSchema.typeName,
+      id: {
+        key: (value: SupportReplyAgentId) =>
+          Buffer.from(
+            toBinary(AnySchema, AnyMessages.pack(SupportReplyAgentIdSchema, value)),
+          ).toString("base64"),
+      },
+    });
+    try {
+      const occurredAt = create(TimestampSchema, { seconds: 1n });
+      const event = create(EventSchema, {
+        id: create(EventIdSchema, { value: "tenant-event" }),
+        message: AnyMessages.pack(
+          SupportReplyDraftedSchema,
+          create(SupportReplyDraftedSchema, { agent: id, reply: "Ready for review" }),
+        ),
+        context: create(EventContextSchema, { timestamp: occurredAt }),
+      });
+      await storage.append(
+        id,
+        create(AgentHistoryEntrySchema, {
+          occurredAt,
+          item: { case: "domainEvent", value: event },
+        }),
+      );
+      const conversation = create(ConversationIdSchema, { value: "tenant-draft" });
+      const recordAt = create(TimestampSchema, { seconds: 2n });
+      const record = create(ConversationRecordSchema, {
+        id: create(ConversationRecordIdSchema, { value: "tenant-request" }),
+        conversation,
+        operation: create(AiOperationIdSchema, { value: "draft-support" }),
+        occurredAt: recordAt,
+        content: AnyMessages.pack(
+          GenerationRequestSchema,
+          create(GenerationRequestSchema, {
+            input: AnyMessages.pack(
+              DraftSupportReplySchema,
+              create(DraftSupportReplySchema, { agent: id, question: "Delivery?" }),
+            ),
+            instructions: "Draft for review.",
+            outputSchemaJson: "{}",
+            promptJson: "[]",
+            digest: create(AiContentDigestSchema, { value: "a".repeat(64) }),
+          }),
+        ),
+      });
+      await storage.append(
+        id,
+        create(AgentHistoryEntrySchema, {
+          occurredAt: recordAt,
+          item: { case: "conversationRecord", value: record },
+        }),
+      );
+      const olderRecord = clone(ConversationRecordSchema, record);
+      olderRecord.id = create(ConversationRecordIdSchema, { value: "tenant-older-request" });
+      olderRecord.occurredAt = create(TimestampSchema, { seconds: 0n });
+      await storage.append(
+        id,
+        create(AgentHistoryEntrySchema, {
+          occurredAt: olderRecord.occurredAt,
+          item: { case: "conversationRecord", value: olderRecord },
+        }),
+      );
+      const first = await reader.domainEventHistory({ pageSize: 1 });
+      expect(first.items.map((item) => item.id?.value)).toEqual(["tenant-event"]);
+      const returnedId = first.items[0]?.id;
+      if (returnedId === undefined) throw new Error("Expected returned Event ID.");
+      returnedId.value = "locally-mutated";
+      expect((await reader.domainEventHistory({ pageSize: 1 })).items[0]?.id?.value).toBe(
+        "tenant-event",
+      );
+      expect(
+        (await reader.conversationHistory({ pageSize: 1, conversation })).items[0]?.id?.value,
+      ).toBe("tenant-request");
+      const firstConversation = await reader.conversationHistory({ pageSize: 1, conversation });
+      if (firstConversation.nextCursor === undefined) throw new Error("Expected continuation.");
+      const secondConversation = await reader.conversationHistory({
+        pageSize: 1,
+        conversation,
+        cursor: firstConversation.nextCursor,
+      });
+      expect(secondConversation.items.map((item) => item.id?.value)).toEqual([
+        "tenant-older-request",
+      ]);
+      expect(secondConversation.nextCursor).toBeUndefined();
+      await expect(
+        configured.agentHistory(id, { tenantId: tenantB }).conversationHistory({
+          pageSize: 1,
+          conversation,
+          cursor: firstConversation.nextCursor,
+        }),
+      ).rejects.toThrow("Invalid Agent history cursor");
+      expect(
+        await configured.agentHistory(id, { tenantId: tenantB }).fullHistory({ pageSize: 1 }),
+      ).toEqual({ items: [] });
+      expect(() => configured.agentHistory(id, {})).toThrow("requires tenantId");
+      expect(() =>
+        configured.agentHistory(create(TenantIdSchema) as unknown as SupportReplyAgentId, {
+          tenantId: tenantA,
+        }),
+      ).toThrow("requires a");
+      expect(() =>
+        configured.agentHistory(id, null as unknown as { tenantId?: typeof tenantA }),
+      ).toThrow("explicit scope");
+      await expect(
+        reader.conversationHistory({
+          pageSize: 1,
+          conversation: create(ConversationIdSchema),
+        }),
+      ).rejects.toThrow("requires a ConversationId");
+      await expect(
+        configured.agentExecution(id, create(EventIdSchema, { value: "tenant-event" }), {
+          tenantId: tenantB,
+        }),
+      ).resolves.toBeUndefined();
+    } finally {
+      storage.close();
+      await context.close();
+    }
+  });
+
+  it("pages more than 100 retained typed entries across every public history view", async () => {
+    const factory = new InMemoryStorageFactory();
+    const configured = waitingRepository();
+    const context = BoundedContext.singleTenant("PagedAgentReads")
+      .withAi(ai())
+      .persistSystemEvents()
+      .withStorageFactory(factory)
+      .add(configured)
+      .build();
+    const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-paged" });
+    const conversation = create(ConversationIdSchema, { value: "paged-draft" });
+    const storage = AgentHistoryStorageFactories.create(factory, {
+      context: { name: "PagedAgentReads", multitenant: false },
+      stateType: SupportReplyAgentStateSchema.typeName,
+      id: {
+        key: (value: SupportReplyAgentId) =>
+          Buffer.from(
+            toBinary(AnySchema, AnyMessages.pack(SupportReplyAgentIdSchema, value)),
+          ).toString("base64"),
+      },
+    });
+    let nanos = 0;
+    const previousTime = Time.setProvider({
+      currentTime: () => create(TimestampSchema, { seconds: 1_782_979_201n, nanos: nanos++ }),
+    });
+    const fullExpected: string[] = [];
+    const domainExpected: string[] = [];
+    const systemExpected: string[] = [];
+    const conversationExpected: string[] = [];
+    try {
+      const command = SignalEnvelopes.command({
+        schema: DraftSupportReplySchema,
+        message: create(DraftSupportReplySchema, { agent: id, question: "Delivery?" }),
+        context: create(CommandContextSchema, { actorContext: create(ActorContextSchema) }),
+      });
+      for (let index = 0; index < 121; index += 1) {
+        const suffix = index.toString().padStart(3, "0");
+        const domainAt = Time.currentTime();
+        const domainId = `domain-${suffix}`;
+        const domain = create(EventSchema, {
+          id: create(EventIdSchema, { value: domainId }),
+          context: create(EventContextSchema, { timestamp: domainAt }),
+          message: AnyMessages.pack(
+            SupportReplyDraftedSchema,
+            create(SupportReplyDraftedSchema, { agent: id, reply: `Draft ${suffix}` }),
+          ),
+        });
+        await storage.append(
+          id,
+          create(AgentHistoryEntrySchema, {
+            occurredAt: domainAt,
+            item: { case: "domainEvent", value: domain },
+          }),
+        );
+        domainExpected.unshift(domainId);
+        fullExpected.unshift(`domain:${domainId}`);
+
+        const systemAt = Time.currentTime();
+        const systemId = `system-${suffix}`;
+        const system = create(EventSchema, {
+          id: create(EventIdSchema, { value: systemId }),
+          context: create(EventContextSchema, { timestamp: systemAt }),
+          message: AnyMessages.pack(
+            CommandDispatchedToHandlerSchema,
+            create(CommandDispatchedToHandlerSchema, {
+              receiver: create(MessageIdSchema, {
+                id: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+                typeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
+              }),
+              payload: command,
+              whenDispatched: systemAt,
+              entityType: create(EntityTypeNameSchema, {
+                impl: { case: "javaClassName", value: "WaitingSupportAgent" },
+              }),
+            }),
+          ),
+        });
+        await storage.append(
+          id,
+          create(AgentHistoryEntrySchema, {
+            occurredAt: systemAt,
+            item: { case: "systemEvent", value: system },
+          }),
+        );
+        systemExpected.unshift(systemId);
+        fullExpected.unshift(`system:${systemId}`);
+
+        const recordAt = Time.currentTime();
+        const recordId = `conversation-${suffix}`;
+        const record = create(ConversationRecordSchema, {
+          id: create(ConversationRecordIdSchema, { value: recordId }),
+          conversation,
+          operation: create(AiOperationIdSchema, { value: "draft-support" }),
+          occurredAt: recordAt,
+          content: AnyMessages.pack(
+            GenerationRequestSchema,
+            create(GenerationRequestSchema, {
+              input: AnyMessages.pack(
+                DraftSupportReplySchema,
+                create(DraftSupportReplySchema, { agent: id, question: "Delivery?" }),
+              ),
+              instructions: "Draft for review.",
+              outputSchemaJson: "{}",
+              promptJson: "[]",
+              digest: create(AiContentDigestSchema, { value: "a".repeat(64) }),
+            }),
+          ),
+        });
+        await storage.append(
+          id,
+          create(AgentHistoryEntrySchema, {
+            occurredAt: recordAt,
+            item: { case: "conversationRecord", value: record },
+          }),
+        );
+        conversationExpected.unshift(recordId);
+        fullExpected.unshift(`conversation:${recordId}`);
+      }
+      const reader = configured.agentHistory(id, {});
+      const full = await collectHistoryIds(
+        (cursor) =>
+          reader.fullHistory({ pageSize: 57, ...(cursor === undefined ? {} : { cursor }) }),
+        (entry) => {
+          if (entry.item.case === "conversationRecord")
+            return `conversation:${entry.item.value.id?.value ?? ""}`;
+          if (entry.item.case === "systemEvent")
+            return `system:${entry.item.value.id?.value ?? ""}`;
+          if (entry.item.case === "domainEvent")
+            return `domain:${entry.item.value.id?.value ?? ""}`;
+          throw new Error("Unexpected Agent history category.");
+        },
+      );
+      const domain = await collectHistoryIds(
+        (cursor) =>
+          reader.domainEventHistory({ pageSize: 43, ...(cursor === undefined ? {} : { cursor }) }),
+        (event) => event.id?.value ?? "",
+      );
+      const system = await collectHistoryIds(
+        (cursor) =>
+          reader.systemEventHistory({ pageSize: 43, ...(cursor === undefined ? {} : { cursor }) }),
+        (event) => event.id?.value ?? "",
+      );
+      const records = await collectHistoryIds(
+        (cursor) =>
+          reader.conversationHistory({
+            pageSize: 43,
+            conversation,
+            ...(cursor === undefined ? {} : { cursor }),
+          }),
+        (record) => record.id?.value ?? "",
+      );
+      expect(full).toEqual(fullExpected);
+      expect(domain).toEqual(domainExpected);
+      expect(system).toEqual(systemExpected);
+      expect(records).toEqual(conversationExpected);
+      expect(new Set(full).size).toBe(363);
+    } finally {
+      Time.setProvider(previousTime);
+      storage.close();
+      await context.close();
+    }
+  });
+
+  it("reads scoped Agent history and exact execution phases without restoring an Agent", async () => {
+    const factory = new RecordingExecutionFactory();
+    factory.suppressSchedulerDiscovery = true;
+    const configured = waitingRepository();
+    const context = BoundedContext.singleTenant("PublicAgentReads")
+      .withAi(ai())
+      .persistSystemEvents()
+      .withStorageFactory(factory)
+      .add(configured)
+      .build();
+    const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-public-read" });
+    const history = configured.agentHistory(id, {});
+    try {
+      const command = SignalEnvelopes.command({
+        schema: DraftSupportReplySchema,
+        message: create(DraftSupportReplySchema, { agent: id, question: "Delivery?" }),
+        context: create(CommandContextSchema, { actorContext: create(ActorContextSchema) }),
+      });
+      if (command.id === undefined) throw new Error("Expected Command ID.");
+      expect(await history.fullHistory({ pageSize: 10 })).toEqual({ items: [] });
+      expect(await configured.agentExecution(id, command.id, {})).toBeUndefined();
+      await repositoryAccess.entityInboxTarget(configured)?.replay({
+        ...createMessage("public-agent-read", command.id.uuid, 1n),
+        inboxId: {
+          targetId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+          targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
+        },
+        signal: AnyMessages.pack(CommandSchema, command, { validate: false }),
+        label: "HANDLE_COMMAND",
+        status: "TO_DELIVER",
+      });
+      expect(await configured.agentExecution(id, command.id, {})).toBe("accepted");
+      const entityOpens = factory.entityStorageOpens;
+      const copiedSource = clone(CommandIdSchema, command.id);
+      const acceptedRead = configured.agentExecution(id, copiedSource, {});
+      copiedSource.uuid = "changed-after-read";
+      expect(await acceptedRead).toBe("accepted");
+      expect(factory.entityStorageOpens).toBe(entityOpens);
+      expect(
+        await configured.agentExecution(id, create(EventIdSchema, { value: command.id.uuid }), {}),
+      ).toBeUndefined();
+      const copiedId = clone(SupportReplyAgentIdSchema, id);
+      const detachedHistory = configured.agentHistory(copiedId, {});
+      copiedId.ticketNumber = "changed-after-reader";
+      const key = factory.admittedKeys.at(-1);
+      if (key === undefined) throw new Error("Expected accepted Agent signal.");
+      await repositoryAccess.runAcceptedAgent(configured, undefined, key);
+      expect(await configured.agentExecution(id, command.id, {})).toBe("completed");
+      const opensBeforeHistory = factory.entityStorageOpens;
+      const first = await history.fullHistory({ pageSize: 1 });
+      expect(first.items).toHaveLength(1);
+      if (first.nextCursor === undefined) throw new Error("Expected history continuation.");
+      expect((await history.fullHistory({ pageSize: 1001 })).items.length).toBeGreaterThan(1);
+      expect((await detachedHistory.fullHistory({ pageSize: 1001 })).items.length).toBeGreaterThan(
+        1,
+      );
+      expect((await history.systemEventHistory({ pageSize: 1001 })).items.length).toBeGreaterThan(
+        0,
+      );
+      expect((await history.domainEventHistory({ pageSize: 1001 })).items.length).toBeGreaterThan(
+        0,
+      );
+      expect(
+        await history.conversationHistory({
+          pageSize: 1,
+          conversation: create(ConversationIdSchema, { value: "unrelated" }),
+        }),
+      ).toEqual({ items: [] });
+      await expect(
+        history.systemEventHistory({ pageSize: 1, cursor: first.nextCursor }),
+      ).rejects.toThrow("Invalid Agent history cursor");
+      const other = configured.agentHistory(
+        create(SupportReplyAgentIdSchema, { ticketNumber: "other" }),
+        {},
+      );
+      await expect(other.fullHistory({ pageSize: 1, cursor: first.nextCursor })).rejects.toThrow(
+        "Invalid Agent history cursor",
+      );
+      expect(factory.entityStorageOpens).toBe(opensBeforeHistory);
+      expect(await context.stand().read(SupportReplyAgentStateSchema, id)).toBeDefined();
+      await expect(configured.agentExecution(id, create(CommandIdSchema), {})).rejects.toThrow();
+    } finally {
+      await context.close();
+    }
+    await expect(history.fullHistory({ pageSize: 1 })).rejects.toThrow("active repository");
+    await expect(
+      configured.agentExecution(id, create(CommandIdSchema, { uuid: "after-close" }), {}),
+    ).rejects.toThrow("active repository");
+  });
+
   it("expires a hanging handler and fences a late draft before the next signal", async () => {
     const factory = new RecordingExecutionFactory();
     factory.suppressSchedulerDiscovery = true;
@@ -365,6 +854,10 @@ describe("Agent registration readiness", () => {
       await expect(running).resolves.toBeUndefined();
       expect((await factory.readAccepted?.(first))?.status).toBe(
         AgentInvocationStatus.AGENT_INVOCATION_TERMINATED,
+      );
+      if (first.sourceSignal?.id.case !== "command") throw new Error("Expected Command source.");
+      expect(await configured.agentExecution(id, first.sourceSignal.id.value, {})).toBe(
+        "terminated",
       );
       expect(await context.stand().read(SupportReplyAgentStateSchema, id)).toBeUndefined();
       expect(emitted).toEqual([]);
@@ -963,6 +1456,8 @@ describe("Agent registration readiness", () => {
       expect((await factory.readAccepted?.(key))?.status).toBe(
         AgentInvocationStatus.AGENT_INVOCATION_ACTIVE,
       );
+      if (command.id === undefined) throw new Error("Expected original Command ID.");
+      expect(await configured.agentExecution(id, command.id, {})).toBe("active");
       seconds += 31n;
       await repositoryAccess.runAcceptedAgent(configured, undefined, key);
       expect((await factory.readAccepted?.(key))?.status).toBe(
@@ -1485,6 +1980,10 @@ describe("Agent registration readiness", () => {
       );
       expect((await factory.readAccepted?.(key))?.status).toBe(
         AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_DELIVERY,
+      );
+      if (command.id === undefined) throw new Error("Expected original Command ID.");
+      expect(await configured.agentExecution(id, command.id, {})).toBe(
+        "completed-pending-delivery",
       );
       seconds += 31n;
       await repositoryAccess.runAcceptedAgent(configured, undefined, key);

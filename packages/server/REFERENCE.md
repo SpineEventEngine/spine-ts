@@ -786,6 +786,17 @@ history in an application test. `BlackBox.readSystemEvents(ids)` reads the paire
 System store by exact Event IDs. See the [testing reference](../testing/REFERENCE.md)
 and [complete support tests](../../examples/support/test/support-blackbox.test.ts).
 
+For a trusted application bridge, a registered Agent `Repository` exposes
+`agentHistory(id, scope)` with the same four history methods and page contracts.
+The scope is explicit: pass `{}` in a single-tenant Bounded Context or
+`{ tenantId }` in a multitenant Bounded Context. The repository also exposes
+`agentExecution(id, sourceCommandOrEventId, scope)` for the exact recorded phase:
+`accepted`, `active`, `completed-pending-delivery`, `completed`, or `terminated`.
+An absent record returns `undefined`; it does not establish completion. These
+reads use indexed storage without restoring an Agent. The application bridge
+must authorize access before calling either method; actor metadata does not
+grant read permission.
+
 ## Signals, validation, and rejection behavior
 
 `CommandBus` validates every accepted command from Proto validation options
