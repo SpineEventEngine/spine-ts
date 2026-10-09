@@ -16,7 +16,10 @@ common workspace version under D-0115.
 
 Current work: [Signal-driven Agent entities](planning/agent-entities.md),
 on `agent-entities`, based on official master `658da1cdd`. Anthropic model
-support is included in the first snapshot. The three additional Anthropic
+support is included in the first snapshot. PR #18 now includes planning for the
+human-approved [Release Notes Studio desktop example](planning/release-notes-studio.md).
+That example remains unimplemented; its subscription adapter and embedded
+storage compatibility gates precede UI implementation. The three additional Anthropic
 review-and-fix rounds and the two further requested rounds are complete, each
 with a fresh reviewer and no inherited conversation or memory. The signed-thinking continuation defect is
 fixed: ordered provider content is recorded and restored for tool and corrective
@@ -30,8 +33,9 @@ Full release verification passes at code checkpoint `5c3d76a9b`: 5,944 tests
 passed and one skipped. Coverage: statements 93.78%, branches 90.01%, functions
 95.62%, lines 95.55%. Both dependency audits pass. All 21 package archives pass
 strict external consumer checks and the offline publication trial. The branch
-uses `2.0.0-snapshot.23`; no packages were published. GitHub Build awaits a
-human-created PR; no PR was created.
+uses `2.0.0-snapshot.23`; no packages were published. The human-created
+[PR #18](https://github.com/SpineEventEngine/spine-ts/pull/18) is the integration
+destination; the cited release run predates the desktop example.
 
 The feature includes the Spine AI facade, mandatory indexed history, durable
 signal-triggered execution, Vercel/Ax integration, MCP and BlackBox support.

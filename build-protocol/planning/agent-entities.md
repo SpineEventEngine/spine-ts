@@ -3229,3 +3229,48 @@ now distinguish Bounded Context from other contexts. The existing release
 verification applies to unchanged runtime behavior; this correction uses the
 bounded documentation/example checks above. Full PR guide follows in chat with
 four-space code indentation, separated TSDoc tags, and implicit Entity-state IDs.
+
+### Release Notes Studio planning — 2026-10-09
+
+The human approved Release Notes Studio as a local-only desktop example in this
+same PR and requested planning, not implementation. Prepare an implementable
+plan covering Electron, direct Sign in with ChatGPT plan usage, existing Agent
+facade integration, local Git MCP reads, persistent local storage, domain
+workflow, BlackBox/UI/provider checks, and documentation. The actual model
+requests go to OpenAI; no hosted application backend or API-key fallback.
+Planning estimate: 0.4–0.7 hours. New desktop/auth/storage boundaries make the
+planned implementation high-risk. One architecture pass is assigned to the
+existing requirements_splitter role, explicit gpt-6-astra/high, fresh read-only
+assignment, no memory or children. A separate read-only repository-scanning
+function may use explicit gpt-6-luna/medium to map current storage seams. Desktop
+supports these explicit dispatch profiles. Preserve the existing feature branch
+and PR; do not create another task, branch, PR, or production implementation.
+
+Planning deliverable: [Release Notes Studio](release-notes-studio.md). The new
+plan covers domain admission and approval, direct official SIWC subscription
+requests, token-limit compatibility, Git MCP evidence, embedded persistence,
+production history/status reads, Electron boundaries, BlackBox and desktop
+checks, and five implementation milestones. Expected implementation effort is
+13–23 hours if the storage compatibility gate succeeds; no runtime code changed.
+
+The read-only storage scan completed under explicit gpt-6-luna/medium; configured
+profile accepted, with no independent runtime introspection available. It found
+PostgreSQL pooling, transaction/session-lock, and cross-family commit requirements
+that must be tested against PGlite rather than assumed. The requirements_splitter
+completed the architecture pass and reviewed the finished plan under the same
+explicit gpt-6-astra/high assignment, without memory or children. Its accepted
+findings add immutable input evidence, approval-frozen Markdown, stale-result
+guards, durable single-flight admission/reconciliation, and authoritative
+execution-status observation. The undefined suspended-selection exception was
+removed. The suggested ban on a user-selected export destination inside Git was
+not accepted: manual save is in scope, and model-directed repository writes
+remain excluded. The plan states that distinction and overwrite confirmation.
+
+Planning checks: changed Markdown formatting, documentation audience, plan
+structure/wording/package paths, and Git whitespace checks. These are documentation
+checks, not claims that desktop/auth/storage implementation tests have run.
+Review dispositions: architecture and public-contract planning reviewed; runtime
+reliability is expressed as concrete compatibility gates; documentation checked;
+production style and release security review deferred to implemented changes
+because this turn adds planning documents only. Next step is milestone 1 when
+the human starts implementation.
