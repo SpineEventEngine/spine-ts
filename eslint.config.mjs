@@ -2,6 +2,8 @@ import js from "@eslint/js";
 import eslintConfigPrettier from "eslint-config-prettier";
 import tseslint from "typescript-eslint";
 
+const typedFiles = ["**/*.ts", "examples/release-notes/{src,test}/**/*.tsx"];
+
 export default tseslint.config(
   {
     ignores: [
@@ -20,11 +22,11 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.strictTypeChecked.map((config) => ({
     ...config,
-    files: ["**/*.ts", "**/*.tsx"],
+    files: typedFiles,
   })),
   ...tseslint.configs.stylisticTypeChecked.map((config) => ({
     ...config,
-    files: ["**/*.ts", "**/*.tsx"],
+    files: typedFiles,
   })),
   {
     files: ["**/*.ts"],
@@ -48,7 +50,10 @@ export default tseslint.config(
     },
   },
   {
-    files: ["examples/release-notes/{src,test}/**/*.ts", "examples/release-notes/{src,test}/**/*.tsx"],
+    files: [
+      "examples/release-notes/{src,test}/**/*.ts",
+      "examples/release-notes/{src,test}/**/*.tsx",
+    ],
     languageOptions: {
       parserOptions: {
         project: "./examples/release-notes/tsconfig.tooling.json",

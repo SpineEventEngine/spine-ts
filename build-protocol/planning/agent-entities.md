@@ -3874,3 +3874,62 @@ available. All four canonical auth review concerns are closed: reliability/API
 clean, style's overlapping findings fixed with checked structure/format, docs
 clean. D-0133 is ready for checkpoint, not final release/security/live-account
 qualification. Parent commits and immediately pushes this reviewed milestone.
+
+D-0133 checkpoint4c7128a7b pushed to origin/agent-entities successfully.
+Next bounded milestone implements D-0135 before desktop domain work. High-risk:
+public callback contract, selection authorization and cancellation lifecycle.
+Estimate1–2h active work for implementation/behavior tests/focused reviews/fixes/
+integration; CI wait additional. This prerequisite was demonstrated during
+integration analysis and adds to the earlier domain estimate. Existing
+implementer chatgpt_profile_implementation continues with explicit configured
+gpt-6-sol/medium; no new writer or child agents. Parent handles logs and Git.
+Scope: registry append-only registration, accepted-message resolver, real
+authorizeSelection enforcement and narrow public docs/tests. D-0134 production
+reads and full domain/UI remain subsequent slices. Acceptance is exactly D-0135;
+cheap preflight before relevant four-concern review, full verify:release once
+the complete coordinated desktop deliverable converges. No thresholds changed.
+
+CI37940094907 at185abe81e completed366 passing files/1skipped; only global
+branch coverage failed89.96% against90% (prior89.93%). Statement93.74%,
+function95.64%, line95.54%. Test-only adapter correction improved coverage but did
+not fully close the gate. Raw log /tmp/spine-agent-adapter-ci-third.log, no repo
+evidence artifact. New checkpoint4c7128a7b CI37943531525 is running. Existing writer
+must retain this failure and cover meaningful remaining paths during the current
+runtime slice, with complete release evidence still required after convergence.
+
+Parallel read-only test analysis reuses chatgpt_sdk_protocol_scan, explicitly
+configured gpt-6-luna/medium. Scope is the now-committed auth source/tests and
+available focused coverage: identify concrete missing acceptance paths that
+would materially improve confidence, not assertions mirroring implementation.
+No source writes, no children, no full verification or duplicate reliability
+review. Return a short prioritized test list to the existing writer for the
+coordinated final coverage pass; D-0135 implementation continues independently.
+
+Read-only Luna/medium test analysis complete, no edits/tests. Existing tests
+already cover forged signatures, state/nonce/issuer/audience/expiry, subject
+changes, token rotation, reconnect/signout races and late account/model choices.
+Prioritized missing behavior: real selected-account connection through the
+adapter (pinned identity/current token, deny switched or signed-out account);
+invalid refresh permission/token responses must not become usable credentials;
+callback denial/missing fields/wrong destination fail before exchange; catalog
+HTTP/shape errors; no-plan/catalog failure leaves UI generation unavailable.
+Use the public Agent/adapter execution path for integrated connection tests when
+domain wiring exists, not an application import of private package source.
+These are final confidence/coverage cases, not a broad extra review wave.
+
+Auth checkpoint CI37943531525 fails before tests: expanded typed ESLint rules
+match all TSX files, but existing Message Board TSX lacks the corresponding
+parser project. Example-only ESLint missed this shared configuration regression.
+Raw /tmp/spine-release-notes-auth-ci.log. Return mechanical correction to current
+writer: preserve existing TS scope and add only intended Release Notes TSX scope,
+or otherwise prove correct existing-project parser routing without expanding
+unrelated lint policy. Reproduce failing Message Board path, then run eslint .
+locally. Estimated0.1–0.25h included in current runtime slice; separate config
+checkpoint push immediately once checks pass. No specialist review needed for
+this deterministic scope correction; D-0135 source remains uncommitted.
+
+Mechanical lint correction reproduces the original parserServices failure, then
+passes pnpm exec eslint . with typed rules restricted to baseline TS plus this
+example's TSX. Three ordinary findings in in-progress D-0135 code were fixed
+before the clean full lint rerun. Parent pushes only ESLint configuration and
+this record; ongoing runtime changes remain outside the checkpoint.
