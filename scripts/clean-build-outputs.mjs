@@ -37,6 +37,7 @@ export const buildOutputPaths = Object.freeze([
   "examples/projects/dist",
   "examples/orders/dist",
   "examples/support/dist",
+  "examples/release-notes/dist",
   "examples/message-board/model/dist",
   "examples/message-board/app/dist",
   "examples/message-board/web/dist",

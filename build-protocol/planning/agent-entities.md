@@ -3997,3 +3997,19 @@ dispositions accepted: reliability/API fixed and clean, documentation clean,
 style no blocking findings with P3 predicate advice recorded. Parent checkpoints
 only reviewed runtime/tests/docs and current records; separate script fixes
 remain uncommitted. Full coordinated release/coverage/security still outstanding.
+
+D-0135 checkpointcc451ad40 pushed successfully. CI correction reproduction starts
+at5/139 failing tests and reaches3/139 after output/workspace inventories are
+fixed. Explicit allowBuilds.esbuild:false still fails isolated offline installs;
+writer investigates interaction with existing onlyBuiltDependencies before
+changing policy or fixture commands. No blanket script permission or skipped
+build tests. This ordinary deterministic investigation is not a human blocker.
+
+Confirmed stale-HEAD fixtures, not a policy conflict: all three tests create
+detached worktrees from committed cc451ad40. Overlaying only current
+pnpm-workspace.yaml onto an isolated HEAD worktree makes ordinary pnpm install
+--offline --frozen-lockfile pass with pnpm11.9.0. Temporary ignore-scripts fixture
+edits were reverted; preserve original canonical tests. Parent checkpoints the
+three minimal inventory/policy files plus record, then writer reruns exact five
+tests against that new committed snapshot. This commit is required for the
+tests' actual fixture source; no claim of complete test success before rerun.
