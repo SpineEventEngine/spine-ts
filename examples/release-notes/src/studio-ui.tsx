@@ -792,7 +792,10 @@ const useDraftEditor = (draft: Draft) => {
   const [preview, setPreview] = useState<Preview>();
   const [dirty, setDirty] = useState(false);
   const latestVersion = useRef(JSON.stringify(draft.version));
+  const synchronizedDraft = useRef(draft);
   useEffect(() => {
+    if (synchronizedDraft.current === draft) return;
+    synchronizedDraft.current = draft;
     latestVersion.current = JSON.stringify(draft.version);
     if (!dirty) setDocument(draft.document);
     setPreview(undefined);

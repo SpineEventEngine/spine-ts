@@ -5664,3 +5664,57 @@ a feature-branch commit and immediate push to `origin/agent-entities`. No PR
 creation, merge, or publication is authorized. The next gates are exact-commit
 Build and Security CI, followed by real browser sign-in and a small synthetic
 Git comparison. The Mac must be unlocked for that interactive check.
+
+### CI editor correction
+
+Commit `3775a8b1e` was pushed immediately to the official feature branch. Security
+run 37999565110 passes. Build run 37999527963 fails one UI assertion: after
+editing a heading to `Highlights`, the saved document still contains `Overview`
+in `studio-ui.test.tsx`. The other 6,187 tests pass. Archive preparation and the
+trial job are skipped. The log is `/tmp/spine-studio-gh-build-failure.log`.
+
+The same explicitly configured implementation agent (`gpt-6-sol`, `medium`)
+receives this bounded editor/test diagnosis. Reproduce the actual ordering,
+distinguish application loss of edits from a fixture timing error, preserve the
+assertion, and run focused tests plus the cheap preflight. No unrelated edits,
+children, memory, commits, or weakened checks. A production correction reopens
+only the affected reliability concern. The selected full release profile must
+pass again after convergence. Estimated correction work is 0.5–1 hour plus CI.
+The live desktop unlock request remains pending.
+
+The CI symptom has not reproduced in isolated local runs. A speculative initial
+editor-effect guard is not accepted: the exact asynchronous mount and React
+interaction ordering still need to be established. The existing reliability
+reviewer (`gpt-6-sol`, `medium`, explicitly configured) receives a read-only
+root-cause investigation over the failing test and editor load path. No memory,
+children, or edits. This uses the actual CI failure as mechanical evidence and
+does not reopen unrelated review concerns. A wait or passing rerun alone is not
+proof of a fix. The current writer remains responsible for any accepted change.
+
+The independent reliability diagnosis identifies a supported causal path:
+`DraftPanel` mounts after asynchronous session reads, outside the initial test
+render. Its passive synchronization effect captures `dirty=false` and can reset
+the first edited heading to the initial document. Skipping synchronization for
+the unchanged initial draft removes that redundant write. A pre-edit test
+rerender would flush and mask the path and is rejected. Retain a post-edit
+rerender and controlled-value assertion plus the original saved-document check.
+This is causal code-path evidence, not a captured CI scheduler trace; isolated
+runs did not reproduce the symptom. The same writer applies only this private
+application correction, then runs the cheap preflight and focused coverage.
+The existing reviewer closes the affected correction after source freeze.
+
+The bounded correction is frozen. All 207 focused tests pass; the editor file
+passes 32 tests. Example branch coverage is 1110/1240, projecting the full
+baseline to 20560/22840 (90.0175%). All affected cheap checks pass. The existing
+explicit Sol/medium reliability reviewer closes the correction cleanly: the
+guard skips only the initial redundant reset, while later draft references
+still update Version, clean document, and preview. The post-edit test rerender
+checks retained controlled state and no longer flushes before the first edit.
+
+The correction is ready for a checkpoint commit and immediate feature-branch
+push. Full local release verification and exact-commit CI will run concurrently
+on that frozen correction; this checkpoint is not a readiness claim. The
+existing mechanical function remains explicitly `gpt-6-luna` / `low`. After the
+local full gate, rebuild and rerun packaged desktop checks for the changed
+renderer. No dependency, authentication, framework, or serialized contract has
+changed, so their completed review dispositions remain current.

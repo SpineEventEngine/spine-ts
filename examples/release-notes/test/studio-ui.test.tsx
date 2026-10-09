@@ -75,11 +75,16 @@ it("saves multiple edited sections and selected citations with the displayed Ver
       edit,
     },
   });
-  render(<StudioPanel modelReady notice={vi.fn()} />);
+  const notice = vi.fn();
+  const { rerender } = render(<StudioPanel modelReady notice={notice} />);
   await screen.findByRole("heading", { name: "Release" });
   fireEvent.change(labeled("Section heading", 0), {
     target: { value: "Highlights" },
   });
+  rerender(<StudioPanel modelReady notice={notice} />);
+  const heading = labeled("Section heading", 0);
+  if (!(heading instanceof HTMLInputElement)) throw new Error("Section heading is missing.");
+  expect(heading.value).toBe("Highlights");
   fireEvent.change(labeled("Claim", 0), { target: { value: "Updated" } });
   const picker = labeled("Evidence citations", 0);
   if (!(picker instanceof HTMLSelectElement)) throw new Error("Citation picker is missing.");
