@@ -35,7 +35,7 @@ no dependency on future physical deletion. Historical proposals are superseded.
 - Preserve original event timestamps. Use full Time timestamps for ordering;
   existing record ID/category resolves ties. Framework runtime time reads use
   Time. TSX and non-runtime scripts remain excluded.
-- Authenticated registry defaults resolve at app/context/repository/instance
+- Authenticated registry defaults resolve at app/Bounded Context/repository/instance
   scope. No login protocol implementation. Credential refresh cannot silently
   change an accepted invocation's identity. MCP tools are authorized, bounded
   and intercepted for audit. Unknown write outcomes are not automatically resent.
@@ -44,7 +44,7 @@ no dependency on future physical deletion. Historical proposals are superseded.
   transition per instance; slow inference must not stall other instances in the
   same delivery shard. Late execution cannot commit after losing authority.
 - Entity transactions are not database transactions held across model calls.
-  No new recovery protocol for copies in context-wide and repository event stores.
+  No new recovery protocol for copies in Bounded Context-wide and repository event stores.
 - Use documented production-style Protos and domain-correct fixtures. No proto3
   optional/readonly, invented Money or wire-compatible substitute domain types.
 - BlackBox is the domain-test entry point. Deliver a warehouse support-ticket
@@ -168,8 +168,8 @@ Promises, reactors then commanders share one draft, and the service awaits
   insufficient. No database transaction spans a callback or model/tool request.
 - **Server integration:** `server/src/context/{bounded-context,entity-inbox}.ts`,
   `repository/repository.ts`, `server/server.ts`, and normal delivery lifecycle
-  attach/close the internal Agent runtime. `.withAi()` respects context override
-  and rejects rebinding built contexts; Agent registration requires persisted
+  attach/close the internal Agent runtime. `.withAi()` respects Bounded Context override
+  and rejects rebinding built Bounded Contexts; Agent registration requires persisted
   System events and a compatible provider before intake. Scripted model/tool
   dependencies remain in `packages/testing`, exercised through real BlackBox.
 
@@ -196,9 +196,9 @@ project/planner vocabulary in illustrative specification snippets.
    The existing follow-up callback is a wake-up hint, not durable evidence and
    not a place to await inference on the shard/bus queue. An internal bounded
    scheduler discovers pending records at start and after interrupted work;
-   scoped indexed scans, finite batches and the context tenant catalog prevent
+   scoped indexed scans, finite batches and the Bounded Context tenant catalog prevent
    process memory or a lost notification from becoming the recovery mechanism.
-3. Serialize transitions by context/tenant/type/typed ID using a persisted
+3. Serialize transitions by Bounded Context/tenant/type/typed ID using a persisted
    per-instance active-invocation claim with expiry and a replaceable token.
    Pending invocations follow accepted Inbox order. Ready work on another ID in
    the same shard proceeds while inference waits. Bound registry concurrency
@@ -233,8 +233,8 @@ project/planner vocabulary in illustrative specification snippets.
    retain their IDs across interruption. Keep this pending-delivery status in
    the invocation record until ordinary delivery accepts it; do not rerun the
    handler after a committed transition. This is accepted-execution recovery,
-   not a new context/repository event-copy reconciliation protocol. System and
-   domain context-wide copies continue through the existing EventStore paths;
+   not a new Bounded Context/repository event-copy reconciliation protocol. System and
+   domain Bounded Context-wide copies continue through the existing EventStore paths;
    their failures remain ordinary storage/publication failures.
 8. Persist write-tool intent before sending. Any interrupted intent without proof
    of non-dispatch is uncertain, including remote success with lost local result:
@@ -260,7 +260,7 @@ values are comparison ranks, not persisted sequence counters. Filter by full
 Entity scope and optionally category/conversation before paging. Bind opaque
 cursors to scope, method, conversation and the complete last key; validate them
 at the read boundary. Use provider range predicates and composite indexes,
-never a context EventStore scan or in-memory sort of an entire history.
+never a Bounded Context EventStore scan or in-memory sort of an entire history.
 
 The history provider port takes typed scope/view, an optional complete-key
 boundary, requested count and response-byte budget; it returns entries and
@@ -595,7 +595,7 @@ content with the same explicitly configured Sol/medium and Luna/medium reviewers
 no repeat architecture or complete four-lane wave for deterministic wording fixes.
 
 Foundation accepted: focused reliability follow-up closed the persistence finding
-using two distinct repositories/contexts over one storage factory. Documentation
+using two distinct repositories/Bounded Contexts over one storage factory. Documentation
 follow-up closed all three findings. Parent reran 7 Agent BlackBox/query tests and
 the reconstructed-repository regression: pass. Type/API wording, shared error text
 and receiver-based discovery corrections were verified directly. All four review
@@ -1150,7 +1150,7 @@ execution acknowledgement, while EventStore presence does not prove all target
 Inbox handoffs. Existing requirements_splitter function dispatched as fresh
 agent_output_acceptance_architecture, explicit gpt-6-astra/high, to design only
 internal acceptance/retry semantics and source-grounded regressions. No public
-publisher API or context/repository event-copy reconciliation is authorized.
+publisher API or Bounded Context/repository event-copy reconciliation is authorized.
 
 Checkpoint856e5efcf pushed to official origin. Remaining estimate revised to
 4–8hours for durable runtime/providers, MCP, integration/recovery tests, independent
@@ -1325,7 +1325,7 @@ to fresh existing reviewer explicitly gpt-6-luna/medium, read-only without memor
 or children, scoped to eight storage README/REFERENCE files and port TSDoc.
 Draft BlackBox provider-key public method removed before contract acceptance;
 internal testing read proves retained rows while final public audit seam must use
-existing opaque history cursor contracts and bound context/tenant.
+existing opaque history cursor contracts and bound Bounded Context/tenant.
 
 Execution storage complete review wave accepted. Explicit Sol/medium technical
 and Luna/medium docs dispatch fields confirmed; actual runtime metadata unavailable.
@@ -1379,7 +1379,7 @@ closed, shared head behavior and preference isolation preserved. Explicit
 configured Sol/medium profile confirmed; runtime metadata unavailable. Same
 existing style reviewer Sol/medium follows up its two substantive findings only.
 BlackBox audit seam now uses opaque full-history cursors and exact System Event
-IDs, verifies context/tenant and returns copies; four tests pass including actual
+IDs, verifies Bounded Context/tenant and returns copies; four tests pass including actual
 paired System store retention. Public contract adds no provider keys or new
 assertion harness. Final runtime review still required.
 
@@ -1593,7 +1593,7 @@ claim passing; parent runs deterministic acceptance after window release.
 
 API follow-up: scripted correction closed; close rejection fixed in source but
 never-settling SPI close still blocks saved outcome, so finite cleanup bound remains.
-Server writer confirms registry-wide concurrency gap across contexts and parallel
+Server writer confirms registry-wide concurrency gap across Bounded Contexts and parallel
 invoke calls, queued cap inert. Existing requirements_splitter explicitly Astra/high
 gets one narrow architecture escalation for precise gate placement/backpressure and
 queue-deadline semantics, packet in /tmp. No public knobs or persistence subsystem
@@ -1702,7 +1702,7 @@ not resolved. Main writer must distinguish pending discovery (diagnostic claim0)
 from missing terminal classification before accepting fix. Parent inspected new
 scheduler source and returned accepted-architecture corrections: retain only key
 in resident descriptors, no cloned full journal; remove random scheduler identity
-from shared gate dedup key, use complete durable context/tenant/repository/source.
+from shared gate dedup key, use complete durable Bounded Context/tenant/repository/source.
 
 Native uncertainty diagnosis refined by exact PG head/provider-clock evidence:
 pending and active true, renewed expiry29seconds ahead at60seconds. Worker has
@@ -1768,8 +1768,8 @@ no new recovery protocol or storage change. Late probe confirms/limits next chec
 New bounded BlackBox capacity/lifecycle test assignment uses existing adapter
 implementer context, explicit immutable Sol/medium profile, now disjoint test-only
 packages/testing/test/agent-capacity-blackbox.test.ts. Main retains all production
-and existing agent-ai-blackbox/query tests. Prove shared registry across contexts,
-durable overflow, same-shard progress, waiting deadlines and context cancellation
+and existing agent-ai-blackbox/query tests. Prove shared registry across Bounded Contexts,
+durable overflow, same-shard progress, waiting deadlines and Bounded Context cancellation
 using existing genuine support fixtures, scripted backend gates and test-only
 provider observation. No new Proto or public instrumentation. Estimate0.5–1h,
 overlaps audit implementation; no duplicate main test authoring. No grandchildren.
@@ -1785,7 +1785,7 @@ main continues actual operation/attempt/tool/selection audit hooks.
 
 Fan-out canonical generation and Proto/private BlackBox build PASS. All three
 implementation contexts released from atomic generation freeze. Foundation must
-supply new generated SupportDraftObserver in affected private test contexts.
+supply new generated SupportDraftObserver in affected private test Bounded Contexts.
 Native WRITE uncertainty passes all six engine variants with exact paired System
 event assertions. All nine interaction event source hooks now implemented; main
 reports focused65/65 plus source TS/cleanup pass. Generic termination, actual query
@@ -1995,10 +1995,10 @@ history helper uses typed Repository and inferred ID, no permissiveunknown overl
 History typing correction integration: generated `.add(AgentClass)` exposes a
 copy-safe RepositoryView, so requiring only an explicit typed Repository would
 force the support example away from generated handler discovery. Parent rejected
-manual EntityHandlers metadata and a new context capture hook. Accepted bounded
+manual EntityHandlers metadata and a new Bounded Context capture hook. Accepted bounded
 API correction allows the Agent class plus its inferred ID, alongside typed
 Repository; testing bridge resolves exact registered class identity and retains
-context/family checks. Wrong-domain-ID compile tests cover both overloads.
+Bounded Context/family checks. Wrong-domain-ID compile tests cover both overloads.
 The example must preserve generated `.add` registration and contain no handwritten
 handler metadata. Fresh origin/master remains658da1cdddcb8fd40f9205b1c200abc3a58dd62e.
 
@@ -2211,7 +2211,7 @@ requirements-splitter architecture function to explicit Astra/high, freshcontext
 read-only no grandchildren. Decide minimal honest collection strategy retaining
 all runtime source scope and90% thresholds; not permission to change metrics or
 introduce a bespoke coverage engine. Existing source repository integration now
-proves one physical model call, state/domain/system/history via public context;
+proves one physical model call, state/domain/system/history via public Bounded Context;
 source-local test and scoped mechanics pass. Fullglobalrelease stillblocked by
 coverage only; source/runtime unchanged since4ced.
 
@@ -2438,7 +2438,7 @@ Round 1 review completed independently at e6ade544c. Configured Sol/medium
 profile was explicit and accepted; runtime introspection is unavailable. One P2
 finding is confirmed by source inspection: the Agent runner directly awaits
 a handler promise, allowing a non-cooperative application await to outlive the
-persisted deadline and block context shutdown while lease renewal continues.
+persisted deadline and block Bounded Context shutdown while lease renewal continues.
 Report: `/tmp/agent-standalone-round-1.md`. No other confirmed finding.
 
 Correction assignment: existing server implementation context, explicit
@@ -2528,7 +2528,7 @@ Configured role/profile is the available metadata; no runtime introspection.
 Round 3 completed independently at 22f06a48c. Explicit configured Sol/medium
 profile accepted; runtime metadata unavailable. One P2 remains in periodic
 recovery discovery: initial and periodic full catalog materialization still
-scales with every tenant/repository, and a blocked catalog read delays context
+scales with every tenant/repository, and a blocked catalog read delays Bounded Context
 shutdown. The earlier amortization fixed repeated short-turn work but did not
 bound the refresh itself. Report: `/tmp/agent-standalone-round-3.md`.
 
@@ -3184,3 +3184,48 @@ The final record-only update receives formatting, audience, readiness and diff
 checks before push, then GitHub Security runs on that final head. Report its
 result to the human without a self-referential record commit. Physical Entity
 deletion remains the separate deferred task.
+
+### Bounded Context terminology correction — 2026-10-09
+
+Micro documentation correction requested by the human: use “Bounded Context”
+when naming the DDD boundary, including configuration scopes, history storage,
+TSDoc, diagnostics, and test descriptions introduced by this changeset. Preserve
+Command/Event/Actor contexts, storage contexts, System Context, code identifiers,
+and references to an agent's working context. No behavioral or API changes.
+Acceptance: inspect added wording against origin/master, correct ambiguous terms,
+run focused documentation/style checks, and provide the full PR guide with
+four-space code indentation and a blank TSDoc line before parameter tags.
+Documentation review will use the existing documentation_reviewer role with
+explicit gpt-6-luna/medium, a fresh read-only assignment and no child agents.
+Other review concerns are N/A: executable code, contracts, persistence and
+security behavior remain unchanged. Desktop supports explicit child dispatch.
+
+The human also identified redundant Entity-state ID options. The user guide
+(first-field routing) and ImplicitRequiredIds plus repository ID validation
+confirm those defaults. The correction now includes the support example's three
+Entity-state ID declarations and is classified standard. Dispatch implementer
+explicit gpt-6-sol/medium for only examples/support/proto/.../states.proto and
+necessary generation artifacts/checks, with no other edits or children. Parent
+retains terminology/docs. Estimate remains 0.2–0.4 hours unless generation or
+focused checks reveal a blocker.
+
+Correction accepted: explicit Sol/medium implementer removed the three redundant
+Support Entity-state ID option pairs and regenerated the example manifest
+(UUID generation ID retained). Root Proto generation, generated-cleanliness,
+Support compilation, and 42 support/implicit-ID/transition tests passed. The
+initial root generation checksum conflict was resolved by retaining the already
+qualified upstream-style “bounded context” comments; no shared Proto changed.
+
+Explicit Luna/medium documentation reviewer found three terminology omissions
+in user-guide/server/testing prose. All were fixed and independently closed.
+Both assignments used explicit model/reasoning dispatch; runtime introspection
+was unavailable. No children were spawned. Relevant task-profile gates passed:
+changed-file formatting, cleanup, TSDoc, documentation audience, TypeDoc/public
+API docs, release-readiness links/assets, tooling typechecks, and diff checks.
+Two further history/BlackBox suites passed all 25 tests, for 67 focused tests.
+The cleanup check was rerun successfully after concurrent generation finished.
+No runtime logic or API identifiers changed; diagnostics and test descriptions
+now distinguish Bounded Context from other contexts. The existing release
+verification applies to unchanged runtime behavior; this correction uses the
+bounded documentation/example checks above. Full PR guide follows in chat with
+four-space code indentation, separated TSDoc tags, and implicit Entity-state IDs.

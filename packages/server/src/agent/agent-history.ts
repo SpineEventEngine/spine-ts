@@ -35,7 +35,7 @@ import {
  */
 export interface AgentHistoryScope {
   /**
-   * Context name in the active repository.
+   * Bounded Context name in the active repository.
    */
   readonly context: string;
 

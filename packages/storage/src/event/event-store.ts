@@ -180,8 +180,9 @@ export class EventStore {
 
   /**
    * Persists one batch only when every original Event ID is available.
+   *
    * @param records Original Event envelopes.
-   * @param context Captured tenant and bounded context.
+   * @param context Captured tenant and Bounded Context.
    * @returns Completion after all unique Events are persisted.
    */
   private async appendUnique(records: readonly Event[], context: StorageContext): Promise<void> {
@@ -201,8 +202,9 @@ export class EventStore {
 
   /**
    * Deletes the IDs inserted by a failed legacy batch operation.
+   *
    * @param ids IDs inserted by the current batch.
-   * @param context Captured tenant and bounded context.
+   * @param context Captured tenant and Bounded Context.
    * @returns Completion after those IDs are removed.
    */
   private async deleteIds(ids: readonly EventId[], context: StorageContext): Promise<void> {
@@ -221,9 +223,10 @@ export class EventStore {
   }
 
   /**
-   * Checks that no ID in a batch is already stored in this context.
+   * Checks that no ID in a batch is already stored for this Bounded Context and tenant.
+   *
    * @param ids Original Event IDs.
-   * @param context Captured tenant and bounded context.
+   * @param context Captured tenant and Bounded Context.
    * @returns Completion after duplicate validation.
    */
   private async checkUnique(ids: readonly EventId[], context: StorageContext): Promise<void> {
@@ -313,10 +316,11 @@ const EventStoreLocks = Object.freeze({
   queues: new WeakMap<StorageFactory, Map<string | symbol, Promise<void>>>(),
 
   /**
-   * Serializes Event ID checks and insertion in one captured context.
+   * Serializes Event ID checks and insertion for one captured Bounded Context and tenant.
+   *
    * @param factory Storage provider used for the Event family.
-   * @param context Captured tenant and bounded context.
-   * @param work Operation run under the context lock.
+   * @param context Captured tenant and Bounded Context.
+   * @param work Operation run under the Bounded Context and tenant lock.
    * @returns Result returned by the operation.
    * @typeParam T Operation result.
    */
@@ -346,8 +350,9 @@ const EventStoreLocks = Object.freeze({
 
   /**
    * Returns the serial queue map for one storage provider.
+   *
    * @param factory Storage provider used for the Event family.
-   * @returns Context queues for this provider.
+   * @returns Bounded Context and tenant queues for this provider.
    */
   queueMap(factory: StorageFactory): Map<string | symbol, Promise<void>> {
     let queues = this.queues.get(factory);
@@ -360,15 +365,16 @@ const EventStoreLocks = Object.freeze({
 });
 
 /**
- * Provider-only Event Store coordination bound to captured context and tenant.
+ * Provider-only Event Store coordination bound to a captured Bounded Context and tenant.
  * @internal
  */
 interface EventStoreAccess {
   /**
-   * Serializes work for one captured provider context.
+   * Serializes work for one captured storage context.
+   *
    * @param factory Storage provider used for the Event family.
-   * @param context Captured tenant and bounded context.
-   * @param work Operation run under the context lock.
+   * @param context Captured tenant and Bounded Context.
+   * @param work Operation run under the Bounded Context and tenant lock.
    * @returns Result returned by the operation.
    * @typeParam T Result of the serialized operation.
    */
@@ -376,7 +382,8 @@ interface EventStoreAccess {
 
   /**
    * Accepts an original saved Event ID or verifies its exact stored envelope.
-   * @param store Event Store with captured context and tenant.
+   *
+   * @param store Event Store with a captured Bounded Context and tenant.
    * @param event Original saved Event envelope.
    * @returns Stored or newly appended original Event.
    */
@@ -408,7 +415,7 @@ export const eventStoreAccess: EventStoreAccess = Object.freeze({
   },
 
   /**
-   * Reuses one EventStore's captured tenant/context for saved-output retry.
+   * Reuses one EventStore's captured tenant and Bounded Context for saved-output retry.
    */
   async appendOrVerifyOriginal(store: EventStore, event: Event): Promise<Event> {
     if (!store.isOpen()) throw new Error("EventStore is closed.");
@@ -585,7 +592,7 @@ const EventContexts = {
 
   /**
    * Captures the selected tenant for an Event Store read.
-   * @param context Event Store context and selected tenant.
+   * @param context Event Store storage context and selected tenant.
    * @returns Immutable storage context for the read.
    */
   snapshot(context: EventStoreContext): StorageContext {
@@ -605,7 +612,7 @@ const EventContexts = {
    * Captures one context using an event envelope tenant when present.
    * @param context Captured event storage context.
    * @param event Original event envelope.
-   * @returns Captured context for this Event and tenant.
+   * @returns Captured storage context for this Event and tenant.
    */
   snapshotForEvent(context: EventStoreContext, event: Event): StorageContext {
     if (!context.multitenant) return EventContexts.snapshot(context);
@@ -621,9 +628,9 @@ const EventContexts = {
 
   /**
    * Checks every Event in one batch uses the same captured tenant.
-   * @param context Event Store context before envelope validation.
+   * @param context Event Store storage context before envelope validation.
    * @param events Original Event envelopes in the batch.
-   * @returns Immutable context shared by every Event in the batch.
+   * @returns Immutable storage context shared by every Event in the batch.
    */
   batch(context: EventStoreContext, events: readonly Event[]): StorageContext {
     const first = events[0];

@@ -62,7 +62,7 @@ describe("shared Agent execution capacity", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("limits active transitions and retains one FIFO waiting descriptor across contexts", async () => {
+  it("limits active transitions and retains one FIFO waiting descriptor across Bounded Contexts", async () => {
     const ai = registry(1, 1);
     const firstContext = AgentExecutionCapacity.for(ai);
     const secondContext = AgentExecutionCapacity.for(ai);

@@ -162,8 +162,9 @@ export class Server {
   }
 
   /**
-   * Sets the default AI registry for context builders added to this server.
-   * A context builder's own registry takes precedence.
+   * Sets the default AI registry for Bounded Context builders added to this server.
+   * An explicit Bounded Context registry takes precedence.
+   *
    * @param registry Factory-created deployment registry.
    * @returns This server builder.
    */

@@ -253,7 +253,7 @@ interface RepositoryRegistration {
   readonly publishSavedCommand: (command: Command, plan: AgentSavedDispatchPlan) => Promise<void>;
 
   /**
-   * Persists the original mandatory Agent System Event in this context's EventStore.
+   * Persists the original mandatory Agent System Event in the paired System Context's EventStore.
    */
   readonly publishAgentSystemEvent: (event: Event) => Promise<void>;
 
@@ -577,9 +577,9 @@ const builderBuilds = new WeakMap<
 
 interface BoundedContextAccess {
   /**
-   * Resolves an original or context-issued copy-safe repository view.
+   * Resolves an original or Bounded Context-issued copy-safe repository view.
    *
-   * @param context Built context that registered the repository.
+   * @param context Built Bounded Context that registered the repository.
    * @param view Candidate original or issued view.
    * @returns Registered repository, or undefined for a foreign view.
    */
@@ -797,7 +797,7 @@ interface BoundedContextAssembly {
   readonly storageFactory: StorageFactory;
 
   /**
-   * Selected AI registry, if this context accepts Agent work.
+   * Selected AI registry, if this Bounded Context accepts Agent work.
    */
   readonly ai?: AiRegistry;
 
@@ -977,8 +977,9 @@ export class BoundedContext {
 
   /**
    * Builds one scan scope from an accepted handoff or a catalog sweep.
+   *
    * @param repository Registered Agent repository.
-   * @param tenantId Accepted tenant, absent only in a single-tenant context.
+   * @param tenantId Accepted tenant, absent only in a single-tenant Bounded Context.
    * @returns The matching indexed provider scan scope.
    */
   #agentScope(repository: RepositoryView, tenantId: TenantId | undefined): AgentScanScope {
@@ -1131,7 +1132,7 @@ export class BoundedContext {
   }
 
   /**
-   * Builds callbacks shared by every repository prepared for this context.
+   * Builds callbacks shared by every repository prepared for this Bounded Context.
    */
   #repositoryRegistration(): RepositoryRegistration {
     const registration: RepositoryRegistration = {
@@ -1458,8 +1459,9 @@ export class BoundedContext {
  */
 export const boundedContextAccess: BoundedContextAccess = Object.freeze({
   /**
-   * Resolves a view only within the context that issued it.
-   * @param context Built context that registered the repository.
+   * Resolves a view only within the Bounded Context that issued it.
+   *
+   * @param context Built Bounded Context that registered the repository.
    * @param view Candidate original or issued view.
    * @returns Registered repository, or undefined for a foreign view.
    */
@@ -1951,7 +1953,8 @@ export class BoundedContextBuilder {
   }
 
   /**
-   * Sets the application AI registry before this context is built.
+   * Sets the application AI registry before this Bounded Context is built.
+   *
    * @param registry Factory-created deployment registry.
    * @returns This builder.
    */
@@ -2127,9 +2130,10 @@ export class BoundedContextBuilder {
 
   /**
    * Rejects missing Agent prerequisites before repository intake is installed.
-   * @param repositories Repositories selected for this context.
+   *
+   * @param repositories Repositories selected for this Bounded Context.
    * @param storageFactory Provider supplying mandatory Agent records.
-   * @param ai Effective context or server registry.
+   * @param ai Effective Bounded Context or server registry.
    */
   #preflightAgents(
     repositories: readonly RepositoryView[],
@@ -3943,9 +3947,10 @@ const ContextParts = Object.freeze({
   },
 
   /**
-   * Binds context services to a prepared repository before target registration.
+   * Binds Bounded Context services to a prepared repository before target registration.
+   *
    * @param repository Prepared repository receiving runtime services.
-   * @param registration Context services and schemas.
+   * @param registration Bounded Context services and schemas.
    */
   bindRepositoryRuntime(repository: RepositoryView, registration: RepositoryRegistration): void {
     repositoryAccess.bindRuntime(repository, {

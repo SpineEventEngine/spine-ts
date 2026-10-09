@@ -36,14 +36,14 @@ returns immutable observations of the named call, input, correction issues, and
 permitted tool names. `assertSatisfied()` reports unused scripts and unexpected
 requests. A release gate from `delay()` pauses a response without sleeping.
 
-The scripted backend still requires the application Agent context and durable
-runtime to execute; it does not call Agent methods or simulate repository state.
+The scripted backend still requires the application Bounded Context containing the Agent
+and its durable runtime to execute; it does not call Agent methods or simulate repository state.
 See [REFERENCE.md](REFERENCE.md) for its exact queue and failure behavior.
 
 ## Test an Agent outcome
 
 The [warehouse support test](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/test/support-blackbox.test.ts)
-shows the complete setup. Once its context has a registered `AiTestBackend`, the
+shows the complete setup. Once its Bounded Context has a registered `AiTestBackend`, the
 test supplies a typed reply and posts the same Command that an application would:
 
 <!-- docs-snippet-path: examples/support/test/support-blackbox.test.ts -->

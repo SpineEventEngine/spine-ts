@@ -164,9 +164,10 @@ export class AgentAiRuntime implements AgentAi {
 
   /**
    * Binds named calls to the selected repository and fenced invocation.
+   *
    * @param registry Configured model and MCP registrations.
    * @param repository Repository model policy.
-   * @param scope Accepted actor, source, context, and tenant.
+   * @param scope Accepted actor, source, Bounded Context, and tenant.
    * @param session Fenced durable execution session.
    * @param handlerOrdinal Saved generated handler order.
    * @param audit Paired Agent history and System Event writer.

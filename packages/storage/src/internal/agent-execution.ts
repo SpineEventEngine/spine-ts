@@ -44,7 +44,8 @@ const factories = new WeakMap<StorageFactory, AgentExecutionStorageFactory>();
 export interface AgentExecutionFactoryAccess {
   /**
    * Returns whether a storage factory registered durable Agent execution.
-   * @param factory Storage factory checked at context registration.
+   *
+   * @param factory Storage factory checked at Bounded Context registration.
    * @returns Whether the provider offers Agent execution handles.
    */
   supports(factory: StorageFactory): boolean;
@@ -76,7 +77,8 @@ export interface AgentExecutionFactoryAccess {
 export const AgentExecutionStorageFactories: AgentExecutionFactoryAccess = Object.freeze({
   /**
    * Checks provider registration without selecting or fabricating a tenant.
-   * @param factory Storage factory checked at context registration.
+   *
+   * @param factory Storage factory checked at Bounded Context registration.
    * @returns Whether the provider offers Agent execution handles.
    */
   supports(factory: StorageFactory): boolean {

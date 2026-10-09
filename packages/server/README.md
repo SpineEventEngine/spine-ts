@@ -148,7 +148,7 @@ An Agent can read its repository history through protected `fullHistory`,
 `conversationHistory`, `systemEventHistory`, and `domainEventHistory` methods.
 Pass a positive `pageSize`; `conversationHistory` also requires a `ConversationId`.
 Pages run newest first and return an opaque `nextCursor` when older entries
-remain. Cursors are bound to the context, tenant, repository, Agent ID, read
+remain. Cursors are bound to the Bounded Context, tenant, repository, Agent ID, read
 method, and conversation. Ordering uses full timestamp precision, then
 conversation/System/domain category, then the existing record ID in unsigned
 UTF-8 order. A page contains at most `pageSize` entries and may contain fewer
@@ -220,12 +220,12 @@ class SupportDraftAgent extends Agent<SupportTicketId, typeof SupportDraftStateS
 }
 ```
 
-Configure the registry outside the Entity. The context requires persisted System
+Configure the registry outside the Entity. The Bounded Context requires persisted System
 Events, and the Agent registration supplies its code revision and permitted
-capabilities. The [example context factory](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/src/index.ts)
+capabilities. The [example Bounded Context factory](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/src/index.ts)
 assembles these settings with the generated handler registry. A server-wide
-`withAi()` default can be supplied when building contexts through `Server`;
-context configuration can provide its registry directly.
+`withAi()` default can be supplied when building Bounded Contexts through `Server`;
+Bounded Context configuration can provide its registry directly.
 
 Posting a Command awaits acceptance. Model work and the resulting domain Event
 arrive asynchronously afterward. The handling operation can await a model without
@@ -270,11 +270,11 @@ These reads are eventually consistent. `limit()` may not exceed 1,000, and
 `all()` can be expensive for a large read model; prefer a targeted, ordered,
 bounded query.
 
-The Entity type identifies its context among those registered with the same
+The Entity type identifies its Bounded Context among those registered with the same
 `Server`. For example, an order process can query a product in a catalogue
-context without naming that context. An Entity in another context must allow
+Bounded Context without naming that Bounded Context. An Entity in another Bounded Context must allow
 queries (`query` or `full` visibility). Registering the same Entity type in two
-contexts causes a startup error.
+Bounded Contexts causes a startup error.
 
 The [Orders example](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/orders/README.md#cross-context-order-review)
 shows this in an Event handler and includes a runnable integration test.

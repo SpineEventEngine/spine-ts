@@ -97,7 +97,7 @@ const state = (registry: AiRegistry): RegistryState => {
 };
 
 /**
- * Application registry configured before a context is built.
+ * Application registry configured before a Bounded Context is built.
  */
 export class AiRegistry {
   /**
@@ -109,8 +109,9 @@ export class AiRegistry {
 
   /**
    * Creates a validated application registry.
+   *
    * @param options Defaults, limits and queue bounds.
-   * @returns Mutable configuration until context build.
+   * @returns Mutable configuration until Bounded Context build.
    */
   static create(options: AiRegistryOptions): AiRegistry {
     const copy = Object.freeze({
@@ -206,7 +207,7 @@ export interface AiSelection {
   readonly repositoryDefault?: ModelRef;
 
   /**
-   * Context model preference for this kind.
+   * Bounded Context model preference for this kind.
    */
   readonly contextDefault?: ModelRef;
 

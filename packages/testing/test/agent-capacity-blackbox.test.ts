@@ -244,7 +244,7 @@ async function produced(box: BlackBox, count: number) {
 }
 
 describe("shared Agent registry capacity through BlackBox", () => {
-  it("keeps a second context admitted but unstarted until one active slot releases", async () => {
+  it("keeps a second Bounded Context admitted but unstarted until one active slot releases", async () => {
     const backend = AiTestBackend.create({
       ref: ModelRef.of("capacity-scripted", "v1"),
       kind: "generation",
@@ -406,7 +406,7 @@ describe("shared Agent registry capacity through BlackBox", () => {
     }
   }, 15_000);
 
-  it("closing one context leaves a second context's queued work runnable", async () => {
+  it("closing one Bounded Context leaves a second Bounded Context's queued work runnable", async () => {
     const backend = AiTestBackend.create({
       ref: ModelRef.of("capacity-close", "v1"),
       kind: "generation",

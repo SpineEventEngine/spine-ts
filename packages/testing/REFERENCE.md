@@ -64,9 +64,9 @@ admitted a produced signal.
 full retained history newest first. It uses the same `HistoryRead` page size and
 opaque cursor as protected Agent history; a cursor from another Agent or view
 is rejected. `readSystemEvents(ids)` reads exact persisted System Event IDs from
-the paired context, in requested order, and returns independent envelope copies;
+the paired System Context, in requested order, and returns independent envelope copies;
 missing IDs are omitted. Both methods use the BlackBox's fixed tenant and fail after close. History
-reads also reject a repository from another context. System reads fail when System Event
+reads also reject a repository from another Bounded Context. System reads fail when System Event
 recording is unavailable. These audit reads are separate from `assertEvents()`,
 which observes produced domain output.
 

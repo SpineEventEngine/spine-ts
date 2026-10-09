@@ -41,7 +41,7 @@ export interface AgentHistoryConformanceAdapter {
   /**
    * Opens a provider handle for a repository scope.
    *
-   * @param input Context, state type, and typed ID scope.
+   * @param input Bounded Context, state type, and typed ID scope.
    * @returns Provider history handle.
    */
   readonly open: (input: AgentHistoryStorageInput<string>) => AgentHistoryStorage<string>;

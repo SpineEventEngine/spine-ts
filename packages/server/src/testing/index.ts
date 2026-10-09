@@ -117,7 +117,8 @@ export function observeProducedSignals(
  * Reads a repository's Agent audit records during a BlackBox test.
  *
  * This observation does not construct an application Entity or publish System Events.
- * @param repository Registered Agent repository in the running test context.
+ *
+ * @param repository Registered Agent repository in the running test Bounded Context.
  * @param entityId Typed Agent identifier.
  * @param view Indexed history category to observe.
  * @param read Requested count, byte budget, and complete continuation key.
@@ -130,8 +131,8 @@ export const readAgentHistory: AgentHistoryReader = (repository, entityId, view,
 /**
  * Reads retained Agent history through the same cursor contract as Entity handlers.
  *
- * @param context Running test context that registered the repository.
- * @typeParam EntityType Generated Agent class registered by the context.
+ * @param context Running test Bounded Context that registered the repository.
+ * @typeParam EntityType Generated Agent class registered by the Bounded Context.
  * @param target Typed Agent repository or its generated class.
  * @param entityId Typed identifier of the Agent to inspect.
  * @param request Page size and optional continuation from an earlier full-history page.
@@ -158,17 +159,18 @@ export function readAgentHistoryPage<
       ? context.registeredRepositories().find((view) => view.entityType === target)
       : target;
   if (repository === undefined)
-    throw new TypeError("Agent audit target is not registered in this BlackBox context.");
+    throw new TypeError("Agent audit target is not registered in this BlackBox Bounded Context.");
   return agentHistoryView(context, repository, entityId, request, tenantId);
 }
 
 /**
- * Reads a context-issued repository view for framework conformance checks.
- * @param context Running test context that issued the view.
- * @param repository Context-issued repository view.
+ * Reads a Bounded Context-issued repository view for framework conformance checks.
+ *
+ * @param context Running test Bounded Context that issued the view.
+ * @param repository Bounded Context-issued repository view.
  * @param entityId Entity ID presented by the framework test.
  * @param request Page size and optional opaque cursor.
- * @param tenantId Fixed tenant when the context is multitenant.
+ * @param tenantId Fixed tenant when the Bounded Context is multitenant.
  * @returns Provider-backed Agent history page.
  */
 export function agentHistoryView(
@@ -180,14 +182,16 @@ export function agentHistoryView(
 ): Promise<HistoryPage<AgentHistoryEntry>> {
   const registered = boundedContextAccess.resolveRepository(context, repository);
   if (registered === undefined)
-    throw new TypeError("Agent audit repository is not registered in this BlackBox context.");
+    throw new TypeError(
+      "Agent audit repository is not registered in this BlackBox Bounded Context.",
+    );
   return repositoryAccess.agentHistoryPage(registered, entityId, request, tenantId);
 }
 
 /**
- * Reads persisted System Events by their original IDs from the paired context.
+ * Reads persisted System Events by their original IDs from the paired System Context.
  *
- * @param context Application context whose System EventStore is inspected.
+ * @param context Application Bounded Context whose System EventStore is inspected.
  * @param ids Exact Event IDs in the requested result order; missing IDs are omitted.
  * @param tenantId Fixed tenant of a multitenant BlackBox; absent for a single tenant.
  * @returns Independent Event envelopes in requested order, or an empty array for no IDs.
@@ -204,7 +208,7 @@ export async function readSystemEvents(
       throw new TypeError("System Event read requires a nonblank EventId.");
   }
   const system = boundedContextAccess.systemPairing(context).system;
-  if (!system.storesEvents) throw new Error("This bounded context does not persist System Events.");
+  if (!system.storesEvents) throw new Error("This Bounded Context does not persist System Events.");
   const store = new EventStore(
     {
       name: system.name.value,

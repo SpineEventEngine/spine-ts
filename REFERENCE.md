@@ -34,7 +34,7 @@ sessions, policy, TLS, and deployment.
 
 - `proto` and `proto-tools`: framework contracts and application model generation.
 - `core`: validation, type URLs, `Any`, registries, envelopes, and rejections.
-- `server`: bounded contexts, entities, Agent execution, services, delivery, and hosting.
+- `server`: Bounded Contexts, entities, Agent execution, services, delivery, and hosting.
 - `ai`: typed model definitions, deployment selection, budgets, tools, and Agent history contracts.
 - `ai-vercel-ax`: optional Vercel/Ax generation, decision, and MCP provider adapters.
 - `client-node`, `client-web`, `client-react`: Node, browser, and React clients.

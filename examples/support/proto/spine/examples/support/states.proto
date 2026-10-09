@@ -26,10 +26,7 @@ message SupportTicketState {
   option (entity).kind = AGGREGATE;
 
   // Ticket to which these incident facts belong.
-  SupportTicketId id = 1 [
-    (required) = true,
-    (validate) = true
-  ];
+  SupportTicketId id = 1;
 
   // Most recently submitted warehouse facts.
   SupportRequest request = 2 [(validate) = true];
@@ -40,10 +37,7 @@ message SupportDraftState {
   option (entity).kind = ENTITY;
 
   // Ticket for which this reply was drafted.
-  SupportTicketId id = 1 [
-    (required) = true,
-    (validate) = true
-  ];
+  SupportTicketId id = 1;
 
   // Request that produced the current draft.
   SupportRequest request = 2 [(validate) = true];
@@ -61,10 +55,7 @@ message SupportReviewState {
   option (entity).visibility = QUERY;
 
   // Ticket whose draft is shown.
-  SupportTicketId id = 1 [
-    (required) = true,
-    (validate) = true
-  ];
+  SupportTicketId id = 1;
 
   // Request facts associated with the latest proposal or failure.
   SupportRequest request = 2 [(validate) = true];

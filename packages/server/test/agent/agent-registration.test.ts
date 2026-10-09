@@ -452,7 +452,7 @@ describe("Agent registration readiness", () => {
     }
   });
 
-  it("closes an Agent context while an application handler ignores cancellation", async () => {
+  it("closes an Agent Bounded Context while an application handler ignores cancellation", async () => {
     let entered: (() => void) | undefined;
     const started = new Promise<void>((resolve) => {
       entered = resolve;

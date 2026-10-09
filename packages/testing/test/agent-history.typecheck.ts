@@ -36,11 +36,12 @@ class TypedKnowledgeProjection extends Projection<
 
 /**
  * Checks the public history read binds a repository to its generated domain ID.
+ *
  * @param box Running test box.
  * @param repository Registered typed Agent repository.
  * @param agentId Correct Agent identifier.
  * @param commandId Different domain identifier.
- * @param context Context bound to the server/testing bridge.
+ * @param context Bounded Context bound to the server/testing bridge.
  * @param projection Real non-Agent repository.
  * @param knowledgeId Correct ID for the non-Agent Projection.
  */

@@ -59,8 +59,9 @@ export class AgentExecutionCapacity {
   }
 
   /**
-   * Finds the process-local capacity shared by contexts using this registry object.
-   * @param registry Exact registry object shared by the contexts.
+   * Finds the process-local capacity shared by Bounded Contexts using this registry object.
+   *
+   * @param registry Exact registry object shared by the Bounded Contexts.
    * @returns Existing gate or one initialized from registry limits.
    */
   static for(registry: AiRegistry): AgentExecutionCapacity {
@@ -85,7 +86,8 @@ export class AgentExecutionCapacity {
 
   /**
    * Tries to retain one descriptor; overflow remains in durable storage.
-   * @param request Keyed work hint and cancellation signal from one context.
+   *
+   * @param request Keyed work hint and cancellation signal from one Bounded Context.
    * @returns Completion of retained work, or undefined when admission is declined.
    */
   trySubmit(request: CapacityRequest): Promise<void> | undefined {

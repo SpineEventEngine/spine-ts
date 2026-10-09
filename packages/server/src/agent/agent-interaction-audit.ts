@@ -32,17 +32,18 @@ import { AgentExecutionSession } from "./agent-execution-session.js";
 import { AgentInteractionEvents } from "./agent-interaction-events.js";
 
 /**
- * Saves one original Agent interaction Event and posts its context-wide copy.
+ * Saves one original Agent interaction Event and posts it to the System Context.
  */
 export class AgentInteractionAudit {
   /**
    * Binds interaction evidence to one accepted Agent invocation.
+   *
    * @param session Fenced execution journal and history writer.
    * @param accepted Original accepted signal and recipient.
    * @param stateSchema Generated Agent state descriptor.
    * @param metadata Canonical signal metadata service.
    * @param onRegisterSchema Registers a System event payload descriptor.
-   * @param onPublish Persists the context-wide copy of an original Event.
+   * @param onPublish Persists the System Context copy of an original Event.
    */
   constructor(
     private readonly session: AgentExecutionSession,
@@ -105,12 +106,13 @@ export class AgentInteractionAudit {
 
   /**
    * Writes the original Event with its journal change before publication.
+   *
    * @typeParam Schema Generated System event payload descriptor.
    * @param schema Payload descriptor.
    * @param payload Matching typed event payload.
    * @param change Journal mutation guarded by the current claim.
    * @param history Conversation rows included in the same fenced mutation.
-   * @returns When the journal and context publication both complete.
+   * @returns When the journal and System Context publication both complete.
    */
   async save<Schema extends MessageSchema>(
     schema: Schema,

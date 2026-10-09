@@ -105,7 +105,7 @@ function generatedSupportContext(
 }
 
 describe("support reply Agent", () => {
-  it("registers authored handlers through generated context discovery", async () => {
+  it("registers authored handlers through generated Bounded Context discovery", async () => {
     const agent = create(SupportReplyAgentIdSchema, { ticketNumber: "T-48" });
     const context = await generatedSupportContext("Support reply generated")
       .add(SupportReplyAgent, {

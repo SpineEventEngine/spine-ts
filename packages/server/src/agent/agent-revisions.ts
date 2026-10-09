@@ -44,9 +44,10 @@ export interface AgentAdmissionRevisions {
 interface AgentRevisionsAccess {
   /**
    * Calculates admission revisions from generated descriptors and configured policy.
+   *
    * @param state Generated Agent state descriptor.
    * @param handlers Selected original handler bindings.
-   * @param ai Effective context AI registry.
+   * @param ai Effective Bounded Context AI registry.
    * @param repository Repository capability configuration.
    * @returns Revisions compared when accepted work resumes.
    */
@@ -64,9 +65,10 @@ interface AgentRevisionsAccess {
 export const AgentRevisions: AgentRevisionsAccess = Object.freeze({
   /**
    * Computes descriptor and effective-policy digests for accepted work.
+   *
    * @param state Generated Agent state descriptor.
    * @param handlers Selected handler bindings in execution order.
-   * @param ai Effective context AI registry.
+   * @param ai Effective Bounded Context AI registry.
    * @param repository Repository capability configuration.
    * @returns Revisions persisted for recovery comparison.
    */

@@ -41,7 +41,7 @@ additional SQL version checks recorded in the task log. Temporary Agent test
 containers were removed. General physical Entity deletion remains a separate
 deferred task. The feature worktree remains available for human review.
 
-Previous completed work: [Process Manager queries across contexts](planning/cross-context-queries.md)
+Previous completed work: [Process Manager queries across Bounded Contexts](planning/cross-context-queries.md)
 on `cross-context-queries`, based on official master `2324311be8`. Preserve the
 current effective tenant, reject duplicate Entity registrations and incompatible
 query destinations, and drain handlers before closing queried contexts. The

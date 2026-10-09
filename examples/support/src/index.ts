@@ -148,10 +148,11 @@ export const SupportContext: Readonly<{
   create(ai: AiRegistry, storage?: StorageFactory): Promise<BoundedContext>;
 }> = Object.freeze({
   /**
-   * Builds the local support context; the caller closes it after use.
+   * Builds the local support Bounded Context; the caller closes it after use.
+   *
    * @param ai Authenticated registry with a generation default.
    * @param storage Optional storage provider; memory is used for local tests.
-   * @returns Built support context with Agent audit retention.
+   * @returns Built support Bounded Context with Agent audit retention.
    */
   async create(ai: AiRegistry, storage?: StorageFactory): Promise<BoundedContext> {
     const builder = BoundedContext.singleTenant("WarehouseSupport")

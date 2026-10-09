@@ -653,21 +653,21 @@ Register a factory-created `AiRegistry`, enable `persistSystemEvents()`, and
 configure `agentCodeRevision` plus `ai.models` for each Agent repository. Use
 an empty `models` array when that Agent has no model calls. Readiness requires
 indexed Agent history and execution storage from the selected provider.
-The [Support context](../../examples/support/src/index.ts) uses generated
+The [Support Bounded Context](../../examples/support/src/index.ts) uses generated
 registration with these options.
 
 Configuration has these scopes:
 
-| Scope      | Setting                                  | Effect                                                           |
-| ---------- | ---------------------------------------- | ---------------------------------------------------------------- |
-| Server     | `Server.withAi(registry)`                | Default registry for context builders assembled by that server.  |
-| Context    | `BoundedContextBuilder.withAi(registry)` | Explicit registry replacing the server default for that context. |
-| Repository | `ai.defaultModels`                       | Generation and decision defaults before the registry's defaults. |
-| Repository | `ai.allowedModels`                       | Deployment references the Agent may use.                         |
-| Repository | `ai.invocationLimits`                    | Limits that can narrow the registry's whole-signal limits.       |
-| Instance   | `this.ai.select(kind, ref)`              | A saved preference applied to later accepted signals.            |
+| Scope           | Setting                                  | Effect                                                                   |
+| --------------- | ---------------------------------------- | ------------------------------------------------------------------------ |
+| Server          | `Server.withAi(registry)`                | Default registry for Bounded Context builders assembled by that server.  |
+| Bounded Context | `BoundedContextBuilder.withAi(registry)` | Explicit registry replacing the server default for that Bounded Context. |
+| Repository      | `ai.defaultModels`                       | Generation and decision defaults before the registry's defaults.         |
+| Repository      | `ai.allowedModels`                       | Deployment references the Agent may use.                                 |
+| Repository      | `ai.invocationLimits`                    | Limits that can narrow the registry's whole-signal limits.               |
+| Instance        | `this.ai.select(kind, ref)`              | A saved preference applied to later accepted signals.                    |
 
-A prebuilt context already has its registry; adding it to a server does not
+A prebuilt Bounded Context already has its registry; adding it to a server does not
 reconfigure it. An instance preference takes precedence over its repository
 default, which takes precedence over the effective registry default. Passing
 `undefined` to `select` restores inheritance. Selection must satisfy the
@@ -687,11 +687,11 @@ Before acknowledging Agent intake, the runtime saves the original signal,
 recipient, selected handlers and code/schema/policy revisions. The scheduler
 processes one accepted signal at a time per Agent instance, under a provider
 claim. Different instances can run concurrently within configured limits.
-Contexts using the same registry object share its capacity within the process.
+Bounded Contexts using the same registry object share its capacity within the process.
 Signals beyond the bounded in-memory waiting queue remain durably pending.
 Waiting before a fresh execution starts precedes its deadline. Once execution
 starts, recovery continues with the saved deadline and counts. The same deadline
-bounds an awaited application handler. Expiry or context shutdown ends that wait
+bounds an awaited application handler. Expiry or Bounded Context shutdown ends that wait
 and prevents late handler results from changing Entity state or emitting signals;
 it cannot stop arbitrary application JavaScript or undo external effects.
 
@@ -709,7 +709,7 @@ large catalog and find later admissions on the next sweep. Periodic scans keep
 their turn during new arrivals, including while execution capacity is full.
 A pending catalog request does not block prompt scans of known scopes.
 
-Context shutdown stops waiting for discovery reads even if a provider ignores
+Bounded Context shutdown stops waiting for discovery reads even if a provider ignores
 cancellation. Late results cannot submit work or restart scanning. Built-in
 adapters use their available cancellation and timeout controls; detaching the
 scheduler does not guarantee cancellation of an already issued native request.
@@ -740,9 +740,9 @@ behavior.
 ### Retained history
 
 Every Agent records conversations, System Events and its emitted domain Events.
-The paired context System EventStore also keeps System Events. Agent history
+The paired System Context EventStore also keeps System Events. Agent history
 reads use dedicated repository indexes for that instance and tenant, rather than
-scanning the context-wide stores. Memory storage lasts for the process; choose a
+scanning the Bounded Context-wide stores. Memory storage lasts for the process; choose a
 persistent provider when records must survive process termination.
 
 | Protected method               | Returned `HistoryPage.items`                                                   |
@@ -794,7 +794,7 @@ Every domain context has an internal paired System Context. Domain events use
 the domain `EventBus` and domain `EventStore`. System events use only the
 System Context `EventBus`, so they never enter the domain EventStore.
 `persistSystemEvents()` enables the paired System Context's separate storage.
-Contexts with Agents must enable it. For other contexts it is optional; without
+Bounded Contexts with Agents must enable it. For other Bounded Contexts it is optional; without
 it, the bus validates, dispatches and notifies without appending. Schemas may come from an external dispatcher or
 a registered internal repository producer. A producer-only schema is not
 thereby an external dispatch route.

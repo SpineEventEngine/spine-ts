@@ -49,8 +49,9 @@ export interface AgentScanScope {
 
   /**
    * Executes one invocation after attempting its provider claim.
+   *
    * @param key Exact accepted invocation selected by the scan.
-   * @param signal Context shutdown cancellation signal.
+   * @param signal Bounded Context shutdown cancellation signal.
    * @returns Completion after the claimed work settles.
    */
   run(key: AgentInvocationKey, signal: AbortSignal): Promise<void>;
@@ -140,7 +141,8 @@ export class AgentScheduler {
   #closed = false;
 
   /**
-   * Creates bounded discovery for the context's registered Agent scopes.
+   * Creates bounded discovery for the Bounded Context's registered Agent scopes.
+   *
    * @param source Pages tenants and constructs a registered scope on demand.
    * @param capacity Shared registry execution gate.
    * @param onError Reports failed discovery or execution turns.

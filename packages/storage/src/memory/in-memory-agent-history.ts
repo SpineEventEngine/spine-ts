@@ -35,7 +35,7 @@ export interface MemoryAgentHistoryAccess {
    *
    * @typeParam Id Typed Agent identifier.
    * @param backend Shared in-memory backend.
-   * @param input Context, state type, and typed ID scope.
+   * @param input Bounded Context, state type, and typed ID scope.
    * @returns Independently closeable history handle.
    */
   open<Id>(

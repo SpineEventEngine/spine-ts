@@ -5,7 +5,8 @@ A warehouse employee reports that neither packing station can print shipping lab
 The ticket Aggregate records the original incident. `SupportDraftAgent` handles a separate `DraftSupportReply` Command, with a real `SupportTicketId` and an explicit `ConversationId`. A bounded model call proposes a typed `SupportReply`. The Agent emits either `SupportReplySuggested` or `SupportReplyFailed`; `SupportReview` stores the latest outcome for queries. A later request can provide updated facts and continue the same conversation or choose another one.
 
 ```text
-Synchronous setup: model definition + generated registration + context build
+Synchronous setup: model definition and builder configuration
+Asynchronous setup: generated registration discovery and Bounded Context build
 Asynchronous work: OpenSupportTicket -> SupportTicket -> SupportTicketOpened
 Asynchronous work: DraftSupportReply -> SupportDraftAgent -> bounded model call
                                                   -> Suggested or Failed Event
@@ -49,7 +50,7 @@ export const draftCommand = create(DraftSupportReplySchema, {
 
 [The Agent handler](src/index.ts) invokes [the model definition](src/model.ts), which supplies typed input and output schemas, instructions, a domain validation callback, two model-request credits, and byte, token, and deadline bounds.
 
-`AiModel.define` and context construction configure capability and routing synchronously. The example's `SupportContext.create` loads generated handler metadata and builds the context asynchronously. Posting `DraftSupportReply` awaits durable acceptance of the Command; that acknowledgement is **not** the draft. Model inference, accepted state and Event persistence, and Projection delivery happen later. The BlackBox test uses `eventually` to observe those results.
+`AiModel.define` and builder configuration run synchronously. The example's `SupportContext.create` loads generated handler metadata and builds the Bounded Context asynchronously. Posting `DraftSupportReply` awaits durable acceptance of the Command; that acknowledgement is **not** the draft. Model inference, accepted state and Event persistence, and Projection delivery happen later. The BlackBox test uses `eventually` to observe those results.
 
 The Agent's domain Events say whether a reviewable proposal exists and retain the exact request and conversation. Framework System Events record model selection, attempts, validation and tool/accounting facts; they are distinct from these domain outcomes. `BlackBox.readAgentHistory` reads a bounded newest-first full audit page with an opaque cursor for older entries. The provider also has full, one-conversation, System-Event, and domain-Event indexed views. Continue with the returned cursor; retention of accepted audit records is mandatory, including when a model result fails.
 

@@ -555,7 +555,7 @@ export interface RepositoryAiOptions {
   readonly models: readonly AiModel<MessageSchema, MessageSchema>[];
 
   /**
-   * Per-kind defaults taking precedence over context or server defaults.
+   * Per-kind defaults taking precedence over Bounded Context or server defaults.
    */
   readonly defaultModels?: AiDefaultModels;
 
@@ -574,7 +574,8 @@ export interface RepositoryAiOptions {
 
   /**
    * Checks one explicit model change or inheritance selection.
-   * @param scope Accepted actor, source, context, and tenant.
+   *
+   * @param scope Accepted actor, source, Bounded Context, and tenant.
    * @param reference Selected model deployment, or inheritance.
    * @param control Deadline and cancellation for the authorization call.
    * @returns Whether this repository permits the requested selection.
@@ -4205,8 +4206,9 @@ const AgentExecutionRunner = {
 
   /**
    * Updates and releases one exact claim while its saved work advances.
+   *
    * @param repository Registered Entity repository for this operation.
-   * @param runtime Bound context storage and publication services.
+   * @param runtime Bounded Context storage and publication services.
    * @param tenantId Tenant selected for this accepted signal.
    * @param session Fenced Agent execution session.
    * @param signal Cancellation signal for the current accepted execution.
@@ -4243,8 +4245,9 @@ const AgentExecutionRunner = {
 
   /**
    * Handles transient failures while giving expired work a final audit.
+   *
    * @param repository Registered Entity repository for this operation.
-   * @param runtime Bound context storage and publication services.
+   * @param runtime Bounded Context storage and publication services.
    * @param tenantId Tenant selected for this accepted signal.
    * @param session Fenced Agent execution session.
    * @param error Failure raised while processing this accepted signal.
@@ -4278,8 +4281,9 @@ const AgentExecutionRunner = {
 
   /**
    * Processes one claimed record according to its saved completion or request state.
+   *
    * @param repository Registered Entity repository for this operation.
-   * @param runtime Bound context storage and publication services.
+   * @param runtime Bounded Context storage and publication services.
    * @param tenantId Tenant selected for this accepted signal.
    * @param session Fenced Agent execution session.
    * @returns When the fenced repository operation completes.
@@ -4376,8 +4380,9 @@ const AgentExecutionRunner = {
 
   /**
    * Records termination of an unreplayable physical request under the provider fence.
+   *
    * @param repository Registered Entity repository for this operation.
-   * @param runtime Bound context storage and publication services.
+   * @param runtime Bounded Context storage and publication services.
    * @param tenantId Tenant selected for this accepted signal.
    * @param session Fenced Agent execution session.
    * @param reason Safe terminal reason retained in Agent audit.
@@ -4413,8 +4418,9 @@ const AgentExecutionRunner = {
 
   /**
    * Builds one original termination envelope for a saved terminal reason.
+   *
    * @param repository Registered Entity repository for this operation.
-   * @param runtime Bound context storage and publication services.
+   * @param runtime Bounded Context storage and publication services.
    * @param tenantId Tenant selected for this accepted signal.
    * @param record Durable Agent execution record.
    * @param reason Safe terminal reason retained in Agent audit.
@@ -4531,8 +4537,9 @@ const AgentExecutionRunner = {
 
   /**
    * Creates or rejects the draft before one conditional Entity completion.
+   *
    * @param repository Registered Entity repository for this operation.
-   * @param runtime Bound context storage and publication services.
+   * @param runtime Bounded Context storage and publication services.
    * @param tenantId Tenant selected for this accepted signal.
    * @param session Fenced Agent execution session.
    * @param loaded Loaded Entity and its repository storage state.
@@ -4569,8 +4576,9 @@ const AgentExecutionRunner = {
 
   /**
    * Rejects a Command draft and persists only its declared rejection.
+   *
    * @param repository Registered Entity repository for this operation.
-   * @param runtime Bound context storage and publication services.
+   * @param runtime Bounded Context storage and publication services.
    * @param tenantId Tenant selected for this accepted signal.
    * @param session Fenced Agent execution session.
    * @param entity Loaded recipient Entity instance.
@@ -4615,7 +4623,8 @@ const AgentExecutionRunner = {
 
   /**
    * Wraps the original rejection Event as one pending saved output.
-   * @param runtime Bound context storage and publication services.
+   *
+   * @param runtime Bounded Context storage and publication services.
    * @param repository Registered Entity repository for this operation.
    * @param command Original typed Command envelope.
    * @param entityId Typed recipient Entity identifier.
@@ -4639,8 +4648,9 @@ const AgentExecutionRunner = {
 
   /**
    * Restores handler results and binds their declared original output envelopes.
+   *
    * @param repository Registered Entity repository for this operation.
-   * @param runtime Bound context storage and publication services.
+   * @param runtime Bounded Context storage and publication services.
    * @param tenantId Tenant selected for this accepted signal.
    * @param session Fenced Agent execution session.
    * @param entity Loaded recipient Entity instance.
@@ -4675,8 +4685,9 @@ const AgentExecutionRunner = {
 
   /**
    * Commits changed state and the fenced execution record as one provider mutation.
+   *
    * @param repository Agent registration.
-   * @param runtime Context Stand and provider services.
+   * @param runtime Bounded Context Stand and provider services.
    * @param tenantId Complete delivery tenant.
    * @param session Serialized provider claim and current record.
    * @param loaded Entity after handler transaction commit.
@@ -4721,8 +4732,9 @@ const AgentExecutionRunner = {
 
   /**
    * Applies the same provider fence to preference events and Entity completion.
+   *
    * @param repository Registered Entity repository for this operation.
-   * @param runtime Bound context storage and publication services.
+   * @param runtime Bounded Context storage and publication services.
    * @param tenantId Tenant selected for this accepted signal.
    * @param session Fenced Agent execution session.
    * @param loaded Loaded Entity and its repository storage state.
@@ -4773,8 +4785,9 @@ const AgentExecutionRunner = {
 
   /**
    * Captures only effective preference changes committed by this signal.
+   *
    * @param repository Registered Entity repository for this operation.
-   * @param runtime Bound context storage and publication services.
+   * @param runtime Bounded Context storage and publication services.
    * @param tenantId Tenant selected for this accepted signal.
    * @param session Fenced Agent execution session.
    * @returns Original model-selection System Events.
@@ -4805,12 +4818,13 @@ const AgentExecutionRunner = {
 
   /**
    * Builds one effective selection change with its original causal context.
+   *
    * @param accepted Durable original signal and saved handler bindings.
-   * @param scope Accepted actor, source, context, and tenant.
+   * @param scope Accepted actor, source, Bounded Context, and tenant.
    * @param kind Generation or decision model kind.
    * @param previous Previously selected model deployment.
    * @param selected Newly selected model deployment.
-   * @param runtime Bound context storage and publication services.
+   * @param runtime Bounded Context storage and publication services.
    * @returns Original model-selection System Event.
    */
   preferenceEvent(
@@ -4910,8 +4924,9 @@ const AgentExecutionRunner = {
 
   /**
    * Commits changed Entity state with the already prepared execution image.
+   *
    * @param repository Registered Entity repository for this operation.
-   * @param runtime Bound context storage and publication services.
+   * @param runtime Bounded Context storage and publication services.
    * @param tenantId Tenant selected for this accepted signal.
    * @param session Fenced Agent execution session.
    * @param loaded Loaded Entity and its repository storage state.
@@ -5023,8 +5038,9 @@ const AgentExecutionRunner = {
 
   /**
    * Binds one declared result using its generated Event or Command role.
+   *
    * @param repository Registered Entity repository for this operation.
-   * @param runtime Bound context storage and publication services.
+   * @param runtime Bounded Context storage and publication services.
    * @param routing Registered generated handler routing metadata.
    * @param source Original accepted source signal.
    * @param entityId Typed recipient Entity identifier.
@@ -5060,8 +5076,9 @@ const AgentExecutionRunner = {
 
   /**
    * Creates the original domain Event envelope and producer context.
+   *
    * @param repository Registered Entity repository for this operation.
-   * @param runtime Bound context storage and publication services.
+   * @param runtime Bounded Context storage and publication services.
    * @param source Original accepted source signal.
    * @param entityId Typed recipient Entity identifier.
    * @param version Entity version associated with the signal.
@@ -5098,7 +5115,8 @@ const AgentExecutionRunner = {
 
   /**
    * Creates the original Command envelope from its accepted origin.
-   * @param runtime Bound context storage and publication services.
+   *
+   * @param runtime Bounded Context storage and publication services.
    * @param source Original accepted source signal.
    * @param signal Original domain signal or execution cancellation signal.
    * @param schema Generated message descriptor for the signal.
@@ -5284,8 +5302,9 @@ const AgentExecutionRunner = {
 
   /**
    * Verifies admission revisions and fixes whole-invocation limits before execution.
+   *
    * @param repository Registered Entity repository for this operation.
-   * @param runtime Bound context storage and publication services.
+   * @param runtime Bounded Context storage and publication services.
    * @param accepted Durable original signal and saved handler bindings.
    * @param loaded Loaded Entity and its repository storage state.
    * @returns Durable deadline, initial version, and whole-invocation bounds.
@@ -5356,10 +5375,11 @@ const AgentExecutionRunner = {
 
   /**
    * Rejects accepted work when its exact handler and AI policy changed.
+   *
    * @param repository Registered Entity repository for this operation.
    * @param accepted Durable original signal and saved handler bindings.
    * @param handlers Generated handlers in their saved order.
-   * @param ai Configured AI registry for this context.
+   * @param ai Configured AI registry for this Bounded Context.
    * @param configuration Repository and AI policy used for revision checks.
    */
   assertRevisions(
@@ -5407,7 +5427,8 @@ const AgentExecutionRunner = {
 
   /**
    * Creates a genuine source-specific dispatch System Event before the handler.
-   * @param runtime Bound context storage and publication services.
+   *
+   * @param runtime Bounded Context storage and publication services.
    * @param repository Registered Entity repository for this operation.
    * @param accepted Durable original signal and saved handler bindings.
    * @param entityId Typed recipient Entity identifier.
@@ -5429,11 +5450,12 @@ const AgentExecutionRunner = {
 
   /**
    * Invokes saved Command or Event bindings inside one Entity transaction.
+   *
    * @param entity Restored Agent instance.
    * @param accepted Original accepted signal.
    * @param handlers Validated current handler bindings.
    * @param repository Registered Entity repository for this operation.
-   * @param runtime Bound context storage and publication services.
+   * @param runtime Bounded Context storage and publication services.
    * @param tenantId Tenant selected for this accepted signal.
    * @param session Fenced Agent execution session.
    * @returns Outputs returned by the selected generated handlers.
@@ -5486,8 +5508,9 @@ const AgentExecutionRunner = {
 
   /**
    * Binds named AI and history reads around one generated handler call.
+   *
    * @param repository Registered Entity repository for this operation.
-   * @param runtime Bound context storage and publication services.
+   * @param runtime Bounded Context storage and publication services.
    * @param tenantId Tenant selected for this accepted signal.
    * @param session Fenced Agent execution session.
    * @param entity Loaded recipient Entity instance.
@@ -5534,8 +5557,9 @@ const AgentExecutionRunner = {
 
   /**
    * Binds Agent AI, indexed history and routed projection queries for one handler.
+   *
    * @param entity Loaded recipient Entity instance.
-   * @param runtime Bound context storage and publication services.
+   * @param runtime Bounded Context storage and publication services.
    * @param tenantId Tenant selected for this accepted signal.
    * @param accepted Durable original signal and saved handler bindings.
    * @param reads Handler-scoped durable read facade.
@@ -5578,8 +5602,9 @@ const AgentExecutionRunner = {
 
   /**
    * Creates one handler-scoped facade from its accepted model policy.
+   *
    * @param repository Registered Entity repository for this operation.
-   * @param runtime Bound context storage and publication services.
+   * @param runtime Bounded Context storage and publication services.
    * @param tenantId Tenant selected for this accepted signal.
    * @param session Fenced Agent execution session.
    * @param accepted Durable original signal and saved handler bindings.
@@ -5746,7 +5771,7 @@ class ProcessManagerCommandExecution {
    *
    * @param repository Process Manager repository receiving the Command.
    * @param routing Registered Command routes and schemas.
-   * @param runtime Built context services.
+   * @param runtime Built Bounded Context services.
    * @param command Source Command to execute.
    */
   constructor(
@@ -7463,7 +7488,8 @@ const RepositorySignals = {
 
   /**
    * Creates the original declared rejection envelope without publishing it.
-   * @param runtime Bound context storage and publication services.
+   *
+   * @param runtime Bounded Context storage and publication services.
    * @param repository Registered Entity repository for this operation.
    * @param command Original typed Command envelope.
    * @param entityId Typed recipient Entity identifier.
@@ -7935,7 +7961,8 @@ class HandlerDispatchPublishing {
 
   /**
    * Builds the genuine Command dispatch diagnostic before its publication.
-   * @param runtime Context signal metadata.
+   *
+   * @param runtime Bounded Context signal metadata.
    * @param repository Receiving repository.
    * @param command Source Command.
    * @param entityId Target Entity identifier.
@@ -7962,7 +7989,8 @@ class HandlerDispatchPublishing {
 
   /**
    * Sends the exact System envelope already retained for an Agent.
-   * @param runtime Context publication services.
+   *
+   * @param runtime Bounded Context publication services.
    * @param event Original System Event envelope.
    */
   publishCommand(runtime: RepositoryRuntime, event: Event): void {
@@ -8017,7 +8045,8 @@ class HandlerDispatchPublishing {
 
   /**
    * Builds the genuine Event-to-reactor diagnostic with its original envelope.
-   * @param runtime Context signal metadata.
+   *
+   * @param runtime Bounded Context signal metadata.
    * @param repository Receiving repository.
    * @param source Source Event.
    * @param entityId Target Entity identifier.
@@ -8050,7 +8079,8 @@ class HandlerDispatchPublishing {
 
   /**
    * Publishes the same Event-to-reactor diagnostic retained by Agent history.
-   * @param runtime Context publication services.
+   *
+   * @param runtime Bounded Context publication services.
    * @param event Original System Event envelope.
    */
   publishReactor(runtime: RepositoryRuntime, event: Event): void {
@@ -10139,9 +10169,10 @@ const RepositoryStorage = {
 
   /**
    * Opens both mandatory Agent ports and closes the first if the second fails.
+   *
    * @typeParam I Typed Agent identifier.
    * @typeParam S Generated Agent state message.
-   * @param factory Storage factory registered with the context.
+   * @param factory Storage factory registered with the Bounded Context.
    * @param input Original Inbox or storage input.
    * @returns Indexed history and execution handles for the same tenant.
    */
@@ -11166,9 +11197,10 @@ const InboxReplay = {
 
   /**
    * Admits a Command using its stored target and registered assignee.
+   *
    * @param repository Agent repository.
    * @param routing Registered Command routes.
-   * @param runtime Bound context services.
+   * @param runtime Bounded Context services.
    * @param message Original Inbox row.
    * @param tenantId Delivery tenant.
    * @returns When the fenced repository operation completes.
@@ -11200,9 +11232,10 @@ const InboxReplay = {
 
   /**
    * Admits matching Event handlers from the stored target without rerouting.
+   *
    * @param repository Agent repository.
    * @param routing Registered Event routes.
-   * @param runtime Bound context services.
+   * @param runtime Bounded Context services.
    * @param message Original Inbox row.
    * @param tenantId Delivery tenant.
    * @returns When the fenced repository operation completes.
@@ -11266,8 +11299,9 @@ const InboxReplay = {
 
   /**
    * Opens the actual tenant handle and records a selected invocation before handoff.
+   *
    * @param repository Registered Agent repository.
-   * @param runtime Context services including the effective registry.
+   * @param runtime Bounded Context services including the effective registry.
    * @param message Durable Inbox receipt.
    * @param tenantId Selected delivery tenant.
    * @param entityId Typed target from the stored route.
@@ -11311,10 +11345,11 @@ const InboxReplay = {
 
   /**
    * Opens the actual tenant's mandatory execution handle.
+   *
    * @typeParam I Typed Agent identifier.
    * @typeParam S Generated Agent state message.
    * @param repository Registered Entity repository for this operation.
-   * @param runtime Bound context storage and publication services.
+   * @param runtime Bounded Context storage and publication services.
    * @param input Original Inbox or storage input.
    * @returns Fenced execution handle for the accepted tenant.
    */
@@ -11335,8 +11370,9 @@ const InboxReplay = {
 
   /**
    * Records the registered code, schema, and AI policy before Inbox handoff.
+   *
    * @param repository Registered Entity repository for this operation.
-   * @param runtime Bound context storage and publication services.
+   * @param runtime Bounded Context storage and publication services.
    * @param handlers Generated handlers in their saved order.
    * @returns Pinned code, schema, and AI policy digests.
    */

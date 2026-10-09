@@ -23,7 +23,7 @@ export interface AgentHistoryStorageFactory {
    * Opens the provider's indexed Agent history handle.
    *
    * @typeParam Id Typed Agent identifier.
-   * @param input Context, tenant, state type, and ID codec.
+   * @param input Bounded Context, tenant, state type, and ID codec.
    * @returns Independently closeable history handle.
    */
   createAgentHistoryStorage<Id>(input: AgentHistoryStorageInput<Id>): AgentHistoryStorage<Id>;
@@ -55,7 +55,7 @@ export interface AgentHistoryFactoryAccess {
    *
    * @typeParam Id Typed Agent identifier.
    * @param factory Provider storage factory.
-   * @param input Context, state type, and typed ID scope.
+   * @param input Bounded Context, state type, and typed ID scope.
    * @returns Independently closeable history handle.
    */
   create<Id>(factory: StorageFactory, input: AgentHistoryStorageInput<Id>): AgentHistoryStorage<Id>;
@@ -67,7 +67,8 @@ export interface AgentHistoryFactoryAccess {
 export const AgentHistoryStorageFactories: AgentHistoryFactoryAccess = Object.freeze({
   /**
    * Checks registration without creating a handle for an invented tenant.
-   * @param factory Storage factory checked at context registration.
+   *
+   * @param factory Storage factory checked at Bounded Context registration.
    * @returns Whether Agent history handles are available.
    */
   supports(factory: StorageFactory): boolean {
@@ -89,7 +90,7 @@ export const AgentHistoryStorageFactories: AgentHistoryFactoryAccess = Object.fr
    *
    * @typeParam Id Typed Agent identifier.
    * @param factory Provider storage factory.
-   * @param input Context, tenant, state type, and ID codec.
+   * @param input Bounded Context, tenant, state type, and ID codec.
    * @returns Independently closeable history handle.
    */
   create<Id>(

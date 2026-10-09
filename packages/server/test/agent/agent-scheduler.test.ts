@@ -893,7 +893,7 @@ describe("Agent indexed scheduler", () => {
     expect(reads).toBe(1);
   });
 
-  it("deduplicates the same durable invocation across context schedulers", async () => {
+  it("deduplicates the same durable invocation across Bounded Context schedulers", async () => {
     const capacity = new AgentExecutionCapacity(2, 0);
     let release: (() => void) | undefined;
     const held = new Promise<void>((resolve) => {

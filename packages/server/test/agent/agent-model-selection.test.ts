@@ -180,7 +180,7 @@ describe("Agent model authorization scope", () => {
     expect(authorized).toHaveBeenCalledOnce();
   });
 
-  it("selects both configured kinds and honors the repository default before the context default", async () => {
+  it("selects both configured kinds and honors the repository default before the Bounded Context default", async () => {
     const { registry, preferred } = selectionRegistry(() => true);
     const decisionRef = ModelRef.of("support-decision", "v1");
     registry.register(

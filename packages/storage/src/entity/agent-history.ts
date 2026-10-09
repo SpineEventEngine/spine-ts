@@ -113,7 +113,7 @@ interface AgentHistoryDomainView {
  */
 export interface AgentHistoryStorageInput<Id> {
   /**
-   * Context and complete tenant selection.
+   * Bounded Context and complete tenant selection.
    */
   readonly context: StorageContext;
 

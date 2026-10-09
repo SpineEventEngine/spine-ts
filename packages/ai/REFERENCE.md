@@ -21,7 +21,7 @@ putting provider SDK calls in its Entity handler.
 bounds. Register deployments with `register()` and configured MCP servers with
 `registerTools()`. Configuration freezes when the runtime binds the registry.
 Choose a generation default, a decision default, or both. A capability's kind
-must match its selected deployment. The server package supplies context and
+must match its selected deployment. The server package supplies Bounded Context and
 repository integration; this package alone does not start a signal handler.
 
 ## Calls and results
@@ -94,7 +94,7 @@ Await each model call before starting the next one in the same handler. Concurre
 calls, an unfinished call when the handler returns, and reuse of a facade after
 its handler finishes are programming errors.
 
-Contexts that share one `AiRegistry` object also share its execution capacity
+Bounded Contexts that share one `AiRegistry` object also share its execution capacity
 within that process. `concurrentOperations` bounds active Agent executions;
 `queuedOperations` bounds additional work waiting in memory for capacity. Further
 accepted signals remain in durable storage until capacity is available. Waiting

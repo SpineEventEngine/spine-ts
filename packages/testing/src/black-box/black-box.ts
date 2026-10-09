@@ -374,7 +374,8 @@ export class BlackBox {
 
   /**
    * Reads complete retained Agent history through its opaque full-history cursor.
-   * @typeParam EntityType Generated Agent class registered in this context.
+   *
+   * @typeParam EntityType Generated Agent class registered in this Bounded Context.
    * @param target Exact typed Agent repository or its generated class.
    * @param entityId Typed Agent identifier.
    * @param request Positive page size and optional prior cursor.
@@ -412,7 +413,9 @@ export class BlackBox {
         .registeredRepositories()
         .find((view) => view.entityType === target);
       if (repository === undefined)
-        throw new TypeError("Agent audit target is not registered in this BlackBox context.");
+        throw new TypeError(
+          "Agent audit target is not registered in this BlackBox Bounded Context.",
+        );
       return agentHistoryView(this.#context, repository, entityId, request, this.#tenant);
     }
     return agentHistoryView(this.#context, target, entityId, request, this.#tenant);
@@ -421,8 +424,9 @@ export class BlackBox {
   /**
    * Reads original persisted System Event envelopes by exact IDs, in requested order.
    * Missing IDs are omitted; repeated IDs return independent copies.
+   *
    * @param ids Exact System Event IDs from retained Agent history.
-   * @returns Stored envelopes for this context and fixed tenant.
+   * @returns Stored envelopes for this Bounded Context and fixed tenant.
    */
   readSystemEvents(ids: readonly EventId[]): Promise<readonly Event[]> {
     this.#assertOpen();

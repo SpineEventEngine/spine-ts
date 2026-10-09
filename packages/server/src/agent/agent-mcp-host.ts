@@ -69,7 +69,7 @@ export type AgentMcpIntent =
  */
 export interface AgentMcpHost {
   /**
-   * Accepted actor, source, context, and tenant.
+   * Accepted actor, source, Bounded Context, and tenant.
    */
   readonly scope: AiScope;
 

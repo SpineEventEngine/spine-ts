@@ -46,9 +46,10 @@ import type { RepositoryAiOptions } from "../repository/repository.js";
 interface AgentModelSelectionAccess {
   /**
    * Builds the authorization scope from immutable accepted signal facts.
+   *
    * @param accepted Accepted original signal and recipient.
    * @param state Generated Agent state descriptor.
-   * @param tenantId Delivery tenant, or undefined for a single-tenant context.
+   * @param tenantId Delivery tenant, or undefined for a single-tenant Bounded Context.
    * @returns Typed actor, Agent, tenant, and source scope.
    */
   scope(accepted: AgentAcceptedInvocation, state: MessageSchema, tenantId?: TenantId): AiScope;
@@ -73,7 +74,8 @@ interface AgentModelSelectionAccess {
   ): Promise<readonly AgentSelectedModel[]>;
 
   /**
-   * Resolves one kind through instance, repository, and context precedence.
+   * Resolves one kind through instance, repository, and Bounded Context precedence.
+   *
    * @param registry Effective deployment registry.
    * @param repository Repository models and selection policy.
    * @param scope Authenticated accepted-invocation scope.
@@ -136,9 +138,10 @@ interface AgentModelSelectionAccess {
 export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
   /**
    * Constructs the accepted actor, tenant, Agent and source authorization scope.
+   *
    * @param accepted Original accepted signal and typed recipient.
    * @param state Generated Agent state descriptor.
-   * @param tenantId Delivery tenant, if this context is tenant-scoped.
+   * @param tenantId Delivery tenant, if this Bounded Context is tenant-scoped.
    * @returns Scope passed to identity and authorization callbacks.
    */
   scope(accepted: AgentAcceptedInvocation, state: MessageSchema, tenantId?: TenantId): AiScope {

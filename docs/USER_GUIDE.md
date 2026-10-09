@@ -91,7 +91,7 @@ an event records a fact that happened; entity state is the current readable
 form of an Aggregate, Projection, Process Manager, or Agent.
 
 Keep each Bounded Context's domain language in its model package. The server
-application combines the contexts' Proto modules into one `TypeRegistry`.
+application combines the Bounded Contexts' Proto modules into one `TypeRegistry`.
 A client imports only the published model modules it needs. Register these
 modules explicitly when setting up the application; Spine does not discover
 them by scanning installed packages.
@@ -439,24 +439,23 @@ for an invariant. Order a bounded query before applying `limit()`; Process
 Manager reads have a maximum of 1,000 results.
 
 For example, an order process can read a product registered in a catalogue
-context. Register both contexts with the same `Server`; the queried Entity type
-identifies the destination, without adding a context name to `select()`. The
-destination Entity must have `query` or `full` visibility for a cross-context
-read. Registering the same Entity type in two contexts is an error, rather than
+Bounded Context. Register both Bounded Contexts with the same `Server`; the queried Entity type
+identifies the destination, without adding a Bounded Context name to `select()`. The
+destination Entity must have `query` or `full` visibility for a read across Bounded Contexts. Registering the same Entity type in two Bounded Contexts is an error, rather than
 a choice determined by registration order. Separately running servers are not
-searched. A context used without a Server continues to query its local state.
+searched. A Bounded Context used without a Server continues to query its local state.
 
 See the [Orders example](../examples/orders/README.md#cross-context-order-review)
-for the two context builders, the handler, and a test of the complete workflow.
+for the two Bounded Context builders, the handler, and a test of the complete workflow.
 
 The query keeps the triggering signal's actor and effective tenant. An Acme
 process reads only Acme's data in a multitenant destination; querying a
 single-tenant destination instead is a tenant mismatch and fails before a read.
 Single-tenant execution uses the built-in `SINGLE_TENANT` identity even when
-the request omits a tenant field. It can read another single-tenant context or
-the `SINGLE_TENANT` partition of a multitenant context. There is no tenant override.
+the request omits a tenant field. It can read another single-tenant Bounded Context or
+the `SINGLE_TENANT` partition of a multitenant Bounded Context. There is no tenant override.
 No matching records means an empty result, not a tenant mismatch. Finding the
-right context does not wait for its read-side to catch up with recent Events.
+right Bounded Context does not wait for its read-side to catch up with recent Events.
 
 ## 7a. Connect bounded contexts with external events
 
