@@ -404,10 +404,13 @@ Add `repository.agentExecution(id, sourceId, scope)` as an exact read of the
 existing execution record, projecting only its phase. `completed` and
 `terminated` release admission; `accepted`, `active`, and
 `completed-pending-delivery` do not. Missing records/read failures remain unknown.
-Capture the source Event ID from the public subscription, activated before
-posting. An immediate acknowledgement does not establish completion. Do not add a persisted reservation
-system or restart-recovery API for this in-memory example. History entries and
-UI spinners alone are not proof of terminal execution.
+Bind the source Event ID in `resolveModel` from the accepted signal scope,
+following the admission rules above. A public subscription activated before
+posting also observes the Event for the UI; it is not the prerequisite for model
+selection. An immediate acknowledgement does not establish completion. Do not
+add a persisted reservation system or restart-recovery API for this in-memory
+example. History entries and UI spinners alone are not proof of terminal
+execution.
 
 The existing Agent methods are protected handler APIs. The production UI must
 not import BlackBox or send artificial Agent Commands just to read history.

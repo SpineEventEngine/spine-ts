@@ -4116,3 +4116,57 @@ Four concerns now accepted: API/reliability fixed and clean, docs clean, style
 advisory only. Explicit retained Sol/medium profiles confirmed, runtime metadata
 not exposed. Parent checkpoints and pushes reviewed API/docs/tests; whole-plan
 release/coverage/security/live-account gates remain pending.
+
+D-0134 checkpoint7f0ea2c2e pushed successfully. Next bounded slice is the approved
+Git comparison service and three read-only MCP tools before Entity/domain wiring.
+High-risk child-process/input boundary; architecture already in accepted plan,
+no new broad planning pass. Estimate1–2h active work including real Git fixtures,
+stdio protocol and packaged Electron worker proof, docs and focused reviews.
+Existing explicit Sol/medium implementer handles all source; parent records/Git.
+MCP-builder skill read and announced; apply protocol/SDK/schema/stdio guidance,
+not its generic broad API coverage or extra evaluation artifacts (approved scope
+is three tools and existing acceptance tests). References read: best practices,
+Node guide, official protocol tools/transports and SDK README. The SDK README
+now identifies v2 split server/client packages; npm reports2.3.1, Apache-2.0,
+Node>=20. Existing framework client interoperability must be verified before
+choosing dependencies. Reuse explicit Luna/medium read-only dependency/API
+verification function for that narrow question while Git-only work can proceed.
+
+CI fd02f70a5/run37947017781 completed:374 test files and6041 tests pass,
+1file/test skipped; global branch coverage89.69% below required90% is the
+remaining failure. Workspace inventory/isolated-install failures are resolved.
+Raw failure output is outside repository at /tmp/spine-release-notes-ci-fd02.log.
+Latest7f0ea2c2e/run37950485467 still running. Preserve thresholds and canonical
+commands; close meaningful uncovered behavior before coordinated qualification.
+Git slice interim evidence from existing explicit Sol/medium implementer:5 real
+Git tests and private TypeScript build pass, covering pinned refs, ancestry,
+merge parents, rename/unusual paths, unsupported content and working-tree
+isolation. Production writer continues; SDK compatibility verification pending.
+
+Latest7f0ea2c2e/run37950485467 fails API documentation inventory before tests:
+AgentExecutionStatus, AgentHistoryReader and AgentReadScope are absent from
+server root-export expectations. Prior D-0134 cheap docs claims covered narrow
+snippets, not this complete inventory gate; do not treat them as release
+qualification. Same explicit Sol/medium writer corrects expected public names
+and runs pnpm docs:api:check locally before a separate checkpoint. Estimate
+0.1–0.25h including exact gate and push. Deterministic inventory correction does
+not reopen specialist review; prior89.69% branch coverage remains open.
+
+SDK compatibility scan accepted from explicit Luna/medium function, no source
+edits; actual runtime metadata unavailable. Pin private example server SDK2.3.1
+and direct Zod4.6.5. Apache-2.0 ESM Node>=20 fits Node24. Official v2 serveStdio
+uses legacy:'serve' by default and handles initialize2025-11-25, matching current
+@ai-sdk/mcp2.0.67 with protocolVersionDiscovery:false. No framework protocol
+upgrade or shim. Use McpServer/registerTool from root and serveStdio from /stdio;
+cancellation is ctx.mcpReq.signal. Sources: official v2 serving/legacy-clients,
+servers/tools and servers/logging-progress-cancellation docs plus unpacked
+server/core2.3.1 source at /tmp/mcp-sdk-2-3-1-scan and installed AI SDK client.
+This is static compatibility evidence; actual framework-client stdio and
+packaged Electron launch remain implementation tests. Parent also aligns the
+history section's source-ID wording with accepted D-0135: resolveModel binds
+from accepted scope, UI subscription observes and never gates selection.
+
+D-0134 inventory correction locally passes pnpm docs:api:check, which recognizes
+243 server exports. Only scripts/check-api-docs.mjs adds the three legitimate
+public type names; diff whitespace gate clean. Parent checkpoints this mechanical
+fix and current records separately from unfinished Git/MCP source.
