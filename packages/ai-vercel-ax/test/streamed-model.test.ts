@@ -299,6 +299,134 @@ describe("direct bounded Vercel model stream", () => {
     });
   });
 
+  it("rejects hosted output and annotations that the local plan profile cannot replay", async () => {
+    for (const event of [
+      {
+        type: "response.output_item.added",
+        output_index: 0,
+        item: { type: "web_search_call", id: "hosted-1" },
+      },
+      {
+        type: "response.output_text.annotation.added",
+        output_index: 0,
+        annotation: { type: "url_citation", url: "https://example.invalid" },
+      },
+    ]) {
+      const failure = await collectModelStream(
+        model([{ type: "raw", rawValue: event }]),
+        options,
+        500,
+        undefined,
+        false,
+        true,
+      ).catch((error: unknown) => error);
+      expect(failure).toBeInstanceOf(StreamCollectionError);
+      expect((failure as StreamCollectionError).partial.openaiContent).toEqual({
+        items: [],
+        complete: false,
+      });
+      expect(JSON.stringify(failure)).not.toContain("example.invalid");
+    }
+  });
+
+  it.each([
+    ["missing encrypted reasoning", "reasoning", { type: "reasoning", id: "item-1", summary: [] }],
+    [
+      "provider-executed call",
+      "function_call",
+      {
+        type: "function_call",
+        id: "item-1",
+        call_id: "call-1",
+        name: "tool_0",
+        namespace: "spine_mcp",
+        arguments: "{}",
+        async: true,
+      },
+    ],
+    [
+      "annotated message",
+      "message",
+      {
+        type: "message",
+        id: "item-1",
+        role: "assistant",
+        content: [{ type: "output_text", text: "ok", annotations: [{ type: "citation" }] }],
+      },
+    ],
+    [
+      "mismatched item ID",
+      "message",
+      {
+        type: "message",
+        id: "different",
+        role: "assistant",
+        content: [{ type: "output_text", text: "ok", annotations: [] }],
+      },
+    ],
+  ])("rejects %s before admitting a typed Responses item", async (_label, type, item) => {
+    const failure = await collectModelStream(
+      model([
+        {
+          type: "raw",
+          rawValue: {
+            type: "response.output_item.added",
+            output_index: 0,
+            item: { type, id: "item-1" },
+          },
+        },
+        { type: "raw", rawValue: { type: "response.output_item.done", output_index: 0, item } },
+        { type: "raw", rawValue: { type: "response.completed", response: {} } },
+        { type: "finish", finishReason: { unified: "stop", raw: "completed" }, usage },
+      ]),
+      options,
+      500,
+      undefined,
+      false,
+      true,
+    ).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(StreamCollectionError);
+    expect((failure as StreamCollectionError).partial.openaiContent?.complete).toBe(false);
+  });
+
+  it("rejects a completed item whose SDK text projection disagrees with the received item", async () => {
+    await expect(
+      collectModelStream(
+        model([
+          {
+            type: "raw",
+            rawValue: {
+              type: "response.output_item.added",
+              output_index: 0,
+              item: { type: "message", id: "item-1" },
+            },
+          },
+          {
+            type: "raw",
+            rawValue: {
+              type: "response.output_item.done",
+              output_index: 0,
+              item: {
+                type: "message",
+                id: "item-1",
+                role: "assistant",
+                content: [{ type: "output_text", text: "trusted", annotations: [] }],
+              },
+            },
+          },
+          { type: "text-delta", id: "item-1", delta: "different" },
+          { type: "raw", rawValue: { type: "response.completed", response: {} } },
+          { type: "finish", finishReason: { unified: "stop", raw: "completed" }, usage },
+        ]),
+        options,
+        500,
+        undefined,
+        false,
+        true,
+      ),
+    ).rejects.toThrow("projection mismatch");
+  });
+
   it("rejects contradictory Responses terminal and later output events", async () => {
     for (const extra of [
       { type: "response.completed", response: {} },
