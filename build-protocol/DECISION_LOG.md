@@ -6101,7 +6101,7 @@ SDK requests, signature fragments, redacted content, bounds and recorded recover
 
 ## D-0132: ChatGPT Plan Responses Profile And Recorded Continuations
 
-Status: Accepted; implementation in progress
+Status: Implemented; focused review complete, coordinated release checks pending
 
 Date: 2026-10-09
 
@@ -6146,3 +6146,141 @@ The prior architecture pass was reopened only for this demonstrated serialized
 continuation gap. No generic provider-content subsystem, database change, or
 migration shim is introduced. See [Release Notes Studio](planning/release-notes-studio.md)
 and [the Agent task](planning/agent-entities.md).
+
+## D-0133: Local Desktop Authentication And Packaging
+
+Status: Accepted; implementation in progress
+
+Date: 2026-10-09
+
+Keep Release Notes Studio in a private example workspace. Electron 44.7.0 bundles
+Node 24.21.0, satisfying the runtime requirement. Use official @electron/packager 20.3.0 with an esbuild-bundled private staging
+directory to produce a local macOS application. Forge 8.0.1 rejects the existing
+isolated pnpm linker; the direct packager avoids a global linker change or
+dependency-copying implementation. Use existing Playwright Test 1.62.0 for
+development and packaged-app checks. No distribution maker, signing, or notarization is
+required for this source example. Make the Electron binary download explicit
+before desktop tests. These development dependencies do not enter public packages.
+
+Implement the documented direct Sign in with ChatGPT flow independently using
+MIT-licensed openid-client 6.8.8. The inspected official SIWC DevKit packages are
+private and their source is noncommercial; do not copy that implementation.
+Every issued-client configuration enables nonrepudiation checks so ID-token
+signatures are verified with issuer JWKS, in addition to claims/state/nonce/PKCE
+checks. Do not write custom JWT cryptography. Preserve verified account identity
+through refresh and store credential rotations atomically under Electron
+safeStorage encryption in the trusted process. The renderer receives nonsecret
+account/model/status data only. No API-key fallback or unrelated credential reuse.
+
+Keep all draft, Entity, conversation, Event, and execution storage in memory.
+Only installation/account registrations and explicit Markdown exports persist.
+No saved credential can reconstruct a draft or start inference after launch.
+The live subscription check requires the human's explicit browser authorization;
+complete independent fixture/domain/UI work before requesting that step.
+
+Source evidence: [Electron DEPS](https://github.com/electron/electron/blob/v44.7.0/DEPS),
+[Electron installation](https://www.electronjs.org/docs/latest/tutorial/installation),
+[packaging](https://www.electronjs.org/docs/latest/tutorial/tutorial-packaging),
+[Playwright Electron](https://playwright.dev/docs/api/class-electron), and the
+published openid-client 6.8.8/oauth4webapi 3.8.8 code path documented in
+[the task record](planning/agent-entities.md).
+
+## D-0134: Production Agent History And Execution Reads
+
+Status: Accepted; planned for Release Notes Studio domain integration
+
+Date: 2026-10-09
+
+Add two read-only methods on the existing registered Agent Repository:
+agentHistory(typedId, explicitScope) returns a reader with fullHistory,
+conversationHistory, systemEventHistory and domainEventHistory; agentExecution
+(typedId, sourceCommandOrEventId, explicitScope) returns the current execution
+phase or undefined. Reuse existing history request/page/Proto/cursor contracts
+and exact indexed execution reads. Do not create or restore an Entity to read.
+Scope explicitly supplies the tenant when required; validate typed IDs,
+repository kind, tenant and lifecycle, and capture detached input values.
+These trusted server APIs rely on application authorization, as Stand does;
+actor metadata alone is not authorization.
+
+Expose only the execution phase as a small TypeScript string union: accepted,
+active, completed-pending-delivery, completed, or terminated. Missing is unknown.
+The existing execution-status Proto is private SPI, and AiOutcome is a different
+concept. Do not export the execution record, claim token, journal bookkeeping,
+or add a serialized state hierarchy. Read failures and missing evidence never
+release application admission. Completed/terminated release it; accepted,
+active and completed-pending-delivery do not. Pre-handler termination can be
+observed if recorded. Failures before admission or still-retryable accepted work
+are not terminal; the app does not invent recovery or silently repeat inference.
+
+Use public SpineServices plus client-node Client.usingTransport and Connect's
+createRouterTransport for desktop in-process posting/query/subscription. No new
+HTTP listener or IPC transport package. Subscribe to ReleaseGenerationRequested
+before posting, correlate the domain draft/generation IDs, and capture the
+original Event ID from the subscription envelope. Immediate Command acknowledgement
+is not domain acceptance or execution completion. Domain rejection releases an
+admission only when authoritative acceptance state excludes active accepted work;
+duplicate accepted generations remain attached to their original execution.
+
+This bounded architecture decision resolves the public read gaps already named
+in the approved plan. It changes no storage schema/index, domain responsibility,
+client runtime, history retention, or recovery semantics. Grounding: current
+RepositoryAccess history, AgentExecutionStorage exact reads and private phases,
+public SubscriptionUpdate Event envelopes, JVM Repository.find and Client.inProcess.
+See the acceptance cases in [Release Notes Studio](planning/release-notes-studio.md)
+and [the task record](planning/agent-entities.md).
+
+## D-0135: Deployments Added After Startup And Signal-Specific Selection
+
+Status: Accepted; implementation follows desktop authentication closure
+
+Date: 2026-10-09
+
+Allow AiRegistry.register() to append factory-created deployments after Bounded
+Context build. Preserve rejection of every duplicate ModelRef, including repeat
+registration of the same object. Existing deployments, defaults, limits and MCP
+policies remain immutable; registerTools() still rejects after build. Do not add
+a second registration method, replacement/removal API or general hot reload.
+
+Add RepositoryAiOptions.resolveModel(kind, scope, sourceMessage, control), using
+existing generation/decision strings, AiScope, google.protobuf.Any and AiControl.
+A concrete ModelRef overrides preference/default precedence for this accepted
+signal; undefined preserves that precedence. Supply a detached copy of the
+accepted source payload. The existing scope identifies its source ID/type, Agent,
+actor and tenant. Validate and clone the returned reference, enforce allowlists,
+capabilities and selection authorization, then resolve/authorize its connection.
+Save the existing AgentSelectedModel before the handler. A saved selection skips
+the resolver on continuation/replay. No new Proto or stored journal field.
+
+This callback is needed because model selection precedes all Agent handlers;
+Ai.select() changes preferences for later signals and cannot bootstrap an Agent
+with no configured default. Append-only registration alone cannot solve this.
+The accepted payload is needed because Event subscriptions have no ordering
+guarantee ahead of Agent selection. EventBus notifies subscribers after handler
+dispatch, while the Agent scheduler may already run. Never use observer timing
+as authority for account/model selection or terminate valid work because the UI
+subscriber has not received an Event yet.
+
+Enforce the already documented authorizeSelection callback. Concrete resolver
+results require authorization before selection is saved. Keep Ai.select()
+synchronous; authorize each effective staged preference change, including reset
+to inheritance, before completion commits the Entity transition, preference and
+selection/domain Events. Denial, exception or timeout prevents that completion.
+No-op assignments change nothing. Bound resolver/authorization callbacks by the
+smaller of invocation deadline and hookTimeoutMs, supply linked cancellation,
+race uncooperative callbacks and ignore late results.
+
+The desktop creates its immutable admission record before posting. Its resolver
+unpacks ReleaseGenerationRequested and checks generation, Agent, actor/tenant
+and reference against that record, then binds the exact source Event ID directly
+from scope. Subscription updates are for observation. Retain the mapping through
+uncertain submission, queueing and pre-selection retries; remove it only after
+authoritative rejection without accepted work or recorded completed/terminated.
+Each ModelRef remains one registration/account/endpoint/concrete-model binding.
+Adding accounts never rebuilds the Bounded Context or drops draft state.
+
+Source-grounded requirements_splitter pass confirms the registry map is live,
+backend catalog does not enter the policy digest, existing selection records
+retain identity, and authorizeSelection was declared/documented but not invoked.
+Focused tests must prove late registration, bootstrap without defaults, saved
+selection reuse, delayed/missing subscribers, authorization failure, cancellation,
+late callback results, detached input and unchanged accepted identity.

@@ -31,6 +31,7 @@
     "vitest.infrastructure.config.ts"
   ],
   "exclude": [
+    "examples/release-notes/**",
     "packages/ai-vercel-ax/src/**/*.ts",
     "packages/ai-vercel-ax/test/**/*.ts",
     "packages/server-blackbox-tests/test/agent-vercel-mcp-blackbox.test.ts"

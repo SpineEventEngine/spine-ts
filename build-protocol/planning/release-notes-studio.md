@@ -101,9 +101,9 @@ validated arguments, not arbitrary Commands, SQL, filesystem paths, URLs, or
 shell instructions. In the trusted process, translate operations to the existing
 public server/client APIs and generated messages. Keep the runtime behind a
 private application bridge; do not introduce a general IPC transport package.
-If the existing client requires a listener, use loopback only and an
-application-generated credential unavailable to the renderer. Prove that setup
-before adopting it. Prefer an existing in-process transport when available.
+Use the existing public in-process transport: register `SpineServices` with
+Connect's `createRouterTransport`, then construct the client with
+`Client.usingTransport`. No local HTTP listener is needed.
 
 The execution sequence is:
 
@@ -184,6 +184,18 @@ registered `ModelRef` must identify one registration and concrete provider model
 changing the picker must not redefine an existing reference. A double click
 must not create another paid operation for the same generation ID. A deliberate
 new revision gets a new generation ID.
+
+Use the existing registry's append-only `register()` after startup; defaults,
+limits, existing references and MCP policies remain fixed. Repository
+`resolveModel(kind, scope, sourceMessage, control)` receives a detached accepted
+payload and selects the concrete deployment before the Agent handler. Unpack
+`ReleaseGenerationRequested`, validate it against the immutable admission record
+and actor/tenant/Agent scope, and bind its source Event ID directly. Do not wait
+for a UI subscription to establish this binding: subscription delivery can
+follow Agent startup. Existing saved selections bypass this callback during
+continuation. `undefined` retains normal selection precedence for applications
+that do not need an explicit signal-specific choice. See D-0135 for callback
+bounds and enforcement of `authorizeSelection`.
 
 Assign a generation ID in the trusted service before submission and return it
 as the application request identity. The Aggregate remembers accepted generation
@@ -388,21 +400,24 @@ for runtime clock reads. UI `.tsx` and non-runtime scripts remain excluded.
 
 The trusted host needs an authoritative completion indication to release its
 in-memory admission record, including failures before the Agent handler starts.
-In the application integration milestone, first inspect existing public
-submission/completion APIs. If they cannot provide this, add the smallest
-read-only execution observation needed. Do not add a persisted reservation
+Add `repository.agentExecution(id, sourceId, scope)` as an exact read of the
+existing execution record, projecting only its phase. `completed` and
+`terminated` release admission; `accepted`, `active`, and
+`completed-pending-delivery` do not. Missing records/read failures remain unknown.
+Capture the source Event ID from the public subscription, activated before
+posting. An immediate acknowledgement does not establish completion. Do not add a persisted reservation
 system or restart-recovery API for this in-memory example. History entries and
 UI spinners alone are not proof of terminal execution.
 
 The existing Agent methods are protected handler APIs. The production UI must
 not import BlackBox or send artificial Agent Commands just to read history.
 Add a public, read-only repository access path, reusing the existing indexed
-storage and opaque cursor logic. Proposed shape: an Agent-specific history
-reader obtained for a typed Entity ID and explicit tenant/authorization scope,
+storage and opaque cursor logic. Use `repository.agentHistory(id, scope)` to obtain an Agent-specific reader
 with `fullHistory`, `conversationHistory`, `systemEventHistory`, and
 `domainEventHistory` methods. Keep the current `HistoryRead`,
 `ConversationHistoryRead`, and `HistoryPage` contracts and Proto result types.
-Finalize the accessor name against existing Repository APIs before coding.
+Require an explicit scope (`{}` for a single-tenant repository); the trusted
+application bridge authorizes access. See D-0134 for the accepted contract.
 
 All four return newest entries first and allow continuation to older entries.
 `fullHistory` retains its Proto oneof; conversation reads require the conversation

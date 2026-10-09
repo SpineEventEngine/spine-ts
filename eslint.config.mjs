@@ -20,11 +20,11 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.strictTypeChecked.map((config) => ({
     ...config,
-    files: ["**/*.ts"],
+    files: ["**/*.ts", "**/*.tsx"],
   })),
   ...tseslint.configs.stylisticTypeChecked.map((config) => ({
     ...config,
-    files: ["**/*.ts"],
+    files: ["**/*.ts", "**/*.tsx"],
   })),
   {
     files: ["**/*.ts"],
@@ -48,6 +48,15 @@ export default tseslint.config(
     },
   },
   {
+    files: ["examples/release-notes/{src,test}/**/*.ts", "examples/release-notes/{src,test}/**/*.tsx"],
+    languageOptions: {
+      parserOptions: {
+        project: "./examples/release-notes/tsconfig.tooling.json",
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+  },
+  {
     files: ["packages/server-blackbox-tests/test/agent-vercel-mcp-blackbox.test.ts"],
     languageOptions: {
       parserOptions: {
@@ -57,7 +66,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["scripts/**/*.mjs"],
+    files: ["scripts/**/*.mjs", "examples/release-notes/scripts/**/*.mjs"],
     languageOptions: {
       globals: {
         console: "readonly",

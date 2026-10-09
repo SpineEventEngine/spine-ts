@@ -16,18 +16,22 @@ common workspace version under D-0115.
 
 Current work: [Signal-driven Agent entities](planning/agent-entities.md),
 on `agent-entities`, based on official master `658da1cdd`. Anthropic model
-support is included in the first snapshot. PR #18 now includes planning for the
+support is included in the first snapshot. PR #18 now includes implementation of the
 human-approved [Release Notes Studio desktop example](planning/release-notes-studio.md).
-The desktop example remains unimplemented; its first milestone, the ChatGPT
-subscription adapter module, is now in progress (D-0132). The approved first
-version uses existing in-memory storage. The subscription adapter module comes first, followed by
-desktop sign-in and the example workflow; persistent domain storage is deferred. The three additional Anthropic
+The ChatGPT subscription adapter checkpoint is implemented, reviewed, and pushed
+(D-0132). Desktop sign-in and protected credentials are in progress (D-0133);
+production history/execution read contracts are accepted for domain integration
+(D-0134). Append-only deployment registration and accepted-signal model selection
+are accepted as domain-integration prerequisites (D-0135). The first version uses existing in-memory storage; persistent domain
+storage is deferred. Final desktop release/security qualification is pending.
+The three additional Anthropic
 review-and-fix rounds and the two further requested rounds are complete, each
 with a fresh reviewer and no inherited conversation or memory. The signed-thinking continuation defect is
 fixed: ordered provider content is recorded and restored for tool and corrective
 requests, including replay (D-0131). All accepted findings, including the
 additional replay coverage and function-size corrections, are closed. Final
-security and specialist review dispositions are complete. Further corrections
+security and specialist review dispositions for that earlier Agent/Anthropic
+scope are complete. Further corrections
 preserve measured bytes for bounded failed responses and keep interrupted tool
 input consistent across recorded projections and replay.
 

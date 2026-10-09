@@ -3573,3 +3573,304 @@ Planning-document format/whitespace also pass. Final global coverage/release
 qualification remains part of the coordinated desktop deliverable; this is the
 reviewed adapter checkpoint, not whole-plan completion. Next: commit and push
 this milestone, then begin private desktop authentication implementation.
+
+### Desktop authentication implementation — 2026-10-09
+
+Adapter milestone committed and pushed to official origin/agent-entities as
+`e5a344d33`; working tree clean immediately after push. Whole-plan work continues.
+Milestone 2 is high-risk because it adds local OAuth and credential persistence.
+Estimate 2–4 hours including implementation, deterministic tests, focused
+reviews/fixes and checkpoint integration; human browser authorization is separate
+and deferred until the usable application can run the real Agent flow. Existing
+frozen architecture and corrected OIDC dependency research apply; no repeat
+architecture pass without a material contract change.
+
+Continue the same implementer (explicit original gpt-6-sol/medium, no children)
+as sole production writer for private examples/release-notes and necessary
+workspace/build/test/package integration. No framework runtime expansion in
+this auth milestone. Scope: minimal Electron trusted-host/preload/renderer shell;
+protected registration store; OAuth/OIDC callback/refresh/revoke; model discovery;
+credential-based profile binding; lifecycle cleanup; deterministic auth tests.
+Parent retains task/decision records and Git integration. Relevant reviewer
+concerns are reliability, API/TSDoc, maintainability, and narrow documentation;
+final security remains whole-plan readiness. Focused checks now, one coordinated
+release profile after the entire plan converges.
+
+Inherited Human-Imposed Requirements Ledger remains binding, additionally:
+
+- Local desktop, macOS first, in-memory domain storage; no PGlite/persistence.
+- No API-key fallback, Codex dependency, copied private/noncommercial DevKit,
+  unsolicited account login, or reuse of another application's credentials.
+- App credentials remain in trusted process and OS-encrypted atomic files;
+  never renderer, Proto, Agent journals, URLs/logs, or Markdown exports.
+- OAuth state/nonce/PKCE, loopback127.0.0.1, dynamic issued client ID, installation
+  host ID, exact audience/issuer/expiry/subject/signature checks and granted plan
+  scope. Enable openid-client nonrepudiation checks on each configuration.
+- Serialize per-registration refresh, preserve rotation atomically, reject
+  subject/account substitution, support refresh without a new ID token.
+- Separate registration identity from email, model picker from account catalog;
+  no hardcoded universally available model. Saved credentials do not infer work.
+- Single app instance, isolated sandboxed renderer, narrow validated IPC,
+  restrictive CSP, no token bridge or arbitrary URL/path/shell IPC surface.
+- Install/read current dependencies through documented public APIs; use common
+  workspace version for this private example. Four-space tutorial examples,
+  documented TS methods and current user-facing wording remain required.
+
+Acceptance: fixture-backed sign-in rejects wrong state/nonce/signature/issuer/
+audience/client/subject or denied plan scope; same-account rotation/reconnect
+works; invalid/missing credentials cannot dispatch inference; model discovery
+is account-scoped; safeStorage encryption and atomic credentials survive only
+as intended; cancellation/close cleans listener and stale attempts; renderer
+gets only nonsecret status and model information. Real live subscription/MCP
+smoke remains outstanding until human browser authorization, while independent
+remaining milestones continue. Development/packaged launch and lifecycle tests
+must exercise real Electron before final readiness, not only Node mocks.
+
+While auth implementation runs, the next domain milestone has a demonstrated
+public-contract gap requiring a bounded design decision: production history and
+authoritative terminal execution reads. Reuse requirements_splitter, explicit
+original gpt-6-astra/high, read-only/no memory/no children, only to finalize this
+planned API against current Repository/BoundedContext/client APIs and JVM
+conventions. Do not reopen the frozen desktop/domain design or invent general
+recovery/coordination abstractions. This replaces later blocking design time;
+no concurrent production writer or runtime edit is introduced. Parent reviews
+and records its minimal decision before milestone3 implementation.
+
+Milestone2 focused progress: encrypted credential-store fixture passes atomic
+write/file-mode/reopen/token-clear behavior. Seven real OAuth/OIDC protocol
+fixtures pass, including issued-client handling, state/nonce/issuer/audience/
+expiry and forged ID-token signature rejection via JWKS/nonrepudiation checks.
+A published dependency declaration conflicts with exactOptionalPropertyTypes;
+implementation must document the exact error and keep any skipLibCheck workaround
+private to the example if possible, not silently weaken shared tooling. Refresh,
+revocation, model catalog, Electron host and lifecycle remain in progress.
+Public in-process client transport is confirmed by the bounded architecture scan,
+so no additional HTTP listener/transport package is needed for desktop Commands.
+
+Bounded requirements_splitter result accepted under explicit Astra/high profile
+(no independent runtime metadata exposed). D-0134 records repository-local
+agentHistory and exact agentExecution phase reads with explicit typed-ID/tenant
+scope, existing cursor/indexed storage, no Entity creation and no SPI leakage.
+Public Connect router transport eliminates the local HTTP listener. Public
+subscription envelopes supply exact source Event IDs when activated before
+posting. Missing/pre-admission or retryable accepted work remains unresolved;
+only authoritative terminal/rejection evidence releases admission. No general
+recovery/submission system is added. The existing implementation agent will
+apply this in milestone3 after the current authentication checkpoint.
+OAuth refresh/revoke/catalog focused fixtures now pass 10/10. Shared tooling
+skipLibCheck is being reverted; the published Configuration.timeout declaration
+TS2420 workaround stays in the private example's compiler/lint configuration.
+
+Adapter checkpoint CI run37935007669 failed at copyright validation for the new
+chatgpt-plan.typecheck.ts header. Release install/audits, generation, TypeScript,
+ESLint, cleanup and TSDoc passed first. Local copyright had passed before that
+fixture was added and was not rerun after it: preflight omission identified.
+Existing implementer receives the mechanical header correction and local
+copyright/diff gate; parent will push it separately without incomplete auth work.
+No reviewer or full local release rerun is warranted for the header alone.
+Include copyright in every new-file preflight thereafter. Raw CI output remains
+in /tmp, not an added repository evidence file.
+
+The CI header-only correction was committed/pushed as 66d1eedf6 after local
+copyright and whitespace checks passed; incomplete auth files were excluded.
+Both dependency audits pass again with the newly installed desktop dependency
+graph. Desktop auth implementation continues; no live sign-in has been attempted.
+
+Real Electron44 development launch passes one Playwright scenario: account
+controls render with renderer isolation. Its initial failure exposed an ESM
+startup deadlock from top-level app.whenReady awaiting; callback-based startup
+fixes it. Auth/lifecycle fixtures pass18/18 across credentials, OIDC, loopback,
+IPC and window settings; private build passes. Profile binding and complete
+cheap preflight remain in progress. Check packaged .app startup early to catch
+pnpm workspace dependency packaging before adding the full domain workflow.
+
+Packaged macOS launch now passes as well (Playwright2/2 for development and
+packaged Electron44). Forge8 refused the isolated pnpm linker before packaging;
+the implementation uses official @electron/packager20.3.0 with an esbuild-bundled
+private staging directory. No global linker change, custom dependency crawler,
+or new public package. D-0133 updated for the demonstrated tooling limitation;
+remove unused Forge dependency. Build/package/lifecycle pass; trusted profile
+registration and remaining cheap gates still in progress.
+
+Authentication preflight now passes private typecheck, ESLint, cleanup, TSDoc,
+copyright and runtime time-read checks. Narrow README and post-refactor auth/
+development/packaged Electron reruns precede source freeze. Upcoming focused
+review assignments, all fresh/no memory/no children and explicit model fields:
+performance_reliability_reviewer gpt-6-sol/medium for OAuth/refresh/signout races,
+callback and credential lifetimes, loopback/IPC and packaging behavior;
+typescript_api_docs_reviewer gpt-6-sol/medium for private/public dependency
+boundaries, scopes/profile binding, compiler workaround and documented APIs;
+style_maintainability_reviewer gpt-6-sol/medium for new example structure/domain
+meaning and avoidable abstractions; documentation_reviewer gpt-6-luna/medium for
+runnable auth/packaging README and limitation claims. Sequence only for available
+slots and collect the full wave before fixes. Final security remains at full
+application readiness. Focused auth review/fixes/checkpoint expected0.5–1hour,
+included in the milestone estimate rather than a separate product task.
+
+One verification-order failure occurred when pnpm lint regenerated/cleaned
+artifacts concurrently with private packaging. Parent requires sequential
+regeneration/build/package work; the sequential rerun passes private build,
+macOS package and both Electron launch tests. Focused auth tests23/23 pass.
+Coverage is not accepted as complete: trusted-service statements84.96%,
+branches74.36%, lines89.32%; Electron main/preload/renderer are outside Vitest's
+instrumentation and currently appear0%. Real Playwright checks exercise launch
+and isolation but do not establish broad branch coverage. Implementer must map
+remaining service failure paths to acceptance and add meaningful missing tests
+before freeze, especially refresh/signout races, callback cancellation and
+credential persistence failures. Do not change denominators or add a bespoke
+coverage subsystem; retain final global>=90% requirement.
+
+CI at66d1eedf6 completes all366 test files (one skipped) and fails only global
+branch coverage89.93% versus90%; statements93.72%, functions95.64%, lines95.52%.
+Existing implementer receives a bounded adapter behavior-test correction using
+previous changed-branch inspection, kept separate from auth changes for its own
+push. No coverage-threshold or exclusion change. Raw output is in /tmp only.
+Both audits pass with the direct-packager dependency graph. Continue auth
+failure-path coverage and adapter correction without adding another writer.
+
+Adapter coverage tests are committed/pushed separately as185abe81e. The local
+changed-file suite passes39/39 (complete adapter selection325/325); tests cover
+unsupported hosted/annotated output, malformed reasoning/function/message items,
+item-ID mismatch and raw/SDK projection disagreement. Stream collector branch
+coverage increases342/382 to349/382. No production/threshold changes; CI must
+confirm whether the total90% gap is closed. Auth scope remains uncommitted and
+frozen for its independent wave. Final auth evidence:26focusedtests and both
+Electron launch modes pass; trusted-service branch76.25% is explicitly not a
+claim that global coverage is satisfied. Relevant remaining gaps go to reviewers.
+
+Authentication first complete review wave collected and classified. Fresh
+reviewers desktop_auth_reliability, desktop_auth_api and desktop_auth_style used
+explicit Sol/medium; desktop_auth_docs used explicit Luna/medium. All checked the
+full applicable ledger; no independent runtime introspection exposed or mismatch.
+Documentation reports no confirmed gap; runnable commands/current-scope claims
+match. API optional OAuth-field suggestions were withdrawn after checking the
+current OpenAI-specific documented protocol; do not expand into generic RFC
+hardening based on that withdrawn observation.
+
+Accepted consolidated correction batch for the existing writer:
+
+- P1 concurrent signIn calls pass the pending check before openLoopback resolves;
+  reserve before first await and test concurrent calls.
+- P2 close during listener startup can miss it and still open the browser;
+  clean/check after asynchronous creation, test ordering.
+- P1 close during code exchange can persist the late grant before closed check;
+  prevent saving a cancelled authorization attempt.
+- P1 reconnect completing during/after signOut can restore credentials; serialize
+  or invalidate grant persistence against signout and test both completion orders.
+- P1 failed clearTokens write/rename removes the signout guard while old tokens
+  remain usable; retain fail-closed behavior and test failed storage removal.
+- P2 stale account-catalog response can replace the newly selected account's
+  model list; ignore stale responses and test delayed switching.
+- P2 account labels based solely on email/subject are ambiguous for separate
+  client registrations; include a distinguishable registration label.
+- P2 staged issued client IDs are never read for failed-code-grant recovery;
+  invalid_grant must retry authorization with that issued ID and fresh state,
+  nonce and PKCE. Preserve staging until verified save or explicit abandonment.
+  Reviewer withdrew its original deletion/file-growth recommendation after the
+  documented protocol check; do not delete the required mapping as a shortcut.
+
+Relevant sources and exact code sites are in the reviewer results; approved
+OpenAI sign-in guidance explicitly covers invalid_grant retry. Return the entire
+batch once; no source fixes began from partial review messages. Re-review only
+substantively affected reliability, API and UI behavior after focused checks.
+
+While the existing writer fixes auth lifecycle findings, reuse the read-only
+repository-scanning function (explicit original Luna/medium, no children or
+source edits) to map example Proto/handler generation and the existing actual
+local MCP registration pattern for milestone3. This is bounded source evidence,
+not a new architecture pass or a competing implementation. Parent will pass the
+concrete public paths to the same writer when domain work starts.
+
+Milestone3 repository mapping accepted from existing explicit Luna/medium
+read-only scan. Follow support/todo model-mode spine-proto.json, authored Proto
+role separation and generated registry; add release-notes to proto-workflow's
+explicit modelAtomicTargets. Existing workspace glob applies, but TS/generated
+references and package staging must include runtime-generated registry/assets.
+Use public Mcp.server + AiRegistry.registerTools; supported actual local stdio
+transport is appropriate for a packaged Git worker if its packaged launch proves
+Node availability without another installation. Existing Agent/MCP BlackBox
+shows real protocol admission and tool invocation. No callback simulation may be
+presented as MCP. No source changes or new design layer were made by the scan.
+
+Auth correction behavior now passes35/35, including cancellation propagation,
+failed-grant retry after encrypted-store reopen, both grant/signout orderings,
+failed-clear protection and UI account races/labels. Private typecheck, cleanup,
+TSDoc and ESLint pass; trusted-service branch coverage rises221/275 (80.36%), not
+final global qualification. Remaining checks/lifecycle rerun precede closure.
+
+A new concrete milestone3 integration contract gap is demonstrated by
+ai/src/internal/registry.ts: AiRegistry.register rejects after freezeRegistry,
+which Bounded Context build invokes. The approved desktop plan allows accounts
+and discovered models to be added/selected after startup while retaining drafts
+and says existing ModelRefs must not be rebound to another account/model. A
+bounded requirements_splitter pass (reuse explicit Astra/high, read-only/no
+memory/children) must choose the smallest actual supported resolution. Do not
+silently restart/drop in-memory domain state, relax accepted binding semantics,
+or add a broad hot-reload subsystem. This is a material contract issue justifying
+the pass; auth fixes remain independent and continue with the same writer.
+
+Auth correction source is frozen. All35 focused tests, both real Electron
+launch modes, private build/package and targeted quality checks pass. Closure
+dispatches use fresh performance_reliability_reviewer and
+typescript_api_docs_reviewer, explicit gpt-6-sol/medium, fork none, no memory or
+children. Review only the accepted lifecycle/retry findings and account UI
+selection/labels above. Earlier reviewer contexts are no longer available on
+this execution surface. Style closure for duplicated lifecycle/UI findings is
+covered by these reviews plus deterministic cleanup/format checks; documentation
+remains clean unless a concrete changed contract is identified. Runtime metadata
+is not exposed; explicit configured role/model/reasoning is acceptance evidence.
+CI37940094907 for185abe81e remains in progress; no global coverage success claim.
+
+Closure reviews complete; explicit Sol/medium dispatch confirmed. Accept two
+findings as a single final targeted correction batch (estimate0.25–0.5h):
+P1 SiwcSession.begin captures grantVersion after asynchronous registration and
+authorization-parameter reads; a signout overlapping those reads can be missed,
+allowing a later grant to restore access. Capture/invalidate before asynchronous
+work and prove the interleaving. P2 account switching leaves a previous loaded
+catalog visible, and an in-flight model selection can update both renderer and
+trusted PlanModelSelection after another account is selected. Clear/fence UI
+catalog/selection and revalidate trusted selection after asynchronous boundaries.
+Retry reuse after reopen and distinct registration labels are clean. Return this
+complete batch to existing implementer, no broad review restart. Focused tests
+must demonstrate RED/GREEN for both paths; reviewer closure is limited to these.
+
+Registry architecture refinement accepts the smallest API direction: existing
+register() becomes append-only after build, no registerDeployment alias. Defaults,
+limits, existing references and MCP policies remain immutable. Repository
+resolveModel(kind, AiScope, AiControl) supplies explicit per-signal selection;
+saved selections bypass it. Callback deadline/cancellation must be enforced.
+The documented authorizeSelection hook currently has no call sites; enforce it
+for resolver results and staged Ai.select preference changes before transition
+completion, including reset-to-inheritance. No new journal/storage contract.
+Before freezing D-0135, resolve the source-subscription ordering gap: Agent
+selection may run before a client subscriber binds the source Event ID. Do not
+assume delivery ordering or terminate valid work merely because an observer is
+late. Existing Astra/high architecture context checks this one bounded issue.
+
+D-0135 accepted after source-grounded ordering investigation. The resolver gets
+an additional detached accepted payload Any, so it can validate/bind the original
+source without waiting for subscription observation. EventBus handler dispatch
+precedes notification and Agent scheduler is independent; awaiting a subscriber
+would introduce spurious timeout/termination. No new stored data or scope type.
+Existing explicit Astra/high requirements_splitter assignment is complete;
+immutable configured profile accepted, no runtime introspection available.
+Auth final correction shows RED/GREEN for initial reconnect overlap and stale
+trusted/UI selections; full focused/check/package rerun continues before freeze.
+
+Final auth correction freezes after38/38 focused tests and2/2 real development/
+packaged Electron checks; private build/package and targeted type/style/docs gates
+pass. New barriers prove initial reconnect storage-read overlap and both stale
+account/same-account model results. Selected three-file V8 coverage is inspected
+but exits1 against global90%: session80.26%, model selection82.75%, renderer64.81%
+branches. This is not release qualification. Existing explicit Sol/medium closure
+reviewers receive only their two corrected findings for targeted closure; no
+complete review-wave restart or new agents. Production source remains frozen.
+
+Both targeted closures are clean. Reliability confirms initial begin/signout
+ordering and its barrier test; API confirms immediate account catalog hiding,
+late-result fencing and competing same-account choice handling. Explicit retained
+Sol/medium configurations satisfy dispatch acceptance, runtime introspection not
+available. All four canonical auth review concerns are closed: reliability/API
+clean, style's overlapping findings fixed with checked structure/format, docs
+clean. D-0133 is ready for checkpoint, not final release/security/live-account
+qualification. Parent commits and immediately pushes this reviewed milestone.

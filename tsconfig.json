@@ -30,6 +30,7 @@
     { "path": "./examples/projects" },
     { "path": "./examples/orders" },
     { "path": "./examples/support" },
+    { "path": "./examples/release-notes" },
     { "path": "./examples/message-board/model" },
     { "path": "./examples/message-board/app" },
     { "path": "./examples/message-board/web" }
