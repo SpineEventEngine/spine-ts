@@ -8,7 +8,7 @@ the changes that support them. The developer can request revisions, edit the
 text, approve a version, and export Markdown.
 
 The example must demonstrate useful Agent behavior: signal-triggered model
-work, typed results, MCP tools, persistent state, bounded correction attempts,
+work, typed results, MCP tools, stateful Entities, bounded correction attempts,
 account-aware configuration, and readable conversation and Event history.
 
 This is an implementation plan. Names explicitly marked as proposed are new
@@ -22,8 +22,13 @@ are outside this first example. Development launch and a locally packaged macOS
 application are both required. Signing and notarization are not release gates
 for this source example.
 
-The application runs locally and saves its data locally. Inference uses OpenAI
-over the network. Repository content selected for drafting is therefore sent to
+The first version uses the existing in-memory storage provider. Drafts, Entity
+state, and history last for the application process lifetime. Saved sign-in
+credentials and exported Markdown are separate, explicitly persisted data.
+Persistent domain storage and restart recovery are a later milestone, not a
+requirement for this first example.
+
+The application runs locally. Inference uses OpenAI over the network. Repository content selected for drafting is therefore sent to
 OpenAI. Explain this before the first generation request. Do not call the app
 offline or imply that inference happens on the machine.
 
@@ -37,9 +42,9 @@ Include:
 - Sign in with ChatGPT, saved registrations, account selection, reconnection,
   and models available to that registration.
 - All inference through the existing Agent AI facade using the ChatGPT plan.
-- Persistent drafts, Entity state, domain Events, System Events, conversation
-  records, and execution records.
-- A history panel with pagination, including after an application restart.
+- In-memory drafts, Entity state, domain Events, System Events, conversation
+  records, and execution records, with mandatory recording during the session.
+- A history panel with pagination for that session.
 
 Exclude issue trackers, GitHub authentication, pushing, release publication,
 working-tree analysis, code modification, shell tools offered to the model,
@@ -71,7 +76,8 @@ incorrect page rotation, and removed a deprecated option.
    conversation. It includes the current text and the submitted instruction.
 7. Edit the text directly if needed. Approve the exact version displayed, then
    export it to a chosen Markdown file. The model does not approve or export it.
-8. Quit and reopen. The draft, approval, evidence, and paginated history remain.
+8. Export before quitting. Reopening restores saved sign-in registrations, but
+   starts with no drafts or history. State that limitation clearly in the app.
 
 No claim of perfect factual accuracy is made. Local validation can check that a
 cited commit/file exists within the selected comparison; a human still reviews
@@ -86,9 +92,9 @@ domain `ReleaseDraftId` while retaining its separate Entity state type.
 
 Keep the renderer unprivileged. Electron's trusted Node.js side hosts the
 application services, Bounded Context, AI registry, credentials, Git tools, and
-database lifecycle. Prefer one trusted backend process initially; isolate the
-embedded database in a utility process if the compatibility milestone shows
-that it blocks the desktop event loop. Do not add distributed coordination.
+in-memory storage lifecycle. Use one trusted backend process initially. Closing
+or reloading the renderer must not discard its data while that backend remains
+running. Do not add distributed coordination or an embedded database.
 
 Use a narrow preload bridge. It accepts named application operations with
 validated arguments, not arbitrary Commands, SQL, filesystem paths, URLs, or
@@ -101,20 +107,20 @@ before adopting it. Prefer an existing in-process transport when available.
 
 The execution sequence is:
 
-| Step | Operation                                                     | Timing                                                                        |
-| ---- | ------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| 1    | Renderer checks required form fields.                         | Synchronous, local UI work.                                                   |
-| 2    | Trusted service resolves Git revisions and posts a Command.   | Asynchronous filesystem/process and dispatch work.                            |
-| 3    | Aggregate accepts the request and produces a domain Event.    | Synchronous domain handler; persistence and delivery are asynchronous.        |
-| 4    | Agent reacts to that Event and invokes `this.ai.invoke(...)`. | Asynchronous; may wait for auth refresh, OpenAI, and local MCP tools.         |
-| 5    | Agent returns a proposal or failure Event.                    | Local result construction, followed by asynchronous persistence and delivery. |
-| 6    | Aggregate admits or discards that result.                     | Synchronous domain handler; storage and delivery remain asynchronous.         |
-| 7    | Projection updates; UI receives the new state.                | Asynchronous notification, then synchronous React rendering.                  |
-| 8    | User approves and exports a particular version.               | Synchronous domain decisions; asynchronous file write.                        |
+| Step | Operation                                                     | Timing                                                                    |
+| ---- | ------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| 1    | Renderer checks required form fields.                         | Synchronous, local UI work.                                               |
+| 2    | Trusted service resolves Git revisions and posts a Command.   | Asynchronous filesystem/process and dispatch work.                        |
+| 3    | Aggregate accepts the request and produces a domain Event.    | Synchronous domain handler; storage and delivery are asynchronous.        |
+| 4    | Agent reacts to that Event and invokes `this.ai.invoke(...)`. | Asynchronous; may wait for auth refresh, OpenAI, and local MCP tools.     |
+| 5    | Agent returns a proposal or failure Event.                    | Local result construction, followed by asynchronous storage and delivery. |
+| 6    | Aggregate admits or discards that result.                     | Synchronous domain handler; storage and delivery remain asynchronous.     |
+| 7    | Projection updates; UI receives the new state.                | Asynchronous notification, then synchronous React rendering.              |
+| 8    | User approves and exports a particular version.               | Synchronous domain decisions; asynchronous file write.                    |
 
-No database transaction stays open while waiting for OpenAI. Preserve the
-existing Entity transaction semantics and short database reads/writes. Do not
-describe a failed model call as rolling back its recorded conversation.
+Preserve the existing Entity transaction semantics and storage interfaces with
+the in-memory provider. Do not describe a failed model call as rolling back its
+recorded conversation. This example introduces no database transactions.
 
 ## Domain messages and rules
 
@@ -162,28 +168,41 @@ and approval Commands with specific domain Rejections.
 Edit structured sections and entries, preserving their evidence references;
 Markdown is the rendered output, not an unrelated freeform document. Approval
 checks the displayed revision/content digest and saves the exact rendered
-Markdown bytes. An application update must not change an already approved
-export. Changing the release range clears incompatible content and evidence.
+Markdown bytes. An export must use those bytes, not render a different version
+after approval. Changing the release range clears incompatible content and
+evidence.
 Keep a repository selection fixed for a draft; open another draft for another
 repository. Projection updates carry the resulting draft revision and ignore
 older deliveries. A stale failure cannot overwrite a newer request's status.
 
 Allow one model operation at a time across this small app. Keep account/model
 selection fixed while an accepted generation is nonterminal. An invalidated
-proposal does not by itself mean its execution has finished. Persist the
-selection and outstanding request before dispatch, restore that restriction
-after restart, and reconcile it with actual execution status. Enforce admission
-in the trusted service atomically, not only through disabled UI controls. Each
+proposal does not by itself mean its execution has finished. Record the
+selection and outstanding request in memory before dispatch, and reconcile them
+with actual execution status. Enforce admission in the trusted service atomically, not only through disabled UI controls. Each
 registered `ModelRef` must identify one registration and concrete provider model;
 changing the picker must not redefine an existing reference. A double click
 must not create another paid operation for the same generation ID. A deliberate
 new revision gets a new generation ID.
 
-Reconcile the persisted admission record with Command acceptance and execution:
-a rejected Command releases admission, an uncertain dispatch is checked before
-resubmission, and a crash between admission and dispatch must not lock the app
-permanently. Cover these cases with restart tests using the existing dispatch
-and execution identities; do not add a second general workflow engine.
+Assign a generation ID in the trusted service before submission and return it
+as the application request identity. The Aggregate remembers accepted generation
+IDs and their input identity for the session. Repeating an accepted generation
+does not emit another `ReleaseGenerationRequested`, even after a later request
+or expiration of the inbox deduplication window. Reusing an ID with different
+input is rejected. Keep this domain safeguard independent of Command IDs: the
+current client's `post` creates a fresh Command ID per call.
+
+Reconcile the in-memory admission record with Command acceptance and execution:
+a genuinely rejected Command releases admission; a duplicate of accepted work
+does not release the active operation's admission. Check authoritative Aggregate
+acceptance state before retrying an uncertain submission. Preserve the generation
+ID, and preserve the Command ID only if the supported posting API permits it;
+do not invent a new posting API merely to replace the domain safeguard. If
+acceptance remains unknown, do not automatically retry. A renderer reconnect
+must not admit a second request while the backend still runs the first. Losing the backend
+process loses this record and all draft state; do not claim cross-restart
+deduplication or recovery, and never reconstruct/replay work from credentials.
 
 Use a conversation ID from the first generation and retain it for revisions of
 that draft. Build each request from the accepted input snapshot and bounded
@@ -199,8 +218,9 @@ Subscription inference goes to `https://api.openai.com/v1/responses`.
 
 Prefer the official SIWC local devkit for registration/session management if its
 published package, license, and credential/authorized-fetch seam fit the Agent
-adapter. Inspect those contracts in the first milestone. Do not call its
-generation helper from Entity code or bypass request accounting through an
+adapter. Inspect those contracts in the sign-in milestone; the adapter milestone
+first defines the authentication seam and tests it with controlled credentials.
+Do not call its generation helper from Entity code or bypass request accounting through an
 opaque helper with hidden retries. If necessary, implement the documented OAuth
 flow with a maintained OAuth/OIDC library; do not implement JWT cryptography.
 
@@ -238,9 +258,26 @@ and the official [Electron example](https://developers.openai.com/cookbook/artic
 
 ## Subscription adapter contract
 
-Add a separately identified ChatGPT subscription profile to `VercelAx`, with
-documented configuration distinct from API-key OpenAI Responses. Reuse the
-current OpenAI response decoding, Ax validation/correction, runtime tickets,
+Implement this first, as a new module inside the existing
+`@spine-event-engine/ai-vercel-ax` package, exposed through `VercelAx`. Do not
+create another published package. Document its configuration separately from
+API-key OpenAI Responses. Browser sign-in, account pickers, token persistence,
+and refresh-session management belong to the application authentication service.
+The profile accepts authenticated connections through the existing adapter
+connection contract; add only a demonstrated missing seam. It must not depend
+on Electron or open a browser.
+
+The first milestone is independently usable from a Node.js application: export
+the new profile through the package's public factory, document a complete typed
+configuration example, and exercise it through the real Agent invocation path
+with a controlled provider. The example supplies identity and authenticated
+connections through the existing `resolveIdentity`, `authorizeUse`, and `connect` hooks;
+verify their exact signatures before writing the snippet. Keep token refresh
+behind the application connection service and preserve the provided request
+control, bounded fetch, cancellation, and deadline behavior. A refresh must not
+silently replay a failed inference request outside the recorded attempt budget.
+
+Reuse the current OpenAI response decoding, Ax validation/correction, runtime tickets,
 abort handling, and journal wherever their contracts match. Do not weaken the
 Anthropic, API-key OpenAI, or Jev profiles.
 
@@ -276,7 +313,7 @@ error. Neither Vercel nor Ax may perform unrecorded provider retries.
 
 Validate the selected account/model binding before every physical request.
 Refreshing credentials for the same registration is allowed; substituting a
-different registration is not. Persist only nonsecret registration references
+different registration is not. Record only nonsecret registration references
 and model identifiers with execution metadata.
 
 Sources: [inference](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference)
@@ -331,46 +368,27 @@ Git content is untrusted input. Instructions found in a commit message or file
 cannot grant additional tools, change authentication, approve a draft, or cause
 an export. The generated text is rendered without executable HTML.
 
-## Persistence and history access
+## In-memory storage and history access
 
-Use disk-backed embedded storage. Reusing the PostgreSQL provider with PGlite is
-the first candidate, not an assumed supported combination. PGlite exposes a
-PostgreSQL wire bridge and Unix sockets, but its single-connection backend has
-different connection behavior. Establish compatibility before building the app
-around it. [PGlite socket documentation](https://pglite.dev/docs/pglite-socket).
+Use the existing in-memory storage factory for all Bounded Context storage
+families, including Entity state, Event Stores, System Events, mandatory Agent
+history, and execution records. Do not create an example-specific substitute,
+save-on-exit snapshot, disk journal, or embedded database dependency.
 
-The first storage experiment uses a private Unix socket, existing `pg` access,
-and a single-client pool. Verify that this cannot deadlock nested operations.
-Keep the socket directory private and protocol inspection disabled. Use a real
-data directory and durable flush behavior, not memory storage or a save-on-exit
-JSON copy. No model or MCP call holds a database connection unnecessarily.
+Recording is mandatory. Retain all recorded history for the backend process
+lifetime without an opt-out, retention timer, or history-position counter. The
+explicit in-memory scope means all of it is lost on process exit; this does not
+change the framework's retention contract for durable providers. General
+physical Entity deletion remains a separate task. Use the shared `Time` utility
+for runtime clock reads. UI `.tsx` and non-runtime scripts remain excluded.
 
-Required compatibility cases come from the current provider implementation:
-schema/catalog checks; table initialization; row locks and conflict handling;
-transaction affinity; advisory transaction and session locks; Entity commits;
-Agent state/history/execution completion; failed-client release; and reopen after
-an abrupt process exit. Prove the relevant atomic write behavior with the actual
-provider, not only a successful `SELECT 1`. Exercise Projections, Event Stores,
-System Events, and indexed Agent history as well as Entity state.
-
-If PGlite cannot meet these contracts through a small, honest integration, stop
-this implementation milestone with a concrete storage alternative and estimate.
-Do not replace the provider with a new general SQLite implementation or require
-a separately installed database without revising this plan.
-
-Retain all Agent history until general physical Entity deletion, which is a
-separate task. No opt-out, retention timer, or history-position counter. Use
-the shared `Time` utility for runtime clock reads. UI `.tsx` and non-runtime
-scripts remain outside that requirement.
-
-The trusted host also needs authoritative execution status for its persisted
-admission record, including failure before the Agent handler starts. During the
-first milestone, identify an existing supported server observation API or add a
-narrow read-only operation alongside Agent inspection. It must distinguish
-pending/running, interrupted with an uncertain outcome, and terminal execution
-for the accepted signal identity. History entries and UI state alone are not
-proof that execution is terminal. Keep provider handles, credentials, leases,
-and mutation operations out of this public read contract.
+The trusted host needs an authoritative completion indication to release its
+in-memory admission record, including failures before the Agent handler starts.
+In the application integration milestone, first inspect existing public
+submission/completion APIs. If they cannot provide this, add the smallest
+read-only execution observation needed. Do not add a persisted reservation
+system or restart-recovery API for this in-memory example. History entries and
+UI spinners alone are not proof of terminal execution.
 
 The existing Agent methods are protected handler APIs. The production UI must
 not import BlackBox or send artificial Agent Commands just to read history.
@@ -398,23 +416,26 @@ text. Apply page byte bounds without imposing a total-history ceiling.
 
 ## Desktop lifecycle and failure behavior
 
-Use one application instance for its data directory. On startup, open storage,
-restore account registrations and deployment references, construct the Bounded
-Context, reconcile accepted work, and then enable generation controls. Do not
-automatically repeat a paid request solely because the window reopened.
+Use one application instance. On startup, restore protected account registrations,
+create fresh in-memory storage and the Bounded Context, and enable the UI when
+services are ready. Saved credentials do not contain draft requests or cause
+inference on launch. A renderer reload reconnects to the same live backend;
+a complete backend restart begins a new empty session.
 
-Preserve the runtime's existing interrupted-execution rules. A request with an
-unknown provider outcome is not advertised as exactly-once inference. Show an
-interrupted/needs-attention state when another request would require user action.
-Expired credentials, denied plan usage, exhausted quota, unavailable models,
-tool errors, and invalid output must leave the editable draft intact.
+A request with an unknown provider outcome is not advertised as exactly-once
+inference. Expired credentials, denied plan usage, exhausted quota, unavailable
+models, tool errors, and invalid output leave the current session's editable
+draft intact. Interrupted/uncertain work keeps its original account/model
+binding until settled under the runtime's supported rules within the session.
+Do not silently repeat a request to clear an uncertain status.
 
-On normal quit, stop accepting new work and close services in dependency order.
-If work is active, present a clear choice to wait or stop and quit, using the
-runtime's actual cancellation/interruption behavior. Test forced exit separately.
-Account selection unlocks only when execution is terminal, not when the editor
-hides its spinner. Interrupted or uncertain work retains its original binding
-until it is explicitly settled under the runtime's supported recovery rules.
+On normal quit, explain that unexported drafts and all session history will be
+lost. Stop accepting new work and close services in dependency order. If work
+is active, offer to wait or stop and quit using actual cancellation behavior.
+The UI must not imply that stopping the local request proves the provider did
+no work or consumed no usage. Account selection unlocks only after execution is
+terminal, not when its spinner disappears. A forced exit loses domain state;
+a later launch must not repeat inference or export automatically.
 
 Export starts with a domain Command such as `PrepareReleaseNotesExport`, which
 validates approval and expected revision against the Aggregate and produces a
@@ -441,17 +462,23 @@ These estimates cover uninterrupted agent implementation, focused tests,
 documentation, reviews, fixes, and integration. They are estimates, not measured
 completion times. External sign-in interaction and CI queue time are additional.
 
-| Milestone                                 | Deliverable and acceptance gate                                                                                                                                                                           | Estimate  |
-| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
-| 1. Prove the two integration dependencies | Durable embedded-provider experiment; exact SIWC package/API/license inspection; subscription request/stream/tool contract tests. Resolve token-limit capability and credential injection before UI work. | 2–4 hours |
-| 2. Complete reusable API support          | Subscription profile through Vercel/Ax, explicit limit compatibility, and production indexed history/execution reads. Existing OpenAI, Anthropic, and Jev behavior remains covered.                       | 3–5 hours |
-| 3. Implement the domain and local tools   | Example Protos, Aggregate/Agent/Projection, immutable Git comparison, read-only MCP, and BlackBox scenarios including stale proposals.                                                                    | 3–5 hours |
-| 4. Build the desktop workflow             | Sign-in/account/model UI, repository comparison, editor/evidence/history, approval/export, and reopen behavior. Packaged macOS launch works without development services.                                 | 3–5 hours |
-| 5. Finish the example and PR              | Tutorial, auth/configuration guide, deterministic UI/provider/restart tests, permitted live subscription smoke test, relevant independent reviews, release gates, and updated PR guide.                   | 2–4 hours |
+| Milestone                               | Deliverable and acceptance gate                                                                                                                                                                                                                          | Estimate  |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| 1. Implement the subscription profile   | New module in `ai-vercel-ax`; authenticated connection contract; token-limit compatibility; exact request, streaming, tool-continuation, cancellation and failure fixtures. Existing provider regressions pass. No Electron or storage changes.          | 2–4 hours |
+| 2. Connect desktop sign-in              | Inspect official SDK/API/license, implement browser sign-in and protected credentials, discover models, and complete a small real Agent subscription call through the profile using in-memory storage. Human authorization is needed for the live check. | 2–4 hours |
+| 3. Implement the domain and local tools | Protos, Aggregate/Agent/Projection, immutable Git comparison, read-only MCP, production history reads, in-session admission/completion, and BlackBox scenarios.                                                                                          | 3–5 hours |
+| 4. Build the release-notes UI           | Repository comparison, editor/evidence/history, approval/export, account/model controls, renderer reconnect, and explicit session-loss behavior. Packaged macOS launch works without development services.                                               | 2–4 hours |
+| 5. Finish the example and PR            | Tutorial, authentication/configuration guide, deterministic UI/provider tests, live MCP smoke check when authorized, relevant independent reviews, release gates, and updated PR guide.                                                                  | 2–3 hours |
 
-Total: **13–23 hours**, assuming the embedded-provider experiment succeeds.
-Revise the estimate immediately if it requires a different storage design or
-the official authentication package cannot be integrated as documented.
+Total for the in-memory version: **11–20 hours**. External authorization and CI
+queue time are additional. If human authorization is unavailable, continue
+independent fixture/domain/UI work and report the live check as outstanding;
+do not claim fixtures prove a real subscription interaction.
+
+Persistent domain storage is deferred. A later milestone will select/prove an
+embedded provider, then add reopen, crash recovery, and durable admission tests.
+PGlite remains a candidate to evaluate then, not a dependency or an early gate
+for the adapter or this example. Its implementation estimate is separate.
 
 Keep this work on `agent-entities` in the existing PR. Do not create another
 feature PR. Use one implementation agent for overlapping production changes.
@@ -467,10 +494,9 @@ an unnecessary new published package for an example-specific service.
 | `packages/ai/`                                               | Explicit capability/limit compatibility needed by subscription deployments.                                                                                            |
 | `packages/ai-vercel-ax/`                                     | Subscription profile, authenticated transport seam, route-specific requests, streams, continuations, and adapter tests.                                                |
 | `packages/server/`                                           | Public read-only Agent history and necessary execution-status observation using existing repository storage.                                                           |
-| `packages/storage-postgres/`                                 | Only changes proved necessary by the embedded-provider experiment; do not duplicate the SQL implementation.                                                            |
 | `packages/server-blackbox-tests/` and affected package tests | Regressions for public history/limit contracts and existing providers. Application scenarios stay in the example.                                                      |
 | Workspace, Proto, build, documentation, and CI configuration | Include the new legitimate example domain, generation, exports, packaging assets, checks, and deterministic desktop tests.                                             |
-| User guide and existing PR description                       | Feature introduction and tutorial with authentication, MCP, persistence, and actual runnable example links.                                                            |
+| User guide and existing PR description                       | Feature introduction and tutorial with authentication, MCP, session lifetime, and actual runnable example links.                                                       |
 
 ## Acceptance scenarios and test tools
 
@@ -485,7 +511,15 @@ call counts alone.
 - Stop when request/tool/byte/deadline limits are reached, retaining the old draft.
 - Reject an explicit token ceiling unsupported by the selected deployment.
 - Discard a result after manual editing, a newer request, or approval.
-- Keep account/model identity through queueing, reconnect, and restart.
+- Keep account/model identity through queueing and reconnect within a session.
+- Reconnect the renderer without losing the live backend state or starting work.
+- Release admission after Command rejection or a failure before the handler runs.
+- Prevent duplicate dispatch from a double click or lost renderer acknowledgement.
+- Lose an acknowledgement after successful acceptance, reconnect the renderer,
+  and retry the same generation after inbox deduplication expires. Assert one
+  Agent invocation. Also repeat an older accepted generation after a newer one
+  and reject an ID reused with changed input.
+- Reopen the backend with empty domain storage, saved sign-in, and no inference.
 - Distinguish Agent proposals from Aggregate admission/approval in projections.
 - Reject stale edits/approvals and prevent export of an unapproved version.
 - Read every history category and subsequent pages without making a model call.
@@ -500,9 +534,10 @@ streamed quota errors, tool continuation, interruption, and rejection of
 unsupported request fields. Assert that credentials never enter history.
 
 Use Playwright's Electron support for the user workflow with scripted providers.
-Launch a fresh process against the same disk directory to test reopen, and
-terminate it during active work to test interruption. Test packaged assets,
-especially the embedded database runtime and generated Proto/registry files.
+Test renderer reconnect separately from a fresh backend process. The latter
+retains protected sign-in registrations but has no drafts/history or automatic
+requests. Terminate during active work to verify that reopening does not replay
+it. Test packaged assets, especially generated Proto/registry files.
 
 A live smoke test must use the actual UI sign-in and complete one subscription
 generation including a local MCP lookup. It requires a human to authorize the
@@ -528,7 +563,8 @@ Include real, typechecked, documented TS examples with four-space indentation,
 correct Proto formatting, and complete imports. Explain which configuration is
 framework API and which belongs to this desktop app. Describe authentication
 setup, credential storage, account/model selection, usage limits, reconnect,
-and the subscription-specific adapter profile. Show history reading from both
+loss of drafts/history on backend exit, and the subscription-specific adapter
+profile. Show history reading from both
 an Agent handler and the desktop's read-only access path.
 
 Keep the PR description a human introduction with examples and runnable links.

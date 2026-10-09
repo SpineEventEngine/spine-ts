@@ -3274,3 +3274,38 @@ reliability is expressed as concrete compatibility gates; documentation checked;
 production style and release security review deferred to implemented changes
 because this turn adds planning documents only. Next step is milestone 1 when
 the human starts implementation.
+
+### In-memory desktop plan revision — 2026-10-09
+
+The human approved starting with the existing in-memory storage provider and
+implementing the ChatGPT subscription adapter profile first, as a module inside
+`ai-vercel-ax`, not a new published package. Browser sign-in and protected saved
+credentials remain application integration concerns. Persistent domain storage
+and restart recovery are deferred. This turn revises and reviews the plan only;
+no production implementation. Estimate: 0.2–0.4 hours including correction and
+push. Fresh independent performance/reliability reviewer: explicit gpt-6-sol,
+medium reasoning, no conversation/memory or children; focus on contradictions,
+adapter boundaries, session lifetime, and the revised implementation sequence.
+Desktop supports explicit model/reasoning dispatch. The existing PR/worktree
+continues because this is an approved scope revision of the same task.
+
+The fresh performance/reliability review completed with the explicit configured
+Sol/medium profile; no independent runtime metadata was exposed. Its one finding
+was accepted and fixed: a fresh Command ID and expiring inbox deduplication cannot
+prevent repeat paid work after lost acknowledgement. The plan now requires
+Aggregate generation-ID idempotence for the session, changed-input rejection,
+authoritative acceptance checks, and no automatic uncertain resubmission. Tests
+cover lost acknowledgement, renderer reconnect, inbox expiry, and repetition of
+an older accepted generation. The same reviewer confirmed closure without a
+residual finding. The profile's current `resolveIdentity`, `authorizeUse`, and
+`connect` APIs were checked; the module remains independently usable without
+Electron. No production code or subscription requests were executed.
+
+The plan now estimates 11–20 hours for the in-memory example, excluding external
+authorization/CI wait and later persistent storage work. Required recording is
+unchanged within the session; backend exit loses all domain/history state while
+protected sign-in registrations and explicit exports persist. Public history
+reads remain in scope; execution observation is added only if current public
+completion APIs prove insufficient. Final checks: changed-document formatting,
+documentation audience, scope assertions, and Git whitespace. Next action is
+adapter-profile implementation when requested, not embedded storage work.
