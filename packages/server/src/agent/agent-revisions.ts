@@ -102,6 +102,7 @@ export const AgentRevisions: AgentRevisionsAccess = Object.freeze({
 
 /**
  * Selects serializable policy fields while callback revisions remain in codeRevision.
+ *
  * @param ai Effective registry.
  * @param repository Repository capabilities and narrowing policy.
  * @returns Ordered policy value for a deterministic digest.
@@ -111,13 +112,11 @@ function policyShape(ai: AiRegistry, repository: RepositoryAiOptions): object {
   return {
     defaults: options.defaultModels,
     limits: options.invocationLimits,
-    concurrency: options.concurrentOperations,
-    queued: options.queuedOperations,
     hookTimeoutMs: options.hookTimeoutMs,
     repositoryDefaults: repository.defaultModels,
     allowedModels: repository.allowedModels,
     invocationLimits: repository.invocationLimits,
-    mcpServers: mcpPolicies(ai),
+    mcpServers: mcpPolicies(ai, repository),
     models: repository.models.map(({ definition }) => ({
       name: definition.name,
       version: definition.version,
@@ -143,12 +142,18 @@ function policyShape(ai: AiRegistry, repository: RepositoryAiOptions): object {
 }
 
 /**
- * Hashes static server policy without evaluating scoped credential callbacks.
+ * Hashes only available tools and their server policy without evaluating credential callbacks.
+ *
  * @param ai Effective AI registry with registered tool servers.
+ * @param repository Model capabilities available to this Agent repository.
  * @returns Deterministically ordered serializable server policies.
  */
-function mcpPolicies(ai: AiRegistry): readonly object[] {
+function mcpPolicies(ai: AiRegistry, repository: RepositoryAiOptions): readonly object[] {
+  const selected = repository.models.flatMap(({ definition }) =>
+    definition.kind === "generation" ? (definition.tools ?? []) : [],
+  );
   return mcpRegistrations(ai)
+    .filter((registration) => selected.some((ref) => ref.server === mcpDefinition(registration).id))
     .map((registration) => {
       const server = mcpDefinition(registration);
       const transport =
@@ -165,6 +170,7 @@ function mcpPolicies(ai: AiRegistry): readonly object[] {
         revision: server.revision,
         transport,
         tools: Object.entries(server.tools)
+          .filter(([name]) => selected.some((ref) => ref.server === server.id && ref.tool === name))
           .sort(([left], [right]) => left.localeCompare(right))
           .map(([name, policy]) => ({
             name,

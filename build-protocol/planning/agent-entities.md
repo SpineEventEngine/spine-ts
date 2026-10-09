@@ -4892,3 +4892,36 @@ semantic quality and full Proto generation pass again. Documentation finding
 closed by direct wording correction, no runtime change. Commit contains only
 Proto/domain naming and documentation, checker discovery/regressions, and parent
 records. Unfinished assembly test/API and dependency additions remain unstaged.
+
+Recovery digest correction frozen in two server source/test files. Targeted RED
+proved capacity affected the digest; GREEN3 revision tests/8 including admission
+integration cover unchanged digest for capacity, unavailable same-server tools
+and unrelated servers, changed digest for relevant server revision/transport/tool
+policy. Server/tooling typechecks, targeted ESLint/Prettier/TSDoc/diff pass.
+Root cleanup fails only on preserved service WIP: explicit Repository assembly
+uses APIs prohibited in end-user examples. Focused recovery reviewer dispatch:
+fresh performance_reliability_reviewer, explicit Sol/medium/fork none, no memory,
+no edits/no children. Check scoped digest correction and recovery comparison,
+not unrelated desktop source. API signatures unchanged; docs/maintainability
+checked deterministically by parent, final release security remains deferred.
+
+Demonstrated service integration blocker: D0134 Agent reads require a Repository
+reference. Supported .add(Entity, options) assembly creates it internally;
+registeredRepositories() exposes immutable metadata-only RepositoryView, while
+manual Repository/HandlerRegistryIngestor/EntityHandlersMetadata construction is
+prohibited in examples. Do not weaken the example checker or use testing/private
+access. Reuse the existing explicit Astra/high architect for a bounded follow-up
+(0.2–0.4h design/source check, then implementation estimate): inspect JVM public
+repository access and select the smallest typed public access route. Do not add
+business rules or a new application abstraction. Runtime profile unchanged and
+explicit from original dispatch; metadata introspection unavailable.
+
+Recovery compatibility correction accepted after fresh explicit Sol/medium
+reliability review. Reviewer traced both admission and recovery digest use and
+confirmed selected MCP references match actual runtime tool availability.
+Capacity remains enforced by execution-capacity machinery, without invalidating
+persisted policy compatibility. Relevant server transport/revision and tool
+effect/limits remain checked. No confirmed missed reachable policy or persistence
+issue. Narrow tests support this correction; revision-only coverage58.33% branches
+is not full release evidence. No new public API or business policy was added.
+Commit only two recovery files and this parent record; service WIP remains out.

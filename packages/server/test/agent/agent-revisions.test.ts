@@ -12,9 +12,13 @@
  * the License.
  */
 
-import { AiRegistry, Mcp } from "@spine-event-engine/ai";
+import { AiModel, AiRegistry, Mcp } from "@spine-event-engine/ai";
 import { describe, expect, it } from "vitest";
 import { SupportReplyAgentStateSchema } from "../../test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
+import {
+  ProposedSupportReplySchema,
+  SupportTicketFactsSchema,
+} from "../../test-fixtures/generated/entity-metadata/support_ai_types_pb.js";
 import { AgentRevisions } from "../../src/agent/agent-revisions.js";
 
 const limits = {
@@ -28,12 +32,36 @@ const limits = {
   maxRecoveryBytes: 1000,
 };
 
-function registry(revision: string, resultBytes: number, url = "https://example.test/mcp") {
+const proposal = AiModel.define({
+  name: "revision-support-reply",
+  version: "v1",
+  kind: "generation",
+  input: SupportTicketFactsSchema,
+  output: ProposedSupportReplySchema,
+  instructions: "Draft a support reply.",
+  outputMode: "prompt-and-validate",
+  tools: [{ server: "lookup", tool: "search" }],
+  limits: {
+    modelRequests: 1,
+    toolCalls: 1,
+    deadlineMs: 1_000,
+    maxInputBytes: 1_000,
+    maxOutputBytes: 1_000,
+  },
+});
+
+function registry(
+  revision: string,
+  resultBytes: number,
+  url = "https://example.test/mcp",
+  concurrentOperations = 1,
+  extraToolBytes = 100,
+) {
   return AiRegistry.create({
     defaultModels: {},
     invocationLimits: limits,
-    concurrentOperations: 1,
-    queuedOperations: 0,
+    concurrentOperations,
+    queuedOperations: concurrentOperations - 1,
   }).registerTools(
     Mcp.server({
       id: "lookup",
@@ -48,6 +76,13 @@ function registry(revision: string, resultBytes: number, url = "https://example.
           maxResultBytes: resultBytes,
           authorize: () => true,
         },
+        archive: {
+          effect: "read",
+          timeoutMs: 100,
+          maxArgumentBytes: 100,
+          maxResultBytes: extraToolBytes,
+          authorize: () => true,
+        },
       },
     }),
   );
@@ -56,11 +91,47 @@ function registry(revision: string, resultBytes: number, url = "https://example.
 describe("Agent MCP admission revision", () => {
   it("changes when registered server revision or tool policy changes", () => {
     const policy = (ai: AiRegistry) =>
-      AgentRevisions.atAdmission(SupportReplyAgentStateSchema, [], ai, { models: [] }).policy;
+      AgentRevisions.atAdmission(SupportReplyAgentStateSchema, [], ai, { models: [proposal] })
+        .policy;
     expect(policy(registry("v1", 100))).not.toBe(policy(registry("v2", 100)));
     expect(policy(registry("v1", 100))).not.toBe(policy(registry("v1", 200)));
     expect(policy(registry("v1", 100))).not.toBe(
       policy(registry("v1", 100, "https://example.test/other")),
+    );
+  });
+
+  it("keeps accepted work compatible across capacity and unrelated tool changes", () => {
+    const policy = (ai: AiRegistry) =>
+      AgentRevisions.atAdmission(SupportReplyAgentStateSchema, [], ai, { models: [proposal] })
+        .policy;
+    expect(policy(registry("v1", 100))).toBe(policy(registry("v1", 100, undefined, 3)));
+    expect(policy(registry("v1", 100))).toBe(policy(registry("v1", 100, undefined, 1, 200)));
+    const extraServer = registry("v1", 100).registerTools(
+      Mcp.server({
+        id: "unrelated",
+        revision: "v2",
+        transport: { kind: "streamable-http", url: "https://example.test/extra" },
+        authorizeConnect: () => true,
+        tools: {
+          inspect: {
+            effect: "read",
+            timeoutMs: 100,
+            maxArgumentBytes: 100,
+            maxResultBytes: 100,
+            authorize: () => true,
+          },
+        },
+      }),
+    );
+    expect(policy(registry("v1", 100))).toBe(policy(extraServer));
+    expect(
+      AgentRevisions.atAdmission(SupportReplyAgentStateSchema, [], registry("v1", 100), {
+        models: [],
+      }).policy,
+    ).toBe(
+      AgentRevisions.atAdmission(SupportReplyAgentStateSchema, [], registry("v2", 200), {
+        models: [],
+      }).policy,
     );
   });
 
