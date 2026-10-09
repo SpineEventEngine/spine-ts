@@ -4,7 +4,7 @@
 
 Build a small desktop example in the existing Agent PR. A developer selects a
 local Git repository and a release range, then gets release notes with links to
-the changes that support them. The developer can request revisions, edit the
+the changes that support them. The developer can ask for changes, edit the
 text, approve a version, and export Markdown.
 
 The example must demonstrate useful Agent behavior: signal-triggered model
@@ -29,14 +29,14 @@ Persistent domain storage and restart recovery are a later milestone, not a
 requirement for this first example.
 
 The application runs locally. Inference uses OpenAI over the network. Repository content selected for drafting is therefore sent to
-OpenAI. Explain this before the first generation request. Do not call the app
+OpenAI. Explain this before the first generation Command. Do not call the app
 offline or imply that inference happens on the machine.
 
 Include:
 
 - Local repository selection and comparisons between two committed revisions.
 - User-facing and developer-facing release notes.
-- Explicit draft and revision requests; no background autonomous work.
+- Explicit Commands to draft or change notes; no background autonomous work.
 - Evidence beside each generated entry.
 - Manual editing, version-specific approval, and Markdown export.
 - Sign in with ChatGPT, saved registrations, account selection, reconnection,
@@ -111,7 +111,7 @@ The execution sequence is:
 | ---- | ------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | 1    | Renderer checks required form fields.                         | Synchronous, local UI work.                                               |
 | 2    | Trusted service resolves Git revisions and posts a Command.   | Asynchronous filesystem/process and dispatch work.                        |
-| 3    | Aggregate accepts the request and produces a domain Event.    | Synchronous domain handler; storage and delivery are asynchronous.        |
+| 3    | Aggregate accepts the Command and produces a domain Event.    | Synchronous domain handler; storage and delivery are asynchronous.        |
 | 4    | Agent reacts to that Event and invokes `this.ai.invoke(...)`. | Asynchronous; may wait for auth refresh, OpenAI, and local MCP tools.     |
 | 5    | Agent returns a proposal or failure Event.                    | Local result construction, followed by asynchronous storage and delivery. |
 | 6    | Aggregate admits or discards that result.                     | Synchronous domain handler; storage and delivery remain asynchronous.     |
@@ -349,7 +349,7 @@ to be an ancestor of the target. Reject ranges containing unrelated-history
 root commits explicitly, before claiming a complete catalog. List commits reachable
 from the target but not the base; compare the two committed trees for net file
 changes. Explain this comparison policy in the UI. A moved branch or tag cannot
-change an already accepted request. Do not read uncommitted files.
+change an already accepted generation Command. Do not read uncommitted files.
 
 Offer three narrow tools:
 
@@ -368,7 +368,7 @@ symlinks/submodules outside the selected committed tree. Handle binary files
 and large patches explicitly. No truncation may look like complete evidence.
 
 Build a bounded verified catalog of commit/file evidence before accepting the
-generation request, and include it in the typed model input. MCP reads details
+generation Command, and include it in the typed model input. MCP reads details
 only for those catalog entries. The current pure validation callback receives
 the result and input, not a live tool transcript; it can therefore verify exact
 catalog membership without a new validation API or mutable shared collection.
@@ -443,7 +443,7 @@ text. Apply page byte bounds without imposing a total-history ceiling.
 
 Use one application instance. On startup, restore protected account registrations,
 create fresh in-memory storage and the Bounded Context, and enable the UI when
-services are ready. Saved credentials do not contain draft requests or cause
+services are ready. Saved credentials do not contain draft Commands or cause
 inference on launch. A renderer reload reconnects to the same live backend;
 a complete backend restart begins a new empty session.
 
@@ -535,7 +535,7 @@ call counts alone.
 - Record malformed output, a specific corrective request, and its outcome.
 - Stop when request/tool/byte/deadline limits are reached, retaining the old draft.
 - Reject an explicit token ceiling unsupported by the selected deployment.
-- Discard a result after manual editing, a newer request, or approval.
+- Discard a result after manual editing, a newer generation Command, or approval.
 - Keep account/model identity through queueing and reconnect within a session.
 - Reconnect the renderer without losing the live backend state or starting work.
 - Release admission after Command rejection or a failure before the handler runs.
@@ -561,7 +561,7 @@ unsupported request fields. Assert that credentials never enter history.
 Use Playwright's Electron support for the user workflow with scripted providers.
 Test renderer reconnect separately from a fresh backend process. The latter
 retains protected sign-in registrations but has no drafts/history or automatic
-requests. Terminate during active work to verify that reopening does not replay
+model calls. Terminate during active work to verify that reopening does not replay
 it. Test packaged assets, especially generated Proto/registry files.
 
 A live smoke test must use the actual UI sign-in and complete one subscription

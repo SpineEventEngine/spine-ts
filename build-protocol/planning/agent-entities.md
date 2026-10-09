@@ -4652,3 +4652,108 @@ unsupported schema fixtures (no casts). Exact pnpm typecheck:tooling passed,
 focused MCP38/38 passed, fileESLint/diffcheck passed. Only adapter test file plus
 thisrecord enter correctivecheckpoint; D0138 remainsseparated. Samewriter resumes
 domainpreflight. No runtimebehavior changed; deterministiccorrection no reviewreopen.
+
+D0138 domain frozen versus67916c6c9 byexisting explicitSol/medium writer. No
+DraftRevision/Projectionwatermark. ExistingVersion expectedtargets, pending
+historicalinputVersion+generation admission, acknowledgementbeforefreshness,
+currentVersion+approvedbytes export. Evidence: proto:generate/check-generated:
+current/lint, typecheck:build:generated, exacttypecheck:tooling, privatebuild,
+focused domain/model/actualAgent10/10, repoESLint/cleanup/TSDoc/copyright/time/
+format/API/audience/snippets/diff allPASS. Domainindexbranch90.9%,lines96.32%;
+narrowselectedtestcoverage globalfailure isnot fullqualification. Remainingfull
+repositorycoverage/humanlivecheck/UIstillopen. Writercompletedturnandholds source.
+
+Fresh independent domainreview wave0.4–0.8h incl corrections, no memory viafork
+none/noedits/nochildren. Existing reliabilitySol/medium: domainVersion freshness,
+idempotence,pendingeligibility, approval/export, realAgenttoolpath andlocal
+Projectionsequencing. APISol/medium: ProtoDDD/Version contracts/publicEntity APIs,
+generationconfig/registry/packagewiring. StyleSol/medium: boundedmaintainable
+code/tests/naming/TSDoc/format. DocsLuna/medium: README/TSDoc/currentclaims (fullUI
+USER_GUIDE follows bridge). All explicitmodel+reasoning, Desktopprofile supported,
+actualruntimeintrospectionunavailable. Reviewonly newdomain diff/filelist under
+examples/release-notes and requiredproto/buildwiring since67916c6c9; D0137accepted
+notreopened. Securitydeferredcoordinatedfinalgate. Collectcompletewaveonefixbatch
+samewriter; substantivelyaffectedclosureonly. HumanVersioncorrection D0138/updated
+plan binding; no DraftRevision or speculative Projectionwatermark reinstatement.
+
+D0138 full independentreviewwave collected, explicit freshprofilesaccepted;
+runtime introspectionunavailable. ReliabilitySol/medium: duplicate OpenReleaseDraft
+can overwriteexistingstate/receipts/fixedrepo andpermitrepeatedpaidgeneration;
+canonicalMarkdown dropscommit/parent/pathcitations contraryapprovedexportplan.
+StyleSol/medium: inputchange/approvalinvalidation test neveracceptsgeneration and
+injectsunrelatedID, so cannot provependinginvalidated; roottsconfigduplicate
+release-notesreference. APISol/medium confirms existingVersion/proto/API/registry/
+declarationcontracts, repeats onlyduplicateconfigcleanup. DocsLuna/medium clean,
+currentREADMEhonestly saysUI/admissionunfinished. Fouruniquefindingsaccepted,
+onebatchsamewriter0.3–0.5h incl focusedchecks. Require exactoriginalgeneration+
+inputVersion in staleoutcome tests, duplicateopenpreservesreceipts/pending/approval/
+fixedrepository, approvedexportcontainsimmutableevidence (no assumedhostURL).
+No speculativewatermark/revisioncounter/clientAPIaddition. Re-reviewreliability
+andtestqualityonly; deterministicconfigcorrectiondoesnotreopenAPIlane. FullUIguide
+andsecurityremainfollowingcoordinatedslices, not silentlydropped.
+
+D0138 correction checkpoint: behavioral tests first failed for repeated opening
+and missing export citations, then passed 12/12 after the implementation fixes.
+The input-change test now starts with an accepted generation and delivers the
+same generation ID and historical input Version after the change. Dedicated
+preflight and affected independent review remain pending; this checkpoint does
+not close the slice. The canonical plan now names domain Commands consistently;
+transport/model request terminology remains where it describes an actual API.
+
+Next affected review dispatches: fresh performance/reliability reviewer with
+explicit gpt-6-sol / medium for repeated opening, pending-result invalidation,
+and exact approved/exported evidence; existing style reviewer with its recorded
+explicit gpt-6-sol / medium profile for the corrected behavioral test. No memory,
+no edits, no children. Runtime introspection is unavailable; explicit configured
+profiles are the acceptance evidence. API duplicate-reference correction is
+mechanical, and the unchanged documentation concern remains accepted. Both
+closures wait for the implementer's complete cheap preflight and frozen source.
+
+D0138 corrected cheap preflight passes: 12 focused domain/model/real Agent tests,
+shared generated build, exact tooling typecheck, generated-current check, Proto
+lint, ESLint, cleanup/TSDoc/copyright/time/docs gates. Parent-edited plan required
+Prettier formatting; corrected, repository format:check and diff check now pass.
+Focused domain branches 91.17%, lines 96.4%; Markdown branches 81.81%, lines 100%.
+The focused selection does not qualify global coverage. Style closure accepts
+the genuine pending-generation test and single project reference. Reliability
+closure for repeated open and exact evidence export remains in progress.
+
+Affected reliability review confirms no production defect in corrected opening,
+Version handling, or canonical evidence export. One accepted test gap remains:
+approval/prepared-export must exercise an evidence path with HTML metacharacters
+and a newline. Same implementer adds the precise byte assertion and reruns the
+focused checks (0.05–0.1h); no runtime change or broad review wave is expected.
+
+Next private desktop integration slice: estimate 3–5 hours for trusted admission
+and public in-process services, narrow validated IPC, full editor/evidence/
+history/approval/export UI, lifecycle, packaged generated registry, focused
+behavior tests, reviews and fixes. This combines the remaining milestone 3
+service integration with milestone 4. Final tutorial, security, full release
+qualification, CI wait and human sign-in remain separate. Existing implementer
+continues under its explicit gpt-6-sol / medium profile, no children; parent
+handles canonical records and Git. Architecture remains the approved frozen
+plan plus D0134–D0138; repeat architecture only for a demonstrated blocker.
+
+The bridge must use actual public APIs. Client.post supplies no successful
+Command ID, and public Rejection subscriptions redact original Command content.
+Serialize export preparation per draft and match its pre-activated Event to
+draft ID plus the submitted expected Version using the Event's pre-dispatch
+producer Version. This correlation does not derive a new current Version.
+Unknown or lost outcomes cannot authorize a file write. Editor reads retain
+Aggregate state and Version from the same response. Model selection binds from
+the accepted Event in resolveModel, not notification timing. Account/model and
+one-operation admission remain fixed until authoritative terminal evidence;
+missing status must not unlock them. No BlackBox, private framework imports,
+new Client API, Request abstraction, revision counter or Projection watermark
+belongs in the application service.
+
+D0138 domain milestone accepted. Final focused export test uses a path containing
+less-than, ampersand, greater-than, quotation mark and newline; exact approved
+Markdown retains escaped JSON path and full commit/parent identifiers, and
+prepared export bytes equal approval. Domain tests 7/7 plus affected Prettier,
+ESLint, tooling typecheck and diff pass. No production change for this final
+test correction. Reliability and style findings are closed; API and documentation
+concerns remain accepted from the complete wave. Explicit Sol/medium writer and
+reviewer profiles were confirmed in dispatch; runtime metadata unavailable.
+This is a domain checkpoint only. Full UI, final coordinated reviews/security,
+repository-wide release verification and real subscription acceptance remain.

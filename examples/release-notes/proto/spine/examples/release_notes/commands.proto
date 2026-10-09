@@ -1,0 +1,113 @@
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+syntax = "proto3";
+
+package spine.examples.release_notes;
+
+import "spine/examples/release_notes/types.proto";
+import "spine/core/version.proto";
+import "spine/options.proto";
+import "spine/ts/agent/model.proto";
+
+option (type_url_prefix) = "type.spine.examples.release_notes";
+
+// Opens one draft for a fixed repository selection and resolved comparison.
+message OpenReleaseDraft {
+  // New draft identifier.
+  ReleaseDraftId id = 1 [(required) = true, (validate) = true];
+
+  // Editor-supplied title.
+  ReleaseTitle title = 2 [(required) = true, (validate) = true];
+
+  // Pinned committed-object comparison.
+  ReleaseComparison comparison = 3 [(required) = true, (validate) = true];
+
+  // Intended readers of the release notes.
+  string audience = 4 [(required) = true];
+}
+
+// Changes the comparison or audience of an existing draft.
+message ChangeReleaseInputs {
+  // Draft to update.
+  ReleaseDraftId id = 1 [(required) = true, (validate) = true];
+
+  // Current framework-managed Aggregate Version read with the draft state.
+  spine.core.Version expected_version = 2 [(required) = true, (validate) = true];
+
+  // New pinned comparison within the same repository selection.
+  ReleaseComparison comparison = 3 [(required) = true, (validate) = true];
+
+  // New intended readers.
+  string audience = 4 [(required) = true];
+}
+
+// Requests one model operation for the complete accepted draft snapshot.
+message RequestReleaseGeneration {
+  // Draft being revised.
+  ReleaseDraftId id = 1 [(required) = true, (validate) = true];
+
+  // Stable application generation identity.
+  ReleaseGenerationId generation = 2 [(required) = true, (validate) = true];
+
+  // Current framework-managed Aggregate Version read with the draft state.
+  spine.core.Version expected_version = 3 [(required) = true, (validate) = true];
+
+  // Complete verified evidence catalog for the pinned comparison.
+  ReleaseEvidenceCatalog catalog = 4 [(validate) = true];
+
+  // Human instruction for this generation.
+  ReleaseInstruction instruction = 5 [(required) = true, (validate) = true];
+
+  // Conversation reused for later generations on this draft.
+  spine.ts.agent.ConversationId conversation = 6 [(required) = true, (validate) = true];
+
+  // Nonsecret account and concrete model binding.
+  ReleaseModelSelection selection = 7 [(required) = true, (validate) = true];
+}
+
+// Replaces the structured release notes the editor reviewed.
+message EditReleaseNotes {
+  // Draft to edit.
+  ReleaseDraftId id = 1 [(required) = true, (validate) = true];
+
+  // Current framework-managed Aggregate Version read with the draft state.
+  spine.core.Version expected_version = 2 [(required) = true, (validate) = true];
+
+  // Replacement structured document retaining evidence citations.
+  ReleaseNotesDocument document = 3 [(validate) = true];
+}
+
+// Approves one exact rendered document for export.
+message ApproveReleaseNotes {
+  // Draft to approve.
+  ReleaseDraftId id = 1 [(required) = true, (validate) = true];
+
+  // Current framework-managed Aggregate Version read with the draft state.
+  spine.core.Version expected_version = 2 [(required) = true, (validate) = true];
+
+  // Digest displayed for the exact Markdown bytes.
+  string digest = 3 [(required) = true];
+
+  // Exact UTF-8 Markdown bytes displayed for approval.
+  bytes markdown = 4 [(required) = true];
+}
+
+// Requests an immutable approved snapshot for a trusted file export.
+message PrepareReleaseNotesExport {
+  // Draft to export.
+  ReleaseDraftId id = 1 [(required) = true, (validate) = true];
+
+  // Current framework-managed Aggregate Version read with the draft state.
+  spine.core.Version expected_version = 2 [(required) = true, (validate) = true];
+}

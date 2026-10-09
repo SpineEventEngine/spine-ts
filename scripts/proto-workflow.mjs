@@ -93,6 +93,12 @@ export const modelAtomicTargets = [
     handlerProjectPath: "examples/support/tsconfig.json",
   },
   {
+    displayPath: "examples/release-notes/generated",
+    packagePath: "examples/release-notes",
+    moduleName: "ReleaseNotes",
+    handlerProjectPath: "examples/release-notes/tsconfig.json",
+  },
+  {
     displayPath: "examples/message-board/model/generated",
     packagePath: "examples/message-board/model",
     moduleName: "MessageBoard",
@@ -247,6 +253,7 @@ const workspaceProtoRoots = [
   "examples/projects/proto",
   "examples/orders/proto",
   "examples/support/proto",
+  "examples/release-notes/proto",
 ];
 const externalProtoRoots = [
   "packages/server/test-fixtures/proto",

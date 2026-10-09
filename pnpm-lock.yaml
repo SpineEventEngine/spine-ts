@@ -296,6 +296,9 @@ importers:
 
   examples/release-notes:
     dependencies:
+      '@bufbuild/protobuf':
+        specifier: 2.12.1
+        version: 2.12.1
       '@modelcontextprotocol/server':
         specifier: 2.3.1
         version: 2.3.1
@@ -308,6 +311,15 @@ importers:
       '@spine-event-engine/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@spine-event-engine/proto':
+        specifier: 2.0.0-snapshot.23
+        version: link:../../packages/proto
+      '@spine-event-engine/server':
+        specifier: workspace:*
+        version: link:../../packages/server
+      '@spine-event-engine/storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
       electron:
         specifier: 44.7.0
         version: 44.7.0
@@ -330,6 +342,12 @@ importers:
       '@playwright/test':
         specifier: 1.62.0
         version: 1.62.0
+      '@spine-event-engine/proto-tools':
+        specifier: 2.0.0-snapshot.23
+        version: link:../../packages/proto-tools
+      '@spine-event-engine/testing':
+        specifier: workspace:*
+        version: link:../../packages/testing
       esbuild:
         specifier: 0.28.2
         version: 0.28.2
