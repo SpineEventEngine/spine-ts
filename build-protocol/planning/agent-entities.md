@@ -3933,3 +3933,67 @@ passes pnpm exec eslint . with typed rules restricted to baseline TS plus this
 example's TSX. Three ordinary findings in in-progress D-0135 code were fixed
 before the clean full lint rerun. Parent pushes only ESLint configuration and
 this record; ongoing runtime changes remain outside the checkpoint.
+
+ESLint checkpoint53f7462a5 pushed successfully. D-0135 focused runtime suite
+passes189/189 across16 files: late deployment append, no-default accepted-payload
+selection without subscriber, detached inputs, invalid/unauthorized choices,
+timeout/cancellation, staged preference denial/reset/no-op. Changed coverage and
+cheap documentation/type/style gates precede frozen review. Planned review wave:
+performance/reliability, TypeScript/API and style reviewers explicit Sol/medium;
+documentation reviewer explicit Luna/medium. Fresh fork-none source-based reviews,
+no memory/children/source edits. Scope is D-0135 diff from53f7462a5 and affected
+runtime/docs, not earlier auth or adapter. Collect all four before one fix batch.
+
+D-0135 frozen review endpoint is working tree over53f7462a5.191/191 focused
+tests across16 files, affected-package build, tooling typecheck, repository ESLint,
+cleanup/TSDoc/copyright/time/docs/snippet/TypeDoc/format/diff gates pass. Source
+coverage inspection: registry96.29%, selector88.88%; focused repository.ts run
+includes broad unrun baseline and is not a global90% claim. Real Agent tests
+prove bootstrap without subscriber, denied preference/reset and saved-selection
+continuation after interrupted claim. Dispatch the planned four independent
+concerns with explicit model/reasoning and frozen path scope; no source writes
+until complete wave is classified. Actual runtime metadata unavailable; verify
+configured profiles at dispatch/acceptance.
+
+D-0135 complete review wave collected. Fresh performance/reliability, API and
+style reviewers explicitly Sol/medium; documentation explicitly Luna/medium;
+fork none/no memory/children, source-only, profiles accepted with no runtime
+introspection. Deduplicate reliability/API P2: mutable AiScope handed to resolver
+is reused by authorization/connection, so callback mutation can replace accepted
+actor/tenant/Agent/source facts. Detach callback scope and prove downstream policy
+still sees original facts. Accept narrow test-quality correction: current
+returned-ref test mutates only after selection completes, so assert actual
+detachment at authorization. Add sourceMessage tags missing from implementation
+TSDoc. Docs otherwise clean; style has no P1/P2. Its P3 shared effective-change
+predicate suggestion is advisory (current predicates agree and behavior is
+tested), no new abstraction requested. One fix batch to current implementer,
+estimate0.25–0.5h, then affected checks and targeted reliability/API closure only.
+
+CI37944403358 at53f7462a5 passes lint/build but fails5 workspace tests;6024
+tests pass,369 files pass/5 fail/1 skipped. Explicit build-output inventory misses
+examples/release-notes/dist; metadata expected workspace list misses the example;
+three isolated install/build tests fail ERR_PNPM_IGNORED_BUILDS for esbuild0.28.2.
+Raw /tmp/spine-release-notes-auth-ci-second.log. Existing no-script local packaging
+already works using platform dependency binaries; prefer explicitly declining
+esbuild install scripts in current allowBuilds policy instead of permitting
+unneeded execution. Same writer fixes inventories/policy and reproduces all five
+failing test files locally, sequential with generation/build. Estimate0.25–0.5h
+for this mechanical integration correction; no gate bypass/test removal. Keep a
+separate checkpoint from the reviewed D-0135 runtime changes where practical.
+
+D-0135 correction freezes after mutation regression RED/GREEN. Resolver now gets
+detached actor/tenant/Agent/source Proto values; downstream policy sees original
+accepted facts. Reference-copy test asserts separation inside authorization,
+not merely after completion.19 focused tests, relevant ESLint/tooling typecheck/
+cleanup/TSDoc/diff pass. Existing explicitly configured Sol/medium reliability
+and API reviewers receive only the shared finding for closure. Current writer
+may correct separate CI inventory/install-policy paths while runtime stays
+frozen; no overlapping source edits during review.
+
+D-0135 reliability/API targeted closures both clean: nested resolver mutations
+cannot alter subsequent policy/connection identities. Review profiles remain
+explicit Sol/medium, runtime introspection unavailable. All four concern
+dispositions accepted: reliability/API fixed and clean, documentation clean,
+style no blocking findings with P3 predicate advice recorded. Parent checkpoints
+only reviewed runtime/tests/docs and current records; separate script fixes
+remain uncommitted. Full coordinated release/coverage/security still outstanding.

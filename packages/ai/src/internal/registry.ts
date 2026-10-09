@@ -97,7 +97,7 @@ const state = (registry: AiRegistry): RegistryState => {
 };
 
 /**
- * Application registry configured before a Bounded Context is built.
+ * Application registry with fixed build policy and append-only deployments.
  */
 export class AiRegistry {
   /**
@@ -111,7 +111,7 @@ export class AiRegistry {
    * Creates a validated application registry.
    *
    * @param options Defaults, limits and queue bounds.
-   * @returns Mutable configuration until Bounded Context build.
+   * @returns Registry with append-only deployments and build-time tool policy.
    */
   static create(options: AiRegistryOptions): AiRegistry {
     const copy = Object.freeze({
@@ -137,13 +137,13 @@ export class AiRegistry {
   }
 
   /**
-   * Registers one unique adapter deployment.
+   * Adds one unique adapter deployment, including after Bounded Context build.
+   *
    * @param deployment Factory-created adapter registration.
    * @returns This registry for configuration chaining.
    */
   register(deployment: AiBackendRegistration): this {
     const current = state(this);
-    if (current.frozen) throw new Error("AI registry is frozen");
     const definition = backendDefinition(deployment);
     const key = modelRefKey(definition.ref);
     if (current.backends.has(key)) throw new TypeError("Duplicate deployment reference");

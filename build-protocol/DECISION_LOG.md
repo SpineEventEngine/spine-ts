@@ -6149,7 +6149,7 @@ and [the Agent task](planning/agent-entities.md).
 
 ## D-0133: Local Desktop Authentication And Packaging
 
-Status: Accepted; implementation in progress
+Status: Implemented and reviewed; coordinated release and live-account checks pending
 
 Date: 2026-10-09
 
@@ -6231,7 +6231,7 @@ and [the task record](planning/agent-entities.md).
 
 ## D-0135: Deployments Added After Startup And Signal-Specific Selection
 
-Status: Accepted; implementation follows desktop authentication closure
+Status: Implemented and reviewed; coordinated release qualification pending
 
 Date: 2026-10-09
 

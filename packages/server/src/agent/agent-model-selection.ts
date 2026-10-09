@@ -12,10 +12,17 @@
  * the License.
  */
 
-import { create } from "@bufbuild/protobuf";
+import { clone, create } from "@bufbuild/protobuf";
+import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
 import { AnyMessages, Time, TypeUrls, Validate } from "@spine-event-engine/core";
 import type { MessageSchema } from "@spine-event-engine/core";
-import type { AiRegistry, AiScope, ModelRef } from "@spine-event-engine/ai";
+import {
+  ModelRef as ModelRefFactory,
+  type AiControl,
+  type AiRegistry,
+  type AiScope,
+  type ModelRef,
+} from "@spine-event-engine/ai";
 import {
   backendDefinition,
   registryOptions,
@@ -28,12 +35,15 @@ import {
   AiModelKind,
   AiProviderModelNameSchema as ModelNameSchema,
   AiProviderNameSchema,
+  ModelRefSchema,
   type ModelPreference,
 } from "@spine-event-engine/proto/agent";
 import {
   CommandIdSchema,
   EventIdSchema,
   MessageIdSchema,
+  ActorContextSchema,
+  TenantIdSchema,
   type TenantId,
 } from "@spine-event-engine/proto";
 import {
@@ -42,6 +52,22 @@ import {
   type AgentSelectedModel,
 } from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
 import type { RepositoryAiOptions } from "../repository/repository.js";
+
+/**
+ * Copies every accepted-scope identity before passing it to an application callback.
+ *
+ * @param scope Original accepted actor, tenant, Agent and source facts.
+ * @returns Detached scope with independent nested Protobuf values.
+ */
+const copyScope = (scope: AiScope): AiScope => ({
+  actor: clone(ActorContextSchema, scope.actor),
+  tenant:
+    scope.tenant.kind === "tenant"
+      ? { kind: "tenant", id: clone(TenantIdSchema, scope.tenant.id) }
+      : { kind: "single-tenant" },
+  agent: clone(MessageIdSchema, scope.agent),
+  source: clone(MessageIdSchema, scope.source),
+});
 
 interface AgentModelSelectionAccess {
   /**
@@ -62,6 +88,7 @@ interface AgentModelSelectionAccess {
    * @param preferences Claim-time per-instance selections.
    * @param signal Cancellation signal for this execution.
    * @param deadlineEpochMs Absolute invocation deadline.
+   * @param sourceMessage Detached original accepted payload when selection is required.
    * @returns Selected, authorized deployments by available kind.
    */
   select(
@@ -71,6 +98,7 @@ interface AgentModelSelectionAccess {
     preferences: readonly ModelPreference[],
     signal: AbortSignal,
     deadlineEpochMs: number,
+    sourceMessage?: Any,
   ): Promise<readonly AgentSelectedModel[]>;
 
   /**
@@ -83,6 +111,7 @@ interface AgentModelSelectionAccess {
    * @param signal Cancellation signal for this execution.
    * @param deadlineEpochMs Absolute invocation deadline.
    * @param kind Generation or decision kind to resolve.
+   * @param sourceMessage Detached original accepted payload when selection is required.
    * @returns Authorized deployment and nonsecret connection identity.
    */
   selectKind(
@@ -93,7 +122,91 @@ interface AgentModelSelectionAccess {
     signal: AbortSignal,
     deadlineEpochMs: number,
     kind: "generation" | "decision",
+    sourceMessage?: Any,
   ): Promise<AgentSelectedModel>;
+
+  /**
+   * Resolves and copies one explicit model from the accepted payload.
+   *
+   * @param registry Effective registry and hook bound.
+   * @param repository Repository selection policy.
+   * @param scope Accepted source and actor.
+   * @param signal Invocation cancellation.
+   * @param deadlineEpochMs Absolute invocation deadline.
+   * @param kind Generation or decision kind.
+   * @param sourceMessage Detached source supplied by the runner.
+   * @returns A validated explicit model or absence.
+   */
+  resolveOverride(
+    registry: AiRegistry,
+    repository: RepositoryAiOptions,
+    scope: AiScope,
+    signal: AbortSignal,
+    deadlineEpochMs: number,
+    kind: "generation" | "decision",
+    sourceMessage?: Any,
+  ): Promise<ModelRef | undefined>;
+
+  /**
+   * Finds and authorizes a registered deployment before identity resolution.
+   *
+   * @param registry Effective registry and hook bound.
+   * @param repository Repository selection policy.
+   * @param scope Accepted source and actor.
+   * @param preferences Claim-time per-instance selections.
+   * @param signal Invocation cancellation.
+   * @param deadlineEpochMs Absolute invocation deadline.
+   * @param kind Generation or decision kind.
+   * @param sourceMessage Original accepted payload.
+   * @returns A registered authorized deployment.
+   */
+  deployment(
+    registry: AiRegistry,
+    repository: RepositoryAiOptions,
+    scope: AiScope,
+    preferences: readonly ModelPreference[],
+    signal: AbortSignal,
+    deadlineEpochMs: number,
+    kind: "generation" | "decision",
+    sourceMessage?: Any,
+  ): Promise<ReturnType<typeof selectDeployment>>;
+
+  /**
+   * Checks a concrete or inherited selection with repository policy.
+   *
+   * @param registry Effective registry and hook bound.
+   * @param repository Repository selection policy.
+   * @param scope Accepted source and actor.
+   * @param reference Selected deployment or inheritance.
+   * @param signal Invocation cancellation.
+   * @param deadlineEpochMs Absolute invocation deadline.
+   * @returns When the selection is authorized.
+   */
+  authorizeSelection(
+    registry: AiRegistry,
+    repository: RepositoryAiOptions,
+    scope: AiScope,
+    reference: ModelRef | undefined,
+    signal: AbortSignal,
+    deadlineEpochMs: number,
+  ): Promise<void>;
+
+  /**
+   * Calls a hook only while active and races its bounded cancellation.
+   *
+   * @typeParam Value Callback result.
+   * @param registry Effective registry and hook bound.
+   * @param signal Invocation cancellation.
+   * @param deadlineEpochMs Absolute invocation deadline.
+   * @param callback Hook receiving a bounded linked control.
+   * @returns A result produced before cancellation or expiry.
+   */
+  invokeHook<Value>(
+    registry: AiRegistry,
+    signal: AbortSignal,
+    deadlineEpochMs: number,
+    callback: (control: AiControl) => Value | Promise<Value>,
+  ): Promise<Value>;
 
   /**
    * Resolves and authorizes the selected backend's nonsecret identity.
@@ -183,6 +296,7 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
    * @param preferences Claim-time per-instance selections.
    * @param signal Cancellation signal for this execution.
    * @param deadlineEpochMs Absolute invocation deadline.
+   * @param sourceMessage Detached original accepted payload when selection is required.
    * @returns Selected deployments for kinds used by the repository.
    */
   async select(
@@ -192,6 +306,7 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
     preferences: readonly ModelPreference[],
     signal: AbortSignal,
     deadlineEpochMs: number,
+    sourceMessage?: Any,
   ): Promise<readonly AgentSelectedModel[]> {
     const selected: AgentSelectedModel[] = [];
     for (const kind of ["generation", "decision"] as const) {
@@ -205,6 +320,7 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
           signal,
           deadlineEpochMs,
           kind,
+          sourceMessage,
         ),
       );
     }
@@ -220,6 +336,7 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
    * @param signal Cancellation signal for this execution.
    * @param deadlineEpochMs Absolute invocation deadline.
    * @param kind Generation or decision kind to select.
+   * @param sourceMessage Detached original accepted payload when selection is required.
    * @returns Chosen deployment and validated connection identity.
    */
   async selectKind(
@@ -230,10 +347,17 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
     signal: AbortSignal,
     deadlineEpochMs: number,
     kind: "generation" | "decision",
+    sourceMessage?: Any,
   ): Promise<AgentSelectedModel> {
-    const registration = selectDeployment(
+    const registration = await this.deployment(
       registry,
-      this.selection(registry, repository, preferences, kind),
+      repository,
+      scope,
+      preferences,
+      signal,
+      deadlineEpochMs,
+      kind,
+      sourceMessage,
     );
     const connection = await this.connection(
       backendDefinition(registration),
@@ -246,6 +370,149 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
       model: registration.ref,
       connection,
     });
+  },
+
+  /**
+   * Finds a deployment and checks a concrete resolver choice before identity work.
+   *
+   * @param registry Effective registry and hook bound.
+   * @param repository Repository selection policy.
+   * @param scope Accepted source and actor.
+   * @param preferences Claim-time per-instance selections.
+   * @param signal Invocation cancellation.
+   * @param deadlineEpochMs Absolute invocation deadline.
+   * @param kind Generation or decision kind.
+   * @param sourceMessage Original accepted payload.
+   * @returns A registered authorized deployment.
+   */
+  async deployment(
+    registry: AiRegistry,
+    repository: RepositoryAiOptions,
+    scope: AiScope,
+    preferences: readonly ModelPreference[],
+    signal: AbortSignal,
+    deadlineEpochMs: number,
+    kind: "generation" | "decision",
+    sourceMessage?: Any,
+  ): Promise<ReturnType<typeof selectDeployment>> {
+    const override = await this.resolveOverride(
+      registry,
+      repository,
+      scope,
+      signal,
+      deadlineEpochMs,
+      kind,
+      sourceMessage,
+    );
+    const normal = this.selection(registry, repository, preferences, kind);
+    const registration = selectDeployment(registry, {
+      ...normal,
+      ...(override === undefined ? {} : { instancePreference: override }),
+    });
+    if (override !== undefined)
+      await this.authorizeSelection(registry, repository, scope, override, signal, deadlineEpochMs);
+    return registration;
+  },
+
+  /**
+   * Resolves and copies one explicit model from the accepted payload.
+   *
+   * @param registry Effective registry and hook bound.
+   * @param repository Repository selection policy.
+   * @param scope Accepted source and actor.
+   * @param signal Invocation cancellation.
+   * @param deadlineEpochMs Absolute invocation deadline.
+   * @param kind Generation or decision kind.
+   * @param sourceMessage Detached source supplied by the runner.
+   * @returns A validated explicit model or absence.
+   */
+  async resolveOverride(
+    registry: AiRegistry,
+    repository: RepositoryAiOptions,
+    scope: AiScope,
+    signal: AbortSignal,
+    deadlineEpochMs: number,
+    kind: "generation" | "decision",
+    sourceMessage?: Any,
+  ): Promise<ModelRef | undefined> {
+    if (repository.resolveModel === undefined) return undefined;
+    if (sourceMessage === undefined) throw new Error("Agent selection requires source payload.");
+    const result = await this.invokeHook(registry, signal, deadlineEpochMs, (control) =>
+      repository.resolveModel?.(kind, copyScope(scope), clone(AnySchema, sourceMessage), control),
+    );
+    if (result === undefined) return undefined;
+    Validate.check(ModelRefSchema, result);
+    return ModelRefFactory.of(result.name?.value ?? "", result.revision?.value ?? "");
+  },
+
+  /**
+   * Checks a concrete or inherited selection with the repository policy.
+   *
+   * @param registry Effective registry and hook bound.
+   * @param repository Repository selection policy.
+   * @param scope Accepted source and actor.
+   * @param reference Selected deployment or inherited preference.
+   * @param signal Invocation cancellation.
+   * @param deadlineEpochMs Absolute invocation deadline.
+   * @returns When selection is authorized.
+   */
+  async authorizeSelection(
+    registry: AiRegistry,
+    repository: RepositoryAiOptions,
+    scope: AiScope,
+    reference: ModelRef | undefined,
+    signal: AbortSignal,
+    deadlineEpochMs: number,
+  ): Promise<void> {
+    if (repository.authorizeSelection === undefined) return;
+    const allowed = await this.invokeHook(registry, signal, deadlineEpochMs, (control) =>
+      repository.authorizeSelection?.(scope, reference, control),
+    );
+    if (allowed !== true) throw new Error("Agent model selection is unauthorized.");
+  },
+
+  /**
+   * Calls a hook only while active and races its bounded cancellation.
+   *
+   * @typeParam Value Callback result.
+   * @param registry Effective registry and hook bound.
+   * @param signal Invocation cancellation.
+   * @param deadlineEpochMs Absolute invocation deadline.
+   * @param callback Hook receiving a linked bounded control.
+   * @returns A result produced before cancellation or expiry.
+   */
+  async invokeHook<Value>(
+    registry: AiRegistry,
+    signal: AbortSignal,
+    deadlineEpochMs: number,
+    callback: (control: AiControl) => Value | Promise<Value>,
+  ): Promise<Value> {
+    const deadline = Math.min(
+      deadlineEpochMs,
+      Time.currentTimeMillis() +
+        (registryOptions(registry).hookTimeoutMs ??
+          registryOptions(registry).invocationLimits.deadlineMs),
+    );
+    if (signal.aborted) throw new Error("Agent model selection cancelled.");
+    if (deadline <= Time.currentTimeMillis()) throw new Error("Agent model selection expired.");
+    const controller = new AbortController();
+    const linked = AbortSignal.any([signal, controller.signal]);
+    const timer = setTimeout(
+      () => {
+        controller.abort();
+      },
+      Math.max(0, deadline - Time.currentTimeMillis()),
+    );
+    try {
+      return await this.awaitHook(
+        callback({ signal: linked, deadlineEpochMs: deadline }),
+        linked,
+        deadline,
+      );
+    } finally {
+      clearTimeout(timer);
+      controller.abort();
+    }
   },
 
   /**
@@ -295,12 +562,18 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
     signal: AbortSignal,
     deadlineEpochMs: number,
   ): Promise<NonNullable<AgentSelectedModel["connection"]>> {
+    if (signal.aborted) throw new Error("Agent model selection cancelled.");
+    if (deadlineEpochMs <= Time.currentTimeMillis())
+      throw new Error("Agent model selection expired.");
     const control = { signal, deadlineEpochMs };
     const identity = await this.awaitHook(
       backend.resolveIdentity(scope, control),
       signal,
       deadlineEpochMs,
     );
+    signal.throwIfAborted();
+    if (deadlineEpochMs <= Time.currentTimeMillis())
+      throw new Error("Agent model selection expired.");
     const allowed = await this.awaitHook(
       backend.authorizeUse(scope, identity, control),
       signal,
@@ -340,8 +613,8 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
     deadlineEpochMs: number,
   ): Promise<Value> {
     const remaining = deadlineEpochMs - Time.currentTimeMillis();
-    if (signal.aborted || remaining <= 0)
-      return Promise.reject(new Error("Agent model selection expired."));
+    if (signal.aborted) return Promise.reject(new Error("Agent model selection cancelled."));
+    if (remaining <= 0) return Promise.reject(new Error("Agent model selection expired."));
     return new Promise<Value>((resolve, reject) => {
       const abort = () => {
         clearTimeout(timer);

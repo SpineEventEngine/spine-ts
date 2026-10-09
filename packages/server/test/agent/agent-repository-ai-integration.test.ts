@@ -13,7 +13,8 @@
  */
 
 import { clone, create, equals, isMessage } from "@bufbuild/protobuf";
-import { AiModel, AiRegistry, ModelRef } from "@spine-event-engine/ai";
+import type { Any } from "@bufbuild/protobuf/wkt";
+import { AiModel, AiRegistry, ModelRef, type AiScope } from "@spine-event-engine/ai";
 import { createBackendRegistration } from "@spine-event-engine/ai/spi/adapter";
 import { AnyMessages, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import {
@@ -54,6 +55,7 @@ import { BoundedContext } from "../../src/context/bounded-context.js";
 import { HandlerRegistryIngestor } from "../../src/handler/generated-handler-registry.js";
 import type { EntityHandlersMetadata } from "../../src/handler/handler-metadata.js";
 import { Repository, repositoryAccess } from "../../src/repository/repository.js";
+import type { RepositoryAiOptions } from "../../src/repository/repository.js";
 import {
   observeProducedSignals,
   readAgentHistoryPage,
@@ -98,8 +100,17 @@ const alternateRef = ModelRef.of("source-support-alternate", "v1");
 class DraftingAgent extends Agent<SupportReplyAgentId, typeof SupportReplyAgentStateSchema> {
   static historyCount = 0;
   static stateHistoryCount = 0;
+  static interruptBeforeModel = false;
 
   async draft(command: DraftSupportReply) {
+    if (command.question === "Resume saved" && DraftingAgent.interruptBeforeModel) {
+      DraftingAgent.interruptBeforeModel = false;
+      throw new Error("Interrupted after selection persistence.");
+    }
+    if (command.question === "Reset selection") {
+      this.ai.select(AiModelKind.GENERATION, undefined);
+      return;
+    }
     if (command.question === "Prefer alternate")
       this.ai.select(AiModelKind.GENERATION, alternateRef);
     if (command.question === "Inspect history") {
@@ -131,13 +142,13 @@ class DraftingAgent extends Agent<SupportReplyAgentId, typeof SupportReplyAgentS
   }
 }
 
-function draftingRepository() {
+function draftingRepository(aiOptions: Partial<RepositoryAiOptions> = {}) {
   return new Repository({
     entityType: DraftingAgent,
     schema: SupportReplyAgentStateSchema,
     agentCodeRevision: "source-drafting-v1",
     stateHistory: true,
-    ai: { models: [proposal] },
+    ai: { models: [proposal], ...aiOptions },
     handlers: new HandlerRegistryIngestor().ingest({
       receivers: [
         {
@@ -263,7 +274,9 @@ describe("Agent repository source integration", () => {
           },
         }),
       );
-    const repository = draftingRepository();
+    let allowSelection = true;
+    const authorizeSelection = vi.fn(() => allowSelection);
+    const repository = draftingRepository({ authorizeSelection });
     const factory = new CapturingExecutionFactory();
     const context = BoundedContext.singleTenant("SourceDrafting")
       .withAi(registry)
@@ -399,7 +412,7 @@ describe("Agent repository source integration", () => {
         await repositoryAccess.runAcceptedAgent(repository, undefined, key);
         return key;
       };
-      await runNext("Prefer alternate", "source-select", 3n);
+      await runNext("Prefer alternate", "source-select", 4n);
       expect(physical).toHaveBeenCalledTimes(2);
       expect(alternatePhysical).not.toHaveBeenCalled();
       expect(
@@ -409,7 +422,7 @@ describe("Agent repository source integration", () => {
             entry.item.value.message?.typeUrl === TypeUrls.derive(AgentModelSelectionChangedSchema),
         ),
       ).toBe(true);
-      await runNext("Inspect history", "source-history", 4n);
+      await runNext("Inspect history", "source-history", 5n);
       expect(alternatePhysical).toHaveBeenCalledTimes(1);
       expect(DraftingAgent.historyCount).toBeGreaterThan(0);
       expect(DraftingAgent.stateHistoryCount).toBe(1);
@@ -420,7 +433,7 @@ describe("Agent repository source integration", () => {
         expect(produced).toHaveLength(3);
       });
       factory.corruptNextRevision = true;
-      const outdated = await runNext("Outdated source", "source-outdated", 5n);
+      const outdated = await runNext("Outdated source", "source-outdated", 6n);
       expect((await factory.readAccepted?.(outdated))?.status).toBe(
         AgentInvocationStatus.AGENT_INVOCATION_TERMINATED,
       );
@@ -440,11 +453,172 @@ describe("Agent repository source integration", () => {
       expect(AnyMessages.unpack(terminatedMessage, AgentInvocationTerminatedSchema)?.reason).toBe(
         "REVISION_CHANGED",
       );
-      await runNext("Continue after revision failure", "source-after-outdated", 6n);
+      await runNext("Continue after revision failure", "source-after-outdated", 7n);
       expect(alternatePhysical).toHaveBeenCalledTimes(2);
+      await runNext("Reset selection", "source-reset", 8n);
+      expect(authorizeSelection).toHaveBeenLastCalledWith(
+        expect.anything(),
+        undefined,
+        expect.anything(),
+      );
+      const checked = authorizeSelection.mock.calls.length;
+      await runNext("Reset selection", "source-reset-noop", 9n);
+      expect(authorizeSelection).toHaveBeenCalledTimes(checked);
+      await runNext("After reset", "source-after-reset", 10n);
+      expect(physical).toHaveBeenCalledTimes(3);
+      await runNext("Prefer alternate", "source-reselect", 11n);
+      expect(physical).toHaveBeenCalledTimes(4);
+      const selectionChanges = (
+        await readAgentHistoryPage(context, repository, id, { pageSize: 50 })
+      ).items.filter(
+        (entry) =>
+          entry.item.case === "systemEvent" &&
+          entry.item.value.message?.typeUrl === TypeUrls.derive(AgentModelSelectionChangedSchema),
+      ).length;
+      allowSelection = false;
+      await expect(runNext("Reset selection", "source-denied-reset", 12n)).rejects.toThrow(
+        "unauthorized",
+      );
+      const denied = factory.key;
+      expect((await factory.readAccepted?.(denied))?.status).not.toBe(
+        AgentInvocationStatus.AGENT_INVOCATION_COMPLETED,
+      );
+      expect(physical).toHaveBeenCalledTimes(4);
+      expect(
+        (await readAgentHistoryPage(context, repository, id, { pageSize: 50 })).items.filter(
+          (entry) =>
+            entry.item.case === "systemEvent" &&
+            entry.item.value.message?.typeUrl === TypeUrls.derive(AgentModelSelectionChangedSchema),
+        ),
+      ).toHaveLength(selectionChanges);
     } finally {
       observation.close();
       await context.close();
     }
   }, 20_000);
+
+  it("selects a late registered deployment from the accepted payload without a default or subscriber", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    DraftingAgent.interruptBeforeModel = true;
+    const ref = ModelRef.of("late-source-model", "v1");
+    const resolved = vi.fn((kind: "generation" | "decision", scope: AiScope, source: Any) => {
+      expect(kind).toBe("generation");
+      expect(scope.source.typeUrl).toBe(TypeUrls.derive(DraftSupportReplySchema));
+      expect(AnyMessages.unpack(source, DraftSupportReplySchema)?.question).toBe("Resume saved");
+      return ref;
+    });
+    const authorized = vi.fn(() => true);
+    const physical = vi.fn();
+    const registry = AiRegistry.create({
+      defaultModels: {},
+      invocationLimits: {
+        operations: 1,
+        modelRequests: 1,
+        toolCalls: 0,
+        recordedReads: 0,
+        deadlineMs: 120000,
+        totalInputBytes: 4000,
+        totalOutputBytes: 4000,
+        maxRecoveryBytes: 128000,
+      },
+      concurrentOperations: 1,
+      queuedOperations: 0,
+    });
+    const repository = draftingRepository({
+      resolveModel: resolved,
+      authorizeSelection: authorized,
+      allowedModels: { generation: [ref] },
+    });
+    const factory = new CapturingExecutionFactory();
+    const context = BoundedContext.singleTenant("LateSourceModel")
+      .withAi(registry)
+      .persistSystemEvents()
+      .withStorageFactory(factory)
+      .add(repository)
+      .build();
+    registry.register(
+      createBackendRegistration({
+        ref,
+        kind: "generation",
+        supports: () => true,
+        resolveIdentity: () => ({
+          provider: "fixture",
+          account: "plan",
+          endpoint: "memory",
+          model: "late-model",
+        }),
+        authorizeUse: () => true,
+        connect: (_scope, identity) => ({ model: {}, identity }),
+        execute: async (execution) => {
+          physical();
+          if (!isMessage(execution.input, SupportTicketFactsSchema))
+            throw new TypeError("Expected support ticket facts for drafting.");
+          const attempt = await execution.control.beginAttempt({
+            kind: "generation",
+            content: create(GenerationRequestSchema, {
+              input: AnyMessages.pack(SupportTicketFactsSchema, execution.input),
+              instructions: "Draft a support reply for review.",
+              outputSchemaJson: "{}",
+              promptJson: "{}",
+              digest: create(AiContentDigestSchema, { value: "0".repeat(64) }),
+            }),
+          });
+          if ("kind" in attempt) throw new Error("Unexpected replayed attempt.");
+          await execution.control.reserveTransport(attempt.id, 128, 1024);
+          const value = create(ProposedSupportReplySchema, { replyText: "Late model worked." });
+          await execution.control.finishAttempt({
+            ticketId: attempt.id,
+            receivedBytes: 64,
+            response: create(GenerationResponseSchema, {
+              outcome: AiOutcome.ADMITTED,
+              rawOutput: JSON.stringify({ replyText: value.replyText }),
+              admittedOutput: AnyMessages.pack(ProposedSupportReplySchema, value),
+            }),
+          });
+          return { ok: true, value };
+        },
+      }),
+    );
+    try {
+      const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-late" });
+      const command = SignalEnvelopes.command({
+        schema: DraftSupportReplySchema,
+        message: create(DraftSupportReplySchema, { agent: id, question: "Resume saved" }),
+        context: create(CommandContextSchema, { actorContext: create(ActorContextSchema) }),
+      });
+      await repositoryAccess.entityInboxTarget(repository)?.replay({
+        ...createMessage("late-source", command.id?.uuid ?? "", 1n),
+        inboxId: {
+          targetId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+          targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
+        },
+        signal: AnyMessages.pack(CommandSchema, command, { validate: false }),
+        label: "HANDLE_COMMAND",
+        status: "TO_DELIVER",
+      });
+      if (factory.key === undefined) throw new Error("Expected accepted Agent work.");
+      await expect(
+        repositoryAccess.runAcceptedAgent(repository, undefined, factory.key),
+      ).rejects.toThrow("Interrupted after selection persistence");
+      expect(resolved).toHaveBeenCalledOnce();
+      expect(physical).not.toHaveBeenCalled();
+      expect((await factory.readAccepted?.(factory.key))?.started?.models[0]?.model).toEqual(ref);
+      vi.setSystemTime(new Date(Date.now() + 31_000));
+      await repositoryAccess.runAcceptedAgent(repository, undefined, factory.key);
+      expect(physical).toHaveBeenCalledOnce();
+      expect(resolved).toHaveBeenCalledOnce();
+      expect(authorized).toHaveBeenCalledOnce();
+      expect((await factory.readAccepted?.(factory.key))?.started?.models[0]?.model).toEqual(ref);
+      await repositoryAccess.runAcceptedAgent(repository, undefined, factory.key);
+      expect(resolved).toHaveBeenCalledOnce();
+      expect(physical).toHaveBeenCalledOnce();
+      expect((await context.stand().read(SupportReplyAgentStateSchema, id))?.proposedReply).toBe(
+        "Late model worked.",
+      );
+    } finally {
+      DraftingAgent.interruptBeforeModel = false;
+      await context.close();
+      vi.useRealTimers();
+    }
+  });
 });

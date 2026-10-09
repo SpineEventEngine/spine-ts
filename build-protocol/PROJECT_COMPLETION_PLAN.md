@@ -19,10 +19,10 @@ on `agent-entities`, based on official master `658da1cdd`. Anthropic model
 support is included in the first snapshot. PR #18 now includes implementation of the
 human-approved [Release Notes Studio desktop example](planning/release-notes-studio.md).
 The ChatGPT subscription adapter checkpoint is implemented, reviewed, and pushed
-(D-0132). Desktop sign-in and protected credentials are in progress (D-0133);
+(D-0132). Desktop sign-in and protected credentials are implemented and reviewed (D-0133);
 production history/execution read contracts are accepted for domain integration
 (D-0134). Append-only deployment registration and accepted-signal model selection
-are accepted as domain-integration prerequisites (D-0135). The first version uses existing in-memory storage; persistent domain
+are implemented and reviewed as domain-integration prerequisites (D-0135). The first version uses existing in-memory storage; persistent domain
 storage is deferred. Final desktop release/security qualification is pending.
 The three additional Anthropic
 review-and-fix rounds and the two further requested rounds are complete, each

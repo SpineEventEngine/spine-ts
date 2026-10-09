@@ -19,7 +19,9 @@ putting provider SDK calls in its Entity handler.
 
 `AiRegistry.create()` validates defaults, invocation limits, concurrency and queue
 bounds. Register deployments with `register()` and configured MCP servers with
-`registerTools()`. Configuration freezes when the runtime binds the registry.
+`registerTools()`. Defaults, limits and tool policy freeze when the runtime
+binds the registry. `register()` can append a unique deployment afterward;
+existing references and policy cannot be replaced.
 Choose a generation default, a decision default, or both. A capability's kind
 must match its selected deployment. The server package supplies Bounded Context and
 repository integration; this package alone does not start a signal handler.

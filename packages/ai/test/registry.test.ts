@@ -153,7 +153,20 @@ describe("application AI registry", () => {
       }),
     ).toThrow("allowed");
     freezeRegistry(registry);
-    expect(() => registry.register(deployment("late"))).toThrow("frozen");
+    const late = deployment("late");
+    registry.register(late);
+    expect(
+      selectDeployment(registry, {
+        kind: "generation",
+        models: [capability],
+        instancePreference: ModelRef.of("late", "v1"),
+      }).ref.name?.value,
+    ).toBe("late");
+    expect(
+      selectDeployment(registry, { kind: "generation", models: [capability] }).ref.name?.value,
+    ).toBe("app");
+    expect(() => registry.register(late)).toThrow("Duplicate deployment");
+    expect(() => registry.register(deployment("late"))).toThrow("Duplicate deployment");
   });
 
   it("keeps a frozen default stable when internal options are observed", () => {

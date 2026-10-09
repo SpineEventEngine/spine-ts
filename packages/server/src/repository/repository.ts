@@ -131,6 +131,7 @@ import {
   type AgentSavedDispatchTarget,
   type AgentInvocationKey,
   type AgentExecutionRecord,
+  type AgentSelectedModel,
 } from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
 import type {
   AiControl,
@@ -571,6 +572,22 @@ export interface RepositoryAiOptions {
    * Whole-signal bounds that may only narrow registry limits.
    */
   readonly invocationLimits?: Partial<AiInvocationLimits>;
+
+  /**
+   * Resolves a deployment for one accepted source signal before its Agent handler.
+   *
+   * @param kind Generation or decision capability kind.
+   * @param scope Accepted actor, Agent, tenant and source identity.
+   * @param sourceMessage Detached original accepted payload.
+   * @param control Bounded deadline and cancellation for this selection.
+   * @returns Explicit deployment, or absence to retain normal precedence.
+   */
+  readonly resolveModel?: (
+    kind: "generation" | "decision",
+    scope: AiScope,
+    sourceMessage: Any,
+    control: AiControl,
+  ) => ModelRef | undefined | Promise<ModelRef | undefined>;
 
   /**
    * Checks one explicit model change or inheritance selection.
@@ -4704,6 +4721,7 @@ const AgentExecutionRunner = {
     entityId: unknown,
     outputs: readonly AgentOutgoingSignal[],
   ): Promise<AgentExecutionRecord> {
+    await this.authorizePreferenceChanges(repository, runtime, tenantId, session);
     const version = RepositoryEntities.repositoryVersion(loaded.entity);
     const preferences = session.preferences();
     const { historyEntries: emitted } = this.completionFacts(
@@ -4728,6 +4746,50 @@ const AgentExecutionRunner = {
     );
     for (const event of preferenceEvents) await runtime.publishAgentSystemEvent(event);
     return completed;
+  },
+
+  /**
+   * Checks effective staged model changes before any completion mutation.
+   *
+   * @param repository Agent registration and model policy.
+   * @param runtime Bounded Context and AI registry.
+   * @param tenantId Accepted tenant when applicable.
+   * @param session Fenced Agent execution and staged preferences.
+   * @returns When every effective change is authorized.
+   */
+  async authorizePreferenceChanges(
+    repository: RepositoryView,
+    runtime: RepositoryRuntime,
+    tenantId: TenantId | undefined,
+    session: AgentExecutionSession,
+  ): Promise<void> {
+    const policy = repositoryAccess.agentConfiguration(repository).ai;
+    if (policy?.authorizeSelection === undefined) return;
+    const accepted = session.record().accepted;
+    const deadline = session.record().started?.deadline;
+    if (runtime.ai === undefined || accepted === undefined || deadline === undefined)
+      throw new Error("Agent model preference requires accepted start facts.");
+    const deadlineMs = Number(deadline.seconds) * 1_000 + Math.floor(deadline.nanos / 1_000_000);
+    const scope = AgentModelSelection.scope(accepted, repository.stateSchema, tenantId);
+    for (const kind of [AiModelKind.GENERATION, AiModelKind.DECISION]) {
+      const previous = this.preferenceModel(session.initialPreferences(), kind);
+      const selected = this.preferenceModel(session.preferences(), kind);
+      if (previous === undefined && selected === undefined) continue;
+      if (
+        previous !== undefined &&
+        selected !== undefined &&
+        equals(ModelRefSchema, previous, selected)
+      )
+        continue;
+      await AgentModelSelection.authorizeSelection(
+        runtime.ai,
+        policy,
+        scope,
+        selected,
+        session.signal,
+        deadlineMs,
+      );
+    }
   },
 
   /**
@@ -5350,7 +5412,7 @@ const AgentExecutionRunner = {
     if (ai === undefined || configuration === undefined || deadline === undefined)
       throw new Error("Agent model selection requires saved start facts and AI policy.");
     const deadlineMs = Number(deadline.seconds) * 1_000 + Math.floor(deadline.nanos / 1_000_000);
-    const scope = AgentModelSelection.scope(accepted, repository.stateSchema, tenantId);
+    const source = accepted.signal.value?.message;
     for (const kind of ["generation", "decision"] as const) {
       if (!configuration.models.some((model) => model.definition.kind === kind)) continue;
       const modelKind = AgentModelSelection.kind(kind);
@@ -5358,19 +5420,34 @@ const AgentExecutionRunner = {
       const selected = await AgentModelSelection.selectKind(
         ai,
         configuration,
-        scope,
+        AgentModelSelection.scope(accepted, repository.stateSchema, tenantId),
         session.initialPreferences(),
         session.signal,
         deadlineMs,
         kind,
+        source,
       );
-      await session.update((record) => {
-        if (record.started === undefined) throw new Error("Agent start facts disappeared.");
-        record.started.models.push(selected);
-        return record;
-      });
+      await this.saveSelectedModel(session, selected);
     }
     return session.record();
+  },
+
+  /**
+   * Writes one selected model under the current Agent claim.
+   *
+   * @param session Fenced Agent execution session.
+   * @param selected Authorized deployment and connection identity.
+   * @returns When the selection is durable.
+   */
+  async saveSelectedModel(
+    session: AgentExecutionSession,
+    selected: AgentSelectedModel,
+  ): Promise<void> {
+    await session.update((record) => {
+      if (record.started === undefined) throw new Error("Agent start facts disappeared.");
+      record.started.models.push(selected);
+      return record;
+    });
   },
 
   /**

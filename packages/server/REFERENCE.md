@@ -664,6 +664,8 @@ Configuration has these scopes:
 | Bounded Context | `BoundedContextBuilder.withAi(registry)` | Explicit registry replacing the server default for that Bounded Context. |
 | Repository      | `ai.defaultModels`                       | Generation and decision defaults before the registry's defaults.         |
 | Repository      | `ai.allowedModels`                       | Deployment references the Agent may use.                                 |
+| Repository      | `ai.resolveModel`                        | Optional accepted-source choice before the Agent handler.                |
+| Repository      | `ai.authorizeSelection`                  | Authorizes explicit choices and staged preference changes.               |
 | Repository      | `ai.invocationLimits`                    | Limits that can narrow the registry's whole-signal limits.               |
 | Instance        | `this.ai.select(kind, ref)`              | A saved preference applied to later accepted signals.                    |
 
@@ -673,6 +675,19 @@ default, which takes precedence over the effective registry default. Passing
 `undefined` to `select` restores inheritance. Selection must satisfy the
 repository policy and `authorizeSelection` callback; it cannot extend the
 repository's allowed deployments. The current signal keeps its original selection.
+
+`resolveModel(kind, scope, sourceMessage, control)` can choose a registered
+deployment from a detached copy of the original accepted Command or Event
+payload. A concrete result overrides preference and default precedence for that
+signal; `undefined` preserves it. This allows an Agent without a configured
+default to start after a deployment is appended to the bound registry. The
+runtime checks repository allowlists, capabilities and `authorizeSelection`
+before saving the selection and connection identity. A saved selection is reused
+on continuation. Resolver and authorization callbacks receive linked cancellation
+and the smaller of the invocation deadline and registry hook timeout. An
+effective `this.ai.select()` change, including reset to inheritance, is
+authorized before the Entity transition and preference Events commit; a no-op
+change skips that callback.
 
 Model registrations resolve a credential-free connection identity and authorize
 use for the original actor, tenant, Agent and source signal. Connection callbacks
