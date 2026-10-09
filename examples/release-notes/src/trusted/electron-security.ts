@@ -127,13 +127,13 @@ export const validateIpc = (
   command: string,
   argument: unknown,
 ): string | { readonly clientId: string; readonly model: string } | null => {
+  assertIpcSender(context);
   if (
-    context.senderId !== context.expectedSenderId ||
-    context.frameUrl !== context.expectedFrameUrl
+    command === "status" ||
+    command === "sign-in" ||
+    command === "usage" ||
+    command === "current-model"
   ) {
-    throw new Error("IPC sender is not the application renderer.");
-  }
-  if (command === "status" || command === "sign-in" || command === "usage") {
     if (argument !== null) throw new Error("Unexpected IPC argument.");
     return null;
   }
@@ -147,4 +147,18 @@ export const validateIpc = (
     throw new Error("Unknown IPC command.");
   }
   return argumentsFor.account(argument);
+};
+
+/**
+ * Rejects IPC from any frame other than the isolated application renderer.
+ *
+ * @param context Actual and expected sender identity and frame URL.
+ */
+export const assertIpcSender = (context: IpcContext): void => {
+  if (
+    context.senderId !== context.expectedSenderId ||
+    context.frameUrl !== context.expectedFrameUrl
+  ) {
+    throw new Error("IPC sender is not the application renderer.");
+  }
 };

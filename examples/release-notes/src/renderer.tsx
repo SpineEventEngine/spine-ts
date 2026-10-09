@@ -12,10 +12,12 @@
  * the License.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { createRoot } from "react-dom/client";
 
 import type { DesktopAuthStatus } from "./trusted/desktop-auth.js";
+import { StudioIpcErrors } from "./trusted/studio-ipc-errors.js";
+import { StudioPanel, type StudioBridge } from "./studio-ui.js";
 
 interface ModelChoice {
   /**
@@ -32,7 +34,14 @@ interface ModelCatalog {
   readonly clientId: string;
   readonly models: readonly ModelChoice[];
 }
-interface ReleaseNotesBridge {
+interface ReleaseNotesBridge extends StudioBridge {
+  /**
+   * Returns the account's selected model after renderer reload.
+   *
+   * @returns Selected model slug, or an empty slug until selection.
+   */
+  currentModel(): Promise<{ model: string }>;
+
   /**
    * Returns the renderer-safe account status.
    *
@@ -121,8 +130,8 @@ const useAccount = () => {
     setNotice("");
     try {
       setStatus(await action());
-    } catch {
-      setNotice("The account action could not be completed.");
+    } catch (error) {
+      setNotice(StudioIpcErrors.display(error, "The account action could not be completed."));
     } finally {
       setBusy(false);
     }
@@ -143,8 +152,8 @@ const useSignOut = (
       onStatus(result.status);
       if (!result.revocationConfirmed)
         onNotice("Signed out locally; remote revocation was not confirmed.");
-    } catch {
-      onNotice("Sign-out could not be completed.");
+    } catch (error) {
+      onNotice(StudioIpcErrors.display(error, "Sign-out could not be completed."));
     } finally {
       onBusy(false);
     }
@@ -187,6 +196,39 @@ const useModelCatalog = (
     : [];
 };
 
+const useCurrentModel = (
+  status: DesktopAuthStatus,
+  models: readonly ModelChoice[],
+  pending: RefObject<{ clientId: string | undefined; version: number }>,
+  onChoice: (choice: { clientId: string; model: string } | undefined) => void,
+  onNotice: (value: string) => void,
+) => {
+  useEffect(() => {
+    const clientId = status.selectedClientId;
+    if (!clientId || models.length === 0) return;
+    let current = true;
+    const version = pending.current.version;
+    void window.releaseNotes
+      .currentModel()
+      .then((result) => {
+        if (
+          current &&
+          pending.current.clientId === clientId &&
+          pending.current.version === version &&
+          models.some((item) => item.slug === result.model)
+        )
+          onChoice({ clientId, model: result.model });
+      })
+      .catch(() => {
+        if (current && pending.current.clientId === clientId && pending.current.version === version)
+          onNotice("Selected model is unavailable.");
+      });
+    return () => {
+      current = false;
+    };
+  }, [status.selectedClientId, models]);
+};
+
 const useModels = (status: DesktopAuthStatus, onNotice: (value: string) => void) => {
   const [choice, setChoice] = useState<{ clientId: string; model: string }>();
   const pending = useRef({ clientId: status.selectedClientId, version: 0 });
@@ -196,6 +238,7 @@ const useModels = (status: DesktopAuthStatus, onNotice: (value: string) => void)
   const models = useModelCatalog(status, onNotice, () => {
     setChoice(undefined);
   });
+  useCurrentModel(status, models, pending, setChoice, onNotice);
   const select = async (slug: string) => {
     const clientId = status.selectedClientId;
     if (!clientId) return;
@@ -205,9 +248,11 @@ const useModels = (status: DesktopAuthStatus, onNotice: (value: string) => void)
       if (pending.current.clientId === clientId && pending.current.version === version) {
         setChoice({ clientId, model: result.model });
       }
-    } catch {
+    } catch (error) {
       if (pending.current.clientId === clientId && pending.current.version === version) {
-        onNotice("That model is no longer available to this account.");
+        onNotice(
+          StudioIpcErrors.display(error, "That model is no longer available to this account."),
+        );
       }
     }
   };
@@ -316,14 +361,18 @@ const App = () => {
     <main>
       <h1>Release Notes Studio</h1>
       <p>
-        Draft release notes with a reviewable Agent workflow. Connect a ChatGPT account before using
-        its plan.
+        Review committed changes, draft release notes, and approve the text before export. Connect a
+        ChatGPT account to generate a draft.
       </p>
       <section aria-label="ChatGPT account">
         <h2>ChatGPT account</h2>
         <AccountActions {...account} />
       </section>
       <ModelPanel status={account.status} {...models} />
+      <StudioPanel
+        modelReady={account.status.planEnabled && Boolean(models.model)}
+        notice={account.setNotice}
+      />
       {account.notice && <p role="status">{account.notice}</p>}
     </main>
   );

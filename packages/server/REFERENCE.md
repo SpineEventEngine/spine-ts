@@ -803,6 +803,12 @@ reads use indexed storage without restoring an Agent. The application bridge
 must authorize access before calling either method; actor metadata does not
 grant read permission.
 
+If a selected model's `authorizeUse` callback explicitly returns `false` at
+Agent claim time, the execution becomes `terminated` with one
+`AgentInvocationTerminated` System Event carrying `MODEL_USE_DENIED`. No Agent
+handler runs and no application-domain result Event is emitted. Callback
+exceptions and infrastructure failures remain distinct from this denial.
+
 ## Signals, validation, and rejection behavior
 
 `CommandBus` validates every accepted command from Proto validation options

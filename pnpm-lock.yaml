@@ -299,6 +299,9 @@ importers:
       '@bufbuild/protobuf':
         specifier: 2.12.1
         version: 2.12.1
+      '@connectrpc/connect':
+        specifier: 2.1.2
+        version: 2.1.2(@bufbuild/protobuf@2.12.1)
       '@modelcontextprotocol/server':
         specifier: 2.3.1
         version: 2.3.1
@@ -308,6 +311,9 @@ importers:
       '@spine-event-engine/ai-vercel-ax':
         specifier: workspace:*
         version: link:../../packages/ai-vercel-ax
+      '@spine-event-engine/client-node':
+        specifier: workspace:*
+        version: link:../../packages/client-node
       '@spine-event-engine/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -339,6 +345,9 @@ importers:
       '@electron/packager':
         specifier: 20.3.0
         version: 20.3.0(supports-color@7.2.0)
+      '@modelcontextprotocol/client':
+        specifier: 2.3.1
+        version: 2.3.1
       '@playwright/test':
         specifier: 1.62.0
         version: 1.62.0
@@ -1571,6 +1580,10 @@ packages:
     resolution: {integrity: sha512-1DpKU0Z5ThltBwjNySMC14g0CkbyhCaz9FkhxqNsZI6uAPJXFS8cMXlBKo26FJ8ZuW6S9GCMcR9IO5k2X5/9Fg==}
     engines: {node: '>= 12.13.0'}
 
+  '@modelcontextprotocol/client@2.3.1':
+    resolution: {integrity: sha512-mIGZXpHsjnZ6lD+gD/WCMpR5k8yVQQ8nNFH1N0Srf7AvnwTUMYD6pvTY8ng2+He5FfV7YMZLmrjL7cLa/cc3dQ==}
+    engines: {node: '>=20'}
+
   '@modelcontextprotocol/core@2.3.1':
     resolution: {integrity: sha512-laVmIhPGpWi7rG9q+0UigblRN0Hws/Yjlb6qLFtVqryXVLkc4h+yN8z731POD2LnAGQlFe7/tXhUm7Bi0YB91g==}
     engines: {node: '>=20'}
@@ -2342,6 +2355,10 @@ packages:
 
   eventsource-parser@3.1.1:
     resolution: {integrity: sha512-EKN1vKAMcZ8MlYMpaNuxN6R9yakzH6uajHcHVTqWJzvu5pWw9DyhbP35HH8MVBQ+dZjAfDxk+A8NiR9KWaXiyQ==}
+    engines: {node: '>=18.0.0'}
+
+  eventsource@3.0.7:
+    resolution: {integrity: sha512-CRT1WTyuQoD771GW56XEZFQ/ZoSfWid1alKGDYMmkt2yl8UXrVR4pspqWNEcqKvVIzg6PAltWjxcSSPrboA4iA==}
     engines: {node: '>=18.0.0'}
 
   expect-type@1.4.0:
@@ -4036,6 +4053,16 @@ snapshots:
     dependencies:
       cross-spawn: 7.0.6
 
+  '@modelcontextprotocol/client@2.3.1':
+    dependencies:
+      '@modelcontextprotocol/core': 2.3.1
+      cross-spawn: 7.0.6
+      eventsource: 3.0.7
+      eventsource-parser: 3.1.1
+      jose: 6.2.4
+      pkce-challenge: 5.0.1
+      zod: 4.6.5
+
   '@modelcontextprotocol/core@2.3.1':
     dependencies:
       zod: 4.6.5
@@ -4792,6 +4819,10 @@ snapshots:
   esutils@2.0.3: {}
 
   eventsource-parser@3.1.1: {}
+
+  eventsource@3.0.7:
+    dependencies:
+      eventsource-parser: 3.1.1
 
   expect-type@1.4.0: {}
 

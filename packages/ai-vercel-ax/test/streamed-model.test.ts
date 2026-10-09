@@ -238,6 +238,41 @@ describe("direct bounded Vercel model stream", () => {
     ).rejects.toThrow("incomplete");
   });
 
+  it("rejects a second Responses output item that reuses an earlier item ID", async () => {
+    const item = {
+      type: "message",
+      id: "message-1",
+      role: "assistant",
+      content: [{ type: "output_text", text: "one", annotations: [] }],
+    };
+    const parts: LanguageModelV3StreamPart[] = [
+      {
+        type: "raw",
+        rawValue: {
+          type: "response.output_item.added",
+          output_index: 0,
+          item: { type: "message", id: "message-1" },
+        },
+      },
+      { type: "raw", rawValue: { type: "response.output_item.done", output_index: 0, item } },
+      {
+        type: "raw",
+        rawValue: {
+          type: "response.output_item.added",
+          output_index: 1,
+          item: { type: "message", id: "message-1" },
+        },
+      },
+      { type: "raw", rawValue: { type: "response.output_item.done", output_index: 1, item } },
+      { type: "text-delta", id: "message-1", delta: "one" },
+      { type: "raw", rawValue: { type: "response.completed", response: {} } },
+      { type: "finish", finishReason: { unified: "stop", raw: "completed" }, usage },
+    ];
+    await expect(
+      collectModelStream(model(parts), options, 500, undefined, false, true),
+    ).rejects.toBeInstanceOf(StreamCollectionError);
+  });
+
   it("rejects a completed Responses event when an output item remains open", async () => {
     const pending = collectModelStream(
       model([

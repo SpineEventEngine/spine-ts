@@ -47,6 +47,15 @@ message ReleaseGenerationConflict {
   ReleaseGenerationId generation = 2 [(required) = true, (validate) = true];
 }
 
+// Rejects generation whose submitted draft Version or conversation is no longer current.
+message ReleaseGenerationInputsConflict {
+  // Identifies the release draft targeted by the generation Command.
+  ReleaseDraftId id = 1 [(required) = true, (validate) = true];
+
+  // Correlates this rejected Command with one retained generation admission.
+  ReleaseGenerationId generation = 2 [(required) = true, (validate) = true];
+}
+
 // Rejects a stale Command or forbidden repository selection change.
 message ReleaseInputsConflict {
   // Identifies the release draft to which this domain outcome applies.

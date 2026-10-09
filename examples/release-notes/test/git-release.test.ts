@@ -254,7 +254,46 @@ describe("trusted Git release comparison", () => {
       comparison.commits.length + comparison.changes.length + comparison.evidence.length,
     );
     expect(entries.filter((entry) => entry.kind === "evidence")).toHaveLength(24);
+    expect(() => comparison.listReleaseChanges(String(entries.length + 1))).toThrow("page token");
   });
+
+  it("accepts an identical pinned range as empty and rejects a bare repository", async () => {
+    const directory = repository();
+    const commitId = commit(directory, "notes.txt", "unchanged\n", "Initial release");
+    const comparison = await GitReleaseComparison.open({
+      repository: directory,
+      gitExecutable,
+      base: commitId,
+      target: commitId,
+    });
+    expect(comparison.commits).toEqual([]);
+    expect(comparison.changes).toEqual([]);
+    expect(comparison.evidence).toEqual([]);
+    expect(comparison.listReleaseChanges()).toMatchObject({ entries: [], complete: true });
+    const bare = mkdtempSync(join(tmpdir(), "spine-release-bare-"));
+    directories.push(bare);
+    git(bare, "init", "--quiet", "--bare");
+    await expect(
+      GitReleaseComparison.open({
+        repository: bare,
+        gitExecutable,
+        base: commitId,
+        target: commitId,
+      }),
+    ).rejects.toThrow("worktree");
+  });
+
+  it("refuses a complete claim when a selected range has too many commits", async () => {
+    const directory = repository();
+    const base = commit(directory, "notes.txt", "0\n", "Base");
+    let target = base;
+    for (let index = 1; index <= 201; index++) {
+      target = commit(directory, "notes.txt", `${String(index)}\n`, `Change ${String(index)}`);
+    }
+    await expect(
+      GitReleaseComparison.open({ repository: directory, gitExecutable, base, target }),
+    ).rejects.toThrow("Commit catalog exceeds bound");
+  }, 20_000);
 
   it("rejects cancelled reads and a replaced repository path", async () => {
     const directory = repository();

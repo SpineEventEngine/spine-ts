@@ -6398,6 +6398,18 @@ acknowledgement and prior export preparation can advance Entity Version without
 changing the document. Editor content and version must come from one Aggregate
 snapshot, never from different Aggregate/Projection reads.
 
+Accepted application follow-up: a generation rejected before acceptance emits
+`ReleaseGenerationInputsConflict` with the draft and generation IDs. The desktop
+subscribes before posting Commands and retains the observed rejection beside its
+private admission. It can then distinguish a known rejection from an unknown
+outcome, including after renderer reload. Only that correlated rejection frees
+admission; a timeout does not. Existing `ReleaseGenerationConflict` still means
+conflicting reuse of accepted input and never establishes that accepted work
+stopped. Rejection of one repeated submission must not erase accepted work.
+The private status response may carry the rejection separately; framework
+`AgentExecutionStatus` remains unchanged. A fresh action uses a new generation
+ID and current draft snapshot; no automatic repost or framework policy is added.
+
 Grounding: local JVM CommandContext target_version; Aggregate/AggregateTransaction/
 EventEmitter, PmTransaction and ProjectionTransaction; TS EntityTransaction,
 Repository dispatch, Stand.readVersioned, public Client/BlackBox and EventBus/

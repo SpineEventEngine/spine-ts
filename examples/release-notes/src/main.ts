@@ -14,14 +14,27 @@
 
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { app, BrowserWindow, ipcMain, safeStorage, shell, type IpcMainInvokeEvent } from "electron";
-import { ModelRef } from "@spine-event-engine/ai";
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  safeStorage,
+  shell,
+  type IpcMainInvokeEvent,
+} from "electron";
 
 import { CredentialStore } from "./trusted/credential-store.js";
 import { DesktopAuth } from "./trusted/desktop-auth.js";
-import { electronCipher, validateIpc } from "./trusted/electron-security.js";
+import { assertIpcSender, electronCipher, validateIpc } from "./trusted/electron-security.js";
 import { SiwcSession } from "./trusted/siwc-session.js";
 import { PlanModelSelection } from "./trusted/plan-model-selection.js";
+import { ReleaseStudio } from "./trusted/studio-service.js";
+import { isStudioIpcCommand, validateStudioIpc } from "./trusted/studio-ipc.js";
+import { StudioDesktop } from "./trusted/studio-desktop.js";
+import { StudioAccountGate } from "./trusted/studio-account-gate.js";
+import { StudioIpcErrors } from "./trusted/studio-ipc-errors.js";
+import { StudioWindowClose } from "./trusted/studio-window-close.js";
 import { windowOptions } from "./trusted/window-options.js";
 
 const sourceDirectory = fileURLToPath(new URL(".", import.meta.url));
@@ -47,9 +60,17 @@ const Runtime = {
       await shell.openExternal(url);
     });
     const plan = new PlanModelSelection(auth, session);
+    const studio = await ReleaseStudio.start({
+      gitExecutable: "/usr/bin/git",
+      workerExecutable: process.execPath,
+      workerPath: join(sourceDirectory, "git-worker.mjs"),
+      workerCwd: app.getPath("userData"),
+      registryRoot: new URL("../", import.meta.url),
+      plan,
+    });
     const window = new BrowserWindow(windowOptions(preloadPath));
-    this.configureWindow(window, auth);
-    this.registerIpc(window, auth, plan);
+    this.configureWindow(window, auth, studio);
+    this.registerIpc(window, auth, plan, studio);
     await window.loadFile(rendererPath);
   },
 
@@ -58,8 +79,19 @@ const Runtime = {
    *
    * @param window The application window.
    * @param auth The trusted account service to close with the window.
+   * @param studio In-memory Bounded Context to stop on window close.
    */
-  configureWindow(window: BrowserWindow, auth: DesktopAuth): void {
+  configureWindow(window: BrowserWindow, auth: DesktopAuth, studio: ReleaseStudio): void {
+    this.restrictWindow(window);
+    this.confirmClose(window, auth, studio);
+  },
+
+  /**
+   * Rejects unexpected renderer navigation, popups, permissions, and webviews.
+   *
+   * @param window Isolated release editor window.
+   */
+  restrictWindow(window: BrowserWindow): void {
     const expectedFrameUrl = pathToFileURL(rendererPath).href;
     window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
     window.webContents.session.setPermissionRequestHandler((_contents, _permission, respond) => {
@@ -73,8 +105,26 @@ const Runtime = {
         event.preventDefault();
       });
     });
-    window.on("closed", () => {
-      void auth.close();
+  },
+
+  /**
+   * Checks whether the user will wait or stop the Bounded Context before closing.
+   *
+   * @param window Isolated release editor window.
+   * @param auth Trusted account service closed with the window.
+   * @param studio In-memory release workflow closed with the window.
+   */
+  confirmClose(window: BrowserWindow, auth: DesktopAuth, studio: ReleaseStudio): void {
+    StudioWindowClose.install(window, studio, auth, async () => {
+      const choice = await dialog.showMessageBox(window, {
+        type: "warning",
+        buttons: ["Wait", "Stop and quit"],
+        defaultId: 0,
+        cancelId: 0,
+        message: "A release generation is still active or its outcome is unknown.",
+        detail: "Waiting keeps this session open. Stopping may still consume plan usage.",
+      });
+      return choice.response === 1 ? "stop" : "wait";
     });
   },
 
@@ -84,14 +134,18 @@ const Runtime = {
    * @param window The application window.
    * @param auth The trusted account service.
    * @param plan The selected plan model service.
+   * @param studio In-memory release workflow for renderer actions.
    */
-  registerIpc(window: BrowserWindow, auth: DesktopAuth, plan: PlanModelSelection): void {
+  registerIpc(
+    window: BrowserWindow,
+    auth: DesktopAuth,
+    plan: PlanModelSelection,
+    studio: ReleaseStudio,
+  ): void {
     ipcMain.handle("release-notes:command", async (event, command: unknown, argument: unknown) => {
-      try {
-        return await this.command(window, auth, plan, event, command, argument);
-      } catch {
-        throw new Error("The requested account action could not be completed.");
-      }
+      return StudioIpcErrors.execute(command, () =>
+        this.command(window, auth, plan, studio, event, command, argument),
+      );
     });
   },
 
@@ -101,6 +155,7 @@ const Runtime = {
    * @param window The application window that sent the command.
    * @param auth The trusted account service.
    * @param plan The selected plan model service.
+   * @param studio In-memory release workflow for renderer actions.
    * @param event The Electron invocation with sender identity.
    * @param command The requested bounded command name.
    * @param argument The untrusted renderer argument.
@@ -110,22 +165,23 @@ const Runtime = {
     window: BrowserWindow,
     auth: DesktopAuth,
     plan: PlanModelSelection,
+    studio: ReleaseStudio,
     event: IpcMainInvokeEvent,
     command: unknown,
     argument: unknown,
   ): Promise<unknown> {
     if (typeof command !== "string") throw new Error("Invalid command.");
-    const account = validateIpc(
-      {
-        senderId: event.sender.id,
-        expectedSenderId: window.webContents.id,
-        frameUrl: event.senderFrame?.url ?? "",
-        expectedFrameUrl: pathToFileURL(rendererPath).href,
-      },
-      command,
-      argument,
-    );
-    return await this.route(auth, plan, command, account);
+    const sender = {
+      senderId: event.sender.id,
+      expectedSenderId: window.webContents.id,
+      frameUrl: event.senderFrame?.url ?? "",
+      expectedFrameUrl: pathToFileURL(rendererPath).href,
+    };
+    assertIpcSender(sender);
+    if (isStudioIpcCommand(command))
+      return StudioDesktop.action(window, studio, command, validateStudioIpc(command, argument));
+    const account = validateIpc(sender, command, argument);
+    return await this.route(auth, plan, studio, command, account);
   },
 
   /**
@@ -133,11 +189,33 @@ const Runtime = {
    *
    * @param auth The trusted account service.
    * @param plan The selected plan model service.
+   * @param studio In-memory workflow used to check active account binding.
    * @param command The validated command name.
    * @param account The validated command argument.
    * @returns The credential-free command result.
    */
   async route(
+    auth: DesktopAuth,
+    plan: PlanModelSelection,
+    studio: ReleaseStudio,
+    command: string,
+    account: ReturnType<typeof validateIpc>,
+  ): Promise<unknown> {
+    return StudioAccountGate.run(studio, command, account, () =>
+      this.accountAction(auth, plan, command, account),
+    );
+  },
+
+  /**
+   * Dispatches a validated account action without returning credentials.
+   *
+   * @param auth Trusted account service.
+   * @param plan Selected plan model service.
+   * @param command Fixed account action name.
+   * @param account Validated account action input.
+   * @returns Credential-free action result.
+   */
+  async accountAction(
     auth: DesktopAuth,
     plan: PlanModelSelection,
     command: string,
@@ -147,6 +225,8 @@ const Runtime = {
     switch (command) {
       case "status":
         return await auth.status();
+      case "current-model":
+        return { model: (await plan.activeBinding())?.model ?? "" };
       case "sign-in":
         return await auth.signIn();
       case "reconnect":
@@ -168,7 +248,7 @@ const Runtime = {
   },
 
   /**
-   * Binds an account-advertised model to a stable registration reference.
+   * Binds an account-advertised model to this account's registration reference.
    *
    * @param plan The selected plan model service.
    * @param account The validated account and model pair.
@@ -180,11 +260,7 @@ const Runtime = {
   ): Promise<{ model: string }> {
     if (account === null || typeof account === "string")
       throw new Error("Invalid model selection.");
-    await plan.select(
-      account.clientId,
-      account.model,
-      ModelRef.of("release-notes-plan", `${account.clientId}:${account.model}`),
-    );
+    await plan.selectDiscovered(account.clientId, account.model);
     return { model: account.model };
   },
 };

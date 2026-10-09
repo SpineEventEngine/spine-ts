@@ -12,7 +12,11 @@
  * the License.
  */
 
-import type { AiBackendRegistration, AiConnectionIdentity, ModelRef } from "@spine-event-engine/ai";
+import {
+  ModelRef,
+  type AiBackendRegistration,
+  type AiConnectionIdentity,
+} from "@spine-event-engine/ai";
 
 import type { DesktopAuth } from "./desktop-auth.js";
 import type { SiwcSession } from "./siwc-session.js";
@@ -32,12 +36,12 @@ interface Selection {
   readonly subject: string;
 
   /**
-   * The model value.
+   * Account-advertised model slug selected for this registration.
    */
   readonly model: string;
 
   /**
-   * The registration value.
+   * Authorized deployment registration bound to this account and model.
    */
   readonly registration: AiBackendRegistration;
 }
@@ -47,7 +51,7 @@ interface Selection {
  */
 export class PlanModelSelection {
   /**
-   * The selected value.
+   * Current in-memory deployment choice, if the user selected a model.
    */
   private selected: Selection | undefined;
 
@@ -56,8 +60,8 @@ export class PlanModelSelection {
   /**
    * Initializes the trusted service.
    *
-   * @param auth The auth for this operation.
-   * @param session The session for this operation.
+   * @param auth Trusted account status service.
+   * @param session Trusted catalog and access-token service.
    */
   constructor(
     private readonly auth: AuthPort,
@@ -65,12 +69,23 @@ export class PlanModelSelection {
   ) {}
 
   /**
+   * Binds a discovered account model to this application's deployment reference.
+   *
+   * @param clientId Issued OAuth registration identifier.
+   * @param model Account-advertised model slug.
+   * @returns Registration for the selected plan model.
+   */
+  async selectDiscovered(clientId: string, model: string): Promise<AiBackendRegistration> {
+    return this.select(clientId, model, ModelRef.of("release-notes-plan", `${clientId}:${model}`));
+  }
+
+  /**
    * Sets a model advertised for the verified account.
    *
    * @param clientId Issued OAuth client identifier.
-   * @param model The model for this operation.
-   * @param ref The ref for this operation.
-   * @returns The select result.
+   * @param model Account-advertised model slug.
+   * @param ref Immutable deployment reference for the selected model.
+   * @returns Registration bound to the verified account and model.
    */
   async select(clientId: string, model: string, ref: ModelRef): Promise<AiBackendRegistration> {
     const version = ++this.selectionVersion;
@@ -99,10 +114,10 @@ export class PlanModelSelection {
   /**
    * Rejects a selection superseded by a later choice or account change.
    *
-   * @param version The selection request version.
+   * @param version Local selection attempt used to reject delayed completions.
    * @param clientId The issued client identifier.
    * @param subject The verified account subject.
-   * @returns When the selection remains current.
+   * @returns After the account and selection still match.
    */
   private async assertSelectionCurrent(version: number, clientId: string, subject: string) {
     const status = await this.auth.status();
@@ -121,8 +136,8 @@ export class PlanModelSelection {
   /**
    * Checks that the account and model selection remain valid.
    *
-   * @param selection The selection for this operation.
-   * @returns The active result.
+   * @param selection Account and model binding to verify.
+   * @returns Whether the binding remains selected and plan-enabled.
    */
   private async active(selection: Omit<Selection, "registration">): Promise<boolean> {
     const current = await this.auth.status();
@@ -140,10 +155,10 @@ export class PlanModelSelection {
   /**
    * Creates a plan model registration bound to the verified account.
    *
-   * @param ref The ref for this operation.
-   * @param selection The selection for this operation.
-   * @param identity The identity for this operation.
-   * @returns The create registration result.
+   * @param ref Immutable deployment reference.
+   * @param selection Verified account and model binding.
+   * @param identity Authorized provider deployment identity.
+   * @returns Registration whose callbacks recheck this binding.
    */
   private async createRegistration(
     ref: ModelRef,
@@ -165,11 +180,16 @@ export class PlanModelSelection {
           !(await this.active(selection)) ||
           !(await this.session.models(selection.clientId)).some(
             (candidate) => candidate.slug === selection.model,
-          )
+          ) ||
+          !(await this.active(selection))
         ) {
           throw new Error("ChatGPT account or model selection changed.");
         }
-        return { accessToken: await this.session.accessToken(selection.clientId), identity };
+        const accessToken = await this.session.accessToken(selection.clientId);
+        if (!(await this.active(selection))) {
+          throw new Error("ChatGPT account or model selection changed.");
+        }
+        return { accessToken, identity };
       },
     });
     return registration;
@@ -178,9 +198,33 @@ export class PlanModelSelection {
   /**
    * Returns the selected plan model registration.
    *
-   * @returns The current result.
+   * @returns Selected registration, if one was chosen in this session.
    */
   current(): AiBackendRegistration | undefined {
     return this.selected?.registration;
+  }
+
+  /**
+   * Returns a credential-free selection only while its account and model remain available.
+   *
+   * @returns Current authorized registration identity for a generation Command.
+   */
+  async activeBinding(): Promise<
+    | {
+        readonly clientId: string;
+        readonly subject: string;
+        readonly model: string;
+        readonly registration: AiBackendRegistration;
+      }
+    | undefined
+  > {
+    const selected = this.selected;
+    if (!selected || !(await this.active(selected))) return undefined;
+    if (
+      !(await this.session.models(selected.clientId)).some((item) => item.slug === selected.model)
+    )
+      return undefined;
+    if (!(await this.active(selected))) return undefined;
+    return { ...selected };
   }
 }

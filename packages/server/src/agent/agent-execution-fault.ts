@@ -20,6 +20,7 @@ export type AgentExecutionFaultReason =
   | "REPLAY_DIVERGENCE"
   | "READ_BUDGET_EXCEEDED"
   | "MODEL_BUDGET_EXCEEDED"
+  | "MODEL_USE_DENIED"
   | "TOOL_BUDGET_EXCEEDED";
 
 /**

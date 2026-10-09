@@ -756,13 +756,19 @@ automated checks that reject:
 - unsupported handler decorators in ordinary end-user/example code;
 - transaction-control calls such as `startTransaction()` and
   `commitTransaction()` inside ordinary end-user/example code;
-- direct internal event ID construction such as `EventIdSchema` usage inside
-  ordinary end-user/example code;
+- direct internal Event ID construction in ordinary end-user/example code;
 - `@Subscribe` handlers without explicit `void` or `Promise<void>` return types;
 - default-route ID extraction helpers in end-user handlers;
 - handler materialization helpers in examples, including
   `materializeDecoratedEntityHandlers`, whether imported from the framework or
   locally declared in application code.
+
+Reading an existing ID from an accepted envelope is permitted. For example,
+`AnyMessages.unpack(value, EventIdSchema)` decodes the supplied ID; it does not
+create a new signal identity. Retain that typed ID for execution reads. This
+exception does not permit constructing replacement IDs or returning framework
+signal envelopes from ordinary handlers. The checker must distinguish this
+read from forbidden construction, without exempting an entire example file.
 
 Additional cleanup-era gates:
 

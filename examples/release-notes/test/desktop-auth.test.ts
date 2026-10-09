@@ -215,3 +215,135 @@ test("closing during code exchange passes an invalidation guard into grant persi
   await expect(completing).rejects.toThrow("canceled");
   expect(checkedGuard).toBe(true);
 });
+
+test("closing while authorization begins never opens the browser or selects a late account", async () => {
+  let releaseBegin: (() => void) | undefined;
+  let markBegin: (() => void) | undefined;
+  const began = new Promise<void>((resolve) => {
+    markBegin = resolve;
+  });
+  const barrier = new Promise<void>((resolve) => {
+    releaseBegin = resolve;
+  });
+  let opened = 0;
+  const auth = new DesktopAuth(
+    {
+      begin: async (redirectUri) => {
+        markBegin?.();
+        await barrier;
+        return {
+          authorizationUrl: "https://auth.openai.com/authorize",
+          redirectUri,
+          state: "state",
+          nonce: "nonce",
+          verifier: "verifier",
+        };
+      },
+      complete: () => Promise.reject(new Error("unexpected exchange")),
+      models: () => Promise.resolve([]),
+      signOut: () => Promise.resolve(true),
+    },
+    { registrations: () => Promise.resolve([]), pendingClientIds: () => Promise.resolve([]) },
+    () => {
+      opened += 1;
+      return Promise.resolve();
+    },
+    () =>
+      Promise.resolve({
+        redirectUri: "http://127.0.0.1/auth/callback",
+        wait: () => Promise.reject(new Error("unexpected callback")),
+        close: () => Promise.resolve(),
+      }),
+  );
+  const signingIn = auth.signIn();
+  await began;
+  await auth.close();
+  releaseBegin?.();
+  await expect(signingIn).rejects.toThrow("canceled");
+  expect(opened).toBe(0);
+  expect(await auth.status()).toMatchObject({ planEnabled: false });
+});
+
+test("unknown account actions leave the selected registration and subject label intact", async () => {
+  let signOutCalls = 0;
+  const auth = new DesktopAuth(
+    {
+      begin: () => Promise.reject(new Error("unused")),
+      complete: () => Promise.reject(new Error("unused")),
+      models: () => Promise.resolve([]),
+      signOut: () => {
+        signOutCalls += 1;
+        return Promise.resolve(true);
+      },
+    },
+    {
+      registrations: () =>
+        Promise.resolve([
+          {
+            clientId: "client-a",
+            subject: "subject-a",
+            issuer: "https://auth.openai.com",
+            scopes: ["chatgpt.tokens.use.direct"],
+            accessToken: "secret",
+          },
+        ]),
+      pendingClientIds: () => Promise.resolve([]),
+    },
+    () => Promise.resolve(),
+  );
+  expect(await auth.selectAccount("client-a")).toMatchObject({ selectedClientId: "client-a" });
+  await expect(auth.selectAccount("client-b")).rejects.toThrow();
+  await expect(auth.signOut("client-b")).rejects.toThrow();
+  expect(signOutCalls).toBe(0);
+  expect(await auth.status()).toMatchObject({
+    selectedClientId: "client-a",
+    planEnabled: true,
+    accounts: [expect.objectContaining({ clientId: "client-a", subject: "subject-a" })],
+  });
+  await auth.close();
+});
+
+test("a completed code exchange arriving after close never selects its account", async () => {
+  let markStarted: (() => void) | undefined;
+  const started = new Promise<void>((resolve) => {
+    markStarted = resolve;
+  });
+  let releaseGrant: (() => void) | undefined;
+  const pendingGrant = new Promise<void>((resolve) => {
+    releaseGrant = resolve;
+  });
+  const auth = new DesktopAuth(
+    {
+      begin: (redirectUri) =>
+        Promise.resolve({
+          authorizationUrl: "https://auth.openai.com/authorize",
+          redirectUri,
+          state: "state",
+          nonce: "nonce",
+          verifier: "verifier",
+        }),
+      complete: async () => {
+        markStarted?.();
+        await pendingGrant;
+        return { clientId: "issued-client", subject: "subject", planEnabled: true };
+      },
+      models: () => Promise.resolve([]),
+      signOut: () => Promise.resolve(true),
+    },
+    { registrations: () => Promise.resolve([]), pendingClientIds: () => Promise.resolve([]) },
+    () => Promise.resolve(),
+    () =>
+      Promise.resolve({
+        redirectUri: "http://127.0.0.1/auth/callback",
+        wait: () =>
+          Promise.resolve(new URL("http://127.0.0.1/auth/callback?state=state&code=code")),
+        close: () => Promise.resolve(),
+      }),
+  );
+  const signingIn = auth.signIn();
+  await started;
+  await auth.close();
+  releaseGrant?.();
+  await expect(signingIn).rejects.toThrow("canceled");
+  expect(await auth.status()).toMatchObject({ planEnabled: false });
+});

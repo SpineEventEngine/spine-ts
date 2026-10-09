@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
@@ -39,6 +39,8 @@ test("credential updates are encrypted, atomic, and retain installation identity
       ),
   };
   const store = new CredentialStore(directory, cipher);
+  expect(await store.registrations()).toEqual([]);
+  expect(await readdir(directory)).toEqual([]);
   const hostId = await store.hostId();
   expect(hostId).toMatch(/^urn:uuid:/);
   await store.save({
@@ -51,6 +53,13 @@ test("credential updates are encrypted, atomic, and retain installation identity
     refreshToken: "refresh-secret",
     idToken: "id-secret",
     expiresAt: 2000,
+  });
+  await store.save({
+    clientId: "other-client",
+    issuer: "https://auth.openai.com",
+    subject: "subject-2",
+    accessToken: "other-access-secret",
+    refreshToken: "other-refresh-secret",
   });
   const contents = await readFile(join(directory, "credentials.bin"));
   expect(contents.toString()).not.toContain("access-secret");
@@ -66,6 +75,11 @@ test("credential updates are encrypted, atomic, and retain installation identity
     subject: "subject-1",
   });
   expect((await reopened.registration("issued-client"))?.accessToken).toBeUndefined();
+  expect(await reopened.registration("other-client")).toMatchObject({
+    subject: "subject-2",
+    accessToken: "other-access-secret",
+    refreshToken: "other-refresh-secret",
+  });
 });
 
 test("corrupt credentials and failed encryption never create a plaintext replacement", async () => {
@@ -97,4 +111,20 @@ test("corrupt credentials and failed encryption never create a plaintext replace
   });
   await expect(unavailable.hostId()).rejects.toThrow("OS encryption unavailable");
   expect(await readdir(emptyDirectory)).toEqual([]);
+});
+
+test("a failed credential read cannot be mistaken for an empty first launch", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "release-notes-credentials-"));
+  directories.push(directory);
+  await mkdir(join(directory, "credentials.bin"));
+  const store = new CredentialStore(directory, {
+    encrypt: (value) => Buffer.from(value),
+    decrypt: (value) => Buffer.from(value).toString(),
+  });
+  await expect(store.registrations()).rejects.toThrow();
+  await expect(store.hostId()).rejects.toThrow();
+  await expect(
+    store.save({ clientId: "issued-client", issuer: "issuer", subject: "subject" }),
+  ).rejects.toThrow();
+  expect((await stat(join(directory, "credentials.bin"))).isDirectory()).toBe(true);
 });

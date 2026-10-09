@@ -16,7 +16,7 @@ import { createSign, generateKeyPairSync } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 
 import { CredentialStore } from "../src/trusted/credential-store.js";
 import { SiwcSession } from "../src/trusted/siwc-session.js";
@@ -31,6 +31,7 @@ const jwk = {
 };
 
 afterEach(async () => {
+  vi.useRealTimers();
   await Promise.all(
     directories.splice(0).map(async (directory) => rm(directory, { recursive: true, force: true })),
   );
@@ -71,6 +72,7 @@ async function fixture(
   onRefresh?: () => Promise<void>,
   onCodeGrant?: () => Promise<void>,
   failFirstCodeGrant = false,
+  modelReply?: () => Promise<Response>,
 ) {
   const directory = await mkdtemp(join(tmpdir(), "release-notes-siwc-"));
   directories.push(directory);
@@ -82,6 +84,8 @@ async function fixture(
   const store = new CredentialStore(directory, cipher);
   let requests = 0;
   let codeGrants = 0;
+  let refreshChanges: Record<string, unknown> = {};
+  let codeGrantChanges: Record<string, unknown> = {};
   const revokedTokens: string[] = [];
   let pendingNonce = "";
   const fetcher: typeof fetch = (input, init) => {
@@ -101,6 +105,7 @@ async function fixture(
       );
     if (url.endsWith("/jwks")) return Promise.resolve(Response.json({ keys: [jwk] }));
     if (url.endsWith("/v1/models")) {
+      if (modelReply) return modelReply();
       expect(new Headers(init?.headers).get("authorization")).toBe("Bearer renewed-access");
       return Promise.resolve(
         Response.json({
@@ -131,6 +136,7 @@ async function fixture(
             ...(refreshClaims === undefined
               ? {}
               : { id_token: signedIdToken("issued-client", "", refreshClaims) }),
+            ...refreshChanges,
           }),
         );
       codeGrants += 1;
@@ -144,6 +150,7 @@ async function fixture(
           expires_in: 3600,
           scope: grantedScope,
           id_token: signedIdToken("issued-client", pendingNonce, changes, tokenKey),
+          ...codeGrantChanges,
         }),
       );
     }
@@ -163,6 +170,12 @@ async function fixture(
     callback,
     count: () => requests,
     revokedTokens,
+    setRefreshChanges: (changes: Record<string, unknown>) => {
+      refreshChanges = changes;
+    },
+    setCodeGrantChanges: (changes: Record<string, unknown>) => {
+      codeGrantChanges = changes;
+    },
     setNonce: (value: string) => {
       pendingNonce = value;
     },
@@ -186,6 +199,57 @@ test("new registration validates a signed ID token and retains issued client ide
     planEnabled: true,
   });
   expect((await store.registration("issued-client"))?.refreshToken).toBe("refresh-secret");
+});
+
+test("a verified grant without refresh or expiry retains identity but requires new sign-in for use", async () => {
+  const { session, store, pending, callback, revokedTokens, setCodeGrantChanges } = await fixture();
+  setCodeGrantChanges({ refresh_token: undefined, expires_in: undefined });
+  expect((await session.complete(pending, callback)).planEnabled).toBe(true);
+  expect(await store.registration("issued-client")).toMatchObject({
+    clientId: "issued-client",
+    subject: "subject-1",
+    accessToken: "access-secret",
+  });
+  expect((await store.registration("issued-client"))?.refreshToken).toBeUndefined();
+  await expect(session.accessToken("issued-client")).rejects.toThrow("sign-in is required");
+  const reconnect = await session.begin("http://127.0.0.1:32500/auth/callback", "issued-client");
+  const authorization = new URL(reconnect.authorizationUrl);
+  expect(authorization.searchParams.get("id_token_hint")).toBeTruthy();
+  expect(authorization.searchParams.has("login_hint")).toBe(false);
+  expect(await session.signOut("issued-client")).toBe(true);
+  expect(revokedTokens).toEqual([]);
+});
+
+test("a signed verified email becomes a reconnect hint without changing the account subject", async () => {
+  const { session, pending, callback } = await fixture({ email: "verified@example.com" });
+  expect(await session.complete(pending, callback)).toMatchObject({
+    subject: "subject-1",
+    email: "verified@example.com",
+  });
+  const reconnect = await session.begin("http://127.0.0.1:32500/auth/callback", "issued-client");
+  const authorization = new URL(reconnect.authorizationUrl);
+  expect(authorization.searchParams.get("login_hint")).toBe("verified@example.com");
+});
+
+test("unknown issued clients cannot reconnect or sign out another registration", async () => {
+  const { session, store, pending, callback, revokedTokens } = await fixture();
+  await session.complete(pending, callback);
+  await expect(
+    session.begin("http://127.0.0.1:32500/auth/callback", "unknown-client"),
+  ).rejects.toThrow("Unknown registration");
+  await expect(session.signOut("unknown-client")).rejects.toThrow("Unknown registration");
+  expect(revokedTokens).toEqual([]);
+  expect((await store.registration("issued-client"))?.accessToken).toBe("access-secret");
+});
+
+test.each([
+  "https://127.0.0.1:32500/auth/callback",
+  "http://localhost:32500/auth/callback",
+  "http://127.0.0.1:32500/other",
+])("never starts browser authorization at an invalid loopback destination: %s", async (url) => {
+  const { session, store } = await fixture();
+  await expect(session.begin(url)).rejects.toThrow("Invalid loopback callback");
+  expect(await store.pendingClientIds()).toEqual([]);
 });
 
 test.each([
@@ -224,11 +288,239 @@ test("refresh rotates both tokens, preserves verified identity without a new ID 
   ]);
 });
 
-test("refresh rejects a different verified subject without replacing prior tokens", async () => {
-  const { session, store, pending, callback } = await fixture({}, privateKey, { sub: "subject-2" });
+test("concurrent plan-token reads share one refresh and install one verified rotation", async () => {
+  const started = Promise.withResolvers<undefined>();
+  const release = Promise.withResolvers<undefined>();
+  let refreshCalls = 0;
+  const { session, store, pending, callback } = await fixture(
+    {},
+    privateKey,
+    undefined,
+    "openid offline_access resource.invoke chatgpt.tokens.use.direct",
+    false,
+    () => {
+      refreshCalls++;
+      started.resolve(undefined);
+      return release.promise;
+    },
+  );
   await session.complete(pending, callback);
+  const first = session.accessToken("issued-client", Date.now() + 10_000_000);
+  await started.promise;
+  const second = session.accessToken("issued-client", Date.now() + 10_000_000);
+  release.resolve(undefined);
+  expect(await Promise.all([first, second])).toEqual(["renewed-access", "renewed-access"]);
+  expect(refreshCalls).toBe(1);
+  expect(await store.registration("issued-client")).toMatchObject({
+    accessToken: "renewed-access",
+    refreshToken: "renewed-refresh",
+  });
+});
+
+test("a renewal that omits scope retains the verified plan grant and validates a new identity token", async () => {
+  const { session, store, pending, callback, setRefreshChanges } = await fixture(
+    {},
+    privateKey,
+    {},
+  );
+  await session.complete(pending, callback);
+  setRefreshChanges({ scope: undefined });
+  expect(await session.accessToken("issued-client", Date.now() + 10_000_000)).toBe(
+    "renewed-access",
+  );
+  const saved = await store.registration("issued-client");
+  expect(saved).toMatchObject({
+    subject: "subject-1",
+    accessToken: "renewed-access",
+    refreshToken: "renewed-refresh",
+  });
+  expect(saved?.scopes).toContain("chatgpt.tokens.use.direct");
+});
+
+test.each(["fetch", "body"])(
+  "bounds a stalled model catalog %s and later accepts a healthy catalog",
+  async (stall) => {
+    let calls = 0;
+    const started = Promise.withResolvers<undefined>();
+    const heldFetch = Promise.withResolvers<Response>();
+    const heldBody = Promise.withResolvers<undefined>();
+    const { session, pending, callback } = await fixture(
+      {},
+      privateKey,
+      undefined,
+      "openid offline_access resource.invoke chatgpt.tokens.use.direct",
+      false,
+      undefined,
+      undefined,
+      false,
+      () => {
+        calls++;
+        started.resolve(undefined);
+        if (calls === 1 && stall === "fetch") return heldFetch.promise;
+        if (calls === 1)
+          return Promise.resolve(
+            new Response(new ReadableStream({ pull: () => heldBody.promise })),
+          );
+        return Promise.resolve(
+          Response.json({ models: [{ slug: "ready", display_name: "Ready", visibility: "list" }] }),
+        );
+      },
+    );
+    await session.complete(pending, callback);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const failed = expect(session.models("issued-client")).rejects.toThrow("catalog");
+    await started.promise;
+    await vi.advanceTimersByTimeAsync(10_001);
+    await failed;
+    expect(await session.models("issued-client")).toEqual([
+      { slug: "ready", displayName: "Ready" },
+    ]);
+  },
+);
+
+test.each([
+  [
+    "response bytes",
+    () =>
+      Response.json({
+        models: [{ slug: "x".repeat(300_000), display_name: "Huge", visibility: "list" }],
+      }),
+  ],
+  [
+    "entry count",
+    () =>
+      Response.json({
+        models: Array.from({ length: 1_001 }, (_, index) => ({
+          slug: `model-${String(index)}`,
+          display_name: "Model",
+          visibility: "list",
+        })),
+      }),
+  ],
+  [
+    "field length",
+    () =>
+      Response.json({
+        models: [{ slug: "x".repeat(129), display_name: "Long", visibility: "list" }],
+      }),
+  ],
+] as const)(
+  "rejects excessive catalog %s without poisoning later model discovery",
+  async (_name, oversized) => {
+    let calls = 0;
+    const { session, pending, callback } = await fixture(
+      {},
+      privateKey,
+      undefined,
+      "openid offline_access resource.invoke chatgpt.tokens.use.direct",
+      false,
+      undefined,
+      undefined,
+      false,
+      () =>
+        Promise.resolve(
+          ++calls === 1
+            ? oversized()
+            : Response.json({
+                models: [{ slug: "ready", display_name: "Ready", visibility: "list" }],
+              }),
+        ),
+    );
+    await session.complete(pending, callback);
+    await expect(session.models("issued-client")).rejects.toThrow("catalog");
+    expect(await session.models("issued-client")).toEqual([
+      { slug: "ready", displayName: "Ready" },
+    ]);
+  },
+);
+
+test.each([
+  ["HTTP failure", () => new Response("private provider text", { status: 503 })],
+  ["empty body", () => new Response(null, { status: 200 })],
+] as const)("a catalog %s is safe and does not prevent a later retry", async (_reason, failure) => {
+  let calls = 0;
+  const { session, pending, callback } = await fixture(
+    {},
+    privateKey,
+    undefined,
+    "openid offline_access resource.invoke chatgpt.tokens.use.direct",
+    false,
+    undefined,
+    undefined,
+    false,
+    () =>
+      Promise.resolve(
+        ++calls === 1
+          ? failure()
+          : Response.json({
+              models: [{ slug: "ready", display_name: "Ready", visibility: "list" }],
+            }),
+      ),
+  );
+  await session.complete(pending, callback);
+  await expect(session.models("issued-client")).rejects.toThrow("catalog is unavailable");
+  expect(await session.models("issued-client")).toEqual([{ slug: "ready", displayName: "Ready" }]);
+});
+
+test.each([
+  ["subject", { sub: "subject-2" }],
+  ["issuer", { iss: "https://different.example.invalid" }],
+  ["audience", { aud: "another-issued-client" }],
+] as const)(
+  "refresh rejects a different verified %s without replacing prior tokens",
+  async (_name, claims) => {
+    const { session, store, pending, callback } = await fixture({}, privateKey, claims);
+    await session.complete(pending, callback);
+    await expect(session.accessToken("issued-client", Date.now() + 10_000_000)).rejects.toThrow();
+    expect((await store.registration("issued-client"))?.accessToken).toBe("access-secret");
+  },
+);
+
+test.each([
+  ["lost plan permission", { scope: "openid offline_access resource.invoke" }],
+  ["missing rotated refresh token", { refresh_token: "" }],
+  ["non-Bearer token", { token_type: "MAC" }],
+  ["missing expiry", { expires_in: 0 }],
+] as const)("%s leaves the prior verified grant unchanged", async (_reason, changed) => {
+  const { session, store, pending, callback, setRefreshChanges } = await fixture();
+  await session.complete(pending, callback);
+  const before = await store.registration("issued-client");
+  setRefreshChanges(changed);
   await expect(session.accessToken("issued-client", Date.now() + 10_000_000)).rejects.toThrow();
-  expect((await store.registration("issued-client"))?.accessToken).toBe("access-secret");
+  expect(await store.registration("issued-client")).toEqual(before);
+});
+
+test.each([
+  [
+    "declined authorization",
+    (callback: URL) => {
+      callback.searchParams.set("error", "access_denied");
+    },
+  ],
+  [
+    "missing code",
+    (callback: URL) => {
+      callback.searchParams.delete("code");
+    },
+  ],
+  [
+    "wrong callback path",
+    (callback: URL) => {
+      callback.pathname = "/wrong";
+    },
+  ],
+  [
+    "wrong callback origin",
+    (callback: URL) => {
+      callback.hostname = "localhost";
+    },
+  ],
+] as const)("%s cannot exchange or save a grant", async (_reason, change) => {
+  const { session, store, pending, callback, count } = await fixture();
+  change(callback);
+  await expect(session.complete(pending, callback)).rejects.toThrow();
+  expect(count()).toBe(0);
+  expect((await store.registration("issued-client"))?.accessToken).toBeUndefined();
 });
 
 test("sign-out revokes the refresh token and clears tokens while retaining the issued client", async () => {
@@ -266,6 +558,7 @@ test("sign-out fences a concurrent refresh so no plan token can be returned or r
   const refreshing = session.accessToken("issued-client", Date.now() + 10_000_000);
   await started;
   const signingOut = session.signOut("issued-client");
+  await expect(session.signOut("issued-client")).rejects.toThrow("in progress");
   releaseRefresh?.();
   await expect(refreshing).rejects.toThrow();
   await signingOut;
@@ -473,6 +766,21 @@ test("a mismatched issued client callback stops before token exchange", async ()
     session.complete({ ...pending, clientId: "issued-client" }, callback),
   ).rejects.toThrow();
   expect(count()).toBe(0);
+});
+
+test("a valid grant for an issued client cannot replace a different saved subject", async () => {
+  const { session, store, pending, callback } = await fixture();
+  await store.save({
+    clientId: "issued-client",
+    issuer: "https://auth.openai.com",
+    subject: "prior-subject",
+    accessToken: "prior-access",
+  });
+  await expect(session.complete(pending, callback)).rejects.toThrow("identity changed");
+  expect(await store.registration("issued-client")).toMatchObject({
+    subject: "prior-subject",
+    accessToken: "prior-access",
+  });
 });
 
 test("identity sign-in without the plan grant remains connected but cannot access inference", async () => {

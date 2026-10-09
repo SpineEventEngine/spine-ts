@@ -5,7 +5,7 @@ body {
   background: #f8fafc;
 }
 main {
-  max-width: 760px;
+  max-width: 960px;
   margin: 0 auto;
   padding: 40px 28px;
 }
@@ -32,6 +32,31 @@ label {
 select {
   display: block;
   min-width: 260px;
+}
+input,
+textarea {
+  display: block;
+  box-sizing: border-box;
+  width: min(100%, 680px);
+  font: inherit;
+  padding: 8px;
+}
+textarea {
+  min-height: 72px;
+}
+pre {
+  overflow: auto;
+  max-height: 420px;
+  padding: 12px;
+  background: #f1f5f9;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.entry,
+.section-editor {
+  border-left: 3px solid #cbd5e1;
+  margin: 16px 0;
+  padding-left: 16px;
 }
 button {
   cursor: pointer;

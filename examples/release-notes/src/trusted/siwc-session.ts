@@ -21,6 +21,72 @@ const issuer = "https://auth.openai.com";
 const resource = "https://api.openai.com/v1";
 const scope = "openid profile email offline_access resource.invoke chatgpt.tokens.use.direct";
 type GrantTokens = Awaited<ReturnType<typeof oidc.authorizationCodeGrant>>;
+const catalogDeadlineMs = 10_000;
+const catalogByteLimit = 256_000;
+const catalogEntryLimit = 1_000;
+
+const CatalogResponse = {
+  /**
+   * Reads only bounded response bytes before JSON parsing.
+   *
+   * @param response Account catalog response.
+   * @param timeout Deadline rejection shared with the fetch.
+   * @returns Parsed bounded catalog body.
+   */
+  async body(response: Response, timeout: Promise<never>): Promise<unknown> {
+    if (!response.ok || !response.body) throw new Error("Account model catalog is unavailable.");
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder("utf-8", { fatal: true });
+    let size = 0;
+    let content = "";
+    try {
+      for (;;) {
+        const part = await Promise.race([reader.read(), timeout]);
+        if (part.done) break;
+        size += part.value.byteLength;
+        if (size > catalogByteLimit) throw new Error("Account model catalog is too large.");
+        content += decoder.decode(part.value, { stream: true });
+      }
+      return JSON.parse(content + decoder.decode()) as unknown;
+    } finally {
+      void reader.cancel().catch(() => undefined);
+    }
+  },
+
+  /**
+   * Rejects oversized or malformed catalog entries without retaining provider prose.
+   *
+   * @param body Parsed bounded catalog response.
+   * @returns List-visible account models.
+   */
+  models(body: unknown): readonly { slug: string; displayName: string }[] {
+    if (
+      typeof body !== "object" ||
+      body === null ||
+      !("models" in body) ||
+      !Array.isArray(body.models) ||
+      body.models.length > catalogEntryLimit
+    )
+      throw new Error("Account model catalog is invalid.");
+    return body.models.flatMap((model: unknown) => {
+      if (
+        typeof model !== "object" ||
+        model === null ||
+        !("slug" in model) ||
+        !("display_name" in model) ||
+        !("visibility" in model) ||
+        typeof model.slug !== "string" ||
+        typeof model.display_name !== "string" ||
+        model.slug.length > 128 ||
+        model.display_name.length > 256
+      )
+        throw new Error("Account model catalog is invalid.");
+      return model.visibility === "list"
+        ? [{ slug: model.slug, displayName: model.display_name }]
+        : [];
+    });
+  },
+};
 
 /**
  * One browser authorization attempt; keep this object in the trusted process.
@@ -443,40 +509,35 @@ export class SiwcSession {
   }
 
   /**
-   * Fetches the account model catalog.
+   * Fetches a bounded catalog of models visible to this plan account.
    *
    * @param clientId Issued OAuth client identifier.
-   * @returns The models result.
+   * @returns List-visible models after bounded response validation.
    */
   async models(clientId: string): Promise<readonly { slug: string; displayName: string }[]> {
     const token = await this.accessToken(clientId);
-    const response = await this.transport(`${resource}/models`, {
-      headers: { Authorization: `Bearer ${token}` },
+    const abort = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => {
+        reject(new Error("Account model catalog timed out."));
+      }, catalogDeadlineMs);
     });
-    if (!response.ok) throw new Error("Account model catalog is unavailable.");
-    const body: unknown = await response.json();
-    if (
-      typeof body !== "object" ||
-      body === null ||
-      !("models" in body) ||
-      !Array.isArray(body.models)
-    ) {
-      throw new Error("Account model catalog is invalid.");
+    try {
+      const response = await Promise.race([
+        this.transport(`${resource}/models`, {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: abort.signal,
+        }),
+        timeout,
+      ]);
+      return CatalogResponse.models(await CatalogResponse.body(response, timeout));
+    } catch {
+      throw new Error("Account model catalog is unavailable.");
+    } finally {
+      if (timer) clearTimeout(timer);
+      abort.abort();
     }
-    return body.models.flatMap((model: unknown) => {
-      if (
-        typeof model !== "object" ||
-        model === null ||
-        !("slug" in model) ||
-        !("display_name" in model) ||
-        !("visibility" in model) ||
-        model.visibility !== "list" ||
-        typeof model.slug !== "string" ||
-        typeof model.display_name !== "string"
-      )
-        return [];
-      return [{ slug: model.slug, displayName: model.display_name }];
-    });
   }
 
   /**

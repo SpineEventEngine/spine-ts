@@ -3128,7 +3128,7 @@ function collectExampleApiViolations(repoRoot, file, source) {
     }
 
     const apiName = forbiddenApiName(node, scopedState);
-    if (apiName !== undefined) {
+    if (apiName !== undefined && !isEventIdRead(source, node, apiName)) {
       violations.push({
         kind: "api",
         detail: lineDetail(source, file, node, apiName),
@@ -3140,6 +3140,48 @@ function collectExampleApiViolations(repoRoot, file, source) {
 
   visit(source);
   return violations;
+}
+
+function isEventIdRead(source, node, apiName) {
+  if (
+    apiName !== "EventIdSchema" ||
+    !ts.isIdentifier(node) ||
+    node.text !== "EventIdSchema" ||
+    !hasExactNamedImport(source, "@spine-event-engine/core", "AnyMessages") ||
+    !hasExactNamedImport(source, "@spine-event-engine/proto", "EventIdSchema")
+  )
+    return false;
+  if (ts.isImportSpecifier(node.parent) && node.parent.name === node) return true;
+  if (!ts.isCallExpression(node.parent) || node.parent.arguments[1] !== node) return false;
+  for (let scope = node.parent.parent; scope && !ts.isSourceFile(scope); scope = scope.parent) {
+    if (scopeDeclaredNames(scope).includes("AnyMessages")) return false;
+  }
+  const call = node.parent.expression;
+  if (
+    !ts.isPropertyAccessExpression(call) ||
+    call.name.text !== "unpack" ||
+    !ts.isIdentifier(call.expression) ||
+    call.expression.text !== "AnyMessages"
+  )
+    return false;
+  return true;
+}
+
+function hasExactNamedImport(source, module, name) {
+  return source.statements.some(
+    (statement) =>
+      ts.isImportDeclaration(statement) &&
+      ts.isStringLiteral(statement.moduleSpecifier) &&
+      statement.moduleSpecifier.text === module &&
+      statement.importClause?.isTypeOnly !== true &&
+      ts.isNamedImports(statement.importClause?.namedBindings) &&
+      statement.importClause.namedBindings.elements.some(
+        (element) =>
+          !element.isTypeOnly &&
+          element.name.text === name &&
+          (element.propertyName?.text ?? name) === name,
+      ),
+  );
 }
 
 function needsTargetGuard(node, decoratorNames, importState) {
@@ -3184,6 +3226,16 @@ function scopeDeclaredNames(node) {
     const names = [];
     collectBindingNames(node.variableDeclaration.name, names);
     return names;
+  }
+  if (ts.isForOfStatement(node) || ts.isForInStatement(node) || ts.isForStatement(node)) {
+    const initializer = node.initializer;
+    if (initializer !== undefined && ts.isVariableDeclarationList(initializer)) {
+      return initializer.declarations.flatMap((declaration) => {
+        const names = [];
+        collectBindingNames(declaration.name, names);
+        return names;
+      });
+    }
   }
 
   return [];

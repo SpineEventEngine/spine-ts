@@ -13,14 +13,59 @@
  */
 
 import { ModelRef, type AiScope } from "@spine-event-engine/ai";
-import { backendDefinition } from "@spine-event-engine/ai/spi/adapter";
-import { expect, test } from "vitest";
+import { backendDefinition, type AiExecutionControl } from "@spine-event-engine/ai/spi/adapter";
+import { expect, test, vi } from "vitest";
 
 import { PlanModelSelection } from "../src/trusted/plan-model-selection.js";
+
+const control = (): AiExecutionControl => ({
+  signal: new AbortController().signal,
+  deadlineEpochMs: Date.now() + 1_000,
+  nowEpochMs: () => Date.now(),
+  hasAuthority: () => true,
+  beginAttempt: vi.fn(),
+  reserveTransport: vi.fn(),
+  onReceived: vi.fn(),
+  finishAttempt: vi.fn(),
+  recordFailure: vi.fn(),
+  admitGeneration: vi.fn(),
+  admitDecision: vi.fn(),
+  callTool: vi.fn(),
+});
+
+test("a nonselected or plan-disabled account cannot browse or register a model", async () => {
+  let selectedClientId = "other-client";
+  let planEnabled = true;
+  const models = vi.fn(() => Promise.resolve([{ slug: "model", displayName: "Model" }]));
+  const accessToken = vi.fn(() => Promise.resolve("secret"));
+  const selector = new PlanModelSelection(
+    {
+      status: () =>
+        Promise.resolve({
+          selectedClientId,
+          planEnabled,
+          pendingClientIds: [],
+          accounts: [{ clientId: "issued-client", subject: "subject", planEnabled }],
+        }),
+    },
+    { models, accessToken },
+  );
+  expect(selector.current()).toBeUndefined();
+  expect(await selector.activeBinding()).toBeUndefined();
+  await expect(selector.selectDiscovered("issued-client", "model")).rejects.toThrow("not selected");
+  selectedClientId = "issued-client";
+  planEnabled = false;
+  await expect(selector.selectDiscovered("issued-client", "model")).rejects.toThrow("not selected");
+  expect(models).not.toHaveBeenCalled();
+  expect(accessToken).not.toHaveBeenCalled();
+  expect(selector.current()).toBeUndefined();
+});
 
 test("a discovered model registration binds the issued client and verified subject", async () => {
   let selectedClientId: string | undefined = "issued-client";
   let subject = "subject-1";
+  let modelAvailable = true;
+  const accessToken = vi.fn(() => Promise.resolve("access-secret"));
   const selector = new PlanModelSelection(
     {
       status: () =>
@@ -32,8 +77,11 @@ test("a discovered model registration binds the issued client and verified subje
         }),
     },
     {
-      models: () => Promise.resolve([{ slug: "account-model", displayName: "Account Model" }]),
-      accessToken: () => Promise.resolve("access-secret"),
+      models: () =>
+        Promise.resolve(
+          modelAvailable ? [{ slug: "account-model", displayName: "Account Model" }] : [],
+        ),
+      accessToken,
     },
   );
   const ref = ModelRef.of("release-notes-plan", "account-model");
@@ -57,6 +105,16 @@ test("a discovered model registration binds the issued client and verified subje
       deadlineEpochMs: Date.now() + 1000,
     }),
   ).toBe(true);
+  expect(await selector.activeBinding()).toMatchObject({
+    clientId: "issued-client",
+    subject: "subject-1",
+    model: "account-model",
+    registration: deployment,
+  });
+  const connection = await binding.connect(scope, identity, control());
+  expect(connection.identity).toEqual(identity);
+  expect(connection.model).toBeDefined();
+  expect(accessToken).toHaveBeenCalledExactlyOnceWith("issued-client");
   subject = "subject-2";
   expect(
     await binding.authorizeUse(scope, identity, {
@@ -65,6 +123,11 @@ test("a discovered model registration binds the issued client and verified subje
     }),
   ).toBe(false);
   subject = "subject-1";
+  modelAvailable = false;
+  expect(await selector.activeBinding()).toBeUndefined();
+  await expect(binding.connect(scope, identity, control())).rejects.toThrow("changed");
+  expect(accessToken).toHaveBeenCalledOnce();
+  modelAvailable = true;
   selectedClientId = undefined;
   expect(
     await binding.authorizeUse(scope, identity, {
@@ -156,4 +219,142 @@ test("a delayed earlier model choice cannot replace a later choice on the same a
   releaseFirst?.([{ slug: "model-A", displayName: "Model A" }]);
   await expect(first).rejects.toThrow("changed");
   expect(selector.current()).toBe(second);
+});
+
+test("an account change during catalog refresh cannot yield an active generation binding", async () => {
+  let selectedClientId = "issued-client";
+  let releaseCatalog:
+    ((models: readonly { slug: string; displayName: string }[]) => void) | undefined;
+  let catalogCalls = 0;
+  let catalogStarted: (() => void) | undefined;
+  const started = new Promise<void>((resolve) => {
+    catalogStarted = resolve;
+  });
+  const delayedCatalog = new Promise<readonly { slug: string; displayName: string }[]>(
+    (resolve) => {
+      releaseCatalog = resolve;
+    },
+  );
+  const selector = new PlanModelSelection(
+    {
+      status: () =>
+        Promise.resolve({
+          selectedClientId,
+          planEnabled: true,
+          pendingClientIds: [],
+          accounts: [{ clientId: "issued-client", subject: "subject", planEnabled: true }],
+        }),
+    },
+    {
+      models: () => {
+        catalogCalls++;
+        if (catalogCalls === 2) catalogStarted?.();
+        return catalogCalls === 2
+          ? delayedCatalog
+          : Promise.resolve([{ slug: "model", displayName: "Model" }]);
+      },
+      accessToken: () => Promise.resolve("access-secret"),
+    },
+  );
+  await selector.select("issued-client", "model", ModelRef.of("plan", "model"));
+  const pending = selector.activeBinding();
+  await started;
+  selectedClientId = "other-client";
+  releaseCatalog?.([{ slug: "model", displayName: "Model" }]);
+  expect(await pending).toBeUndefined();
+});
+
+test("a connection cannot use a credential after its account changes during catalog refresh", async () => {
+  let selectedClientId = "issued-client";
+  let releaseCatalog:
+    ((models: readonly { slug: string; displayName: string }[]) => void) | undefined;
+  let catalogStarted: (() => void) | undefined;
+  const started = new Promise<void>((resolve) => {
+    catalogStarted = resolve;
+  });
+  const delayedCatalog = new Promise<readonly { slug: string; displayName: string }[]>(
+    (resolve) => {
+      releaseCatalog = resolve;
+    },
+  );
+  let catalogCalls = 0;
+  const accessToken = vi.fn(() => Promise.resolve("access-secret"));
+  const selector = new PlanModelSelection(
+    {
+      status: () =>
+        Promise.resolve({
+          selectedClientId,
+          planEnabled: true,
+          pendingClientIds: [],
+          accounts: [{ clientId: "issued-client", subject: "subject", planEnabled: true }],
+        }),
+    },
+    {
+      models: () => {
+        catalogCalls++;
+        if (catalogCalls === 2) catalogStarted?.();
+        return catalogCalls === 2
+          ? delayedCatalog
+          : Promise.resolve([{ slug: "model", displayName: "Model" }]);
+      },
+      accessToken,
+    },
+  );
+  const registration = await selector.select(
+    "issued-client",
+    "model",
+    ModelRef.of("plan", "model"),
+  );
+  const binding = backendDefinition(registration);
+  const scope = {} as AiScope;
+  const identity = await binding.resolveIdentity(scope, control());
+  const pending = binding.connect(scope, identity, control());
+  await started;
+  selectedClientId = "other-client";
+  releaseCatalog?.([{ slug: "model", displayName: "Model" }]);
+  await expect(pending).rejects.toThrow("changed");
+  expect(accessToken).not.toHaveBeenCalled();
+});
+
+test("a connection discards a token obtained after account selection changes", async () => {
+  let selectedClientId = "issued-client";
+  let releaseToken: ((token: string) => void) | undefined;
+  let tokenStarted: (() => void) | undefined;
+  const started = new Promise<void>((resolve) => {
+    tokenStarted = resolve;
+  });
+  const token = new Promise<string>((resolve) => {
+    releaseToken = resolve;
+  });
+  const selector = new PlanModelSelection(
+    {
+      status: () =>
+        Promise.resolve({
+          selectedClientId,
+          planEnabled: true,
+          pendingClientIds: [],
+          accounts: [{ clientId: "issued-client", subject: "subject", planEnabled: true }],
+        }),
+    },
+    {
+      models: () => Promise.resolve([{ slug: "model", displayName: "Model" }]),
+      accessToken: () => {
+        tokenStarted?.();
+        return token;
+      },
+    },
+  );
+  const registration = await selector.select(
+    "issued-client",
+    "model",
+    ModelRef.of("plan", "model"),
+  );
+  const binding = backendDefinition(registration);
+  const scope = {} as AiScope;
+  const identity = await binding.resolveIdentity(scope, control());
+  const pending = binding.connect(scope, identity, control());
+  await started;
+  selectedClientId = "other-client";
+  releaseToken?.("access-secret");
+  await expect(pending).rejects.toThrow("changed");
 });

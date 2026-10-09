@@ -188,7 +188,7 @@ describe("Agent model authorization scope", () => {
         new AbortController().signal,
         Time.currentTimeMillis() + 1_000,
       ),
-    ).rejects.toThrow("unauthorized");
+    ).rejects.toMatchObject({ name: "AgentExecutionFault", reason: "MODEL_USE_DENIED" });
     expect(authorized).toHaveBeenCalledOnce();
   });
 

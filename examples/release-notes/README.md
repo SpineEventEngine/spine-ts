@@ -1,8 +1,22 @@
 # Release Notes Studio
 
-This private desktop example provides a ChatGPT account and model-selection shell, a bounded local Git evidence worker, and the release-notes domain workflow. The desktop editor and trusted admission bridge are still being implemented.
+Turn a local Git comparison into release notes that a maintainer can check,
+edit, approve, and export. An Agent drafts entries and can inspect committed
+changes through three read-only MCP tools. Each entry cites its supporting
+commit, parent, and file; the maintainer decides whether the explanation is right.
 
-From the repository root, install dependencies and the pinned Electron binary, then build and launch the development app:
+The application runs locally. Model inference uses the selected ChatGPT account
+at OpenAI, so selected repository content can leave the machine. Drafts and
+history are kept in memory for the backend session. Export approved Markdown
+before quitting; saved sign-in registrations do not restore drafts.
+
+Read the [Agent tutorial](USER_GUIDE.md) to follow the Commands, Events, model
+configuration, validation, MCP calls, and history APIs behind the application.
+
+## Run on macOS
+
+Use Node.js 24 or later, the repository's pinned pnpm version, and an installed
+Git executable. From the repository root:
 
 ```sh
 pnpm install --ignore-scripts
@@ -11,17 +25,123 @@ pnpm --filter @spine-event-engine/example-release-notes build
 pnpm --filter @spine-event-engine/example-release-notes start
 ```
 
-To create a local macOS `.app` and run the development and packaged lifecycle tests:
+Create a local macOS application bundle with:
 
 ```sh
 pnpm --filter @spine-event-engine/example-release-notes package
+```
+
+This source example is not code-signed or notarized. Windows and Linux installers
+are outside its current scope. No Codex installation, terminal sign-in, API key,
+Docker container, or separately installed database is required.
+
+## Prepare a release
+
+1. Choose **Continue with ChatGPT** and complete sign-in in the system browser.
+   Select an account with plan permission, then choose one of the models offered
+   for that account. Signing in alone does not grant plan inference permission.
+2. Enter the base and target revisions, then choose the local repository. The
+   app resolves both revisions to full commit IDs. The base must be an ancestor
+   of the target.
+3. Enter a release title and audience, then open a draft. Review the comparison
+   before generation.
+4. Add an optional instruction, such as “Explain changes that require library
+   users to update their code,” and generate the draft. Generation uses the
+   selected account and model; the app does not switch them while work is active.
+5. Inspect the entries and their evidence. A valid citation proves that the
+   referenced change is in the comparison, not that the model's explanation is
+   correct. Read the committed patch when checking a claim.
+6. Edit the notes or submit another generation with a more specific instruction.
+   Save edits before reviewing the Markdown. An old Agent proposal cannot replace
+   an edit that the Aggregate has already accepted.
+7. Preview the Markdown and approve the reviewed notes. Export uses those exact
+   approved bytes and a native file dialog. Cancelling the dialog does not save
+   a file or advance the draft's Version. The macOS dialog asks before replacing
+   an existing file. If export fails, read the current draft before retrying;
+   the app does not report a failed write as a successful save.
+8. In Agent history, use **View** to select the combined history (`all`),
+   conversation records, System Events, or Agent-emitted domain Events. Choose
+   **Load history**, then **Older entries** to continue to earlier records.
+9. Export before ending the backend session. Reloading its window keeps the live
+   session; reopening after backend exit starts with empty drafts and history.
+
+If submission remains unconfirmed, **Retry unconfirmed generation** repeats the
+saved Command with its original instruction, account, model, and comparison.
+It does not use newly edited inputs. The app does not repost automatically, and
+the Aggregate's retained receipt prevents an accepted generation from starting
+again.
+
+If the draft changes before its generation Command is handled, the app can
+receive a rejection for that generation. It shows the rejection and allows you
+to generate again from the current draft; it does not repeat the rejected
+Command. A timeout without a confirmed outcome stays unconfirmed. Reloading the
+window preserves a rejection already observed by the running backend.
+
+While generation is active or unconfirmed, closing the window offers **Wait**
+or **Stop and quit**. Wait keeps the session open. Stopping closes the Bounded
+Context before the window, but the provider may already have performed work and
+charged plan usage. If the app stops after writing an export but before showing
+success, the file may already exist. Reopening never repeats an export automatically.
+
+## Account and model selection
+
+The system browser handles the official ChatGPT sign-in flow. The trusted
+process receives the loopback callback, verifies the signed identity token,
+and checks the granted `chatgpt.tokens.use.direct` permission. It uses the
+selected account's model catalog instead of assuming a universal model list.
+
+Tokens are encrypted with Electron `safeStorage` and remain in the trusted
+process. They are not passed to the renderer, stored in domain messages or Agent
+history, or included in exports. Refresh is tied to the same issued registration
+and verified account. **Manage usage** opens the account's ChatGPT usage settings.
+
+If an initial grant fails with `invalid_grant`, retry using the retained issued
+client registration. Reconnection uses fresh browser authorization secrets.
+Sign-out attempts remote refresh-token revocation and clears local credentials;
+it reports when remote revocation could not be confirmed. The installation ID
+and issued client mapping remain available for a later reconnection.
+
+The adapter uses the official Responses endpoint with ChatGPT plan permission.
+There is no API-key fallback. See the [authentication and adapter explanation](USER_GUIDE.md#6-connect-an-authenticated-model)
+for how the application connects sign-in to the Agent API.
+
+## Git scope and limits
+
+The app reads committed changes only. A selected subdirectory resolves to its
+working-tree repository root; bare repositories are unsupported. The accepted
+comparison contains full commit IDs, so moving a branch afterward cannot change
+that generation's input.
+
+The catalog allows up to 200 commits, 2,000 net changes, and 2,000 per-parent
+evidence entries, with a 200 KB bound on aggregate Git output and retained catalog
+data. Git admission also has a ten-second deadline. If the range exceeds a bound,
+select a narrower range. Binary, missing, or oversized detail is reported as
+incomplete rather than silently truncated.
+
+The MCP worker exposes only `list_release_changes`, `read_change_patch`, and
+`read_release_file` for accepted evidence. It cannot edit code, fetch arbitrary
+paths, push, publish a release, or execute a model-supplied shell command.
+
+## Follow the implementation
+
+| Area                                                   | Code                                                    |
+| ------------------------------------------------------ | ------------------------------------------------------- |
+| Domain IDs, Commands, Events, and state                | [Protobuf model](proto/spine/examples/releasenotes)     |
+| Aggregate, Agent, and Projection                       | [Domain handlers](src/domain/index.ts)                  |
+| Typed model operation and citation validation          | [Model definition](src/domain/model.ts)                 |
+| Account-bound ChatGPT deployment                       | [Model selection](src/trusted/plan-model-selection.ts)  |
+| Public client, production history, and execution reads | [Trusted service](src/trusted/studio-service.ts)        |
+| Local read-only tools                                  | [MCP registration](src/trusted/git-mcp-registration.ts) |
+| Commands and domain outcomes through BlackBox          | [Domain tests](test/release-domain.test.ts)             |
+| Real adapter and MCP protocol fixtures                 | [Agent integration test](test/release-agent.test.ts)    |
+
+Automated tests use controlled OAuth and provider responses, not a live account.
+The development and packaged Electron checks can be run with:
+
+```sh
 pnpm --filter @spine-event-engine/example-release-notes test:electron
 ```
 
-The app opens the official ChatGPT sign-in page in the system browser and receives one authorization callback on `127.0.0.1`. An account must grant `chatgpt.tokens.use.direct` before its plan can be used. The trusted process verifies signed identity tokens and keeps refreshed credentials encrypted with Electron `safeStorage`; it does not send tokens, authorization URLs, or token hints to the renderer. If the first grant returns `invalid_grant`, the account screen offers a retry with the retained issued client ID and new browser authorization secrets, including after an app restart. It fetches the selected account's model catalog instead of assuming a universal model. Sign-out attempts to revoke the refresh token, clears local credentials even if revocation fails, and reports whether remote revocation was confirmed. The installation identifier and issued client mapping remain so the app can reconnect the account.
-
-This is a local development build. It has not yet been code-signed or notarized, and automated tests use controlled OAuth responses rather than a live ChatGPT account.
-
-The trusted Git service accepts one selected local repository and two revisions. A selected subdirectory resolves to the working-tree repository root; bare repositories are not supported by this example. It resolves them to full commit IDs, requires the base to be an ancestor of the target, lists target-not-base commits, and compares the committed trees for net changes. It builds a bounded catalog before generation; a moved branch cannot change that accepted comparison. Admission rejects an unsupported unrelated-history root, more than 200 commits, 2,000 net changes or 2,000 per-parent evidence entries, or more than 200 KB of aggregate Git output or retained catalog data; the ten-second overall deadline also applies. A rejected comparison needs a narrower range before generation. The local read-only MCP worker exposes `list_release_changes`, `read_change_patch`, and `read_release_file` only for cataloged evidence. Individual binary, missing, or oversized patch/file detail is reported as incomplete rather than silently truncated.
-
-The domain Aggregate retains structured drafts, exact Markdown approval bytes, and generation receipts; opening an existing draft returns `ReleaseDraftAlreadyOpen` without replacing its state. Canonical Markdown includes each citation's full commit, parent, and literal path as escaped inert text. Existing-draft Commands supply the framework-managed Entity Version read with the Aggregate state. A per-draft Agent uses the verified catalog and the three Git tools to propose evidence-backed entries; the Aggregate stages only a proposal matching its latest generation and historical input Version, preserving later edits. The editor Projection subscribes to authoritative Aggregate Events. A prepared export contains the approved bytes only when the Command supplies the current Entity Version and the approval still matches the document. The desktop editor and evidence viewer are not wired to these contracts yet, and a successful local test does not mean a live account was used.
+A live subscription check requires a person to complete the actual browser
+sign-in. A successful fixture test does not establish that a particular account
+has plan permission, remaining usage, or access to a chosen model.

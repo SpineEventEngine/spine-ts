@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { copyFile, cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -23,13 +23,12 @@ const manifest = JSON.parse(await readFile(join(directory, "package.json"), "utf
 const stage = await mkdtemp(join(tmpdir(), "spine-release-notes-package-"));
 const output = join(directory, "out");
 try {
-  await mkdir(join(stage, "src"));
-  await cp(join(directory, "dist/src/chunks"), join(stage, "src/chunks"), { recursive: true });
+  await cp(join(directory, "dist/app/src"), join(stage, "src"), { recursive: true });
+  await cp(join(directory, "dist/app/generated"), join(stage, "generated"), { recursive: true });
+  await cp(join(directory, "dist/app/chunks"), join(stage, "chunks"), { recursive: true });
   await Promise.all([
-    copyFile(join(directory, "dist/src/main.mjs"), join(stage, "src/main.mjs")),
-    copyFile(join(directory, "dist/src/git-worker.mjs"), join(stage, "src/git-worker.mjs")),
     ...["preload.cjs", "renderer.html", "renderer.js", "renderer.css"].map(async (name) =>
-      copyFile(join(directory, "dist", name), join(stage, name)),
+      copyFile(join(directory, "dist/app", name), join(stage, name)),
     ),
   ]);
   await writeFile(

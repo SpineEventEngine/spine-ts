@@ -74,6 +74,10 @@ test("desktop shell opens one isolated window with account controls", async () =
   try {
     const window = await app.firstWindow();
     await expect(window.getByRole("button", { name: "Continue with ChatGPT" })).toBeVisible();
+    await expect(
+      window.getByRole("button", { name: "Choose repository and comparison" }),
+    ).toBeVisible();
+    await expect(window.getByRole("button", { name: "Stop and quit" })).toBeVisible();
     expect(await window.evaluate(() => typeof process)).toBe("undefined");
     expect(await window.evaluate(() => typeof window.localStorage.getItem("access_token"))).toBe(
       "object",
@@ -92,6 +96,58 @@ test("packaged macOS app opens the same isolated account shell", async () => {
     expect(await window.evaluate(() => typeof process)).toBe("undefined");
   } finally {
     await app.close();
+  }
+});
+
+test("packaged editor opens an authoritative draft from a native-selected comparison", async () => {
+  const repository = mkdtempSync(join(tmpdir(), "spine-packaged-draft-"));
+  const git = (...args: string[]) =>
+    execFileSync("/usr/bin/git", args, { cwd: repository, encoding: "utf8" }).trim();
+  git("init", "--quiet");
+  git("config", "user.name", "Fixture");
+  git("config", "user.email", "fixture@example.invalid");
+  writeFileSync(join(repository, "notes.txt"), "Before\n");
+  git("add", "notes.txt");
+  git("commit", "--quiet", "-m", "Base");
+  const base = git("rev-parse", "HEAD");
+  writeFileSync(join(repository, "notes.txt"), "After\n");
+  git("commit", "--quiet", "-am", "Release");
+  const target = git("rev-parse", "HEAD");
+  const executablePath = (await readFile(resolve(directory, "out/app-path.txt"), "utf8")).trim();
+  const app = await electron.launch({ executablePath });
+  try {
+    await app.evaluate(({ dialog }, selected) => {
+      dialog.showOpenDialog = () => Promise.resolve({ canceled: false, filePaths: [selected] });
+    }, repository);
+    const window = await app.firstWindow();
+    await window.getByLabel("Base revision").fill(base);
+    await window.getByLabel("Target revision").fill(target);
+    await window.getByRole("button", { name: "Choose repository and comparison" }).click();
+    await expect(window.getByText(`${base} → ${target}`)).toBeVisible();
+    await window.getByLabel("Release title").fill("Packaged release");
+    await window.getByLabel("Audience").fill("SDK users");
+    await window.getByRole("button", { name: "Open release draft" }).click();
+    await expect(window.getByRole("heading", { name: "Packaged release" })).toBeVisible();
+    await expect(window.getByRole("button", { name: "Generate draft" })).toBeDisabled();
+    await window.getByLabel("Inspect committed evidence").selectOption("0");
+    await expect(window.getByLabel("Committed patch")).toContainText("+After");
+    await window.getByRole("button", { name: "Add section" }).click();
+    await window.getByRole("button", { name: "Add claim" }).click();
+    await window.getByLabel("Claim").fill("Changed release file.");
+    await window.screenshot({ path: "/tmp/spine-release-notes-packaged.png", fullPage: true });
+    await window.reload();
+    await expect(window.getByRole("heading", { name: "Packaged release" })).toBeVisible();
+  } finally {
+    await app.close();
+    rmSync(repository, { recursive: true, force: true });
+  }
+  const restarted = await electron.launch({ executablePath });
+  try {
+    const window = await restarted.firstWindow();
+    await expect(window.getByRole("heading", { name: "Packaged release" })).toHaveCount(0);
+    await expect(window.getByLabel("Session drafts")).toHaveCount(0);
+  } finally {
+    await restarted.close();
   }
 });
 
@@ -135,6 +191,105 @@ test("development and packaged Electron binaries serve the scoped Git worker", a
       ]);
     }
   } finally {
+    rmSync(repository, { recursive: true, force: true });
+  }
+});
+
+test("packaged runtime completes a real Agent generation, Git tool call, approval, and export", async () => {
+  const executablePath = (await readFile(resolve(directory, "out/app-path.txt"), "utf8")).trim();
+  const appRoot = resolve(executablePath, "../../Resources/app.asar");
+  const output = execFileSync(
+    executablePath,
+    [resolve(directory, "test/packaged-studio-probe.mjs"), appRoot],
+    {
+      env: { ELECTRON_RUN_AS_NODE: "1" },
+      encoding: "utf8",
+      timeout: 30_000,
+      maxBuffer: 4096,
+    },
+  );
+  expect(JSON.parse(output)).toEqual({ staged: true, attempts: 2, approved: true, exported: true });
+});
+
+test("isolated packaged UI generates, reviews history, approves, and saves exact native export bytes", async () => {
+  const repository = mkdtempSync(join(tmpdir(), "spine-ui-workflow-"));
+  const exportPath = join(repository, "approved.md");
+  const git = (...args: string[]) =>
+    execFileSync("/usr/bin/git", args, { cwd: repository, encoding: "utf8" }).trim();
+  git("init", "--quiet");
+  git("config", "user.name", "Fixture");
+  git("config", "user.email", "fixture@example.invalid");
+  writeFileSync(join(repository, "notes.txt"), "Before\n");
+  git("add", "notes.txt");
+  git("commit", "--quiet", "-m", "Base");
+  const base = git("rev-parse", "HEAD");
+  writeFileSync(join(repository, "notes.txt"), "After\n");
+  git("commit", "--quiet", "-am", "Release");
+  const target = git("rev-parse", "HEAD");
+  const executablePath = (await readFile(resolve(directory, "out/app-path.txt"), "utf8")).trim();
+  const appRoot = resolve(executablePath, "../../Resources/app.asar");
+  const app = await electron.launch({
+    executablePath: electronPath,
+    args: [
+      resolve(directory, "test/studio-ui-harness.mjs"),
+      appRoot,
+      repository,
+      exportPath,
+      base,
+      target,
+    ],
+  });
+  try {
+    const window = await app.firstWindow();
+    await window.getByLabel("Base revision").fill(base);
+    await window.getByLabel("Target revision").fill(target);
+    await window.getByRole("button", { name: "Choose repository and comparison" }).click();
+    await window.getByLabel("Release title").fill("UI release");
+    await window.getByLabel("Audience").fill("SDK users");
+    await window.getByRole("button", { name: "Open release draft" }).click();
+    await window.getByLabel("Available to this account").selectOption("fixture-model");
+    await expect(window.getByRole("button", { name: "Generate draft" })).toBeEnabled();
+    await window.getByRole("button", { name: "Generate draft" }).click();
+    await expect(window.getByLabel("Claim")).toHaveValue("Changed release file.");
+    await window.getByRole("button", { name: "Preview release notes" }).click();
+    const preview = await window.getByLabel("Markdown preview").textContent();
+    expect(preview).toContain("Changed release file.");
+    await window.getByRole("button", { name: "Approve reviewed notes" }).click();
+    await app.evaluate(({ dialog }) => {
+      dialog.showSaveDialog = () => Promise.resolve({ canceled: true, filePath: "" });
+    });
+    await window.getByRole("button", { name: "Export approved release notes" }).click();
+    await expect(window.getByRole("status")).toHaveText("Export cancelled; no file was written.");
+    expect(await readFile(exportPath, "utf8").catch(() => null)).toBeNull();
+    await app.evaluate(({ dialog }, selected) => {
+      dialog.showSaveDialog = () => Promise.resolve({ canceled: false, filePath: selected });
+    }, repository);
+    await window.getByRole("button", { name: "Export approved release notes" }).click();
+    await expect(window.getByRole("status")).toContainText("Read the current draft");
+    expect(await readFile(exportPath, "utf8").catch(() => null)).toBeNull();
+    await window.reload();
+    await expect(
+      window.getByRole("button", { name: "Export approved release notes" }),
+    ).toBeEnabled();
+    await app.evaluate(({ dialog }, selected) => {
+      dialog.showSaveDialog = () => Promise.resolve({ canceled: false, filePath: selected });
+    }, exportPath);
+    await window.getByRole("button", { name: "Export approved release notes" }).click();
+    await expect.poll(async () => readFile(exportPath, "utf8").catch(() => null)).toBe(preview);
+    await window.getByRole("button", { name: "Export approved release notes" }).click();
+    await expect(window.getByRole("status")).toHaveText("Approved Markdown exported.");
+    expect(await readFile(exportPath, "utf8")).toBe(preview);
+    await window
+      .getByRole("region", { name: "Agent history" })
+      .getByLabel("View")
+      .selectOption("conversation");
+    await window.getByRole("button", { name: "Load history" }).click();
+    await expect(window.getByRole("region", { name: "Agent history" })).toContainText(
+      "Model or tool exchange",
+    );
+    await window.screenshot({ path: "/tmp/spine-release-notes-controlled-ui.png", fullPage: true });
+  } finally {
+    await app.close();
     rmSync(repository, { recursive: true, force: true });
   }
 });

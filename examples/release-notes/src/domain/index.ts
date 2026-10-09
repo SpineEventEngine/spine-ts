@@ -67,6 +67,7 @@ import {
 import {
   ReleaseDraftAlreadyOpen,
   ReleaseGenerationConflict,
+  ReleaseGenerationInputsConflict,
   ReleaseExportUnavailable,
   ReleaseInputsConflict,
   StaleReleaseApproval,
@@ -160,7 +161,7 @@ export class ReleaseDraft extends Aggregate<ReleaseDraftId, typeof ReleaseDraftS
    * @returns An Agent-triggering Event or an idempotent acknowledgement.
    */
   @Assign
-  @Throws(ReleaseGenerationConflict, ReleaseInputsConflict)
+  @Throws(ReleaseGenerationConflict, ReleaseGenerationInputsConflict)
   requestGeneration(command: RequestReleaseGeneration): ReleaseGenerationRequested | ReleaseGenerationAlreadyRequested {
     const inputDigest = createHash("sha256")
       .update(toBinary(RequestReleaseGenerationSchema, command)).digest("hex");
@@ -177,7 +178,7 @@ export class ReleaseDraft extends Aggregate<ReleaseDraftId, typeof ReleaseDraftS
         command.conversation === undefined ||
         (this.state.conversation !== undefined &&
           this.state.conversation.value !== command.conversation.value))
-      throw ReleaseInputsConflict.create({ id: this.id });
+      throw ReleaseGenerationInputsConflict.create({ id: this.id, generation: command.generation });
     return this.beginGeneration(command, inputDigest);
   }
 

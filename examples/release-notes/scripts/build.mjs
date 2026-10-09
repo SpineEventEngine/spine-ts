@@ -38,15 +38,27 @@ await Promise.all([
     outfile: resolve(directory, "dist/renderer.js"),
   }),
   build({
-    entryPoints: [resolve(directory, "src/main.ts")],
+    entryPoints: [
+      resolve(directory, "src/main.ts"),
+      resolve(directory, "src/trusted/studio-service.ts"),
+      resolve(directory, "src/trusted/plan-model-selection.ts"),
+      resolve(directory, "src/trusted/studio-desktop.ts"),
+      resolve(directory, "src/trusted/studio-ipc.ts"),
+      resolve(directory, "src/trusted/window-options.ts"),
+      resolve(directory, "generated/handler/generated-handler-registry.ts"),
+    ],
     bundle: true,
     splitting: true,
     platform: "node",
     format: "esm",
     target: "node24",
     external: ["electron"],
-    outdir: resolve(directory, "dist/src"),
-    entryNames: "main",
+    banner: {
+      js: 'import { createRequire as createNodeRequire } from "node:module"; const require = createNodeRequire(import.meta.url);',
+    },
+    outdir: resolve(directory, "dist/app"),
+    outbase: directory,
+    entryNames: "[dir]/[name]",
     chunkNames: "chunks/[name]-[hash]",
     outExtension: { ".js": ".mjs" },
   }),
@@ -60,4 +72,17 @@ await Promise.all([
   }),
   copyFile(resolve(directory, "src/renderer.html"), resolve(directory, "dist/renderer.html")),
   copyFile(resolve(directory, "src/renderer.css"), resolve(directory, "dist/renderer.css")),
+]);
+await Promise.all([
+  copyFile(
+    resolve(directory, "dist/src/git-worker.mjs"),
+    resolve(directory, "dist/app/src/git-worker.mjs"),
+  ),
+  copyFile(
+    resolve(directory, "dist/app/generated/handler/generated-handler-registry.mjs"),
+    resolve(directory, "dist/app/generated/handler/generated-handler-registry.js"),
+  ),
+  ...["preload.cjs", "renderer.html", "renderer.js", "renderer.css"].map((name) =>
+    copyFile(resolve(directory, "dist", name), resolve(directory, "dist/app", name)),
+  ),
 ]);

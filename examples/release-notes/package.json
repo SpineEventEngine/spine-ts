@@ -3,7 +3,7 @@
   "version": "2.0.0-snapshot.23",
   "private": true,
   "type": "module",
-  "main": "dist/src/main.mjs",
+  "main": "dist/app/src/main.mjs",
   "exports": {
     "./spine-proto-manifest.json": "./spine-proto-manifest.json",
     "./proto/*": "./proto/*",
@@ -20,9 +20,11 @@
   },
   "dependencies": {
     "@bufbuild/protobuf": "2.12.1",
+    "@connectrpc/connect": "2.1.2",
     "@modelcontextprotocol/server": "2.3.1",
     "@spine-event-engine/ai": "workspace:*",
     "@spine-event-engine/ai-vercel-ax": "workspace:*",
+    "@spine-event-engine/client-node": "workspace:*",
     "@spine-event-engine/core": "workspace:*",
     "@spine-event-engine/proto": "2.0.0-snapshot.23",
     "@spine-event-engine/server": "workspace:*",
@@ -35,9 +37,10 @@
   },
   "devDependencies": {
     "@electron/packager": "20.3.0",
+    "@modelcontextprotocol/client": "2.3.1",
     "@playwright/test": "1.62.0",
-    "esbuild": "0.28.2",
     "@spine-event-engine/proto-tools": "2.0.0-snapshot.23",
-    "@spine-event-engine/testing": "workspace:*"
+    "@spine-event-engine/testing": "workspace:*",
+    "esbuild": "0.28.2"
   }
 }

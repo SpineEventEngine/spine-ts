@@ -5031,3 +5031,636 @@ correction changes no runtime/public/domain contract, so specialist lanes are N/
 parent inspected inventory/path/assertion changes. Full release remains pending
 for the coordinated desktop deliverable. Commit these three tests plus this record,
 leaving service/UI WIP uncommitted; push immediately, then resume that work.
+
+Parent prepares the human tutorial while the same Sol/medium implementer completes
+private desktop services and UI. Documentation responsibility: new example
+USER_GUIDE.md and subsequent README linkage; no overlapping production edits.
+Use implemented domain/model/auth/history contracts, four-space TS snippets,
+complete imports and meaningful TSDoc. App workflow instructions wait for actual
+UI integration. This work is within the existing desktop/documentation estimate.
+Independent documentation review follows frozen contracts and deterministic
+snippet/audience/link checks; no readiness claim from drafted prose.
+
+Tutorial domain/API draft preflight: TypeScript snippets and audience checker pass.
+Dispatch fresh documentation reviewer, expected gpt-6-luna / medium, explicit
+fields, fork none, no memory/edits/children. Scope: new USER_GUIDE domain/model/
+auth/history explanations against existing implementation; desktop launch/control
+instructions remain pending actual UI. Estimate0.2–0.4h review plus corrections
+within documentation work. Require application-only freshness boundary, exact
+API/Proto contracts, simple prose, four-space TS and TSDoc blank tag separator.
+No concurrent source review of unfrozen service/UI. Profile available on Desktop;
+actual runtime metadata unavailable. Parent accepts configured-profile evidence.
+
+Fresh release_tutorial_docs review complete: clean for domain/model/auth/history
+scope; links, statuses, Proto ID semantics and app-only proposal applicability
+match implementation. Explicit Luna/medium dispatch accepted, runtime
+introspection unavailable. Snippet/audience gates already pass. UI steps remain
+to be written against the completed desktop flow; no repeated domain review
+unless a material change affects those claims. Reviewer completed read-only.
+
+Parent also normalized adapter README TypeScript examples to the human-required
+four-space indentation and inserted the missing TSDoc blank before parameter
+tags. Snippets compile; Prettier passes for adapter README and new tutorial.
+No code/example semantics changed, so this formatting correction does not reopen
+technical review. Source/UI implementation continues in the existing writer.
+
+Desktop implementation progress: focused UI/service checks and dev/packaged shells
+plus both workers pass. Packaged native selection -> public Client/Bounded Context
+-> committed draft -> renderer also passes after correcting omitted empty ProtoJSON
+sections. Packaged provider/MCP/export still pending. Next frozen-slice estimate
+1–2h includes service edge cases, full packaged flow, lifecycle/export failure tests
+and code-quality decomposition. Dirty editor text now retains its displayed Version;
+account switching is fenced while active; ordinary renderer reload keeps session.
+Desktop invocation deadline aligns to120s model ceiling; no framework timeout change.
+
+Demonstrated checker false positive: blanket EventIdSchema value prohibition also
+rejects decoding an existing accepted source ID needed by approved execution reads.
+Correction scope is semantic read-only use, not a whole-file/path waiver: permit
+public AnyMessages.unpack(any, EventIdSchema), retain decoded typed EventId, continue
+rejecting create/new ID construction and alias escapes. Under BUILD_PROTOCOL the
+forbidden behavior is constructing internal IDs or returning envelopes from ordinary
+handlers, not reading accepted envelopes. Same Sol/medium writer corrects the checker
+with positive read/negative construction regressions and full checker tests; estimate
+0.2–0.4h within cleanup. No public/runtime/serialized API change, no approval blocker.
+If implementation requires broad AST changes, stop that expansion for parent review.
+
+Packaged process vertical passes (5 Electron checks): actual bundle/registry,
+controlled plan Responses, packaged Git MCP worker, staging, approval and exact
+prepared export bytes. It caught @vercel/oidc ESM dynamic require; fixed build
+createRequire banner. This process probe calls services directly, so it is NOT
+full button-driven UI/export evidence. Parent inspected /tmp/spine-release-notes-
+packaged.png and requested actual UI generation/history/approval/native export
+fixture plus visible network/session-loss disclosure. No live account used.
+README rewritten as a human workflow, tutorial remains compiled/reviewed for
+its domain scope; final UI claims still need coordinated closure. PR guide draft
+is /tmp/spine-agent-pr-description.md, based on existing PR body with ChatGPT
+profile, new example, late registration/resolver and application-only applicability
+clarifications. Not published; validate against final implementation first.
+
+Exact8b1fe7f89 CI run37973526463 completed:6088 tests pass,1 skipped; all three
+previous inventory/worker failures are fixed. Workflow fails only global branch
+coverage89.6% against90% threshold (statements93.31/functions95.23/lines95.16).
+Rawlog /tmp/spine-release-notes-ci-8b1.log. Meaningful changed-behavior tests remain
+part of desktop completion; do not weaken thresholds/exclude code or run unrelated
+coverage-padding tests. Same writer notified to inspect changed-source branches
+before frozen review. This is a known implementation gate, not a human blocker.
+
+Controlled full UI walkthrough now passes: actual packaged renderer/preload and
+trusted studio service with fixture account/provider/native dialog selections;
+comparison, generation, approval, native export exact bytes, and conversation
+history. Parent viewed populated screenshot /tmp/spine-release-notes-controlled-ui.png;
+network and in-memory-loss notices are visible. No actual browser OAuth or live
+subscription claimed. Snippet compilation and audience checks pass. Private source
+cleanup, focused negative cases and branch coverage remain before review. Corrected
+CODE_QUALITY namespace list to include the already approved releasenotes domain;
+this is a stale documentation list, not a new namespace or Proto contract.
+
+Updated private-desktop freeze estimate remains1–2h for decomposition, exact tooling
+checks, six Electron cases and account/lifecycle/early-failure coverage. Parent
+confirmed README/tutorial local links and formatting pass. Do not freeze solely
+on the happy UI workflow: nonterminal account binding, dirty-document Version
+pairing, failure before handler entry, quit/cancellation, and cancelled/failed
+export are part of the accepted behavior. Final review/release/live authorization
+are additional; no live sign-in request until independent work finishes.
+
+Reuse completed release_tutorial_docs, existing documentation reviewer function,
+immutable explicit gpt-6-luna/medium original dispatch (fork none, no memory).
+Affected-scope follow-up: README launch/account/UI instructions only, checked
+against current implemented controls and package scripts. No production edits
+or review of mutable implementation internals. Docs snippet/audience/link/format
+gates pass. Estimate0.1–0.2h within tutorial work; source refactoring proceeds
+independently. Actual runtime metadata unavailable; configured profile retained.
+
+README follow-up documentation review found one concrete omission: combined all
+history view and named View/Older entries controls. Parent corrected step8 to
+list all four views and actual navigation. Other scoped claims matched source.
+Expected Luna/medium configured metadata accepted, runtime introspection unavailable.
+This deterministic prose correction does not reopen technical lanes.
+
+Private desktop mechanical progress: current cleanup, exact tooling typecheck and
+targeted ESLint pass. Focused service/IPC/UI/files plus full checker regression
+run:162 tests/5 files pass. Fresh build/package and all6 Electron tests pass,
+including button-driven generation/history/approval/native export. Copyright,
+time-read and affected formatting gates pass. TSDoc gate found332 diagnostics
+in new private service/UI/desktop/IPC code; same explicit Sol/medium writer is
+adding semantic contracts, not weakening the checker. No freeze or final profile
+yet; failure-path coverage also remains. Configured profile accepted; runtime
+metadata not exposed.
+
+Frozen shared-checker correction receives a bounded style/maintainability review
+while private desktop TSDoc proceeds. Scope: scripts/check-cleanup-rules.mjs and
+its regression tests plus BUILD_PROTOCOL existing EventId read clarification.
+Expected gpt-6-sol/medium, explicit dispatch, fork none, no memory/children/edits.
+Review semantic read exception, import/shadowing handling, construction rejection,
+and avoid broad exemptions. Full checker tests and cleanup gate pass. Estimate
+0.1–0.2h within final cleanup; private runtime review waits for its own preflight.
+No public runtime/serialized API changes in this checker correction.
+
+Bounded checker review completed with two confirmed findings: canonical imports
+plus an aliased EventIdSchema binding can bypass the no-alias rule; loop-local
+AnyMessages bindings are absent from the shadow lookup. Same Sol/medium writer
+received one complete correction batch with regression requirements. No broader
+checker design change accepted. Explicit reviewer model/reasoning confirmed;
+runtime metadata unavailable. Re-review only this substantive corrected guard
+after full checker tests and cleanup pass.
+
+Checker corrections: exact canonical schema binding plus for/for-in/for-of
+lexical shadow handling; regression reproduced loop-shadow failure then full
+checker156/156 and cleanup pass. Private TSDoc now passes without exemptions.
+Existing explicit Sol/medium reviewer receives affected-only closure; no other
+lanes reopened. UI now states ancestor/committed-only comparison policy. Trusted
+service failure-path tests and branch coverage remain before runtime freeze.
+
+Affected checker re-review clean: both alias and loop-shadow findings closed
+with regression coverage. No files changed or checks repeated by reviewer.
+Explicit configured Sol/medium accepted; actual runtime metadata unavailable.
+This shared-checker correction is review-complete; final integrated release
+verification still pending with desktop source.
+
+Root pnpm audit:release passes both full and production audits with no known
+vulnerabilities. New private service regression exposes second generation after
+successful prior generation/approval/export remaining active with no second
+AgentAiOperationStarted. Same Sol/medium writer isolates example/test/runtime
+root cause before modifying framework; preserve failing regression. Ordinary
+concrete bug fix is in scope; public/serialized/domain semantics change or
+architecture ambiguity requires exact evidence before escalation. No business
+freshness mechanism is authorized. Freeze/release verification remain pending.
+
+Concrete claim-time denial root cause: AgentModelSelection.connection throws
+an ordinary Error on authorizeUse===false; repository handleRunFailure treats
+that as transient until the saved deadline, retaining active status and repeated
+authorization checks. Bounded correction approved: reuse existing internal
+AgentExecutionFault and existing AgentInvocationTerminated System Event path
+for this explicit denial. Add a safe internal reason, no new public error class,
+Proto envelope, callback, application business Event or retry/freshness mechanism.
+Do not classify thrown transport/storage/shutdown exceptions as deterministic
+denial. Tests require zero provider calls, one terminal System Event/phase and
+no repeated authorization after terminal; same Agent may receive later signals
+when authorized. This is an existing lifecycle defect with demonstrated cause,
+not an unresolved public-contract architecture decision. Estimate0.3–0.6h for
+existing Sol/medium implementation, focused regression/preflight and affected
+reliability review; final desktop work continues independently in same writer.
+
+Real Agent denial regression and later authorized generation pass (6 focused
+server/service tests). Packaged UI cancellation regression also exposed export
+ordering: posting PrepareExport before native cancellation advanced Version and
+made the next export stale. Private app now selects destination first, posts the
+existing approval/Version-validating Command only after selection, and writes
+only the correlated approved bytes. Updated plan to actual safe order; no public
+framework/Proto change and no file write before domain acceptance. Exact-byte
+packaged cancellation/retry flow passes; cancellation notice remains visible.
+
+Bounded runtime denial correction review dispatch: existing performance/reliability
+reviewer, expected explicit gpt-6-sol/medium, fork none, no memory/children/edits.
+Scope internal fault reason, AgentModelSelection explicit false branch, existing
+repository termination behavior, added real Agent service regression and narrow
+server reference claim. Focus distinguishing definitive denial from thrown
+transport/storage/cancellation, fenced single audit, later authorized signals.
+Focused server/service6/6 pass; prior shared tooling/TSDoc passed and correction
+changes only one internal reason/throw plus explanatory docs. Estimate0.1–0.2h
+within bounded correction. No new public signature/Proto; API concern N/A for
+shape change, reliability reviewer checks observable status. Code style is the
+existing fault idiom and final deterministic gates cover it.
+
+Model denial reliability review completed: no production finding; existing
+fenced termination saves audit/status together and thrown callback exceptions
+remain separate. Reviewer ran entire agent-model-selection.test.ts and found
+16 passes/1 failure: old unauthorized message assertion not updated. Same writer
+received complete batch to assert typed MODEL_USE_DENIED and rerun whole file
+plus service regressions, not filtered subset. Earlier6-test subset did not
+establish full affected-file success. Mechanical assertion correction will not
+reopen production review. Explicit Sol/medium configured profile accepted; actual
+runtime metadata unavailable.
+
+Private app behavior convergence:92-test slice and6 Electron cases pass; direct
+MCP SDK client/server tests now exercise actual Git catalog/details, malformed
+arguments, out-of-catalog access, binary incompleteness and cancellation. Added
+private dev-only MCP client2.3.1; repeated full/prod audit passes. In-process MCP
+coverage76.92% branches/96.87% lines replaces subprocess-only zero instrumentation.
+Focused percentages are not a global release result.
+
+Lost-ack regression uses test-only public Client.post interception after real
+Command acceptance; original generation/admission retained, duplicate paid work
+and account switch blocked, one delayed provider attempt. With active work,
+Wait preserves session/window, Stop closes Bounded Context before window with
+no additional provider call. Two files/five tests pass. Narrow private window
+helper used by main and tests, no generic lifecycle/framework API. Account gate,
+renderer reload/fresh backend, export cancel/failure/repeat and dirty-Version
+tests close the previously listed gaps. Final tooling/format/app tests pending
+before independent private runtime/style review.
+
+Parent found an accepted-plan completeness gap during handoff preparation:
+release-notes-studio.md explicit-repeat/receipt-reconciliation requirement is
+not implemented by retaining admission alone. Current requestGeneration rejects
+all unknown/active admissions and generationPhase only checks observed source,
+so a preaccept unknown post has no explicit repeat path except quitting. Same
+writer received bounded app correction: repeat exact retained Command/input/
+expectedVersion/generation/model binding only on explicit UI action, reconcile
+receipt/status, preserve source on duplicate acknowledgment, release only genuine
+rejection or terminal execution. No automatic repost/generic retry/framework API.
+Require preaccept unknown then explicit repeat and accepted repeat regressions
+with no second Agent operation. Estimate adds0.2–0.4h including UI/tests/gates.
+All18 example files/78 tests and build/package pass before this correction;
+Electron command from root found no tests and is rerun from correct example cwd.
+No review-ready claim until this already accepted behavior is complete.
+
+Prepared optional live-check sample Git repository outside the project, with
+CSV header validation change and two commits. Metadata is in /tmp/spine-release-
+notes-live-fixture.json; no real user repository content or credentials used.
+This preparation does not constitute live inference or authorization. Actual
+UI sign-in remains deferred until reviews/local release/exact-SHA CI finish.
+
+Explicit-repeat correction passes18 example files/79 tests: test drops initial
+Command before dispatch, repeats retained payload, loses acknowledgment after
+commit, repeats again; all three payloads identical and one provider attempt.
+UI action Retry unconfirmed generation appears only for unknown status and
+explains original instruction/account/model/comparison reuse. Parent README and
+tutorial updated to this explicit application behavior; formatting passes.
+New guide also documents pre-handler MODEL_USE_DENIED termination and uses
+four-space Proto excerpt indentation. Final affected docs review will cover
+these narrow additions alongside frozen private source TSDoc.
+
+Private desktop source frozen at working tree over8b1fe7f89; same implementer
+ends turn and remains available for one aggregate correction batch. Exact
+preflight:18 example files/79 tests,6 Electron dev/packaged tests, tooling,
+cleanup,TSDoc,ESLint,copyright,time,Prettier,diff,API-docs,build,package and full/
+prod dependency audits all pass. Latest focused branches:service72.95%,UI66.66%,
+MCP76.92%,window-close90%; Electron subprocess entrypoints uninstrumented in parent
+Vitest. Full global90% remains unproven (last pushed baseline89.6%). Actual live
+subscription and native active-close dialog not end-to-end proven; close policy
+uses real delayed Agent with controlled window/dialog callbacks.
+
+Dispatch fresh independent frozen-app wave, fork none/no memory/no children/
+read-only: existing performance/reliability reviewer gpt-6-sol/medium for private
+service/IPC/account/lifecycle/export/history concurrency and tests; existing
+style/maintainability reviewer gpt-6-sol/medium for private structure, simple
+framework use, domain/API boundaries; existing documentation reviewer gpt-6-luna/
+medium for human docs and meaningful TSDoc/claims. All model/reasoning fields
+explicit. Expected runtime metadata may be unavailable; immutable configuration
+accepted. Canonical TypeScript/API concern: no new public package signature or
+Proto in this frozen slice; prior getRepository/agentExecution/selection contracts
+reviewed separately, as was internal explicit-denial reason. Private bridge type
+and framework-use correctness covered by reliability/style and exact tooling.
+No fourth duplicate public-contract reviewer needed. Shared checker already
+reviewed/fixed/closed; exclude it. Estimate0.5–1h for review plus corrections,
+then final security and release qualification additional. Collect complete wave
+before one correction batch to same implementation context; do not rerun closed
+lanes for deterministic documentation or assertion fixes.
+
+Frozen app review wave complete, all explicit profiles accepted (runtime metadata
+not exposed). Reliability Sol/medium: P1 account action TOCTOU between awaited
+selectionLocked and mutation; P1 superseded/out-of-order generation read can
+replace editor/current draft; P2 stale history view/cursor and captured-page
+append. Style Sol/medium: duplicate history finding plus P2 catch-all account
+error hides trusted Studio outcomes. Docs Luna/medium: quit Wait/Stop/usage
+semantics and export failure/crash/no automatic repeat/overwrite explanation
+omitted. Deduplicated four code findings go in one batch to existing Sol/medium
+implementation context; parent corrects README/USER_GUIDE independently. No
+framework business/version automation or generic error/retry system authorized.
+Require overlap/delayed-read/IPC-safe-error regressions then cheap preflight and
+affected reliability/style closure. Narrow prose corrections receive doc closure
+without reopening unrelated runtime. Review/correction0.5–1h estimate still applies.
+
+Parent corrected both documentation findings: Wait vs Stop/plan-usage limits,
+export cancellation without Version change, write failure/read-current retry,
+crash after file write before success display, no restart re-export, and native
+replacement confirmation. Apple NSOpenSavePanelDelegate official Markdown
+confirms native existing-file prompt; Electron docs show overwrite option is
+Linux-only, so no macOS production flag added. Tutorial links the Apple source.
+Formatting passes. Existing fresh documentation reviewer receives affected
+closure only; no code changes by parent.
+
+Affected documentation closure clean: both findings resolved in README/tutorial;
+no remaining omission in scope. Explicit immutable Luna/medium profile accepted,
+runtime metadata unavailable. Code corrections continue in same implementation
+context; only substantively affected reliability/style lanes reopen after gates.
+
+App correction batch frozen for affected closure: private atomic account/action
+reservation, obsolete same/different-draft polling rejection and serial polling,
+category/draft/cursor-bound history with duplicate-page exclusion, fixed safe
+IPC guidance. RED tests reproduced overlap/stale-read/page failures before fixes.
+Final example19 files/85 tests pass; exact tooling, ESLint, cleanup,TSDoc,
+copyright,time,Prettier,diff,build/package and6 Electron checks pass. Focused
+coverage remains an inspection only, not global qualification; latest84-test
+figures service73.8/UI69.92/renderer71.21/gate81.81/IPC-errors80 branches.
+
+Existing explicit Sol/medium reliability and style reviewers receive affected
+closure with same immutable profiles, no memory/children/edits. Scope corrected
+private main/renderer/studio-ui/service/account-gate/new IPC-errors and tests.
+Documentation already closed separately. Require no broad baseline reopening;
+collect closure results before next correction or final security. Same writer
+ends turn but remains available for any complete accepted finding batch.
+
+Affected closure results: style clean, both findings closed; reliability confirms
+all three production defects closed. One accepted P2 testing gap remains: test
+StudioAccountGate.run same-client renewal during active generation and release
+a reservation after its action throws, proving subsequent generation can proceed.
+Return tests to same implementation context; no new production finding or broader
+review wave. If tests expose code defect, fix and re-review only affected path.
+Both immutable explicit Sol/medium profiles accepted; runtime metadata unavailable.
+
+Final coordinated security gate prepared after frozen-app production findings
+closed. Remaining account reservation correction is two tests only. Dispatch
+fresh existing security_reviewer, gpt-6-sol/high, explicit model/reasoning, fork
+none/no memory/read-only/no children. Scope release desktop/auth/IPC/Git/MCP/
+adapter boundaries and relevant runtime additions against approved Agent branch;
+no credential reads or live authorization. Runtime metadata not exposed; accept
+immutable configured profile if no visible mismatch. Expected remaining effort
+0.75–1.5h for security, any bounded corrections, local verify:release and exact-SHA
+CI; coverage/security failures may extend it. No human login until independent
+qualification complete. Full profile required by shared runtime/build changes.
+
+Read-only mechanical coverage triage dispatched as orchestrator function to
+gpt-6-luna/medium (explicit fields, no children): inspect existing focused LCOV
+and last full CI coverage; identify meaningful untested feature behaviors and
+quantify shortfall without full rerun, gate changes, or source edits. This is
+preflight evidence gathering, not another review role or release-profile run.
+
+Account-gate test gap closed without production changes: same-client action
+through run succeeds during real active generation, different client action
+never runs; rejected action releases reservation and later real generation
+completes. Focused service4/4, example19files/85tests, exact tooling, ESLint,
+Prettier, cleanup,TSDoc,diff pass. Test-only closure satisfies accepted P2;
+no additional specialist wave required. Same explicit Sol/medium implementation
+profile accepted; runtime metadata not exposed. Final security and read-only
+coverage triage continue. Selected-suite coverage does not establish global90%.
+
+Read-only Luna/medium coverage scan completed; explicit profile accepted, runtime
+metadata unavailable. Current report snapshot differs from latest selected run,
+so per-file values are directional, not global proof. Largest meaningful gap is
+private StudioDesktop (0/43 branches in in-process report, exercised in Electron
+subprocess). IPC43/71, service186/252, UI93/133, renderer47/66 in scanned snapshot.
+Same Sol/medium writer receives bounded tests-only batch: direct desktop native
+cancel/export/credential-free result/lifecycle contracts, IPC shape/byte/cursor/
+approval boundaries, renderer catalog/sign-out failure behavior. Preserve source
+freeze unless tests reveal actual defects; no instrumentation exclusions or
+framework seams for test percentages. This improves preflight coverage before
+full release instead of diagnosing through repeated full runs. Existing0.75–1.5h
+estimate includes this bounded batch; report if it extends materially.
+
+Final security review complete: fresh existing reviewer explicit Sol/high
+accepted; runtime self-metadata unavailable. P2 accepted: siwc-session models
+uses unbounded fetch/json; a stalled/oversized catalog can retain generation
+admission or consume unbounded memory. Same writer must bound deadline/body/
+entry and string sizes with tests for failure and later generation admission;
+use private example limits, no generic framework API. P3 advisory recorded,
+nonblocking: unrelated local OAuth callback can consume one-shot listener and
+force user to retry sign-in; state validation prevents credential/account
+acceptance, local denial only. Do not expand this correction beyond accepted
+resource-bound finding. Reviewer found no credential exfiltration/cross-account
+binding defect across IPC/Git/MCP/history/provider paths; no live login performed.
+Require affected security closure after P2 correction and cheap gates.
+
+Security P2 and boundary-test batch frozen: only production correction is private
+siwc-session catalog read.10s deadline bounds fetch/body even when injected abort
+is ignored;256KB streamed byte cap before JSON,1000entries and128/256character
+slug/label limits; fixed safe failure text. Tests establish stall/oversize failure,
+later healthy retry and generation-admission release. Direct desktop/native
+cancel/export/lifecycle,IPC bounds and renderer account failure tests added.
+Example20files/96tests and exact tooling, targeted ESLint,cleanup,TSDoc,copyright,
+time,Prettier,diff pass. Previous focused desktop23/43,IPC59/71,renderer50/66
+branches are inspection evidence only. No threshold change/full profile yet.
+Existing Sol/high security reviewer receives P2 affected closure; no broad wave.
+
+Affected security closure CLEAN; reviewer independently reran SIWC26/26 and
+service4/4 plus diff check. P2 closed, no introduced P2+; prior P3 local callback
+availability advisory unchanged/nonblocking. Explicit configured Sol/high
+accepted, actual runtime metadata unavailable. All required relevant concerns
+converged; selected example96tests, tooling/lint/docs/source checks and bundle
+build pass. Dispatch full local verify:release as mechanical orchestrator
+function on gpt-6-luna/low, explicit fields/no children/source edits, log under
+/tmp. Profile required by shared runtime/build changes. Node24.18.0 confirmed.
+Run once on converged tree; any failure returns to bounded diagnosis/correction
+and cheap preflight, no gate weakening. Local qualification/global90% and final
+SHA CI remain pending. Estimate full local checks20–40min with CI additional.
+
+Full local verify:release completed: all static gates and387testfiles/6120tests
+pass,1file/test skipped. Sole failure global branches89.25% (20341/22789), below
+90%; statements93.16/functions94.84/lines95.03%. Need170additional covered
+branches at unchanged denominator, with margin for any new source branches.
+Mechanical Luna/low profile accepted; no generated tracked changes. Audit and
+release archive/trial correctly not run after failure. Preserve raw log and
+full LCOV under/tmp; dispatch read-only Luna/medium exact coverage triage and
+return one meaningful test batch to same Sol/medium writer. No exclusions or
+threshold weakening, no production abstractions for tests. Estimate adds0.5–1h
+for focused behavior tests, cheap preflight and second full release attempt.
+
+Exact full-LCOV triage complete, Luna/medium read-only profile accepted. App
+coverage894/1189,295missing; earlier2789 denominator was a broader subset, not
+global. Same writer receives purposeful batch: actual main-process IPC/security/
+lifecycle wiring; service admission and export/source correlation; desktop
+action outcomes; multisection editor/citation preservation; remaining IPC
+shape/approval detachment and SIWC refresh validation. Estimated110–150direct
+app branches plus runtime branches reached by real Client tests; measure actual
+delta before another full run. Do not manufacture contrived tests to reach170.
+No production edits unless a test exposes an actual defect; affected review if
+that happens. Main/mock Electron tests must use temporary application paths and
+never actual credentials. All prior review closures remain valid for unchanged
+production source.
+
+Coverage batch exposed application rejection-correlation gap: stale generation
+expectedVersion yields accepted Command Ack plus asynchronous typed rejection,
+not ClientOutcome.rejection (server REFERENCE812–827). The reproduced test interleaves a valid edit after the draft read and before
+the generation Command is handled; generation then rejects, no receipt/Agent
+appears, current private admission remains unknown indefinitely. Model discovery
+happens before the draft read; the initial commentary described that ordering
+incorrectly and was corrected explicitly.
+Timeout alone must not release. Public rejection deliveries intentionally scrub
+original Command payload; Client.post does not expose envelope ID. Need smallest
+app-only correlation using declared rejection, not new framework behavior.
+Dispatch one bounded requirements_splitter architecture pass, explicit
+gpt-6-astra/high, fork none/read-only/no memory/no children, triggered by actual
+application correctness/serialized-contract ambiguity. Existing rejection
+ReleaseGenerationConflict has generation but narrow reuse-conflict meaning;
+ReleaseInputsConflict only draft ID insufficient to identify pending Command.
+Do not repurpose logically different messages just for fields. Same writer
+continues independent tests; production waits for minimal decision. This is a
+real discovered defect, not justification for a generic framework abstraction.
+
+Architecture decision accepted and recorded under D-0138: dedicated private
+ReleaseGenerationInputsConflict(draft,generation), receipt-first Aggregate
+checks preserved; new activated public rejection subscription before Commands,
+retained terminal app outcome, exact admission match, account/admission gates
+skip rejected work, no repeat of known rejection, fresh ID/current input allowed.
+Retain latest reference for reload and delayed rejection; expose optional private
+rejection beside unchanged AgentExecutionStatus. Remove unconditional release
+on synchronous ClientOutcome.rejection, which can describe only one conflicting
+repeat. Preserve unknown lock on lost/unobserved rejection and retain known
+rejection if subsequent UI refresh fails. Same Sol/medium writer handles Proto,
+Aggregate, service, UI and focused tests; parent narrow human docs. No framework
+changes/Command-ID access/generic policy/revision counter. Architecture immutable
+explicit Astra/high accepted; runtime metadata unavailable. This high-risk
+application serialized/correlation correction adds implementation+affected
+review; remaining local work1–1.5h before CI.
+
+Purposeful app tests gained71covered branches before rejection correction; new
+source changes require denominator-aware projection, not raw gain. Same read-only
+Luna/medium scanning function checks only newly introduced ChatGPT adapter/profile
+residual protocol/security behaviors in full LCOV for meaningful additional
+coverage; no unrelated baseline tests, contrived branches, source edits or
+coverage exclusions. Same Sol/medium writer remains sole implementation/test
+context. Typed rejection focused53tests/typecheck/lint/cleanup currently pass;
+full correlation cases and source freeze pending before affected review wave.
+
+Read-only adapter triage found no meaningful30–80branch batch: ChatGPT factory
+45/45 and profile/stream/tool/replay heavily covered. A few receipt-tamper/raw
+event cases might yield15–25 but not enough to justify unrelated expansion; no
+adapter changes assigned. Same explicit Luna/medium scanner now investigates
+focused UI branch denominator133→271 (service252→272,IPCerrors20→38), comparing
+exact reports to fullLCOV. Distinguish legitimate V8 discovery from source/dist
+remap changes before trusting projection or adding tests. Current112example
+tests pass; no next full run until rejection correction and measurement analysis
+converge. No coverage gate changes.
+
+Application rejection correction frozen: real Agent stale-Version case RED5s
+unknown then GREEN<1s typed rejection/no extra model use; known rejected repeat
+refused, fresh generation accepted while older rejection retained, active fresh
+provider keeps account lock. UI reload shows rejected/hides explicit repeat/
+enables fresh action.112example tests and53focused tests pass; Proto generate,
+example tsc, build-generated/tooling, ESLint, generated-clean, Buf lint,TSDoc,
+full format,copyright,time,diff checks pass. Dispatch affected wave: existing
+Sol/medium reliability reviewer for correlation/concurrency/subscriptions/UI;
+fresh TypeScript/API docs reviewer explicit Sol/medium for private Proto/typed
+rejection/API boundary and TSDoc; existing Sol/medium style reviewer and Luna/
+medium docs reviewer follow as capacity permits. No memory use/children/edits,
+concern-specific scope. Collect whole affected wave then one batch to samewriter.
+Current coverage mapping investigation independent, no full profile yet.
+
+Coverage measurement cause established by read-only Luna/medium: focused LCOV
+merges two whole function/branch maps for old/current UI source revisions into
+one authored SF.271 = current138branches/113hits + old133/11; IPCerrors similarly
+contains old/current function offsets. Service272vs252 has one function map and
+real added rejection logic. LCOV proves stale/mixed source mappings, not exact
+producer (compiled output vs transform cache). Do not assign147UI misses as
+current debt. Same mechanical Luna/low function now clean-builds frozen source
+and runs focused example coverage serialized, capturing LCOV+rawJSON under/tmp.
+This is bounded diagnosis/preflight, not a repeated full profile or gate change.
+No source writes; contract/reliability reviewers run independently.
+
+Affected review wave interim: fresh TypeScript/API/Proto Sol/medium clean.
+Reliability Sol/medium reports P1 startup leak if second subscription create/
+activate fails (including handle assignment only after activation); P2 known
+rejection hidden by subsequent hasReceipt failure; P2 missing unrelated/late/
+duplicate/accepted-conflict/unobserved/startup-failure regressions. Collect
+remaining style Sol/medium and docs Luna/medium results before one correction
+batch; those existing profiles explicitly confirmed, no memory/children/edits.
+No extra broadsecurityreview: unchanged auth/network/IPC ingress surfaces;
+correlation and lifecycle covered by affected reliability/API review.
+
+Affected wave complete: API/Proto and style Sol/medium clean; docs Luna/medium
+clean. All immutable explicit profiles accepted, runtime metadata unavailable.
+Accepted reliability batch only: cleanup partially started session/subscriptions,
+return retained rejection before any Aggregate read, add actual missing delayed/
+unrelated/duplicate/newer/accepted-conflict/unobserved/startup-failure tests.
+Mechanical clean-build/frozen selected run has112tests passing; selected-only
+globalthreshold failure expected, report interpretation pending. Source remains
+frozen until mechanical function confirms capture complete, then same writer
+receives one batch. Re-review only affected reliability after fixes; other
+concerns reopen only if contract/claims/structure changes materially.
+
+### Desktop correction closure and release qualification
+
+The same implementation agent (`chatgpt_profile_implementation`, explicitly
+configured `gpt-6-sol` / `medium`) completed the remaining desktop corrections
+and focused behavior tests. No subagent used memory or spawned children.
+
+The following defects were reproduced before correction:
+
+- Failed subscription startup could leave subscriptions, the Client, or the
+  Bounded Context open. Startup now retains handles before activation and
+  attempts every cleanup action even when cancellation fails.
+- A later Aggregate read failure could hide an already received generation
+  rejection. The private service now returns the retained rejection first.
+- Account selection could change while model catalog or token reads were
+  pending. The private model selection code rechecks the selected account
+  after those waits and discards a binding for a different account.
+- Conversation history for a draft without any Agent conversation threw.
+  It now returns an empty first page; a supplied older cursor still rejects.
+- An old model lookup failure could replace the renderer's newer selection.
+  Failure handling now uses the same current-account and selection checks as
+  success handling.
+- A draft read failure could replace an authoritative generation status with
+  an unknown status. Polling now retains a phase already received.
+- A new generation attempt failing before admission could reuse an earlier
+  completed generation ID and offer retry of the wrong Command. Submission
+  now reconciles only a different retained ID and preserves authoritative
+  rejection, phase, or receipt information for that ID.
+
+These are application decisions. No framework API copies Aggregate Versions,
+chooses business freshness, approves content, or decides whether an Agent's
+result still applies. The existing application Protos carry the relevant IDs
+and input Version explicitly.
+
+Focused tests also cover delayed and unrelated rejections after newer work
+starts, held rejection delivery, accepted-ID conflicts, account changes,
+renderer navigation and reloads, all four paginated history views, export
+subscription termination and stale export Commands, protected credential
+storage, concurrent token refresh, sign-out fencing, desktop IPC validation,
+real Git range bounds, and malformed provider streams. Tests requiring
+artificial production seams or impossible fixture states were not added.
+Coverage thresholds and exclusions are unchanged.
+
+The existing reliability reviewer (`studio_reliability_review`, explicitly
+configured `gpt-6-sol` / `medium`) closed each substantively affected correction.
+The final narrow submission-status review is clean: preadmission failure
+preserves the earlier completed generation, and a newly retained ID is checked
+against its own authoritative status. The existing final security reviewer
+(`studio_final_security`, explicitly configured `gpt-6-sol` / `high`) closed
+the account-binding correction and independently passed its six focused tests.
+The earlier nonblocking local OAuth callback availability observation remains
+unchanged. API, documentation, and style reviews remain closed; the later
+private guards change no signatures, serialized contracts, or documented
+workflow. Deterministic documentation and style checks pass.
+
+Read-only coverage scans used the existing orchestrator-dispatched function
+with explicit `gpt-6-luna` / `medium`. The scans found no justified broad batch
+of missing framework tests. A mixed-source-map report was discarded after a
+clean generated build produced coherent maps. Raw reports remain under `/tmp`.
+The execution surface exposes configured profiles but not actual runtime model
+introspection. Each accepted assignment had explicit model and reasoning;
+there was no visible mismatch or inherited fallback.
+
+The frozen final focused batch passes 207 tests across 23 files. Example branch
+coverage is 1108/1238. Replacing those files in the preserved full baseline and
+including three additional provider branches projects 20558/22838 (90.0166%).
+This estimate is only three branches above the threshold and does not replace
+full-release coverage. Affected typechecks, ESLint, cleanup, TSDoc, formatting,
+copyright, time-read, and diff checks pass. `pnpm audit:release` passes both full
+and production-only audits with no known vulnerabilities.
+
+The existing mechanical function (`studio_release_checks`, explicitly
+configured `gpt-6-luna` / `low`) now runs the frozen install and full release
+profile once, followed on success by archive preparation and publication trial.
+It may not publish, change source, or build private Electron bundles before
+coverage finishes. Remaining work is packaged desktop checks, immediate
+feature-branch push, exact-commit CI, and real UI sign-in plus one subscription
+interaction with a local MCP lookup. Estimated remaining active work is
+0.5–1 hour, plus CI and human-dependent sign-in waiting. Any failure returns to
+focused diagnosis and the cheap preflight before another full profile.
+
+The frozen install and full local `pnpm verify:release` pass. The test run
+completed in 732.86 seconds: 388 files and 6,188 tests passed, with one file and
+one test skipped. Coverage is 93.72% statements, 90.01% branches (20,558/22,838),
+95.45% functions, and 95.52% lines. The full log is
+`/tmp/spine-studio-final-verify-release.log`. The explicitly configured Luna/low
+mechanical function continues with archive preparation and the local publication
+trial; packaged desktop checks follow. The Mac is currently locked, so the
+interactive subscription check cannot start yet. This does not block the
+remaining noninteractive qualification or feature-branch push.
+
+Local release qualification is complete. Node v24.18.0 and npm 11.16.0 match
+CI; the Rekor recovery reproduction passes. Archive preparation produces all
+21 package tarballs, and the local publication trial passes normal execution,
+partial failure, rerun, delayed recovery, fatal reads, and read-only scenarios.
+The example build and macOS arm64 package pass. All six Electron checks pass,
+including packaged Agent generation, the Git MCP worker, history, approval, and
+exact exported bytes. These use controlled provider responses and do not prove
+live ChatGPT subscription access. The existing explicit Luna/low mechanical
+assignment is accepted; runtime introspection remains unavailable.
+
+Source and tests remain unchanged since full release verification. The desktop
+milestone, corrections, tests, tutorial, and required task records are ready for
+a feature-branch commit and immediate push to `origin/agent-entities`. No PR
+creation, merge, or publication is authorized. The next gates are exact-commit
+Build and Security CI, followed by real browser sign-in and a small synthetic
+Git comparison. The Mac must be unlocked for that interactive check.

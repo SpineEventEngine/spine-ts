@@ -141,4 +141,40 @@ describe("bounded Anthropic stream collection", () => {
       collectModelStream(compaction, { prompt: [] }, 1024, undefined, true),
     ).rejects.toMatchObject({ message: "Unsupported Anthropic text metadata" });
   });
+
+  it("rejects reused content IDs and misplaced reasoning metadata before any proposal", async () => {
+    const reused = modelWith([
+      { type: "text-start", id: "block-1" },
+      { type: "text-end", id: "block-1" },
+      { type: "reasoning-start", id: "block-1" },
+      finish,
+    ]);
+    await expect(
+      collectModelStream(reused, { prompt: [] }, 1024, undefined, true),
+    ).rejects.toMatchObject({ message: "Duplicate Anthropic content start" });
+    const signedAtStart = modelWith([
+      {
+        type: "reasoning-start",
+        id: "block-2",
+        providerMetadata: { anthropic: { signature: "misplaced" } },
+      },
+      finish,
+    ]);
+    await expect(
+      collectModelStream(signedAtStart, { prompt: [] }, 1024, undefined, true),
+    ).rejects.toMatchObject({ message: "Anthropic reasoning start metadata invalid" });
+    const redactedDelta = modelWith([
+      { type: "reasoning-start", id: "block-3" },
+      {
+        type: "reasoning-delta",
+        id: "block-3",
+        delta: "thinking",
+        providerMetadata: { anthropic: { redactedData: "misplaced" } },
+      },
+      finish,
+    ]);
+    await expect(
+      collectModelStream(redactedDelta, { prompt: [] }, 1024, undefined, true),
+    ).rejects.toMatchObject({ message: "Anthropic reasoning delta metadata invalid" });
+  });
 });

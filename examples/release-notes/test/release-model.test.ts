@@ -169,3 +169,35 @@ it("rejects a plausible citation when its parent differs and bounds claim text",
     ]),
   );
 });
+
+it("refuses blank claims, oversized headings, and sections with too many claims", () => {
+  const input = create(ReleaseGenerationRequestedSchema, {
+    catalog: create(ReleaseEvidenceCatalogSchema),
+  });
+  const candidate = create(ReleaseNotesDocumentSchema, {
+    sections: [
+      create(ReleaseNotesSectionSchema, {
+        heading: "H".repeat(121),
+        entries: Array.from({ length: 41 }, () =>
+          create(ReleaseNoteEntrySchema, {
+            text: " ",
+            evidence: [],
+          }),
+        ),
+      }),
+    ],
+  });
+  const issues = ReleaseDocumentValidation.check(candidate, input);
+  expect(issues).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ code: "HEADING", path: "sections[0].heading" }),
+      expect.objectContaining({ code: "ENTRIES", path: "sections[0].entries" }),
+      expect.objectContaining({ code: "TEXT", path: "sections[0].entries[0].text" }),
+      expect.objectContaining({
+        code: "MISSING_EVIDENCE",
+        path: "sections[0].entries[0].evidence",
+      }),
+    ]),
+  );
+  expect(issues.filter((issue) => issue.code === "TEXT")).toHaveLength(41);
+});

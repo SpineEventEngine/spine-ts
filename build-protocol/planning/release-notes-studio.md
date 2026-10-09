@@ -223,8 +223,16 @@ advances the framework Entity Version as usual; it must not invalidate pending
 work or replace its source Event binding. See D-0136 as corrected by D-0138.
 
 Reconcile uncertain Command submission using retained Aggregate receipts and
-exact execution status. A genuinely rejected Command releases its admission;
-a repeated Command acknowledging accepted work does not. Preserve the generation
+exact execution status. A generation rejected before acceptance emits the
+application rejection `ReleaseGenerationInputsConflict` with draft and generation
+IDs. Subscribe before posting and release only its matching admission after
+observing that rejection. Retain the terminal application outcome for delayed
+observation and renderer reload; expose it separately from Agent execution
+status. Unobserved rejection remains unknown and locked. Refuse an explicit
+repeat of a known rejected generation; a fresh action uses a new generation ID
+and current draft. A conflicting reuse rejection (`ReleaseGenerationConflict`)
+or a synchronous rejection of one repeated submission must not release already
+accepted work. A repeated Command acknowledging accepted work also does not. Preserve the generation
 ID and original input on an explicit repeat; the public client's `post` supplies
 a new Command ID. If acceptance remains unknown, do not automatically repost.
 Renderer reconnect must not admit another operation while the backend still
@@ -476,11 +484,13 @@ no work or consumed no usage. Account selection unlocks only after execution is
 terminal, not when its spinner disappears. A forced exit loses domain state;
 a later launch must not repeat inference or export automatically.
 
-Export starts with a domain Command such as `PrepareReleaseNotesExport`, which
-validates approval and expected Entity Version against the Aggregate and produces a
+Export first asks for a destination through the native save dialog. Cancelling
+does not post a Command or advance the Aggregate's Version. After a destination
+is selected, a domain Command such as `PrepareReleaseNotesExport` validates
+approval and the displayed Entity Version against the Aggregate and produces a
 correlated Event containing the immutable approved Markdown. Checking approval
 only in a potentially stale Projection is insufficient. The trusted process
-then opens a save dialog, writes those exact bytes, and reports the exported
+then writes those exact bytes and reports the exported
 approved version only after the write succeeds. Later edits do not alter that prepared
 snapshot. A new export Command requires approval of the current content.
 A cancelled or failed save must not show success. A crash after writing may

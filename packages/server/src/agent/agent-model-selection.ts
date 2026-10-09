@@ -52,6 +52,7 @@ import {
   type AgentSelectedModel,
 } from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
 import type { RepositoryAiOptions } from "../repository/repository.js";
+import { AgentExecutionFault } from "./agent-execution-fault.js";
 
 /**
  * Copies every accepted-scope identity before passing it to an application callback.
@@ -549,7 +550,9 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
   },
 
   /**
-   * Resolves and authorizes a connection identity within the execution deadline.
+   * Resolves a connection identity within the deadline. An explicit use denial
+   * becomes a safe terminal execution fault before the Agent handler runs.
+   *
    * @param backend Factory-proven selected backend callbacks.
    * @param scope Authenticated accepted-invocation scope.
    * @param signal Cancellation signal for this execution.
@@ -579,7 +582,8 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
       signal,
       deadlineEpochMs,
     );
-    if (!allowed) throw new Error("Selected Agent model use is unauthorized.");
+    if (!allowed)
+      throw new AgentExecutionFault("MODEL_USE_DENIED", "Selected Agent model use was denied.");
     const connection = create(AiConnectionIdentitySchema, {
       provider: create(AiProviderNameSchema, { value: identity.provider }),
       account: create(AiAccountIdentitySchema, { value: identity.account }),
