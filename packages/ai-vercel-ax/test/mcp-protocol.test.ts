@@ -1517,6 +1517,21 @@ describe("bounded MCP protocol", () => {
         }),
       },
     ]);
+    schemaOverride = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+      properties: { ticket: { type: "string" } },
+      required: ["ticket"],
+      additionalProperties: false,
+    };
+    expect(await session.discover(["lookup"])).toEqual(tools);
+    schemaOverride = { ...schemaOverride, $schema: "https://untrusted.example/schema" };
+    await expect(session.discover(["lookup"])).rejects.toMatchObject({
+      code: "UNSUPPORTED_CAPABILITY",
+      message: "MCP tool capability is unsupported.",
+    });
+    schemaOverride = undefined;
+    await session.discover(["lookup"]);
     expect(methods).toContain("initialize");
     expect(methods).toContain("tools/list");
     expect(finishMessage).toHaveBeenCalled();
@@ -1608,6 +1623,34 @@ describe("bounded MCP protocol", () => {
         }),
       }),
     ]);
+    outputSchemaOverride = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+      properties: { ticket: { type: "string" } },
+      required: ["ticket"],
+      additionalProperties: false,
+    };
+    expect(await session.discover(["lookup"])).toEqual([
+      expect.objectContaining({
+        outputSchemaJson: JSON.stringify({
+          additionalProperties: false,
+          properties: { ticket: { type: "string" } },
+          required: ["ticket"],
+          type: "object",
+        }),
+      }),
+    ]);
+    outputSchemaOverride = { ...outputSchemaOverride, $schema: "https://untrusted.example/schema" };
+    await expect(session.discover(["lookup"])).rejects.toMatchObject({
+      code: "UNSUPPORTED_CAPABILITY",
+    });
+    outputSchemaOverride = {
+      type: "object",
+      properties: { ticket: { type: "string" } },
+      required: ["ticket"],
+      additionalProperties: false,
+    };
+    await session.discover(["lookup"]);
     structuredContent = true;
     structuredValue = { ticket: 17 };
     await expect(
@@ -1664,21 +1707,29 @@ describe("bounded MCP protocol", () => {
     ).resolves.toEqual({ content: [{ kind: "text", text: "Ticket found" }], isError: true });
     toolError = false;
     outputSchemaOverride = { $ref: "https://untrusted.example/output" };
-    await expect(session.discover(["lookup"])).rejects.toThrow("output schema unsupported");
+    await expect(session.discover(["lookup"])).rejects.toMatchObject({
+      code: "UNSUPPORTED_CAPABILITY",
+    });
     expect(() => {
       session.validateArguments("lookup", '{"ticket":"T-9"}');
     }).toThrow("not advertised");
     outputSchemaOverride = { type: "string" };
-    await expect(session.discover(["lookup"])).rejects.toThrow("output schema unsupported");
+    await expect(session.discover(["lookup"])).rejects.toMatchObject({
+      code: "UNSUPPORTED_CAPABILITY",
+    });
     discoveryCredit = 32_768;
     outputSchemaOverride = { type: "object", description: "x".repeat(16_385) };
-    await expect(session.discover(["lookup"])).rejects.toThrow("output schema unsupported");
+    await expect(session.discover(["lookup"])).rejects.toMatchObject({
+      code: "UNSUPPORTED_CAPABILITY",
+    });
     discoveryCredit = 8_192;
     let nestedOutput: unknown = { type: "string" };
     for (let depth = 0; depth < 14; depth += 1)
       nestedOutput = { type: "object", properties: { next: nestedOutput } };
     outputSchemaOverride = nestedOutput;
-    await expect(session.discover(["lookup"])).rejects.toThrow("output schema unsupported");
+    await expect(session.discover(["lookup"])).rejects.toMatchObject({
+      code: "UNSUPPORTED_CAPABILITY",
+    });
     outputSchemaOverride = undefined;
     await session.discover(["lookup"]);
     await expect(
@@ -1694,7 +1745,9 @@ describe("bounded MCP protocol", () => {
       session.validateArguments("lookup", '{"ticket":"T-1"}');
     }).toThrow("not advertised");
     unsafeHeaderSchema = true;
-    await expect(session.discover(["lookup"])).rejects.toThrow("x-mcp-header");
+    await expect(session.discover(["lookup"])).rejects.toMatchObject({
+      code: "UNSUPPORTED_CAPABILITY",
+    });
     expect(() => {
       session.validateArguments("lookup", '{"ticket":"T-1"}');
     }).toThrow("not advertised");
@@ -1702,18 +1755,26 @@ describe("bounded MCP protocol", () => {
     schemaOverride = { type: "object", properties: 7 };
     await expect(session.discover(["lookup"])).rejects.toThrow("parse server response");
     schemaOverride = { $ref: "https://untrusted.example/schema" };
-    await expect(session.discover(["lookup"])).rejects.toThrow("keyword $ref unsupported");
+    await expect(session.discover(["lookup"])).rejects.toMatchObject({
+      code: "UNSUPPORTED_CAPABILITY",
+    });
     schemaOverride = undefined;
     listingMode = "repeat-name";
-    await expect(session.discover(["lookup"])).rejects.toThrow("repeats tool name");
+    await expect(session.discover(["lookup"])).rejects.toMatchObject({
+      code: "UNSUPPORTED_CAPABILITY",
+    });
     listingMode = "repeat-cursor";
-    await expect(session.discover([])).rejects.toThrow("repeats cursor");
+    await expect(session.discover([])).rejects.toMatchObject({ code: "UNSUPPORTED_CAPABILITY" });
     listingMode = "many";
-    await expect(session.discover([])).rejects.toThrow("tool limit");
+    await expect(session.discover([])).rejects.toMatchObject({ code: "UNSUPPORTED_CAPABILITY" });
     listingMode = "long-description";
-    await expect(session.discover(["lookup"])).rejects.toThrow("description exceeds limit");
+    await expect(session.discover(["lookup"])).rejects.toMatchObject({
+      code: "UNSUPPORTED_CAPABILITY",
+    });
     listingMode = "partial-failure";
-    await expect(session.discover(["lookup", "unsafe"])).rejects.toThrow("x-mcp-header");
+    await expect(session.discover(["lookup", "unsafe"])).rejects.toMatchObject({
+      code: "UNSUPPORTED_CAPABILITY",
+    });
     expect(() => {
       session.validateArguments("lookup", "{}");
     }).toThrow("not advertised");

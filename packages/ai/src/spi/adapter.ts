@@ -31,6 +31,7 @@ export type {
   AiBackendOutcome,
 } from "../internal/execution.js";
 export { assertAiOutcomeContext } from "../internal/execution.js";
+export { AiMcpSetupFailure } from "../internal/mcp-protocol.js";
 export type {
   AiMcpProtocolFactory,
   AiMcpProtocolSession,

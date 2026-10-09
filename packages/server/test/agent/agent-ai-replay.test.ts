@@ -15,8 +15,9 @@
 import { createHash } from "node:crypto";
 import { clone, create, toBinary, type Message } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { AiModel, AiRegistry, ModelRef } from "@spine-event-engine/ai";
+import { AiModel, AiRegistry, Mcp, ModelRef } from "@spine-event-engine/ai";
 import {
+  AiMcpSetupFailure,
   createBackendRegistration,
   type AiBackendExecution,
 } from "@spine-event-engine/ai/spi/adapter";
@@ -52,7 +53,7 @@ import type {
   AgentExecutionCapacity,
   AgentExecutionStorage,
 } from "@spine-event-engine/storage/provider";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { AgentAiRuntime } from "../../src/agent/agent-ai-runtime.js";
 import { AgentExecutionSession } from "../../src/agent/agent-execution-session.js";
 import { SupportReplyAgentIdSchema } from "../../test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
@@ -115,6 +116,17 @@ const revisedGeneration = AiModel.define({
   outputMode: "prompt-and-validate",
   limits: { ...limits, maxOutputTokens: 100 },
 });
+const mcpGeneration = AiModel.define({
+  name: "propose-support-reply",
+  version: "v1",
+  kind: "generation",
+  input: SupportTicketFactsSchema,
+  output: ProposedSupportReplySchema,
+  instructions: "Propose a support reply.",
+  outputMode: "prompt-and-validate",
+  tools: [{ server: "knowledge", tool: "lookup" }],
+  limits: { ...limits, toolCalls: 1, maxOutputTokens: 100 },
+});
 const decision = AiModel.define({
   name: "route-support-ticket",
   version: "v1",
@@ -142,8 +154,16 @@ function harness(
   fail = false,
   boundaryFault?: BoundaryFault,
   anthropicPrepared = false,
+  setupFailure?: "denied" | "unsupported",
 ) {
-  const model = kind === "decision" ? decision : correction ? correctiveGeneration : generation;
+  const model =
+    kind === "decision"
+      ? decision
+      : setupFailure
+        ? mcpGeneration
+        : correction
+          ? correctiveGeneration
+          : generation;
   const ref = ModelRef.of(`scripted-${kind}`, "v1");
   const selectedIdentity = anthropicPrepared
     ? { ...identity, provider: "anthropic", model: "claude-sonnet-4-5" }
@@ -169,10 +189,26 @@ function harness(
   let connectionChanged = false;
   let authorizationDenied = false;
   let boundaryError: unknown;
+  const authorizeConnect = vi.fn(() => setupFailure !== "denied");
+  const discover = vi.fn(() => Promise.reject(new AiMcpSetupFailure("UNSUPPORTED_CAPABILITY")));
+  const protocolConnect = vi.fn(() =>
+    Promise.resolve({
+      identity: {
+        serverId: "knowledge",
+        revision: "v1",
+        endpoint: `sha256:${createHash("sha256").update("https://example.invalid/mcp").digest("hex")}`,
+      },
+      discover,
+      validateArguments: vi.fn(),
+      call: vi.fn(() => Promise.reject(new Error("Unexpected tool call."))),
+      close: vi.fn(() => Promise.resolve()),
+    }),
+  );
   const capacity: AgentExecutionCapacity = {};
   const backend = createBackendRegistration({
     ref,
     kind,
+    ...(setupFailure ? { mcp: { connect: protocolConnect } } : {}),
     supports: () => true,
     resolveIdentity: () =>
       identityChanged ? { ...selectedIdentity, model: "unexpected-deployment" } : selectedIdentity,
@@ -399,7 +435,7 @@ function harness(
       bounds: create(AgentInvocationBoundsSchema, {
         operations: 1n,
         modelRequests: correction ? 2n : 1n,
-        toolCalls: 0n,
+        toolCalls: setupFailure ? 1n : 0n,
         recordedReads: 0n,
         deadlineMillis: 60_000n,
         totalInputBytes: 4_000n,
@@ -446,12 +482,12 @@ function harness(
     complete: () => Promise.resolve(),
     markDelivered: () => Promise.resolve(),
   };
-  const registry = AiRegistry.create({
+  let registry = AiRegistry.create({
     defaultModels: { [kind]: ref },
     invocationLimits: {
       operations: 1,
       modelRequests: correction ? 2 : 1,
-      toolCalls: 0,
+      toolCalls: setupFailure ? 1 : 0,
       recordedReads: 0,
       deadlineMs: 60_000,
       totalInputBytes: 4_000,
@@ -461,6 +497,24 @@ function harness(
     concurrentOperations: 1,
     queuedOperations: 0,
   }).register(backend);
+  if (setupFailure)
+    registry = registry.registerTools(
+      Mcp.server({
+        id: "knowledge",
+        revision: "v1",
+        authorizeConnect,
+        transport: { kind: "streamable-http", url: "https://example.invalid/mcp" },
+        tools: {
+          lookup: {
+            effect: "read",
+            timeoutMs: 1_000,
+            maxArgumentBytes: 1_024,
+            maxResultBytes: 1_024,
+            authorize: () => true,
+          },
+        },
+      }),
+    );
   const runtime = () =>
     new AgentAiRuntime(
       registry,
@@ -477,6 +531,9 @@ function harness(
     );
   return {
     model,
+    authorizeConnect,
+    discover,
+    protocolConnect,
     runtime,
     saved: () => clone(AgentExecutionRecordSchema, saved),
     changeSaved: (change: (record: typeof saved) => void) => {
@@ -763,6 +820,57 @@ describe("Agent AI replay from a persisted execution journal", () => {
       expect(fixture.counts()).toEqual({ physicalRequests: 1, executeCalls: 2 });
     },
   );
+
+  it("replays a saved MCP setup denial without authorization, discovery, or provider callbacks", async () => {
+    const fixture = harness("generation", false, false, undefined, false, "denied");
+    const request = { call: "draft", conversation, input };
+    const first = await fixture.runtime().invoke(mcpGeneration, request);
+    expect(first).toMatchObject({
+      ok: false,
+      failure: { code: "AUTHENTICATION_REQUIRED", retryableByNewSignal: false },
+    });
+    expect(fixture.authorizeConnect).toHaveBeenCalledOnce();
+    expect(fixture.protocolConnect).not.toHaveBeenCalled();
+    const replayed = await fixture.runtime().invoke(mcpGeneration, request);
+    expect(replayed).toEqual(first);
+    expect(fixture.authorizeConnect).toHaveBeenCalledOnce();
+    expect(fixture.protocolConnect).not.toHaveBeenCalled();
+    expect(fixture.counts()).toEqual({ physicalRequests: 0, executeCalls: 0 });
+  });
+
+  it("replays a saved unsupported catalog without a second connection or model call", async () => {
+    const fixture = harness("generation", false, false, undefined, false, "unsupported");
+    const request = { call: "draft", conversation, input };
+    const first = await fixture.runtime().invoke(mcpGeneration, request);
+    expect(first).toMatchObject({
+      ok: false,
+      failure: { code: "UNSUPPORTED_CAPABILITY", retryableByNewSignal: false },
+    });
+    expect(first.ok).toBe(false);
+    if (first.ok) throw new Error("Expected a saved MCP setup failure.");
+    expect(first.operationId.value).toBeTruthy();
+    expect(first.failure.diagnosticId).toBeTruthy();
+    expect(fixture.authorizeConnect).toHaveBeenCalledOnce();
+    expect(fixture.protocolConnect).toHaveBeenCalledOnce();
+    expect(fixture.discover).toHaveBeenCalledOnce();
+    const resumed = await fixture.runtime().invoke(mcpGeneration, request);
+    expect(resumed).toEqual(first);
+    expect(fixture.authorizeConnect).toHaveBeenCalledOnce();
+    expect(fixture.protocolConnect).toHaveBeenCalledOnce();
+    expect(fixture.discover).toHaveBeenCalledOnce();
+    expect(fixture.counts()).toEqual({ physicalRequests: 0, executeCalls: 0 });
+  });
+
+  it("rejects a failed MCP setup outcome write instead of reporting a saved result", async () => {
+    const fixture = harness("generation", false, false, undefined, false, "denied");
+    fixture.interruptTerminalWrite();
+    await expect(
+      fixture.runtime().invoke(mcpGeneration, { call: "draft", conversation, input }),
+    ).rejects.toThrow("interrupted before result persistence");
+    expect(fixture.authorizeConnect).toHaveBeenCalledOnce();
+    expect(fixture.protocolConnect).not.toHaveBeenCalled();
+    expect(fixture.counts()).toEqual({ physicalRequests: 0, executeCalls: 0 });
+  });
 
   it.each(["generation", "decision"] as const)(
     "reuses the completed %s physical attempt and then the saved named result",

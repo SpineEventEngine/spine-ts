@@ -28,6 +28,7 @@ import type {
   AiMcpToolResult,
   AiToolInvocation,
 } from "@spine-event-engine/ai/spi/adapter";
+import { AiMcpSetupFailure } from "@spine-event-engine/ai/spi/adapter";
 import {
   AgentHistoryEntrySchema,
   AiDiagnosticIdSchema,
@@ -43,6 +44,7 @@ import {
   type ToolResponse,
 } from "@spine-event-engine/proto/agent";
 import type { AgentMcpHost } from "./agent-mcp-host.js";
+import { AgentExecutionFault } from "./agent-execution-fault.js";
 
 interface SelectedServer {
   readonly definition: McpServerDefinition;
@@ -241,6 +243,7 @@ export class AgentMcpRuntime {
       } catch {
         /* The setup failure remains authoritative. */
       }
+      if (error instanceof AiMcpSetupFailure || error instanceof AgentExecutionFault) throw error;
       throw error instanceof SafeMcpError ? error : new SafeMcpError("MCP setup failed");
     }
   }
@@ -266,7 +269,7 @@ export class AgentMcpRuntime {
     for (const tool of found) {
       const key = `${id}\u0000${tool.name}`;
       if (!allowed.includes(tool.name) || definitions.has(key))
-        throw new SafeMcpError("MCP discovery changed the configured tool catalog");
+        throw new AiMcpSetupFailure("UNSUPPORTED_CAPABILITY");
       definitions.set(
         key,
         Object.freeze({
@@ -293,7 +296,7 @@ export class AgentMcpRuntime {
     return Object.freeze(
       this.allowedTools.map((ref) => {
         const definition = definitions.get(`${ref.server}\u0000${ref.tool}`);
-        if (!definition) throw new SafeMcpError("MCP discovery omitted a configured tool");
+        if (!definition) throw new AiMcpSetupFailure("UNSUPPORTED_CAPABILITY");
         return definition;
       }),
     );
@@ -310,7 +313,7 @@ export class AgentMcpRuntime {
       (control) => server.authorizeConnect(this.host.scope, control),
       timeout,
     );
-    if (!allowed) throw new SafeMcpError("MCP connection denied");
+    if (!allowed) throw new AiMcpSetupFailure("AUTHENTICATION_REQUIRED");
     const resolved = await this.resolve(server);
     const factory = this.host.backend.mcp;
     if (!factory) throw new SafeMcpError("Selected backend has no MCP protocol factory");

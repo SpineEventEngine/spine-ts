@@ -6298,11 +6298,12 @@ does not emit another `ReleaseGenerationRequested` or schedule another model
 operation. No framework return-type change or empty-result workaround is needed.
 
 Compare the submitted request with its retained receipt before checking current
-draft revision or conversation eligibility. The same input acknowledges the
-original acceptance without changing state, `DraftRevision`, pending generation,
+expected Entity Version or conversation eligibility. The same input acknowledges the
+original acceptance without changing state, pending generation,
 approval, receipts or the accepted input snapshot. Different input under the
 same ID remains `ReleaseGenerationConflict`. Framework Entity Version can advance
-when the acknowledgement is emitted; it is separate from `DraftRevision`.
+when the acknowledgement is emitted; pending input Version remains a historical
+reference, as clarified in D-0138.
 
 The Agent and draft Projection ignore the acknowledgement. The trusted service
 may use it to confirm acceptance, but must preserve the original source Event
@@ -6316,3 +6317,86 @@ return-shape rules, Repository runtime nonempty-outcome check, and existing
 Entity transaction version behavior. This is a bounded refinement of the
 [approved example plan](planning/release-notes-studio.md), not a new framework
 API, persistence mechanism, or recovery policy.
+
+## D-0137: Recorded MCP Setup Outcomes
+
+Status: Accepted; implementation in progress
+
+Date: 2026-10-09
+
+A policy denial or unsupported tool catalog discovered after an Agent operation
+starts must yield an ordinary recorded AI failure so the handler can produce
+its domain outcome. The previous setup path threw before saving that result,
+leaving only the operation-start record until existing execution failure rules
+applied. Do not treat every sanitized exception as an operational result.
+
+Introduce one internal `AiMcpSetupFailure` exported only through the existing
+adapter SPI, containing an existing failure code and fixed safe message. Explicit
+`authorizeConnect === false` uses `AUTHENTICATION_REQUIRED`; unsupported input
+or output schema, invalid bounded listing, and missing configured tools use
+`UNSUPPORTED_CAPABILITY`. These outcomes are not automatically retryable by the
+accepted signal. Keep request I/O outside catalog-validation classification:
+raw connection/listTools failures can originate in storage, budgets or execution
+fencing and remain exceptions. Preserve `AgentExecutionFault` through cleanup.
+
+Catch only this explicit category around execution preparation. Require an
+active execution and use the existing diagnostic, failed System Event and saved
+named-operation result paths before returning its existing operation ID. Failed
+persistence, identity drift, cancellation and replay faults continue to reject.
+Replaying the saved failed operation returns its retained outcome without another
+authorization callback, MCP discovery or provider request. No public application
+API, Proto, storage format, recovery scheme or time utility is added.
+
+The bounded architecture pass inspected current Agent dispatch/setup/result and
+repository failure paths, plus JVM `PmEndpoint` and `PmTransaction`: normal
+handler outcomes follow existing transaction/publication phases, while dispatch
+infrastructure errors remain failures. Tests must cover actual Agent policy
+denial, unsupported schemas, saved-result replay and infrastructure exceptions.
+
+## D-0138: Entity Versions in Release Notes Studio
+
+Status: Accepted; implementation in progress
+
+Date: 2026-10-09
+
+Human correction: use existing Entity versions, not an application revision
+mechanism, and name Commands, Events, Rejections and Queries precisely. Remove
+`DraftRevision` and the speculative Projection `applied_event_version` watermark.
+The local EventBus serializes admitted dispatch through the runtime queue and
+awaits Projection handoff; no demonstrated requirement justifies that watermark.
+Projection outcomes follow ordinary Aggregate subscriptions, including progress.
+
+Commands targeting an existing draft carry `expected_version: spine.core.Version`,
+copied from the actual Aggregate state/version pair returned by public Query or
+trusted Stand.readVersioned. Compare it with `this.version` in the handler.
+This is a historical reference to a framework-managed Version, not a counter.
+The Proto `CommandContext.targetVersion` exists, but the public Client/BlackBox
+post options expose only cancellation. The earlier proposal to use that native
+field through the current client was incorrect. Avoid both a private envelope
+bypass and a client API expansion for this example.
+
+Retain the accepted generation ID and its actual input Version as pending state;
+copy that Version through accepted-generation, Agent proposal and failure Events.
+Admit a result only against the pending pair. Material edits/input changes and
+approval clear pending work; a newer generation replaces it. Never compare the
+pending historical Version with the current Aggregate Version: acknowledgement
+Events advance Entity Version without changing accepted inputs. Exact repeated
+Commands keep their original expected Version in the input fingerprint and are
+acknowledged before current-Version checks. Changed Version under the same
+generation ID is a conflict. This corrects the earlier D-0136 revision wording.
+
+Approval retains exact bytes/digest and the actual reviewed Version. Export
+checks its current expected Version and matching approved content, not equality
+between historical approval Version and current Entity Version. Approval,
+acknowledgement and prior export preparation can advance Entity Version without
+changing the document. Editor content and version must come from one Aggregate
+snapshot, never from different Aggregate/Projection reads.
+
+Grounding: local JVM CommandContext target_version; Aggregate/AggregateTransaction/
+EventEmitter, PmTransaction and ProjectionTransaction; TS EntityTransaction,
+Repository dispatch, Stand.readVersioned, public Client/BlackBox and EventBus/
+Projection handoff. Current Aggregate EventContext carries the pre-dispatch
+producer Version in both inspected runtimes. Do not mistake it for the current
+committed Aggregate Version, synthesize a next Version, or use the Projection's
+independent Version to target the Aggregate. The existing Event Proto comment
+is not sufficient evidence for post-commit version semantics.

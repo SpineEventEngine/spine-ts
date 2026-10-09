@@ -124,107 +124,103 @@ recorded conversation. This example introduces no database transactions.
 
 ## Domain messages and rules
 
-Create domain Protos under the new example's Proto root. Follow production JVM
-Proto formatting and the repository's current example conventions. Use domain
-messages such as `ReleaseDraftId`, `ReleaseGenerationId`, `GitCommitId`,
-`RepositorySelectionId`, `ReleaseTitle`, `ReleaseInstruction`, and
-`ReleaseNotesDocument`. A Git object identifier is not assumed to have a fixed
-40-character length. Use existing `ConversationId`, `ModelRef`, and timestamp
-types when they represent the intended concept. A domain `DraftRevision`
-identifies reviewed inputs/content; do not confuse it with the framework's
-Entity `Version`.
+Use Commands, Events, Rejections and Queries to describe the signal flow.
+Generation is a domain operation with a `ReleaseGenerationId`, not a separate
+Request Entity. Create documented domain Protos under the example's Proto root,
+following production JVM conventions. Use existing `spine.core.Version`,
+`ConversationId`, `ModelRef` and timestamp types where applicable. The first
+Entity-state field is its typed ID; do not repeat its implicit required and
+validation options. Do not use proto3 `optional` or `readonly`. TS examples use
+four spaces and TSDoc has a blank line before tags.
 
-The first field of Entity state is its typed ID. Do not repeat the implicit
-required/validation options for that field. Do not use proto3 `optional` or
-`readonly`. Document messages, fields, handlers, and public TS APIs. Use four
-spaces in TS examples and a blank TSDoc line before the tag section.
+There is no `DraftRevision`, application version counter, or Projection ordering
+watermark. Use actual Aggregate versions. The public client currently does not
+expose `CommandContext.targetVersion`, so the relevant domain Commands carry
+`expected_version: spine.core.Version`. Read state and its committed Version
+together through the existing versioned Query response or trusted
+`BoundedContext.stand().readVersioned(...)`. The editor displays content from
+that same snapshot. Do not combine stale Projection content with a newly read
+Aggregate version. Handlers compare the supplied Version with `this.version`;
+the application never increments a version itself. See D-0138.
 
-| Message or Entity                                 | Required meaning                                                                                                                                                                              |
-| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ReleaseComparison`                               | Local repository selection, resolved base and target commit IDs, and the explicit comparison policy.                                                                                          |
-| `ReleaseDraft` state                              | ID, title, comparison, audience, current document, document version, approval, and latest requested generation.                                                                               |
-| `ReleaseNotesAgent` state                         | ID, conversation ID, and enough domain progress to associate proposals with their generation requests. Do not copy the full audit journal into state.                                         |
-| `ReleaseGenerationRequested`                      | Draft ID, generation ID, input/document version, resolved comparison, verified evidence catalog, audience, instruction, current text, conversation ID, and nonsecret account/model selection. |
-| `ReleaseNotesProposed`                            | Request identity, input version, structured entries with evidence, and AI operation identity. This is a proposal, not the approved document.                                                  |
-| `ReleaseGenerationFailed`                         | Request identity and safe failure details. Preserve the current document.                                                                                                                     |
-| `ReleaseNotesStaged` / `ReleaseProposalDiscarded` | Aggregate decision about whether the proposal applies to the current draft.                                                                                                                   |
-| `ReleaseNotesEdited`                              | A replacement document tied to the version the user edited.                                                                                                                                   |
-| `ReleaseNotesApproved`                            | The exact document version approved by the user.                                                                                                                                              |
+| Message or Entity                                         | Meaning                                                                                                                                                      |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ReleaseComparison`                                       | Selected repository, full base/target commit IDs and comparison policy.                                                                                      |
+| `ReleaseDraft` state                                      | Typed ID, title, comparison, audience, current document, retained approval, pending generation/input Version, conversation and accepted-generation receipts. |
+| `ReleaseNotesAgent` state                                 | Typed draft ID, conversation and generation progress; the audit journal remains separate.                                                                    |
+| `ReleaseGenerationRequested` Event                        | Complete accepted input snapshot, generation ID, actual input Version, catalog, conversation and nonsecret model/account selection.                          |
+| `ReleaseNotesProposed` / `ReleaseGenerationFailed` Events | Generation ID and copied input Version, result or safe failure, and AI operation ID.                                                                         |
+| `ReleaseNotesStaged` / `ReleaseProposalDiscarded` Events  | Aggregate decisions about whether the Agent outcome applies.                                                                                                 |
+| Edit, approval and export Commands                        | Existing `Version` identifying the Aggregate snapshot on which the person's action is based.                                                                 |
 
 The Aggregate accepts opening a draft, changing its comparison/audience,
-requesting generation, editing, and approving. It emits the complete input
-snapshot in `ReleaseGenerationRequested`. The Agent handles it with `@React`,
-using only the AI facade in Entity code. The Aggregate also reacts to the
-Agent's proposal/failure Events. The Projection subscribes to authoritative
-Aggregate outcomes, not raw Agent proposals.
+generating, editing, approving and preparing export. Except opening, these
+Commands carry the expected Aggregate Version and reject stale targets with
+specific domain Rejections. The Agent reacts to `ReleaseGenerationRequested`
+with `@React` and uses only the AI facade in Entity code. The Aggregate reacts
+to the Agent's proposal/failure Events. The Projection subscribes to the
+Aggregate's authoritative outcomes, including generation progress, and ignores
+acknowledgement, discarded-proposal and export Events with no displayed effect.
+The editor obtains its concurrency version from the Aggregate, not the Projection.
 
-Before staging a proposal, match both the latest generation ID and its input
-version. A manual edit, comparison/audience change, or approval invalidates a
-pending proposal. A late result remains in history but cannot overwrite the
-document or silently remove its approval. Editing an approved document clears
-approval; export requires approval of the current version. Reject stale edit
-and approval Commands with specific domain Rejections.
+When generation is accepted, retain its ID and the Aggregate's actual
+`this.version` as `pending_input_version`; put that Version in the accepted Event.
+The Agent copies it into its result Event. Admit a result only if both the
+generation ID and input Version match the pending pair. Material input changes,
+manual edits, approval and successful staging clear pending work; a new
+generation replaces it. A stale failure cannot change the current generation's
+status. Do not compare the historical input Version with the Aggregate's current
+Version: an acknowledgement can advance the latter without changing inputs.
+The Agent's outgoing EventContext version describes the Agent, not the draft.
 
-Edit structured sections and entries, preserving their evidence references;
-Markdown is the rendered output, not an unrelated freeform document. Approval
-checks the displayed revision/content digest and saves the exact rendered
-Markdown bytes. An export must use those bytes, not render a different version
-after approval. Changing the release range clears incompatible content and
-evidence.
-Keep a repository selection fixed for a draft; open another draft for another
-repository. Projection updates carry the resulting draft revision and ignore
-older deliveries. A stale failure cannot overwrite a newer request's status.
+Edit structured sections/entries while preserving their evidence. Markdown is
+the rendered output. Approval validates the expected Aggregate Version, displayed
+bytes and digest, then stores those exact bytes plus the reviewed historical
+Version. Material changes clear approval. Export checks its current expected
+Version and that the retained approved bytes/digest still match the document;
+it does not require the approval's historical Version to equal the current
+Aggregate Version. Approval itself, acknowledgement and earlier export preparation
+can advance Entity Version without changing approved content. A changed release
+range clears incompatible content/evidence. Keep a draft's selected repository
+fixed; open another draft for another repository.
 
-Allow one model operation at a time across this small app. Keep account/model
-selection fixed while an accepted generation is nonterminal. An invalidated
-proposal does not by itself mean its execution has finished. Record the
-selection and outstanding request in memory before dispatch, and reconcile them
-with actual execution status. Enforce admission in the trusted service atomically, not only through disabled UI controls. Each
-registered `ModelRef` must identify one registration and concrete provider model;
-changing the picker must not redefine an existing reference. A double click
-must not create another paid operation for the same generation ID. A deliberate
-new revision gets a new generation ID.
+Allow one nonterminal model operation across the app. Enforce admission atomically
+in the trusted service, not merely through disabled buttons. Keep account/model
+selection fixed until authoritative completion or rejection. Each registered
+`ModelRef` identifies one registration/account/endpoint/concrete model. Append
+late deployments with the existing registry `register()` without rebuilding the
+Bounded Context. Defaults, limits, existing references and MCP policies remain
+fixed. The repository's `resolveModel(kind, scope, sourceMessage, control)` checks
+the accepted generation Event against the immutable admission and actor/tenant/
+Agent scope, then binds its exact source Event ID. Subscription delivery is not
+a prerequisite for selection. Preserve that binding through uncertain submission,
+queueing and continuation. Existing saved selections skip the callback on
+continuation. See D-0135 for callback bounds and selection authorization.
 
-Use the existing registry's append-only `register()` after startup; defaults,
-limits, existing references and MCP policies remain fixed. Repository
-`resolveModel(kind, scope, sourceMessage, control)` receives a detached accepted
-payload and selects the concrete deployment before the Agent handler. Unpack
-`ReleaseGenerationRequested`, validate it against the immutable admission record
-and actor/tenant/Agent scope, and bind its source Event ID directly. Do not wait
-for a UI subscription to establish this binding: subscription delivery can
-follow Agent startup. Existing saved selections bypass this callback during
-continuation. `undefined` retains normal selection precedence for applications
-that do not need an explicit signal-specific choice. See D-0135 for callback
-bounds and enforcement of `authorizeSelection`.
+Assign the generation ID before posting its Command. Retain accepted generation
+receipts for the session. Check a receipt before current expected-Version or
+conversation checks. An identical Command payload, including its original
+expected Version, emits `ReleaseGenerationAlreadyRequested`, without another
+accepted-generation Event/model call or changes to pending inputs, approval,
+conversation or receipts. Command ID and envelope timestamps are excluded from
+the input fingerprint. Changed payload or expected Version under the same
+generation ID rejects with `ReleaseGenerationConflict`. An acknowledgement
+advances the framework Entity Version as usual; it must not invalidate pending
+work or replace its source Event binding. See D-0136 as corrected by D-0138.
 
-Assign a generation ID in the trusted service before submission and return it
-as the application request identity. The Aggregate remembers accepted generation
-IDs and their input identity for the session. Repeating an accepted generation
-does not emit another `ReleaseGenerationRequested`, even after a later request
-or expiration of the inbox deduplication window. It emits
-`ReleaseGenerationAlreadyRequested` with the retained input digest, without
-changing `DraftRevision` or the accepted snapshot. Check that receipt before
-current revision eligibility. The Agent and draft Projection ignore this
-acknowledgement; its Event ID never replaces the original model source binding.
-Reusing an ID with different input is rejected. See D-0136. Keep this domain safeguard independent of Command IDs: the
-current client's `post` creates a fresh Command ID per call.
+Reconcile uncertain Command submission using retained Aggregate receipts and
+exact execution status. A genuinely rejected Command releases its admission;
+a repeated Command acknowledging accepted work does not. Preserve the generation
+ID and original input on an explicit repeat; the public client's `post` supplies
+a new Command ID. If acceptance remains unknown, do not automatically repost.
+Renderer reconnect must not admit another operation while the backend still
+runs the first. Backend exit loses all these in-memory records; credentials
+cannot reconstruct or replay work.
 
-Reconcile the in-memory admission record with Command acceptance and execution:
-a genuinely rejected Command releases admission; a duplicate of accepted work
-does not release the active operation's admission. Check authoritative Aggregate
-acceptance state before retrying an uncertain submission. Preserve the generation
-ID, and preserve the Command ID only if the supported posting API permits it;
-do not invent a new posting API merely to replace the domain safeguard. If
-acceptance remains unknown, do not automatically retry. A renderer reconnect
-must not admit a second request while the backend still runs the first. Losing the backend
-process loses this record and all draft state; do not claim cross-restart
-deduplication or recovery, and never reconstruct/replay work from credentials.
-
-Use a conversation ID from the first generation and retain it for revisions of
-that draft. Build each request from the accepted input snapshot and bounded
-recorded history as needed. The stored conversation is complete even when only
-part of it is included in a model request. Record the exact materialized request
-so inspection shows what the model received.
+Use one conversation ID from the first generation for later generations of the
+same draft. Build model inputs from accepted Event data and bounded recorded
+history as needed. Store the complete conversation even when only part is sent
+to the model, and record exactly what each model call received.
 
 ## Sign in with ChatGPT
 
@@ -467,12 +463,12 @@ terminal, not when its spinner disappears. A forced exit loses domain state;
 a later launch must not repeat inference or export automatically.
 
 Export starts with a domain Command such as `PrepareReleaseNotesExport`, which
-validates approval and expected revision against the Aggregate and produces a
+validates approval and expected Entity Version against the Aggregate and produces a
 correlated Event containing the immutable approved Markdown. Checking approval
 only in a potentially stale Projection is insufficient. The trusted process
 then opens a save dialog, writes those exact bytes, and reports the exported
-revision only after the write succeeds. Later edits do not alter that prepared
-snapshot. A new export request requires approval of the new current revision.
+approved version only after the write succeeds. Later edits do not alter that prepared
+snapshot. A new export Command requires approval of the current content.
 A cancelled or failed save must not show success. A crash after writing may
 leave a file without a receipt; do not automatically repeat or overwrite exports
 on restart. Do not give the model an export/write MCP tool.

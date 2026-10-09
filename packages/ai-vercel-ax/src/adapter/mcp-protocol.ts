@@ -22,6 +22,7 @@ import type {
   AiMcpToolResult,
   AiMcpResultContent,
 } from "@spine-event-engine/ai/spi/adapter";
+import { AiMcpSetupFailure } from "@spine-event-engine/ai/spi/adapter";
 import { BoundedMcpHttpTransport } from "./mcp-http-transport.js";
 import { BoundedMcpStdioTransport } from "./mcp-stdio-transport.js";
 import { scheduleBoundedDeadline } from "./deadline.js";
@@ -154,10 +155,8 @@ class VercelMcpSession implements AiMcpProtocolSession {
     let cursor: string | undefined;
     for (let page = 0; page < maximumPages; page += 1) {
       const listing = await this.client.listTools({ params: cursor ? { cursor } : undefined });
-      if (listing.tools.length + seen.size > maximumTools)
-        throw new Error("MCP discovery exceeds tool limit");
-      collectTools(
-        listing.tools,
+      cursor = this.acceptPage(
+        listing,
         allowed,
         seen,
         ajv,
@@ -165,16 +164,46 @@ class VercelMcpSession implements AiMcpProtocolSession {
         pendingOutputValidators,
         result,
       );
-      cursor = listing.nextCursor;
       if (!cursor) {
         this.validators = pendingValidators;
         this.outputValidators = pendingOutputValidators;
         return Object.freeze(result);
       }
-      if (cursors.has(cursor)) throw new Error("MCP discovery repeats cursor");
+      if (cursors.has(cursor)) throw new AiMcpSetupFailure("UNSUPPORTED_CAPABILITY");
       cursors.add(cursor);
     }
-    throw new Error("MCP discovery exceeds page limit");
+    throw new AiMcpSetupFailure("UNSUPPORTED_CAPABILITY");
+  }
+
+  /**
+   * Validates only a received discovery page, preserving listTools transport errors.
+   *
+   * @param listing SDK-decoded protocol page.
+   * @param allowed Configured names.
+   * @param seen Names from prior pages.
+   * @param ajv Local schema compiler.
+   * @param inputs Staged argument validators.
+   * @param outputs Staged result validators.
+   * @param result Staged model-visible definitions.
+   * @returns Continuation cursor, if present.
+   */
+  private acceptPage(
+    listing: Awaited<ReturnType<MCPClient["listTools"]>>,
+    allowed: Set<string>,
+    seen: Set<string>,
+    ajv: Ajv,
+    inputs: Map<string, ValidateFunction>,
+    outputs: Map<string, ValidateFunction>,
+    result: AiMcpToolDefinition[],
+  ): string | undefined {
+    try {
+      if (listing.tools.length + seen.size > maximumTools)
+        throw new Error("MCP discovery exceeds tool limit");
+      collectTools(listing.tools, allowed, seen, ajv, inputs, outputs, result);
+      return listing.nextCursor;
+    } catch {
+      throw new AiMcpSetupFailure("UNSUPPORTED_CAPABILITY");
+    }
   }
 
   /**
@@ -304,11 +333,12 @@ const acceptTool = (
 } => {
   if (Buffer.byteLength(description) > maximumDescriptionBytes)
     throw new Error("MCP tool description exceeds limit");
-  const schemaJson = JSON.stringify(canonicalJsonValue(schema));
+  const normalized = withoutKnownDialect(schema);
+  const schemaJson = JSON.stringify(canonicalJsonValue(normalized));
   if (!schemaJson || Buffer.byteLength(schemaJson) > maximumSchemaBytes)
     throw new Error("MCP tool schema exceeds limit");
-  assertSchemaSubset(schema, 0);
-  const validator = ajv.compile(schema as Record<string, unknown>);
+  assertSchemaSubset(normalized, 0);
+  const validator = ajv.compile(normalized as Record<string, unknown>);
   const output = compileOutputSchema(outputSchema, ajv);
   return {
     definition: Object.freeze({
@@ -334,14 +364,32 @@ const compileOutputSchema = (
 ): { json: string; validator: ValidateFunction } | undefined => {
   if (schema === undefined) return undefined;
   try {
-    const json = JSON.stringify(canonicalJsonValue(schema));
+    const normalized = withoutKnownDialect(schema);
+    const json = JSON.stringify(canonicalJsonValue(normalized));
     if (!json || Buffer.byteLength(json) > maximumSchemaBytes) throw new Error("schema size");
-    assertSchemaSubset(schema, 0);
-    if ((schema as Record<string, unknown>).type !== "object") throw new Error("schema root");
-    return { json, validator: ajv.compile(schema as Record<string, unknown>) };
+    assertSchemaSubset(normalized, 0);
+    if ((normalized as Record<string, unknown>).type !== "object") throw new Error("schema root");
+    return { json, validator: ajv.compile(normalized as Record<string, unknown>) };
   } catch {
     throw new Error("MCP output schema unsupported");
   }
+};
+
+/**
+ * Drops only the SDK v2 root dialect marker for the shared supported subset.
+ *
+ * @param schema Advertised tool schema.
+ * @returns Detached schema without its exact known dialect declaration.
+ */
+const withoutKnownDialect = (schema: unknown): unknown => {
+  if (typeof schema !== "object" || schema === null || Array.isArray(schema)) return schema;
+  const source = schema as Record<string, unknown>;
+  if (!("$schema" in source)) return source;
+  if (source.$schema !== "https://json-schema.org/draft/2020-12/schema")
+    throw new Error("MCP schema dialect unsupported");
+  const detached = { ...source };
+  delete detached.$schema;
+  return detached;
 };
 
 /**

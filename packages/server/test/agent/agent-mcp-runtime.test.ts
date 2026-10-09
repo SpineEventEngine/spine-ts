@@ -21,6 +21,7 @@ import type {
   AiMcpProtocolSession,
   AiToolInvocation,
 } from "@spine-event-engine/ai/spi/adapter";
+import { AiMcpSetupFailure } from "@spine-event-engine/ai/spi/adapter";
 import {
   AiOutcome,
   AiToolCallIdSchema,
@@ -33,6 +34,7 @@ import {
 } from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
 import { describe, expect, it, vi } from "vitest";
 import { AgentMcpRuntime } from "../../src/agent/agent-mcp-runtime.js";
+import { AgentExecutionFault } from "../../src/agent/agent-execution-fault.js";
 import type { AgentMcpHost } from "../../src/agent/agent-mcp-host.js";
 
 const limits = {
@@ -293,7 +295,7 @@ describe("Agent MCP runtime", () => {
       { name: "unexpected", description: "Changed", inputSchemaJson: schemaJson },
     ]);
     const runtime = new AgentMcpRuntime(test.host, [{ server: "knowledge", tool: "lookup" }]);
-    await expect(runtime.prepare()).rejects.toThrow("catalog");
+    await expect(runtime.prepare()).rejects.toMatchObject({ code: "UNSUPPORTED_CAPABILITY" });
     expect(test.protocol.close).toHaveBeenCalledOnce();
     expect(test.host.journalToolIntent).not.toHaveBeenCalled();
   });
@@ -496,7 +498,10 @@ describe("Agent MCP runtime", () => {
     const test = fixture();
     test.authorizeConnect.mockReturnValueOnce(false);
     const runtime = new AgentMcpRuntime(test.host, [{ server: "knowledge", tool: "lookup" }]);
-    await expect(runtime.prepare()).rejects.toThrow("connection denied");
+    await expect(runtime.prepare()).rejects.toMatchObject({
+      code: "AUTHENTICATION_REQUIRED",
+      message: "MCP connection authorization denied.",
+    } satisfies Partial<AiMcpSetupFailure>);
     expect(test.factory.connect).not.toHaveBeenCalled();
     expect(test.host.reserveMessage).not.toHaveBeenCalled();
   });
@@ -507,6 +512,26 @@ describe("Agent MCP runtime", () => {
     const runtime = new AgentMcpRuntime(test.host, [{ server: "knowledge", tool: "lookup" }]);
     await expect(runtime.prepare()).rejects.toThrow("MCP setup failed");
     await expect(runtime.prepare()).rejects.not.toThrow("secret-token-value");
+    await expect(runtime.prepare()).rejects.not.toBeInstanceOf(AiMcpSetupFailure);
+    expect(test.host.journalToolIntent).not.toHaveBeenCalled();
+  });
+
+  it("preserves a durable execution fault through MCP cleanup", async () => {
+    const test = fixture();
+    const fault = new AgentExecutionFault("TOOL_BUDGET_EXCEEDED", "Tool setup budget exceeded.");
+    vi.mocked(test.protocol.discover).mockRejectedValueOnce(fault);
+    const runtime = new AgentMcpRuntime(test.host, [{ server: "knowledge", tool: "lookup" }]);
+    await expect(runtime.prepare()).rejects.toBe(fault);
+    expect(test.protocol.close).toHaveBeenCalledOnce();
+  });
+
+  it("preserves a bounded schema rejection through protocol cleanup", async () => {
+    const test = fixture();
+    const failure = new AiMcpSetupFailure("UNSUPPORTED_CAPABILITY");
+    vi.mocked(test.protocol.discover).mockRejectedValueOnce(failure);
+    const runtime = new AgentMcpRuntime(test.host, [{ server: "knowledge", tool: "lookup" }]);
+    await expect(runtime.prepare()).rejects.toBe(failure);
+    expect(test.protocol.close).toHaveBeenCalledOnce();
     expect(test.host.journalToolIntent).not.toHaveBeenCalled();
   });
 
@@ -528,13 +553,13 @@ describe("Agent MCP runtime", () => {
     const test = fixture();
     vi.mocked(test.protocol.discover).mockResolvedValueOnce([]);
     const missing = new AgentMcpRuntime(test.host, [{ server: "knowledge", tool: "lookup" }]);
-    await expect(missing.prepare()).rejects.toThrow("omitted");
+    await expect(missing.prepare()).rejects.toMatchObject({ code: "UNSUPPORTED_CAPABILITY" });
     vi.mocked(test.protocol.discover).mockResolvedValueOnce([
       { name: "lookup", description: "First", inputSchemaJson: schemaJson },
       { name: "lookup", description: "Second", inputSchemaJson: schemaJson },
     ]);
     const duplicate = new AgentMcpRuntime(test.host, [{ server: "knowledge", tool: "lookup" }]);
-    await expect(duplicate.prepare()).rejects.toThrow("catalog");
+    await expect(duplicate.prepare()).rejects.toMatchObject({ code: "UNSUPPORTED_CAPABILITY" });
     expect(test.host.journalToolIntent).not.toHaveBeenCalled();
   });
 

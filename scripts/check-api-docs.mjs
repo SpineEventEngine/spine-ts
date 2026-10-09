@@ -1083,6 +1083,7 @@ const expectedAiAdapterExports = [
   "AiMcpProtocolSession",
   "AiMcpResolvedConnection",
   "AiMcpResultContent",
+  "AiMcpSetupFailure",
   "AiMcpToolDefinition",
   "AiMcpToolResult",
   "AiToolInvocation",

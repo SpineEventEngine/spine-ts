@@ -4405,3 +4405,235 @@ identity; output parser removes only final line terminator, not path whitespace.
 README now states subdirectory resolution and bare-repository limitation. Parent
 formats updated planning records, diff clean; checkpoint excludes unfinished
 Domain source/config. Whole-domain development continues with D-0136.
+
+D-0136 domain GREEN2/2: open/projection and generation snapshot/idempotent
+acknowledgement via BlackBox. Snapshot includes domain revision, comparison and
+catalog, audience/instruction/current document, conversation, nonsecret selection,
+title and digest. Repeating older accepted generation after newer request emits
+only acknowledgement. Required-option constraints were corrected for legitimate
+initial empty document/catalog. Same writer proceeds conflict/stale-result,
+Agent/model, approval/export and authoritative Projection tests; not full slice
+acceptance yet.
+
+Domain focused GREEN4tests: BlackBox open/projection, complete requested snapshot
+with D-0136 replay acknowledgement, stale proposal discarded after manual edit
+without changing edited document/revision, and pure exact catalog membership
+validation. Controlled late-Event fixture uses the proper domain Event and
+producer/version envelope, not a shape-compatible substitute. Input changes,
+approval/export, actual Agent/provider/MCP and remaining cases continue.
+
+Git/MCP CI aeaba5b13/run37955502923 completed:376 files/6061 tests pass,
+1skipped; only global branches89.55% below90% fails. Attempt to cancel it as
+obsolete raced completion and made no change. Raw /tmp/spine-release-notes-ci-aeaba.log.
+Current26a4c511a/run37957659337 remains active. Child-process worker coverage is
+an instrumentation limit, not license to exclude source or lower thresholds;
+coordinated in-process behavior tests and final global qualification remain open.
+
+Domain progress: focused BlackBox5/5 covers approval/export exact bytes and safe
+failure projection; actual Agent fixture reaches recorded operation start and
+Git binding but no provider request yet. Same explicit Sol/medium writer traces
+MCP/fixture boundary; not a human blocker. No broad runtime change authorized by
+this symptom alone. Latest pushed26a CI remains active. Work continues.
+
+Ahead of trusted service integration, bounded read-only public-client API scan,
+expected explicit gpt-6-luna/medium, fork none/no memory/no children. Inspect
+current source for subscription activation and correlation, post acknowledgement
+vs domain rejection, authoritative Aggregate reads, Projection query, and teardown
+through public in-process transport. Estimate0.15–0.25h within already approved
+milestone; no implementation or architecture change, no repeat lifecycle/AI scan.
+Desktop supports explicit dispatch; runtime introspection unavailable. Findings
+feed the existing implementation context, no independent writer.
+
+Public-client scan accepted from explicit Luna/medium dispatched function;
+read-only/no memory/no children, runtime introspection unavailable. Public path
+SpineServices({contexts}).register + createRouterTransport + Client.usingTransport
+supports app bridge. post(schema,message) creates fresh CommandID, no caller-ID
+option. Activate event subscription and drain iterator before posting; Event
+subscription has no authoritative recovery query. Read current Aggregate receipt
+via actual generated Query/request.send and unpack state; no readAggregate helper.
+Entity subscriptions may provide authoritativeQuery. Cancel subscriptions and
+close client. Ack cannot establish downstream Agent completion. Source refs
+client-web/client564-572/636-653, server/spine-services330-367, todo query-client27-56
+and black-box1445-1460. Results sent to existing writer for next integration slice.
+
+Latest pushed26a CI run37957659337 completed:376files/6062tests pass,1skipped,
+only global branch89.54% below90% fails. Raw log /tmp/spine-release-notes-ci-26a.log.
+No gate change; meaningful integration and failure tests must close coverage.
+
+Real Agent/Git test exposed adapter compatibility gap: SDKv2 tools/list includes
+$schema=https://json-schema.org/draft/2020-12/schema; mcp-protocol assertSchemaSubset
+rejects it. Prior interop tested raw listTools but not session.discover. Same
+Sol/medium writer gets bounded adapter correction0.3–0.6h incl focused checks
+and affected review. Preserve limited schema vocabulary/size/depth and reject
+unsupported dialects/references. Evaluate pinned Ajv's actual2020 compiler versus
+unambiguous shared-subset handling; never silently reinterpret arbitrary dialect.
+Add actual discover+argument validation regression and Agent/MCP success. Also
+establish setup failure reaches recorded failure/terminal outcome; investigate
+separately if lifecycle does not finish. No public API/newdependency intended.
+
+Follow-up client scan confirms actual ID-filtered Aggregate queries do not need
+QUERY visibility: spine-services237-253 registers every route, documented142-151
+and validation1052-1088 permit exact IDs; cross-Bounded-Context visibility is a
+different concern. No visibility change needed. Missing receipt remains unknown.
+Same explicit Luna/medium result accepted and sent to writer.
+
+Actual Agent/MCP integration GREEN1/1 through real subscription adapter, local
+Git worker, tool continuation and Aggregate staging. Exact known2020-12 root
+schema marker is normalized only for already restricted shared vocabulary;
+unknown dialect/features remain unsupported. Writer removes diagnostics and
+adds input/output dialect negative coverage/documentation before review. Fixture
+also needed1MB totaloutput budget to reserve configured512KB tool reply, rather
+than inconsistent256KB. Do not copy undersized fixture policy into desktop.
+Setup-failure terminal observation remains to be checked, not inferred from
+success. Domain edge tests and cheap preflight continue; no fullrelease yet.
+
+Domain/model/actual Agent focused7/7 and cleanup pass after diagnostics removed.
+Remaining failure test demonstrated runtime issue: second accepted generation
+with Git binding callback returning undefined records AgentAiOperationStarted,
+but no AiResult/domain failure within30s. #dispatch awaits #execution before
+try; #connectExecution calls mcp.prepare which can throw. Existing #saveOutcome
+not reached. Treat as high-risk existing operation completion semantics, not an
+app workaround or human blocker. Estimate0.4–0.8h fix+tests+affected review.
+Dispatch bounded requirements_splitter explicit gpt-6-astra/high fork none,
+no memory/no children/no edits: source-grounded smallest failure boundary for
+known MCP setup/denial vs identity/fencing/replay faults, existing failure codes,
+recorded operation identity, audit/recovery consistency, tests. Inspect relevant
+JVM lifecycle notes/source before server contract recommendation. Same Sol/medium
+writer continues independent domain tests/docs, awaits this bounded decision
+before server edit. No broader architecture wave or new public API intended.
+
+D-0137 accepted from explicit requirements_splitter Astra/high, fork none,
+read-only/no children; runtime introspection unavailable. Known MCP setup errors
+need internal typed AiMcpSetupFailure through adapter SPI only; authfalse ->
+AUTHENTICATION_REQUIRED, unsupported bounded schemas/catalog ->
+UNSUPPORTED_CAPABILITY. Keep listTools I/O outside schema classificationcatch.
+Preserve AgentExecutionFault and generic setup exceptions; don't classify
+SafeMcpError as whole. Catch known category only around preparation, requireopen,
+recordFailure/saveOutcome using existing operationID and saved replay path.
+Persistence/identity/cancellation/fencing remain exceptions. JVM PmEndpoint/
+PmTransaction inspected by splitter. Same writer implements tests for denial,
+input/output schema, saved replay and infrastructure negativepaths. Full review
+wave will include these affected runtime/adapter semantics after cheap checks.
+
+D-0137 implementation checkpoints: actual Agent fixture now covers invalid
+evidence correction, real Git tool continuation, accepted staged notes, then
+policy denial yielding ReleaseGenerationFailed without additional provider I/O.
+Fresh-runtime saved-failure replay test returns same operationID/diagnostic with
+one original authorization and no protocol/provider repetition. Runtime test
+preserves AgentExecutionFault; adapter fixture classifies bounded invalid
+input/output/listing only and leaves SDK parse failure raw. Combined focused run
+had one stale expected-error assertion, corrected and isolatedGREEN; wholefocused
+rerun/format/type/docs/changedcoverage still required before freeze. Writer
+estimates20–40min to finish, not accepted as full preflight yet. Domain5 and prior
+model/adapter combined44 passed; source/docs cheapgates passed before this fix.
+
+D-0137 focused118/118 pass incl saved-result replay and failed persistence;
+ai/adapter/server/example typechecks and cleanup pass. API docs SPI inventory
+updated for exact new internal setup failure export, recheck pending. Narrow
+coverage (whole repo instrumented, six selected files) fails global threshold as
+expected, not a behavior failure: adapter109/119, MCP runtime96/102, AI runtime
+415/589; new domain69/88 and model21/30 require missing behavioral scenarios.
+Additional0.2–0.4h tests cover stale proposals after newer request/approval,
+stale failures/status, conflicting/stale edits/exports and malformed claims.
+No gate weakening or mirror-only tests. Parent identified same DraftRevision can
+span several generations; writer confirms Projection lacks Requested tracking
+and status checks only revision. Add generation identity checks and establish
+actual delivery-order handling, not a counter or unproven ordering assumption.
+Whole domain freeze remains pending this concrete correctness correction.
+
+Projection correction uses the existing Aggregate EventContext.version, retained
+as typed Version in the private view Proto. It is not a repository-managed
+counter/history position and does not change D0136 DraftRevision semantics.
+Existing Todo @Subscribe(event,EventContext) establishes supported API. Apply
+source-version admission across authoritative outcomes, including Opened/Edited/
+Inputs/Staged/Approved, not generation only; opaque IDs alone cannot order two
+same-revision requests. Verify one relevant Event per Aggregate commit before
+strict greater comparison; ignored acknowledgement creates permitted gaps.
+This implements the approved out-of-order Projection requirement using existing
+metadata; no new framework contract/ordering guarantee or architecture concept.
+Tests deliver older Requested/status at sameDraftRevision afternewer outcome.
+
+Human correction (2026-10-09): 'There is no such mechanism in Spine JVM. We do
+not rely on revisions at all. We rely on versions. Also, there are no requests.
+There are commands, events, rejections, queries, etc.' Binding: remove invented
+DraftRevision counter from private domain design, use existing Entity Version
+semantics. Describe signal flow precisely, not generic request concepts. Also
+reassess speculative Projection watermark: source confirmed normal singleprocess
+EventBus serialized through runtime#tail, no observed ordinarydelivery race.
+Do not retain extra ordering machinery without source-grounded necessity.
+Domain/Proto/Projection edits paused, preserved uncommitted; last terminalrepeat
+test refactor unverified. Same writer completes independent D0137 only.
+
+Bounded material domain-contract correction estimate0.5–1.0h incl JVM/currentTS
+inspection, implementation/examples and focused checks. Dispatch fresh existing
+requirements_splitter explicit Astra/high/fork none/no memory/no children,
+read-only: current Entity Version/command targetVersion/EventContext, actual
+JVM Async ProcessManager/Projection patterns, minimal staleAgentresult/edit/
+approval/export/idempotentack semantics with no DraftRevision or speculative
+counter. Source-version watermark necessity must be established, not assumed.
+Revise approved plan/decisions once resolved; human correction supersedes older
+DraftRevision design. No human clarification needed for routine choices.
+
+Independent D0137 frozen: adapter/runtime111/111 across3files; ai/adapter/server
+tsc + targetedESLint +diffcheck clean; API inventory check passed exact SPIexport.
+Full domain remains unfrozen. D0137 review may proceed independently while domain
+architecture is corrected; no full release or wholeplan readiness claim.
+
+D0137-only independent review wave estimate0.3–0.6h incl fixes; source frozen
+relative26a4c511a, exclude unfinished example/domain/generation/config. Concerns:
+performance_reliability_reviewer Sol/medium for setup outcome/journal/replay/
+exceptions/cleanup; typescript_api_docs_reviewer Sol/medium for narrow SPI error,
+schema normalization/contracts/root export isolation; style_maintainability_reviewer
+Sol/medium for bounded implementation and tests; documentation_reviewer Luna/medium
+for adapter README/API inventory claims. Each fresh fork none/no memory/no edits/
+no children; explicit model and reasoning dispatch required. Desktop supports all.
+Runtime introspection unavailable, immutable configured profiles accepted. Existing
+requesting-code-review skill retained; use existing project concerns, not generic
+new role. Security deferred to coordinated finalrelease gate; domain correctness
+excluded because human version correction stillunderanalysis. Collect allconcerns
+before returning one batch to same implementationcontext, reopen affected only.
+
+D0137 firsttwo independent reviews returned under explicit Sol/medium fresh
+profiles (runtime introspectionunavailable). Reliability finds no confirmed
+productiondefect; requests integrated unsupported-schema savedresult/replay test,
+not authorizationdenial alone. API reviewer finds discover() SPI TSDoc missing
+precise newtypedfailure versus infrastructureexception contract. Accepted pending
+complete wave; styleSol/medium +docsLuna/medium nowdispatched fresh no memory,
+read-only/nochildren. No fixbatch sent until remainingconcernscollected. Domain
+version correction remains with separate explicitAstra/high architecturepass.
+
+D0138 accepted following explicit fresh Astra/high source investigation, no memory/
+edits/children; runtime metadataunavailable. Remove DraftRevision and Projection
+watermark. Existing typed Version expected_version belongs in domainCommands
+because Client.post/BlackBox only accept signal cancellation, not native
+CommandContext.targetVersion. Splitter's initial native-posting recommendation
+was corrected on followup before implementation; user told explicitly. No client
+API expansion/privateenvelope. Atomic Aggregate state+Version read supplies UI
+concurrency value. Pending inputVersion copiedfromthis.version matches result
+payload alongsidegenerationID; materialchangesinvalidate, ack preserves. Current
+EntityVersion mustnot be compared tohistoricalpending/approvalversions. Exact
+repeatfingerprintincludes originalexpectedVersion. Plan/decisionbodyupdated.
+JVM and TS EventContext producerVersion is predispatch; do not synthesizecurrent
+committedVersion fromit. Samewriter resumes domain onlyafter MCP reviewfixbatch.
+
+D0137 allfourreviewconcerns complete, explicit profiles verified: reliability+
+style duplicate missing integrated unsupported-schema savedreplay test; API
+missing discover() throwcontract docs; docs README incorrectly generalized setup
+exceptions to toolcall faults. Threeaccepted findings, no confirmedproduction
+runtime defect. Returnonebatch sameSol/medium implementer; fixes0.15–0.3h within
+reviewestimate. Security remains coordinatedfinalgate. Re-review reliability
+for addedintegratedtest and API/docs forcontractwording only; no broadened wave.
+
+D0137 fixes120/120 across4focusedfiles pass, ai/adapter/server/blackbox tsc,
+targetedESLint/cleanup/TSDoc/copyright/diffclean. ActualHTTPMCP input+outputschema
+rejections now yield failedSystemEvent/diagnostic/operationID beforeinference;
+separatefresh-runtime replay proves no repeatedauthorization/discovery/connection/
+provider. Reliabilityclosureclean; styleduplicatefindingclosedbythesametest.
+APIclosure asked explicit UNSUPPORTED_CAPABILITY code in discoverTSDoc; exact
+wordingfixedandlint:tsdoc passed. Parent verifies deterministictextcorrection,
+no runtimechange requiringreviewreopen. README now explicitly limits rawfault
+exceptionclaim tosetup, so docs/API findingclosed. All4concernsaccepted under
+recordedexplicitprofiles; finalsecuritydeferredcoordinatedrelease. Commit only
+D0137 runtime/adapter/tests/APIinventory pluscanonicalrecords; exclude unfinished
+D0138 domain/source/config/README. No fullreleaseclaim. D0138 generationpassed,
+remainingdomainimplementationtestscontinue samewriter.

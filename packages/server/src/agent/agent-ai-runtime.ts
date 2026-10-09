@@ -49,6 +49,7 @@ import type {
   AiBackendOutcome,
   AiExecutionControl,
 } from "@spine-event-engine/ai/spi/adapter";
+import { AiMcpSetupFailure } from "@spine-event-engine/ai/spi/adapter";
 import {
   AiAttemptIdSchema,
   AiCapabilityNameSchema,
@@ -132,6 +133,15 @@ interface InvokeRequest<I extends MessageSchema> {
   readonly call: string;
   readonly conversation: ConversationId;
   readonly input: MessageShape<I>;
+}
+
+/**
+ * Backend and optional prepared MCP session for one named operation.
+ */
+interface PreparedAiExecution {
+  readonly backend: AiBackendDefinition;
+  readonly execution: AiBackendExecution;
+  readonly mcp: AgentMcpRuntime | undefined;
 }
 
 /**
@@ -439,7 +449,10 @@ export class AgentAiRuntime implements AgentAi {
     request: InvokeRequest<I>,
     operation: AgentNamedOperation,
   ): Promise<AiResult<MessageShape<O>>> {
-    const { backend, execution, mcp } = await this.#execution(model, request, operation);
+    const prepared = await this.#prepareExecution(model, request, operation);
+    if (prepared instanceof AiMcpSetupFailure)
+      return this.#setupFailure(model, operation, prepared);
+    const { backend, execution, mcp } = prepared;
     try {
       this.#requireOpen();
       const outcome = await AgentModelSelection.awaitHook(
@@ -460,6 +473,41 @@ export class AgentAiRuntime implements AgentAi {
     } finally {
       await this.#closeMcp(mcp, operation);
     }
+  }
+
+  /**
+   * Classifies only a typed MCP setup failure from execution preparation.
+   *
+   * @typeParam I Generated input descriptor.
+   * @typeParam O Generated admitted-output descriptor.
+   */
+  async #prepareExecution<I extends MessageSchema, O extends MessageSchema>(
+    model: AiModel<I, O>,
+    request: InvokeRequest<I>,
+    operation: AgentNamedOperation,
+  ): Promise<PreparedAiExecution | AiMcpSetupFailure> {
+    try {
+      return await this.#execution(model, request, operation);
+    } catch (error) {
+      if (error instanceof AiMcpSetupFailure) return error;
+      throw error;
+    }
+  }
+
+  /**
+   * Saves only a typed MCP preparation denial as the named operation result.
+   *
+   * @typeParam O Generated admitted-output descriptor.
+   */
+  async #setupFailure<O extends MessageSchema>(
+    model: AiModel<MessageSchema, O>,
+    operation: AgentNamedOperation,
+    error: AiMcpSetupFailure,
+  ): Promise<AiResult<MessageShape<O>>> {
+    this.#requireOpen();
+    const failure = await this.#recordFailure(operation, error.code, false);
+    await this.#saveOutcome(model, operation, { ok: false, failure });
+    return { ok: false, failure, operationId: this.#operationId(operation) };
   }
 
   /**
@@ -496,11 +544,7 @@ export class AgentAiRuntime implements AgentAi {
     model: AiModel<I, O>,
     request: InvokeRequest<I>,
     operation: AgentNamedOperation,
-  ): Promise<{
-    backend: AiBackendDefinition;
-    execution: AiBackendExecution;
-    mcp: AgentMcpRuntime | undefined;
-  }> {
+  ): Promise<PreparedAiExecution> {
     const { backend, connection } = this.#selectedBackend(model);
     const identity = await this.#connectIdentity(backend, connection, operation);
     const tools = model.definition.kind === "generation" ? (model.definition.tools ?? []) : [];

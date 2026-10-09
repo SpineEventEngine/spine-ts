@@ -21,6 +21,8 @@ import { VercelAx } from "@spine-event-engine/ai-vercel-ax";
 import { AnyMessages } from "@spine-event-engine/core";
 import {
   AiOutcome,
+  AiFailureCode,
+  AgentAiOperationFailedSchema,
   GenerationRequestSchema,
   GenerationResponseSchema,
   ToolRequestSchema,
@@ -320,6 +322,7 @@ const startEndpoints = async (
   invalidToolOutput = false,
   thinking: false | "signed" | "redacted" = false,
   chatgptPlan = false,
+  unsupportedSchema?: "input" | "output",
 ) => {
   const methods: string[] = [];
   const providerBodies: unknown[] = [];
@@ -371,22 +374,27 @@ const startEndpoints = async (
                 {
                   name: "lookup",
                   description: "Look up a ticket",
-                  inputSchema: {
-                    type: "object",
-                    properties: { ticket: { type: "string" } },
-                    required: ["ticket"],
-                    additionalProperties: false,
-                  },
-                  ...(invalidToolOutput
-                    ? {
-                        outputSchema: {
+                  inputSchema:
+                    unsupportedSchema === "input"
+                      ? { $ref: "https://unsupported.example/schema" }
+                      : {
                           type: "object",
-                          properties: { ticketNumber: { type: "string" } },
-                          required: ["ticketNumber"],
+                          properties: { ticket: { type: "string" } },
+                          required: ["ticket"],
                           additionalProperties: false,
                         },
-                      }
-                    : {}),
+                  ...(unsupportedSchema === "output"
+                    ? { outputSchema: { type: "string" } }
+                    : invalidToolOutput
+                      ? {
+                          outputSchema: {
+                            type: "object",
+                            properties: { ticketNumber: { type: "string" } },
+                            required: ["ticketNumber"],
+                            additionalProperties: false,
+                          },
+                        }
+                      : {}),
                 },
               ],
             },
@@ -539,6 +547,59 @@ const supportBox = async (
 };
 
 describe("Agent with real Vercel Responses and MCP transports", () => {
+  it.each(["input", "output"] as const)(
+    "records unsupported %s tool schema before provider inference",
+    async (schema) => {
+      const endpoint = await startEndpoints(false, false, true, schema);
+      const { box, repository } = await supportBox(endpoint.base, "chatgpt-plan");
+      const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-47" });
+      try {
+        expect(
+          (
+            await box
+              .asGuest()
+              .post(
+                DraftRecoverySupportReplySchema,
+                create(DraftRecoverySupportReplySchema, { agent: id, question: "Status?" }),
+              )
+          ).kind,
+        ).toBe("ok");
+        const failures = await box.eventually(
+          async () => {
+            const page = await box.readAgentHistory(repository, id, { pageSize: 30 });
+            return page.items.flatMap((entry) => {
+              if (entry.item.case !== "systemEvent" || !entry.item.value.message) return [];
+              const event = AnyMessages.unpack(
+                entry.item.value.message,
+                AgentAiOperationFailedSchema,
+              );
+              return event ? [event] : [];
+            });
+          },
+          (events) => events.length === 1,
+        );
+        expect(failures[0]).toMatchObject({
+          failure: AiFailureCode.UNSUPPORTED_CAPABILITY,
+          outcome: AiOutcome.FAILED,
+        });
+        expect(failures[0]?.operation?.operation?.value).toBeTruthy();
+        expect(failures[0]?.diagnosticId?.value).toBeTruthy();
+        expect(endpoint.methods).toContain("tools/list");
+        expect(endpoint.methods).not.toContain("tools/call");
+        expect(endpoint.providerBodies).toEqual([]);
+        expect(box.assertEvents()).toEqual([]);
+      } finally {
+        await box.close();
+        await new Promise<void>((resolve) =>
+          endpoint.server.close(() => {
+            resolve();
+          }),
+        );
+      }
+    },
+    20_000,
+  );
+
   it("uses the ChatGPT plan profile through Agent with recorded tool and correction attempts", async () => {
     const endpoint = await startEndpoints(false, false, true);
     const { box, repository } = await supportBox(endpoint.base, "chatgpt-plan");

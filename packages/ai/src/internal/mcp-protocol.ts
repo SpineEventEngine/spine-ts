@@ -15,6 +15,25 @@
 import type { AiScope, McpServerDefinition } from "./contracts.js";
 
 /**
+ * Safe, nonretryable failure while preparing a selected MCP catalog.
+ */
+export class AiMcpSetupFailure extends Error {
+  /**
+   * Creates one fixed category without retaining provider or credential text.
+   *
+   * @param code Supported safe setup failure category.
+   */
+  constructor(readonly code: "AUTHENTICATION_REQUIRED" | "UNSUPPORTED_CAPABILITY") {
+    super(
+      code === "AUTHENTICATION_REQUIRED"
+        ? "MCP connection authorization denied."
+        : "MCP tool capability is unsupported.",
+    );
+    this.name = "AiMcpSetupFailure";
+  }
+}
+
+/**
  * Durable admission for one physical MCP protocol send.
  */
 export interface AiMcpMessageTicket {
@@ -262,7 +281,10 @@ export interface AiMcpProtocolSession {
   readonly identity: AiMcpConnectionIdentity;
 
   /**
-   * Lists and validates only configured tool names.
+   * Lists and validates only configured tool names. A bounded schema or catalog
+   * rejection uses AiMcpSetupFailure("UNSUPPORTED_CAPABILITY"). Raw transport,
+   * cancellation, storage, and fencing failures reject without that classification.
+   *
    * @param allowedNames Registered names allowed for this invocation.
    * @returns Bounded accepted definitions.
    */

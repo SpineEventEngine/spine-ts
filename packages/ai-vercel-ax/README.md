@@ -99,6 +99,18 @@ Only a `response.completed` terminal event can admit output. Corrections and
 tool continuations use new recorded attempt tickets. This profile does not
 perform sign-in or retry a failed inference outside the Agent runtime.
 
+For local MCP tools, discovery accepts the pinned server SDK's root
+`https://json-schema.org/draft/2020-12/schema` declaration and records the
+equivalent bounded schema without that dialect marker. Discovery still rejects
+unknown dialects, remote references, unsupported keywords, excessive nesting,
+and schemas over the configured byte limit before a model request.
+Denied MCP connection authorization becomes a saved, nonretryable
+`AUTHENTICATION_REQUIRED` Agent result. Unsupported bounded tool discovery
+becomes `UNSUPPORTED_CAPABILITY` during setup. Transport, cancellation, journal,
+and storage faults in that setup still reject the execution rather than becoming
+model results. Later tool-call failures have their separate bounded tool
+outcomes.
+
 ## Anthropic Messages registration
 
 Install `@ai-sdk/anthropic@4.0.72`. Give `createAnthropic` the scoped fetch and a secret supplied by your application. The native-schema mode is tested with the exact model IDs listed in [REFERENCE.md](REFERENCE.md); `prompt-and-validate` can use other Anthropic model IDs, subject to provider access and the usual local validation.
