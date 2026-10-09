@@ -4170,3 +4170,123 @@ D-0134 inventory correction locally passes pnpm docs:api:check, which recognizes
 243 server exports. Only scripts/check-api-docs.mjs adds the three legitimate
 public type names; diff whitespace gate clean. Parent checkpoints this mechanical
 fix and current records separately from unfinished Git/MCP source.
+
+Git/MCP interim GREEN: existing @ai-sdk/mcp2.0.67 client over framework bounded
+stdio transport interoperates with server SDK2.3.1. Actual worker test discovers
+exactly three tools, reads pinned content and denies uncataloged path; private
+TypeScript build passes. Worker env binding uses bounded repo/executable/full-OID
+fields instead of entire catalog. Git command environment disables lazy fetch
+so missing objects cannot trigger promisor helper/network execution. Packaged
+worker, cancellation and full focused gate/review remain pending.
+
+Packaged Git-worker milestone from explicit Sol/medium writer: private example
+build and package pass; Playwright3/3 proves dev Electron and actual packaged
+.app executable launch fixed bundled worker with ELECTRON_RUN_AS_NODE=1.
+Focused Vitest6/6 and private tsc pass. Interim example test imported private
+adapter transport; corrected by moving that low-level test into ai-vercel-ax
+package tests. Ordinary CI fixture uses host Node, not an uninstalled Electron
+binary; desktop proof remains dedicated explicit-install test. Full Git boundary
+coverage, public registration integration and cheap gates precede frozen review.
+
+Git pre-review checkpoint:10 real Git/stdio tests pass, private tsc clean,
+dev/package Playwright3/3. Copyright, tooling tsc and documentation audience gate
+pass. Cheap preflight identifies >35-line callables, TSDoc tags and direct runtime
+Date.now reads; same writer correcting before frozen review, using Time for
+runtime deadlines. No full release run or slice acceptance claimed yet.
+
+Git cleanup/TSDoc/copyright/docs-audience/time gates now pass; two tooling tsc
+nullable-stream findings corrected and rerunning with ESLint/format, followed by
+fresh package/Playwright for refactored worker. Writer estimates0.2–0.25h to freeze.
+In parallel reuse explicit Luna/medium read-only scanning function for the next
+slice's exact public AiModel/Agent/MCP and BlackBox/scripted-AI recipe from
+current support example and exported declarations. Scope is API evidence, no
+architecture change, no source edits or children. Estimate0.1–0.25h; avoid
+repeating prior repository-history/in-process-transport exploration. Record
+actual metadata limitation as before; configured explicit profile persists.
+
+Next-domain API scan accepted from explicit Luna/medium, read-only, runtime
+introspection unavailable. Existing AiModel validation.check(value,input) returns
+code/path/message issues and can validate exact catalog membership without a
+new API. AgentAi.invoke uses call/conversation/input and returns typed result
+plus operationId. BlackBox handles accepted signals and retained histories.
+AiTestBackend has no MCP protocol factory, so tool-enabled scenarios must use
+controlled provider HTTP/SSE responses through actual VercelAx profile plus real
+MCP, following existing server-blackbox-tests adapter fixtures. Do not alter the
+production model to evade tool checks or add a fake MCP substitute/testing API.
+This is existing API composition, not a material contract change. Evidence in
+support example/model/tests, AI contracts and agent-vercel-mcp-blackbox.test.ts.
+
+Git/MCP source frozen over d266ffe43. Explicit Sol/medium writer reports2files/
+10tests GREEN, private build/package and Playwright3/3 GREEN, tooling typecheck,
+repository ESLint, cleanup/TSDoc/copyright/time/format/docs-audience/diff gates
+GREEN and pnpm audit:release full+prod clean. Narrow child-process coverage is
+not final global qualification: GitRelease84.12% branches, GitCommand88.23%;
+worker instrumentation absent across process boundary, public registration
+Agent integration remains next-slice obligation. Narrow selected64.61% aggregate
+coverage exits threshold error; do not claim coverage gate passing.
+Fresh independent concern-specific review dispatches now: performance/reliability,
+TypeScript/API and style/maintainability each explicit gpt-6-sol/medium;
+documentation explicit gpt-6-luna/medium as capacity allows. All fork none,
+no memory, writes or children, use approved plan/current source. Estimate0.4–0.75h
+including reviews, one aggregated fix batch, affected closure and checkpoint.
+Actual runtime metadata unavailable; explicit immutable profile evidence required.
+Source scope: private Git command/comparison/MCP registration/server/worker,
+build/package/electron/real-Git tests, adapter interop test and dependency pins.
+No new security lane until coordinated release-readiness. Collect complete wave
+before corrections; same implementation context remains available.
+
+Git review wave complete: explicit Sol/medium API clean; style no blocking
+finding, P3 adapter-test coupling to example source retained intentionally to
+keep private transport access inside its package (no refactor now). Reliability
+accepts P2 accepted catalog is rebuilt without digest binding, allowing mutable
+shallow/graft metadata to change evidence despite fixed commits/directory IDs;
+P2 catalog construction lacks whole-operation deadline/cancellation and checks
+aggregate bytes only after accumulation. Documentation Luna/medium accepts minor
+README omission: over-limit comparison is rejected before tools and requires a
+narrower range; document current ceilings with that distinction. Parent confirms
+additional root-edge omission in catalogCommits: zero-parent commits introduced
+by unrelated-history merge produce no per-commit evidence. Handle them correctly
+or reject such a comparison explicitly before claiming a complete catalog; prefer
+correct root diff support with precise identities. Include actual MCP patch
+read assertion (missing test, not alleged runtime defect). One fix batch to same
+Sol/medium writer, estimate0.5–1h including regression tests/cheap gates and
+affected reliability/API/docs closures; no new architecture/security wave.
+
+CI d266ffe43/run37951549743 completed:374 files and6046 tests pass,1skipped;
+API documentation inventory correction confirmed. Global branches89.7% below90%
+is sole failure (raw /tmp/spine-release-notes-ci-d266.log). Expected failure
+fixture stderr is not a test failure. Coverage remains outstanding; preserve
+thresholds and close meaningful behaviors during coordinated domain/UI tests.
+Git first correction regressions GREEN13/13 including digest metadata mutation,
+whole-operation control/budget and explicit unrelated-root rejection. Worker
+rejection and MCP patch assertions/cheap closure still in progress.
+
+Final tutorial/documentation qualification must include the earlier human
+formatting rules across this PR's examples, not only new desktop files. Parent
+source read found support/src/index.ts TSDoc blocks under prettier-ignore with
+no blank before @param; address in final documentation slice alongside the
+copyable four-space guide snippets and Bounded Context terminology. Keep this
+separate from frozen Git review corrections; do not claim mechanical TSDoc gates
+alone prove the human formatting requirement.
+
+Git correction source frozen: exact accepted catalog SHA-256 bound in worker;
+whole construction10s/200KB with linked cancellation and incremental checks;
+unsupported unrelated root histories explicitly reject before catalog acceptance;
+real MCP patch read asserted. README documents ceilings/rejection vs incomplete
+content. Focused15/15, fresh build/package and Electron3/3 pass; tooling tsc,
+full ESLint/cleanup/TSDoc/copyright/time/format/docs-audience/diff pass. Canonical
+Electron command now explicitly uses private tsconfig.tooling.json to avoid
+workspace automatic-reference lookup. Existing explicit Sol/medium reliability/
+API and Luna/medium documentation reviewers receive targeted fixes for closure;
+style advisory remains accepted, no broad wave restart. Parent checks and pushes
+after closure. Whole-plan coverage/release/security/live sign-in remain open.
+
+Targeted Git reliability and API closures clean (retained explicit Sol/medium,
+read-only; no runtime introspection). Both P2 findings resolved with real
+regressions; no correction regression. Documentation retained Luna/medium closes
+original omission but requests exact independent2,000 net-change and2,000
+per-parent-evidence limits instead of ambiguous 'change/evidence'. Same writer
+makes deterministic wording correction plus format/diff gate, estimate0.05–0.1h
+including checkpoint/push. No substantive review lane reopened. Style advisory
+accepted as recorded. Git slice acceptance remains distinct from unfinished
+Agent domain integration and coordinated release/coverage/live checks.

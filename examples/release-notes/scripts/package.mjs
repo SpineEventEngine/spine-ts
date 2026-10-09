@@ -27,6 +27,7 @@ try {
   await cp(join(directory, "dist/src/chunks"), join(stage, "src/chunks"), { recursive: true });
   await Promise.all([
     copyFile(join(directory, "dist/src/main.mjs"), join(stage, "src/main.mjs")),
+    copyFile(join(directory, "dist/src/git-worker.mjs"), join(stage, "src/git-worker.mjs")),
     ...["preload.cjs", "renderer.html", "renderer.js", "renderer.css"].map(async (name) =>
       copyFile(join(directory, "dist", name), join(stage, name)),
     ),

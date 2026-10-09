@@ -50,6 +50,14 @@ await Promise.all([
     chunkNames: "chunks/[name]-[hash]",
     outExtension: { ".js": ".mjs" },
   }),
+  build({
+    entryPoints: [resolve(directory, "src/trusted/git-worker-main.ts")],
+    bundle: true,
+    platform: "node",
+    format: "esm",
+    target: "node24",
+    outfile: resolve(directory, "dist/src/git-worker.mjs"),
+  }),
   copyFile(resolve(directory, "src/renderer.html"), resolve(directory, "dist/renderer.html")),
   copyFile(resolve(directory, "src/renderer.css"), resolve(directory, "dist/renderer.css")),
 ]);

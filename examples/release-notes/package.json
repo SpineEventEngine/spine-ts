@@ -8,16 +8,18 @@
     "build": "node scripts/build.mjs",
     "start": "electron .",
     "package": "node scripts/package.mjs",
-    "test:electron": "playwright test test/electron.spec.ts --workers=1"
+    "test:electron": "playwright test test/electron.spec.ts --workers=1 --tsconfig tsconfig.tooling.json"
   },
   "dependencies": {
+    "@modelcontextprotocol/server": "2.3.1",
     "@spine-event-engine/ai": "workspace:*",
     "@spine-event-engine/ai-vercel-ax": "workspace:*",
     "@spine-event-engine/core": "workspace:*",
     "electron": "44.7.0",
     "openid-client": "6.8.8",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@electron/packager": "20.3.0",

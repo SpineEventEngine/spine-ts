@@ -39,6 +39,7 @@
   },
   "devDependencies": {
     "@ai-sdk/anthropic": "4.0.72",
-    "@openrouter/ai-sdk-provider": "3.1.0"
+    "@openrouter/ai-sdk-provider": "3.1.0",
+    "esbuild": "0.28.2"
   }
 }
