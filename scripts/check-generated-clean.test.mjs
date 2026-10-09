@@ -231,6 +231,7 @@ describe("check-generated-clean", () => {
       "examples/projects/generated",
       "examples/orders/generated",
       "examples/support/generated",
+      "examples/release-notes/generated",
       "examples/message-board/model/generated",
       "examples/message-board/app/generated",
     ]);

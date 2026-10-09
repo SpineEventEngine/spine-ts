@@ -39,6 +39,7 @@ import {
   ReleaseGenerationFailedSchema,
   ReleaseGenerationRequestedSchema,
   ReleaseNotesStagedSchema,
+  type ReleaseNotesStaged,
 } from "../generated/spine/examples/releasenotes/events_pb.js";
 import { ReleaseDraftStateSchema } from "../generated/spine/examples/releasenotes/states_pb.js";
 import {
@@ -206,7 +207,7 @@ it("uses the real Agent, plan Responses, and local Git tool before staging evide
   let comparisonAvailable = true;
   const tools = ReleaseGitRegistration.create({
     executable: process.execPath,
-    workerPath: resolve("examples/release-notes/dist/src/git-worker.mjs"),
+    workerPath: resolve("examples/release-notes/dist/src/trusted/git-worker-main.js"),
     cwd: directory,
     resolveComparison: () => (comparisonAvailable ? comparison : undefined),
   });
@@ -288,16 +289,48 @@ it("uses the real Agent, plan Responses, and local Git tool before staging evide
     expect((await box.asGuest().post(RequestReleaseGenerationSchema, firstRequest)).kind).toBe(
       "ok",
     );
-    const staged = await box.eventually(
-      () =>
-        box.assertEvents().flatMap((event) => {
-          const value =
-            event.message && AnyMessages.unpack(event.message, ReleaseNotesStagedSchema);
-          return value ? [value] : [];
-        }),
-      (events) => events.length === 1,
-    );
-    expect(staged[0]?.document?.sections[0]?.entries[0]?.evidence[0]?.path).toBe("notes.txt");
+    const agentRepository = context.getRepository(ReleaseNotesAgent);
+    let lastPhase = "unobserved";
+    const result = await box
+      .eventually(
+        async () => {
+          const events = box.assertEvents();
+          const requested = events.find(
+            (event) =>
+              event.message && AnyMessages.unpack(event.message, ReleaseGenerationRequestedSchema),
+          );
+          if (requested?.id) {
+            lastPhase =
+              (await agentRepository.agentExecution(id, requested.id, {})) ?? "unobserved";
+          }
+          return events.flatMap<
+            { kind: "staged"; staged: ReleaseNotesStaged } | { kind: "failed"; reason: string }
+          >((event) => {
+            const staged =
+              event.message && AnyMessages.unpack(event.message, ReleaseNotesStagedSchema);
+            if (staged) return [{ kind: "staged" as const, staged }];
+            const failed =
+              event.message && AnyMessages.unpack(event.message, ReleaseGenerationFailedSchema);
+            return failed ? [{ kind: "failed" as const, reason: failed.reason }] : [];
+          });
+        },
+        (events) => events.length > 0 || lastPhase === "terminated",
+      )
+      .catch((error: unknown) => {
+        throw new Error(
+          `Generation did not stage (phase=${lastPhase}, providerCalls=${String(providerBodies.length)}).`,
+          { cause: error },
+        );
+      });
+    if (result.length === 0)
+      throw new Error(
+        `Generation terminated without staging (providerCalls=${String(providerBodies.length)}).`,
+      );
+    expect(result).toHaveLength(1);
+    if (result[0]?.kind === "failed")
+      throw new Error(`Generation failed with safe reason ${result[0].reason}.`);
+    if (result[0]?.kind !== "staged") throw new Error("Generation did not stage.");
+    expect(result[0].staged.document?.sections[0]?.entries[0]?.evidence[0]?.path).toBe("notes.txt");
     expect(providerBodies).toHaveLength(3);
     expect(JSON.stringify(providerBodies[1])).toContain('"type":"function_call_output"');
     const requested = box

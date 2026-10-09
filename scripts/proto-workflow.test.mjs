@@ -1157,6 +1157,7 @@ describe("proto-workflow", () => {
       "examples/projects/generated",
       "examples/orders/generated",
       "examples/support/generated",
+      "examples/release-notes/generated",
       "examples/message-board/model/generated",
     ]);
     expect(atomicGeneratedTargets.map((target) => target.displayPath)).toEqual([
@@ -1169,6 +1170,7 @@ describe("proto-workflow", () => {
       "examples/projects/generated",
       "examples/orders/generated",
       "examples/support/generated",
+      "examples/release-notes/generated",
       "examples/message-board/model/generated",
       "examples/message-board/app/generated",
     ]);

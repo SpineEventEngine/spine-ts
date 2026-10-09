@@ -4971,3 +4971,63 @@ blank tag separator and Bounded Context wording; mechanical style gates pass.
 Commit source/API/docs and example lookup integration with parent records. Keep
 future service dependency additions unstaged. Same implementer resumes trusted
 service/IPC/UI afterward; no remaining decision or user-dependent blocker here.
+
+D0139 checkpoint67c347c3d pushed successfully. Same Sol/medium implementer resumed
+private trusted service. First vertical slice uses public in-process Client /
+SpineServices transport to open a native-selected Git draft and reads Aggregate
+state plus actual Version together. Parent rejected an unnecessary proposed
+opaque Version transport token before adoption: carry existing spine.core.Version
+with the same snapshot using normal Proto JSON/bytes or an exact validated DTO.
+No token registry, alternate version format or counter is justified by Electron
+transport. Application handlers continue to check their explicit expectedVersion.
+
+Trusted-service first vertical GREEN: compiled example build and one service
+integration test pass using a real temporary Git repository, public in-process
+Client/OpenReleaseDraft Command, and atomic Stand state+Version read. Initial RED
+was absent service, then missing direct client-node workspace dependency; corrected
+imports use compiled example classes consistently with generated registry identity.
+No production Version token was implemented; the RED expectation was replaced
+with the detached existing Version message. Service remains WIP with generation
+binding/tool lookup placeholders, not accepted runtime behavior yet. Next same
+writer implements accepted Event/account/model/comparison binding, then history,
+editor/export and restricted Electron integration. No whole-app readiness claim.
+
+Trusted generation vertical GREEN: compiled example plus two service tests use
+public Client/SpineServices, accepted-source resolver, pinned SDK Responses
+fixture, operation-bound stdio Git MCP worker and real committed evidence. Missing
+plan access leaves Aggregate Version unchanged. No live subscription claim.
+During edit/approval integration, RED proved Client.post OK is submission
+acknowledgement, not completed handling. Application now prechecks the displayed
+Version and awaits authoritative committed state; race/rejection/unknown outcomes
+must never be reported as success. Parent reiterates: compare intended outcome,
+not any Version increment; export still requires its correlated ExportPrepared
+Event. Generation admission and scope authorization are still WIP, with immutable
+source/actor/tenant checks and uncertain-post reconciliation required before
+acceptance. No framework change follows from these application workflow rules.
+
+CI8228d078d run37969178907 reached tests after corrected Proto checks and failed
+three cases: check-generated-clean/proto-workflow expected inventories omit the
+new example; release-agent real SDK/MCP test timed out waiting for staged notes
+at line290. 6081 tests passed,3 failed,1 skipped. Raw log
+/tmp/spine-release-notes-ci-8228.log. Do not guess timeout cause or increase wait
+without evidence. Same writer pauses IPC/UI at safe point, preserves WIP, fixes
+inventory expectations and diagnoses actual Agent outcome before correcting.
+Estimate0.3–0.6h for bounded correction/relevantchecks. Include these generator
+tests in preflight for model-inventory changes; previous targeted selection was
+incomplete. No full release diagnostic loop; reproduce with affected tests and
+coverage settings as needed. Parent stages narrow correction separately from
+incomplete desktop integration and pushes immediately.
+
+CI correction converged: both generated-target inventories now include the new
+example (128 focused tests pass). The Agent timeout was a test build-path defect:
+the fixture invoked esbuild-only dist/src/git-worker.mjs, absent from normal CI
+tsc outputs. It now uses dist/src/trusted/git-worker-main.js. The real Agent test
+passes with the bundled .mjs temporarily absent, proving no leftover bundle
+prerequisite. It also reports safe domain failure or terminal execution status
+instead of waiting only for staging; no timeout increase. Exact tooling typecheck,
+targeted ESLint/format and diff checks pass. Same explicitly configured Sol/medium
+implementer supplied evidence; runtime metadata not exposed. This bounded test-only
+correction changes no runtime/public/domain contract, so specialist lanes are N/A;
+parent inspected inventory/path/assertion changes. Full release remains pending
+for the coordinated desktop deliverable. Commit these three tests plus this record,
+leaving service/UI WIP uncommitted; push immediately, then resume that work.
