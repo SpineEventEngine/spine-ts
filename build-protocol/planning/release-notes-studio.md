@@ -201,8 +201,12 @@ Assign a generation ID in the trusted service before submission and return it
 as the application request identity. The Aggregate remembers accepted generation
 IDs and their input identity for the session. Repeating an accepted generation
 does not emit another `ReleaseGenerationRequested`, even after a later request
-or expiration of the inbox deduplication window. Reusing an ID with different
-input is rejected. Keep this domain safeguard independent of Command IDs: the
+or expiration of the inbox deduplication window. It emits
+`ReleaseGenerationAlreadyRequested` with the retained input digest, without
+changing `DraftRevision` or the accepted snapshot. Check that receipt before
+current revision eligibility. The Agent and draft Projection ignore this
+acknowledgement; its Event ID never replaces the original model source binding.
+Reusing an ID with different input is rejected. See D-0136. Keep this domain safeguard independent of Command IDs: the
 current client's `post` creates a fresh Command ID per call.
 
 Reconcile the in-memory admission record with Command acceptance and execution:
@@ -342,8 +346,11 @@ Implement one small read-only MCP server inside the example. Use the framework's
 existing MCP transport and tool registration; the model must genuinely make an
 MCP tool call through that path. Do not substitute callbacks and call them MCP.
 
-Resolve both revision names to commit objects before accepting generation.
-For v1, require the base to be an ancestor of the target. List commits reachable
+Resolve a selected directory to its working-tree repository root before reading
+paths; bare repositories are outside this first example. Resolve both revision
+names to commit objects before accepting generation. For v1, require the base
+to be an ancestor of the target. Reject ranges containing unrelated-history
+root commits explicitly, before claiming a complete catalog. List commits reachable
 from the target but not the base; compare the two committed trees for net file
 changes. Explain this comparison policy in the UI. A moved branch or tag cannot
 change an already accepted request. Do not read uncommitted files.

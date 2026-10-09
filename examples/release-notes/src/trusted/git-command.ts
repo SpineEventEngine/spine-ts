@@ -61,6 +61,8 @@ export const GitCommand = {
         "core.fsmonitor=false",
         "-c",
         "diff.external=",
+        "-c",
+        "diff.relative=false",
         ...args,
       ],
       {

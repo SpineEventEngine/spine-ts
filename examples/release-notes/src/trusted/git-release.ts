@@ -241,7 +241,7 @@ export class GitReleaseComparison {
   ): Promise<GitReleaseComparison> {
     const admission = new GitAdmission(control);
     try {
-      const repository = await realpath(input.repository);
+      const repository = await this.repositoryRoot(input, admission);
       const info = await stat(repository);
       const run = (args: string[]) => admission.run(input.gitExecutable, repository, args);
       const base = await this.resolveCommit(run, input.base);
@@ -267,6 +267,27 @@ export class GitReleaseComparison {
     } finally {
       admission.close();
     }
+  }
+
+  /**
+   * Resolves a selected subdirectory to the canonical worktree root.
+   *
+   * @param input Selected repository and trusted Git executable.
+   * @param admission Shared cancellation and command budget.
+   * @returns Canonical worktree root for every catalog and detail command.
+   */
+  private static async repositoryRoot(input: GitComparisonInput, admission: GitAdmission) {
+    const selected = await realpath(input.repository);
+    const bare = GitCodec.text(
+      await admission.run(input.gitExecutable, selected, ["rev-parse", "--is-bare-repository"]),
+    );
+    if (bare !== "false\n") throw new Error("Selected Git repository requires a worktree.");
+    const top = GitCodec.text(
+      await admission.run(input.gitExecutable, selected, ["rev-parse", "--show-toplevel"]),
+    );
+    if (!top.endsWith("\n") || !top.startsWith("/"))
+      throw new Error("Selected Git repository root is invalid.");
+    return realpath(top.slice(0, -1));
   }
 
   /**

@@ -4290,3 +4290,118 @@ makes deterministic wording correction plus format/diff gate, estimate0.05–0.1
 including checkpoint/push. No substantive review lane reopened. Style advisory
 accepted as recorded. Git slice acceptance remains distinct from unfinished
 Agent domain integration and coordinated release/coverage/live checks.
+
+Git/MCP checkpoint aeaba5b13 committed and pushed to origin/agent-entities.
+Next bounded milestone implements approved release-draft domain before desktop
+application-service/UI wiring: authored/generated Protos, ReleaseDraft Aggregate,
+ReleaseNotesAgent @React, authoritative Projection, AiModel/pure evidence checks,
+public Bounded Context assembly and BlackBox behavior. High-risk serialized/domain
+rules; existing approved plan supplies responsibilities and accepted architecture,
+no repeat broad architecture pass absent a material deviation/blocker. Estimate
+2–3h including Proto generation, focused tests, cheap gates, independent relevant
+review/fixes and integration. Same explicit Sol/medium sole writer, no children;
+parent records/Git. No new published package or general framework API planned.
+Acceptance: complete input snapshot and typed IDs/state; retained conversation;
+proposal/failure with operation identity; latest generation+input revision admission;
+manual edit/approval invalidation; same-generation domain idempotence independent
+of Command ID/inboxTTL; immutable approved Markdown export snapshot; Projection
+only authoritative Aggregate outcomes and revision guards; typed catalogmembership
+validation/correction through real profile/MCP fixtures. Scripted provider testing
+uses public APIs and BlackBox, no private example imports/fake MCP. Domain storage
+in memory. Authentication/admission bridge/UI and packaged domain flow remain
+following integration, not silently omitted.
+Packaging note for integration: public generated registry loader expects
+generated/handler/generated-handler-registry.js and exact constructor identity.
+Bundled main and generated registry must share domain/framework classes rather
+than loading separately bundled duplicate constructors; test actual packaged
+Bounded Context, not only copied files. Prefer existing build shared-entry chunks
+and loader convention over a new framework registry API. Runtime registry root
+must come from trusted app entry path, not assume a bundled helper's import.meta
+still has source layout.
+
+Parallel read-only preparation for desktop lifecycle: reuse explicit Luna/medium
+scanning function to establish existing public Bounded Context/client/Agent
+shutdown and cancellation semantics, so wait/stop-and-quit uses real APIs and
+honest provider-outcome wording. No source edits, children, architecture change,
+or repeats of model/history/transport discovery. Estimate0.1–0.25h alongside
+domain writer; runtime metadata unavailable, retained explicit profile evidence.
+
+Lifecycle scan accepted from explicit Luna/medium read-only function with app
+scope correction: BoundedContext.close immediately stops admission and scheduler,
+which aborts shared active-work control, then awaits active tasks and drains/
+closes resources. It is terminal shutdown, not nonterminal Wait. No public
+per-operation cancellation API. Wait uses exact repository.agentExecution phase
+or trusted completion observation while Bounded Context remains open. A UI wait
+timeout alone does not cancel. Stop-and-quit closes the Bounded Context and
+resources with bounded quit handling; no promise provider did no work/usage.
+Cancellation need not immediately record terminal execution. Source discussion
+of durable lease/journal recovery applies only to durable providers and MUST NOT
+be applied to this in-memory example: exit loses all domain/journal data and
+reopening never resumes work. Credentials persist separately. Sources current
+bounded-context1364-1433, scheduler459-483 and repository4600ff; no new API.
+
+Domain first RED→GREEN through public BlackBox: missing domain implementation
+then invalid required option on uint32 DraftRevision produced real failures;
+corrected authored Proto validation annotation, regenerated and built. Opening
+ReleaseDraft now emits ReleaseDraftOpened and projects revision1, focused1/1
+passes. Proto generation/private build pass. Same writer continues generation
+identity/snapshot and stale-result rules; whole-domain review not yet frozen.
+
+New mechanically confirmed Git boundary defect during desktop integration
+preparation: selecting a subdirectory keeps Git cwd prefix. Real temporary repo
+with root file.txt and nested/file.txt, only root changed: diff --name-status
+from nested returns M file.txt, but ls-tree target -- :(literal)file.txt returns
+nested blob, distinct from target:file.txt. Thus existing readReleaseFile can
+label the wrong committed file as catalog evidence. Parent probe uses temporary
+repo only, no production edits. Same writer pauses domain briefly to canonicalize
+repository root or root-qualify all paths consistently, with exact real-Git
+subdirectory regression (also prevent local diff.relative config narrowing).
+Estimate0.15–0.3h for fix, focused checks and affected reliability closure;
+no new abstraction/architecture. Domain work remains active and uncommitted.
+
+Demonstrated domain contract blocker: writer's second BlackBox idempotence case
+is RED because generated @Assign metadata rejects Event|undefined and optional
+one-element tuple for no-output repeated-generation handling. Do not bypass
+analyzer or silently change framework contracts. Dispatch one bounded existing
+requirements_splitter role, explicit gpt-6-astra/high, fork none/no memory,
+read-only/no children, estimate0.15–0.3h alongside independent Git correction.
+Inspect actual supported handler shapes/JVM precedent only as relevant and pick
+smallest existing-domain outcome consistent with approved rule: same accepted
+generation+sameinput never emits another ReleaseGenerationRequested or paidcall;
+changed-input reuse rejected; duplicate must not release active admission.
+An explicit already-requested domain Event/Rejection may fit without a framework
+API change. Return source-grounded recommendation/precise contract effects; no
+broad roadmap repeat or invented recovery. Profile supported by Desktop explicit
+child model/reasoning surface; actual introspection unavailable.
+
+Bounded architecture result accepted from explicit requirements_splitter
+Astra/high, read-only/no memory/children; runtime metadata unavailable. Existing
+@Assign contract requires >=1 normal Event (handler-decorators139–145,
+REFERENCE347–354, repository3288–3290), so empty-array workarounds are invalid.
+Use ReleaseGenerationAlreadyRequested acknowledgement Event with typed draft ID,
+generation ID and retained input_digest. Same submitted request digest returns
+ack before current revision/conversation checks, no update and no new Requested
+Event/model call. Preserve original snapshot/source binding, all receipts and
+DraftRevision; framework Entity Version may advance as usual due to emittedEvent.
+Changed-input reuse remains ReleaseGenerationConflict. Agent and draft Projection
+do not react/subscribe to acknowledgement. Trusted service must not bind its Event
+ID as model source or release prior admission. Tests wait for acknowledgement,
+not fixed sleep; older IDafternewer and active/terminal repeat cases included.
+No framework API/storage/recovery change. This refines the already approved rule,
+not a new subsystem. Same writer continues after narrow Git closure.
+
+Git subdirectory correction frozen: real-Git RED reproduced root/subdirectory
+content mismatch, GREEN canonicalizes worktree root, rejects bare repositories,
+and disables diff.relative. Exact root file and patch asserted with same-named
+nested file.16focusedtests, privatebuild/package and Electron3/3 pass; tooling,
+selected ESLint/copyright/time/diff pass. Full cleanup/TSDoc currently flag only
+unfinished domain requestGeneration (uncommitted and outside Git checkpoint),
+not Git; do not claim whole-worktree preflight passing. Existing explicit
+Sol/medium reliability reviewer receives narrow path-correction closure.
+
+Git root-path targeted reliability closure clean, retained explicit Sol/medium.
+Canonical root and forced diff.relative=false preserve exact catalog/content
+identity; output parser removes only final line terminator, not path whitespace.
+README now states subdirectory resolution and bare-repository limitation. Parent
+formats updated planning records, diff clean; checkpoint excludes unfinished
+Domain source/config. Whole-domain development continues with D-0136.

@@ -19,6 +19,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   renameSync,
   rmSync,
   symlinkSync,
@@ -116,6 +117,33 @@ describe("trusted Git release comparison", () => {
         target,
       }),
     ).rejects.toThrow("ancestor");
+  });
+
+  it("uses repository-root paths when selected from a nested directory", async () => {
+    const directory = repository();
+    mkdirSync(join(directory, "nested"));
+    writeFileSync(join(directory, "file.txt"), "root-before\n");
+    writeFileSync(join(directory, "nested/file.txt"), "nested-unchanged\n");
+    git(directory, "add", "--", "file.txt", "nested/file.txt");
+    git(directory, "commit", "--quiet", "-m", "Base");
+    const base = git(directory, "rev-parse", "HEAD");
+    writeFileSync(join(directory, "file.txt"), "root-after\n");
+    git(directory, "commit", "--quiet", "-am", "Change root file");
+    const target = git(directory, "rev-parse", "HEAD");
+    git(directory, "config", "diff.relative", "true");
+    const comparison = await GitReleaseComparison.open({
+      repository: join(directory, "nested"),
+      gitExecutable,
+      base,
+      target,
+    });
+    expect(comparison.changes.map((change) => change.path)).toEqual(["file.txt"]);
+    expect(comparison.workerBinding().repository).toBe(realpathSync(directory));
+    expect((await comparison.readReleaseFile("file.txt")).text).toBe("root-after\n");
+    const evidence = comparison.evidence[0];
+    if (!evidence) throw new Error("Expected root path evidence.");
+    expect((await comparison.readChangePatch(evidence)).patch).toContain("+root-after");
+    expect((await comparison.readChangePatch(evidence)).patch).not.toContain("nested-unchanged");
   });
 
   it("catalogs both parents of a merge and keeps rename paths literal", async () => {

@@ -6284,3 +6284,35 @@ retain identity, and authorizeSelection was declared/documented but not invoked.
 Focused tests must prove late registration, bootstrap without defaults, saved
 selection reuse, delayed/missing subscribers, authorization failure, cancellation,
 late callback results, detached input and unchanged accepted identity.
+
+## D-0136: Acknowledging Repeated Release Generations
+
+Status: Accepted; implementation in progress
+
+Date: 2026-10-09
+
+A successful `@Assign` handler must emit at least one normal Event. Repeating an
+accepted generation request therefore emits `ReleaseGenerationAlreadyRequested`,
+containing its typed draft ID, generation ID and retained request digest. It
+does not emit another `ReleaseGenerationRequested` or schedule another model
+operation. No framework return-type change or empty-result workaround is needed.
+
+Compare the submitted request with its retained receipt before checking current
+draft revision or conversation eligibility. The same input acknowledges the
+original acceptance without changing state, `DraftRevision`, pending generation,
+approval, receipts or the accepted input snapshot. Different input under the
+same ID remains `ReleaseGenerationConflict`. Framework Entity Version can advance
+when the acknowledgement is emitted; it is separate from `DraftRevision`.
+
+The Agent and draft Projection ignore the acknowledgement. The trusted service
+may use it to confirm acceptance, but must preserve the original source Event
+binding and active admission. Its new Event ID does not identify a new execution.
+A conflicting repeat cannot release admission for the original accepted work.
+Tests await the acknowledgement, then assert no second requested Event or model
+call, including older IDs after newer requests and fresh command envelopes.
+
+Grounding: handler-decorators.ts command assignment contract, server REFERENCE
+return-shape rules, Repository runtime nonempty-outcome check, and existing
+Entity transaction version behavior. This is a bounded refinement of the
+[approved example plan](planning/release-notes-studio.md), not a new framework
+API, persistence mechanism, or recovery policy.
