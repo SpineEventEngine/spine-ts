@@ -216,13 +216,14 @@ Use the current official direct flow for local/open-source applications. This
 supersedes the earlier exploratory design based on Codex backend endpoints.
 Subscription inference goes to `https://api.openai.com/v1/responses`.
 
-Prefer the official SIWC local devkit for registration/session management if its
-published package, license, and credential/authorized-fetch seam fit the Agent
-adapter. Inspect those contracts in the sign-in milestone; the adapter milestone
-first defines the authentication seam and tests it with controlled credentials.
-Do not call its generation helper from Entity code or bypass request accounting through an
-opaque helper with hidden retries. If necessary, implement the documented OAuth
-flow with a maintained OAuth/OIDC library; do not implement JWT cryptography.
+Use the documented OAuth flow with `openid-client` in the private app. The
+inspected official SIWC DevKit packages are private and their source license
+is noncommercial, so do not copy that implementation. Do not call generation
+helpers from Entity code or bypass request accounting through hidden retries.
+For pinned `openid-client` 6.8.8, call `enableNonRepudiationChecks` on every
+per-issued-client configuration before authorization-code or refresh grants:
+claim checks alone do not verify the ID-token signature. Do not implement JWT
+cryptography.
 
 Required behavior:
 
@@ -263,15 +264,18 @@ Implement this first, as a new module inside the existing
 create another published package. Document its configuration separately from
 API-key OpenAI Responses. Browser sign-in, account pickers, token persistence,
 and refresh-session management belong to the application authentication service.
-The profile accepts authenticated connections through the existing adapter
-connection contract; add only a demonstrated missing seam. It must not depend
+Register the profile through `VercelAx.chatgptPlanModel(...)`: keep identity and
+authorization callbacks, but have its connection callback return an explicit
+access token and matching identity. The adapter constructs the SDK model using
+its guarded fetch; reject this profile through the generic caller-built model
+factory. This prevents accidental ambient API-key fallback. It must not depend
 on Electron or open a browser.
 
 The first milestone is independently usable from a Node.js application: export
 the new profile through the package's public factory, document a complete typed
 configuration example, and exercise it through the real Agent invocation path
 with a controlled provider. The example supplies identity and authenticated
-connections through the existing `resolveIdentity`, `authorizeUse`, and `connect` hooks;
+credentials through `resolveIdentity`, `authorizeUse`, and the dedicated `connect` hook;
 verify their exact signatures before writing the snippet. Keep token refresh
 behind the application connection service and preserve the provided request
 control, bounded fetch, cancellation, and deadline behavior. A refresh must not

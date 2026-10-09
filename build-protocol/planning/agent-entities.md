@@ -3309,3 +3309,267 @@ reads remain in scope; execution observation is added only if current public
 completion APIs prove insufficient. Final checks: changed-document formatting,
 documentation audience, scope assertions, and Git whitespace. Next action is
 adapter-profile implementation when requested, not embedded storage work.
+
+### Subscription adapter implementation — 2026-10-09
+
+The human started approved milestone 1 of the revised Release Notes Studio plan.
+Scope: independently usable ChatGPT plan Responses profile inside `ai-vercel-ax`,
+optional generation token ceiling with strict profile compatibility, documented
+public configuration, and actual Agent-path fixture coverage. Desktop OAuth,
+Electron, domain example, and storage work remain later milestones. Estimate:
+2–4 hours including implementation, focused checks, specialist reviews/fixes,
+release verification and integration. High-risk because public capability,
+request accounting, and authenticated provider transport contracts change.
+Architecture is frozen by the prior Astra/high pass and accepted revision; do
+not repeat it without a demonstrated material blocker. Fresh origin/master was
+fetched; continue this same human-directed PR on the existing feature worktree.
+
+Human-Imposed Requirements Ledger for this milestone:
+
+- New module in the existing adapter package, not another published package.
+- Agent handlers use AiModel/facade only; no LLM names, Captured, or ReasoningReceiver.
+- ChatGPT subscription route, never an API-key fallback or Codex installation.
+- Auth credentials supplied by application connections, never in Proto/history.
+- In-memory example later; no storage/backend/Electron work in this milestone.
+- Mandatory journal and finite request/tool/byte/deadline limits; every correction
+  and continuation counted; no hidden retries, no unsupported token-limit promise.
+- All runtime time reads use Time; no migrations in TSX or non-runtime scripts.
+- Domain-correct Proto fixtures; no optional/readonly proto fields; Entity IDs
+  follow implicit required/validated semantics. Prefer no Proto changes here.
+- Bounded Context wording; no unnecessary possession or “stable” filler.
+- Document TS/public contracts, blank line before TSDoc tags, four-space tutorial
+  snippets, short functions and repository style. No PR Verification section.
+- Preserve OpenAI API-key, Anthropic, and Jev behavior. Current version-only
+  commit already exists; do not change unrelated versions or generate new logs.
+
+Assignments: existing implementer, explicit gpt-6-sol/medium, sole production
+writer in packages/ai, packages/ai-vercel-ax, affected provider BlackBox tests
+and narrow user docs; no children. Read-only pinned SDK/protocol verification
+function: explicit gpt-6-luna/medium, no children or source edits. Desktop supports
+these explicit profiles. Parent handles task/decision records and integration.
+Apply test-driven-development skill: behavioral failing tests before runtime
+changes, then targeted green checks. Record results in this existing task file.
+
+Pinned-SDK verification completed under explicit Luna/medium: published OpenAI
+provider supports developer-role override, namespace tools, store:false and
+explicit reasoning.encrypted_content inclusion. Existing defaults do not cover
+all account-discovered model IDs. Both dependency audits pass. A material
+serialized-contract gap was identified: GenerationResponse retains Anthropic
+continuation blocks but has no typed OpenAI reasoning/tool-item journal field.
+Invoke one bounded requirements_splitter pass (explicit Astra/high, fresh
+read-only, no memory/children) to choose the minimal additive Proto and replay
+contract; implementation continues on independent token/profile tests. Pending
+that decision, extend the same implementer's write scope to affected Agent
+content Proto/generated artifacts and focused runtime mapping/tests if needed.
+No new writer; no new history subsystem or untyped credential-bearing dump.
+
+The focused Astra/high contract pass completed and was accepted (configured
+profile explicit; runtime introspection unavailable). D-0132 records its minimal
+additive typed response-content decision. Initial suggestion of exact transport
+reconstruction was narrowed: SDK-compatible deterministic prompt lowering is
+sufficient, while raw receipt validation is needed to catch omitted refusal or
+unsupported content. No transport splice or generic JSON carrier is needed.
+Implementation has shown RED for omitted token ceilings and GREEN for all ten
+model-definition tests. The initial pinned SDK request fixture also passes:
+Bearer credential, developer input, store:false/stream:true, no forbidden fields.
+The same writer now performs Proto generation/targeted builds; parent avoids
+concurrent generated-output cleanup. No live subscription call was attempted.
+
+Implementation checkpoint checks: 201/201 tests across model, public contracts,
+adapter factory/stream, and Agent/MCP BlackBox files pass. Targeted Proto/AI/
+adapter/BlackBox TypeScript builds and changed-path ESLint pass. The Agent case
+uses real pinned SDK streaming plus local MCP, three journaled attempts,
+encrypted reasoning, tool continuation, correction, and credential exclusion.
+Remaining mechanical cleanup is TSDoc/formatting before review. Node 24.18.0,
+npm 11.16.0, and pnpm 11.9.0 match CI. No dependency changes or live auth calls.
+
+Review wave assignments, all fresh with no conversation, memory, or children:
+
+- Existing performance_reliability_reviewer, explicit gpt-6-sol/medium: request
+  admission, byte/deadline bounds, terminal/item closure, recorded replay and MCP.
+- Existing typescript_api_docs_reviewer, explicit gpt-6-sol/medium: public factory,
+  optional token ceiling, typed Proto/exports, strict consumers and config sample.
+- Existing style_maintainability_reviewer, explicit gpt-6-sol/medium: bounded
+  changed source organization, semantic fixtures, comments and duplication.
+- Existing documentation_reviewer, explicit gpt-6-luna/medium: changed README/
+  REFERENCE claims, configuration teaching and scope. No mechanical re-review.
+  Collect the complete wave before assigning one correction batch to the existing
+  implementer. Parent will run final release verification after convergence;
+  security_reviewer uses explicit gpt-6-sol/high at final readiness. Configured
+  profiles are the acceptance metadata if runtime introspection is unavailable.
+
+The human explicitly directed autonomous execution of the WHOLE revised
+Release Notes Studio plan, using the stated model routing and build protocol,
+until completed or a real human-dependent blocker. Do not stop at adapter
+milestone completion. Keep the five milestones and the 11–20 hour whole-plan
+estimate current; revise if evidence warrants it. Continue independent work
+around unavailable human browser authorization; present a real usable app and
+concrete live-test step before asking for that interaction. No credential reuse
+from unrelated apps. Existing single production writer and explicit child model/
+reasoning assignments remain binding across milestones. Desktop domain storage
+stays in memory; no deferred persistence work is pulled into this plan.
+
+While adapter cleanup/review converges, reuse the read-only SDK verification
+function for milestone 2 dependency preparation: explicit existing
+Luna/medium profile, no source edits or children. Inspect official SIWC package
+availability, license, supported auth/token access surface, and Electron-safe
+credential lifecycle. This independent research may overlap adapter writing;
+no second production writer or premature sign-in is authorized by this dispatch.
+
+Adapter source frozen after all focused checks: 201/201 tests; targeted
+Proto/AI/adapter/BlackBox builds; changed-file ESLint; cleanup; TSDoc; format;
+compiled documentation snippets; whitespace. No architecture blocker remains.
+Independent reviews now inspect changes since 58f6ad569 plus the new profile
+module, not the entire earlier Agent feature. Implementation pauses source edits
+until the complete review wave is returned as one batch.
+
+Milestone-2 research found @siwc/local and @siwc/react are private workspace
+packages (npm E404), with upstream DevKit noncommercial source licensing and no
+public token getter fitting the adapter. Follow the approved fallback: independent
+application integration using maintained OAuth/OIDC and OS-protected storage,
+not copied DevKit code. Candidate openid-client 6.8.8 is MIT. Keep it and Electron
+in the private desktop example. No sign-in or credential access occurred.
+
+The first complete independent review wave is collected. All four configured
+profiles match their explicit dispatch; runtime introspection is unavailable.
+Accepted batch: R1 partial normalized text/tool deltas in an incomplete failed
+receipt must be replayable without weakening complete-receipt validation; R2
+allowlisted streamed subscription quota/auth errors need correct non-generic
+classification; R3 reject contradictory terminal/item statuses; R4 validate the
+ChatGPT model object's modelId against authorized identity; R5 update the public
+Proto token-ceiling comment. Style and reliability duplicated R1. Predispatch
+cancellation reservation behavior was identified as largely pre-existing and
+is not a separate expansion of this scope. R6 API/docs both found the no-ambient
+API-key guarantee is stronger than generic caller-built SDK-model enforcement.
+A bounded Astra/high requirements_splitter pass decides the smallest explicit
+credential boundary or precise documented trust contract; no speculative token
+format recognition or opaque credential parsing. Same implementer fixes the
+whole batch; other accepted items may proceed while R6's contract is settled.
+No code corrections were assigned before all four review results were collected.
+
+R6 architecture decision accepted: dedicated VercelAx.chatgptPlanModel options
+omit caller-selected capability/model/settings. The existing identity and
+permission hooks remain; connect returns explicit accessToken plus identity.
+The adapter checks nonblank token and matching identity, then constructs the
+pinned OpenAI model with explicit endpoint/token and guarded fetch. Generic
+VercelAx.model rejects the subscription profile. Move the already-pinned OpenAI
+SDK to runtime dependencies in the same package. No brand, token-format inference,
+private SDK introspection, or new credential store. This is a material public
+credential-boundary correction justified by R6; D-0132/plan updated accordingly.
+
+R1–R5 fix tests established 10 expected RED failures across incomplete failed
+receipt replay, contradictory status, streamed error classification, and model
+identity; 186 existing cases passed. R6's dedicated factory decision was sent
+to the same implementer, including ambient key/base-URL sentinel tests. Pinned
+SDK has no organization/project environment defaults. No user decision is needed.
+The whole-plan authorization means final release/security qualification belongs
+to the converged desktop+adapter deliverable; use focused checks and relevant
+re-review for intermediate milestones, with required checkpoint pushes/CI.
+
+OIDC research correction, verified against the crypto-call chain: openid-client
+6.8.8 defaults validate ID-token claims, not their cryptographic signature.
+Every per-issued-client Configuration MUST enableNonRepudiationChecks before
+code/refresh grants. It verifies the contained ID-token JWS through issuer JWKS
+and crypto.subtle.verify; it is not a separate HTTP response signature. Parent
+challenged the earlier scanner conclusion, and the same Luna/medium scanner
+confirmed the correction. Required tests include forged signature, state/nonce,
+audience/issuer, dynamic issued client ID, refresh subject mismatch, and refresh
+without a new ID token preserving the prior verified identity. No code was built
+on the earlier incorrect conclusion. This is a concrete milestone-2 requirement.
+
+Next-milestone preparation reuses the existing read-only dependency function
+(gpt-6-luna/medium, explicit original dispatch) to confirm Electron's bundled
+Node version and the smallest current packaging/test setup compatible with this
+repository. No duplicate architecture pass or source edits. The private desktop
+workspace will use the common existing workspace version and no public package.
+
+Review-correction focused checks pass: 222/222 tests in five files and the
+Proto/AI/adapter/BlackBox TypeScript build. R6 now uses the dedicated public
+credential constructor, with ambient-key/base-URL sentinel and real SDK Agent
+coverage. Source freeze follows cleanup, docs/snippet checks and dependency
+audit. Focused closure assignments use fresh no-memory agents because prior
+reviewer sessions are no longer available: performance_reliability_reviewer,
+gpt-6-sol/medium, for R1–R3 partial receipt/stream/replay closure;
+typescript_api_docs_reviewer, gpt-6-sol/medium, for R4/R6 credential constructor,
+identity and public Proto contracts; documentation_reviewer, gpt-6-luna/medium,
+for R5/R6 config/limitation claims. All fields will be explicit. The original
+style finding duplicated R1; no independent style issue remains, and mechanical
+style checks cover the narrow correction. Collect the entire focused closure
+wave before returning findings. Final security remains at whole-plan readiness.
+
+Desktop dependency research accepted under explicitly dispatched Luna/medium
+(runtime introspection unavailable). Electron 44.7.0 DEPS/release feed confirms
+bundled Node 24.21.0, satisfying Node 24. Private workspace dependencies may use
+Electron 44.7.0, Forge CLI 8.0.1, and existing Playwright Test 1.62.0. Forge
+package produces the local macOS .app without a distribution maker; Playwright
+can launch both modes. Electron uses lazy binary download rather than a
+postinstall script in this version: make installation explicit before desktop
+checks, with no speculative pnpm allowBuilds exception. Existing examples/*
+workspace discovery applies. No dependencies installed by the read-only scan.
+Source: Electron v44.7.0 DEPS, release feed, official installation/packaging docs,
+and Playwright Electron API. Git whitespace and planning-document formatting pass.
+
+Correction preflight: 222 focused tests still pass; cleanup, TSDoc, formatting,
+compiled snippets and whitespace pass. The initial four-file coverage selection
+missed existing AI execution suites and reported 83.38% branches; this is not
+accepted coverage evidence. Implementation inspects changed branches and adds
+relevant existing suites before deciding which new behavior tests are necessary.
+Parent audience and runtime-time checks pass. Reuse the read-only Luna/medium
+scanner to map existing public in-process Command/query/completion and Agent
+history access APIs for the later application integration; no design or source
+changes. This is repository scanning, not another architecture pass.
+
+Public application API scan accepted (explicit Luna/medium; no runtime metadata
+exposed). ClientRequest.post returns immediate ClientOutcome, not eventual Agent
+completion; send/query/subscriptions are public. Agent history is protected on
+the Entity and exposed only through testing/internal RepositoryAccess. Existing
+cursor scope already includes Bounded Context, tenant, repository state type,
+Entity and view. Pending/accepted execution access is internal, confirming the
+plan's production history/terminal observation gap. Do not build the desktop on
+BlackBox, private RepositoryAccess, or a spinner-as-completion assumption. Resolve
+the smallest public read surface at the domain integration milestone using the
+existing indexed records; no duplicate storage or new recovery subsystem.
+
+Coverage inspection expanded to 14 relevant AI/adapter/Agent-BlackBox test files:
+365/365 passed. Four-file coverage still reports 84.12% branches and 89.53%
+statements, not final release coverage. Changed uncovered branch counts were
+execution 14, factory 0, generation 53, streamed-model 18; many are defensive
+provider parsing paths. Added behavior tests for encrypted-content byte crossing
+and failed typed-refusal replay; the narrow set then passed 225/225. Review must
+assess material changed-path coverage gaps; retain the final global >=90% gate.
+Do not describe the partial coverage run as passing the coverage requirement.
+API documentation export check and strict provider/tooling typechecks pass.
+
+Focused closure wave complete; all three fresh roles used explicit expected
+model/reasoning profiles, with no exposed runtime introspection or mismatch.
+R1 partial replay and R3 contradictory status are closed. Accepted final targeted
+batch: (1) R2 still drops SSE authentication failure code, recording retryable
+UNAVAILABLE instead of nonretryable AUTHENTICATION_REQUIRED; add narrow safe
+allowlist and behavioral test. (2) R4/R6 passes mutable expected identity into
+async credential callback, then validates/constructs against potentially changed
+values; preserve authorized fields before callback and test model mutation.
+(3) README's exhaustive recorded-identity list omits provider; use accurate
+credential-free identity wording. No package-public internal helper leak or
+other Proto/export/dependency finding. Return all three to existing implementer;
+recheck only affected R2/R4/R6 concerns, no new complete review wave. Full and
+production pnpm audit:release pass with no known vulnerabilities after SDK move.
+
+Final targeted correction reproduced three expected failures for streamed
+invalid_api_key/status401 and mutable authorized identity. Five focused cases
+then pass, also covering invalid_token and status403. Factory captures/freezes
+four authorized fields before the callback/gate, checks returned identity and
+constructs the SDK model against captured values. Only safe allowlisted codes
+or auth statuses reach failure classification; provider prose remains excluded.
+README now describes credential-free deployment identity. Broader focused
+checks follow before targeted closure and the adapter checkpoint push.
+
+Adapter correction review converged. Focused 230/230 tests and affected builds,
+ESLint/cleanup/TSDoc/snippets/format/whitespace pass. Reliability reviewer confirms
+R2 closed, and API reviewer confirms R4/R6 closed after inspecting the frozen
+correction; configured Sol/medium profiles retained. Documentation correction
+is mechanically confirmed, no further lane reopened. Original style R1 duplicate
+is covered by the reliability closure. No unresolved accepted finding remains.
+Planning-document format/whitespace also pass. Final global coverage/release
+qualification remains part of the coordinated desktop deliverable; this is the
+reviewed adapter checkpoint, not whole-plan completion. Next: commit and push
+this milestone, then begin private desktop authentication implementation.

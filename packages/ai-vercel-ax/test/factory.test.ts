@@ -42,11 +42,12 @@ import {
   SupportTicketFactsSchema,
   SupportTicketNumberSchema,
 } from "../../server/test-fixtures/generated/entity-metadata/support_ai_types_pb.js";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   VercelAx,
   VercelDecision,
   providerConnection,
+  registerGeneration,
   type VercelConnectControl,
   type VercelDecisionModel,
 } from "../src/adapter/factory.js";
@@ -59,6 +60,8 @@ const identity = {
 };
 
 const scope = {} as Parameters<ReturnType<typeof backendDefinition>["resolveIdentity"]>[0];
+
+afterEach(() => vi.unstubAllEnvs());
 
 const advertisedLookup = Object.freeze({
   server: "support",
@@ -120,6 +123,8 @@ function generationFixture(
   provider: "openai" | "anthropic" = "openai",
   modelId = "claude-sonnet-4-5",
   outputMode: "native-schema" | "prompt-and-validate" = "native-schema",
+  chatgptPlan = false,
+  maxOutputTokens: number | null = 100,
 ) {
   let scopedFetch!: typeof fetch;
   let nextStream = 0;
@@ -151,20 +156,24 @@ function generationFixture(
       };
     },
   });
-  const registration = VercelAx.model({
+  const registrationOptions = {
     ref: ModelRef.of("draft-support-reply", "r1"),
-    capabilities:
-      provider === "anthropic"
+    capabilities: chatgptPlan
+      ? VercelAx.capabilities.chatgptPlanResponses()
+      : provider === "anthropic"
         ? VercelAx.capabilities.anthropicMessages()
         : VercelAx.capabilities.openAIResponses(),
     platformFetch: network,
     resolveIdentity: () => selectedIdentity,
     authorizeUse: () => true,
-    connect: (_scope, _expected, runtime) => {
+    connect: (_scope: typeof scope, _expected: typeof identity, runtime: VercelConnectControl) => {
       scopedFetch = runtime.fetch;
       return { model, identity: selectedIdentity };
     },
-  });
+  };
+  const registration = chatgptPlan
+    ? registerGeneration(registrationOptions)
+    : VercelAx.model(registrationOptions);
   const definition = executionDefinition(
     AiModel.define({
       name: "draft-support-reply",
@@ -181,7 +190,7 @@ function generationFixture(
         deadlineMs: 900,
         maxInputBytes: 2000,
         maxOutputBytes: 2000,
-        maxOutputTokens: 100,
+        ...(maxOutputTokens === null ? {} : { maxOutputTokens }),
       },
     }).definition,
   );
@@ -458,6 +467,829 @@ function decisionFixture(model: VercelDecisionModel) {
 }
 
 describe("Vercel connection registration", () => {
+  it("requires the dedicated ChatGPT credential constructor", () => {
+    const network = vi.fn<typeof fetch>();
+    const callback = vi.fn(() => ({
+      model: new MockLanguageModelV3({ modelId: identity.model }),
+      identity,
+    }));
+    expect(() =>
+      VercelAx.model({
+        ref: ModelRef.of("draft-support-reply", "r1"),
+        capabilities: VercelAx.capabilities.chatgptPlanResponses(),
+        platformFetch: network,
+        resolveIdentity: () => identity,
+        authorizeUse: () => true,
+        connect: callback,
+      }),
+    ).toThrow("chatgptPlanModel");
+    expect(callback).not.toHaveBeenCalled();
+    expect(network).not.toHaveBeenCalled();
+  });
+
+  it.each(["", "   ", undefined])(
+    "rejects a missing ChatGPT plan access token before dispatch",
+    async (accessToken) => {
+      const network = vi.fn<typeof fetch>();
+      const invalidToken: unknown = accessToken;
+      const registration = VercelAx.chatgptPlanModel({
+        ref: ModelRef.of("draft-support-reply", "r1"),
+        platformFetch: network,
+        resolveIdentity: () => identity,
+        authorizeUse: () => true,
+        connect: () => ({ accessToken: invalidToken as string, identity }),
+      });
+      await expect(
+        backendDefinition(registration).connect(scope, identity, control()),
+      ).rejects.toThrow("access token");
+      expect(network).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rejects a ChatGPT token bound to another identity before dispatch", async () => {
+    const network = vi.fn<typeof fetch>();
+    const registration = VercelAx.chatgptPlanModel({
+      ref: ModelRef.of("draft-support-reply", "r1"),
+      platformFetch: network,
+      resolveIdentity: () => identity,
+      authorizeUse: () => true,
+      connect: () => ({
+        accessToken: "fixture-plan-token",
+        identity: { ...identity, account: "other-account" },
+      }),
+    });
+    await expect(
+      backendDefinition(registration).connect(scope, identity, control()),
+    ).rejects.toThrow("identity changed");
+    expect(network).not.toHaveBeenCalled();
+  });
+
+  it("rejects a ChatGPT model changed through the identity captured by the token callback", async () => {
+    const selectedIdentity = { ...identity };
+    const network = vi.fn<typeof fetch>();
+    const registration = VercelAx.chatgptPlanModel({
+      ref: ModelRef.of("draft-support-reply", "r1"),
+      platformFetch: network,
+      resolveIdentity: () => selectedIdentity,
+      authorizeUse: () => true,
+      connect: () => {
+        selectedIdentity.model = "unapproved-model";
+        return { accessToken: "fixture-plan-token", identity: selectedIdentity };
+      },
+    });
+    await expect(
+      backendDefinition(registration).connect(scope, selectedIdentity, control()),
+    ).rejects.toThrow("identity changed");
+    expect(network).not.toHaveBeenCalled();
+  });
+
+  it.each(["throw", "cancel", "deadline"] as const)(
+    "does not fall back to ambient credentials after ChatGPT token callback %s",
+    async (mode) => {
+      vi.stubEnv("OPENAI_API_KEY", "ambient-api-key");
+      const network = vi.fn<typeof fetch>();
+      const connect = vi.fn(() => {
+        if (mode === "throw") throw new Error("token callback failed");
+        return { accessToken: "fixture-plan-token", identity };
+      });
+      const registration = VercelAx.chatgptPlanModel({
+        ref: ModelRef.of("draft-support-reply", "r1"),
+        platformFetch: network,
+        resolveIdentity: () => identity,
+        authorizeUse: () => true,
+        connect,
+      });
+      const base = control();
+      const runtime = {
+        ...base,
+        ...(mode === "cancel" ? { signal: AbortSignal.abort() } : {}),
+        ...(mode === "deadline" ? { deadlineEpochMs: base.nowEpochMs() } : {}),
+      };
+      await expect(
+        backendDefinition(registration).connect(scope, identity, runtime),
+      ).rejects.toThrow();
+      expect(network).not.toHaveBeenCalled();
+      if (mode === "throw") expect(connect).toHaveBeenCalledOnce();
+      else expect(connect).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rejects a ChatGPT plan token ceiling before an inference attempt", async () => {
+    const fixture = generationFixture(
+      [],
+      1,
+      false,
+      "openai",
+      "test-model",
+      "prompt-and-validate",
+      true,
+    );
+    await expect(fixture.run()).resolves.toMatchObject({
+      ok: false,
+      failure: { code: "UNSUPPORTED_CAPABILITY" },
+    });
+    expect(fixture.runtime.beginAttempt).not.toHaveBeenCalled();
+    expect(fixture.network).not.toHaveBeenCalled();
+  });
+
+  it("uses developer instructions and stateless encrypted Responses for ChatGPT plan", async () => {
+    const fixture = generationFixture(
+      [
+        [
+          {
+            type: "raw",
+            rawValue: {
+              type: "response.output_item.added",
+              output_index: 0,
+              item: { type: "message", id: "message-1" },
+            },
+          },
+          {
+            type: "raw",
+            rawValue: {
+              type: "response.output_item.done",
+              output_index: 0,
+              item: {
+                type: "message",
+                role: "assistant",
+                id: "message-1",
+                phase: "final_answer",
+                content: [{ type: "output_text", text: '{"replyText":"Hello"}', annotations: [] }],
+              },
+            },
+          },
+          { type: "text-delta", id: "t", delta: '{"replyText":"Hello"}' },
+          { type: "raw", rawValue: { type: "response.completed", response: {} } },
+          {
+            type: "finish",
+            finishReason: { unified: "stop", raw: "completed" },
+            usage: sdkUsage(3, 2),
+          },
+        ],
+      ],
+      1,
+      false,
+      "openai",
+      "test-model",
+      "prompt-and-validate",
+      true,
+      null,
+    );
+    vi.mocked(fixture.runtime.admitGeneration).mockReturnValue({
+      ok: true,
+      value: create(ProposedSupportReplySchema, { replyText: "Hello" }),
+    });
+    await expect(fixture.run()).resolves.toMatchObject({ ok: true });
+    expect(fixture.providerCalls[0]).toMatchObject({
+      responseFormat: { type: "text" },
+      providerOptions: {
+        openai: {
+          store: false,
+          systemMessageMode: "developer",
+          include: ["reasoning.encrypted_content"],
+        },
+      },
+    });
+    expect(fixture.providerCalls[0]?.maxOutputTokens).toBeUndefined();
+    const attempt = vi.mocked(fixture.runtime.beginAttempt).mock.calls[0]?.[0];
+    if (attempt?.kind !== "generation") throw new Error("Expected generation request");
+    expect(JSON.parse(attempt.content.promptJson)).toMatchObject({
+      provider: { profile: "chatgpt-plan-responses-v1", outputMode: "prompt-and-validate" },
+    });
+  });
+
+  it.each(["text", "tool"] as const)(
+    "journals and replays an interrupted ChatGPT %s delta without continuation",
+    async (kind) => {
+      const parts: LanguageModelV3StreamPart[] = [
+        {
+          type: "raw",
+          rawValue: {
+            type: "response.output_item.added",
+            output_index: 0,
+            item: { type: kind === "text" ? "message" : "function_call", id: "item-1" },
+          },
+        },
+        kind === "text"
+          ? { type: "text-delta", id: "item-1", delta: "partial" }
+          : { type: "tool-call", toolCallId: "call-1", toolName: "tool_0", input: "{}" },
+        { type: "error", error: new Error("private provider failure") },
+      ];
+      const first = generationFixture(
+        [parts],
+        1,
+        kind === "tool",
+        "openai",
+        "test-model",
+        "prompt-and-validate",
+        true,
+        null,
+      );
+      await expect(first.run()).resolves.toMatchObject({
+        ok: false,
+        failure: { code: "UNAVAILABLE" },
+      });
+      const saved = vi.mocked(first.runtime.finishAttempt).mock.calls[0]?.[0].response;
+      if (saved?.$typeName !== "spine.ts.agent.GenerationResponse")
+        throw new Error("Expected generation response");
+      expect(saved).toMatchObject({
+        outcome: AiOutcome.FAILED,
+        rawOutput: kind === "text" ? "partial" : "",
+        openaiContent: { complete: false, items: [] },
+      });
+      expect(saved.toolCalls).toHaveLength(kind === "tool" ? 1 : 0);
+      expect(() => {
+        assertAiOutcomeContext(saved);
+      }).not.toThrow();
+      const replay = generationFixture(
+        [],
+        1,
+        kind === "tool",
+        "openai",
+        "test-model",
+        "prompt-and-validate",
+        true,
+        null,
+      );
+      vi.mocked(replay.runtime.beginAttempt).mockResolvedValueOnce({
+        kind: "replay",
+        id: "attempt-1",
+        response: fromBinary(GenerationResponseSchema, toBinary(GenerationResponseSchema, saved)),
+        failure: {
+          code: "UNAVAILABLE",
+          retryableByNewSignal: true,
+          diagnosticId: "diagnostic-1",
+        },
+      });
+      await expect(replay.run()).resolves.toMatchObject({
+        ok: false,
+        failure: { code: "UNAVAILABLE" },
+      });
+      expect(replay.network).not.toHaveBeenCalled();
+      expect(replay.runtime.callTool).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ["subscription_sharing_usage_limit_exceeded", "RATE_LIMITED"],
+    ["subscription_sharing_unavailable", "UNAVAILABLE"],
+  ] as const)(
+    "classifies streamed ChatGPT %s without retry or provider prose",
+    async (providerCode, code) => {
+      const fixture = generationFixture(
+        [
+          [
+            { type: "text-delta", id: "msg-1", delta: "partial" },
+            {
+              type: "raw",
+              rawValue: {
+                type: "response.failed",
+                response: { error: { code: providerCode, message: "private provider prose" } },
+              },
+            },
+          ],
+        ],
+        1,
+        false,
+        "openai",
+        "test-model",
+        "prompt-and-validate",
+        true,
+        null,
+      );
+      await expect(fixture.run()).resolves.toMatchObject({
+        ok: false,
+        failure: { code, retryableByNewSignal: false },
+      });
+      expect(fixture.runtime.recordFailure).toHaveBeenCalledWith(code, false);
+      expect(JSON.stringify(vi.mocked(fixture.runtime.finishAttempt).mock.calls)).not.toContain(
+        "private provider prose",
+      );
+      expect(fixture.network).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("sends only the permitted ChatGPT plan wire fields with a scoped bearer token", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "ambient-api-key");
+    vi.stubEnv("OPENAI_BASE_URL", "https://ambient.example/v1");
+    const events = [
+      {
+        type: "response.created",
+        response: { id: "resp-plan", created_at: 1, model: identity.model },
+      },
+      {
+        type: "response.output_item.added",
+        output_index: 0,
+        item: { type: "message", id: "msg-1", phase: "final_answer" },
+      },
+      { type: "response.output_text.delta", item_id: "msg-1", delta: '{"replyText":"Hello"}' },
+      {
+        type: "response.output_item.done",
+        output_index: 0,
+        item: {
+          type: "message",
+          role: "assistant",
+          id: "msg-1",
+          phase: "final_answer",
+          content: [{ type: "output_text", text: '{"replyText":"Hello"}', annotations: [] }],
+        },
+      },
+      { type: "response.completed", response: { usage: { input_tokens: 3, output_tokens: 2 } } },
+    ]
+      .map((event) => `data: ${JSON.stringify(event)}\n\n`)
+      .join("");
+    const network = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        new Response(events, { headers: { "content-type": "text/event-stream" } }),
+      );
+    const registration = VercelAx.chatgptPlanModel({
+      ref: ModelRef.of("draft-support-reply", "r1"),
+      platformFetch: network,
+      resolveIdentity: () => identity,
+      authorizeUse: () => true,
+      connect: (_scope, expected) => ({ accessToken: "fixture-plan-token", identity: expected }),
+    });
+    const fixture = generationFixture(
+      [],
+      1,
+      false,
+      "openai",
+      "test-model",
+      "prompt-and-validate",
+      true,
+      null,
+    );
+    const runtime = fixture.runtime;
+    vi.mocked(runtime.admitGeneration).mockReturnValue({
+      ok: true,
+      value: create(ProposedSupportReplySchema, { replyText: "Hello" }),
+    });
+    const definition = executionDefinition(
+      AiModel.define({
+        name: "draft-support-reply",
+        version: "v1",
+        kind: "generation",
+        input: SupportTicketFactsSchema,
+        output: ProposedSupportReplySchema,
+        instructions: "Draft a reply",
+        outputMode: "prompt-and-validate",
+        limits: {
+          modelRequests: 1,
+          toolCalls: 0,
+          deadlineMs: 900,
+          maxInputBytes: 4000,
+          maxOutputBytes: 4000,
+        },
+      }).definition,
+    );
+    const selected = await backendDefinition(registration).connect(scope, identity, runtime);
+    const result = await backendDefinition(registration).execute({
+      operationId: create(AiOperationIdSchema, { value: "op-plan" }),
+      call: "support-request",
+      scope,
+      identity,
+      model: selected.model,
+      definition,
+      input: create(SupportTicketFactsSchema, {
+        ticketNumber: { value: "T-1" },
+        customerQuestion: "Help?",
+      }),
+      control: runtime,
+    });
+    expect(result).toMatchObject({ ok: true });
+    expect(network).toHaveBeenCalledTimes(1);
+    const [url, init] = vi.mocked(network).mock.calls[0] ?? [];
+    expect(url).toBe("https://provider.example/v1/responses");
+    if (!url) throw new Error("Expected a provider request");
+    expect(new Headers(init?.headers).get("authorization")).toBe("Bearer fixture-plan-token");
+    const body = JSON.parse(await new Request(url, init).text()) as Record<string, unknown>;
+    expect(body).toMatchObject({ stream: true, store: false, model: identity.model });
+    expect(Array.isArray(body.input)).toBe(true);
+    expect(JSON.stringify(body.input)).toContain('"role":"developer"');
+    expect(JSON.stringify(body.input)).not.toContain('"role":"system"');
+    for (const field of [
+      "max_output_tokens",
+      "previous_response_id",
+      "conversation",
+      "temperature",
+      "top_p",
+      "metadata",
+      "user",
+    ])
+      expect(body).not.toHaveProperty(field);
+    expect(JSON.stringify(body)).not.toContain("fixture-plan-token");
+    const journal = JSON.stringify(
+      vi.mocked(runtime.finishAttempt).mock.calls,
+      (_key, value: unknown) => (typeof value === "bigint" ? value.toString() : value),
+    );
+    expect(journal).not.toContain("fixture-plan-token");
+    expect(journal).not.toContain("ambient-api-key");
+  });
+
+  it.each([
+    { source: "code", error: { code: "invalid_api_key" } },
+    { source: "token code", error: { code: "invalid_token" } },
+    { source: "status", error: { status: 401 } },
+    { source: "forbidden status", error: { status: 403 } },
+  ] as const)(
+    "classifies streamed ChatGPT authentication by structured $source",
+    async ({ error }) => {
+      const fixture = generationFixture(
+        [
+          [
+            { type: "text-delta", id: "msg-1", delta: "partial" },
+            {
+              type: "raw",
+              rawValue: {
+                type: "response.failed",
+                response: { error: { ...error, message: "private auth prose" } },
+              },
+            },
+          ],
+        ],
+        1,
+        false,
+        "openai",
+        "test-model",
+        "prompt-and-validate",
+        true,
+        null,
+      );
+      await expect(fixture.run()).resolves.toMatchObject({
+        ok: false,
+        failure: { code: "AUTHENTICATION_REQUIRED", retryableByNewSignal: false },
+      });
+      const serialized = JSON.stringify(
+        vi.mocked(fixture.runtime.finishAttempt).mock.calls,
+        (_key, value: unknown) => (typeof value === "bigint" ? value.toString() : value),
+      );
+      expect(serialized).not.toContain("private auth prose");
+      expect(fixture.network).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("journals a typed ChatGPT refusal and replays it as a terminal refusal", async () => {
+    const first = generationFixture(
+      [
+        [
+          {
+            type: "raw",
+            rawValue: {
+              type: "response.output_item.added",
+              output_index: 0,
+              item: { type: "message", id: "message-1" },
+            },
+          },
+          {
+            type: "raw",
+            rawValue: {
+              type: "response.output_item.done",
+              output_index: 0,
+              item: {
+                type: "message",
+                id: "message-1",
+                role: "assistant",
+                status: "completed",
+                content: [{ type: "refusal", refusal: "Cannot help" }],
+              },
+            },
+          },
+        ],
+      ],
+      1,
+      false,
+      "openai",
+      "test-model",
+      "prompt-and-validate",
+      true,
+      null,
+    );
+    await expect(first.run()).resolves.toMatchObject({
+      ok: false,
+      failure: { code: "REFUSED", retryableByNewSignal: false },
+    });
+    const saved = vi.mocked(first.runtime.finishAttempt).mock.calls[0]?.[0].response;
+    if (saved?.$typeName !== "spine.ts.agent.GenerationResponse")
+      throw new Error("Expected generation response");
+    expect(saved).toMatchObject({
+      outcome: AiOutcome.REFUSED,
+      rawOutput: "",
+      openaiContent: { complete: false, items: [{ itemId: "message-1" }] },
+    });
+    const replay = generationFixture(
+      [],
+      1,
+      false,
+      "openai",
+      "test-model",
+      "prompt-and-validate",
+      true,
+      null,
+    );
+    vi.mocked(replay.runtime.beginAttempt).mockResolvedValueOnce({
+      kind: "replay",
+      id: "attempt-1",
+      response: fromBinary(GenerationResponseSchema, toBinary(GenerationResponseSchema, saved)),
+      failure: { code: "REFUSED", retryableByNewSignal: false, diagnosticId: "diagnostic-1" },
+    });
+    await expect(replay.run()).resolves.toMatchObject({ ok: false, failure: { code: "REFUSED" } });
+    expect(replay.network).not.toHaveBeenCalled();
+  });
+
+  it("continues a ChatGPT plan tool call with ordered encrypted reasoning", async () => {
+    const first: LanguageModelV3StreamPart[] = [
+      {
+        type: "raw",
+        rawValue: {
+          type: "response.output_item.added",
+          output_index: 0,
+          item: { type: "reasoning", id: "reason-1" },
+        },
+      },
+      {
+        type: "raw",
+        rawValue: {
+          type: "response.output_item.done",
+          output_index: 0,
+          item: {
+            type: "reasoning",
+            id: "reason-1",
+            encrypted_content: "encrypted-1",
+            summary: [
+              { type: "summary_text", text: "first" },
+              { type: "summary_text", text: "second" },
+            ],
+          },
+        },
+      },
+      {
+        type: "raw",
+        rawValue: {
+          type: "response.output_item.added",
+          output_index: 1,
+          item: { type: "function_call", id: "function-1" },
+        },
+      },
+      {
+        type: "raw",
+        rawValue: {
+          type: "response.output_item.done",
+          output_index: 1,
+          item: {
+            type: "function_call",
+            id: "function-1",
+            call_id: "provider-1",
+            name: "tool_0",
+            namespace: "spine_mcp",
+            arguments: '{"ticket":"T-1"}',
+          },
+        },
+      },
+      {
+        type: "tool-call",
+        toolCallId: "provider-1",
+        toolName: "tool_0",
+        input: '{"ticket":"T-1"}',
+      },
+      { type: "raw", rawValue: { type: "response.completed", response: {} } },
+      {
+        type: "finish",
+        finishReason: { unified: "tool-calls", raw: "completed" },
+        usage: sdkUsage(2, 3),
+      },
+    ];
+    const second: LanguageModelV3StreamPart[] = [
+      {
+        type: "raw",
+        rawValue: {
+          type: "response.output_item.added",
+          output_index: 0,
+          item: { type: "message", id: "message-2" },
+        },
+      },
+      {
+        type: "raw",
+        rawValue: {
+          type: "response.output_item.done",
+          output_index: 0,
+          item: {
+            type: "message",
+            role: "assistant",
+            id: "message-2",
+            phase: "final_answer",
+            content: [{ type: "output_text", text: '{"replyText":"Done"}', annotations: [] }],
+          },
+        },
+      },
+      { type: "text-delta", id: "message-2", delta: '{"replyText":"Done"}' },
+      { type: "raw", rawValue: { type: "response.completed", response: {} } },
+      {
+        type: "finish",
+        finishReason: { unified: "stop", raw: "completed" },
+        usage: sdkUsage(3, 2),
+      },
+    ];
+    const fixture = generationFixture(
+      [first, second],
+      2,
+      true,
+      "openai",
+      "test-model",
+      "prompt-and-validate",
+      true,
+      null,
+    );
+    vi.mocked(fixture.runtime.callTool).mockResolvedValue(
+      create(ToolResponseSchema, {
+        call: create(AiToolCallIdSchema, { value: "spine-tool-1" }),
+        outcome: AiOutcome.ADMITTED,
+        text: ["Found policy"],
+      }),
+    );
+    vi.mocked(fixture.runtime.admitGeneration).mockReturnValue({
+      ok: true,
+      value: create(ProposedSupportReplySchema, { replyText: "Done" }),
+    });
+    await expect(fixture.run()).resolves.toMatchObject({ ok: true });
+    expect(fixture.providerCalls).toHaveLength(2);
+    const prompt = fixture.providerCalls[1]?.prompt ?? [];
+    const assistant = prompt.find((entry) => entry.role === "assistant");
+    expect(assistant?.content).toMatchObject([
+      { type: "reasoning", text: "first", providerOptions: { openai: { itemId: "reason-1" } } },
+      {
+        type: "reasoning",
+        text: "second",
+        providerOptions: {
+          openai: {
+            itemId: "reason-1",
+            reasoningEncryptedContent: "encrypted-1",
+          },
+        },
+      },
+      {
+        type: "tool-call",
+        toolCallId: "provider-1",
+        toolName: "tool_0",
+        providerOptions: { openai: { itemId: "function-1", namespace: "spine_mcp" } },
+      },
+    ]);
+    expect(prompt.find((entry) => entry.role === "tool")).toBeDefined();
+    const response = vi.mocked(fixture.runtime.finishAttempt).mock.calls[0]?.[0].response;
+    expect(response?.$typeName).toBe("spine.ts.agent.GenerationResponse");
+    if (response?.$typeName === "spine.ts.agent.GenerationResponse")
+      expect(response.openaiContent?.items).toHaveLength(2);
+  });
+
+  it("replays serialized ChatGPT plan tool content and rejects tampered namespace", async () => {
+    const proposal: LanguageModelV3StreamPart[] = [
+      {
+        type: "raw",
+        rawValue: {
+          type: "response.output_item.added",
+          output_index: 0,
+          item: { type: "function_call", id: "function-1" },
+        },
+      },
+      {
+        type: "raw",
+        rawValue: {
+          type: "response.output_item.done",
+          output_index: 0,
+          item: {
+            type: "function_call",
+            id: "function-1",
+            call_id: "provider-1",
+            name: "tool_0",
+            namespace: "spine_mcp",
+            arguments: '{"ticket":"T-1"}',
+          },
+        },
+      },
+      {
+        type: "tool-call",
+        toolCallId: "provider-1",
+        toolName: "tool_0",
+        input: '{"ticket":"T-1"}',
+      },
+      { type: "raw", rawValue: { type: "response.completed", response: {} } },
+      {
+        type: "finish",
+        finishReason: { unified: "tool-calls", raw: "completed" },
+        usage: sdkUsage(1, 1),
+      },
+    ];
+    const answer: LanguageModelV3StreamPart[] = [
+      {
+        type: "raw",
+        rawValue: {
+          type: "response.output_item.added",
+          output_index: 0,
+          item: { type: "message", id: "message-2" },
+        },
+      },
+      {
+        type: "raw",
+        rawValue: {
+          type: "response.output_item.done",
+          output_index: 0,
+          item: {
+            type: "message",
+            role: "assistant",
+            id: "message-2",
+            content: [{ type: "output_text", text: '{"replyText":"Done"}' }],
+          },
+        },
+      },
+      { type: "text-delta", id: "message-2", delta: '{"replyText":"Done"}' },
+      { type: "raw", rawValue: { type: "response.completed", response: {} } },
+      {
+        type: "finish",
+        finishReason: { unified: "stop", raw: "completed" },
+        usage: sdkUsage(1, 1),
+      },
+    ];
+    const first = generationFixture(
+      [proposal, answer],
+      2,
+      true,
+      "openai",
+      "test-model",
+      "prompt-and-validate",
+      true,
+      null,
+    );
+    for (const fixture of [first]) {
+      vi.mocked(fixture.runtime.callTool).mockResolvedValue(
+        create(ToolResponseSchema, {
+          call: create(AiToolCallIdSchema, { value: "spine-tool-1" }),
+          outcome: AiOutcome.ADMITTED,
+          text: ["Found"],
+        }),
+      );
+      vi.mocked(fixture.runtime.admitGeneration).mockReturnValue({
+        ok: true,
+        value: create(ProposedSupportReplySchema, { replyText: "Done" }),
+      });
+    }
+    await expect(first.run()).resolves.toMatchObject({ ok: true });
+    const saved = vi.mocked(first.runtime.finishAttempt).mock.calls[0]?.[0].response;
+    if (saved?.$typeName !== "spine.ts.agent.GenerationResponse")
+      throw new Error("Expected generation response");
+    const restored = fromBinary(
+      GenerationResponseSchema,
+      toBinary(GenerationResponseSchema, saved),
+    );
+    const replay = generationFixture(
+      [answer],
+      2,
+      true,
+      "openai",
+      "test-model",
+      "prompt-and-validate",
+      true,
+      null,
+    );
+    vi.mocked(replay.runtime.beginAttempt).mockResolvedValueOnce({
+      kind: "replay",
+      id: "attempt-1",
+      response: restored,
+    });
+    vi.mocked(replay.runtime.callTool).mockResolvedValue(
+      create(ToolResponseSchema, {
+        call: create(AiToolCallIdSchema, { value: "spine-tool-1" }),
+        outcome: AiOutcome.ADMITTED,
+        text: ["Found"],
+      }),
+    );
+    vi.mocked(replay.runtime.admitGeneration).mockReturnValue({
+      ok: true,
+      value: create(ProposedSupportReplySchema, { replyText: "Done" }),
+    });
+    await expect(replay.run()).resolves.toMatchObject({ ok: true });
+    expect(replay.providerCalls).toHaveLength(1);
+    expect(replay.network).toHaveBeenCalledTimes(1);
+    const changed = fromBinary(GenerationResponseSchema, toBinary(GenerationResponseSchema, saved));
+    const call = changed.openaiContent?.items[0]?.content;
+    if (call?.case === "functionCall") call.value.namespace = "other";
+    const tampered = generationFixture(
+      [],
+      2,
+      true,
+      "openai",
+      "test-model",
+      "prompt-and-validate",
+      true,
+      null,
+    );
+    vi.mocked(tampered.runtime.beginAttempt).mockResolvedValueOnce({
+      kind: "replay",
+      id: "attempt-1",
+      response: changed,
+    });
+    await expect(tampered.run()).rejects.toThrow("namespace");
+    expect(tampered.network).not.toHaveBeenCalled();
+  });
   it("registers the pinned Anthropic Messages route as a generation provider", () => {
     const capabilities = VercelAx.capabilities.anthropicMessages();
     const anthropicIdentity = { ...identity, provider: "anthropic", model: "claude-sonnet-4-5" };
@@ -510,6 +1342,25 @@ describe("Vercel connection registration", () => {
     });
     await expect(
       backendDefinition(registration).connect(scope, selectedIdentity, control()),
+    ).rejects.toThrow("model identity changed");
+    expect(network).not.toHaveBeenCalled();
+  });
+
+  it("rejects a ChatGPT plan model that differs from the authorized identity before fetch", async () => {
+    const network = vi.fn<typeof fetch>();
+    const registration = registerGeneration({
+      ref: ModelRef.of("draft-support-reply", "r1"),
+      capabilities: VercelAx.capabilities.chatgptPlanResponses(),
+      platformFetch: network,
+      resolveIdentity: () => identity,
+      authorizeUse: () => true,
+      connect: () => ({
+        model: new MockLanguageModelV3({ modelId: "different-model" }),
+        identity,
+      }),
+    });
+    await expect(
+      backendDefinition(registration).connect(scope, identity, control()),
     ).rejects.toThrow("model identity changed");
     expect(network).not.toHaveBeenCalled();
   });

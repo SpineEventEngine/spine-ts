@@ -90,6 +90,12 @@ uses saved counts and deadlines. Completed exchanges charge their measured respo
 bytes. If the complete byte count is unknown, the full response allowance stays
 reserved; interruption does not grant another free request.
 
+Generation `maxOutputTokens` is optional. Set it only when the selected
+deployment can enforce a token ceiling; an adapter that cannot enforce an
+explicit ceiling rejects the call before inference. Physical request count,
+tool count, deadline, input bytes, and output bytes are always required. Byte
+limits bound materialized and received data, not model tokens.
+
 Await each model call before starting the next one in the same handler. Concurrent
 calls, an unfinished call when the handler returns, and reuse of a facade after
 its handler finishes are programming errors.

@@ -444,7 +444,7 @@
     },
     {
       "localPath": "packages/proto/proto/spine/ts/agent/content.proto",
-      "sha256": "8ae1589a208bfcd7fcaf9e25078f621ae41e950a5b653c956643d40e63919f43"
+      "sha256": "d119c8a71c39dcdd4af8de1dd1c1ceeb22eab08fb02a704d8ee15bae5949f4fe"
     },
     {
       "localPath": "packages/proto/proto/spine/ts/agent/history.proto",
@@ -456,7 +456,7 @@
     },
     {
       "localPath": "packages/proto/proto/spine/ts/agent/model.proto",
-      "sha256": "20227135bff1cc23bf3d57d1ede031390ff6fc257299fe3b2716765fca34f47f"
+      "sha256": "e8cfcc1b53731627fbdeaeaeb74a59b98b05510bb7044ceffb493ac2ab3292e1"
     }
   ]
 }

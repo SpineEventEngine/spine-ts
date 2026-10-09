@@ -217,7 +217,7 @@ message AiOperationLimits {
     (validate) = true
   ];
 
-  // Generation-only output token limit; absent for decisions.
+  // Optional generation output token limit; absent for decisions and unsupported profiles.
   AiOutputTokenLimit max_output_tokens = 6 [(validate) = true];
 }
 

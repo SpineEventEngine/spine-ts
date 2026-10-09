@@ -4,6 +4,24 @@ Audience: application developers registering provider models, and implementers c
 
 `VercelAx.model()` registers OpenAI Responses with `VercelAx.capabilities.openAIResponses()` or Anthropic Messages with `VercelAx.capabilities.anthropicMessages()`. `VercelDecision.model()` registers an OpenRouter Jev decision backend with `VercelDecision.capabilities.openRouterJev()`. Both factories accept a semantic `ModelRef`, trusted identity and authorization callbacks, and a connection callback that constructs a published Vercel provider model using the supplied operation-scoped `fetch`. The connection returns that model and the same credential-free identity that the runtime authorized. Registration and connection do not dispatch a model request.
 
+`VercelAx.chatgptPlanModel()` selects the separate ChatGPT plan Responses
+profile at `/v1/responses`. It uses the same identity, authorization, and
+guarded-fetch controls. The trusted application supplies a nonempty OAuth
+access token through its connection callback; the adapter sets the pinned
+OpenAI SDK's `apiKey`, endpoint, and guarded fetch explicitly. The adapter
+does not sign in, refresh credentials, or fall back to ambient API key or
+base URL settings. The generic `VercelAx.model()` rejects this profile. See
+the [complete registration example](README.md#chatgpt-plan-responses-registration).
+This profile sends `stream: true`, `store: false`, developer instructions,
+stateless input, and `reasoning.encrypted_content`. Local functions use a
+`spine_mcp` namespace. It accepts prompt-and-validate output only. A requested
+`maxOutputTokens` ceiling or native-schema mode fails with
+`UNSUPPORTED_CAPABILITY` before an inference attempt. The existing API-key
+OpenAI and Anthropic profiles continue to support explicit token ceilings.
+The profile retains ordered typed response items for continuation and replay;
+only `response.completed` admits output. Provider failure, incomplete output,
+refusal, and missing terminal responses remain recorded failures.
+
 The generation path uses Ax to render requests, correct invalid output within the model-request allowance, and continue after recorded tool proposals. Direct Vercel provider streams carry native descriptor-derived JSON schemas or prompt-and-validate instructions. The adapter preserves bounded raw output, ordered provider tool proposals, actual model identity when reported, token usage with absent counts distinct from zero, and safe failure categories. For Anthropic Messages, the response journal also records bounded ordered text, signed thinking, redacted thinking, and tool blocks. The adapter rebuilds the exact assistant block order from that journal for tool and correction requests, including after replay; incomplete thinking never authorizes a continuation. It journals each physical attempt before tool authorization or a second model request. A runtime denial ends with `TOOL_FAILED`; an unresolved tool write ends with `TOOL_OUTCOME_UNKNOWN`. Neither becomes a fabricated tool result.
 
 Anthropic uses `@ai-sdk/anthropic@4.0.72` and the exact `/messages` endpoint under the authorized credential-free base URL. In native-schema mode the adapter forces `providerOptions.anthropic.structuredOutputMode: "outputFormat"`; it never asks the SDK to substitute a JSON tool. The tested exact native model IDs are `claude-sonnet-4-5`, `claude-sonnet-4-5-20250929`, `claude-haiku-4-5`, `claude-haiku-4-5-20251001`, `claude-opus-4-5`, `claude-opus-4-5-20251101`, `claude-sonnet-4-6`, `claude-opus-4-6`, `claude-opus-4-7`, `claude-opus-4-8`, `claude-sonnet-5`, `claude-opus-5`, `claude-sonnet-5-5`, `claude-opus-5-5`, `claude-fable-5`, and `claude-fable-5-1`. Other model IDs in native mode return a recorded `UNSUPPORTED_CAPABILITY` before an attempt or fetch. Prompt-and-validate remains available for other Anthropic model IDs, subject to actual provider access. The provider's native schema lowering relaxes some pattern and numeric bounds and oneof constraints; the recorded request retains the original descriptor schema and Anthropic lowering revision, and local Protobuf/application validation remains definitive. Credentials are supplied by trusted connection callbacks using the provider's `apiKey` or `authToken` setting; the adapter has no OAuth or subscription-login flow.

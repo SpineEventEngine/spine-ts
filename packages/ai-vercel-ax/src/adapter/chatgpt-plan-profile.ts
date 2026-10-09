@@ -12,15 +12,18 @@
  * the License.
  */
 
+import type { VercelProviderCapabilities } from "./factory.js";
+
 /**
- * Optional Vercel provider registrations for Spine Agent capabilities.
+ * Exact stateless Responses contract accepted by ChatGPT plan usage.
  */
-export { VercelAx, VercelDecision } from "./adapter/factory.js";
-export type {
-  ChatgptPlanModelOptions,
-  VercelConnectControl,
-  VercelConnection,
-  VercelModelOptions,
-  VercelProviderCapabilities,
-  VercelDecisionModel,
-} from "./adapter/factory.js";
+export const chatgptPlanProfile: VercelProviderCapabilities = Object.freeze({
+  id: "chatgpt-plan-responses-v1",
+  routeSuffix: "/responses",
+  providerProtocol: "openai-responses-stream-v1",
+  boundedFetchRevision: "spine-bounded-fetch-v1",
+  outputContract: "prompt-validate-v1",
+  cancellationContract: "ticket-abort-and-deadline-v1",
+  retryContract: "one-provider-call-per-ticket-v1",
+  tokenCeiling: "unsupported",
+} as const satisfies VercelProviderCapabilities);

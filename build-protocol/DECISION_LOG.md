@@ -6098,3 +6098,51 @@ Agent and AiModel application APIs remain unchanged. This unreleased serialized
 contract needs no migration shim. The bounded architecture assessment is recorded
 in the [Agent task](planning/agent-entities.md); correction tests cover real pinned
 SDK requests, signature fragments, redacted content, bounds and recorded recovery.
+
+## D-0132: ChatGPT Plan Responses Profile And Recorded Continuations
+
+Status: Accepted; implementation in progress
+
+Date: 2026-10-09
+
+Add a distinct subscription profile inside ai-vercel-ax. Its dedicated
+VercelAx.chatgptPlanModel registration retains identity and authorization hooks;
+connect supplies an explicit nonblank access token and matching identity. The
+adapter constructs the pinned OpenAI SDK model with its guarded fetch. Generic
+VercelAx.model rejects this profile, preventing accidental ambient-key fallback.
+No new published package, Electron dependency, login flow, or credential store.
+The published OpenAI SDK's apiKey option carries the application's OAuth access
+token as a Bearer credential; its parameter name does not require platform API
+billing. Reject missing tokens in the dedicated connection before invoking the SDK,
+rather than relying on application examples to prevent environment fallback.
+The application establishes that the explicit credential belongs to the selected
+ChatGPT registration; the adapter does not infer OAuth scopes from token syntax.
+Move the pinned OpenAI SDK dependency to this existing package runtime dependencies.
+
+Generation output-token ceilings become optional. All existing finite request,
+tool, byte, and deadline limits remain mandatory. The subscription profile
+rejects explicit token ceilings and initially supports prompt-and-validation
+only. It uses public Responses with streaming, store:false, developer messages,
+namespace tools, and explicit encrypted-reasoning inclusion. SDK lowering occurs
+before guarded materialization/admission; no unrecorded retries or transport
+rewrite after journal admission.
+
+Extend GenerationResponse additively with typed ordered OpenAI message,
+reasoning, and function-call items plus completion state. Keep exact received
+item IDs, summary parts, encrypted reasoning, function correlation and namespace
+in bounded history. Validate raw stream items because the SDK's normalized parts
+can omit refusal/unsupported content. Record complete only after coherent item
+closure and response.completed. Include typed content in receipt digest and byte
+accounting, without changing other profiles' digest contracts.
+
+Continuation uses deterministic published-SDK lowering of validated recorded
+content. The SDK may omit message/function item IDs, reserialize arguments and
+omit empty summaries from outgoing input; those transformations do not require
+a new transport layer. Received values remain in history, and prepared request
+metadata records the reconstruction/lowering revision. Replay validates recorded
+content, completeness, projections and digest before another request or tool.
+
+The prior architecture pass was reopened only for this demonstrated serialized
+continuation gap. No generic provider-content subsystem, database change, or
+migration shim is introduced. See [Release Notes Studio](planning/release-notes-studio.md)
+and [the Agent task](planning/agent-entities.md).

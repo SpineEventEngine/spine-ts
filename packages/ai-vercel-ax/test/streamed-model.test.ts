@@ -164,6 +164,319 @@ describe("direct bounded Vercel model stream", () => {
     expect(backend.doGenerateCalls).toHaveLength(0);
   });
 
+  it("requires completed ChatGPT Responses and retains ordered reasoning and output items", async () => {
+    const items = [
+      {
+        type: "reasoning",
+        id: "reason-1",
+        encrypted_content: "encrypted-1",
+        summary: [
+          { type: "summary_text", text: "first" },
+          { type: "summary_text", text: "second" },
+        ],
+      },
+      {
+        type: "message",
+        role: "assistant",
+        id: "message-1",
+        phase: "final_answer",
+        content: [{ type: "output_text", text: '{"reply":"ok"}', annotations: [] }],
+      },
+    ];
+    const parts: LanguageModelV3StreamPart[] = [
+      ...items.flatMap((item, output_index) => [
+        {
+          type: "raw" as const,
+          rawValue: {
+            type: "response.output_item.added",
+            output_index,
+            item: { type: item.type, id: item.id },
+          },
+        },
+        {
+          type: "raw" as const,
+          rawValue: { type: "response.output_item.done", output_index, item },
+        },
+      ]),
+      { type: "text-delta", id: "message-1", delta: '{"reply":"ok"}' },
+      { type: "raw", rawValue: { type: "response.completed", response: {} } },
+      { type: "finish", finishReason: { unified: "stop", raw: "completed" }, usage },
+    ];
+    const result = await collectModelStream(model(parts), options, 500, undefined, false, true);
+    expect(result.openaiContent).toEqual({
+      complete: true,
+      items: [
+        {
+          id: "reason-1",
+          type: "reasoning",
+          summary: ["first", "second"],
+          encryptedContent: "encrypted-1",
+        },
+        {
+          id: "message-1",
+          type: "message",
+          phase: "final_answer",
+          parts: [{ type: "output_text", text: '{"reply":"ok"}' }],
+        },
+      ],
+    });
+    await expect(
+      collectModelStream(
+        model(
+          parts.filter(
+            (part) =>
+              part.type !== "raw" ||
+              (part.rawValue as { type?: string }).type !== "response.completed",
+          ),
+        ),
+        options,
+        500,
+        undefined,
+        false,
+        true,
+      ),
+    ).rejects.toThrow("incomplete");
+  });
+
+  it("rejects a completed Responses event when an output item remains open", async () => {
+    const pending = collectModelStream(
+      model([
+        {
+          type: "raw",
+          rawValue: {
+            type: "response.output_item.added",
+            output_index: 0,
+            item: { type: "message", id: "message-1" },
+          },
+        },
+        { type: "raw", rawValue: { type: "response.completed", response: {} } },
+        { type: "finish", finishReason: { unified: "stop", raw: "completed" }, usage },
+      ]),
+      options,
+      500,
+      undefined,
+      false,
+      true,
+    );
+    await expect(pending).rejects.toThrow("incomplete");
+  });
+
+  it("retains a bounded refusal in a failed Responses receipt", async () => {
+    const failure = await collectModelStream(
+      model([
+        {
+          type: "raw",
+          rawValue: {
+            type: "response.output_item.added",
+            output_index: 0,
+            item: { type: "message", id: "message-1" },
+          },
+        },
+        {
+          type: "raw",
+          rawValue: {
+            type: "response.output_item.done",
+            output_index: 0,
+            item: {
+              type: "message",
+              role: "assistant",
+              id: "message-1",
+              content: [{ type: "refusal", refusal: "Cannot help" }],
+            },
+          },
+        },
+      ]),
+      options,
+      500,
+      undefined,
+      false,
+      true,
+    ).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(StreamCollectionError);
+    expect((failure as StreamCollectionError).partial.openaiContent).toMatchObject({
+      complete: false,
+      items: [{ id: "message-1", parts: [{ type: "refusal", text: "Cannot help" }] }],
+    });
+  });
+
+  it("rejects contradictory Responses terminal and later output events", async () => {
+    for (const extra of [
+      { type: "response.completed", response: {} },
+      {
+        type: "response.output_item.added",
+        output_index: 0,
+        item: { type: "message", id: "late-message" },
+      },
+    ]) {
+      await expect(
+        collectModelStream(
+          model([
+            { type: "raw", rawValue: { type: "response.completed", response: {} } },
+            { type: "raw", rawValue: extra },
+            { type: "finish", finishReason: { unified: "stop", raw: "completed" }, usage },
+          ]),
+          options,
+          500,
+          undefined,
+          false,
+          true,
+        ),
+      ).rejects.toThrow("after terminal");
+    }
+    await expect(
+      collectModelStream(
+        model([
+          {
+            type: "raw",
+            rawValue: { type: "response.completed", response: { status: "incomplete" } },
+          },
+          { type: "finish", finishReason: { unified: "stop", raw: "completed" }, usage },
+        ]),
+        options,
+        500,
+        undefined,
+        false,
+        true,
+      ),
+    ).rejects.toThrow("incomplete");
+  });
+
+  it.each(["failed", "incomplete", "unknown"])(
+    "rejects a response.completed event with %s status",
+    async (status) => {
+      await expect(
+        collectModelStream(
+          model([
+            { type: "raw", rawValue: { type: "response.completed", response: { status } } },
+            { type: "finish", finishReason: { unified: "stop", raw: "completed" }, usage },
+          ]),
+          options,
+          500,
+          undefined,
+          false,
+          true,
+        ),
+      ).rejects.toThrow("incomplete");
+    },
+  );
+
+  it.each(["message", "reasoning", "function_call"])(
+    "rejects noncompleted %s output items",
+    async (type) => {
+      const item =
+        type === "message"
+          ? { type, id: "item-1", status: "incomplete", role: "assistant", content: [] }
+          : type === "reasoning"
+            ? {
+                type,
+                id: "item-1",
+                status: "incomplete",
+                encrypted_content: "encrypted",
+                summary: [],
+              }
+            : {
+                type,
+                id: "item-1",
+                status: "incomplete",
+                call_id: "call-1",
+                name: "tool_0",
+                namespace: "spine_mcp",
+                arguments: "{}",
+              };
+      await expect(
+        collectModelStream(
+          model([
+            {
+              type: "raw",
+              rawValue: {
+                type: "response.output_item.added",
+                output_index: 0,
+                item: { type, id: "item-1" },
+              },
+            },
+            { type: "raw", rawValue: { type: "response.output_item.done", output_index: 0, item } },
+            { type: "raw", rawValue: { type: "response.completed", response: {} } },
+            { type: "finish", finishReason: { unified: "stop", raw: "completed" }, usage },
+          ]),
+          options,
+          500,
+          undefined,
+          false,
+          true,
+        ),
+      ).rejects.toThrow("incomplete");
+    },
+  );
+
+  it("retains allowlisted failed Responses codes without vendor prose", async () => {
+    const failure = await collectModelStream(
+      model([
+        { type: "text-delta", id: "msg-1", delta: "partial" },
+        {
+          type: "raw",
+          rawValue: {
+            type: "response.failed",
+            response: {
+              error: {
+                code: "subscription_sharing_usage_limit_exceeded",
+                message: "private provider prose",
+              },
+            },
+          },
+        },
+      ]),
+      options,
+      500,
+      undefined,
+      false,
+      true,
+    ).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(StreamCollectionError);
+    expect(failure).toMatchObject({ providerCode: "subscription_sharing_usage_limit_exceeded" });
+    expect((failure as StreamCollectionError).partial.text).toBe("partial");
+    expect(JSON.stringify(failure)).not.toContain("private provider prose");
+  });
+
+  it("bounds an encrypted reasoning item before retaining it", async () => {
+    const failure = await collectModelStream(
+      model([
+        {
+          type: "raw",
+          rawValue: {
+            type: "response.output_item.added",
+            output_index: 0,
+            item: { type: "reasoning", id: "reason-1" },
+          },
+        },
+        {
+          type: "raw",
+          rawValue: {
+            type: "response.output_item.done",
+            output_index: 0,
+            item: {
+              type: "reasoning",
+              id: "reason-1",
+              status: "completed",
+              summary: [],
+              encrypted_content: "x".repeat(512),
+            },
+          },
+        },
+      ]),
+      options,
+      200,
+      undefined,
+      false,
+      true,
+    ).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(StreamCollectionError);
+    expect((failure as StreamCollectionError).message).toContain("Parsed output limit");
+    expect((failure as StreamCollectionError).partial.openaiContent).toEqual({
+      complete: false,
+      items: [],
+    });
+  });
+
   it("preserves tool input and rejects a parseable truncation", async () => {
     const call = await collectModelStream(
       model([

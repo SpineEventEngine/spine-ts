@@ -136,8 +136,6 @@ const copyLimits = (limits: AiLimits, kind: "generation" | "decision"): AiLimits
       ? { maxOutputTokens: positiveInteger(limits.maxOutputTokens, "maxOutputTokens") }
       : {}),
   };
-  if (kind === "generation" && copy.maxOutputTokens === undefined)
-    throw new TypeError("generation maxOutputTokens is required");
   if (kind === "decision" && copy.maxOutputTokens !== undefined)
     throw new TypeError("decision maxOutputTokens is unsupported");
   if (kind === "decision" && copy.toolCalls !== 0)

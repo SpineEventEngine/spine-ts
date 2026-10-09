@@ -23,12 +23,14 @@ import {
   type AiExecutionControl,
 } from "@spine-event-engine/ai/spi/adapter";
 import type { ModelRef } from "@spine-event-engine/ai";
+import { createOpenAI } from "@ai-sdk/openai";
 import { createBoundedProviderFetch, type BoundedProviderFetch } from "./bounded-fetch.js";
 import { scheduleBoundedDeadline } from "./deadline.js";
 import type { StreamModel } from "./streamed-model.js";
 import { executeGeneration } from "./generation.js";
 import { executeDecision } from "./decision.js";
 import { createMcpProtocolFactory } from "./mcp-protocol.js";
+import { chatgptPlanProfile } from "./chatgpt-plan-profile.js";
 
 /**
  * Operation-scoped provider fetch supplied to a trusted connection callback.
@@ -47,7 +49,11 @@ export interface VercelProviderCapabilities {
   /**
    * Versioned integration profile.
    */
-  readonly id: "openai-responses-v1" | "anthropic-messages-v1" | "openrouter-decisions-v1";
+  readonly id:
+    | "openai-responses-v1"
+    | "chatgpt-plan-responses-v1"
+    | "anthropic-messages-v1"
+    | "openrouter-decisions-v1";
 
   /**
    * Exact route relative to the credential-free endpoint identity.
@@ -68,7 +74,8 @@ export interface VercelProviderCapabilities {
   /**
    * Supported output-schema or decision-question lowering.
    */
-  readonly outputContract: "native-json-or-prompt-validate-v1" | "typed-decision-v1";
+  readonly outputContract:
+    "native-json-or-prompt-validate-v1" | "prompt-validate-v1" | "typed-decision-v1";
 
   /**
    * Operation and ticket cancellation with a local callback deadline.
@@ -79,6 +86,11 @@ export interface VercelProviderCapabilities {
    * One physical provider call per durable attempt ticket, without SDK retries.
    */
   readonly retryContract: "one-provider-call-per-ticket-v1";
+
+  /**
+   * Whether this protocol accepts an explicit generation output-token ceiling.
+   */
+  readonly tokenCeiling: "supported" | "unsupported";
 }
 
 const openAIProfile = Object.freeze({
@@ -89,6 +101,7 @@ const openAIProfile = Object.freeze({
   outputContract: "native-json-or-prompt-validate-v1",
   cancellationContract: "ticket-abort-and-deadline-v1",
   retryContract: "one-provider-call-per-ticket-v1",
+  tokenCeiling: "supported",
 } as const satisfies VercelProviderCapabilities);
 
 const anthropicProfile = Object.freeze({
@@ -99,6 +112,7 @@ const anthropicProfile = Object.freeze({
   outputContract: "native-json-or-prompt-validate-v1",
   cancellationContract: "ticket-abort-and-deadline-v1",
   retryContract: "one-provider-call-per-ticket-v1",
+  tokenCeiling: "supported",
 } as const satisfies VercelProviderCapabilities);
 
 const openRouterProfile = Object.freeze({
@@ -109,6 +123,7 @@ const openRouterProfile = Object.freeze({
   outputContract: "typed-decision-v1",
   cancellationContract: "ticket-abort-and-deadline-v1",
   retryContract: "one-provider-call-per-ticket-v1",
+  tokenCeiling: "unsupported",
 } as const satisfies VercelProviderCapabilities);
 
 /**
@@ -203,6 +218,30 @@ export interface VercelModelOptions<M extends StreamModel | VercelDecisionModel>
 }
 
 /**
+ * Explicit subscription credential binding for the pinned ChatGPT plan profile.
+ */
+export interface ChatgptPlanModelOptions extends Pick<
+  VercelModelOptions<StreamModel>,
+  "ref" | "platformFetch" | "resolveIdentity" | "authorizeUse"
+> {
+  /**
+   * Returns an authorized OAuth access token for this operation.
+   *
+   * @param scope Authenticated signal scope.
+   * @param expected Authorized credential-free deployment identity.
+   * @param control Cancellation and deadline controls.
+   * @returns Access token and matching deployment identity.
+   */
+  readonly connect: (
+    scope: AiScope,
+    expected: AiConnectionIdentity,
+    control: AiControl,
+  ) =>
+    | { readonly accessToken: string; readonly identity: AiConnectionIdentity }
+    | Promise<{ readonly accessToken: string; readonly identity: AiConnectionIdentity }>;
+}
+
+/**
  * Accepted V4 decision model or published OpenRouter evaluation compatibility model.
  */
 // Published OpenRouter 3.1.0 implements the SDK's deprecated evaluation compatibility contract.
@@ -273,6 +312,20 @@ const checkIdentity = (expected: AiConnectionIdentity, actual: AiConnectionIdent
 };
 
 /**
+ * Captures immutable authorized fields before a trusted callback can mutate its input.
+ *
+ * @param identity Previously authorized deployment.
+ * @returns Stable credential-free identity.
+ */
+const authorizedIdentity = (identity: AiConnectionIdentity): AiConnectionIdentity =>
+  Object.freeze({
+    provider: identity.provider,
+    account: identity.account,
+    endpoint: identity.endpoint,
+    model: identity.model,
+  });
+
+/**
  * Checks the trusted callback's deployment and Anthropic model identity.
  * @param expected Previously authorized identity.
  * @param result Constructed provider connection.
@@ -285,7 +338,10 @@ const checkConnectionIdentity = <M extends StreamModel | VercelDecisionModel>(
   capabilities: VercelProviderCapabilities,
 ): void => {
   checkIdentity(expected, result.identity);
-  if (capabilities.id === anthropicProfile.id && result.model.modelId !== expected.model)
+  if (
+    (capabilities.id === anthropicProfile.id || capabilities.id === chatgptPlanProfile.id) &&
+    result.model.modelId !== expected.model
+  )
     throw new Error("Provider model identity changed");
 };
 
@@ -380,12 +436,13 @@ const connect = async <M extends StreamModel | VercelDecisionModel>(
   control: AiExecutionControl,
 ) => {
   assertConnectionActive(control);
+  const authorized = authorizedIdentity(expected);
   const received = new Map<string, number>();
-  const gate = scopedGate(options, expected, control, received);
+  const gate = scopedGate(options, authorized, control, received);
   try {
     const result = await awaitConnection(
       Promise.resolve(
-        options.connect(scope, expected, {
+        options.connect(scope, authorized, {
           signal: control.signal,
           deadlineEpochMs: control.deadlineEpochMs,
           fetch: gate.fetch,
@@ -393,21 +450,58 @@ const connect = async <M extends StreamModel | VercelDecisionModel>(
       ),
       control,
     );
-    checkConnectionIdentity(expected, result, options.capabilities);
+    checkConnectionIdentity(authorized, result, options.capabilities);
     assertConnectionActive(control);
-    const handle = Object.freeze({});
-    connections.set(handle, {
-      model: result.model,
-      capabilities: options.capabilities,
-      gate,
-      receivedBytes: (ticketId) => received.get(ticketId),
-    });
-    return { model: handle, identity: result.identity };
+    const handle = connectionHandle(result.model, options.capabilities, gate, received);
+    return { model: handle, identity: authorized };
   } catch (error) {
     gate.revoke();
     throw error;
   }
 };
+
+/**
+ * @param model Verified provider model.
+ * @param capabilities Canonical provider profile.
+ * @param gate Bound operation fetch.
+ * @param received Locally observed response bytes.
+ * @returns Opaque handle for provider dispatch.
+ */
+const connectionHandle = (
+  model: StreamModel | VercelDecisionModel,
+  capabilities: VercelProviderCapabilities,
+  gate: BoundedProviderFetch,
+  received: Map<string, number>,
+): object => {
+  const handle = Object.freeze({});
+  connections.set(handle, {
+    model,
+    capabilities,
+    gate,
+    receivedBytes: (ticketId) => received.get(ticketId),
+  });
+  return handle;
+};
+
+/**
+ * Registers one tested generation connection after its public constructor checks.
+ *
+ * @param options Verified provider connection options.
+ * @returns SDK-free backend registration.
+ */
+export const registerGeneration = (
+  options: VercelModelOptions<StreamModel>,
+): AiBackendRegistration =>
+  createBackendRegistration({
+    ref: options.ref,
+    kind: "generation",
+    mcp: createMcpProtocolFactory(),
+    supports: (definition) => definition.kind === "generation",
+    resolveIdentity: options.resolveIdentity,
+    authorizeUse: options.authorizeUse,
+    connect: (scope, expected, control) => connect(options, scope, expected, control),
+    execute: executeGeneration,
+  });
 
 /**
  * Factory for tested OpenAI Responses and Anthropic Messages connections.
@@ -424,6 +518,12 @@ export const VercelAx = {
     openAIResponses: (): VercelProviderCapabilities => openAIProfile,
 
     /**
+     * Returns the bounded ChatGPT plan Responses streaming profile.
+     * @returns Stateless subscription Responses profile.
+     */
+    chatgptPlanResponses: (): VercelProviderCapabilities => chatgptPlanProfile,
+
+    /**
      * Returns the pinned Anthropic Messages protocol.
      * @returns Pinned Vercel Anthropic Messages streaming protocol profile.
      */
@@ -436,19 +536,43 @@ export const VercelAx = {
    * @returns Immutable SDK-free registration.
    */
   model(options: VercelModelOptions<StreamModel>): AiBackendRegistration {
+    if (options.capabilities.id === chatgptPlanProfile.id)
+      throw new TypeError("Use VercelAx.chatgptPlanModel for a ChatGPT plan connection");
     const expected =
       options.capabilities.id === anthropicProfile.id ? anthropicProfile : openAIProfile;
     assertProfile(options.capabilities, expected);
-    const selected = { ...options, capabilities: expected };
-    return createBackendRegistration({
-      ref: selected.ref,
-      kind: "generation",
-      mcp: createMcpProtocolFactory(),
-      supports: (definition) => definition.kind === "generation",
-      resolveIdentity: selected.resolveIdentity,
-      authorizeUse: selected.authorizeUse,
-      connect: (scope, expected, control) => connect(selected, scope, expected, control),
-      execute: executeGeneration,
+    return registerGeneration({ ...options, capabilities: expected });
+  },
+
+  /**
+   * Registers a ChatGPT plan deployment with an explicit operation-scoped token.
+   *
+   * @param options Authorized identity, OAuth token callback, and platform fetch.
+   * @returns Immutable SDK-free registration.
+   */
+  chatgptPlanModel(options: ChatgptPlanModelOptions): AiBackendRegistration {
+    return registerGeneration({
+      ...options,
+      capabilities: chatgptPlanProfile,
+      connect: async (scope, expected, control) => {
+        const credential = (await options.connect(scope, expected, control)) as
+          Awaited<ReturnType<ChatgptPlanModelOptions["connect"]>> | undefined;
+        if (
+          !credential ||
+          typeof credential.accessToken !== "string" ||
+          !credential.accessToken.trim()
+        )
+          throw new TypeError("ChatGPT plan access token required");
+        checkIdentity(expected, credential.identity);
+        return {
+          model: createOpenAI({
+            apiKey: credential.accessToken,
+            baseURL: expected.endpoint,
+            fetch: control.fetch,
+          }).responses(expected.model),
+          identity: credential.identity,
+        };
+      },
     });
   },
 };

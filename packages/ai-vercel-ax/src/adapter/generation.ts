@@ -49,8 +49,11 @@ import {
   GenerationRequestSchema,
   GenerationResponseSchema,
   AnthropicAssistantContentSchema,
+  OpenAiAssistantContentSchema as OpenAiContentSchema,
+  OpenAiMessageItem_Phase as OpenAiPhase,
   type GenerationResponse,
   type AnthropicAssistantContent,
+  type OpenAiAssistantContent,
 } from "@spine-event-engine/proto/agent";
 import { AxVercelBridge, type PreparedRequest } from "./bridge.js";
 import { providerConnection } from "./factory.js";
@@ -62,6 +65,8 @@ import {
   type StreamModel,
   type StreamedPartialResult,
   type AnthropicBlock,
+  type OpenAiBlock,
+  type OpenAiContent,
 } from "./streamed-model.js";
 
 const nativeAnthropicModels = new Set([
@@ -96,6 +101,24 @@ const anthropicOptions = (request: AiBackendExecution) =>
     : undefined;
 
 type AnthropicOptions = ReturnType<typeof anthropicOptions>;
+
+/**
+ * Forces the pinned SDK to lower the subscription request as stateless Responses.
+ * @param request Selected generation execution.
+ * @returns Provider options for the ChatGPT plan profile.
+ */
+const chatgptPlanOptions = (request: AiBackendExecution) =>
+  providerConnection(request.model).capabilities.id === "chatgpt-plan-responses-v1"
+    ? {
+        openai: {
+          store: false,
+          systemMessageMode: "developer" as const,
+          include: ["reasoning.encrypted_content"],
+        },
+      }
+    : undefined;
+
+type ProviderSettings = AnthropicOptions | ReturnType<typeof chatgptPlanOptions>;
 
 /**
  * @param value Exact bounded content.
@@ -218,31 +241,63 @@ const assistantPrompt = (
 ): LanguageModelV3Message => {
   if (typeof message.content === "string")
     return { role: "assistant", content: [{ type: "text", text: message.content }] };
-  const parts = message.content.map((part) => {
-    if (part.type === "text") return { type: "text" as const, text: part.text };
-    if (part.type === "reasoning") {
-      const options = part.providerOptions?.anthropic;
-      if (
-        !options ||
-        (typeof options.signature !== "string" && typeof options.redactedData !== "string")
-      )
-        throw new TypeError("Anthropic reasoning metadata missing");
-      return {
-        type: "reasoning" as const,
-        text: part.text,
-        providerOptions: { anthropic: options },
-      };
-    }
-    if (part.type === "tool-call")
-      return {
-        type: "tool-call" as const,
-        toolCallId: part.toolCallId,
-        toolName: part.toolName,
-        input: part.input,
-      };
-    throw new TypeError("Unsupported assistant continuation content");
-  });
-  return { role: "assistant", content: parts };
+  return { role: "assistant", content: message.content.map(assistantPart) };
+};
+
+/**
+ * @param part Ax assistant continuation part.
+ * @returns Equivalent provider part.
+ */
+const assistantPart = (
+  part: Exclude<
+    Extract<PreparedRequest["messages"][number], { role: "assistant" }>["content"],
+    string
+  >[number],
+) => {
+  if (part.type === "text")
+    return {
+      type: "text" as const,
+      text: part.text,
+      ...(part.providerOptions ? { providerOptions: part.providerOptions } : {}),
+    };
+  if (part.type === "reasoning") return assistantReasoning(part);
+  if (part.type === "tool-call")
+    return {
+      type: "tool-call" as const,
+      toolCallId: part.toolCallId,
+      toolName: part.toolName,
+      input: part.input,
+      ...(part.providerOptions ? { providerOptions: part.providerOptions } : {}),
+    };
+  throw new TypeError("Unsupported assistant continuation content");
+};
+
+/**
+ * @param part Ax reasoning continuation.
+ * @returns Provider reasoning part.
+ */
+const assistantReasoning = (
+  part: Extract<
+    Exclude<
+      Extract<PreparedRequest["messages"][number], { role: "assistant" }>["content"],
+      string
+    >[number],
+    { type: "reasoning" }
+  >,
+) => {
+  if (part.providerOptions?.openai)
+    return {
+      type: "reasoning" as const,
+      text: part.text,
+      providerOptions: { openai: part.providerOptions.openai },
+    };
+  const options = part.providerOptions?.anthropic;
+  if (
+    !options ||
+    (typeof options.signature !== "string" && typeof options.redactedData !== "string")
+  )
+    throw new TypeError("Anthropic reasoning metadata missing");
+  return { type: "reasoning" as const, text: part.text, providerOptions: { anthropic: options } };
 };
 
 /**
@@ -325,32 +380,53 @@ const preparedPromptJson = (
   request: AiBackendExecution,
   prepared: PreparedRequest,
   instructions: string,
-  settings: AnthropicOptions,
+  settings: ProviderSettings,
 ): string => {
   if (request.definition.kind !== "generation")
     throw new TypeError("Generation capability required");
-  const tools = advertisedFunctions(request).map((tool) => ({
-    modelName: tool.modelName,
-    server: tool.server,
-    tool: tool.tool,
-    description: tool.description,
-    inputSchemaJson: tool.inputSchemaJson,
-    ...(tool.outputSchemaJson === undefined ? {} : { outputSchemaJson: tool.outputSchemaJson }),
-  }));
+  const tools = advertisedFunctions(request).map(preparedTool);
   const prompt = { messages: modelPrompt(prepared, instructions), tools };
-  return JSON.stringify(
-    providerConnection(request.model).capabilities.id === "anthropic-messages-v1"
-      ? {
-          ...prompt,
-          provider: {
-            profile: "anthropic-messages-v1",
-            lowering: "anthropic-4.0.72-v2",
-            outputMode: request.definition.outputMode,
-            providerOptions: settings ?? null,
-          },
-        }
-      : prompt,
-  );
+  const provider = preparedProvider(request, settings);
+  return JSON.stringify(provider ? { ...prompt, provider } : prompt);
+};
+
+/**
+ * @param tool Verified advertised function.
+ * @returns Persistable tool record.
+ */
+const preparedTool = (tool: ReturnType<typeof advertisedFunctions>[number]) => ({
+  modelName: tool.modelName,
+  server: tool.server,
+  tool: tool.tool,
+  description: tool.description,
+  inputSchemaJson: tool.inputSchemaJson,
+  ...(tool.outputSchemaJson === undefined ? {} : { outputSchemaJson: tool.outputSchemaJson }),
+});
+
+/**
+ * @param request Selected generation.
+ * @param settings Selected provider options.
+ * @returns Profile-specific lowering record.
+ */
+const preparedProvider = (request: AiBackendExecution, settings: ProviderSettings) => {
+  if (request.definition.kind !== "generation")
+    throw new TypeError("Generation capability required");
+  const profile = providerConnection(request.model).capabilities.id;
+  if (profile === "chatgpt-plan-responses-v1")
+    return {
+      profile,
+      lowering: "openai-4.0.84-chatgpt-plan-v1",
+      outputMode: request.definition.outputMode,
+      providerOptions: settings,
+    };
+  if (profile === "anthropic-messages-v1")
+    return {
+      profile,
+      lowering: "anthropic-4.0.72-v2",
+      outputMode: request.definition.outputMode,
+      providerOptions: settings ?? null,
+    };
+  return undefined;
 };
 
 /**
@@ -366,7 +442,7 @@ const requestContent = (
   prepared: PreparedRequest,
   schema: JSONSchema7,
   previous: Pick<AiAttemptTicket, "id"> | undefined,
-  settings: AnthropicOptions,
+  settings: ProviderSettings,
 ) => {
   const definition = request.definition;
   if (definition.kind !== "generation") throw new TypeError("Generation capability required");
@@ -433,6 +509,71 @@ const typedAnthropicContent = (
       });
 
 /**
+ * Maps bounded ordered Responses items into the durable typed journal.
+ *
+ * @param content Complete or interrupted Responses receipt.
+ * @returns Typed provider continuation content.
+ */
+const typedOpenAiContent = (content: OpenAiContent): OpenAiAssistantContent =>
+  create(OpenAiContentSchema, {
+    complete: content.complete,
+    items: content.items.map(typedOpenAiItem),
+  });
+
+/**
+ * @param item Bounded provider item.
+ * @returns Typed journal item.
+ */
+const typedOpenAiItem = (item: OpenAiBlock) => {
+  if (item.type === "reasoning")
+    return {
+      itemId: item.id,
+      content: {
+        case: "reasoning" as const,
+        value: { summary: [...item.summary], encryptedContent: item.encryptedContent },
+      },
+    };
+  if (item.type === "function_call")
+    return {
+      itemId: item.id,
+      content: {
+        case: "functionCall" as const,
+        value: {
+          call: {
+            providerCallId: item.call.id,
+            toolName: item.call.name,
+            argumentsJson: item.call.input,
+          },
+          namespace: item.namespace,
+        },
+      },
+    };
+  return {
+    itemId: item.id,
+    content: { case: "message" as const, value: typedOpenAiMessage(item) },
+  };
+};
+
+/**
+ * @param item Bounded message item.
+ * @returns Typed journal message.
+ */
+const typedOpenAiMessage = (item: Extract<OpenAiBlock, { type: "message" }>) => ({
+  phase:
+    item.phase === "commentary"
+      ? OpenAiPhase.COMMENTARY
+      : item.phase === "final_answer"
+        ? OpenAiPhase.FINAL_ANSWER
+        : OpenAiPhase.PHASE_UNSPECIFIED,
+  parts: item.parts.map((part) => ({
+    content:
+      part.type === "output_text"
+        ? { case: "outputText" as const, value: part.text }
+        : { case: "refusal" as const, value: part.text },
+  })),
+});
+
+/**
  * @param partial Received content.
  * @param outcome Local outcome.
  * @param failure Safe failure.
@@ -458,6 +599,9 @@ const responseContent = (
     ...(partial.anthropicContent !== undefined
       ? { anthropicContent: typedAnthropicContent(partial.anthropicContent) }
       : {}),
+    ...(partial.openaiContent !== undefined
+      ? { openaiContent: typedOpenAiContent(partial.openaiContent) }
+      : {}),
     ...(output ? { admittedOutput: AnyMessages.pack(schema, output) } : {}),
     ...(failure
       ? { diagnosticId: create(AiDiagnosticIdSchema, { value: failure.diagnosticId }) }
@@ -481,6 +625,9 @@ const responseDigest = (partial: StreamedPartialResult): ReturnType<typeof diges
       toolCalls: partial.toolCalls,
       ...(partial.anthropicContent !== undefined
         ? { anthropicContent: partial.anthropicContent }
+        : {}),
+      ...(partial.openaiContent !== undefined
+        ? { openaiContent: canonicalJsonValue(partial.openaiContent) }
         : {}),
     }),
   );
@@ -545,10 +692,98 @@ const recordedAssistant = (
   index: number,
 ): ModelMessage => {
   const recorded = state.assistantTurns[index];
-  const content = recorded?.response.anthropicContent;
-  if (!recorded || !content) throw new TypeError("Anthropic assistant journal turn missing");
+  if (!recorded) throw new TypeError("Assistant journal turn missing");
   verifyAxAssistant(recorded, message);
-  return { role: "assistant", content: content.blocks.map(anthropicAssistantBlock) };
+  const openai = recorded.response.openaiContent;
+  if (openai) {
+    if (!openai.complete) throw new TypeError("Saved Responses content incomplete");
+    return { role: "assistant", content: openai.items.flatMap(openAiAssistantItem) };
+  }
+  const anthropic = recorded.response.anthropicContent;
+  if (!anthropic) throw new TypeError("Anthropic assistant journal turn missing");
+  return { role: "assistant", content: anthropic.blocks.map(anthropicAssistantBlock) };
+};
+
+/**
+ * Rebuilds provider continuation parts from one typed Responses item.
+ *
+ * @param item Durable ordered item.
+ * @returns Published assistant content parts.
+ */
+const openAiAssistantItem = (
+  item: OpenAiAssistantContent["items"][number],
+): Exclude<Extract<ModelMessage, { role: "assistant" }>["content"], string> => {
+  if (item.content.case === "message") {
+    const phase =
+      item.content.value.phase === OpenAiPhase.COMMENTARY
+        ? "commentary"
+        : item.content.value.phase === OpenAiPhase.FINAL_ANSWER
+          ? "final_answer"
+          : undefined;
+    return item.content.value.parts.map((part) => {
+      if (part.content.case !== "outputText") throw new TypeError("Saved Responses refusal");
+      return {
+        type: "text" as const,
+        text: part.content.value,
+        providerOptions: { openai: { itemId: item.itemId, ...(phase ? { phase } : {}) } },
+      };
+    });
+  }
+  if (item.content.case === "reasoning")
+    return openAiReasoningParts(item.itemId, item.content.value);
+  if (item.content.case === "functionCall")
+    return [openAiCallPart(item.itemId, item.content.value)];
+  throw new TypeError("Saved Responses item missing");
+};
+
+/**
+ * @param itemId Saved provider item ID.
+ * @param content Saved local function call.
+ * @returns SDK continuation call.
+ */
+const openAiCallPart = (
+  itemId: string,
+  content: Extract<
+    OpenAiAssistantContent["items"][number]["content"],
+    { case: "functionCall" }
+  >["value"],
+) => {
+  const call = content.call;
+  if (!call || !content.namespace) throw new TypeError("Saved Responses call incomplete");
+  return {
+    type: "tool-call" as const,
+    toolCallId: call.providerCallId,
+    toolName: call.toolName,
+    input: JSON.parse(call.argumentsJson) as object,
+    providerOptions: { openai: { itemId, namespace: content.namespace } },
+  };
+};
+
+/**
+ * @param itemId Saved provider item ID.
+ * @param reasoning Saved ordered summaries and encrypted state.
+ * @returns SDK continuation parts.
+ */
+const openAiReasoningParts = (
+  itemId: string,
+  reasoning: NonNullable<
+    Extract<OpenAiAssistantContent["items"][number]["content"], { case: "reasoning" }>["value"]
+  >,
+) => {
+  if (!reasoning.encryptedContent) throw new TypeError("Saved Responses reasoning incomplete");
+  const summaries = reasoning.summary.length ? reasoning.summary : [""];
+  return summaries.map((text, index) => ({
+    type: "reasoning" as const,
+    text,
+    providerOptions: {
+      openai: {
+        itemId,
+        ...(index === summaries.length - 1
+          ? { reasoningEncryptedContent: reasoning.encryptedContent }
+          : {}),
+      },
+    },
+  }));
 };
 
 /**
@@ -779,8 +1014,16 @@ const classifyStreamFailure = (
     return { code: "INVALID_OUTPUT", retryable: false, outcome: AiOutcome.INVALID_OUTPUT };
   if (error.partial.finishReason === "content-filter")
     return { code: "REFUSED", retryable: false, outcome: AiOutcome.REFUSED };
+  if (error.message === "Provider response refused")
+    return { code: "REFUSED", retryable: false, outcome: AiOutcome.REFUSED };
   if (error.statusCode === 401 || error.statusCode === 403)
     return { code: "AUTHENTICATION_REQUIRED", retryable: false, outcome: AiOutcome.FAILED };
+  if (error.providerCode === "invalid_api_key" || error.providerCode === "invalid_token")
+    return { code: "AUTHENTICATION_REQUIRED", retryable: false, outcome: AiOutcome.FAILED };
+  if (error.providerCode === "subscription_sharing_usage_limit_exceeded")
+    return { code: "RATE_LIMITED", retryable: false, outcome: AiOutcome.FAILED };
+  if (error.providerCode === "subscription_sharing_unavailable")
+    return { code: "UNAVAILABLE", retryable: false, outcome: AiOutcome.FAILED };
   if (error.statusCode === 429)
     return { code: "RATE_LIMITED", retryable: true, outcome: AiOutcome.FAILED };
   return { code: "UNAVAILABLE", retryable: true, outcome: AiOutcome.FAILED };
@@ -809,6 +1052,16 @@ const coherentProposals = (
   request: AiBackendExecution,
 ): boolean => {
   if (partial.toolCalls.length === 0) return false;
+  if (providerConnection(request.model).capabilities.id === "chatgpt-plan-responses-v1") {
+    const content = partial.openaiContent;
+    const calls = content?.items.filter((item) => item.type === "function_call") ?? [];
+    if (
+      !content?.complete ||
+      calls.length !== partial.toolCalls.length ||
+      calls.some((item) => item.namespace !== "spine_mcp")
+    )
+      return false;
+  }
   const seen = new Set<string>();
   for (const call of partial.toolCalls) {
     if (
@@ -866,6 +1119,7 @@ const replayGeneration = (
     throw new TypeError("Saved attempt response kind mismatch");
   assertAiOutcomeContext(response);
   assertSavedAnthropicContent(request, response);
+  assertOpenAiReceipt(request, response);
   if (response.outcome === AiOutcome.ADMITTED)
     return replayAdmittedGeneration(request, state, response);
   const partial: StreamedPartialResult = {
@@ -875,6 +1129,9 @@ const replayGeneration = (
       name: call.toolName,
       input: call.argumentsJson,
     })),
+    ...(response.openaiContent
+      ? { openaiContent: projectedOpenAiContent(response.openaiContent) }
+      : {}),
   };
   if (response.outcome === AiOutcome.TOOL_REQUESTED)
     return replayToolProposals(request, state, replay.id, partial, response);
@@ -910,6 +1167,148 @@ const assertSavedAnthropicContent = (
   )
     throw new TypeError("Saved Anthropic content incomplete");
 };
+
+/**
+ * Rebuilds bounded typed items for saved digest and projection checks.
+ *
+ * @param content Saved Responses receipt.
+ * @returns Ordered provider item projection.
+ */
+const projectedOpenAiContent = (content: OpenAiAssistantContent): OpenAiContent => ({
+  complete: content.complete,
+  items: content.items.map(projectedOpenAiItem),
+});
+
+/**
+ * @param item Durable typed item.
+ * @returns Bounded response projection.
+ */
+const projectedOpenAiItem = (item: OpenAiAssistantContent["items"][number]): OpenAiBlock => {
+  if (item.content.case === "reasoning")
+    return {
+      type: "reasoning",
+      id: item.itemId,
+      summary: item.content.value.summary,
+      encryptedContent: item.content.value.encryptedContent,
+    };
+  if (item.content.case === "functionCall") {
+    const call = item.content.value.call;
+    if (!call) throw new TypeError("Saved Responses call missing");
+    return {
+      type: "function_call",
+      id: item.itemId,
+      call: { id: call.providerCallId, name: call.toolName, input: call.argumentsJson },
+      namespace: item.content.value.namespace,
+    };
+  }
+  if (item.content.case === "message")
+    return {
+      type: "message",
+      id: item.itemId,
+      phase:
+        item.content.value.phase === OpenAiPhase.COMMENTARY
+          ? "commentary"
+          : item.content.value.phase === OpenAiPhase.FINAL_ANSWER
+            ? "final_answer"
+            : "",
+      parts: item.content.value.parts.map((part) => ({
+        type: part.content.case === "outputText" ? "output_text" : "refusal",
+        text: part.content.value ?? "",
+      })),
+    };
+  throw new TypeError("Saved Responses item missing");
+};
+
+/**
+ * Checks the complete typed provider receipt before replay or continuation.
+ *
+ * @param request Selected authenticated profile.
+ * @param response Durable generation receipt.
+ */
+const assertOpenAiReceipt = (request: AiBackendExecution, response: GenerationResponse): void => {
+  if (providerConnection(request.model).capabilities.id !== "chatgpt-plan-responses-v1") return;
+  if (!response.openaiContent) throw new TypeError("Saved Responses content missing");
+  const content = projectedOpenAiContent(response.openaiContent);
+  assertOpenAiItems(content, response);
+  if (
+    !content.complete &&
+    (response.outcome === AiOutcome.ADMITTED ||
+      response.outcome === AiOutcome.TOOL_REQUESTED ||
+      response.outcome === AiOutcome.INVALID_OUTPUT)
+  )
+    throw new TypeError("Saved Responses content incomplete");
+  assertOpenAiProjection(content, response);
+};
+
+/**
+ * @param content Typed provider receipt.
+ */
+const assertOpenAiItems = (content: OpenAiContent, response: GenerationResponse): void => {
+  const ids = new Set<string>();
+  for (const item of content.items) {
+    if (!item.id || ids.has(item.id)) throw new TypeError("Saved Responses item ID invalid");
+    ids.add(item.id);
+    if (item.type === "reasoning" && !item.encryptedContent)
+      throw new TypeError("Saved Responses reasoning incomplete");
+    if (item.type === "function_call" && item.namespace !== "spine_mcp")
+      throw new TypeError("Saved Responses namespace invalid");
+    if (
+      item.type === "message" &&
+      item.parts.some((part) => part.type === "refusal") &&
+      (content.complete ||
+        (response.outcome !== AiOutcome.FAILED && response.outcome !== AiOutcome.REFUSED))
+    )
+      throw new TypeError("Saved Responses refusal");
+  }
+};
+
+/**
+ * @param content Typed provider receipt.
+ * @param response Saved response projection.
+ */
+const assertOpenAiProjection = (content: OpenAiContent, response: GenerationResponse): void => {
+  const text = content.items
+    .flatMap((item) =>
+      item.type === "message"
+        ? item.parts.filter((part) => part.type === "output_text").map((part) => part.text)
+        : [],
+    )
+    .join("");
+  const calls = content.items.flatMap((item) => (item.type === "function_call" ? [item.call] : []));
+  const partialFailure =
+    !content.complete &&
+    (response.outcome === AiOutcome.FAILED || response.outcome === AiOutcome.REFUSED);
+  if (
+    !(partialFailure ? response.rawOutput.startsWith(text) : text === response.rawOutput) ||
+    !(partialFailure
+      ? calls.length <= response.toolCalls.length
+      : calls.length === response.toolCalls.length) ||
+    calls.some(
+      (call, index) =>
+        call.id !== response.toolCalls[index]?.providerCallId ||
+        call.name !== response.toolCalls[index].toolName ||
+        call.input !== response.toolCalls[index].argumentsJson,
+    ) ||
+    response.digest?.value !== savedOpenAiDigest(content, response)
+  )
+    throw new TypeError("Saved Responses projection changed");
+};
+
+/**
+ * @param content Durable typed receipt projection.
+ * @param response Durable standard response fields.
+ * @returns Digest of both projections.
+ */
+const savedOpenAiDigest = (content: OpenAiContent, response: GenerationResponse): string =>
+  responseDigest({
+    text: response.rawOutput,
+    toolCalls: response.toolCalls.map((call) => ({
+      id: call.providerCallId,
+      name: call.toolName,
+      input: call.argumentsJson,
+    })),
+    openaiContent: content,
+  }).value;
 
 /**
  * Rebuilds a saved admitted generation without provider dispatch.
@@ -1044,20 +1443,18 @@ const providerOptions = (
   prepared: PreparedRequest,
   schema: JSONSchema7,
   ticket: AiAttemptTicket,
-  settings: AnthropicOptions,
+  settings: ProviderSettings,
 ): V3Options => {
   const definition = request.definition;
   if (definition.kind !== "generation") throw new TypeError("Generation capability required");
   const instructions = outputInstructions(definition.instructions, definition.outputMode, schema);
+  const chatgptPlan =
+    providerConnection(request.model).capabilities.id === "chatgpt-plan-responses-v1";
   const options = {
     prompt: modelPrompt(prepared, instructions),
-    tools: advertisedFunctions(request).map((tool) => ({
-      type: "function" as const,
-      name: tool.modelName,
-      description: tool.description,
-      inputSchema: tool.schema,
-    })),
+    tools: advertisedFunctions(request).map((tool) => providerTool(tool, chatgptPlan)),
     abortSignal: ticket.signal,
+    ...(chatgptPlan ? { includeRawChunks: true } : {}),
     ...(definition.limits.maxOutputTokens
       ? { maxOutputTokens: definition.limits.maxOutputTokens }
       : {}),
@@ -1068,6 +1465,28 @@ const providerOptions = (
   };
   return settings ? { ...options, providerOptions: settings } : options;
 };
+
+/**
+ * @param tool Verified local function.
+ * @param chatgptPlan Whether namespace lowering is required.
+ * @returns Provider-visible tool declaration.
+ */
+const providerTool = (
+  tool: ReturnType<typeof advertisedFunctions>[number],
+  chatgptPlan: boolean,
+) => ({
+  type: "function" as const,
+  name: tool.modelName,
+  description: tool.description,
+  inputSchema: tool.schema,
+  ...(chatgptPlan
+    ? {
+        providerOptions: {
+          openai: { namespace: { name: "spine_mcp", description: "Configured local MCP tools" } },
+        },
+      }
+    : {}),
+});
 
 /**
  * @param request Selected execution.
@@ -1086,7 +1505,7 @@ const chat = async (
   if (definition.kind !== "generation") throw new TypeError("Generation capability required");
   const connection = providerConnection(request.model);
   if (!("doStream" in connection.model)) throw new TypeError("Streaming generation model required");
-  const settings = anthropicOptions(request);
+  const settings = chatgptPlanOptions(request) ?? anthropicOptions(request);
   const content = requestContent(request, prepared, schema, state.previous, settings);
   const attempt = await runtimeBarrier(state, () =>
     request.control.beginAttempt({ kind: "generation", content }),
@@ -1115,7 +1534,7 @@ const collectAttempt = async (
   prepared: PreparedRequest,
   schema: JSONSchema7,
   ticket: AiAttemptTicket,
-  settings: AnthropicOptions,
+  settings: ProviderSettings,
 ): Promise<AxChatResponse> => {
   const connection = providerConnection(request.model);
   if (!("doStream" in connection.model)) throw new TypeError("Streaming generation model required");
@@ -1131,6 +1550,7 @@ const collectAttempt = async (
         nowEpochMs: request.control.nowEpochMs,
       },
       connection.capabilities.id === "anthropic-messages-v1",
+      connection.capabilities.id === "chatgpt-plan-responses-v1",
     );
   } catch (error) {
     if (!(error instanceof StreamCollectionError)) throw error;
@@ -1162,7 +1582,9 @@ const runProgram = async (
   const service = AxVercelBridge.createControlled(model, {
     maxRequests: definition.limits.modelRequests,
     onChat: (_model, prepared) => chat(request, state, prepared, schema),
-    ...(providerConnection(request.model).capabilities.id === "anthropic-messages-v1"
+    ...(["anthropic-messages-v1", "chatgpt-plan-responses-v1"].includes(
+      providerConnection(request.model).capabilities.id,
+    )
       ? {
           onAssistant: (
             message: Extract<AxChatRequest["chatPrompt"][number], { role: "assistant" }>,
@@ -1218,11 +1640,7 @@ export const executeGeneration = async (request: AiBackendExecution): Promise<Ai
   const state: GenerationState = { pendingCalls: new Map(), assistantTurns: [] };
   try {
     advertisedFunctions(request);
-    if (
-      connection.capabilities.id === "anthropic-messages-v1" &&
-      definition.outputMode === "native-schema" &&
-      !nativeAnthropicModels.has(request.identity.model)
-    ) {
+    if (unsupportedGeneration(request)) {
       state.failure = await recordFailure(request, state, "UNSUPPORTED_CAPABILITY", false);
       return { ok: false, failure: state.failure };
     }
@@ -1238,4 +1656,25 @@ export const executeGeneration = async (request: AiBackendExecution): Promise<Ai
     ok: false,
     failure: state.failure ?? (await recordFailure(request, state, "INVALID_OUTPUT", false)),
   };
+};
+
+/**
+ * @param request Selected generation.
+ * @returns Whether the provider rejects its requested contract.
+ */
+const unsupportedGeneration = (request: AiBackendExecution): boolean => {
+  const definition = request.definition;
+  if (definition.kind !== "generation") throw new TypeError("Generation capability required");
+  const capabilities = providerConnection(request.model).capabilities;
+  if (
+    capabilities.tokenCeiling === "unsupported" &&
+    definition.limits.maxOutputTokens !== undefined
+  )
+    return true;
+  if (definition.outputMode !== "native-schema") return false;
+  if (capabilities.id === "chatgpt-plan-responses-v1") return true;
+  return (
+    capabilities.id === "anthropic-messages-v1" &&
+    !nativeAnthropicModels.has(request.identity.model)
+  );
 };

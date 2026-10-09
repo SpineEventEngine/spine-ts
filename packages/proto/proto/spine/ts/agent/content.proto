@@ -93,6 +93,65 @@ message AnthropicRedactedThinking {
   string data = 1;
 }
 
+// Ordered assistant items received through ChatGPT plan Responses.
+message OpenAiAssistantContent {
+  // Provider items in output index order, including items on an interrupted receipt.
+  repeated OpenAiOutputItem items = 1 [(validate) = true];
+
+  // True only after response.completed and coherent closure of every item.
+  bool complete = 2;
+}
+
+// One Responses assistant output item with its exact provider item ID.
+message OpenAiOutputItem {
+  string item_id = 1 [(required) = true];
+
+  oneof content {
+    option (choice).required = true;
+
+    OpenAiMessageItem message = 2 [(validate) = true];
+    OpenAiReasoningItem reasoning = 3 [(validate) = true];
+    OpenAiFunctionCallItem function_call = 4 [(validate) = true];
+  }
+}
+
+// Output text and refusals in provider order.
+message OpenAiMessageItem {
+  enum Phase {
+    PHASE_UNSPECIFIED = 0;
+    COMMENTARY = 1;
+    FINAL_ANSWER = 2;
+  }
+
+  Phase phase = 1;
+  repeated OpenAiMessagePart parts = 2 [(validate) = true];
+}
+
+// One visible or refused message part.
+message OpenAiMessagePart {
+  oneof content {
+    option (choice).required = true;
+
+    string output_text = 1;
+    string refusal = 2;
+  }
+}
+
+// Reasoning summaries and encrypted continuation state.
+message OpenAiReasoningItem {
+  repeated string summary = 1;
+  string encrypted_content = 2 [(required) = true];
+}
+
+// Namespaced local function proposal.
+message OpenAiFunctionCallItem {
+  ModelToolCall call = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+  string namespace = 2 [(required) = true];
+}
+
 // Provider generation content, admitted or rejected after local validation.
 message GenerationResponse {
   // Exact received assistant text, including text accompanying tool proposals.
@@ -122,6 +181,9 @@ message GenerationResponse {
 
   // Ordered Anthropic assistant content, present for Anthropic Messages receipts.
   AnthropicAssistantContent anthropic_content = 9 [(validate) = true];
+
+  // Ordered ChatGPT plan response items, present only for that profile.
+  OpenAiAssistantContent openai_content = 10 [(validate) = true];
 }
 
 // Application-assigned identity of one non-generative question.

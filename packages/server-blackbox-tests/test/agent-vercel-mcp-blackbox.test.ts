@@ -39,7 +39,12 @@ import { DraftRecoverySupportReplySchema } from "../generated/spine/server/testi
 import { SupportReplyDraftedSchema } from "../generated/spine/server/testing/support_agent_events_pb.js";
 import { SupportRecoveryStateSchema } from "../generated/spine/server/testing/support_recovery_states_pb.js";
 import { SupportReplyAgentIdSchema } from "../generated/spine/server/testing/support_agent_states_pb.js";
-import { McpSupportAgent, mcpSupportModel } from "./fixtures/mcp-support-agent.js";
+import {
+  ChatgptPlanSupportAgent,
+  chatgptPlanSupportModel,
+  McpSupportAgent,
+  mcpSupportModel,
+} from "./fixtures/mcp-support-agent.js";
 
 interface RpcRequest {
   readonly method: string;
@@ -125,6 +130,103 @@ const replyStream = (requestNumber: number): string =>
       },
     },
   ]);
+
+/**
+ * Supplies exact ordered Responses items for the subscription fixture.
+ *
+ * @param requestNumber Physical request position.
+ * @returns Bounded Responses SSE fixture.
+ */
+const chatgptPlanStream = (requestNumber: number): string => {
+  const tool = requestNumber === 1;
+  const text =
+    requestNumber === 2 ? '{"replyText":""}' : '{"replyText":"Ticket found; we can help."}';
+  const reasoning = {
+    type: "reasoning",
+    id: `reason-${String(requestNumber)}`,
+    encrypted_content: `encrypted-${String(requestNumber)}`,
+    summary: [
+      { type: "summary_text", text: "first" },
+      { type: "summary_text", text: "second" },
+    ],
+  };
+  const result = tool
+    ? {
+        type: "function_call",
+        id: "fc-1",
+        call_id: "provider-call-1",
+        name: "tool_0",
+        namespace: "spine_mcp",
+        arguments: '{"ticket":"T-47"}',
+        status: "completed",
+      }
+    : {
+        type: "message",
+        role: "assistant",
+        id: `msg-${String(requestNumber)}`,
+        phase: "final_answer",
+        content: [{ type: "output_text", text, annotations: [] }],
+      };
+  return eventStream([
+    {
+      type: "response.created",
+      response: {
+        id: `resp-${String(requestNumber)}`,
+        created_at: requestNumber,
+        model: "fixture-model",
+      },
+    },
+    {
+      type: "response.output_item.added",
+      output_index: 0,
+      item: { type: "reasoning", id: reasoning.id },
+    },
+    { type: "response.output_item.done", output_index: 0, item: reasoning },
+    {
+      type: "response.output_item.added",
+      output_index: 1,
+      item: {
+        type: result.type,
+        id: result.id,
+        ...(tool
+          ? {
+              call_id: "provider-call-1",
+              name: "tool_0",
+              arguments: '{"ticket":"T-47"}',
+              namespace: "spine_mcp",
+            }
+          : {}),
+      },
+    },
+    ...(tool
+      ? [
+          {
+            type: "response.function_call_arguments.done",
+            item_id: "fc-1",
+            output_index: 1,
+            arguments: '{"ticket":"T-47"}',
+          },
+        ]
+      : [
+          {
+            type: "response.output_text.delta",
+            item_id: result.id,
+            output_index: 1,
+            content_index: 0,
+            delta: text,
+          },
+        ]),
+    { type: "response.output_item.done", output_index: 1, item: result },
+    {
+      type: "response.completed",
+      response: {
+        id: `resp-${String(requestNumber)}`,
+        status: "completed",
+        usage: { input_tokens: 8, output_tokens: 6 },
+      },
+    },
+  ]);
+};
 
 /**
  * Encodes a real Anthropic Messages stream with a typed tool proposal.
@@ -217,6 +319,7 @@ const anthropicStream = (
 const startEndpoints = async (
   invalidToolOutput = false,
   thinking: false | "signed" | "redacted" = false,
+  chatgptPlan = false,
 ) => {
   const methods: string[] = [];
   const providerBodies: unknown[] = [];
@@ -229,7 +332,11 @@ const startEndpoints = async (
         providerBodies.push(body);
         response.setHeader("content-type", "text/event-stream");
         response.end(
-          providerBodies.length === 1 ? toolProposalStream() : replyStream(providerBodies.length),
+          chatgptPlan
+            ? chatgptPlanStream(providerBodies.length)
+            : providerBodies.length === 1
+              ? toolProposalStream()
+              : replyStream(providerBodies.length),
         );
         return;
       }
@@ -313,17 +420,17 @@ const startEndpoints = async (
 /**
  * Builds a domain-correct support Agent repository for the typed MCP capability.
  */
-const supportRepository = () =>
+const supportRepository = (chatgptPlan = false) =>
   new Repository({
-    entityType: McpSupportAgent,
+    entityType: chatgptPlan ? ChatgptPlanSupportAgent : McpSupportAgent,
     schema: SupportRecoveryStateSchema,
     agentCodeRevision: "support-mcp-v1",
-    ai: { models: [mcpSupportModel] },
+    ai: { models: [chatgptPlan ? chatgptPlanSupportModel : mcpSupportModel] },
     handlers: new HandlerRegistryIngestor().ingest({
       receivers: [
         {
           receiverKind: "entity",
-          receiverType: McpSupportAgent,
+          receiverType: chatgptPlan ? ChatgptPlanSupportAgent : McpSupportAgent,
           stateSchema: SupportRecoveryStateSchema,
           handlers: [
             {
@@ -345,14 +452,17 @@ const supportRepository = () =>
  * @param base Local fixture address.
  * @returns BlackBox and repository for checking the persisted outcome.
  */
-const supportBox = async (base: string, provider: "openai" | "anthropic" = "openai") => {
+const supportBox = async (
+  base: string,
+  provider: "openai" | "anthropic" | "chatgpt-plan" = "openai",
+) => {
   const identity = {
     provider,
     account: "fixture",
     endpoint: `${base}/v1`,
     model: provider === "anthropic" ? "claude-fable-5" : "fixture-model",
   };
-  const registration = VercelAx.model({
+  const registrationOptions: Parameters<typeof VercelAx.model>[0] = {
     ref: ModelRef.of("support-vercel", "v1"),
     capabilities:
       provider === "anthropic"
@@ -375,7 +485,16 @@ const supportBox = async (base: string, provider: "openai" | "anthropic" = "open
             }).responses(identity.model),
       identity,
     }),
-  });
+  };
+  const registration =
+    provider === "chatgpt-plan"
+      ? VercelAx.chatgptPlanModel({
+          ref: registrationOptions.ref,
+          resolveIdentity: registrationOptions.resolveIdentity,
+          authorizeUse: registrationOptions.authorizeUse,
+          connect: () => ({ accessToken: "fixture-only", identity }),
+        })
+      : VercelAx.model(registrationOptions);
   const tools = Mcp.server({
     id: "knowledge",
     revision: "v1",
@@ -409,7 +528,7 @@ const supportBox = async (base: string, provider: "openai" | "anthropic" = "open
   })
     .register(registration)
     .registerTools(tools);
-  const repository = supportRepository();
+  const repository = supportRepository(provider === "chatgpt-plan");
   const context = BoundedContext.singleTenant("RealVercelMcpSupport")
     .withAi(registry)
     .persistSystemEvents()
@@ -420,6 +539,58 @@ const supportBox = async (base: string, provider: "openai" | "anthropic" = "open
 };
 
 describe("Agent with real Vercel Responses and MCP transports", () => {
+  it("uses the ChatGPT plan profile through Agent with recorded tool and correction attempts", async () => {
+    const endpoint = await startEndpoints(false, false, true);
+    const { box, repository } = await supportBox(endpoint.base, "chatgpt-plan");
+    const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-47" });
+    try {
+      const posted = await box
+        .asGuest()
+        .post(
+          DraftRecoverySupportReplySchema,
+          create(DraftRecoverySupportReplySchema, { agent: id, question: "Where is my order?" }),
+        );
+      expect(posted.kind).toBe("ok");
+      await box.eventually(
+        () => box.assertEvents(),
+        (events) => events.length === 1,
+      );
+      expect(endpoint.providerBodies).toHaveLength(3);
+      const initial = endpoint.providerBodies[0] as Record<string, unknown>;
+      expect(initial).toMatchObject({ store: false, stream: true });
+      expect(initial).not.toHaveProperty("max_output_tokens");
+      expect(JSON.stringify(initial.tools)).toContain('"type":"namespace"');
+      const continued = JSON.stringify((endpoint.providerBodies[1] as { input: unknown }).input);
+      expect(continued).toContain('"encrypted_content":"encrypted-1"');
+      expect(continued).toContain('"call_id":"provider-call-1"');
+      expect(continued).toContain('"type":"function_call_output"');
+      const page = await box.readAgentHistory(repository, id, { pageSize: 30 });
+      const responses = page.items.flatMap((entry) => {
+        if (entry.item.case !== "conversationRecord" || !entry.item.value.content) return [];
+        const value = AnyMessages.unpack(entry.item.value.content, GenerationResponseSchema);
+        return value ? [value] : [];
+      });
+      expect(responses.map((response) => response.outcome)).toEqual([
+        AiOutcome.ADMITTED,
+        AiOutcome.INVALID_OUTPUT,
+        AiOutcome.TOOL_REQUESTED,
+      ]);
+      expect(responses[2]?.openaiContent?.items).toHaveLength(2);
+      expect(
+        JSON.stringify(page, (_key, value: unknown) =>
+          typeof value === "bigint" ? String(value) : value,
+        ),
+      ).not.toContain("fixture-only");
+      expect(endpoint.methods.filter((method) => method === "tools/call")).toHaveLength(1);
+    } finally {
+      await box.close();
+      await new Promise<void>((resolve) =>
+        endpoint.server.close(() => {
+          resolve();
+        }),
+      );
+    }
+  }, 20_000);
   it.each([
     ["signed", '"type":"thinking"', '"signature":"signed-fixture-thought-1"'],
     ["redacted", '"type":"redacted_thinking"', '"data":"opaque-fixture-thought"'],

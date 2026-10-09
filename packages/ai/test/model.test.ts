@@ -54,6 +54,27 @@ describe("typed AI capability declarations", () => {
     expect(isAiModel({ ...model })).toBe(false);
   });
 
+  it("accepts generation without a token ceiling while retaining finite transport limits", () => {
+    const bounded = {
+      modelRequests: limits.modelRequests,
+      toolCalls: limits.toolCalls,
+      deadlineMs: limits.deadlineMs,
+      maxInputBytes: limits.maxInputBytes,
+      maxOutputBytes: limits.maxOutputBytes,
+    };
+    const model = AiModel.define({
+      name: "draft-without-token-ceiling",
+      version: "v1",
+      kind: "generation",
+      input: SupportTicketFactsSchema,
+      output: ProposedSupportReplySchema,
+      instructions: "Draft a response",
+      outputMode: "prompt-and-validate",
+      limits: bounded,
+    });
+    expect(model.definition.limits).toEqual(bounded);
+  });
+
   it("rejects malformed limits and decision-only configuration before registration", () => {
     const definition = {
       name: "draft-support-reply",
@@ -160,9 +181,6 @@ describe("typed AI capability declarations", () => {
     expect(() => AiModel.define({ ...base, limits: { ...limits, maxInputBytes: 0 } })).toThrow(
       "maxInputBytes",
     );
-    expect(() =>
-      AiModel.define({ ...base, limits: { ...limits, maxOutputTokens: undefined } } as never),
-    ).toThrow("maxOutputTokens");
     expect(() => AiModel.define({ ...base, outputMode: "unknown" as never })).toThrow("outputMode");
     expect(() => AiModel.define({ ...base, kind: "unknown" as never })).toThrow("model kind");
     expect(() => AiModel.define({ ...base, instructions: " " })).toThrow("instructions");

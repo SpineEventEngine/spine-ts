@@ -94,7 +94,68 @@ export const assertAiOutcomeContext = (
     throw new TypeError("ADMITTED requires output without outstanding proposals");
   if (content.outcome !== AiOutcome.ADMITTED && hasOutput)
     throw new TypeError("Only ADMITTED may carry application output");
+  if (content.anthropicContent && content.openaiContent)
+    throw new TypeError("Generation response has multiple provider content envelopes");
   if (content.anthropicContent) assertAnthropicProjection(content);
+  if (content.openaiContent) assertOpenAiProjection(content);
+};
+
+/**
+ * Checks the typed Responses projection without depending on provider SDK data.
+ *
+ * @param content Generation response with ordered Responses items.
+ */
+const assertOpenAiProjection = (content: GenerationResponse): void => {
+  const receipt = content.openaiContent;
+  if (!receipt) return;
+  if (
+    (content.outcome === AiOutcome.ADMITTED || content.outcome === AiOutcome.TOOL_REQUESTED) &&
+    !receipt.complete
+  )
+    throw new TypeError("Responses receipt incomplete");
+  const { text, calls } = projectOpenAiItems(receipt);
+  const partialFailure =
+    !receipt.complete &&
+    (content.outcome === AiOutcome.FAILED || content.outcome === AiOutcome.REFUSED);
+  const savedText = text.join("");
+  const textMatches = partialFailure
+    ? content.rawOutput.startsWith(savedText)
+    : savedText === content.rawOutput;
+  const callCountMatches = partialFailure
+    ? calls.length <= content.toolCalls.length
+    : calls.length === content.toolCalls.length;
+  if (
+    !textMatches ||
+    !callCountMatches ||
+    calls.some(
+      (call, index) =>
+        call.providerCallId !== content.toolCalls[index]?.providerCallId ||
+        call.toolName !== content.toolCalls[index].toolName ||
+        call.argumentsJson !== content.toolCalls[index].argumentsJson,
+    )
+  )
+    throw new TypeError("Responses projection differs from standard fields");
+};
+
+/**
+ * @param receipt Ordered typed Responses items.
+ * @returns Standard text and tool projection.
+ */
+const projectOpenAiItems = (receipt: NonNullable<GenerationResponse["openaiContent"]>) => {
+  const text: string[] = [];
+  const calls: GenerationResponse["toolCalls"] = [];
+  for (const item of receipt.items) {
+    if (item.content.case === "message") {
+      for (const part of item.content.value.parts) {
+        if (part.content.case === "outputText") text.push(part.content.value);
+      }
+    } else if (item.content.case === "functionCall") {
+      if (!item.content.value.call) throw new TypeError("Responses call missing");
+      calls.push(item.content.value.call);
+    } else if (item.content.case !== "reasoning")
+      throw new TypeError("Responses item kind missing");
+  }
+  return { text, calls };
 };
 
 /**

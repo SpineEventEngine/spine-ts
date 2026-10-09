@@ -41,6 +41,64 @@ const registration = VercelAx.model({
 
 Supply real authenticated identity and authorization callbacks in an application. The runtime admits requests and persists attempt, budget, and result records before this adapter dispatches; using a registration outside that runtime does not provide those guarantees. To check the adapter's credential-free protocol fixtures in this repository, run `pnpm exec vitest run packages/ai-vercel-ax/test/factory.test.ts` from the root. See [REFERENCE.md](REFERENCE.md) for the supported profiles and boundaries.
 
+## ChatGPT plan Responses registration
+
+Use `VercelAx.chatgptPlanModel()` for an account with ChatGPT plan inference permission.
+The application handles sign-in, registration selection, token refresh, and model
+discovery. This adapter accepts the selected account and model through the same
+trusted identity and authorization callbacks as the API-key profile. Its
+connection callback returns a nonempty OAuth access token. The adapter binds
+that token and the authorized endpoint explicitly to the pinned OpenAI SDK,
+without reading ambient `OPENAI_API_KEY` or `OPENAI_BASE_URL`.
+
+<!-- prettier-ignore-start -->
+<!-- docs-snippet-path: packages/ai-vercel-ax/test/factory.test.ts -->
+
+```ts
+import { ModelRef, type AiConnectionIdentity, type AiScope } from "@spine-event-engine/ai";
+import { VercelAx } from "@spine-event-engine/ai-vercel-ax";
+
+interface PlanConnectionService {
+    identity(scope: AiScope): Promise<AiConnectionIdentity>;
+    permits(scope: AiScope, identity: AiConnectionIdentity): Promise<boolean>;
+    accessToken(scope: AiScope, identity: AiConnectionIdentity): Promise<string>;
+}
+
+/**
+ * Registers a selected ChatGPT plan account and discovered model.
+ *
+ * @param plan Trusted application session and token service.
+ * @returns An Agent generation deployment registration.
+ */
+function registerPlanModel(plan: PlanConnectionService) {
+    return VercelAx.chatgptPlanModel({
+        ref: ModelRef.of("release-notes-plan", "registration-1-model-1"),
+        resolveIdentity: (scope) => plan.identity(scope),
+        authorizeUse: (scope, identity) => plan.permits(scope, identity),
+        connect: async (scope, expected) => {
+            const accessToken = await plan.accessToken(scope, expected);
+            return { accessToken, identity: expected };
+        },
+    });
+}
+```
+<!-- prettier-ignore-end -->
+
+The service must obtain and bind `identity`, `permits`, and `accessToken` to the same
+registration and selected model. Use `https://api.openai.com/v1` as the
+credential-free endpoint in its identity. Keep tokens in the trusted process;
+the adapter records the credential-free deployment identity and request/response history.
+Define the generation capability with `outputMode: "prompt-and-validate"` and
+omit `maxOutputTokens`. An explicit token ceiling and native-schema mode are
+rejected before inference for this profile. Request count, tool count, byte,
+and deadline bounds remain mandatory.
+
+The profile sends stateless streamed Responses with developer instructions,
+`store: false`, and encrypted reasoning included for local tool continuation.
+Only a `response.completed` terminal event can admit output. Corrections and
+tool continuations use new recorded attempt tickets. This profile does not
+perform sign-in or retry a failed inference outside the Agent runtime.
+
 ## Anthropic Messages registration
 
 Install `@ai-sdk/anthropic@4.0.72`. Give `createAnthropic` the scoped fetch and a secret supplied by your application. The native-schema mode is tested with the exact model IDs listed in [REFERENCE.md](REFERENCE.md); `prompt-and-validate` can use other Anthropic model IDs, subject to provider access and the usual local validation.

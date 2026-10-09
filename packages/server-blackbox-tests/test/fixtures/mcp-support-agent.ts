@@ -51,6 +51,27 @@ export const mcpSupportModel = AiModel.define({
 });
 
 /**
+ * Generation capability without a wire token ceiling for ChatGPT plan Responses.
+ */
+export const chatgptPlanSupportModel = AiModel.define({
+  name: "support-mcp-reply",
+  version: "2",
+  kind: "generation",
+  input: DraftRecoverySupportReplySchema,
+  output: SupportReplyProposalSchema,
+  outputMode: "prompt-and-validate",
+  instructions: "Lookup the support ticket, then propose a reply for human review.",
+  tools: [{ server: "knowledge", tool: "lookup" }],
+  limits: {
+    modelRequests: 3,
+    toolCalls: 1,
+    deadlineMs: 10_000,
+    maxInputBytes: 8_000,
+    maxOutputBytes: 8_000,
+  },
+});
+
+/**
  * Converts an MCP-assisted typed proposal into a support domain Event.
  */
 export class McpSupportAgent extends Agent<SupportReplyAgentId, typeof SupportRecoveryStateSchema> {
@@ -68,6 +89,34 @@ export class McpSupportAgent extends Agent<SupportReplyAgentId, typeof SupportRe
     if (!result.ok) {
       throw new Error(`Support proposal unavailable: ${result.failure.code}`);
     }
+    this.update((state) => {
+      state.id = this.id;
+      state.proposedReply = result.value.replyText;
+    });
+    return create(SupportReplyDraftedSchema, { agent: this.id, reply: result.value.replyText });
+  }
+}
+
+/**
+ * Agent fixture that invokes the subscription capability through the public facade.
+ */
+export class ChatgptPlanSupportAgent extends Agent<
+  SupportReplyAgentId,
+  typeof SupportRecoveryStateSchema
+> {
+  /**
+   * Drafts one reply after the selected model completes its registered lookup.
+   *
+   * @param command Accepted support ticket question.
+   * @returns Drafted reply for human review.
+   */
+  async draft(command: DraftRecoverySupportReply): Promise<SupportReplyDrafted> {
+    const result = await this.ai.invoke(chatgptPlanSupportModel, {
+      call: "support-mcp-reply",
+      conversation: create(ConversationIdSchema, { value: `support-${this.id.ticketNumber}` }),
+      input: command,
+    });
+    if (!result.ok) throw new Error(`Support proposal unavailable: ${result.failure.code}`);
     this.update((state) => {
       state.id = this.id;
       state.proposedReply = result.value.replyText;

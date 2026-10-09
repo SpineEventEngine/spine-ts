@@ -103,6 +103,99 @@ export type AnthropicBlock =
     };
 
 /**
+ * Ordered bounded Responses item retained for stateless continuation.
+ */
+export type OpenAiBlock =
+  | {
+      /**
+       * Message item kind.
+       */
+      readonly type: "message";
+
+      /**
+       * Provider output item ID.
+       */
+      readonly id: string;
+
+      /**
+       * Provider message phase.
+       */
+      readonly phase: "commentary" | "final_answer" | "";
+
+      /**
+       * Ordered visible and refused parts.
+       */
+      readonly parts: readonly {
+        /**
+         * Part kind.
+         */
+        readonly type: "output_text" | "refusal";
+
+        /**
+         * Exact bounded part text.
+         */
+        readonly text: string;
+      }[];
+    }
+  | {
+      /**
+       * Reasoning item kind.
+       */
+      readonly type: "reasoning";
+
+      /**
+       * Provider output item ID.
+       */
+      readonly id: string;
+
+      /**
+       * Exact ordered summary parts.
+       */
+      readonly summary: readonly string[];
+
+      /**
+       * Opaque encrypted continuation bytes.
+       */
+      readonly encryptedContent: string;
+    }
+  | {
+      /**
+       * Local function call item kind.
+       */
+      readonly type: "function_call";
+
+      /**
+       * Provider output item ID.
+       */
+      readonly id: string;
+
+      /**
+       * Exact correlated function proposal.
+       */
+      readonly call: StreamToolCall;
+
+      /**
+       * Configured local namespace.
+       */
+      readonly namespace: string;
+    };
+
+/**
+ * Complete only after the exact response.completed terminal event.
+ */
+export interface OpenAiContent {
+  /**
+   * Ordered provider response items.
+   */
+  readonly items: readonly OpenAiBlock[];
+
+  /**
+   * Whether the exact terminal event and item closure were observed.
+   */
+  readonly complete: boolean;
+}
+
+/**
  * Bounded parsed output and provider-reported usage.
  */
 export interface StreamedModelResult {
@@ -120,6 +213,11 @@ export interface StreamedModelResult {
    * Present for a stream collected through the Anthropic Messages profile.
    */
   readonly anthropicContent?: readonly AnthropicBlock[];
+
+  /**
+   * Ordered ChatGPT plan Responses items.
+   */
+  readonly openaiContent?: OpenAiContent;
 
   /**
    * Complete provider stop state.
@@ -167,15 +265,31 @@ export class StreamCollectionError extends Error {
   readonly statusCode?: number;
 
   /**
+   * Allowlisted provider failure code, without provider prose.
+   */
+  readonly providerCode?:
+    | "subscription_sharing_usage_limit_exceeded"
+    | "subscription_sharing_unavailable"
+    | "invalid_api_key"
+    | "invalid_token";
+
+  /**
    * Creates a safe error with bounded received content.
    * @param reason Fixed adapter diagnostic without vendor exception data.
    * @param partial Bounded provider content received before the failure.
    * @param statusCode Safe HTTP status if the provider SDK exposed it.
+   * @param providerCode Safe allowlisted provider failure code.
    */
-  constructor(reason: string, partial: StreamedPartialResult, statusCode?: number) {
+  constructor(
+    reason: string,
+    partial: StreamedPartialResult,
+    statusCode?: number,
+    providerCode?: StreamCollectionError["providerCode"],
+  ) {
     super(reason);
     this.partial = partial;
     if (statusCode !== undefined) this.statusCode = statusCode;
+    if (providerCode !== undefined) this.providerCode = providerCode;
   }
 }
 
@@ -228,6 +342,13 @@ interface State {
     open: Map<string, AnthropicOpenBlock>;
     closed: Set<string>;
   };
+  openai?: {
+    items: OpenAiBlock[];
+    added: Map<number, { id: string; type: string }>;
+    complete: boolean;
+    rawBytes: number;
+    failed: boolean;
+  };
 }
 
 type AnthropicState = NonNullable<State["anthropic"]>;
@@ -251,6 +372,14 @@ const partial = (state: State): StreamedPartialResult => ({
       )
     : [...state.toolCalls],
   ...(state.anthropic ? { anthropicContent: [...state.anthropic.blocks] } : {}),
+  ...(state.openai
+    ? {
+        openaiContent: {
+          items: [...state.openai.items],
+          complete: state.openai.complete,
+        },
+      }
+    : {}),
   ...(state.finishReason ? { finishReason: state.finishReason } : {}),
   ...(state.usage ? { usage: state.usage } : {}),
   ...(state.actualModelId ? { actualModelId: state.actualModelId } : {}),
@@ -260,8 +389,13 @@ const partial = (state: State): StreamedPartialResult => ({
  * @param state Current stream.
  * @param reason Safe failure category.
  */
-const fail = (state: State, reason: string, statusCode?: number): never => {
-  throw new StreamCollectionError(reason, partial(state), statusCode);
+const fail = (
+  state: State,
+  reason: string,
+  statusCode?: number,
+  providerCode?: StreamCollectionError["providerCode"],
+): never => {
+  throw new StreamCollectionError(reason, partial(state), statusCode, providerCode);
 };
 
 /**
@@ -311,6 +445,7 @@ const openBoundedStream = async (
  * @param maxParsedBytes Bound for retained decoded text and tool input.
  * @param deadline Optional runtime ticket deadline for ignored provider cancellation.
  * @param anthropic Whether the authenticated connection uses Anthropic Messages.
+ * @param openai Whether the authenticated connection uses ChatGPT plan Responses.
  * @returns Complete text, tool calls, finish state and known usage.
  */
 export const collectModelStream = async (
@@ -319,17 +454,13 @@ export const collectModelStream = async (
   maxParsedBytes: number,
   deadline?: StreamDeadline,
   anthropic = false,
+  openai = false,
 ): Promise<StreamedModelResult> => {
   if (!Number.isSafeInteger(maxParsedBytes) || maxParsedBytes < 1)
     throw new TypeError("Parsed output limit is invalid");
   const guard = deadline ? deadlineSignal(options.abortSignal, deadline) : undefined;
   const signal = guard?.signal ?? options.abortSignal;
-  const state: State = {
-    text: "",
-    toolCalls: [],
-    bytes: 0,
-    ...(anthropic ? { anthropic: { blocks: [], open: new Map(), closed: new Set() } } : {}),
-  };
+  const state = streamState(anthropic, openai);
   try {
     if (signal?.aborted) fail(state, failureReason(signal, guard?.expired() ?? false));
     const result = await openBoundedStream(
@@ -346,6 +477,21 @@ export const collectModelStream = async (
     guard?.dispose();
   }
 };
+
+/**
+ * @param anthropic Whether Anthropic blocks are retained.
+ * @param openai Whether Responses items are retained.
+ * @returns Empty bounded stream state.
+ */
+const streamState = (anthropic: boolean, openai: boolean): State => ({
+  text: "",
+  toolCalls: [],
+  bytes: 0,
+  ...(anthropic ? { anthropic: { blocks: [], open: new Map(), closed: new Set() } } : {}),
+  ...(openai
+    ? { openai: { items: [], added: new Map(), complete: false, rawBytes: 0, failed: false } }
+    : {}),
+});
 
 /**
  * Consumes one direct stream while retaining only bounded parsed content.
@@ -371,8 +517,7 @@ const readModelStream = async (
       if (next.done) break;
       acceptPart(state, next.value, maxParsedBytes);
     }
-    if (!state.finishReason || state.anthropic?.open.size)
-      fail(state, "Provider stream incomplete");
+    assertStreamComplete(state);
     complete = true;
     return { ...partial(state), finishReason: state.finishReason as "stop" | "tool-calls" };
   } catch (error) {
@@ -389,6 +534,19 @@ const readModelStream = async (
     if (!complete) void reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
+};
+
+/**
+ * @param state Bounded provider receipt.
+ */
+const assertStreamComplete = (state: State): void => {
+  if (
+    !state.finishReason ||
+    state.anthropic?.open.size ||
+    (state.openai && (!state.openai.complete || state.openai.added.size))
+  )
+    fail(state, "Provider stream incomplete");
+  if (state.openai) assertOpenAiProjection(state);
 };
 
 /**
@@ -436,6 +594,7 @@ const openStream = async (model: StreamModel, options: Options) => {
  */
 const acceptPart = (state: State, part: Part, limit: number): void => {
   if (state.anthropic) acceptAnthropicPart(state, part, limit);
+  if (state.openai && part.type === "raw") acceptOpenAiRaw(state, part.rawValue, limit);
   if (part.type === "text-delta") {
     if (!state.anthropic) addBytes(state, part.delta, limit);
     state.text += part.delta;
@@ -453,6 +612,258 @@ const acceptPart = (state: State, part: Part, limit: number): void => {
     if (part.modelId) state.actualModelId = part.modelId;
   } else if (part.type === "finish") acceptFinish(state, part);
   else if (part.type === "error") fail(state, "Provider stream error");
+};
+
+/**
+ * @param value Unknown SDK raw chunk.
+ * @returns Plain object or undefined.
+ */
+const objectValue = (value: unknown): Record<string, unknown> | undefined =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+
+/**
+ * @param state Bounded Responses state.
+ * @param raw SDK raw Responses event.
+ * @param limit Retained-output byte limit.
+ */
+const acceptOpenAiRaw = (state: State, raw: unknown, limit: number): void => {
+  const event = objectValue(raw);
+  if (!event || typeof event.type !== "string") return fail(state, "Invalid Responses event");
+  const openai = state.openai;
+  if (!openai) return fail(state, "Responses state missing");
+  if (openai.complete) fail(state, "Responses event after terminal");
+  if (event.type === "response.completed") {
+    const status = objectValue(event.response)?.status;
+    if (openai.added.size || (status !== undefined && status !== "completed"))
+      fail(state, "Provider response incomplete");
+    openai.complete = true;
+  } else if (event.type === "response.failed" || event.type === "response.incomplete") {
+    acceptOpenAiFailure(state, event);
+  } else if (event.type === "response.output_item.added") {
+    addOpenAiItem(state, event);
+  } else if (event.type === "response.output_item.done") {
+    acceptOpenAiItem(state, event, limit);
+  } else if (event.type === "response.output_text.annotation.added") {
+    fail(state, "Unsupported Responses annotation");
+  }
+};
+
+/**
+ * @param state Bounded Responses state.
+ * @param event Failed or incomplete terminal event.
+ */
+const acceptOpenAiFailure = (state: State, event: Record<string, unknown>): never => {
+  if (state.openai) state.openai.failed = true;
+  const error = objectValue(objectValue(event.response)?.error);
+  const code = error?.code;
+  const safeCode =
+    code === "subscription_sharing_usage_limit_exceeded" ||
+    code === "subscription_sharing_unavailable" ||
+    code === "invalid_api_key" ||
+    code === "invalid_token"
+      ? code
+      : undefined;
+  const status = error?.status;
+  const safeStatus = status === 401 || status === 403 ? status : undefined;
+  return fail(
+    state,
+    event.type === "response.failed" ? "Provider response failed" : "Provider response incomplete",
+    safeStatus,
+    safeCode,
+  );
+};
+
+/**
+ * @param state Bounded Responses state.
+ * @param event Item opening event.
+ */
+const addOpenAiItem = (state: State, event: Record<string, unknown>): void => {
+  const item = objectValue(event.item);
+  const openai = state.openai;
+  if (!item || !openai) return fail(state, "Responses output item invalid");
+  if (
+    typeof item.id !== "string" ||
+    !item.id ||
+    typeof item.type !== "string" ||
+    !["message", "reasoning", "function_call"].includes(item.type) ||
+    !Number.isSafeInteger(event.output_index) ||
+    openai.added.has(event.output_index as number)
+  )
+    fail(state, "Responses output item invalid");
+  openai.added.set(event.output_index as number, {
+    id: item.id as string,
+    type: item.type as string,
+  });
+};
+
+/**
+ * @param state Bounded Responses state.
+ * @param event Complete output item event.
+ * @param limit Retained-output byte limit.
+ */
+const acceptOpenAiItem = (state: State, event: Record<string, unknown>, limit: number): void => {
+  const item = objectValue(event.item);
+  const openai = state.openai;
+  if (!openai || !item) return fail(state, "Responses output item invalid");
+  if (item.status !== undefined && item.status !== "completed")
+    fail(state, "Provider output item incomplete");
+  const added = openai.added.get(event.output_index as number);
+  if (
+    event.output_index !== openai.items.length ||
+    typeof item.id !== "string" ||
+    !item.id ||
+    added?.id !== item.id ||
+    added.type !== item.type ||
+    openai.items.some((prior) => prior.id === item.id)
+  )
+    fail(state, "Responses output item invalid");
+  const block = parseOpenAiItem(state, item);
+  const bytes = Buffer.byteLength(JSON.stringify(block));
+  if (bytes > limit - openai.rawBytes) fail(state, "Parsed output limit exceeded");
+  openai.rawBytes += bytes;
+  openai.items.push(block);
+  openai.added.delete(event.output_index as number);
+  if (block.type === "message" && block.parts.some((part) => part.type === "refusal"))
+    fail(state, "Provider response refused");
+};
+
+/**
+ * @param state Bounded Responses state.
+ * @param item One complete provider item.
+ * @returns Checked item without unsupported fields.
+ */
+const parseOpenAiItem = (state: State, item: Record<string, unknown>): OpenAiBlock => {
+  const id = item.id as string;
+  if (item.type === "reasoning") return parseOpenAiReasoning(state, id, item);
+  if (item.type === "message") return parseOpenAiMessage(state, id, item);
+  if (item.type === "function_call") return parseOpenAiCall(state, id, item);
+  return fail(state, "Unsupported Responses output item");
+};
+
+/**
+ * @param state Bounded Responses state.
+ * @param id Provider item ID.
+ * @param item Complete reasoning item.
+ * @returns Ordered reasoning content.
+ */
+const parseOpenAiReasoning = (
+  state: State,
+  id: string,
+  item: Record<string, unknown>,
+): OpenAiBlock => {
+  const summary = item.summary;
+  if (
+    typeof item.encrypted_content !== "string" ||
+    !item.encrypted_content ||
+    !Array.isArray(summary) ||
+    summary.some(
+      (part) =>
+        objectValue(part)?.type !== "summary_text" || typeof objectValue(part)?.text !== "string",
+    )
+  )
+    fail(state, "Responses reasoning incomplete");
+  return {
+    type: "reasoning",
+    id,
+    encryptedContent: item.encrypted_content as string,
+    summary: (summary as unknown[]).map((part) => objectValue(part)?.text as string),
+  };
+};
+
+/**
+ * @param state Bounded Responses state.
+ * @param id Provider item ID.
+ * @param item Complete local function call.
+ * @returns Correlated tool proposal.
+ */
+const parseOpenAiCall = (state: State, id: string, item: Record<string, unknown>): OpenAiBlock => {
+  if (
+    typeof item.call_id !== "string" ||
+    !item.call_id ||
+    typeof item.name !== "string" ||
+    !item.name ||
+    typeof item.arguments !== "string" ||
+    typeof item.namespace !== "string" ||
+    !item.namespace ||
+    item.async ||
+    item.caller
+  )
+    fail(state, "Responses function call invalid");
+  return {
+    type: "function_call",
+    id,
+    namespace: item.namespace as string,
+    call: {
+      id: item.call_id as string,
+      name: item.name as string,
+      input: item.arguments as string,
+    },
+  };
+};
+
+/**
+ * @param state Bounded Responses state.
+ * @param id Provider item ID.
+ * @param item Complete message item.
+ * @returns Checked message parts.
+ */
+const parseOpenAiMessage = (
+  state: State,
+  id: string,
+  item: Record<string, unknown>,
+): OpenAiBlock => {
+  if (
+    item.role !== "assistant" ||
+    !Array.isArray(item.content) ||
+    (item.phase !== "commentary" && item.phase !== "final_answer" && item.phase != null)
+  )
+    fail(state, "Responses message invalid");
+  const parts = (item.content as unknown[]).map((value) => {
+    const part = objectValue(value);
+    if (
+      part?.type === "output_text" &&
+      typeof part.text === "string" &&
+      (!part.annotations || (Array.isArray(part.annotations) && part.annotations.length === 0))
+    )
+      return { type: "output_text" as const, text: part.text };
+    if (part?.type === "refusal" && typeof part.refusal === "string")
+      return { type: "refusal" as const, text: part.refusal };
+    return fail(state, "Unsupported Responses message part");
+  });
+  return {
+    type: "message",
+    id,
+    phase: (item.phase ?? "") as "" | "commentary" | "final_answer",
+    parts,
+  };
+};
+
+/**
+ * @param state Complete stream and typed item receipt.
+ */
+const assertOpenAiProjection = (state: State): void => {
+  const openai = state.openai;
+  if (!openai) return fail(state, "Responses state missing");
+  const items = openai.items;
+  const text = items
+    .flatMap((item) =>
+      item.type === "message"
+        ? item.parts.filter((part) => part.type === "output_text").map((part) => part.text)
+        : [],
+    )
+    .join("");
+  const calls = items.flatMap((item) => (item.type === "function_call" ? [item.call] : []));
+  if (
+    text !== state.text ||
+    calls.length !== state.toolCalls.length ||
+    calls.some((call, index) => {
+      const actual = state.toolCalls[index];
+      return call.id !== actual?.id || call.name !== actual.name || call.input !== actual.input;
+    })
+  )
+    fail(state, "Responses stream projection mismatch");
 };
 
 /**

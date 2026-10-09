@@ -18,8 +18,9 @@ Current work: [Signal-driven Agent entities](planning/agent-entities.md),
 on `agent-entities`, based on official master `658da1cdd`. Anthropic model
 support is included in the first snapshot. PR #18 now includes planning for the
 human-approved [Release Notes Studio desktop example](planning/release-notes-studio.md).
-That example remains unimplemented. The approved first version uses existing
-in-memory storage. The subscription adapter module comes first, followed by
+The desktop example remains unimplemented; its first milestone, the ChatGPT
+subscription adapter module, is now in progress (D-0132). The approved first
+version uses existing in-memory storage. The subscription adapter module comes first, followed by
 desktop sign-in and the example workflow; persistent domain storage is deferred. The three additional Anthropic
 review-and-fix rounds and the two further requested rounds are complete, each
 with a fresh reviewer and no inherited conversation or memory. The signed-thinking continuation defect is

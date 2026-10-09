@@ -16,7 +16,10 @@ import { describe, expect, it } from "vitest";
 import { create, fromBinary, fromJson, toBinary, toJson } from "@bufbuild/protobuf";
 import { AnyMessages } from "@spine-event-engine/core";
 import { assertAiOutcomeContext } from "../src/spi/adapter.js";
-import { AnthropicAssistantContentSchema } from "@spine-event-engine/proto/agent";
+import {
+  AnthropicAssistantContentSchema,
+  OpenAiAssistantContentSchema,
+} from "@spine-event-engine/proto/agent";
 import {
   ProposedSupportReplySchema,
   SupportTicketFactsSchema,
@@ -48,6 +51,73 @@ import {
 } from "../src/index.js";
 
 describe("public SDK-free facade inventory", () => {
+  it("rejects incomplete or mismatched typed Responses receipts", () => {
+    const content = create(OpenAiAssistantContentSchema, {
+      complete: false,
+      items: [
+        {
+          itemId: "message-1",
+          content: {
+            case: "message",
+            value: {
+              parts: [{ content: { case: "outputText", value: "Hello" } }],
+            },
+          },
+        },
+      ],
+    });
+    const response = create(GenerationResponseSchema, {
+      outcome: AiOutcome.TOOL_REQUESTED,
+      rawOutput: "Different",
+      toolCalls: [{ providerCallId: "call-1", toolName: "tool_0", argumentsJson: "{}" }],
+      openaiContent: content,
+    });
+    expect(() => {
+      assertAiOutcomeContext(response);
+    }).toThrow("Responses");
+    response.openaiContent = create(OpenAiAssistantContentSchema, { ...content, complete: true });
+    expect(() => {
+      assertAiOutcomeContext(response);
+    }).toThrow("Responses");
+  });
+
+  it("accepts bounded normalized text and tool deltas in an incomplete failed Responses receipt", () => {
+    const response = create(GenerationResponseSchema, {
+      outcome: AiOutcome.FAILED,
+      rawOutput: "started",
+      toolCalls: [{ providerCallId: "call-1", toolName: "tool_0", argumentsJson: "{}" }],
+      openaiContent: create(OpenAiAssistantContentSchema, { complete: false }),
+    });
+    expect(() => {
+      assertAiOutcomeContext(response);
+    }).not.toThrow();
+    response.outcome = AiOutcome.TOOL_REQUESTED;
+    expect(() => {
+      assertAiOutcomeContext(response);
+    }).toThrow("incomplete");
+  });
+
+  it("rejects a failed partial Responses receipt that contradicts normalized text", () => {
+    const response = create(GenerationResponseSchema, {
+      outcome: AiOutcome.FAILED,
+      rawOutput: "later text",
+      openaiContent: create(OpenAiAssistantContentSchema, {
+        complete: false,
+        items: [
+          {
+            itemId: "message-1",
+            content: {
+              case: "message",
+              value: { parts: [{ content: { case: "outputText", value: "different" } }] },
+            },
+          },
+        ],
+      }),
+    });
+    expect(() => {
+      assertAiOutcomeContext(response);
+    }).toThrow("projection");
+  });
   it("provides factory values with their approved type names", () => {
     const ref: ModelRef = ModelRef.of("deployment", "r1");
     const model: AiModel<typeof SupportTicketFactsSchema, typeof ProposedSupportReplySchema> =

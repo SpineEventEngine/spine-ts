@@ -54,7 +54,7 @@ export interface AiLimits {
   readonly maxOutputBytes: number;
 
   /**
-   * Generation-only output token limit.
+   * Optional generation-only ceiling when the selected deployment can enforce it.
    */
   readonly maxOutputTokens?: number;
 }

@@ -26,6 +26,7 @@
   ],
   "dependencies": {
     "@ai-sdk/mcp": "2.0.67",
+    "@ai-sdk/openai": "4.0.84",
     "@ai-sdk/provider": "4.0.22",
     "@ax-llm/ax": "25.0.0",
     "@bufbuild/protobuf": "2.12.1",
@@ -38,7 +39,6 @@
   },
   "devDependencies": {
     "@ai-sdk/anthropic": "4.0.72",
-    "@ai-sdk/openai": "4.0.84",
     "@openrouter/ai-sdk-provider": "3.1.0"
   }
 }
