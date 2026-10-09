@@ -1525,7 +1525,13 @@ describe("bounded MCP protocol", () => {
       additionalProperties: false,
     };
     expect(await session.discover(["lookup"])).toEqual(tools);
-    schemaOverride = { ...schemaOverride, $schema: "https://untrusted.example/schema" };
+    schemaOverride = {
+      $schema: "https://untrusted.example/schema",
+      type: "object",
+      properties: { ticket: { type: "string" } },
+      required: ["ticket"],
+      additionalProperties: false,
+    };
     await expect(session.discover(["lookup"])).rejects.toMatchObject({
       code: "UNSUPPORTED_CAPABILITY",
       message: "MCP tool capability is unsupported.",
@@ -1640,7 +1646,13 @@ describe("bounded MCP protocol", () => {
         }),
       }),
     ]);
-    outputSchemaOverride = { ...outputSchemaOverride, $schema: "https://untrusted.example/schema" };
+    outputSchemaOverride = {
+      $schema: "https://untrusted.example/schema",
+      type: "object",
+      properties: { ticket: { type: "string" } },
+      required: ["ticket"],
+      additionalProperties: false,
+    };
     await expect(session.discover(["lookup"])).rejects.toMatchObject({
       code: "UNSUPPORTED_CAPABILITY",
     });

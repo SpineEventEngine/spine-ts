@@ -4637,3 +4637,18 @@ recordedexplicitprofiles; finalsecuritydeferredcoordinatedrelease. Commit only
 D0137 runtime/adapter/tests/APIinventory pluscanonicalrecords; exclude unfinished
 D0138 domain/source/config/README. No fullreleaseclaim. D0138 generationpassed,
 remainingdomainimplementationtestscontinue samewriter.
+
+4748ef026 pushed successfully; CI37964269891 failed before tests in dedicated
+adapter test-tooling typecheck: mcp-protocol.test.ts1528/1643 TS2698 unknownschema
+spread. Prior package tsc did not cover that dedicated tooling project; preflight
+was incomplete, acknowledged tohuman. Samewriter pausesdomain briefly for typed
+fixturefix +exact pnpm typecheck:tooling +focusedMCPtest/lint (0.1–0.2h). No
+productionbehaviorchange or reviewwave needed for deterministictesttyping; no
+anycast/gateweakening. Raw /tmp/spine-release-notes-ci-4748.log. Parentcommitsonly
+boundedfix+record immediatelyaftergreen. Wholeplan/coverage remainopen.
+
+CI typing correction GREEN: two unknown-value spreads replaced with explicit
+unsupported schema fixtures (no casts). Exact pnpm typecheck:tooling passed,
+focused MCP38/38 passed, fileESLint/diffcheck passed. Only adapter test file plus
+thisrecord enter correctivecheckpoint; D0138 remainsseparated. Samewriter resumes
+domainpreflight. No runtimebehavior changed; deterministiccorrection no reviewreopen.
