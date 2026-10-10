@@ -60,6 +60,35 @@ plain, non-reserved ASCII identifiers only. Reserved and quoted-required names
 preserve their spelling; all names reject NUL, unsafe values, 63-byte overflow,
 and collisions before DDL, DML, or catalog inspection.
 
+## Agent history
+
+The provider-only Agent history handle stores `AgentHistoryRecord` in one
+`agent_history` record family per selected tenant database. Its payload retains
+the original complete `AgentHistoryEntry` and full state type and Agent key.
+SHA-256 digests provide bounded physical record IDs and indexed scope keys;
+reads also compare the complete state type and Agent key. Three validated B-tree
+indexes cover scope plus full order, scope plus category plus full order, and
+scope plus conversation digest plus full order. Conversation reads also compare
+the complete conversation key. `order_key` encodes original seconds,
+nanoseconds, category, and unsigned UTF-8 record ID under PostgreSQL `C`
+collation. The handle rejects incompatible existing same-name indexes; native
+B-tree entry limits still apply to exceptionally long record IDs. Pages use
+bounded SQL chunks and sum serialized entry bytes; a fetched chunk can be
+larger than the returned byte budget.
+
+## Agent execution
+
+Agent execution records and per-instance pending entries are stored in separate
+tenant database tables. Indexed queries select the next eligible instance and
+the first unresolved signal within it. Required B-tree indexes use complete
+binary-comparable ordering keys and are checked before admission.
+
+Claims, history updates and conditional Entity completion use the same native
+transaction connection. Completion compares the original Entity Version before
+writing the resulting state, history, preferences and outgoing signals. Reopening
+a factory can read the saved work. No database transaction remains open while a
+model request runs.
+
 ## Lifecycle and errors
 
 `factory.close()` is idempotent, closes registered handles, prevents new handle
@@ -77,7 +106,10 @@ compiler internals.
 
 ## Live verification
 
-The infrastructure suite is intentionally excluded from ordinary CI. Supply
+The infrastructure suite is intentionally excluded from ordinary CI. Its Agent
+history regressions require a superuser to alter index catalog flags within
+disposable temporary schemas, which are removed after each test. This is a test
+requirement; the production adapter does not require superuser access. Supply
 explicit `SPINE_TS_POSTGRESQL_URL`, `SPINE_TS_POSTGRESQL_TENANT_A_URL`, and
 `SPINE_TS_POSTGRESQL_TENANT_B_URL` values naming three test databases, then run
 the package's `test:postgresql:16`

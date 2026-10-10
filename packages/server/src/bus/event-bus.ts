@@ -12,10 +12,16 @@
  * the License.
  */
 
-import { clone } from "@bufbuild/protobuf";
+import { clone, create } from "@bufbuild/protobuf";
 import { AnyMessages, Validate, type MessageSchema } from "@spine-event-engine/core";
 import { EventSchema, type Event } from "@spine-event-engine/proto";
+import * as AgentInteraction from "@spine-event-engine/proto/agent";
 import type { EventStore } from "@spine-event-engine/storage";
+import { eventStoreAccess } from "@spine-event-engine/storage/provider";
+import {
+  AgentSavedDispatchPlanSchema as SavedPlanSchema,
+  type AgentSavedDispatchPlan,
+} from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
 import type { ILogLayer } from "loglayer";
 
 import {
@@ -26,12 +32,25 @@ import {
 import { EventDispatcherRegistry } from "./event-dispatcher-registry.js";
 import type { EventDispatcher } from "./event-dispatcher.js";
 import { emitServerError } from "../server/server-log.js";
+import { SavedDispatcherBindings } from "./saved-dispatcher-binding.js";
 
 const storedDispatchers = new WeakMap<EventBus, (event: Event) => Promise<void>>();
 const storedFollowUpDispatchers = new WeakMap<EventBus, (event: Event) => Promise<void>>();
 const followUpPosters = new WeakMap<EventBus, (event: Event) => Promise<void>>();
+const savedPreparers = new WeakMap<EventBus, (event: Event) => Promise<AgentSavedDispatchPlan>>();
+const savedFollowUps = new WeakMap<
+  EventBus,
+  (event: Event, plan: AgentSavedDispatchPlan) => Promise<void>
+>();
+// prettier-ignore
 const exclusiveWorkers = new WeakMap<
   EventBus,
+
+  /**
+   * Executes work in the event bus sequence.
+   *
+   * @typeParam Result Value returned by serialized work.
+   */
   <Result>(work: () => Result | Promise<Result>) => Promise<Result>
 >();
 const subscriberRegistrars = new WeakMap<
@@ -54,40 +73,203 @@ const eventBusLoggers = new WeakMap<EventBus, ILogLayer>();
 
 type EventBusRole = "domain" | "system";
 
+const agentSystemTypes = new Set<string>([
+  AgentInteraction.AgentAiOperationStartedSchema.typeName,
+  AgentInteraction.AgentModelAttemptStartedSchema.typeName,
+  AgentInteraction.AgentModelAttemptFinishedSchema.typeName,
+  AgentInteraction.AgentAiResultAdmittedSchema.typeName,
+  AgentInteraction.AgentAiOperationFailedSchema.typeName,
+  AgentInteraction.AgentToolCallStartedSchema.typeName,
+  AgentInteraction.AgentToolCallFinishedSchema.typeName,
+  AgentInteraction.AgentModelSelectionChangedSchema.typeName,
+  AgentInteraction.AgentInvocationTerminatedSchema.typeName,
+]);
+
+/**
+ * Checks for framework System events, including Agent interaction events.
+ *
+ * @param schema Event message descriptor to classify.
+ * @returns Whether the schema is reserved for System events.
+ */
+export const isSystemEventSchema = (schema: MessageSchema): boolean =>
+  schema.typeName.startsWith("spine.system.") || agentSystemTypes.has(schema.typeName);
+
 interface AcceptedEventDispatcher {
   readonly dispatcher: EventDispatcher;
   readonly event: Event;
 }
 
 interface EventBusAccess {
-  // prettier-ignore
-
   /**
-   * Assembles a package-internal bus that owns no event store.
+   * Creates a bus without event storage.
    *
-   * @param dispatchers the initial dispatchers to register.
-   * @returns the assembled forgetting bus.
+   * @param dispatchers Initial dispatchers to register.
+   * @returns The event bus without an event store.
    */
   createForgettingBus(dispatchers?: Iterable<EventDispatcher>): EventBus;
+
+  /**
+   * Creates a System-event bus with optional storage.
+   *
+   * @param eventStore Optional event store for the System bus.
+   * @param dispatchers Initial dispatchers to register.
+   * @returns The System-event bus.
+   */
   createSystemBus(
     eventStore: EventStore | undefined,
     dispatchers?: Iterable<EventDispatcher>,
   ): EventBus;
+
+  /**
+   * Stores and dispatches an accepted event.
+   *
+   * @param eventBus Event bus receiving this internal operation.
+   * @param event Event envelope to prepare or dispatch.
+   * @returns A promise for event storage and dispatch.
+   */
   postStored(eventBus: EventBus, event: Event): Promise<void>;
+
+  /**
+   * Stores and dispatches an event during follow-up work.
+   *
+   * @param eventBus Event bus receiving this internal operation.
+   * @param event Event envelope to prepare or dispatch.
+   * @returns A promise for follow-up event storage and dispatch.
+   */
   postStoredFollowUp(eventBus: EventBus, event: Event): Promise<void>;
+
+  /**
+   * Posts an internal event during follow-up work.
+   *
+   * @param eventBus Event bus receiving this internal operation.
+   * @param event Event envelope to prepare or dispatch.
+   * @returns A promise for follow-up event dispatch.
+   */
   postFollowUp(eventBus: EventBus, event: Event): Promise<void>;
+
+  /**
+   * Prepares a dispatch plan before persisting accepted output.
+   *
+   * @param eventBus Event bus receiving this internal operation.
+   * @param event Event envelope to prepare or dispatch.
+   * @returns The exact saved recipient plan.
+   */
+  prepareSaved(eventBus: EventBus, event: Event): Promise<AgentSavedDispatchPlan>;
+
+  /**
+   * Posts a prepared dispatch after its Agent result is saved.
+   *
+   * @param eventBus Event bus receiving this internal operation.
+   * @param event Event envelope to prepare or dispatch.
+   * @param plan Persisted recipient plan for this dispatch.
+   * @returns A promise for completion of the saved dispatch.
+   */
+  postSavedFollowUp(eventBus: EventBus, event: Event, plan: AgentSavedDispatchPlan): Promise<void>;
+
+  /**
+   * Executes work in the bus-wide exclusive sequence.
+   *
+   * @typeParam Result Result type returned by the serialized work.
+   * @param eventBus Event bus receiving this internal operation.
+   * @param work Work to serialize with other bus operations.
+   * @returns The result returned by the serialized work.
+   */
   runExclusive<Result>(eventBus: EventBus, work: () => Result | Promise<Result>): Promise<Result>;
+
+  /**
+   * Subscribes a callback to one event type.
+   *
+   * @param eventBus Event bus receiving this internal operation.
+   * @param typeUrl Fully qualified event message type URL.
+   * @param subscriber Callback to invoke for matching events.
+   * @returns A handle for removing the subscription.
+   */
   subscribe(eventBus: EventBus, typeUrl: string, subscriber: EventSubscriber): EventSubscription;
+
+  /**
+   * Lists schemas registered for dispatch.
+   *
+   * @param eventBus Event bus receiving this internal operation.
+   * @returns The registered event message schemas.
+   */
   eventSchemas(eventBus: EventBus): readonly MessageSchema[];
+
+  /**
+   * Registers event schemas for dispatch.
+   *
+   * @param eventBus Event bus receiving this internal operation.
+   * @param schemas Event message schemas to register.
+   */
   registerSchemas(eventBus: EventBus, schemas: Iterable<MessageSchema>): void;
+
+  /**
+   * Removes a dispatcher from the bus.
+   *
+   * @param eventBus Event bus receiving this internal operation.
+   * @param dispatcher Dispatcher to register or inspect.
+   */
   unregister(eventBus: EventBus, dispatcher: EventDispatcher): void;
+
+  /**
+   * Finds a registered event schema by type URL.
+   *
+   * @param eventBus Event bus receiving this internal operation.
+   * @param typeUrl Fully qualified event message type URL.
+   * @returns The matching schema, if registered.
+   */
   schema(eventBus: EventBus, typeUrl: string): MessageSchema | undefined;
+
+  /**
+   * Stops accepting new external work.
+   *
+   * @param eventBus Event bus receiving this internal operation.
+   */
   beginClose(eventBus: EventBus): void;
+
+  /**
+   * Waits for accepted dispatches to settle.
+   *
+   * @param eventBus Event bus receiving this internal operation.
+   * @returns A promise that settles when accepted work drains.
+   */
   drain(eventBus: EventBus): Promise<void>;
+
+  /**
+   * Completes the bus shutdown.
+   *
+   * @param eventBus Event bus receiving this internal operation.
+   * @returns A promise that settles when shutdown completes.
+   */
   finishClose(eventBus: EventBus): Promise<void>;
+
+  /**
+   * Restores intake after an aborted shutdown.
+   *
+   * @param eventBus Event bus receiving this internal operation.
+   */
   abortClose(eventBus: EventBus): void;
+
+  /**
+   * Returns the number of accepted dispatches still in progress.
+   *
+   * @param eventBus Event bus receiving this internal operation.
+   * @returns The number of accepted dispatches still in progress.
+   */
   acceptedWorkCount(eventBus: EventBus): number;
+
+  /**
+   * Attaches the server logger to this bus.
+   *
+   * @param eventBus Event bus receiving this internal operation.
+   * @param logger Logger used for bus diagnostics.
+   */
   installLogger(eventBus: EventBus, logger: ILogLayer): void;
+
+  /**
+   * Removes the server logger from this bus.
+   *
+   * @param eventBus Event bus receiving this internal operation.
+   */
   clearLogger(eventBus: EventBus): void;
 }
 
@@ -104,12 +286,19 @@ type EventBusIntakeState = "open" | "closing" | "closed";
  */
 export class EventBus {
   readonly #eventStore: EventStore | undefined;
+
   readonly #registry = new EventDispatcherRegistry();
+
   readonly #subscribers = new Map<string, Set<EventSubscriberRecord>>();
+
   readonly #runtime = new SingleProcessServerRuntime();
+
   readonly #started: Promise<void>;
+
   #intakeState: EventBusIntakeState = "open";
+
   #acceptedWorkCount = 0;
+
   #closed: Promise<void> | undefined;
 
   /**
@@ -128,6 +317,8 @@ export class EventBus {
     storedDispatchers.set(this, (event) => this.#postStored(event));
     storedFollowUpDispatchers.set(this, (event) => this.#postStoredFollowUp(event));
     followUpPosters.set(this, (event) => this.#postFollowUp(event));
+    savedPreparers.set(this, (event) => this.#prepareSaved(event));
+    savedFollowUps.set(this, (event, plan) => this.#postSavedFollowUp(event, plan));
     exclusiveWorkers.set(this, (work) => this.#runExclusive(work));
     subscriberRegistrars.set(this, (typeUrl, subscriber) => this.#subscribe(typeUrl, subscriber));
     eventSchemaLists.set(this, () => this.#registry.schemas());
@@ -156,6 +347,7 @@ export class EventBus {
   /**
    * Registers an event dispatcher.
    *
+   * @typeParam Dispatcher Concrete Event dispatcher type returned to the caller.
    * @param dispatcher the dispatcher to register.
    * @returns the registered dispatcher.
    */
@@ -300,6 +492,69 @@ export class EventBus {
     );
   }
 
+  async #prepareSaved(event: Event): Promise<AgentSavedDispatchPlan> {
+    const typeUrl = event.message?.typeUrl;
+    if (!typeUrl) throw new Error("Saved Agent Event requires a registered message type.");
+    this.#validate(event, typeUrl);
+    const targets = [];
+    for (const dispatcher of this.#registry.find(typeUrl, event.context?.external === true)) {
+      const binding = SavedDispatcherBindings.forEvent(dispatcher);
+      if (binding === undefined)
+        throw new Error("Saved Agent Event matches a dispatcher without durable metadata.");
+      targets.push(await binding.prepare(clone(EventSchema, event)));
+    }
+    return create(SavedPlanSchema, { targets });
+  }
+
+  #postSavedFollowUp(event: Event, plan: AgentSavedDispatchPlan): Promise<void> {
+    const accepted = clone(EventSchema, event);
+    const frozen = clone(SavedPlanSchema, plan);
+    if (this.#intakeState === "closed")
+      return Promise.reject(new ServerRuntimeStateError("enqueue", "closed"));
+    this.#acceptedWorkCount++;
+    return this.#started.then(() =>
+      runtimeAccess.enqueueFollowUp(this.#runtime, () => this.#dispatchSaved(accepted, frozen)),
+    );
+  }
+
+  async #dispatchSaved(event: Event, plan: AgentSavedDispatchPlan): Promise<void> {
+    const typeUrl = event.message?.typeUrl;
+    if (!typeUrl) throw new Error("Saved Agent Event requires a registered message type.");
+    this.#validate(event, typeUrl);
+    const dispatchers = this.#registry.find(typeUrl, event.context?.external === true);
+    const deliveries = await this.#bindSaved(event, plan, dispatchers);
+    const store = this.#eventStore;
+    if (store === undefined) throw new Error("Saved Agent Event requires an EventStore.");
+    await eventStoreAccess.appendOrVerifyOriginal(store, event);
+    for (const deliver of deliveries) await deliver();
+    this.#notify(event);
+  }
+
+  async #bindSaved(
+    event: Event,
+    plan: AgentSavedDispatchPlan,
+    dispatchers: readonly EventDispatcher[],
+  ): Promise<readonly (() => Promise<void>)[]> {
+    if (dispatchers.length !== plan.targets.length)
+      throw new Error("Saved Agent Event dispatcher set changed before delivery.");
+    const remaining = new Set(dispatchers);
+    const deliveries: (() => Promise<void>)[] = [];
+    for (const target of plan.targets) {
+      const matches = [...remaining].filter(
+        (dispatcher) => SavedDispatcherBindings.forEvent(dispatcher)?.matches(target) === true,
+      );
+      if (matches.length !== 1)
+        throw new Error("Saved Agent Event dispatcher binding is missing or ambiguous.");
+      const dispatcher = matches[0];
+      if (dispatcher === undefined) throw new Error("Saved Agent Event dispatcher disappeared.");
+      remaining.delete(dispatcher);
+      const binding = SavedDispatcherBindings.forEvent(dispatcher);
+      if (binding === undefined) throw new Error("Saved Agent Event metadata disappeared.");
+      deliveries.push(await binding.bind(clone(EventSchema, event), target));
+    }
+    return deliveries;
+  }
+
   async #dispatchStored(event: Event): Promise<void> {
     const typeUrl = event.message?.typeUrl;
 
@@ -349,6 +604,13 @@ export class EventBus {
     Validate.check(schema, message);
   }
 
+  /**
+   * Executes one task after prior accepted bus work settles.
+   *
+   * @typeParam Result Value returned by the task.
+   * @param work Task to serialize with other bus work.
+   * @returns The task result after dispatch ordering is respected.
+   */
   #runExclusive<Result>(work: () => Result | Promise<Result>): Promise<Result> {
     let result: Result | undefined;
 
@@ -494,6 +756,13 @@ export class EventBus {
 }
 
 const EventBusRoles = Object.freeze({
+  /**
+   * Creates a bus restricted to System event schemas.
+   *
+   * @param eventStore Optional store for published System events.
+   * @param dispatchers Initial System event dispatchers.
+   * @returns The configured System event bus.
+   */
   createSystem(
     eventStore: EventStore | undefined,
     dispatchers: Iterable<EventDispatcher>,
@@ -504,12 +773,26 @@ const EventBusRoles = Object.freeze({
     for (const dispatcher of dispatchers) eventBus.register(dispatcher);
     return eventBus;
   },
+
+  /**
+   * Validates every schema accepted by a dispatcher against the bus role.
+   *
+   * @param role Domain or System role of the bus.
+   * @param dispatcher Dispatcher whose schemas are checked.
+   */
   validateDispatcher(role: EventBusRole, dispatcher: EventDispatcher): void {
     for (const schema of dispatcher.messageSchemas()) EventBusRoles.validateSchema(role, schema);
   },
+
+  /**
+   * Validates a message schema against the bus role.
+   *
+   * @param role Domain or System role of the bus.
+   * @param schema Event message descriptor to check.
+   */
   validateSchema(role: EventBusRole, schema: MessageSchema): void {
     const typeUrl = `type.${schema.typeName}`;
-    const systemSchema = typeUrl.startsWith("type.spine.system.");
+    const systemSchema = isSystemEventSchema(schema);
     if (role === "domain" && systemSchema)
       throw new Error(`Domain EventBus rejects system event schema "${typeUrl}".`);
     if (role === "system" && !systemSchema)
@@ -619,6 +902,26 @@ export const eventBusAccess: EventBusAccess = Object.freeze({
     return postFollowUp(event);
   },
 
+  prepareSaved(eventBus: EventBus, event: Event): Promise<AgentSavedDispatchPlan> {
+    const prepare = savedPreparers.get(eventBus);
+    if (prepare === undefined) throw new TypeError("Saved Event preparation requires an EventBus.");
+    return prepare(event);
+  },
+
+  postSavedFollowUp(eventBus: EventBus, event: Event, plan: AgentSavedDispatchPlan): Promise<void> {
+    const post = savedFollowUps.get(eventBus);
+    if (post === undefined) throw new TypeError("Saved Event delivery requires an EventBus.");
+    return post(event, plan);
+  },
+
+  /**
+   * Executes work in the bus-wide exclusive sequence.
+   *
+   * @typeParam Result Value returned by serialized work.
+   * @param eventBus Bus providing the exclusive sequence.
+   * @param work Task to serialize with other bus work.
+   * @returns The result returned by the task.
+   */
   runExclusive<Result>(eventBus: EventBus, work: () => Result | Promise<Result>): Promise<Result> {
     const runExclusive = exclusiveWorkers.get(eventBus);
 

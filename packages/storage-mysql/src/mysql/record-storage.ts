@@ -13,6 +13,7 @@
  */
 
 import { fromBinary, ScalarType, toBinary, type Message } from "@bufbuild/protobuf";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash } from "node:crypto";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { StringifierRegistry } from "@spine-event-engine/core";
@@ -87,7 +88,10 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
 
   #ready: Promise<void> | undefined;
 
-  #bound: import("mysql2/promise").PoolConnection | undefined;
+  /**
+   * Keeps transaction connections separate across concurrent asynchronous calls.
+   */
+  readonly #bound = new AsyncLocalStorage<import("mysql2/promise").PoolConnection>();
 
   readonly #idColumn: MysqlIdColumn<I>;
 
@@ -109,6 +113,90 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
    */
   async prepare(): Promise<void> {
     await this.using(() => Promise.resolve());
+  }
+
+  /**
+   * Reads a bounded package-local native history page.
+   * @param sql Parameterized SQL assembled by the Agent history provider.
+   * @param values Bound scope, view, boundary, and limit values.
+   * @returns Decoded original record envelopes.
+   */
+  async historyPage(sql: string, values: readonly unknown[]): Promise<readonly R[]> {
+    return this.using(async (connection) => {
+      const [rows] = await connection.query<PayloadRow[]>(sql, [...values]);
+      try {
+        return rows.map((row) => fromBinary(this.recordSpec.recordType, row.bytes));
+      } catch (error) {
+        throw mysqlError(MysqlStorageDataError, "Stored MySQL history data is invalid.", error);
+      }
+    });
+  }
+
+  /**
+   * Creates one required complete Agent history index when absent.
+   * @param name Fixed provider index name.
+   * @param columns Fixed complete index columns.
+   * @returns Completion after the native index definition is checked.
+   */
+  async ensureHistoryIndex(name: string, columns: readonly string[]): Promise<void> {
+    await this.using(async (connection) => {
+      const existing = await this.historyIndex(connection, name);
+      if (existing.length !== 0) {
+        this.assertHistoryIndex(existing, columns);
+        return;
+      }
+      if (!/^[a-z_]+$/u.test(name) || columns.some((column) => !/^[a-z_]+$/u.test(column)))
+        throw new MysqlStorageSchemaError("MySQL Agent history index name is invalid.");
+      const quoted = columns.map((column) => `\`${column}\``).join(", ");
+      try {
+        await connection.query(`CREATE INDEX \`${name}\` ON \`${this.tableName}\` (${quoted})`);
+      } catch (error) {
+        if ((error as { code?: string }).code !== "ER_DUP_KEYNAME") throw error;
+      }
+      this.assertHistoryIndex(await this.historyIndex(connection, name), columns);
+    });
+  }
+
+  /**
+   * Reads complete physical index metadata for one fixed history index.
+   * @param connection Active MySQL connection.
+   * @param name Fixed required index name.
+   * @returns Ordered native index components.
+   */
+  private async historyIndex(
+    connection: import("mysql2/promise").PoolConnection,
+    name: string,
+  ): Promise<readonly IndexRow[]> {
+    const [rows] = await connection.query<IndexRow[]>(
+      "SELECT index_name AS index_name, non_unique AS non_unique, " +
+        "column_name AS column_name, seq_in_index AS seq_in_index, " +
+        "sub_part AS sub_part, collation AS collation, index_type AS index_type " +
+        "FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name=? " +
+        "AND index_name=? ORDER BY seq_in_index",
+      [this.tableName, name],
+    );
+    return rows;
+  }
+
+  /**
+   * Rejects prefixes, wrong order, or a different native index.
+   * @param rows Ordered native index components.
+   * @param columns Required complete index columns.
+   */
+  private assertHistoryIndex(rows: readonly IndexRow[], columns: readonly string[]): void {
+    if (
+      rows.length !== columns.length ||
+      rows.some(
+        (row, index) =>
+          row.column_name !== columns[index] ||
+          Number(row.seq_in_index) !== index + 1 ||
+          row.sub_part !== null ||
+          Number(row.non_unique) !== 1 ||
+          row.collation !== "A" ||
+          row.index_type !== "BTREE",
+      )
+    )
+      throw new MysqlStorageSchemaError("MySQL Agent history index is incompatible.");
   }
 
   /**
@@ -262,16 +350,16 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     connection: import("mysql2/promise").PoolConnection,
     work: () => Promise<T>,
   ): Promise<T> {
-    if (this.#bound !== undefined) {
+    const bound = this.#bound.getStore();
+    if (bound !== undefined) {
+      if (bound !== connection)
+        throw new Error("MySQL record handle is bound to another transaction.");
       return work();
     }
-    this.#bound = connection;
-    try {
+    return this.#bound.run(connection, async () => {
       await this.ready(connection);
       return await work();
-    } finally {
-      this.#bound = undefined;
-    }
+    });
   }
 
   /**
@@ -519,7 +607,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
   private async using<T>(
     work: (connection: import("mysql2/promise").PoolConnection) => Promise<T>,
   ): Promise<T> {
-    const bound = this.#bound;
+    const bound = this.#bound.getStore();
     if (bound !== undefined) {
       return work(bound);
     }
@@ -1249,9 +1337,12 @@ interface EngineRow extends RowDataPacket {
 
 interface IndexRow extends RowDataPacket {
   index_name: string;
-  non_unique: number;
+  non_unique: number | string;
   column_name: string;
-  seq_in_index: number;
+  seq_in_index: number | string;
+  sub_part?: number | null;
+  collation?: string | null;
+  index_type?: string;
 }
 
 function mysqlColumnDefinition(
@@ -1314,10 +1405,10 @@ function groupedIndexes(
   for (const index of indexes) {
     const existing = grouped.get(index.index_name) ?? {
       name: index.index_name,
-      nonUnique: index.non_unique,
+      nonUnique: Number(index.non_unique),
       columns: [],
     };
-    existing.columns[index.seq_in_index - 1] = index.column_name;
+    existing.columns[Number(index.seq_in_index) - 1] = index.column_name;
     grouped.set(index.index_name, existing);
   }
   return [...grouped.values()];

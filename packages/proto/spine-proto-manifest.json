@@ -1,7 +1,7 @@
 {
   "formatVersion": 2,
   "packageName": "@spine-event-engine/proto",
-  "packageVersion": "2.0.0-snapshot.22",
+  "packageVersion": "2.0.0-snapshot.23",
   "protoFiles": [
     "grpc/health/v1/health.proto",
     "spine/auth/authenticated_subscription.proto",
@@ -37,6 +37,8 @@
     "spine/net/email_address.proto",
     "spine/net/internet_domain.proto",
     "spine/options.proto",
+    "spine/server/agent/execution_record.proto",
+    "spine/server/agent/history_record.proto",
     "spine/server/catchup/catch_up.proto",
     "spine/server/delivery/delivery.proto",
     "spine/server/delivery/delivery_events.proto",
@@ -51,6 +53,10 @@
     "spine/system/server/entity_type.proto",
     "spine/time/time.proto",
     "spine/time_options.proto",
+    "spine/ts/agent/content.proto",
+    "spine/ts/agent/history.proto",
+    "spine/ts/agent/interaction_events.proto",
+    "spine/ts/agent/model.proto",
     "spine/ui/language.proto",
     "spine/validation/validation_error.proto"
   ],
@@ -89,6 +95,8 @@
     "spine/net/email_address.proto": "generated/spine/net/email_address_pb.js",
     "spine/net/internet_domain.proto": "generated/spine/net/internet_domain_pb.js",
     "spine/options.proto": "generated/spine/options_pb.js",
+    "spine/server/agent/execution_record.proto": "generated/spine/server/agent/execution_record_pb.js",
+    "spine/server/agent/history_record.proto": "generated/spine/server/agent/history_record_pb.js",
     "spine/server/catchup/catch_up.proto": "generated/spine/server/catchup/catch_up_pb.js",
     "spine/server/delivery/delivery.proto": "generated/spine/server/delivery/delivery_pb.js",
     "spine/server/delivery/delivery_events.proto": "generated/spine/server/delivery/delivery_events_pb.js",
@@ -103,10 +111,14 @@
     "spine/system/server/entity_type.proto": "generated/spine/system/server/entity_type_pb.js",
     "spine/time/time.proto": "generated/spine/time/time_pb.js",
     "spine/time_options.proto": "generated/spine/time_options_pb.js",
+    "spine/ts/agent/content.proto": "generated/spine/ts/agent/content_pb.js",
+    "spine/ts/agent/history.proto": "generated/spine/ts/agent/history_pb.js",
+    "spine/ts/agent/interaction_events.proto": "generated/spine/ts/agent/interaction_events_pb.js",
+    "spine/ts/agent/model.proto": "generated/spine/ts/agent/model_pb.js",
     "spine/ui/language.proto": "generated/spine/ui/language_pb.js",
     "spine/validation/validation_error.proto": "generated/spine/validation/validation_error_pb.js"
   },
   "dependencies": [],
   "moduleExport": "spineProtoModule",
-  "generationId": "91c5aa56-b9dc-411b-b107-58366b721202"
+  "generationId": "02b1e24c-4607-44d7-a4df-72ec16898d3d"
 }

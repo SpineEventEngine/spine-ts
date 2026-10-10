@@ -419,12 +419,12 @@
   ],
   "ownedSources": [
     {
-      "localPath": "packages/proto/proto/spine/auth/authentication_service.proto",
-      "sha256": "dcd178e057a13d4d044ac9fb1ba487b5a27203b0686191d5955ee928852822d7"
-    },
-    {
       "localPath": "packages/proto/proto/spine/auth/authenticated_subscription.proto",
       "sha256": "b6436714f754e6d7c1a6bbd177c5a4f0b606d3c7c1adc4b86fa3c299210ffc76"
+    },
+    {
+      "localPath": "packages/proto/proto/spine/auth/authentication_service.proto",
+      "sha256": "dcd178e057a13d4d044ac9fb1ba487b5a27203b0686191d5955ee928852822d7"
     },
     {
       "localPath": "packages/proto/proto/spine/client/subscription_record.proto",
@@ -433,6 +433,30 @@
     {
       "localPath": "packages/proto/proto/spine/deployment/node_discovery.proto",
       "sha256": "7c300d215a1757c17b7bd1a89cebb4825df28a58fcc119f2aa6d5535d7520073"
+    },
+    {
+      "localPath": "packages/proto/proto/spine/server/agent/execution_record.proto",
+      "sha256": "051cff9a1c7873f40c34101f7d30c86416775ed18fce3223a3eb7452adf83db4"
+    },
+    {
+      "localPath": "packages/proto/proto/spine/server/agent/history_record.proto",
+      "sha256": "24ed282bc0cd901a3b38748ea7b516e972a87b2a7f69db99a2b094458d48e38a"
+    },
+    {
+      "localPath": "packages/proto/proto/spine/ts/agent/content.proto",
+      "sha256": "d119c8a71c39dcdd4af8de1dd1c1ceeb22eab08fb02a704d8ee15bae5949f4fe"
+    },
+    {
+      "localPath": "packages/proto/proto/spine/ts/agent/history.proto",
+      "sha256": "9e102eb7c4a617ca707b7570b82ddc38927df451e133b98e9b0dbac8d3a9ec4e"
+    },
+    {
+      "localPath": "packages/proto/proto/spine/ts/agent/interaction_events.proto",
+      "sha256": "9c991d632faf035c8489e88235ee55308f9ff6dfb29cfe664cf579ca96d1c01e"
+    },
+    {
+      "localPath": "packages/proto/proto/spine/ts/agent/model.proto",
+      "sha256": "e8cfcc1b53731627fbdeaeaeb74a59b98b05510bb7044ceffb493ac2ab3292e1"
     }
   ]
 }

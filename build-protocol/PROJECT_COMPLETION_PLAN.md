@@ -14,7 +14,49 @@ evidence of completed work and are not current operating instructions. Every
 future `master` merge triggers NPM publication and therefore carries a new
 common workspace version under D-0115.
 
-Current approved work: [Process Manager queries across contexts](planning/cross-context-queries.md)
+Current work: [Signal-driven Agent entities](planning/agent-entities.md),
+on `agent-entities`, based on official master `658da1cdd`. Anthropic model
+support is included in the first snapshot. PR #18 now includes implementation of the
+human-approved [Release Notes Studio desktop example](planning/release-notes-studio.md).
+The ChatGPT subscription adapter checkpoint is implemented, reviewed, and pushed
+(D-0132). Desktop sign-in and protected credentials are implemented and reviewed (D-0133);
+production history/execution reads are implemented and reviewed for domain integration
+(D-0134). Append-only deployment registration and accepted-signal model selection
+are implemented and reviewed as domain-integration prerequisites (D-0135). The first version uses existing in-memory storage; persistent domain
+storage is deferred. Desktop UI polish and three fresh independent review-and-fix
+rounds are complete. Final local release qualification passes: 6,222 tests,
+all coverage thresholds, both dependency audits, all 21 external package
+consumers and offline publication trials, and six Electron checks. PR #18
+records the branch's Build/Security results. Live ChatGPT subscription interaction
+was not exercised by the controlled desktop/provider checks.
+The three additional Anthropic
+review-and-fix rounds and the two further requested rounds are complete, each
+with a fresh reviewer and no inherited conversation or memory. The signed-thinking continuation defect is
+fixed: ordered provider content is recorded and restored for tool and corrective
+requests, including replay (D-0131). All accepted findings, including the
+additional replay coverage and function-size corrections, are closed. Final
+security and specialist review dispositions for that earlier Agent/Anthropic
+scope are complete. Further corrections
+preserve measured bytes for bounded failed responses and keep interrupted tool
+input consistent across recorded projections and replay.
+
+Full release verification passes at code checkpoint `5c3d76a9b`: 5,944 tests
+passed and one skipped. Coverage: statements 93.78%, branches 90.01%, functions
+95.62%, lines 95.55%. Both dependency audits pass. All 21 package archives pass
+strict external consumer checks and the offline publication trial. The branch
+uses `2.0.0-snapshot.23`; no packages were published. The human-created
+[PR #18](https://github.com/SpineEventEngine/spine-ts/pull/18) is the integration
+destination; the cited release run predates the desktop example.
+
+The feature includes the Spine AI facade, mandatory indexed history, durable
+signal-triggered execution, Vercel/Ax integration, MCP and BlackBox support.
+History uses full occurrence timestamps and existing category/record IDs for
+ties. Native recovery checks passed for PostgreSQL, MySQL and Datastore, with
+additional SQL version checks recorded in the task log. Temporary Agent test
+containers were removed. General physical Entity deletion remains a separate
+deferred task. The feature worktree remains available for human review.
+
+Previous completed work: [Process Manager queries across Bounded Contexts](planning/cross-context-queries.md)
 on `cross-context-queries`, based on official master `2324311be8`. Preserve the
 current effective tenant, reject duplicate Entity registrations and incompatible
 query destinations, and drain handlers before closing queried contexts. The

@@ -230,6 +230,30 @@ describe("MysqlStorageFactory builder contract", () => {
       expect.objectContaining({ single: false, tenantId: tenantOne }),
       expect.objectContaining({ single: false, tenantId: tenantTwo }),
     ]);
+    const catalog = factory.tenantCatalog();
+    const signal = new AbortController().signal;
+    const firstPage = await catalog.page({ count: 1, signal });
+    expect(firstPage.boundaries).toHaveLength(1);
+    if (firstPage.after === undefined) throw new Error("Expected MySQL catalog cursor.");
+    await expect(
+      catalog.page({
+        count: 1,
+        signal,
+        after: {
+          [Symbol.toStringTag]: "TenantCatalogCursor",
+        },
+      }),
+    ).rejects.toThrow(/continuation/);
+    const constructed = Reflect.construct(firstPage.after.constructor, [
+      catalog,
+      1,
+      2,
+    ]) as typeof firstPage.after;
+    await expect(catalog.page({ count: 1, signal, after: constructed })).rejects.toThrow();
+    const finalPage = await catalog.page({ count: 1, signal, after: firstPage.after });
+    expect(finalPage.boundaries).toHaveLength(1);
+    expect(finalPage.hasMore).toBe(false);
+    await expect(catalog.page({ count: 0, signal })).rejects.toThrow(/count/);
     firstQuery.mockClear();
     secondQuery.mockClear();
     const spec = new RecordSpec({

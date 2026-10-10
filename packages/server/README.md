@@ -82,10 +82,12 @@ for the exact contract.
 
 An `@Assign`, `@Command`, `@React`, or `@Subscribe` handler may return its
 usual result directly or through exactly one built-in `Promise<T>` layer. Its
-transaction remains open until that promise settles. Nested `Promise<Promise<T>>`
+in-memory Entity draft remains active until that promise settles. Nested `Promise<Promise<T>>`
 results and structural or imported thenable lookalikes are rejected during handler
-analysis. Rejection rolls back framework state and suppresses produced output; it
-cannot roll back an external HTTP request or other side effect.
+analysis. Storage writes happen in separate short operations after the handler succeeds.
+A failed handler leaves previous persisted state unchanged and
+suppresses produced output. An external HTTP request or other side effect may
+already have happened.
 
 Handler return declarations can use native unions for one of several results,
 or fixed tuples for several ordered results. For example,
@@ -129,7 +131,108 @@ class TaskAssignee {
 Place the primary handler decorator first for readability. Reversing the two
 decorators has the same behavior.
 
-Process Managers, but not Aggregates, have protected read-only `select()` during a handler:
+Process Managers have protected read-only `select()` during a handler. Agents use
+the generated `select(query).read()` form with the same actor, tenant, and
+1,000-state limits. Aggregates do not expose handler-scoped queries.
+
+An Agent uses a Proto `ENTITY` state and a generated handler registry.
+`@Assign` returns one or more native Events, `@React` returns native Events or
+`undefined`, and `@Command` returns native Commands under the existing Process
+Manager signal contract. Agents reject `@Subscribe` and Entity-state Apply
+handlers. Matching Event reactors run before commanders against one draft and
+commit one Version. The protected `ai` facade is available while a signal handler
+is active. Its asynchronous calls retain model requests and responses before
+returning a validated result or an operational failure.
+
+An Agent can read its repository history through protected `fullHistory`,
+`conversationHistory`, `systemEventHistory`, and `domainEventHistory` methods.
+Pass a positive `pageSize`; `conversationHistory` also requires a `ConversationId`.
+Pages run newest first and return an opaque `nextCursor` when older entries
+remain. Cursors are bound to the Bounded Context, tenant, repository, Agent ID, read
+method, and conversation. Ordering uses full timestamp precision, then
+conversation/System/domain category, then the existing record ID in unsigned
+UTF-8 order. A page contains at most `pageSize` entries and may contain fewer
+when the independent 1 MiB serialized-byte limit is reached; its cursor resumes
+the remaining older entries. If the first entry exceeds the byte limit, the
+read fails explicitly. Agent history is retained through archive and
+logical deletion. System dispatch audit and emitted domain Events use their
+original Event envelopes in repository history.
+
+Declare the Agent ID and state in Proto, with `option (entity).kind = ENTITY;`
+on the state. The [Support example](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/README.md) includes
+complete [domain Protos](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/proto/spine/examples/support/states.proto),
+[a model definition](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/src/model.ts), and
+[an Agent implementation](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/src/index.ts).
+
+The handler invokes a typed model operation, updates its draft only on success,
+and emits a domain outcome. This abbreviated declaration uses the example's
+actual generated messages:
+
+<!-- docs-snippet-path: examples/support/src/index.ts -->
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import { Agent, Assign } from "@spine-event-engine/server";
+import type { DraftSupportReply } from "../generated/spine/examples/support/commands_pb.js";
+import {
+  SupportReplySuggestedSchema,
+  SupportReplyFailedSchema,
+  type SupportReplySuggested,
+  type SupportReplyFailed,
+} from "../generated/spine/examples/support/events_pb.js";
+import { SupportDraftStateSchema } from "../generated/spine/examples/support/states_pb.js";
+import type { SupportTicketId } from "../generated/spine/examples/support/types_pb.js";
+import { draftSupportReply } from "./model.js";
+
+/** Proposes support replies for a person's review. */
+class SupportDraftAgent extends Agent<SupportTicketId, typeof SupportDraftStateSchema> {
+  /**
+   * Drafts a reply from the submitted ticket facts.
+   * @param command Ticket facts and an explicit conversation.
+   * @returns The proposed reply or a recorded failure outcome.
+   */
+  @Assign
+  async draft(command: DraftSupportReply): Promise<SupportReplySuggested | SupportReplyFailed> {
+    if (command.conversation === undefined || command.request === undefined)
+      throw new TypeError("A draft requires ticket facts and a conversation.");
+    const result = await this.ai.invoke(draftSupportReply, {
+      call: "draft-support-reply",
+      conversation: command.conversation,
+      input: command,
+    });
+    const outcome = {
+      id: this.id,
+      request: command.request,
+      conversation: command.conversation,
+      operation: result.operationId,
+    };
+    if (!result.ok) return create(SupportReplyFailedSchema, outcome);
+    this.update((state) =>
+      Object.assign(state, {
+        id: this.id,
+        request: command.request,
+        conversation: command.conversation,
+        reply: result.value,
+      }),
+    );
+    return create(SupportReplySuggestedSchema, { ...outcome, reply: result.value });
+  }
+}
+```
+
+Configure the registry outside the Entity. The Bounded Context requires persisted System
+Events, and the Agent registration supplies its code revision and permitted
+capabilities. The [example Bounded Context factory](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/src/index.ts)
+assembles these settings with the generated handler registry. A server-wide
+`withAi()` default can be supplied when building Bounded Contexts through `Server`;
+Bounded Context configuration can provide its registry directly.
+
+Posting a Command awaits acceptance. Model work and the resulting domain Event
+arrive asynchronously afterward. The handling operation can await a model without
+keeping a database transaction open. See the [Agent execution reference](REFERENCE.md#agent-execution)
+for defaults, recovery and retained history.
+
+For Process Manager's schema-and-columns query form:
 
 ```ts
 import { EntityQuery, type EntityColumn } from "@spine-event-engine/core";
@@ -167,11 +270,11 @@ These reads are eventually consistent. `limit()` may not exceed 1,000, and
 `all()` can be expensive for a large read model; prefer a targeted, ordered,
 bounded query.
 
-The Entity type identifies its context among those registered with the same
+The Entity type identifies its Bounded Context among those registered with the same
 `Server`. For example, an order process can query a product in a catalogue
-context without naming that context. An Entity in another context must allow
+Bounded Context without naming that Bounded Context. An Entity in another Bounded Context must allow
 queries (`query` or `full` visibility). Registering the same Entity type in two
-contexts causes a startup error.
+Bounded Contexts causes a startup error.
 
 The [Orders example](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/orders/README.md#cross-context-order-review)
 shows this in an Event handler and includes a runnable integration test.

@@ -1,0 +1,370 @@
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+
+syntax = "proto3";
+
+package spine.ts.agent;
+
+import "google/protobuf/timestamp.proto";
+import "spine/core/diagnostics.proto";
+import "spine/options.proto";
+import "spine/ts/agent/content.proto";
+import "spine/ts/agent/model.proto";
+
+option (type_url_prefix) = "type.spine.io";
+
+// Correlates a model interaction with the Agent and triggering signal.
+message AgentOperationRef {
+  // Logical operation including bounded corrective attempts.
+  AiOperationId operation = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Canonical reference to Agent state type and concrete instance ID.
+  spine.core.MessageId agent = 2 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Canonical reference to the handled command, event or rejection.
+  spine.core.MessageId source_signal = 3 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Selected deployment and configuration revision.
+  ModelRef model = 4 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Generation or decision; unspecified values are invalid.
+  AiModelKind kind = 5 [(required) = true];
+
+  // Explicit conversation continued by this operation.
+  ConversationId conversation = 6 [
+    (required) = true,
+    (validate) = true
+  ];
+}
+
+// Accepted named model operation and its fixed execution contract.
+message AgentAiOperationStarted {
+  // Operation and accepted signal identity.
+  AgentOperationRef operation = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Application capability name.
+  AiCapabilityName capability = 2 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Capability definition revision.
+  AiCapabilityRevision capability_revision = 3 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Identity of typed input facts.
+  AiContentDigest input = 4 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Effective physical, tool, time and byte limits.
+  AiOperationLimits limits = 5 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Non-secret connection identity after authorization.
+  AiConnectionIdentity connection = 6 [(validate) = true];
+
+  // Occurrence time from Spine Time.
+  google.protobuf.Timestamp started_at = 7 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Effective generation or direct decision execution mode.
+  AiExecutionMode mode = 8 [(required) = true];
+}
+
+// One physical provider request is about to be dispatched.
+message AgentModelAttemptStarted {
+  // Logical interaction to which the request belongs.
+  AgentOperationRef operation = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Identity unique to this physical request.
+  AiAttemptId attempt = 2 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Time the attempt was recorded using Spine Time.
+  google.protobuf.Timestamp started_at = 3 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Actual prepared request identity, excluding credentials.
+  AiContentDigest request = 4 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Earlier attempt being corrected; absent for the first attempt.
+  AiAttemptId previous_attempt = 5 [(validate) = true];
+}
+
+// Completion or failure of one physical provider request.
+message AgentModelAttemptFinished {
+  // Logical operation that admitted the physical request.
+  AgentOperationRef operation = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Physical request identity.
+  AiAttemptId attempt = 2 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Provider and local result status; TOOL_REQUESTED closes this attempt, not its operation.
+  AiOutcome outcome = 3 [(required) = true];
+
+  // Received content identity, absent if no response was received.
+  AiContentDigest response = 4 [(validate) = true];
+
+  // Provider usage when reported.
+  AiUsage usage = 5 [(validate) = true];
+
+  // Occurrence time from Spine Time.
+  google.protobuf.Timestamp finished_at = 6 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Safe diagnostic reference for a non-admitted outcome.
+  AiDiagnosticId diagnostic_id = 7 [(validate) = true];
+
+  // Safe failure category when the physical attempt failed.
+  AiFailureCode failure = 8;
+}
+
+// Typed result passed local validation and was saved for recovery.
+message AgentAiResultAdmitted {
+  // Logical operation producing the result.
+  AgentOperationRef operation = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Identity of the typed admitted output.
+  AiContentDigest result = 2 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Validation revision pinned to the invocation.
+  AiValidationRevision validation_revision = 3 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Decision mapping revision, absent for generation.
+  AiMappingRevision mapping_revision = 4 [(validate) = true];
+
+  // Occurrence time from Spine Time.
+  google.protobuf.Timestamp admitted_at = 5 [
+    (required) = true,
+    (validate) = true
+  ];
+}
+
+// Logical model operation ended without an admitted result.
+message AgentAiOperationFailed {
+  // Logical operation that failed.
+  AgentOperationRef operation = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Safe terminal failure category; TOOL_REQUESTED is invalid here.
+  AiOutcome outcome = 2 [(required) = true];
+
+  // Diagnostic reference containing no credential or raw exception.
+  AiDiagnosticId diagnostic_id = 3 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Last physical attempt if dispatch began.
+  AiAttemptId attempt = 4 [(validate) = true];
+
+  // Occurrence time from Spine Time.
+  google.protobuf.Timestamp failed_at = 5 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Safe operational failure category.
+  AiFailureCode failure = 6 [(required) = true];
+}
+
+// An authorized external tool call was recorded before dispatch.
+message AgentToolCallStarted {
+  // Logical operation requesting the tool.
+  AgentOperationRef operation = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Provider attempt that requested the tool.
+  AiAttemptId attempt = 2 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Spine-assigned tool call identity.
+  AiToolCallId call = 3 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Configured MCP server identifier.
+  McpServerId server = 4 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Exact tool name.
+  McpToolName tool = 5 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Validated argument identity.
+  AiContentDigest arguments = 6 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Application-established effect category.
+  ToolEffect effect = 7 [(required) = true];
+
+  // Occurrence time from Spine Time.
+  google.protobuf.Timestamp started_at = 8 [
+    (required) = true,
+    (validate) = true
+  ];
+}
+
+// Result or uncertain outcome of an external tool call.
+message AgentToolCallFinished {
+  // Logical operation requesting the tool.
+  AgentOperationRef operation = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Spine-assigned tool call identity.
+  AiToolCallId call = 2 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Success, failure or unresolved write outcome.
+  AiOutcome outcome = 3 [(required) = true];
+
+  // Result content identity when available.
+  AiContentDigest result = 4 [(validate) = true];
+
+  // Occurrence time from Spine Time.
+  google.protobuf.Timestamp finished_at = 5 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Safe diagnostic reference for failure or uncertainty.
+  AiDiagnosticId diagnostic_id = 6 [(validate) = true];
+}
+
+// A later invocation will use a changed deployment preference.
+message AgentModelSelectionChanged {
+  // Agent whose preference changed.
+  spine.core.MessageId agent = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Signal authorizing the change.
+  spine.core.MessageId source_signal = 2 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Kind affected by this preference.
+  AiModelKind kind = 3 [(required) = true];
+
+  // Previous explicit selection, absent when inherited.
+  ModelRef previous_model = 4 [(validate) = true];
+
+  // New explicit selection, absent when inheritance is restored.
+  ModelRef selected_model = 5 [(validate) = true];
+
+  // Occurrence time from Spine Time.
+  google.protobuf.Timestamp changed_at = 6 [
+    (required) = true,
+    (validate) = true
+  ];
+}
+
+// Accepted invocation ended because execution could not complete.
+message AgentInvocationTerminated {
+  // Agent whose invocation terminated.
+  spine.core.MessageId agent = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Original accepted source signal.
+  spine.core.MessageId source_signal = 2 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Safe termination reason.
+  string reason = 3 [(required) = true];
+
+  // Unresolved physical requests whose outcomes remain unknown.
+  repeated AiAttemptId unresolved_attempts = 4 [(validate) = true];
+
+  // Unresolved external tool calls whose effects may be unknown.
+  repeated AiToolCallId unresolved_tool_calls = 5 [(validate) = true];
+
+  // Occurrence time from Spine Time.
+  google.protobuf.Timestamp terminated_at = 6 [
+    (required) = true,
+    (validate) = true
+  ];
+}

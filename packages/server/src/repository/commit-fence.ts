@@ -24,6 +24,7 @@ const fences = new AsyncLocalStorage<Guard>();
 /**
  * Executes a delivery callback with a commit-time ownership guard.
  *
+ * @typeParam T Value returned by the delivery callback.
  * @param guard Verifies that the delivery worker still owns its shard.
  * @param callback Performs the delivery work within the guarded scope.
  * @returns The value produced by the delivery callback.
@@ -36,8 +37,21 @@ export async function withDeliveryCommitFence<T>(
 }
 
 /**
+ * Starts accepted background work outside the earlier Inbox shard's commit guard.
+ * The background execution establishes its persisted claim before changing state.
+ *
+ * @typeParam T Value returned by the callback, including its Promise when asynchronous.
+ * @param callback Starts the accepted work outside the delivery guard's scope.
+ * @returns The callback's result without changing its completion semantics.
+ */
+export function withoutDeliveryCommitFence<T>(callback: () => T): T {
+  return fences.exit(callback);
+}
+
+/**
  * Verifies delivery ownership immediately before committing an Entity.
  *
+ * @typeParam T Entity transaction commit result.
  * @param entity Supplies the Entity whose transaction is committed.
  * @param commit Commits the active Entity transaction synchronously.
  * @returns The result produced by the Entity transaction commit.

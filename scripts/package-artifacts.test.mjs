@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   dependencyFirstOrder,
+  frameworkPackageNames,
   packedArchiveProblems,
   packedContentProblems,
   packedReadmeLinkProblems,
@@ -9,6 +10,12 @@ import {
 } from "./package-artifacts.mjs";
 
 describe("package artifacts", () => {
+  it("keeps both approved AI packages in the exact public artifact inventory", () => {
+    expect(frameworkPackageNames).toHaveLength(21);
+    expect(frameworkPackageNames).toContain("@spine-event-engine/ai");
+    expect(frameworkPackageNames).toContain("@spine-event-engine/ai-vercel-ax");
+  });
+
   it("rejects a packed manifest with a workspace dependency", () => {
     expect(
       packedManifestProblems({

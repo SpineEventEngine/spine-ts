@@ -31,6 +31,27 @@ wording that names the responsible class, module, package, agent, or person.
 This rule applies to code, documentation, review records, and user-facing chat
 responses.
 
+Use “Bounded Context” when naming the DDD boundary. Do not shorten it to
+“context”: Command contexts, Event contexts, Actor contexts, storage contexts,
+and System Context name different concepts. Preserve actual API identifiers.
+
+## Pull Request Descriptions
+
+Write pull request descriptions for human framework users. Explain the concrete
+behavior and how to use it. For significant features, include practical code
+examples, configuration, and authentication where relevant. Check examples
+against the implemented public API. Assume readers know the framework basics:
+start with the problem and explain the new behavior. Omit statements that are
+obvious in this repository, avoid repeatedly naming Spine, and rephrase rather
+than mechanically replacing its name with “framework”. Format code examples
+according to CODE_QUALITY.md, including multi-line TSDoc, declaration spacing,
+readable line lengths, and short methods. In PR examples, use four-space code
+indentation and a blank TSDoc line before the parameter/tag section.
+
+Do not add a Verification section, test counts, coverage totals, audit results,
+or agent review records to a pull request description unless the human explicitly
+asks for them. Keep required development evidence in the existing task records.
+
 ## Model Allocation
 
 Use Standard speed. Do not enable Fast/boost mode. Do not use Max or Ultra in

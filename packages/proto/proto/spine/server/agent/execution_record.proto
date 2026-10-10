@@ -1,0 +1,858 @@
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+
+syntax = "proto3";
+
+package spine.server.agent;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+import "spine/core/actor_context.proto";
+import "spine/core/command.proto";
+import "spine/core/event.proto";
+import "spine/core/version.proto";
+import "spine/options.proto";
+import "spine/ts/agent/content.proto";
+import "spine/ts/agent/history.proto";
+import "spine/ts/agent/model.proto";
+
+option (SPI_all) = true;
+option (type_url_prefix) = "type.spine.io";
+
+// Complete Agent instance scope within one provider tenant boundary.
+message AgentExecutionScope {
+  // Generated Agent state type name.
+  string state_type = 1 [(required) = true];
+
+  // Canonical storage key of the typed Agent identifier.
+  string agent_key = 2 [(required) = true];
+}
+
+// Typed original signal ID used without optional version metadata.
+message AgentSignalKey {
+  oneof id {
+    option (choice).required = true;
+
+    // Identity of an accepted Command.
+    spine.core.CommandId command = 1 [(validate) = true];
+
+    // Identity of an accepted Event or rejection Event.
+    spine.core.EventId event = 2 [(validate) = true];
+  }
+}
+
+// Original signal and exact Agent instance identity used for admission deduplication.
+message AgentInvocationKey {
+  // Concrete Agent instance scope.
+  AgentExecutionScope scope = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Original Command or Event identity, independent of an Inbox row ID.
+  AgentSignalKey source_signal = 2 [
+    (required) = true,
+    (validate) = true
+  ];
+}
+
+// Existing Inbox acceptance order, with a deterministic source identity tie-break.
+message AgentInboxOrder {
+  // Time at which the Inbox received the source signal.
+  google.protobuf.Timestamp received_at = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Existing Inbox version distinguishing signals received at the same time.
+  uint64 inbox_version = 2;
+
+  // Original source signal identity when time and Inbox version tie.
+  AgentSignalKey source_signal = 3 [
+    (required) = true,
+    (validate) = true
+  ];
+}
+
+// Revision of Agent application handler code.
+message AgentCodeRevision {
+  // Application build revision recorded at admission.
+  string value = 1 [(required) = true];
+}
+
+// Revision of generated Agent state and signal schemas.
+message AgentSchemaRevision {
+  // Generated schema revision recorded at admission.
+  string value = 1 [(required) = true];
+}
+
+// Revision of Agent execution and authorization policy.
+message AgentPolicyRevision {
+  // Execution policy revision recorded at admission.
+  string value = 1 [(required) = true];
+}
+
+// Closed registered handler roles permitted by Agent admission.
+enum AgentHandlerKind {
+  // No handler role was provided.
+  AGENT_HANDLER_KIND_UNSPECIFIED = 0;
+
+  // Command assignment declared by an Agent method.
+  AGENT_HANDLER_COMMAND_ASSIGNMENT = 1;
+
+  // Event-to-Command reaction declared by a handler.
+  AGENT_HANDLER_COMMAND_REACTION = 2;
+
+  // Event reaction declared by an Agent method.
+  AGENT_HANDLER_EVENT_REACTION = 3;
+}
+
+// Closed signal origins used by generated handler metadata.
+enum AgentHandlerOrigin {
+  // No signal origin was provided.
+  AGENT_HANDLER_ORIGIN_UNSPECIFIED = 0;
+
+  // Signal originated in the current bounded context.
+  AGENT_HANDLER_DOMESTIC = 1;
+
+  // Signal was imported from an external bounded context.
+  AGENT_HANDLER_EXTERNAL = 2;
+}
+
+// Selected handler identity fixed when one signal is admitted.
+message AgentHandlerBinding {
+  // Explicit order across reactors and command reactions.
+  uint32 ordinal = 1;
+
+  // Generated Agent state receiver type.
+  string receiver_type = 2 [(required) = true];
+
+  // Registered method on the Agent receiver.
+  string method_name = 3 [(required) = true];
+
+  // Assign, React, or Command role selected at intake.
+  AgentHandlerKind kind = 4 [(required) = true];
+
+  // Generated full type name of the handled Command, Event, or rejection.
+  string signal_type = 5 [(required) = true];
+
+  // Domestic or imported external signal source requirement.
+  AgentHandlerOrigin origin = 6 [(required) = true];
+
+  // Registered handler arity.
+  uint32 parameter_count = 7;
+
+  // Optional Event field path selected by a generated equality filter.
+  string where_event_field = 8;
+
+  // Stringifier text compared by the optional Event equality filter.
+  string where_equals = 9;
+}
+
+// Immutable original work persisted before Inbox acknowledgement.
+message AgentAcceptedInvocation {
+  // Typed Agent and original source signal identity.
+  AgentInvocationKey key = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Original concrete typed recipient identifier.
+  google.protobuf.Any recipient_id = 2 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Original complete Command or Event envelope.
+  oneof signal {
+    option (choice).required = true;
+
+    // Accepted Command with original message identity and context.
+    spine.core.Command command = 3 [(validate) = true];
+
+    // Accepted Event or rejection with original message identity and context.
+    spine.core.Event event = 4 [(validate) = true];
+  }
+
+  // Actor context supplied to all selected handlers.
+  spine.core.ActorContext actor = 5 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Existing Inbox order for the accepted signal.
+  AgentInboxOrder order = 6 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Every selected handler in actual execution order.
+  repeated AgentHandlerBinding handlers = 7 [(validate) = true];
+
+  // Accepted application handler code revision.
+  AgentCodeRevision code_revision = 8 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Accepted generated schema revision.
+  AgentSchemaRevision schema_revision = 9 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Accepted execution policy revision.
+  AgentPolicyRevision policy_revision = 10 [
+    (required) = true,
+    (validate) = true
+  ];
+}
+
+// Current state of one accepted invocation.
+enum AgentInvocationStatus {
+  // No valid execution state was recorded.
+  AGENT_INVOCATION_STATUS_UNSPECIFIED = 0;
+
+  // Accepted work is waiting for its instance claim.
+  AGENT_INVOCATION_ACCEPTED = 1;
+
+  // An exclusive token may update the current invocation.
+  AGENT_INVOCATION_ACTIVE = 2;
+
+  // Handler work committed while output delivery remains pending.
+  AGENT_INVOCATION_COMPLETED_PENDING_DELIVERY = 3;
+
+  // Handler work and all outgoing delivery were accepted.
+  AGENT_INVOCATION_COMPLETED = 4;
+
+  // Execution ended with retained failure or uncertain effect evidence.
+  AGENT_INVOCATION_TERMINATED = 5;
+}
+
+// Whole-transition limits spanning every selected handler.
+message AgentInvocationBounds {
+  // Maximum named operations across all selected handlers.
+  uint64 operations = 1;
+
+  // Maximum physical model requests across the whole invocation.
+  uint64 model_requests = 2;
+
+  // Maximum external tool calls across the whole invocation.
+  uint64 tool_calls = 3;
+
+  // Maximum recorded query and history reads across all handlers.
+  uint64 recorded_reads = 4;
+
+  // Maximum elapsed milliseconds after execution starts.
+  uint64 deadline_millis = 5;
+
+  // Maximum cumulative model, tool and setup input bytes.
+  uint64 total_input_bytes = 6;
+
+  // Maximum cumulative reserved model, tool and setup output bytes.
+  uint64 total_output_bytes = 7;
+
+  // Maximum retained execution evidence bytes for recovery.
+  uint64 max_recovery_bytes = 8;
+}
+
+// Durable whole-transition charges, including unresolved reservations.
+message AgentInvocationCounters {
+  // Named operations already charged.
+  uint64 operations = 1;
+
+  // Physical model requests already charged, including uncertain requests.
+  uint64 model_requests = 2;
+
+  // External tool calls already charged, including uncertain writes.
+  uint64 tool_calls = 3;
+
+  // Query and history reads already recorded.
+  uint64 recorded_reads = 4;
+
+  // Cumulative model, tool and setup input bytes already charged.
+  uint64 input_bytes = 5;
+
+  // Full model, tool and setup response allowances charged before dispatch.
+  uint64 reserved_output_bytes = 6;
+
+  // Exact external response bytes observed, when known.
+  uint64 received_output_bytes = 7;
+
+  // Retained execution evidence bytes already charged.
+  uint64 recovery_bytes = 8;
+}
+
+// Deployment and complete credential-free connection identity chosen at start.
+message AgentSelectedModel {
+  // Generation or decision deployment role.
+  spine.ts.agent.AiModelKind kind = 1 [(required) = true];
+
+  // Application-selected model deployment reference.
+  spine.ts.agent.ModelRef model = 2 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Complete nonsecret provider, account, endpoint and model identity.
+  spine.ts.agent.AiConnectionIdentity connection = 3 [
+    (required) = true,
+    (validate) = true
+  ];
+}
+
+// Invocation facts fixed only when execution begins.
+message AgentExecutionStart {
+  // Absolute deadline sampled when execution began, excluding queue wait.
+  google.protobuf.Timestamp deadline = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Entity version observed before the first selected handler.
+  spine.core.Version initial_version = 2 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Whole-invocation limits, distinct from limits of each model call.
+  AgentInvocationBounds bounds = 3 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Selected deployment and connection identity for each model kind.
+  repeated AgentSelectedModel models = 4 [(validate) = true];
+}
+
+// Safe operational failure retained for exact replay.
+message AgentSavedFailure {
+  // Failure category exposed by the application-facing facade.
+  spine.ts.agent.AiFailureCode code = 1 [(required) = true];
+
+  // Whether another accepted signal may make a fresh attempt.
+  bool retryable_by_new_signal = 2;
+
+  // Safe diagnostic reference, without credential or raw exception text.
+  spine.ts.agent.AiDiagnosticId diagnostic = 3 [
+    (required) = true,
+    (validate) = true
+  ];
+}
+
+// Exact named model call admitted for deterministic recovery.
+message AgentNamedOperation {
+  // Selected handler binding that called this name.
+  uint32 handler_ordinal = 1;
+
+  // Name unique within the active handler binding.
+  string call_name = 2 [(required) = true];
+
+  // Explicit conversation continued by this operation.
+  spine.ts.agent.ConversationId conversation = 3 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Logical operation reused during recovery.
+  spine.ts.agent.AiOperationId operation = 4 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Effective bounds for this one model operation.
+  spine.ts.agent.AiOperationLimits limits = 5 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Exact dynamic typed application facts before backend rendering.
+  google.protobuf.Any input = 6 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Accepted capability identity.
+  spine.ts.agent.AiCapabilityName capability = 7 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Accepted capability definition revision.
+  spine.ts.agent.AiCapabilityRevision capability_revision = 8 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Accepted pure validation rule revision, when applicable.
+  spine.ts.agent.AiValidationRevision validation_revision = 9 [(validate) = true];
+
+  // Accepted decision mapping revision, when applicable.
+  spine.ts.agent.AiMappingRevision mapping_revision = 10 [(validate) = true];
+
+  // Admitted dynamic typed output or safe terminal failure.
+  oneof result {
+    // Validated typed application result returned to the handler.
+    google.protobuf.Any admitted_output = 11 [(validate) = true];
+
+    // Recorded failure returned to the handler.
+    AgentSavedFailure failure = 12 [(validate) = true];
+  }
+
+  // Provider and validation outcome associated with the recorded result.
+  spine.ts.agent.AiOutcome outcome = 13;
+
+  // Safe recorded diagnostics that do not terminate this operation.
+  repeated AgentSavedFailure diagnostics = 14 [(validate) = true];
+
+  // Absolute operation deadline fixed at creation and bounded by the invocation deadline.
+  google.protobuf.Timestamp deadline = 15 [
+    (required) = true,
+    (validate) = true
+  ];
+}
+
+// Indexed history view selected by a recorded Agent read.
+enum AgentHistoryReadKind {
+  // No history view was selected.
+  AGENT_HISTORY_READ_UNSPECIFIED = 0;
+
+  // Conversation records, System Events and emitted domain Events.
+  AGENT_HISTORY_READ_FULL = 1;
+
+  // Records from one explicitly identified conversation.
+  AGENT_HISTORY_READ_CONVERSATION = 2;
+
+  // System Events concerning this Agent.
+  AGENT_HISTORY_READ_SYSTEM = 3;
+
+  // Domain Events emitted by this Agent.
+  AGENT_HISTORY_READ_DOMAIN = 4;
+}
+
+// Exact history request whose result is reused after interruption.
+message AgentHistoryReadRequest {
+  // Indexed view used for this read.
+  AgentHistoryReadKind kind = 1 [(required) = true];
+
+  // Required only when the selected view is one conversation.
+  spine.ts.agent.ConversationId conversation = 2 [(validate) = true];
+
+  // Positive maximum number of requested entries.
+  uint64 page_size = 3 [(min).value = "1"];
+
+  // Original opaque continuation; absent on the first page.
+  spine.ts.agent.AgentHistoryCursor cursor = 4 [(validate) = true];
+
+  // Positive serialized-byte bound applied to this page.
+  uint64 max_bytes = 5 [(min).value = "1"];
+}
+
+// Complete provider page returned by one recorded history read.
+message AgentHistoryReadPage {
+  // Exact original entries, in newest-first order.
+  repeated spine.ts.agent.AgentHistoryEntry entries = 1 [(validate) = true];
+
+  // Whether another entry followed this page when the read occurred.
+  bool has_more = 2;
+}
+
+// Complete typed projection states returned by one recorded Agent query.
+message AgentProjectionReadResult {
+  // State snapshots in the exact order returned to the handler.
+  repeated google.protobuf.Any states = 1 [(validate) = true];
+}
+
+// Exact projection or Agent-history read reused after interruption.
+message AgentReadSnapshot {
+  // Selected handler binding that made this read.
+  uint32 handler_ordinal = 1;
+
+  // Name unique within the active handler binding.
+  string read_name = 2 [(required) = true];
+
+  // Exact typed query or history-read request.
+  google.protobuf.Any request = 3 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Exact typed result returned to the handler.
+  google.protobuf.Any result = 4 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Agent scope under which the read was authorized.
+  AgentExecutionScope scope = 5 [
+    (required) = true,
+    (validate) = true
+  ];
+}
+
+// One local validation issue retained for exact attempt replay.
+message AgentValidationIssue {
+  // Machine-readable issue category from the validator.
+  string code = 1 [(required) = true];
+
+  // Field path; empty when the issue applies to the root value.
+  string path = 2;
+
+  // Human-readable issue detail returned by the validator.
+  string message = 3 [(required) = true];
+}
+
+// One physical request reservation and its exact observed progress.
+message AgentAttemptEvidence {
+  // Logical operation that admitted this physical request.
+  spine.ts.agent.AiOperationId operation = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Distinct identity of this physical provider request.
+  spine.ts.agent.AiAttemptId attempt = 2 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // One-based physical request number shared by runtime and adapter.
+  uint64 physical_attempt = 3;
+
+  // Full response allowance charged before provider dispatch.
+  uint64 reserved_response_bytes = 4;
+
+  // Exact received bytes when observed; absence means an interrupted unknown amount.
+  google.protobuf.UInt64Value received_bytes = 5 [(validate) = true];
+
+  // Actual prepared generation or decision request sent to the provider.
+  oneof prepared_request {
+    // Generated request including rendered instructions and corrections.
+    spine.ts.agent.GenerationRequest generation_request = 6 [(validate) = true];
+
+    // Direct declared decision questions and typed input.
+    spine.ts.agent.DecisionRequest decision_request = 7 [(validate) = true];
+  }
+
+  // Complete received generation or decision response when known.
+  oneof response {
+    // Exact received generation content and admitted result when any.
+    spine.ts.agent.GenerationResponse generation_response = 8 [(validate) = true];
+
+    // Exact received decision content and admitted result when any.
+    spine.ts.agent.DecisionResponse decision_response = 9 [(validate) = true];
+  }
+
+  // Outcome after provider and local validation.
+  spine.ts.agent.AiOutcome outcome = 10;
+
+  // Ordered local validation issues used to replay this physical attempt.
+  repeated AgentValidationIssue validation_issues = 11 [(validate) = true];
+
+  // Exact serialized provider request-body bytes charged before dispatch.
+  uint64 input_bytes = 12;
+}
+
+// Persisted tool intent and observed result, including uncertain writes.
+message AgentToolEvidence {
+  // Logical operation that requested the tool.
+  spine.ts.agent.AiOperationId operation = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Physical provider attempt whose model output proposed the call.
+  spine.ts.agent.AiAttemptId requesting_attempt = 2 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Nonblank provider correlation ID, unique within this operation and attempt.
+  string provider_call_id = 3 [(required) = true];
+
+  // Authorized request with effect category and validated arguments.
+  spine.ts.agent.ToolRequest request = 4 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Complete observed tool result, absent when dispatch outcome is unknown.
+  spine.ts.agent.ToolResponse response = 5 [(validate) = true];
+
+  // Whether dispatch was known to have begun.
+  bool dispatched = 6;
+
+  // Unresolved write effect retained without automatic resend.
+  bool outcome_unknown = 7;
+}
+
+// Framework reservation identity distinct from the MCP wire request ID.
+message AgentProtocolTicketId {
+  // Nonblank identity assigned before the physical protocol send.
+  string value = 1 [(required) = true];
+}
+
+// Phase of one physical MCP protocol exchange.
+enum AgentProtocolPhase {
+  // No phase was selected.
+  AGENT_PROTOCOL_PHASE_UNSPECIFIED = 0;
+
+  // Connection setup or tool discovery before any tool intent.
+  AGENT_PROTOCOL_SETUP = 1;
+
+  // Authorized physical call for a previously journaled tool intent.
+  AGENT_PROTOCOL_CALL = 2;
+}
+
+// Fenced reservation and observed receipt for one physical MCP exchange.
+message AgentProtocolEvidence {
+  // Named model operation that admitted this protocol exchange.
+  spine.ts.agent.AiOperationId operation = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Configured MCP server selected for this exchange.
+  spine.ts.agent.McpServerId server = 2 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Framework ticket, distinct from the MCP wire request ID.
+  AgentProtocolTicketId ticket = 3 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Setup or authorized tool-call phase.
+  AgentProtocolPhase phase = 4 [(required) = true];
+
+  // Exact textual JSON-RPC method used for the physical exchange.
+  string method = 5 [(required) = true];
+
+  // Input bytes charged before any physical send.
+  uint64 input_bytes = 6;
+
+  // Full response credit reserved before any physical send.
+  uint64 reserved_response_bytes = 7;
+
+  // Exact known receipt; absence retains the full uncertain response credit.
+  google.protobuf.UInt64Value received_bytes = 8 [(validate) = true];
+
+  // Previously journaled tool intent for a call; absent during setup.
+  spine.ts.agent.AiToolCallId tool_call = 9 [(validate) = true];
+
+  // Whether the physical exchange reached a recorded terminal observation.
+  bool settled = 10;
+}
+
+// One persisted step in the deterministic handler replay sequence.
+message AgentExecutionJournalEntry {
+  // Ordered replay position within one invocation, never a history position.
+  uint64 ordinal = 1;
+
+  // One model operation, read, provider attempt or tool observation.
+  oneof evidence {
+    option (choice).required = true;
+
+    // Named logical model operation.
+    AgentNamedOperation operation = 2 [(validate) = true];
+
+    // Exact query or history read snapshot.
+    AgentReadSnapshot read = 3 [(validate) = true];
+
+    // Reserved or observed physical model request.
+    AgentAttemptEvidence attempt = 4 [(validate) = true];
+
+    // Reserved or observed external tool call.
+    AgentToolEvidence tool = 5 [(validate) = true];
+
+    // Reserved or observed physical MCP protocol exchange.
+    AgentProtocolEvidence protocol = 6 [(validate) = true];
+  }
+}
+
+// Closed saved-output dispatcher roles, independent of registration position.
+enum AgentSavedTargetKind {
+  // No saved dispatcher is selected.
+  AGENT_SAVED_TARGET_UNSPECIFIED = 0;
+
+  // A generated repository accepts this Event.
+  AGENT_SAVED_REPOSITORY_EVENT = 1;
+
+  // A generated repository accepts this Command.
+  AGENT_SAVED_REPOSITORY_COMMAND = 2;
+
+  // A generated standalone handler accepts this Event.
+  AGENT_SAVED_STANDALONE_EVENT = 3;
+
+  // A generated standalone handler accepts this Command.
+  AGENT_SAVED_STANDALONE_COMMAND = 4;
+}
+
+// Generated repository family used when rebinding an accepted recipient.
+enum AgentSavedRepositoryFamily {
+  // No generated repository family was selected.
+  AGENT_SAVED_FAMILY_UNSPECIFIED = 0;
+
+  // Aggregate repository.
+  AGENT_SAVED_AGGREGATE = 1;
+
+  // Projection repository.
+  AGENT_SAVED_PROJECTION = 2;
+
+  // Process Manager repository.
+  AGENT_SAVED_PROCESS_MANAGER = 3;
+
+  // Agent repository.
+  AGENT_SAVED_AGENT = 4;
+}
+
+// One ordered validated dispatcher and its exact typed recipients.
+message AgentSavedDispatchTarget {
+  // Closed dispatcher role; a matching runtime binding must still exist.
+  AgentSavedTargetKind kind = 1 [(required) = true];
+
+  // Generated repository state type, absent for a standalone handler.
+  string receiver_state_type = 2;
+
+  // Generated repository family, absent for a standalone handler.
+  AgentSavedRepositoryFamily repository_family = 3;
+
+  // Accepted signal message type used by this dispatcher.
+  string signal_type = 4 [(required) = true];
+
+  // Complete selected generated handler metadata fingerprint.
+  string binding_fingerprint = 5 [(required) = true];
+
+  // Exact typed repository recipients in accepted order; empty when filtered.
+  repeated google.protobuf.Any recipients = 6 [(validate) = true];
+}
+
+// Presence distinguishes a prepared empty route from an unprepared output.
+message AgentSavedDispatchPlan {
+  // Applicable dispatchers in their accepted order.
+  repeated AgentSavedDispatchTarget targets = 1 [(validate) = true];
+}
+
+// Original outgoing envelope retained until normal delivery accepts its ID.
+message AgentOutgoingSignal {
+  // Original envelope and ID for normal delivery.
+  oneof signal {
+    option (choice).required = true;
+
+    // Native Event emitted by the completed Agent transition.
+    spine.core.Event event = 1 [(validate) = true];
+
+    // Native Command emitted by a selected command reaction.
+    spine.core.Command command = 2 [(validate) = true];
+  }
+
+  // Normal delivery accepted this envelope's original message ID.
+  bool delivered = 3;
+
+  // Frozen target plan persisted before any transport side effect.
+  AgentSavedDispatchPlan plan = 4 [(validate) = true];
+}
+
+// Terminal transition result and pending delivery obligations.
+message AgentExecutionCompletion {
+  // Version read before execution of the selected handlers.
+  spine.core.Version initial_version = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Version after one persisted transition, equal to initial for a no-op.
+  spine.core.Version resulting_version = 2 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Current per-model preferences made visible with completion.
+  repeated spine.ts.agent.ModelPreference preferences = 3 [(validate) = true];
+
+  // Original outgoing signals and delivery state.
+  repeated AgentOutgoingSignal outgoing = 4 [(validate) = true];
+}
+
+// Complete provider record for one accepted Agent signal.
+message AgentExecutionRecord {
+  // Immutable source envelope and selected handler bindings.
+  AgentAcceptedInvocation accepted = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Current execution and delivery phase.
+  AgentInvocationStatus status = 2 [(required) = true];
+
+  // Exact exclusive claim token; absent before claim or after release.
+  string claim_token = 3;
+
+  // Time after which another claim may replace this token.
+  google.protobuf.Timestamp claim_expires_at = 4 [(validate) = true];
+
+  // Chosen limits, models and initial version after execution starts.
+  AgentExecutionStart started = 5 [(validate) = true];
+
+  // Ordered evidence used to resume without repeating settled work.
+  repeated AgentExecutionJournalEntry journal = 6 [(validate) = true];
+
+  // Preference changes waiting for atomic transition completion.
+  repeated spine.ts.agent.ModelPreference staged_preferences = 7 [(validate) = true];
+
+  // Committed transition result and remaining delivery obligations.
+  AgentExecutionCompletion completion = 8 [(validate) = true];
+
+  // Safe diagnostic for a terminal invocation failure.
+  spine.ts.agent.AiDiagnosticId terminal_failure = 9 [(validate) = true];
+
+  // Mutable charges updated only under the current claim fence.
+  AgentInvocationCounters counters = 10 [(validate) = true];
+}
+
+// Per-instance claim and current preference row serializing accepted work.
+message AgentExecutionHead {
+  // Complete Agent instance identity within its provider tenant.
+  AgentExecutionScope scope = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Currently claimed invocation; unset when no transition is active.
+  AgentInvocationKey active = 2 [(validate) = true];
+
+  // Current exclusive claim token for this Agent instance.
+  string claim_token = 3;
+
+  // Expiry of the current claim token.
+  google.protobuf.Timestamp claim_expires_at = 4 [(validate) = true];
+
+  // Queryable current model preferences after completed transitions.
+  repeated spine.ts.agent.ModelPreference preferences = 5 [(validate) = true];
+
+  // Existing Inbox order of the latest resolved invocation.
+  AgentInboxOrder last_resolved = 6 [(validate) = true];
+
+  // Earliest unresolved invocation selected by its original Inbox order.
+  AgentInvocationKey pending = 7 [(validate) = true];
+
+  // Original Inbox order of the pending invocation.
+  AgentInboxOrder pending_order = 8 [(validate) = true];
+
+  // Provider time at which the pending invocation may enter discovery.
+  google.protobuf.Timestamp eligible_at = 9 [(validate) = true];
+}

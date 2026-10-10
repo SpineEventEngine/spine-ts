@@ -34,6 +34,7 @@ export class InMemoryStorageBackend {
    * @param family Identifies the record family inside the tenant.
    * @param create Creates the value when the scope is first bound.
    * @returns The existing or newly created backend-owned value.
+   * @typeParam T Value retained for one backend scope.
    */
   static bind<T>(
     backend: InMemoryStorageBackend,
@@ -64,6 +65,30 @@ export class InMemoryStorageBackend {
   static tenants(backend: InMemoryStorageBackend): readonly TenantBoundary[] {
     return MemoryBackendScopes.tenants(backend);
   }
+
+  /**
+   * Returns the current finite tenant-index length without copying rows.
+   * @param backend Backend containing the admission index.
+   * @returns Number of distinct admitted multitenant boundaries.
+   */
+  static tenantCount(backend: InMemoryStorageBackend): number {
+    return MemoryBackendScopes.tenantCount(backend);
+  }
+
+  /**
+   * Reads only one bounded range from the admission-time tenant index.
+   * @param backend Backend containing the admission index.
+   * @param start First admission-order position to examine.
+   * @param count Maximum number of boundaries to copy.
+   * @returns The bounded admission-order page.
+   */
+  static tenantPage(
+    backend: InMemoryStorageBackend,
+    start: number,
+    count: number,
+  ): readonly TenantBoundary[] {
+    return MemoryBackendScopes.tenantPage(backend, start, count);
+  }
 }
 
 const scopesByBackend = new WeakMap<
@@ -71,6 +96,7 @@ const scopesByBackend = new WeakMap<
   Map<string, Map<string | symbol, Map<string, unknown>>>
 >();
 const tenantsByBackend = new WeakMap<InMemoryStorageBackend, Map<string, TenantBoundary>>();
+const tenantOrderByBackend = new WeakMap<InMemoryStorageBackend, TenantBoundary[]>();
 
 /**
  * Binds provider tenant and record-family identities for each backend.
@@ -80,6 +106,13 @@ const MemoryBackendScopes = {
 
   /**
    * Binds one tenant and record family to one backend-owned value.
+   * @typeParam T Value retained for the selected scope.
+   * @param backend Backend containing record families.
+   * @param namespace Entity or generic record family namespace.
+   * @param tenant Complete tenant boundary.
+   * @param family Record family name inside the tenant.
+   * @param create Factory called for a missing scoped value.
+   * @returns The existing or newly created scoped value.
    */
   bind<T>(
     backend: InMemoryStorageBackend,
@@ -113,6 +146,11 @@ const MemoryBackendScopes = {
     return existing as T;
   },
 
+  /**
+   * Records a multitenant boundary exactly once in admission order.
+   * @param backend Backend containing the admission index.
+   * @param tenant Complete boundary to admit.
+   */
   admit(backend: InMemoryStorageBackend, tenant: TenantBoundary): void {
     if (tenant.single) return;
     let tenants = tenantsByBackend.get(backend);
@@ -120,15 +158,51 @@ const MemoryBackendScopes = {
       tenants = new Map();
       tenantsByBackend.set(backend, tenants);
     }
+    if (tenants.has(String(tenant.key))) return;
     tenants.set(String(tenant.key), tenant);
+    let ordered = tenantOrderByBackend.get(backend);
+    if (ordered === undefined) {
+      ordered = [];
+      tenantOrderByBackend.set(backend, ordered);
+    }
+    ordered.push(tenant);
   },
 
+  /**
+   * Lists all admitted boundaries for legacy catalog callers.
+   * @param backend Backend containing the tenant index.
+   * @returns Complete sorted boundary snapshots.
+   */
   tenants(backend: InMemoryStorageBackend): readonly TenantBoundary[] {
     return Object.freeze(
       [...(tenantsByBackend.get(backend)?.entries() ?? [])]
         .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
         .map(([, boundary]) => boundary),
     );
+  },
+
+  /**
+   * Reads the admission-order index length without copying entries.
+   * @param backend Backend containing the tenant index.
+   * @returns Number of admitted multitenant boundaries.
+   */
+  tenantCount(backend: InMemoryStorageBackend): number {
+    return tenantOrderByBackend.get(backend)?.length ?? 0;
+  },
+
+  /**
+   * Copies only one admission-order index range.
+   * @param backend Backend containing the tenant index.
+   * @param start First position to examine.
+   * @param count Maximum copied boundaries.
+   * @returns One bounded page of boundaries.
+   */
+  tenantPage(
+    backend: InMemoryStorageBackend,
+    start: number,
+    count: number,
+  ): readonly TenantBoundary[] {
+    return tenantOrderByBackend.get(backend)?.slice(start, start + count) ?? [];
   },
 };
 import type { TenantBoundary } from "../internal/tenancy.js";

@@ -15,6 +15,7 @@
 import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import { and, Datastore, or, PropertyFilter } from "@google-cloud/datastore";
 import { StringifierRegistry } from "@spine-event-engine/core";
+import { AgentHistoryRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
 import {
   ColumnMappings,
   defaultQueryCandidateLimit,
@@ -271,6 +272,8 @@ class FlatEntityCodec<I, R extends Message> {
    */
   unindexedProperties(data: Readonly<Record<string, unknown>>): readonly string[] {
     void data;
+    if (this.recordSpec.recordType.typeName === AgentHistoryRecordSchema.typeName)
+      return [payloadProperty, "state_type", "agent_key", "conversation_key"];
     return [payloadProperty];
   }
 
@@ -487,11 +490,21 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     readonly excludeFromIndexes: readonly string[];
   } {
     const materialized = this.recordSpec.materialize(record);
+    const data = this.#codec.encode(materialized.record, materialized.columns);
     return {
       key: this.#codec.key(this.client, materialized.id),
-      data: this.#codec.encode(materialized.record, materialized.columns),
-      excludeFromIndexes: [payloadProperty],
+      data,
+      excludeFromIndexes: this.#codec.unindexedProperties(data),
     };
+  }
+
+  /**
+   * Returns the exact tenant-scoped native key for a typed record ID.
+   * @param id Complete persisted record identity.
+   * @returns Native key for the typed record identity.
+   */
+  transactionKey(id: I): ReturnType<Datastore["key"]> {
+    return this.#codec.key(this.client, id);
   }
 
   /**
@@ -573,6 +586,33 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
       cursor: info.more ? next : undefined,
       hasMore: info.more,
     };
+  }
+
+  /**
+   * Reads at most two indexed successor records inside the caller's transaction.
+   * @param filters Native indexed query predicates.
+   * @param orderProperty Native property containing the complete order key.
+   * @param transaction Current native transaction.
+   * @returns Earliest scoped rows in native order.
+   */
+  async queryTransactionSuccessors(
+    transaction: ReturnType<Datastore["transaction"]>,
+    filters: readonly DatastoreRangeFilter[],
+    orderProperty: string,
+  ): Promise<readonly R[]> {
+    const query = this.#codec.createQuery(this.client);
+    for (const filter of filters)
+      query.filter(
+        new PropertyFilter(
+          filter.property,
+          filter.operator,
+          this.#codec.columnValue(filter.property, filter.value),
+        ),
+      );
+    query.order(orderProperty);
+    query.limit(2);
+    const response = await transaction.runQuery(query, wrappedReadOptions);
+    return DatastoreResults.entities(response).map((entity) => this.#codec.decode(entity));
   }
 
   /**

@@ -37,6 +37,55 @@ function entityReceivers(analysis: ReturnType<typeof BuildHandlerAnalyzer.analyz
 }
 
 describe("build-time handler analyzer", () => {
+  it("discovers Agent native handlers and rejects subscriptions", () => {
+    const result = analyzeBuildHandlers(
+      programWithSources("src/support-agent.ts", {
+        "src/support-agent.ts": `
+          import { Agent, Assign, Command, React, Subscribe } from "@spine-event-engine/server";
+          import {
+            SupportReplyAgentStateSchema, type SupportReplyAgentState,
+          } from "../generated/support_agent_states_pb.js";
+          import { type DraftSupportReply, type ReviewSupportReply } from "../generated/support_agent_commands_pb.js";
+          import { type SupportReplyDrafted, type SupportTicketUpdated } from "../generated/support_agent_events_pb.js";
+          export class SupportReplyAgent extends Agent<string, typeof SupportReplyAgentStateSchema> {
+            @Assign draft(command: DraftSupportReply): SupportReplyDrafted { throw Error(String(command)); }
+            @React react(event: SupportTicketUpdated): SupportReplyDrafted | undefined {
+              throw Error(String(event));
+            }
+            @Command command(event: SupportTicketUpdated): ReviewSupportReply { throw Error(String(event)); }
+            @Subscribe observe(event: SupportTicketUpdated): void { void event; }
+            @Subscribe apply(state: SupportReplyAgentState): void { void state; }
+          }
+        `,
+        "generated/support_agent_states_pb.ts": generatedTypedModule(
+          "spine/server/testing/support_agent_states.proto",
+          "SupportReplyAgentState",
+        ),
+        "generated/support_agent_commands_pb.ts": generatedTypedModule(
+          "spine/server/testing/support_agent_commands.proto",
+          "DraftSupportReply",
+          "ReviewSupportReply",
+        ),
+        "generated/support_agent_events_pb.ts": generatedTypedModule(
+          "spine/server/testing/support_agent_events.proto",
+          "SupportReplyDrafted",
+          "SupportTicketUpdated",
+        ),
+      }),
+    );
+
+    expect(entityReceivers(result)[0]?.className).toBe("SupportReplyAgent");
+    expect(entityReceivers(result)[0]?.handlers.map((handler) => handler.kind)).toEqual([
+      "command-assignment",
+      "event-reaction",
+      "command-reaction",
+    ]);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "UNSUPPORTED_SUBSCRIBE_HANDLER",
+      "UNSUPPORTED_SUBSCRIBE_HANDLER",
+    ]);
+  });
+
   it("treats concrete aliases, tuple members, arrays, and void subscriber aliases consistently", () => {
     const program = programWithSources(
       "src/return-shapes.ts",
@@ -2591,7 +2640,9 @@ function generatedModule(protoSource: string, ...names: string[]): string {
 function generatedTypedModule(protoSource: string, ...names: string[]): string {
   const protoPackage = protoSource.includes("/access/")
     ? "spine.examples.access"
-    : "spine.examples.todo";
+    : protoSource.includes("/server/testing/")
+      ? "spine.server.testing"
+      : "spine.examples.todo";
   const file = "file_spine_examples_v1_test";
   const declarations = names.map((name, index) => {
     const fields = name === "TaskCreated" ? "title: string;" : "";

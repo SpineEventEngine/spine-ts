@@ -4,6 +4,7 @@ node_modules/
 dist/
 coverage/
 test-results/
+examples/release-notes/out/
 playwright-report/
 docs/api/reference/
 packages/*/generated/

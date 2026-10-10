@@ -21,6 +21,68 @@ pnpm add -D @spine-event-engine/testing@snapshot
   user.
 - ✅ Runs on an ephemeral local server with predictable cleanup.
 - ✅ Waits for genuinely asynchronous results with bounded polling.
+- ✅ Scripts registered AI deployments without network or provider credentials.
+
+## Script a model dependency
+
+`AiTestBackend` registers through the same `AiRegistry.register()` route as a
+provider adapter. Queue responses for a factory-created `AiModel` before posting
+the Agent signal through `BlackBox`. A typed `respondWith()` value is serialized
+to ProtoJSON and passes through the runtime's normal parse, Protobuf, and
+application validation. `respondWithText()` exercises invalid candidates;
+`respondWithDecision()` supplies non-generative answers. The backend records only
+physical requests that cross the runtime's reservation barrier. `requests()`
+returns immutable observations of the named call, input, correction issues, and
+permitted tool names. `assertSatisfied()` reports unused scripts and unexpected
+requests. A release gate from `delay()` pauses a response without sleeping.
+
+The scripted backend still requires the application Bounded Context containing the Agent
+and its durable runtime to execute; it does not call Agent methods or simulate repository state.
+See [REFERENCE.md](REFERENCE.md) for its exact queue and failure behavior.
+
+## Test an Agent outcome
+
+The [warehouse support test](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/test/support-blackbox.test.ts)
+shows the complete setup. Once its Bounded Context has a registered `AiTestBackend`, the
+test supplies a typed reply and posts the same Command that an application would:
+
+<!-- docs-snippet-path: examples/support/test/support-blackbox.test.ts -->
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import { AnyMessages } from "@spine-event-engine/core";
+import { AiTestBackend, BlackBox } from "@spine-event-engine/testing";
+import {
+  DraftSupportReplySchema,
+  type DraftSupportReply,
+} from "../generated/spine/examples/support/commands_pb.js";
+import { SupportReplySuggestedSchema } from "../generated/spine/examples/support/events_pb.js";
+import { SupportReplySchema } from "../generated/spine/examples/support/types_pb.js";
+import { draftSupportReply } from "../dist/src/index.js";
+
+/** Scripts a proposal and submits the request through the application boundary. */
+async function submitDraft(box: BlackBox, backend: AiTestBackend, command: DraftSupportReply) {
+  backend.forModel(draftSupportReply).respondWith(
+    create(SupportReplySchema, {
+      subject: "Shipping label printing is blocked",
+      body: "Both stations still fail after restarting. What error appears when printing?",
+    }),
+  );
+  const acknowledgement = await box.asGuest().post(DraftSupportReplySchema, command);
+  if (acknowledgement.kind !== "ok") throw new Error("Draft request was not accepted.");
+  await box.eventually(
+    () => box.assertEvents(),
+    (events) => events.length > 0,
+  );
+  backend.assertSatisfied();
+}
+```
+
+Command acceptance happens before the model finishes. The complete test therefore
+waits for `SupportReplySuggested`, checks its reply and conversation, and queries
+the review Projection. It also calls `readAgentHistory` to inspect the Agent's
+retained records. Script malformed text or a blank proposal to test parsing and
+application validation, including the configured correction attempt.
 
 ## ✅ Run one command through a BlackBox
 
@@ -101,7 +163,7 @@ async function inspectPartnerEvent<Schema extends GenMessage<Message>>(
 
 Snapshots are taken at the call time. Use `eventually()` when detached handling
 may produce output later. Input Commands, setup Events, received external
-Events, and rollback-path rejection Events are excluded; only admitted produced
+Events, and rejection Events from unsuccessful handlers are excluded; only admitted produced
 Commands and committed produced Events appear in their production order.
 
 ## ⚠️ Test boundary

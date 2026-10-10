@@ -14,8 +14,14 @@
 
 import type { TenantId } from "@spine-event-engine/proto";
 import { type StorageFactory } from "@spine-event-engine/storage";
-import type { TenantCatalog, TenantCatalogProvider } from "@spine-event-engine/storage/provider";
+import type {
+  TenantCatalog,
+  TenantCatalogCursor,
+  TenantCatalogProvider,
+  TenantCatalogRead,
+} from "@spine-event-engine/storage/provider";
 import { TenantBoundary } from "@spine-event-engine/storage/provider";
+import { TenantCatalogReads } from "@spine-event-engine/storage/provider";
 import { EffectiveTenants } from "./effective-tenant.js";
 
 type TenantMode = "single-tenant" | "multitenant";
@@ -39,6 +45,13 @@ export interface TenantIndex {
   all(): Promise<readonly TenantId[]>;
 
   /**
+   * Reads a finite page for Agent recovery without enumerating the catalog.
+   * @param request Bounded provider page and cancellation.
+   * @returns Complete tenant IDs and an opaque continuation.
+   */
+  page(request: TenantCatalogRead): Promise<TenantIndexPage>;
+
+  /**
    * Records one complete tenant through provider-native catalog state.
    *
    * @param tenantId The complete generated tenant ID.
@@ -50,6 +63,26 @@ export interface TenantIndex {
    * Closes this context view without closing the factory-owned catalog.
    */
   close(): void;
+}
+
+/**
+ * One finite provider tenant page for Agent discovery.
+ */
+export interface TenantIndexPage {
+  /**
+   * Complete generated tenant identities from this provider page.
+   */
+  readonly ids: readonly TenantId[];
+
+  /**
+   * Opaque continuation when another provider page remains.
+   */
+  readonly after?: TenantCatalogCursor;
+
+  /**
+   * Whether the finite catalog traversal has another page.
+   */
+  readonly hasMore: boolean;
 }
 
 /**
@@ -110,6 +143,22 @@ class SingleTenantIndex implements TenantIndex {
     return closed === undefined
       ? Promise.resolve(Object.freeze([EffectiveTenants.current(false, undefined)]))
       : Promise.reject(closed);
+  }
+
+  /**
+   * Returns the single effective tenant without a provider catalog.
+   * @param request Finite page request.
+   * @returns One terminal tenant page.
+   */
+  page(request: TenantCatalogRead): Promise<TenantIndexPage> {
+    return Promise.resolve().then(() => {
+      const closed = this.closedError();
+      if (closed !== undefined) throw closed;
+      TenantCatalogReads.require(request);
+      if (request.after !== undefined)
+        throw new TypeError("Single-tenant catalog does not accept a continuation.");
+      return { ids: [EffectiveTenants.current(false, undefined)], hasMore: false };
+    });
   }
 
   /**
@@ -186,6 +235,29 @@ class StorageTenantIndex implements TenantIndex {
   }
 
   /**
+   * Reads exactly one bounded provider page.
+   * @param request Finite page request.
+   * @returns Validated complete tenant IDs.
+   */
+  async page(request: TenantCatalogRead): Promise<TenantIndexPage> {
+    this.requireOpen();
+    TenantCatalogReads.require(request);
+    const page = await this.catalog.page(request);
+    request.signal.throwIfAborted();
+    this.requireOpen();
+    const ids = page.boundaries.map((boundary) => {
+      if (boundary.single || boundary.tenantId === undefined)
+        throw new Error("Multitenant provider catalog returned a single-tenant boundary.");
+      return boundary.tenantId;
+    });
+    return {
+      ids,
+      ...(page.after === undefined ? {} : { after: page.after }),
+      hasMore: page.hasMore,
+    };
+  }
+
+  /**
    * Records a named tenant in the provider catalog.
    *
    * @param tenantId Named tenant to record.
@@ -217,5 +289,8 @@ function tenantCatalog(factory: StorageFactory): TenantCatalog {
   const provider = factory as Partial<TenantCatalogProvider>;
   if (typeof provider.tenantCatalog !== "function")
     throw new Error("Multitenant storage requires a provider-owned tenant catalog.");
-  return provider.tenantCatalog();
+  const catalog = provider.tenantCatalog();
+  if (typeof catalog.page !== "function")
+    throw new Error("Multitenant Agent storage requires a paged provider tenant catalog.");
+  return catalog;
 }

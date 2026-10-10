@@ -11,7 +11,7 @@ an npm token. Never add a token fallback.
 4. `publish.yml` runs for the `master` push. It uses npm `11.16.0` to publish
    the tested package archives with OIDC authentication and provenance.
 
-Every merge may result in a release. Keep one version across the root, 19 public
+Every merge may result in a release. Keep one version across the root, 21 public
 packages, and seven examples. Maintainers make a standalone commit named `Bump
 version -> <version>`; concrete internal pins and `pnpm-lock.yaml` change
 separately. `publishConfig.access` remains package metadata, but a static
@@ -28,7 +28,7 @@ In npm's UI, configure the GitHub trusted publisher for each package. Use organi
 `SpineEventEngine`, repository `spine-ts`, filename `publish.yml` only,
 environment `gh-actions-environment`, and allowed action `npm publish`.
 
-- `@spine-event-engine/auth`, `@spine-event-engine/client-node`, `@spine-event-engine/client-react`, `@spine-event-engine/client-web`, `@spine-event-engine/core`, `@spine-event-engine/delivery-client`
+- `@spine-event-engine/ai`, `@spine-event-engine/ai-vercel-ax`, `@spine-event-engine/auth`, `@spine-event-engine/client-node`, `@spine-event-engine/client-react`, `@spine-event-engine/client-web`, `@spine-event-engine/core`, `@spine-event-engine/delivery-client`
 - `@spine-event-engine/delivery-server`, `@spine-event-engine/deployment`, `@spine-event-engine/deployment-gce`, `@spine-event-engine/deployment-gke`, `@spine-event-engine/proto`, `@spine-event-engine/proto-tools`
 - `@spine-event-engine/server`, `@spine-event-engine/storage`, `@spine-event-engine/storage-datastore`, `@spine-event-engine/storage-postgres`, `@spine-event-engine/storage-mysql`, `@spine-event-engine/testing`, `@spine-event-engine/transport`
 
@@ -115,9 +115,9 @@ the pinned npm/Rekor loopback fixture, and saved archive preparation. The PR
 job downloads the archives into a fresh Node-only runner and runs the actual
 preflight, publication, report, rerun, and read-only verification entrypoints.
 Only registry HTTP responses and the network-producing `npm publish` subprocess
-are replaced with strict local responses. The trial checks all 19 packages,
+are replaced with strict local responses. The trial checks all 21 packages,
 a partial failed attempt, the saved prior report on rerun, and read-only
-verification. It proves that all 19 accepted uploads finish when none of the
+verification. It proves that all 21 accepted uploads finish when none of the
 new versions is publicly readable, and that a rerun skips accepted uploads
 while they remain invisible. It also checks a delayed registry response body
 during explicit verification, plus fatal permission and malformed responses.
@@ -139,7 +139,7 @@ The consumer test may download third-party dependencies from the registry.
 Every framework package comes from the prepared local archives, and dependency
 installation scripts remain disabled.
 
-Before a first publication attempt, the job checks all 19 packages against
+Before a first publication attempt, the job checks all 21 packages against
 npm's public registry. A rerun skips public reads for validated accepted uploads.
 Each registry GET has a 10-second request-and-body limit and at most three
 attempts for temporary transport failures, HTTP 429, or HTTP 5xx, with short
@@ -252,7 +252,7 @@ to bypass recovery checks.
 
 Before activation, protect `master`: require pull requests and successful PR
 verification, prohibit direct pushes, and disable bypass. Repository code cannot
-configure this environment or the 19 npm trusted publishers; an operator must
+configure this environment or the 21 npm trusted publishers; an operator must
 provide that configuration evidence before activation.
 
 If final registry verification shows a missing version or selected tag, stop and

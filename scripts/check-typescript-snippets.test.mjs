@@ -48,6 +48,10 @@ describe("TypeScript documentation snippets", () => {
     expect(documentedTypeScriptPaths).toEqual([
       "README.md",
       "REFERENCE.md",
+      "packages/ai/README.md",
+      "packages/ai/REFERENCE.md",
+      "packages/ai-vercel-ax/README.md",
+      "packages/ai-vercel-ax/REFERENCE.md",
       "packages/core/README.md",
       "packages/core/REFERENCE.md",
       "packages/proto/README.md",
@@ -96,6 +100,9 @@ describe("TypeScript documentation snippets", () => {
       "examples/orders/REFERENCE.md",
       "examples/projects/README.md",
       "examples/projects/REFERENCE.md",
+      "examples/support/README.md",
+      "examples/support/REFERENCE.md",
+      "examples/support/USER_GUIDE.md",
       "packages/delivery-client/README.md",
       "packages/delivery-client/REFERENCE.md",
       "packages/delivery-server/README.md",
@@ -169,6 +176,8 @@ describe("TypeScript documentation snippets", () => {
 
   it("puts each Wave 14 package install and connected first success before workspace guidance", () => {
     for (const document of [
+      "packages/ai/README.md",
+      "packages/ai-vercel-ax/README.md",
       "packages/core/README.md",
       "packages/proto/README.md",
       "packages/storage/README.md",

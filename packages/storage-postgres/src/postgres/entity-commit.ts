@@ -250,6 +250,42 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
   }
 
   /**
+   * Prepares existing Entity record families for an Agent's same-client conditional completion.
+   * @typeParam Id Typed Entity identifier.
+   * @typeParam State Generated Entity state.
+   * @param input Current state and immutable Entity records.
+   * @returns Prepared transaction work and its close operation.
+   */
+  async prepareConditional<Id, State extends Message>(
+    input: EntityCommitInput<Id, State>,
+  ): Promise<{
+    /**
+     * Applies the conditional Entity work on the Agent transaction client.
+     */
+    apply(client: PoolClient, expectedVersion: number): Promise<void>;
+
+    /**
+     * Closes temporary record-family handles.
+     */
+    close(): void;
+  }> {
+    this.validate(input);
+    const records = new PostgresCommitRecords(input, this.open);
+    try {
+      await records.prepare();
+    } catch (error) {
+      records.close();
+      throw error;
+    }
+    return {
+      apply: (client, expectedVersion) => this.apply(client, input, records, expectedVersion),
+      close: () => {
+        records.close();
+      },
+    };
+  }
+
+  /**
    * Closes this handle to new commits while allowing started work to settle.
    */
   close(): void {
@@ -261,21 +297,24 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
 
   /**
    * Applies one validated Entity commit on an active transaction.
-   *
    * @typeParam Id Entity identifier type supplied by the commit.
    * @typeParam State Entity state message type supplied by the commit.
    * @param client PostgreSQL transaction client.
    * @param input Defines the Entity records to commit.
    * @param records Provides the prepared record families.
    * @returns Completion after records are committed.
+   * @param expectedVersion Expected current Entity Version.
    */
   private async apply<Id, State extends Message>(
     client: PoolClient,
     input: EntityCommitInput<Id, State>,
     records: PostgresCommitRecords<Id, State>,
+    expectedVersion?: number,
   ): Promise<void> {
     await this.locks(client, input, records);
     const current = await records.current.read(client, input.entityId, "for-update");
+    if (expectedVersion !== undefined && (current?.version?.number ?? 0) !== expectedVersion)
+      throw new Error("Agent execution initial Entity Version is no longer current.");
     await this.preflight(client, input, records);
     await this.append(client, input, records);
     if (!PostgresCommitValues.same(current, input.next))

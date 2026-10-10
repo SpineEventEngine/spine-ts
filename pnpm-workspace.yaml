@@ -28,5 +28,7 @@ verifyDepsBeforeRun: error
 onlyBuiltDependencies:
   - "@bufbuild/buf"
 allowBuilds:
+  "@ax-llm/ax": false
   "@bufbuild/buf": true
+  esbuild: false
   protobufjs: false

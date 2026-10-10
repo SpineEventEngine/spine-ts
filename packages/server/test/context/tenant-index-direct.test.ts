@@ -46,6 +46,32 @@ describe("provider tenant index", () => {
     index.close();
   });
 
+  it("reads bounded provider pages when the unrelated all path is unavailable", async () => {
+    const source = new InMemoryStorageFactory();
+    const catalog = source.tenantCatalog();
+    await catalog.keep(TenantBoundary.from(tenant("first")));
+    await catalog.keep(TenantBoundary.from(tenant("second")));
+    const index = TenantIndexes.create({
+      contextName: "Tasks",
+      tenantMode: "multitenant",
+      storageFactory: new CatalogFactory({
+        all: () => Promise.reject(new Error("full enumeration forbidden")),
+        page: (request) => catalog.page(request),
+        keep: (boundary) => catalog.keep(boundary),
+        close: () => Promise.resolve(),
+      }),
+    });
+    const signal = new AbortController().signal;
+    const first = await index.page({ count: 1, signal });
+    expect(first.ids).toHaveLength(1);
+    if (first.after === undefined) throw new Error("Expected tenant continuation.");
+    const second = await index.page({ count: 1, signal, after: first.after });
+    expect(second.ids).toHaveLength(1);
+    expect(second.hasMore).toBe(false);
+    index.close();
+    await expect(index.page({ count: 1, signal })).rejects.toThrow(/closed/);
+  });
+
   it("reports SINGLE_TENANT without a storage partition and rejects recording or later access", async () => {
     const index = TenantIndexes.create({
       contextName: "Tasks",
@@ -54,9 +80,24 @@ describe("provider tenant index", () => {
     });
 
     await expect(index.all()).resolves.toEqual([tenant("SINGLE_TENANT")]);
+    const signal = new AbortController().signal;
+    await expect(index.page({ count: 1, signal })).resolves.toMatchObject({
+      ids: [tenant("SINGLE_TENANT")],
+      hasMore: false,
+    });
+    await expect(
+      index.page({
+        count: 1,
+        signal,
+        after: {
+          [Symbol.toStringTag]: "TenantCatalogCursor",
+        },
+      }),
+    ).rejects.toThrow(/continuation/);
     await expect(index.keep(tenant("tenant-a"))).rejects.toThrow("does not accept");
     index.close();
     await expect(index.all()).rejects.toThrow("closed");
+    await expect(index.page({ count: 1, signal })).rejects.toThrow("closed");
     await expect(index.keep(tenant("tenant-a"))).rejects.toThrow("closed");
   });
 
@@ -95,6 +136,7 @@ describe("provider tenant index", () => {
   it("rejects a single-tenant boundary returned by a multitenant catalog", async () => {
     const factory = new CatalogFactory({
       all: () => Promise.resolve([TenantBoundary.single]),
+      page: () => Promise.resolve({ boundaries: [TenantBoundary.single], hasMore: false }),
       keep: () => Promise.resolve(),
       close: () => Promise.resolve(),
     });
@@ -105,6 +147,48 @@ describe("provider tenant index", () => {
     });
 
     await expect(index.all()).rejects.toThrow(/returned a single-tenant boundary/);
+    await expect(index.page({ count: 1, signal: new AbortController().signal })).rejects.toThrow(
+      /returned a single-tenant boundary/,
+    );
+  });
+
+  it("fails setup when a catalog does not implement paging", () => {
+    const legacy = {
+      all: () => Promise.resolve([]),
+      keep: () => Promise.resolve(),
+      close: () => Promise.resolve(),
+    } as unknown as TenantCatalog;
+    expect(() =>
+      TenantIndexes.create({
+        contextName: "Tasks",
+        tenantMode: "multitenant",
+        storageFactory: new CatalogFactory(legacy),
+      }),
+    ).toThrow(/paged/);
+  });
+
+  it("rejects a provider page that arrives after its index closes", async () => {
+    let deliver:
+      ((page: { boundaries: readonly TenantBoundary[]; hasMore: false }) => void) | undefined;
+    const delayed = new Promise<{ boundaries: readonly TenantBoundary[]; hasMore: false }>(
+      (resolve) => {
+        deliver = resolve;
+      },
+    );
+    const index = TenantIndexes.create({
+      contextName: "Tasks",
+      tenantMode: "multitenant",
+      storageFactory: new CatalogFactory({
+        all: () => Promise.resolve([]),
+        page: () => delayed,
+        keep: () => Promise.resolve(),
+        close: () => Promise.resolve(),
+      }),
+    });
+    const reading = index.page({ count: 1, signal: new AbortController().signal });
+    index.close();
+    deliver?.({ boundaries: [TenantBoundary.from(tenant("late"))], hasMore: false });
+    await expect(reading).rejects.toThrow(/closed/);
   });
 });
 

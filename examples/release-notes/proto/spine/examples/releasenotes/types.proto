@@ -1,0 +1,205 @@
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+syntax = "proto3";
+
+package spine.examples.releasenotes;
+
+import "spine/options.proto";
+import "spine/core/version.proto";
+import "spine/ts/agent/model.proto";
+
+option (type_url_prefix) = "type.spine.examples.releasenotes";
+
+// Identifies one editable release draft.
+message ReleaseDraftId {
+  // Application-assigned draft identifier.
+  string value = 1 [(required) = true];
+}
+
+// Identifies one generation, independent of its Command identifier.
+message ReleaseGenerationId {
+  // Application-assigned generation identifier.
+  string value = 1 [(required) = true];
+}
+
+// Identifies the selected local repository without storing its path.
+message RepositorySelectionId {
+  // Trusted application selection identifier.
+  string value = 1 [(required) = true];
+}
+
+// Identifies an immutable SHA-1 or SHA-256 Git object.
+message GitCommitId {
+  // Full hexadecimal commit object identifier.
+  string value = 1 [(required) = true];
+}
+
+// Human-visible release title.
+message ReleaseTitle {
+  // Nonblank title supplied by the editor.
+  string value = 1 [(required) = true];
+}
+
+// Human instruction for one generation.
+message ReleaseInstruction {
+  // Requested emphasis within the accepted comparison.
+  string value = 1 [(required) = true];
+}
+
+// The one comparison policy supported by the local Git evidence service.
+enum ReleaseComparisonPolicy {
+  // No comparison policy was supplied.
+  RELEASE_COMPARISON_POLICY_UNSPECIFIED = 0;
+
+  // Target-not-base commits and the net committed tree difference.
+  ANCESTOR_NET_TREE = 1;
+}
+
+// Pinned comparison for one selected local repository.
+message ReleaseComparison {
+  // Fixed repository selection for the draft.
+  RepositorySelectionId repository = 1 [(required) = true, (validate) = true];
+
+  // Identifies the ancestor commit used as the comparison baseline.
+  GitCommitId base = 2 [(required) = true, (validate) = true];
+
+  // Identifies the target commit whose changes are summarized.
+  GitCommitId target = 3 [(required) = true, (validate) = true];
+
+  // Explicit committed-object comparison policy.
+  ReleaseComparisonPolicy policy = 4 [(required) = true];
+}
+
+// One target-not-base commit visible to the model.
+message ReleaseCommit {
+  // Identifies the release draft to which this domain outcome applies.
+  GitCommitId id = 1 [(required) = true, (validate) = true];
+
+  // Full parent object identifiers, including both sides of merges.
+  repeated GitCommitId parents = 2 [(validate) = true];
+
+  // Untrusted commit subject from the selected repository.
+  string subject = 3 [(required) = true];
+}
+
+// One changed path in the net committed tree comparison.
+message ReleaseChange {
+  // Records a literal repository-relative path from the verified catalog.
+  string path = 1 [(required) = true];
+
+  // Records the Git path change type from a verified committed diff.
+  string status = 2 [(required) = true];
+
+  // Literal source-side path when renamed.
+  string previous_path = 3;
+}
+
+// One exact per-parent path reference from the verified catalog.
+message ReleaseEvidence {
+  // Child commit containing the change.
+  GitCommitId commit = 1 [(required) = true, (validate) = true];
+
+  // Exact parent whose diff includes the change.
+  GitCommitId parent = 2 [(required) = true, (validate) = true];
+
+  // Records a literal repository-relative path from the verified catalog.
+  string path = 3 [(required) = true];
+
+  // Records the Git path change type from a verified committed diff.
+  string status = 4 [(required) = true];
+
+  // Literal source-side path when renamed.
+  string previous_path = 5;
+}
+
+// Complete bounded comparison evidence accepted before generation.
+message ReleaseEvidenceCatalog {
+  // Target-not-base commits.
+  repeated ReleaseCommit commits = 1 [(validate) = true];
+
+  // Lists net committed-tree changes between base and target.
+  repeated ReleaseChange changes = 2 [(validate) = true];
+
+  // Exact per-parent evidence references.
+  repeated ReleaseEvidence evidence = 3 [(validate) = true];
+}
+
+// Account and concrete model selection without credentials.
+message ReleaseModelSelection {
+  // Nonsecret account registration reference.
+  string registration = 1 [(required) = true];
+
+  // Nonsecret account subject reference.
+  string account = 2 [(required) = true];
+
+  // Immutable registry deployment reference.
+  spine.ts.agent.ModelRef model = 3 [(required) = true, (validate) = true];
+}
+
+// Exact catalog evidence cited by a draft entry.
+message ReleaseEvidenceReference {
+  // Child commit containing the cited path.
+  GitCommitId commit = 1 [(required) = true, (validate) = true];
+
+  // Exact parent used for the cited diff.
+  GitCommitId parent = 2 [(required) = true, (validate) = true];
+
+  // Records a literal repository-relative path from the verified catalog.
+  string path = 3 [(required) = true];
+}
+
+// One editable release note with explicit evidence.
+message ReleaseNoteEntry {
+  // Editor-visible claim.
+  string text = 1 [(required) = true];
+
+  // Evidence supporting this claim.
+  repeated ReleaseEvidenceReference evidence = 2 [(validate) = true];
+}
+
+// One editable document section.
+message ReleaseNotesSection {
+  // Editor-visible section heading.
+  string heading = 1 [(required) = true];
+
+  // Structured claims under this heading.
+  repeated ReleaseNoteEntry entries = 2 [(validate) = true];
+}
+
+// Structured release notes; Markdown is rendered from these entries.
+message ReleaseNotesDocument {
+  // Orders document sections for rendering into approved Markdown.
+  repeated ReleaseNotesSection sections = 1 [(validate) = true];
+}
+
+// Exact approved bytes and their content digest.
+message ReleaseApproval {
+  // Entity Version reviewed by the editor.
+  spine.core.Version reviewed_version = 1 [(required) = true, (validate) = true];
+
+  // SHA-256 of the approved Markdown bytes.
+  string digest = 2 [(required) = true];
+
+  // Immutable UTF-8 Markdown bytes approved by the editor.
+  bytes markdown = 3 [(required) = true];
+}
+
+// Session-retained generation identity preventing duplicate model work.
+message ReleaseGenerationReceipt {
+  // Correlates this outcome with one accepted model generation.
+  ReleaseGenerationId generation = 1 [(required) = true, (validate) = true];
+
+  // SHA-256 of the accepted input snapshot.
+  string input_digest = 2 [(required) = true];
+}

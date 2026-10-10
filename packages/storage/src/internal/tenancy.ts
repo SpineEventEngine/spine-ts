@@ -59,7 +59,7 @@ interface TenantBoundaryFactory {
   from(tenantId: TenantId): MultitenantTenantBoundary;
 
   /**
-   * Selects the boundary declared by a storage context.
+   * Validates a storage context and returns its complete tenant boundary.
    *
    * @param context The storage context.
    * @returns The validated tenant boundary.
@@ -120,11 +120,20 @@ export const TenantBoundary: TenantBoundaryFactory = {
 };
 Object.freeze(TenantBoundary);
 
+/**
+ * Clones and validates a complete multitenant identifier.
+ */
 class MultitenantBoundary implements MultitenantTenantBoundary {
   readonly #tenantId: TenantId;
+
   readonly key: string;
+
   readonly single = false;
 
+  /**
+   * Stores one validated tenant identity.
+   * @param tenantId Complete generated tenant identifier.
+   */
   constructor(tenantId: TenantId) {
     TenantIds.require(tenantId);
     this.#tenantId = clone(TenantIdSchema, tenantId);
@@ -132,12 +141,20 @@ class MultitenantBoundary implements MultitenantTenantBoundary {
     Object.freeze(this);
   }
 
+  /**
+   * Returns a detached complete tenant identifier.
+   * @returns The cloned generated tenant identifier.
+   */
   get tenantId(): TenantId {
     return clone(TenantIdSchema, this.#tenantId);
   }
 }
 
 const TenantIds = Object.freeze({
+  /**
+   * Rejects an empty or unspecified generated tenant identifier.
+   * @param tenantId Identifier to validate.
+   */
   require(tenantId: TenantId): void {
     const kind = tenantId.kind;
     const value =
@@ -151,6 +168,11 @@ const TenantIds = Object.freeze({
     }
   },
 
+  /**
+   * Encodes the complete generated tenant identifier as a map key.
+   * @param tenantId Identifier to encode.
+   * @returns Hexadecimal Protobuf bytes without unknown fields.
+   */
   key(tenantId: TenantId): string {
     const bytes = toBinary(TenantIdSchema, tenantId, { writeUnknownFields: false });
     let encoded = "";
@@ -158,6 +180,102 @@ const TenantIds = Object.freeze({
     return encoded;
   },
 });
+
+/**
+ * Opaque continuation issued by one provider catalog instance.
+ */
+export interface TenantCatalogCursor {
+  /**
+   * Identifies an opaque in-process catalog continuation.
+   */
+  readonly [Symbol.toStringTag]: "TenantCatalogCursor";
+}
+
+/**
+ * Structural cancellation accepted from a platform AbortSignal.
+ */
+export interface TenantCatalogSignal {
+  /**
+   * Whether cancellation has already been requested.
+   */
+  readonly aborted: boolean;
+
+  /**
+   * Throws when cancellation has been requested.
+   */
+  throwIfAborted(): void;
+
+  /**
+   * Observes one cancellation notification.
+   * @param type Abort event name.
+   * @param onAbort Callback notified on cancellation.
+   * @param options One-shot listener selection.
+   */
+  addEventListener(type: "abort", onAbort: () => void, options?: { once?: boolean }): void;
+
+  /**
+   * Removes a previously registered cancellation listener.
+   * @param type Abort event name.
+   * @param onAbort Callback to remove.
+   */
+  removeEventListener(type: "abort", onAbort: () => void): void;
+}
+
+/**
+ * Bounded provider tenant-page request.
+ */
+export interface TenantCatalogRead {
+  /**
+   * Positive safe page size, at most 127 native candidates.
+   */
+  readonly count: number;
+
+  /**
+   * Cancels discovery before native work and before results become visible.
+   */
+  readonly signal: TenantCatalogSignal;
+
+  /**
+   * Continuation issued by this same catalog instance.
+   */
+  readonly after?: TenantCatalogCursor;
+}
+
+/**
+ * One finite tenant-catalog page.
+ */
+export interface TenantCatalogPage {
+  /**
+   * Complete boundaries selected from this page's native candidates.
+   */
+  readonly boundaries: readonly TenantBoundary[];
+
+  /**
+   * Continuation when more candidates remain.
+   */
+  readonly after?: TenantCatalogCursor;
+
+  /**
+   * Whether another page belongs to this finite sweep.
+   */
+  readonly hasMore: boolean;
+}
+
+/**
+ * Validates common finite-page limits for provider catalogs.
+ */
+export const TenantCatalogReads: Readonly<{ require(request: TenantCatalogRead): void }> =
+  Object.freeze({
+    /**
+     * Rejects invalid page bounds or cancellation.
+     * @param request Requested finite page.
+     */
+    require(request: TenantCatalogRead): void {
+      if (!Number.isSafeInteger(request.count) || request.count < 1 || request.count > 127)
+        throw new RangeError("Tenant catalog count must be a positive safe integer at most 127.");
+      request.signal.throwIfAborted();
+    },
+  });
 
 /**
  * Provider-owned enumeration of storage tenant boundaries.
@@ -173,6 +291,13 @@ export interface TenantCatalog {
    * @returns The available tenant boundaries.
    */
   all(): Promise<readonly TenantBoundary[]>;
+
+  /**
+   * Reads at most the requested number of native candidates per page.
+   * @param request Finite page request and opaque continuation.
+   * @returns A possibly empty continuing page or terminal page.
+   */
+  page(request: TenantCatalogRead): Promise<TenantCatalogPage>;
 
   /**
    * Closes resources owned by this catalog.

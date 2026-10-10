@@ -41,11 +41,11 @@ export function checkExampleProtoQuality(repoRoot = defaultRepoRoot) {
   const root = resolve(repoRoot);
   const resolvedRoot = realpathSync(root);
   const failures = [];
-  const files = trackedFiles(root);
-  const tracked = files.filter((file) => /^examples\/(?:[^/]+\/)*proto\/.+\.proto$/.test(file));
-  const manifests = exampleManifests(root, files, tracked, failures);
+  const files = candidateFiles(root);
+  const protoFiles = files.filter((file) => /^examples\/(?:[^/]+\/)*proto\/.+\.proto$/.test(file));
+  const manifests = exampleManifests(root, files, protoFiles, failures);
 
-  for (const file of tracked) {
+  for (const file of protoFiles) {
     if (!isConfined(root, resolvedRoot, file)) {
       failures.push(`${file} invalid-provenance unconfined-path`);
       continue;
@@ -137,10 +137,10 @@ function writeDebtPartitions(root) {
 
 function checkExampleProtoQualityWithoutDebt(root) {
   const failures = [];
-  const files = trackedFiles(root);
-  const tracked = files.filter((file) => /^examples\/(?:[^/]+\/)*proto\/.+\.proto$/.test(file));
-  const manifests = exampleManifests(root, files, tracked, failures);
-  for (const file of tracked) {
+  const files = candidateFiles(root);
+  const protoFiles = files.filter((file) => /^examples\/(?:[^/]+\/)*proto\/.+\.proto$/.test(file));
+  const manifests = exampleManifests(root, files, protoFiles, failures);
+  for (const file of protoFiles) {
     const provenance = manifests.get(file);
     if (provenance === undefined) failures.push(`${file} invalid-provenance unlisted-file`);
     else if (provenance.kind === "invalid")
@@ -310,22 +310,34 @@ export function baselineObservesExampleProtoEntry(entry, source) {
   );
 }
 
-function trackedFiles(root) {
-  const result = spawnSync("git", ["ls-files", "-z", "examples"], {
-    cwd: root,
-    encoding: "utf8",
-  });
-  if (result.status !== 0) throw new Error("Unable to enumerate tracked example Proto files.");
-  return result.stdout.split("\0").filter(Boolean);
+function candidateFiles(root) {
+  const result = spawnSync(
+    "git",
+    ["ls-files", "-z", "--cached", "--others", "--exclude-standard", "examples"],
+    {
+      cwd: root,
+      encoding: "utf8",
+    },
+  );
+  if (result.status !== 0) throw new Error("Unable to enumerate example Proto files.");
+  return [
+    ...new Set(result.stdout.split("\0").filter((path) => path && existsSync(join(root, path)))),
+  ];
 }
 
 function exampleManifests(root, files, protoFiles, failures) {
   const manifests = new Map();
-  const tracked = new Set(files);
+  const candidates = new Set(files);
+  const indexed = new Set(indexedFiles(root));
   const roots = new Set(protoFiles.map((file) => file.slice(0, file.indexOf("/proto/"))));
   for (const packagePath of roots) {
     const manifestFile = `${packagePath}/spine-proto-manifest.json`;
-    if (!tracked.has(manifestFile)) continue;
+    if (!candidates.has(manifestFile)) continue;
+    if (
+      !indexed.has(manifestFile) &&
+      protoFiles.some((file) => file.startsWith(`${packagePath}/`) && indexed.has(file))
+    )
+      continue;
     const path = join(root, manifestFile);
     const packageName = packagePath.slice("examples/".length);
     let manifest;
@@ -374,6 +386,15 @@ function exampleManifests(root, files, protoFiles, failures) {
     }
   }
   return manifests;
+}
+
+function indexedFiles(root) {
+  const result = spawnSync("git", ["ls-files", "-z", "--cached", "examples"], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  if (result.status !== 0) throw new Error("Unable to enumerate indexed example Proto files.");
+  return result.stdout.split("\0").filter((path) => path && existsSync(join(root, path)));
 }
 
 function isCopiedSource(source) {
@@ -509,8 +530,11 @@ function scanProto(file, source) {
  */
 export function scanExampleProtoContract(file, source) {
   const failures = [];
-  const example = /(?:^|\/)examples\/(message-board|projects|orders|todo)(?:\/|$)/.exec(file)?.[1];
-  const domain = example === "message-board" ? "messageboard" : example;
+  const example =
+    /(?:^|\/)examples\/(message-board|projects|orders|support|todo|release-notes)(?:\/|$)/.exec(
+      file,
+    )?.[1];
+  const domain = example?.replaceAll("-", "");
   const packageName = /^\s*package\s+([\w.]+)\s*;/m.exec(source)?.[1];
   if (domain === undefined || packageName !== `spine.examples.${domain}`)
     failures.push(`${file} namespace spine.examples.<domain>`);

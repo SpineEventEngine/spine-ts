@@ -103,4 +103,75 @@ describe("InMemoryStorageBackend", () => {
       ),
     ).rejects.toThrow(/catalog is closed/);
   });
+
+  it("pages only a bounded admission snapshot and rejects foreign continuations", async () => {
+    const first = new InMemoryStorageFactory();
+    const catalog = first.tenantCatalog();
+    const foreign = new InMemoryStorageFactory().tenantCatalog();
+    const signal = new AbortController().signal;
+    for (const name of ["a", "b", "c"])
+      await catalog.keep(
+        TenantBoundary.from(
+          create(TenantIdSchema, {
+            kind: { case: "value", value: name },
+          }),
+        ),
+      );
+    const page = await catalog.page({ count: 1, signal });
+    expect(page.boundaries).toHaveLength(1);
+    expect(page.hasMore).toBe(true);
+    if (page.after === undefined) throw new Error("Expected tenant continuation.");
+    await expect(
+      catalog.page({
+        count: 1,
+        signal,
+        after: {
+          [Symbol.toStringTag]: "TenantCatalogCursor",
+        },
+      }),
+    ).rejects.toThrow(/continuation/);
+    const forged = Object.create(Reflect.getPrototypeOf(page.after)) as typeof page.after;
+    await expect(catalog.page({ count: 1, signal, after: forged })).rejects.toThrow();
+    const constructed = Reflect.construct(page.after.constructor, [
+      catalog,
+      1,
+      3,
+    ]) as typeof page.after;
+    await expect(catalog.page({ count: 1, signal, after: constructed })).rejects.toThrow();
+    await catalog.keep(
+      TenantBoundary.from(
+        create(TenantIdSchema, {
+          kind: { case: "value", value: "later" },
+        }),
+      ),
+    );
+    await expect(foreign.page({ count: 1, signal, after: page.after })).rejects.toThrow();
+    const second = await catalog.page({ count: 2, signal, after: page.after });
+    expect(second.boundaries).toHaveLength(2);
+    expect(second.hasMore).toBe(false);
+    expect((await catalog.page({ count: 10, signal })).boundaries).toHaveLength(4);
+    await expect(catalog.page({ count: 0, signal })).rejects.toThrow();
+    const aborted = new AbortController();
+    aborted.abort();
+    await expect(catalog.page({ count: 1, signal: aborted.signal })).rejects.toThrow();
+  });
+
+  it("returns a terminal empty page before any memory tenant is admitted", async () => {
+    const catalog = new InMemoryStorageFactory().tenantCatalog();
+    const signal = new AbortController().signal;
+    await expect(catalog.page({ count: 1, signal })).resolves.toEqual({
+      boundaries: [],
+      hasMore: false,
+    });
+    await catalog.keep(
+      TenantBoundary.from(
+        create(TenantIdSchema, {
+          kind: { case: "value", value: "later" },
+        }),
+      ),
+    );
+    const admitted = await catalog.page({ count: 1, signal });
+    expect(admitted.boundaries).toHaveLength(1);
+    expect(admitted.hasMore).toBe(false);
+  });
 });

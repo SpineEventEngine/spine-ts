@@ -1,1 +1,24 @@
-indexes: []
+indexes:
+  - kind: spine_agent_history
+    properties:
+      - name: scope_digest
+      - name: order_key
+  - kind: spine_agent_history
+    properties:
+      - name: scope_digest
+      - name: category
+      - name: order_key
+  - kind: spine_agent_history
+    properties:
+      - name: scope_digest
+      - name: conversation_digest
+      - name: order_key
+  - kind: spine_agent_execution_head
+    properties:
+      - name: state_digest
+      - name: pending_key
+  - kind: spine_agent_execution
+    properties:
+      - name: scope_digest
+      - name: status
+      - name: order_key

@@ -15,8 +15,12 @@
 import { configDefaults, defineConfig } from "vitest/config";
 
 import { infrastructureTestFiles } from "./scripts/test-inventory.mjs";
+import { typescriptVitestPlugin } from "./scripts/vitest-typescript.mjs";
 
 export default defineConfig({
+  oxc: false,
+  esbuild: false,
+  plugins: [typescriptVitestPlugin()],
   test: {
     include: [
       "packages/*/test/**/*.test.ts",
@@ -40,22 +44,27 @@ export default defineConfig({
       include: [
         "packages/*/src/**/*.ts",
         "packages/*/src/**/*.tsx",
+        "packages/*/dist/**/*.js",
         "examples/*/src/**/*.ts",
         "examples/*/src/**/*.tsx",
+        "examples/*/dist/**/*.js",
         "examples/*/*/src/**/*.ts",
         "examples/*/*/src/**/*.tsx",
+        "examples/*/*/dist/**/*.js",
       ],
+      excludeAfterRemap: true,
       exclude: [
         "**/*.test.ts",
+        "**/*.d.ts",
         "packages/*/generated/**",
+        "packages/*/dist/generated/**",
         "examples/*/generated/**",
+        "examples/*/dist/generated/**",
         "examples/*/*/generated/**",
+        "examples/*/*/dist/generated/**",
         // The build-time handler analyzer is a TypeScript compiler integration
         // with focused tests; keep global thresholds centered on runtime code.
         "packages/proto-tools/src/generation/build-time-handler-analyzer.ts",
-        // Vitest cannot execute raw TypeScript standard decorators here; the
-        // example test covers this source through its `tsc` output.
-        "examples/todo/src/index.ts",
       ],
       thresholds: {
         branches: 90,

@@ -19,6 +19,110 @@ history and Entity commit contracts, query values, tenant boundaries/catalogs,
 and delivery-cleanup handles. The storage root intentionally does not export
 these provider seams; application code uses its root storage contracts instead.
 
+The provider entry point also exports `AgentHistoryStorage`,
+`AgentHistoryStorageFactories`, `AgentHistoryKeys`, and
+`AgentHistoryConformance`. Calling `AgentHistoryStorageFactories.create()` to
+open a handle fails if the supplied factory has not registered the capability.
+Agent repository registration requires this capability. Opening the actual
+tenant handle also checks the selected provider before accepting Agent work.
+Agent history's append-only entries
+retain the original conversation record or Event envelope,
+ID, and occurrence time. The full, conversation, System, and domain views use
+separate indexes. Conversation reads require a `ConversationId`. The complete
+order is occurrence seconds and nanoseconds descending, then conversation,
+System, domain, then unsigned UTF-8 record ID ascending. `AgentHistoryKeys`
+derives a sortable index value from that order; it is not a record identity.
+
+Provider reads use an optional complete ordering-key boundary and positive
+count and byte limits. The byte limit counts the sum of serialized
+`AgentHistoryEntry` wrapper lengths, excluding provider framing. A page reports
+whether older entries remain; if the first entry exceeds the byte limit, the
+read rejects. Limits never remove stored entries. Identical repeated appends
+are accepted, while different content with the same category and record ID
+is rejected. `AgentHistoryConformance` runs reusable view, order, paging,
+scope, and retention checks for adapter implementations. The memory provider
+retains entries across handles sharing a backend during the process lifetime;
+it does not provide restart durability.
+The PostgreSQL, MySQL, and Datastore providers store complete entries in one
+tenant-scoped `agent_history` record family with native full, category, and
+conversation ordering indexes. Each derives a bounded physical record ID from
+the full state type, Agent key, category, and original record ID, then checks
+immutable payload equality on repeated appends. Their provider references
+specify physical index and payload constraints.
+
+## Tenant catalog paging
+
+Storage adapters implement `TenantCatalog.page({ count, signal, after? })` from
+the provider entry point. `count` is a positive safe integer up to 127 and bounds
+native candidates examined, including candidates filtered out as unrelated
+namespaces. `signal` accepts a native `AbortSignal`; `TenantCatalogSignal`
+describes the required members without requiring DOM declarations in storage
+consumers. `TenantCatalogReads.require()` performs common request validation.
+
+A `TenantCatalogPage` returns complete `boundaries`, `hasMore`, and an opaque
+`after` continuation when more candidates remain. Pass that continuation to the
+same catalog instance. Forged or cross-catalog continuations are rejected; the
+cursor is an in-process value, not a durable domain record. An empty page can
+still have more candidates. Continue until `hasMore` is false, rather than
+stopping at the first empty page. Repeating a valid continuation may repeat the
+page. A fresh sweep starts without a continuation.
+
+Memory pages use an admission-time index and capture its length for that sweep;
+PostgreSQL and MySQL page their configured tenant collections. Datastore pages
+its bounded early-admission cache and then native namespace metadata using a
+query limit and native cursor. A tenant can appear in both phases. Existing
+Agent claims prevent that duplicate discovery from running the same accepted
+invocation concurrently. An empty native `MORE_RESULTS_AFTER_LIMIT` tail that repeats its cursor ends
+that sweep; other continuing pages must advance. Datastore limits each page wait to five
+seconds and destroys its query stream on cancellation or timeout.
+
+Catalogs check cancellation before starting work and before returning a result.
+Paging is a finite traversal, not an atomic catalog snapshot: a concurrent
+admission can appear in the current or next sweep. Agent recovery uses this
+paged contract; the separate `all()` operation remains available for existing
+callers that require the complete catalog.
+
+## Agent execution storage
+
+`AgentExecutionStorageFactories` opens the provider-only execution handle for an
+Agent repository and tenant. `supports()` checks factory registration without
+opening a tenant. It does not replace the provider checks made when admitting
+work. Application code configures a storage factory; it does not claim or poll
+these records directly.
+
+The handle's `capacity` reports encoded execution, per-instance and history-record
+limits plus a transaction payload limit where the provider enforces one.
+`AgentExecutionSizes` measures the full internal Protobuf wrappers, including
+scope and metadata. The runtime must allow for the bounded response and complete
+record overhead before dispatch; a payload limit is not a history retention rule.
+
+`admit()` stores the original signal, typed recipient and selected handlers once.
+`claim()` permits one execution at a time for an Agent instance. `renew()`,
+`update()`, `complete()` and `markDelivered()` check the current claim token.
+Updates also compare the exact previously read record. Completion compares the
+initial Entity Version and stores the Entity changes, mandatory histories, model
+preferences and original outgoing signals in one provider operation. This includes
+handlers that change no state or produce only a Command.
+
+Pending queries read one pending invocation per Agent instance from an index. A page
+carries its original time cutoff and the provider-observed continuation, so the
+caller can continue even when another execution claims a returned invocation.
+These internal pages are separate from application history pages. Eligibility
+and claim expiry use Spine `Time`; original Inbox order determines which signal
+runs next within an instance.
+
+Each saved output can receive one delivery plan before transport begins. The
+plan and original envelope cannot be replaced. `markDelivered()` requires that
+plan and a current claim. The framework's internal EventStore retry operation
+accepts an identical existing envelope; ordinary public EventStore append still
+rejects duplicate IDs. Delivery retries must still visit every saved recipient.
+These records do not make downstream application callbacks execute exactly once.
+
+The memory implementation coordinates changes only within a shared in-process
+backend. PostgreSQL, transactional MySQL and Datastore use native transactions.
+Database query, index and payload requirements are documented in each provider's
+reference. No execution-storage operation trims the Agent's history.
+
 ## Record storage
 
 `StorageFactory.createRecordStorage(context, spec, group?)` returns an

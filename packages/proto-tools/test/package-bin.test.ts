@@ -16,6 +16,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -27,34 +28,43 @@ const packageJson = JSON.parse(readFileSync(join(packageRoot, "package.json"), "
 const bin = packageJson.bin["spine-proto"];
 const generationReuseRuntime = "dist/src/generation/generation-reuse.mjs";
 
+const timedCommand = (stage: string, command: string, args: string[], cwd: string): void => {
+  const started = performance.now();
+  process.stdout.write(`Isolated proto-tools ${stage} started.\n`);
+  try {
+    execFileSync(command, args, { cwd, stdio: "pipe" });
+    process.stdout.write(
+      `Isolated proto-tools ${stage} completed in ${String(Math.round(performance.now() - started))}ms.\n`,
+    );
+  } catch (error) {
+    process.stdout.write(
+      `Isolated proto-tools ${stage} failed after ${String(Math.round(performance.now() - started))}ms.\n`,
+    );
+    throw error;
+  }
+};
+
 describe("spine-proto package binary", () => {
   it("includes its authored runtime companion after an isolated canonical clean build", () => {
     const isolated = mkdtempSync(join(tmpdir(), "spine-proto-clean-build-"));
     const worktree = join(isolated, "repo");
     try {
-      execFileSync("git", ["worktree", "add", "--detach", worktree, "HEAD"], {
-        cwd: repositoryRoot,
-        stdio: "pipe",
-      });
-      execFileSync("pnpm", ["install", "--offline", "--frozen-lockfile"], {
-        cwd: worktree,
-        stdio: "pipe",
-      });
-      execFileSync("pnpm", ["typecheck:build"], {
-        cwd: worktree,
-        stdio: "pipe",
-      });
+      timedCommand(
+        "checkout",
+        "git",
+        ["worktree", "add", "--detach", worktree, "HEAD"],
+        repositoryRoot,
+      );
+      timedCommand("install", "pnpm", ["install", "--offline", "--frozen-lockfile"], worktree);
+      timedCommand("build", "pnpm", ["typecheck:build"], worktree);
 
       expect(existsSync(join(worktree, "packages/proto-tools", generationReuseRuntime))).toBe(true);
     } finally {
-      execFileSync("git", ["worktree", "remove", "--force", worktree], {
-        cwd: repositoryRoot,
-        stdio: "pipe",
-      });
+      timedCommand("cleanup", "git", ["worktree", "remove", "--force", worktree], repositoryRoot);
       expect(existsSync(worktree)).toBe(false);
       rmSync(isolated, { force: true, recursive: true });
     }
-  }, 120_000);
+  }, 240_000);
 
   it("exists before build and is included in the packed package", () => {
     expect(existsSync(join(packageRoot, bin))).toBe(true);

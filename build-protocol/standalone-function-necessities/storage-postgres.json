@@ -61,5 +61,23 @@
     "name": "operationError",
     "disposition": "necessity",
     "reason": "TypeScript PostgreSQL provider boundary: operationError remains standalone because record operations share the exact sanitized provider-error conversion."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-postgres/src/postgres/agent-execution.ts",
+    "kind": "function-declaration",
+    "identity": "historyRecord()#1",
+    "name": "historyRecord",
+    "disposition": "necessity",
+    "reason": "TypeScript PostgreSQL boundary: historyRecord builds one complete immutable history envelope from the accepted Agent scope and original entry."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-postgres/src/postgres/agent-execution.ts",
+    "kind": "function-declaration",
+    "identity": "ensureIndex()#1",
+    "name": "ensureIndex",
+    "disposition": "necessity",
+    "reason": "TypeScript PostgreSQL boundary: ensureIndex checks native index definition and readiness before accepting Agent work."
   }
 ]

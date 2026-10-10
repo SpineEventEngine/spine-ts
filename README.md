@@ -25,8 +25,10 @@ Node.js with less code.
 
 **Application runtime**
 
-- Bounded Contexts, Aggregates, Process Managers, Projections, generated
+- Bounded Contexts, Aggregates, Process Managers, Projections, Agents, generated
   handlers, validation, and rejections.
+- Signal-driven AI operations with typed results, bounded model and tool calls,
+  retained conversation records, and domain and System Event histories.
 - A `Server` that manages startup, readiness, shutdown, and optional authenticated
   browser access.
 - In-memory delivery coordination for one process or a trusted local network.
@@ -104,6 +106,8 @@ Start with these packages:
 | Connect from a browser          | [`@spine-event-engine/client-web`](packages/client-web/README.md)                      |
 | Use React hooks                 | [`@spine-event-engine/client-react`](packages/client-react/README.md)                  |
 | Test a bounded context          | [`@spine-event-engine/testing`](packages/testing/README.md) `BlackBox` tests           |
+| Define Agent model operations   | [`@spine-event-engine/ai`](packages/ai/README.md)                                      |
+| Use Vercel AI SDK and Ax        | [`@spine-event-engine/ai-vercel-ax`](packages/ai-vercel-ax/README.md)                  |
 | Configure authentication        | [`@spine-event-engine/auth`](packages/auth/README.md)                                  |
 | Choose a storage backend        | [`@spine-event-engine/storage`](packages/storage/README.md)                            |
 
@@ -111,6 +115,7 @@ Start with these packages:
 
 - [End-user guide](docs/USER_GUIDE.md)
 - [Message Board example](examples/message-board/README.md)
+- [Support reply Agent example](examples/support/README.md)
 - [Deploy on GKE](packages/deployment-gke/README.md)
 - [Deploy on GCE](packages/deployment-gce/README.md)
 - [Browser authentication and extension guide](docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)

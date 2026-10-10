@@ -23,16 +23,32 @@ import {
   type StorageContext,
   type StorageGroup,
 } from "@spine-event-engine/storage";
-import { TenantBoundary, type TenantCatalog } from "@spine-event-engine/storage/provider";
+import {
+  TenantBoundary,
+  TenantCatalogReads,
+  type TenantCatalog,
+  type TenantCatalogCursor,
+  type TenantCatalogRead,
+  type TenantCatalogPage,
+} from "@spine-event-engine/storage/provider";
+import {
+  AgentExecutionRecords,
+  AgentHistoryRecords,
+  type AgentExecutionStorageInput,
+} from "@spine-event-engine/storage/provider";
 import {
   DeliveryCleanupStorageFactories,
   EntityCommitStorageFactories,
+  AgentHistoryStorageFactories,
+  AgentExecutionStorageFactories,
 } from "@spine-event-engine/storage/provider";
 import { Pool, type PoolConfig, type PoolClient } from "pg";
 
 import { PostgresStorageConfigurationError, PostgresStorageConnectionError } from "./errors.js";
 import { PostgresRecordStorage, type PostgresRecordLifecycle } from "./record-storage.js";
 import { PostgresEntityStorage } from "./entity-history.js";
+import { PostgresAgentHistory, AgentHistoryHash } from "./agent-history.js";
+import { PostgresAgentExecution } from "./agent-execution.js";
 import { PostgresEntityCommitStorage } from "./entity-commit.js";
 import { PostgresDeliveryCleanupStorage } from "./delivery-cleanup.js";
 import { PostgresTableResolver } from "./table-resolver.js";
@@ -321,6 +337,57 @@ export class PostgresStorageFactory extends StorageFactory {
     DeliveryCleanupStorageFactories.register(this, {
       createDeliveryCleanupStorage: () => this.createDeliveryCleanupStorage(),
     });
+    AgentHistoryStorageFactories.register(this, {
+      createAgentHistoryStorage: (input) => {
+        if (!this.isOpen()) throw new Error("StorageFactory is closed.");
+        return new PostgresAgentHistory(
+          input,
+          this.createPostgresRecordStorage(
+            input.context,
+            AgentHistoryRecords.spec((value) => AgentHistoryHash.value(value)),
+            AgentHistoryRecords.group,
+          ),
+        );
+      },
+    });
+    AgentExecutionStorageFactories.register(this, {
+      createAgentExecutionStorage: (input) => this.createAgentExecutionStorage(input),
+    });
+  }
+
+  /**
+   * Opens native record families for one typed Agent repository.
+   * @param input Tenant scope, typed ID and generated state layout.
+   * @returns Closeable Agent execution storage handle.
+   * @typeParam I Typed Agent identifier.
+   * @typeParam S Generated Agent state.
+   */
+  private createAgentExecutionStorage<I, S extends Message>(
+    input: AgentExecutionStorageInput<I, S>,
+  ): PostgresAgentExecution<I, S> {
+    if (!this.isOpen()) throw new Error("StorageFactory is closed.");
+    const context = input.entity.context;
+    const digest = (value: string) => AgentHistoryHash.value(value);
+    return new PostgresAgentExecution(
+      input,
+      this.createPostgresRecordStorage(
+        context,
+        AgentExecutionRecords.invocationSpec(digest),
+        AgentExecutionRecords.invocationGroup,
+      ),
+      this.createPostgresRecordStorage(
+        context,
+        AgentExecutionRecords.headSpec(digest),
+        AgentExecutionRecords.headGroup,
+      ),
+      this.createPostgresRecordStorage(
+        context,
+        AgentHistoryRecords.spec(digest),
+        AgentHistoryRecords.group,
+      ),
+      this.createPostgresRecordStorage(context, input.entity.recordSpec),
+      () => this.createEntityCommitStorage(input.entity),
+    );
   }
 
   /**
@@ -748,6 +815,8 @@ interface PostgresDatabaseConfig {
  * Reports the immutable tenant boundaries configured by the factory.
  */
 class PostgresTenantCatalog implements TenantCatalog {
+  readonly #cursorIdentity = {};
+
   /**
    * Creates a catalog from configured tenant boundaries.
    *
@@ -762,6 +831,33 @@ class PostgresTenantCatalog implements TenantCatalog {
    */
   all(): Promise<readonly TenantBoundary[]> {
     return Promise.resolve(this.boundaries);
+  }
+
+  /**
+   * Reads one finite page of configured tenants.
+   * @param request Bounded page and catalog continuation.
+   * @returns A page without copying other configured boundaries.
+   */
+  page(request: TenantCatalogRead): Promise<TenantCatalogPage> {
+    return Promise.resolve().then(() => {
+      TenantCatalogReads.require(request);
+      const after = request.after;
+      if (after !== undefined && !(after instanceof PostgresTenantCursor))
+        throw new TypeError("PostgreSQL tenant catalog continuation is invalid.");
+      const cursor = after?.state(this.#cursorIdentity);
+      const length = cursor?.length ?? this.boundaries.length;
+      const start = cursor?.index ?? 0;
+      const end = Math.min(length, start + request.count);
+      const boundaries = this.boundaries.slice(start, end);
+      request.signal.throwIfAborted();
+      return {
+        boundaries,
+        ...(end < length
+          ? { after: new PostgresTenantCursor(this.#cursorIdentity, end, length) }
+          : {}),
+        hasMore: end < length,
+      };
+    });
   }
 
   /**
@@ -786,6 +882,43 @@ class PostgresTenantCatalog implements TenantCatalog {
    */
   close(): Promise<void> {
     return Promise.resolve();
+  }
+}
+
+/**
+ * Immutable continuation issued by one configured PostgreSQL catalog.
+ */
+class PostgresTenantCursor implements TenantCatalogCursor {
+  readonly [Symbol.toStringTag] = "TenantCatalogCursor" as const;
+
+  readonly #identity: object;
+
+  readonly #index: number;
+
+  readonly #length: number;
+
+  /**
+   * Captures one configured-boundary sweep position.
+   * @param identity Private catalog issuance identity.
+   * @param index Next boundary position.
+   * @param length Fixed boundary count for this sweep.
+   */
+  constructor(identity: object, index: number, length: number) {
+    this.#identity = identity;
+    this.#index = index;
+    this.#length = length;
+    Object.freeze(this);
+  }
+
+  /**
+   * Verifies issuance before exposing the fixed sweep position.
+   * @param identity Private identity of the reading catalog.
+   * @returns Fixed boundary count and next position.
+   */
+  state(identity: object): { index: number; length: number } {
+    if (this.#identity !== identity)
+      throw new TypeError("PostgreSQL tenant catalog continuation is invalid.");
+    return { index: this.#index, length: this.#length };
   }
 }
 

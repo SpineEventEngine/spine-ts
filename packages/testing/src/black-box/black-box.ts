@@ -13,6 +13,7 @@
  */
 
 import { Time } from "@spine-event-engine/core/time";
+import type { HistoryPage, HistoryRead } from "@spine-event-engine/ai";
 import { clone, create, type Message, type MessageShape } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import {
@@ -37,15 +38,29 @@ import {
   type ZoneId,
   type Command,
   type Event,
+  type EventId,
 } from "@spine-event-engine/proto";
 import type { Query, Topic } from "@spine-event-engine/proto/client";
 import {
   BoundedContext,
+  Agent,
+  Repository,
   type BoundedContextBuilder,
+  type ConcreteRepositoryEntityType,
+  type RepositoryEntityId,
+  type RepositoryEntityType,
+  type RepositoryStateSchema,
+  type RepositoryView,
   Server,
   type RunningServer,
 } from "@spine-event-engine/server";
-import { observeProducedSignals, postExternalEvent } from "@spine-event-engine/server/testing";
+import {
+  observeProducedSignals,
+  postExternalEvent,
+  agentHistoryView,
+  readSystemEvents as readStoredSystemEvents,
+} from "@spine-event-engine/server/testing";
+import type { AgentHistoryEntry } from "@spine-event-engine/proto/agent";
 
 /**
  * Fixed configuration for one runner-neutral BlackBox session.
@@ -355,6 +370,67 @@ export class BlackBox {
   assertEvents(): readonly Event[] {
     this.#assertOpen();
     return Object.freeze(this.#events.map((event) => clone(EventSchema, event)));
+  }
+
+  /**
+   * Reads complete retained Agent history through its opaque full-history cursor.
+   *
+   * @typeParam EntityType Generated Agent class registered in this Bounded Context.
+   * @param target Exact typed Agent repository or its generated class.
+   * @param entityId Typed Agent identifier.
+   * @param request Positive page size and optional prior cursor.
+   * @returns Provider-backed entries newest first, with an older-page cursor when present.
+   */
+  readAgentHistory<
+    EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>,
+  >(
+    target: (Repository<EntityType> | EntityType) &
+      (EntityType["prototype"] extends Agent<
+        RepositoryEntityId<EntityType>,
+        RepositoryStateSchema<EntityType>
+      >
+        ? unknown
+        : never),
+    entityId: NoInfer<RepositoryEntityId<EntityType>>,
+    request: HistoryRead,
+  ): Promise<HistoryPage<AgentHistoryEntry>>;
+
+  /**
+   * Reads registered Agent history after resolving the typed target.
+   * @param target Typed repository or generated Agent class.
+   * @param entityId Agent identifier paired with the target.
+   * @param request Page size and optional prior cursor.
+   * @returns Provider-backed retained entries with an older-page cursor when present.
+   */
+  readAgentHistory(
+    target: RepositoryView | RepositoryEntityType,
+    entityId: unknown,
+    request: HistoryRead,
+  ): Promise<HistoryPage<AgentHistoryEntry>> {
+    this.#assertOpen();
+    if (typeof target === "function") {
+      const repository = this.#context
+        .registeredRepositories()
+        .find((view) => view.entityType === target);
+      if (repository === undefined)
+        throw new TypeError(
+          "Agent audit target is not registered in this BlackBox Bounded Context.",
+        );
+      return agentHistoryView(this.#context, repository, entityId, request, this.#tenant);
+    }
+    return agentHistoryView(this.#context, target, entityId, request, this.#tenant);
+  }
+
+  /**
+   * Reads original persisted System Event envelopes by exact IDs, in requested order.
+   * Missing IDs are omitted; repeated IDs return independent copies.
+   *
+   * @param ids Exact System Event IDs from retained Agent history.
+   * @returns Stored envelopes for this Bounded Context and fixed tenant.
+   */
+  readSystemEvents(ids: readonly EventId[]): Promise<readonly Event[]> {
+    this.#assertOpen();
+    return readStoredSystemEvents(this.#context, ids, this.#tenant);
   }
 
   /**

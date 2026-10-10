@@ -2,6 +2,8 @@ import js from "@eslint/js";
 import eslintConfigPrettier from "eslint-config-prettier";
 import tseslint from "typescript-eslint";
 
+const typedFiles = ["**/*.ts", "examples/release-notes/{src,test}/**/*.tsx"];
+
 export default tseslint.config(
   {
     ignores: [
@@ -20,11 +22,11 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.strictTypeChecked.map((config) => ({
     ...config,
-    files: ["**/*.ts"],
+    files: typedFiles,
   })),
   ...tseslint.configs.stylisticTypeChecked.map((config) => ({
     ...config,
-    files: ["**/*.ts"],
+    files: typedFiles,
   })),
   {
     files: ["**/*.ts"],
@@ -36,7 +38,40 @@ export default tseslint.config(
     },
   },
   {
-    files: ["scripts/**/*.mjs"],
+    files: ["packages/ai-vercel-ax/{src,test}/**/*.ts"],
+    languageOptions: {
+      parserOptions: {
+        project: [
+          "./packages/ai-vercel-ax/tsconfig.tooling.json",
+          "./packages/ai-vercel-ax/tsconfig.provider-boundary.json",
+        ],
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+  },
+  {
+    files: [
+      "examples/release-notes/{src,test}/**/*.ts",
+      "examples/release-notes/{src,test}/**/*.tsx",
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: "./examples/release-notes/tsconfig.tooling.json",
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+  },
+  {
+    files: ["packages/server-blackbox-tests/test/agent-vercel-mcp-blackbox.test.ts"],
+    languageOptions: {
+      parserOptions: {
+        project: "./packages/server-blackbox-tests/tsconfig.provider-tests.json",
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+  },
+  {
+    files: ["scripts/**/*.mjs", "examples/release-notes/scripts/**/*.mjs"],
     languageOptions: {
       globals: {
         console: "readonly",

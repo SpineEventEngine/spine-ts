@@ -1,0 +1,97 @@
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+syntax = "proto3";
+
+package spine.examples.support;
+
+import "spine/examples/support/types.proto";
+import "spine/options.proto";
+import "spine/ts/agent/model.proto";
+
+option (type_url_prefix) = "type.spine.examples.support";
+
+// Records that a warehouse incident entered the support queue.
+message SupportTicketOpened {
+  // Ticket created for the incident.
+  SupportTicketId id = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Facts supplied at opening.
+  SupportRequest request = 2 [
+    (required) = true,
+    (validate) = true
+  ];
+}
+
+// Records a reviewable proposal without sending it to the employee.
+message SupportReplySuggested {
+  // Ticket receiving the proposal.
+  SupportTicketId id = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Exact facts used for this draft.
+  SupportRequest request = 2 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Validated reply awaiting a support person's review.
+  SupportReply reply = 3 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Model operation represented in the System audit.
+  spine.ts.agent.AiOperationId operation = 4 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Explicit conversation used by the draft.
+  spine.ts.agent.ConversationId conversation = 5 [
+    (required) = true,
+    (validate) = true
+  ];
+}
+
+// Records that a request produced no usable reply.
+message SupportReplyFailed {
+  // Ticket whose draft request failed.
+  SupportTicketId id = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Facts retained for review of this outcome.
+  SupportRequest request = 2 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Model operation represented in the System audit.
+  spine.ts.agent.AiOperationId operation = 3 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Explicit conversation used by the failed request.
+  spine.ts.agent.ConversationId conversation = 4 [
+    (required) = true,
+    (validate) = true
+  ];
+}

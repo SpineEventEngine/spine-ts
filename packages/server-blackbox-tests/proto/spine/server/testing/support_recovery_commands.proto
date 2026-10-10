@@ -1,0 +1,57 @@
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+syntax = "proto3";
+
+package spine.server.testing;
+
+import "spine/options.proto";
+import "spine/server/testing/support_agent_states.proto";
+
+option (type_url_prefix) = "type.spine.server.testing";
+
+// Starts a support proposal whose execution is tested across process recovery.
+message DraftRecoverySupportReply {
+  // Identifies the support ticket handled by the recovery Agent.
+  SupportReplyAgentId agent = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Supplies the customer's question to answer.
+  string question = 2 [(required) = true];
+}
+
+// Requests a support reply informed by a prior draft and read-only ticket lookup.
+message DraftKnowledgeSupportReply {
+  // Identifies the ticket whose prior draft and lookup inform the reply.
+  SupportReplyAgentId agent = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Customer question answered after the ticket lookup.
+  string question = 2 [(required) = true];
+}
+
+// Requests a support escalation through a write-capable external tool.
+message EscalateRecoverySupportTicket {
+  // Identifies the ticket whose escalation may be interrupted.
+  SupportReplyAgentId agent = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Customer question supplied to the escalation proposal.
+  string question = 2 [(required) = true];
+}

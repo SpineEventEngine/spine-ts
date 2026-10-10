@@ -1,0 +1,201 @@
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+syntax = "proto3";
+
+package spine.examples.releasenotes;
+
+import "spine/examples/releasenotes/types.proto";
+import "spine/core/version.proto";
+import "spine/options.proto";
+import "spine/ts/agent/model.proto";
+
+option (type_url_prefix) = "type.spine.examples.releasenotes";
+
+// Records the initial editor-visible draft inputs.
+message ReleaseDraftOpened {
+  // Identifies the release draft to which this domain outcome applies.
+  ReleaseDraftId id = 1 [(required) = true, (validate) = true];
+
+  // Names the release represented by this editable draft.
+  ReleaseTitle title = 2 [(required) = true, (validate) = true];
+
+  // Pins the selected repository and its base and target commits.
+  ReleaseComparison comparison = 3 [(required) = true, (validate) = true];
+
+  // Names the readers whose needs shape these release notes.
+  string audience = 4 [(required) = true];
+}
+
+// Records changed source inputs and invalidates pending proposals.
+message ReleaseInputsChanged {
+  // Identifies the release draft to which this domain outcome applies.
+  ReleaseDraftId id = 1 [(required) = true, (validate) = true];
+
+  // Pins the selected repository and its base and target commits.
+  ReleaseComparison comparison = 2 [(required) = true, (validate) = true];
+
+  // Names the readers whose needs shape these release notes.
+  string audience = 3 [(required) = true];
+
+  // Carries structured release note entries with catalog citations.
+  ReleaseNotesDocument document = 5 [(validate) = true];
+}
+
+// Complete accepted input snapshot delivered to the per-draft Agent.
+message ReleaseGenerationRequested {
+  // Identifies the release draft to which this domain outcome applies.
+  ReleaseDraftId id = 1 [(required) = true, (validate) = true];
+
+  // Correlates this outcome with one accepted model generation.
+  ReleaseGenerationId generation = 2 [(required) = true, (validate) = true];
+
+  // Historical Entity Version at generation acceptance.
+  spine.core.Version input_version = 3 [(required) = true, (validate) = true];
+
+  // Pins the selected repository and its base and target commits.
+  ReleaseComparison comparison = 4 [(required) = true, (validate) = true];
+
+  // Contains verified committed changes the model may cite.
+  ReleaseEvidenceCatalog catalog = 5 [(validate) = true];
+
+  // Names the readers whose needs shape these release notes.
+  string audience = 6 [(required) = true];
+
+  // Conveys the editor’s requested emphasis for this generation.
+  ReleaseInstruction instruction = 7 [(required) = true, (validate) = true];
+
+  // Supplies earlier edited entries as context for another generation.
+  ReleaseNotesDocument current_document = 8 [(validate) = true];
+
+  // Conversation reused for later generations.
+  spine.ts.agent.ConversationId conversation = 9 [(required) = true, (validate) = true];
+
+  // Nonsecret model/account selection.
+  ReleaseModelSelection selection = 10 [(required) = true, (validate) = true];
+
+  // Exact accepted snapshot identity for durable idempotence in this session.
+  string input_digest = 11 [(required) = true];
+
+  // Names the release represented by this editable draft.
+  ReleaseTitle title = 12 [(required) = true, (validate) = true];
+}
+
+// Acknowledges an exact accepted generation replay without starting another operation.
+message ReleaseGenerationAlreadyRequested {
+  // Identifies the release draft to which this domain outcome applies.
+  ReleaseDraftId id = 1 [(required) = true, (validate) = true];
+
+  // Correlates this outcome with one accepted model generation.
+  ReleaseGenerationId generation = 2 [(required) = true, (validate) = true];
+
+  // Digest of the original submitted Command identity.
+  string input_digest = 3 [(required) = true];
+}
+
+// Agent-produced structured proposal, not yet an accepted document.
+message ReleaseNotesProposed {
+  // Identifies the release draft to which this domain outcome applies.
+  ReleaseDraftId id = 1 [(required) = true, (validate) = true];
+
+  // Correlates this outcome with one accepted model generation.
+  ReleaseGenerationId generation = 2 [(required) = true, (validate) = true];
+
+  // Original historical Entity Version at generation acceptance.
+  spine.core.Version input_version = 3 [(required) = true, (validate) = true];
+
+  // Carries structured release note entries with catalog citations.
+  ReleaseNotesDocument document = 4 [(required) = true, (validate) = true];
+
+  // Audited model operation identity.
+  spine.ts.agent.AiOperationId operation = 5 [(required) = true, (validate) = true];
+}
+
+// Agent-produced safe failure preserving the current document.
+message ReleaseGenerationFailed {
+  // Identifies the release draft to which this domain outcome applies.
+  ReleaseDraftId id = 1 [(required) = true, (validate) = true];
+
+  // Correlates this outcome with one accepted model generation.
+  ReleaseGenerationId generation = 2 [(required) = true, (validate) = true];
+
+  // Original historical Entity Version at generation acceptance.
+  spine.core.Version input_version = 3 [(required) = true, (validate) = true];
+
+  // Records a safe failure code without provider text or credentials.
+  string reason = 4 [(required) = true];
+
+  // Audited model operation identity.
+  spine.ts.agent.AiOperationId operation = 5 [(required) = true, (validate) = true];
+}
+
+// Authoritative draft decision applying the latest proposal.
+message ReleaseNotesStaged {
+  // Identifies the release draft to which this domain outcome applies.
+  ReleaseDraftId id = 1 [(required) = true, (validate) = true];
+
+  // Correlates this outcome with one accepted model generation.
+  ReleaseGenerationId generation = 2 [(required) = true, (validate) = true];
+
+  // Carries structured release note entries with catalog citations.
+  ReleaseNotesDocument document = 4 [(required) = true, (validate) = true];
+}
+
+// Authoritative draft decision keeping a stale proposal out of the draft.
+message ReleaseProposalDiscarded {
+  // Identifies the release draft to which this domain outcome applies.
+  ReleaseDraftId id = 1 [(required) = true, (validate) = true];
+
+  // Correlates this outcome with one accepted model generation.
+  ReleaseGenerationId generation = 2 [(required) = true, (validate) = true];
+
+}
+
+// Records a failed latest generation without replacing the document.
+message ReleaseGenerationStatusChanged {
+  // Identifies the release draft to which this domain outcome applies.
+  ReleaseDraftId id = 1 [(required) = true, (validate) = true];
+
+  // Correlates this outcome with one accepted model generation.
+  ReleaseGenerationId generation = 2 [(required) = true, (validate) = true];
+
+  // Records a safe failure code without provider text or credentials.
+  string reason = 4 [(required) = true];
+}
+
+// Records one editor replacement of structured entries.
+message ReleaseNotesEdited {
+  // Identifies the release draft to which this domain outcome applies.
+  ReleaseDraftId id = 1 [(required) = true, (validate) = true];
+
+  // Carries structured release note entries with catalog citations.
+  ReleaseNotesDocument document = 3 [(validate) = true];
+}
+
+// Records exact approved Markdown bytes for a reviewed document.
+message ReleaseNotesApproved {
+  // Identifies the release draft to which this domain outcome applies.
+  ReleaseDraftId id = 1 [(required) = true, (validate) = true];
+
+  // Carries the reviewed Markdown bytes and digest accepted for export.
+  ReleaseApproval approval = 2 [(required) = true, (validate) = true];
+}
+
+// Provides an immutable approved snapshot to the trusted export service.
+message ReleaseNotesExportPrepared {
+  // Identifies the release draft to which this domain outcome applies.
+  ReleaseDraftId id = 1 [(required) = true, (validate) = true];
+
+  // Carries the reviewed Markdown bytes and digest accepted for export.
+  ReleaseApproval approval = 2 [(required) = true, (validate) = true];
+}

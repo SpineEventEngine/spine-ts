@@ -28,6 +28,7 @@ import {
 import type { GeneratedStandaloneHandlerGroup } from "../../src/handler/generated-handler-registry.js";
 import { StandaloneHandlerRuntime } from "../../src/runtime/standalone-handler-runtime.js";
 import { EventDispatcherRegistry } from "../../src/bus/event-dispatcher-registry.js";
+import { SavedDispatcherBindings } from "../../src/bus/saved-dispatcher-binding.js";
 import {
   ProjectStateSchema,
   type ProjectState,
@@ -478,6 +479,114 @@ describe("StandaloneHandlerRuntime", () => {
     );
 
     expect(receiver.calls).toEqual(["selected"]);
+  });
+
+  it("saves standalone filter selection and rejects changed receiver metadata", async () => {
+    const receiver = new FilteredSubscriber();
+    const group: GeneratedStandaloneHandlerGroup = {
+      receiverKind: "standalone",
+      receiverType: FilteredSubscriber,
+      handlers: [
+        {
+          kind: "event-subscription",
+          methodName: "selected",
+          input: {
+            schema: ReviewTaskAssignedSchema,
+            origin: "domestic",
+            where: { eventField: "name", equals: "selected" },
+          },
+          outcomes: { returned: [], thrown: [] },
+          parameterCount: 1,
+        },
+        {
+          kind: "event-subscription",
+          methodName: "fallback",
+          input: { schema: ReviewTaskAssignedSchema, origin: "domestic" },
+          outcomes: { returned: [], thrown: [] },
+          parameterCount: 1,
+        },
+      ],
+    };
+    const runtime = new StandaloneHandlerRuntime([
+      { group, instance: receiver, publisher: {} as never },
+    ]);
+    const dispatcher = runtime.eventDispatcher();
+    if (dispatcher === undefined) throw new Error("Expected standalone Event dispatcher.");
+    const binding = SavedDispatcherBindings.forEvent(dispatcher);
+    if (binding === undefined) throw new Error("Expected saved standalone binding.");
+    const event = create(EventSchema, {
+      id: { value: "saved-event" },
+      message: AnyMessages.pack(
+        ReviewTaskAssignedSchema,
+        create(ReviewTaskAssignedSchema, { name: "selected" }),
+      ),
+    });
+    const target = await binding.prepare(event);
+    const deliver = await binding.bind(event, target);
+    await deliver();
+    expect(receiver.calls).toEqual(["selected"]);
+
+    const changed = new StandaloneHandlerRuntime([
+      {
+        group: {
+          ...group,
+          handlers: group.handlers.map((handler) =>
+            handler.methodName === "selected"
+              ? {
+                  ...handler,
+                  input: { ...handler.input, where: { eventField: "name", equals: "other" } },
+                }
+              : handler,
+          ),
+        },
+        instance: receiver,
+        publisher: {} as never,
+      },
+    ]).eventDispatcher();
+    if (changed === undefined) throw new Error("Expected changed Event dispatcher.");
+    await expect(SavedDispatcherBindings.forEvent(changed)?.bind(event, target)).rejects.toThrow(
+      "Saved standalone dispatcher binding changed before delivery.",
+    );
+  });
+
+  it("rebinds a saved standalone Command to its generated assignee", async () => {
+    const receiver = new RejectingAssignee();
+    const published: Event[] = [];
+    const group: GeneratedStandaloneHandlerGroup = {
+      receiverKind: "standalone",
+      receiverType: RejectingAssignee,
+      handlers: [
+        {
+          kind: "command-assignment",
+          methodName: "assign",
+          input: { schema: AssignReviewTaskSchema, origin: "domestic" },
+          outcomes: { returned: [ReviewTaskAssignedSchema], thrown: [ReviewRejectedSchema] },
+          parameterCount: 1,
+        },
+      ],
+    };
+    const dispatcher = new StandaloneHandlerRuntime([
+      {
+        group,
+        instance: receiver,
+        publisher: {
+          publishRejectionEvent: (event: Event) => {
+            published.push(event);
+            return Promise.resolve();
+          },
+        } as never,
+      },
+    ]).commandDispatcher();
+    if (dispatcher === undefined) throw new Error("Expected standalone Command dispatcher.");
+    const binding = SavedDispatcherBindings.forCommand(dispatcher);
+    if (binding === undefined) throw new Error("Expected saved standalone Command binding.");
+    const command = reviewAssignmentCommand("saved-command");
+    const target = await binding.prepare(command);
+    await (
+      await binding.bind(command, target)
+    )();
+    expect(published).toHaveLength(1);
+    expect(published[0]?.context?.rejection?.command?.id?.uuid).toBe("saved-command");
   });
 
   it("advertises external standalone subscribers and preserves their @Where selection", async () => {

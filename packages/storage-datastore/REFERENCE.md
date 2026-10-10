@@ -124,6 +124,20 @@ truncate behavior. Timestamp comparisons include seconds and nanoseconds.
 Long maintenance can commit several bounded chunks, so a later failure leaves
 earlier chunks durable and the caller retries the same idempotent operation.
 
+The provider-only Agent history handle uses the fixed `spine_agent_history`
+kind in each complete tenant namespace. Each row retains the original complete
+`AgentHistoryEntry` and full state type and Agent key. SHA-256 digests provide
+bounded physical IDs and indexed scope/conversation keys; every decoded row is
+checked against the complete requested scope and conversation. A digest
+collision fails the read. `index.yaml` declares three complete composite
+indexes for scope plus full order, scope plus category plus full order, and
+scope plus conversation digest plus full order. The order value encodes full
+Timestamp seconds/nanoseconds, category, and unsigned UTF-8 record ID. Values
+longer than Datastore's 1,500-byte indexed-string limit reject before append;
+original scope strings remain unindexed in the payload. Reads use native pages
+of at most 128 rows and sum serialized entry bytes. A fetched chunk can be
+larger than the returned byte budget.
+
 The factory has one tenant catalog. It reads native `__namespace__` metadata,
 converts only namespaces recognized by its `NamespaceConverter`, and keeps an early
 in-memory cache for newly admitted tenants. `keep()` stores no `TenantId` row or
@@ -136,6 +150,32 @@ enumerates native namespaces and kinds and fails closed on discovery errors,
 an old `_scope` property, or a scope-derived key name. Passing the inventory is
 a startup prerequisite; the application performs migration offline, with no
 dual-layout reads or automatic conflict winner.
+
+## Agent execution
+
+Agent execution uses `spine_agent_execution` and `spine_agent_execution_head` in
+the selected tenant namespace. Deploy the execution indexes in this package's
+`index.yaml` together with its Agent history indexes. Pending queries select one
+entry per instance by its complete eligibility-time key.
+
+The database must support the adapter's non-ancestor query inside a transaction.
+The `OPTIMISTIC_WITH_ENTITY_GROUPS` concurrency mode requires ancestor queries
+and is therefore incompatible with Agent execution in this adapter. See
+[Datastore transaction modes](https://docs.cloud.google.com/datastore/docs/concepts/transactions).
+Admission probes that query and the indexed pending query before saving work.
+A database mode that forbids it is rejected; the adapter does not fall back to
+a scan or a query outside the transaction. The local Agent execution conformance suite uses the Firestore emulator in
+Datastore mode, distributed with Google Cloud CLI 578.0.0. This tests the
+transactional query capability; it does not validate a production project's
+configuration.
+
+Conditional completion reads the current Entity Version and pending work before
+queuing writes. State, mandatory history, preferences, execution completion and
+outgoing signals are saved in the same transaction. Datastore entity, index and
+transaction limits still apply: execution, per-instance and Agent history
+payloads are limited to 1,000,000 encoded bytes each, and the adapter limits a staged transaction to
+9 MiB. Response reservations must account for the complete stored records before
+inference. No transaction remains open during a model call.
 
 ## Operations and errors
 

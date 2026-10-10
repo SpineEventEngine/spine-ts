@@ -13,7 +13,7 @@
  */
 
 import { isEntitySchema, type DescriptorMessageSchema } from "../entity/entity-metadata.js";
-import { ProcessManager } from "../entity/entity.js";
+import { Agent, ProcessManager } from "../entity/entity.js";
 import {
   AbstractAssignee,
   AbstractCommander,
@@ -783,14 +783,26 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
    */
   validateCommandHandlers(entity: GeneratedEntityHandlerGroup): void {
     if (
+      entity.receiverType.prototype instanceof Agent &&
       entity.handlers.some(
-        (handler) => handler.kind === "command-substitution" || handler.kind === "command-reaction",
-      ) &&
-      !(entity.receiverType.prototype instanceof ProcessManager)
+        (handler) => handler.kind === "event-subscription" || handler.kind === "state-subscription",
+      )
     ) {
       throw new HandlerRegistryIngestionError(
         "UNSUPPORTED_HANDLER_KIND",
-        "Generated @Command handlers are supported only by Process Manager entities.",
+        "Generated @Subscribe handlers are unavailable for Agent entities.",
+      );
+    }
+    if (
+      entity.handlers.some(
+        (handler) => handler.kind === "command-substitution" || handler.kind === "command-reaction",
+      ) &&
+      !(entity.receiverType.prototype instanceof ProcessManager) &&
+      !(entity.receiverType.prototype instanceof Agent)
+    ) {
+      throw new HandlerRegistryIngestionError(
+        "UNSUPPORTED_HANDLER_KIND",
+        "Generated @Command handlers require Process Manager or Agent entities.",
       );
     }
   },

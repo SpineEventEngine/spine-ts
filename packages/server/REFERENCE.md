@@ -238,11 +238,13 @@ route registration API.
 
 Handlers may return their established result directly or through exactly one built-in `Promise<T>`.
 Nested promises and structural or imported thenable lookalikes are rejected during handler analysis.
-The entity transaction remains open until that promise settles; rejection rolls
-back framework state and suppresses produced output, but cannot undo external
-side effects. Process Managers may use their protected read-only query surface
-for eventually consistent Entity state during a handler. Aggregates must not
-use these reads for invariants.
+The in-memory Entity draft remains active until that promise settles. Storage
+writes use separate short operations after the handler succeeds; a rejected
+handler leaves no partial persisted state or produced signals, but cannot undo
+external side effects. Process Managers may use their protected read-only query
+surface for eventually consistent Entity state during a handler. Agents expose
+the generated `select(query).read()` form under the same handler scope and
+limits. Aggregates must not use these reads for invariants.
 
 `select(schema, columns)` supports `byId`, typed `where`, `orderBy`,
 `limit`, `read`, `findById`, and `all`. A Process Manager query returns at most
@@ -329,10 +331,11 @@ A command-input `@Command` method is a command substitution receptor: it is
 the one effective receptor for that Command type (instead of an `@Assign`),
 commits its Entity state before its one-or-more returned Commands are detached
 for in-process produced-command enqueue, and receives an optional `CommandContext`.
-Only Process Manager repositories support `@Command` handlers. Aggregate and
-Projection repositories reject command-input substitutions and event- or
+Process Manager and Agent repositories support `@Command` handlers. Aggregate
+and Projection repositories reject command-input substitutions and event- or
 rejection-input command reactions during generated metadata ingestion and
-repository construction.
+repository construction. Agents reject `@Subscribe`, including Entity-state
+Apply handlers, at generation and runtime registration.
 Event- and rejection-input `@Command` methods remain Event- or
 rejection-to-command reactions on Event Bus.
 
@@ -542,6 +545,11 @@ handler registry for classes registered with `add(EntityClass)`;
 `buildAsync()` performs that discovery and assembly. `build()` remains for
 explicit `Repository` registration. A built context contains `CommandBus`,
 `EventBus`, `Stand`, repositories, and its storage lifecycle.
+Trusted server-side code can call `context.getRepository(EntityClass)` to obtain
+the already registered repository for that exact constructor. The lookup does
+not create a repository or read Entity state; an absent class or closing
+Bounded Context fails explicitly. Application code must authorize users before
+exposing repository reads through a client bridge.
 
 Generated writer output is an unversioned receiver collection and records
 command substitutions explicitly. The ingestor rejects retired versioned
@@ -615,8 +623,10 @@ configuration and Datastore custom record storage registered for
 `SubscriptionRecord` are used by the registry. The registry uses one
 record-storage handle, while the context closes the registry.
 
-`Entity` is the state base class. `Aggregate`, `Projection`, and
-`ProcessManager` identify the three entity families. Handler decorators are
+`Entity` is the state base class. `Aggregate`, `Projection`,
+`ProcessManager`, and `Agent` identify the four entity families. Agent state
+declares canonical Proto kind `ENTITY` and uses the same Spine `Version`.
+Handler decorators are
 `@Assign`, `@Command`, `@React`, and `@Subscribe`. A command-accepting
 handler uses `@Throws(GeneratedRejection)` to declare its possible domain
 rejections. Write the primary handler decorator first and `@Throws` immediately
@@ -633,6 +643,172 @@ zero. A dispatch that produces Events or changes state or lifecycle advances it
 once; no-op and rejected dispatches do not. Repositories restore and persist the
 full Version, including its timestamp, across current state, history, and Stand.
 
+## Agent execution
+
+Agents extend `Agent<Id, typeof StateSchema>`. The state declares Proto kind
+`ENTITY`; IDs, state, Version, validation and routing use the normal Entity
+contracts. Agents accept `@Assign`, `@React` and `@Command`, including declared
+rejections as inputs. They reject `@Subscribe` and Entity-state Apply handlers.
+The Agent runs only after an accepted signal. A model response or timer cannot
+start a new autonomous Entity loop.
+
+### Configuration
+
+Register a factory-created `AiRegistry`, enable `persistSystemEvents()`, and
+configure `agentCodeRevision` plus `ai.models` for each Agent repository. Use
+an empty `models` array when that Agent has no model calls. Readiness requires
+indexed Agent history and execution storage from the selected provider.
+The [Support Bounded Context](../../examples/support/src/index.ts) uses generated
+registration with these options.
+
+Configuration has these scopes:
+
+| Scope           | Setting                                  | Effect                                                                   |
+| --------------- | ---------------------------------------- | ------------------------------------------------------------------------ |
+| Server          | `Server.withAi(registry)`                | Default registry for Bounded Context builders assembled by that server.  |
+| Bounded Context | `BoundedContextBuilder.withAi(registry)` | Explicit registry replacing the server default for that Bounded Context. |
+| Repository      | `ai.defaultModels`                       | Generation and decision defaults before the registry's defaults.         |
+| Repository      | `ai.allowedModels`                       | Deployment references the Agent may use.                                 |
+| Repository      | `ai.resolveModel`                        | Optional accepted-source choice before the Agent handler.                |
+| Repository      | `ai.authorizeSelection`                  | Authorizes explicit choices and staged preference changes.               |
+| Repository      | `ai.invocationLimits`                    | Limits that can narrow the registry's whole-signal limits.               |
+| Instance        | `this.ai.select(kind, ref)`              | A saved preference applied to later accepted signals.                    |
+
+A prebuilt Bounded Context already has its registry; adding it to a server does not
+reconfigure it. An instance preference takes precedence over its repository
+default, which takes precedence over the effective registry default. Passing
+`undefined` to `select` restores inheritance. Selection must satisfy the
+repository policy and `authorizeSelection` callback; it cannot extend the
+repository's allowed deployments. The current signal keeps its original selection.
+
+`resolveModel(kind, scope, sourceMessage, control)` can choose a registered
+deployment from a detached copy of the original accepted Command or Event
+payload. A concrete result overrides preference and default precedence for that
+signal; `undefined` preserves it. This allows an Agent without a configured
+default to start after a deployment is appended to the bound registry. The
+runtime checks repository allowlists, capabilities and `authorizeSelection`
+before saving the selection and connection identity. A saved selection is reused
+on continuation. Resolver and authorization callbacks receive linked cancellation
+and the smaller of the invocation deadline and registry hook timeout. An
+effective `this.ai.select()` change, including reset to inheritance, is
+authorized before the Entity transition and preference Events commit; a no-op
+change skips that callback.
+
+Model registrations resolve a credential-free connection identity and authorize
+use for the original actor, tenant, Agent and source signal. Connection callbacks
+can obtain an API key, refreshed token, cloud credential or local model handle
+through application code. The optional adapter supplies a guarded fetch function
+for provider construction. Spine does not implement a provider's login flow.
+See [adapter configuration](../ai-vercel-ax/README.md).
+
+### Acceptance and completion
+
+Before acknowledging Agent intake, the runtime saves the original signal,
+recipient, selected handlers and code/schema/policy revisions. The scheduler
+processes one accepted signal at a time per Agent instance, under a provider
+claim. Different instances can run concurrently within configured limits.
+Bounded Contexts using the same registry object share its capacity within the process.
+Signals beyond the bounded in-memory waiting queue remain durably pending.
+Waiting before a fresh execution starts precedes its deadline. Once execution
+starts, recovery continues with the saved deadline and counts. The same deadline
+bounds an awaited application handler. Expiry or Bounded Context shutdown ends that wait
+and prevents late handler results from changing Entity state or emitting signals;
+it cannot stop arbitrary application JavaScript or undo external effects.
+
+Newly accepted work supplies its repository and tenant to prompt discovery.
+Periodic discovery reads tenant pages and constructs repository scopes as they
+are needed. It retains at most one page of 16 tenants, four periodic scan scopes,
+and 64 scopes awaiting a prompt scan. A turn requests at most one tenant page
+and reads at most four pending-work pages. It does not load the complete tenant
+catalog or retain a scan position for every tenant.
+
+A sweep finishes before another begins. The next starts no earlier than five
+seconds after the preceding sweep started, measured by `Time`; longer sweeps
+restart after completion. This lets discovery reach tenants near the end of a
+large catalog and find later admissions on the next sweep. Periodic scans keep
+their turn during new arrivals, including while execution capacity is full.
+A pending catalog request does not block prompt scans of known scopes.
+
+Bounded Context shutdown stops waiting for discovery reads even if a provider ignores
+cancellation. Late results cannot submit work or restart scanning. Built-in
+adapters use their available cancellation and timeout controls; detaching the
+scheduler does not guarantee cancellation of an already issued native request.
+
+The signal's matching handlers share one Entity draft. Each handler can await
+`this.ai.invoke()` through the protected Spine facade. Calls in one handler must
+be sequential and finish before it returns. Requests, results and
+validation failures are saved as the operation progresses. The final accepted
+state, Version, history and original outgoing envelopes are committed under the
+same execution claim. A no-op still completes its execution record. Waiting for
+a provider does not hold a database transaction open.
+
+Recovery compares the registered handler, schema and policy with accepted work.
+A saved named call can reuse its result; changing that call's input or prepared
+request is a mismatch, not a new attempt. Domain code should derive its decisions
+from accepted signals and recorded reads. Arbitrary external effects performed
+by handler code are outside the model/tool journal.
+
+After completion, delivery uses the saved outgoing envelopes and recipient
+bindings. The producing handler and model are not rerun to deliver them.
+Downstream delivery is at least once: a recipient or standalone callback may be
+called again with the same envelope. Application effects must account for that.
+Generated repository and standalone receivers have the required binding metadata.
+Matching raw custom dispatchers without that metadata are rejected for Agent
+output; unrelated dispatchers and ordinary non-Agent posting keep their usual
+behavior.
+
+### Retained history
+
+Every Agent records conversations, System Events and its emitted domain Events.
+The paired System Context EventStore also keeps System Events. Agent history
+reads use dedicated repository indexes for that instance and tenant, rather than
+scanning the Bounded Context-wide stores. Memory storage lasts for the process; choose a
+persistent provider when records must survive process termination.
+
+| Protected method               | Returned `HistoryPage.items`                                                   |
+| ------------------------------ | ------------------------------------------------------------------------------ |
+| `fullHistory(request)`         | `AgentHistoryEntry` oneof: conversation record, System Event, or domain Event. |
+| `conversationHistory(request)` | `ConversationRecord` for the required `conversation` ID.                       |
+| `systemEventHistory(request)`  | Original System Event envelopes.                                               |
+| `domainEventHistory(request)`  | Original domain Event envelopes emitted by this Agent.                         |
+
+All methods return newest entries first. A request supplies positive `pageSize`
+and an optional opaque cursor; `nextCursor` continues toward older entries.
+There is no fixed 100-item ceiling. A 1 MiB serialized page bound can shorten a
+page; an individual record larger than that bound fails explicitly. Ordering
+uses the full Spine `Time` timestamp, category and existing record ID. There is
+no repository-managed history counter. Cursors cannot be transferred across
+Agents, tenants, categories or conversations.
+
+Recording has no off switch, expiry policy or Agent-specific purge operation.
+Archive and logical deletion retain the history. General physical Entity deletion
+is a separate feature; this API does not introduce it. Authentication callbacks do not become conversation records. Hidden model
+reasoning is not part of the audit API. The records describe the supplied
+requests, received supported content, tool calls and admitted outcomes.
+
+Use `BlackBox.readAgentHistory(AgentClass, id, request)` to inspect full
+history in an application test. `BlackBox.readSystemEvents(ids)` reads the paired
+System store by exact Event IDs. See the [testing reference](../testing/REFERENCE.md)
+and [complete support tests](../../examples/support/test/support-blackbox.test.ts).
+
+For a trusted application bridge, `context.getRepository(AgentClass)` returns
+the registered Agent `Repository`, which exposes
+`agentHistory(id, scope)` with the same four history methods and page contracts.
+The scope is explicit: pass `{}` in a single-tenant Bounded Context or
+`{ tenantId }` in a multitenant Bounded Context. The repository also exposes
+`agentExecution(id, sourceCommandOrEventId, scope)` for the exact recorded phase:
+`accepted`, `active`, `completed-pending-delivery`, `completed`, or `terminated`.
+An absent record returns `undefined`; it does not establish completion. These
+reads use indexed storage without restoring an Agent. The application bridge
+must authorize access before calling either method; actor metadata does not
+grant read permission.
+
+If a selected model's `authorizeUse` callback explicitly returns `false` at
+Agent claim time, the execution becomes `terminated` with one
+`AgentInvocationTerminated` System Event carrying `MODEL_USE_DENIED`. No Agent
+handler runs and no application-domain result Event is emitted. Callback
+exceptions and infrastructure failures remain distinct from this denial.
+
 ## Signals, validation, and rejection behavior
 
 `CommandBus` validates every accepted command from Proto validation options
@@ -646,18 +822,18 @@ UUIDs; fixed IDs belong only to existing source envelopes retained through the
 normal origin chain.
 
 An application handler throws a generated core `RejectionThrowable` for a
-domain rejection declared with `@Throws`. The repository rolls back state,
-version, lifecycle, and output; it schedules the typed rejection event independently. Command service
+domain rejection declared with `@Throws`. The repository discards the unaccepted
+draft and output, retaining the previous state, Version and lifecycle; it schedules the typed rejection event independently. Command service
 acknowledgement remains an accepted `Ack`. Rejection-event posting can be
 unobserved by inactive, full, or closed subscriptions and a posting failure is
 an internal diagnostic, not a retry guarantee.
 
 Every domain context has an internal paired System Context. Domain events use
 the domain `EventBus` and domain `EventStore`. System events use only the
-System Context `EventBus`, so they never enter the domain EventStore. System
-event persistence is optional: `persistSystemEvents()` enables the paired
-System Context's separate storage; otherwise the bus validates, dispatches,
-and notifies without appending. Schemas may come from an external dispatcher or
+System Context `EventBus`, so they never enter the domain EventStore.
+`persistSystemEvents()` enables the paired System Context's separate storage.
+Bounded Contexts with Agents must enable it. For other Bounded Contexts it is optional; without
+it, the bus validates, dispatches and notifies without appending. Schemas may come from an external dispatcher or
 a registered internal repository producer. A producer-only schema is not
 thereby an external dispatch route.
 
@@ -863,7 +1039,7 @@ const context = BoundedContext.singleTenant("Tasks")
   .build();
 ```
 
-Aggregate commands and Process Manager commands/events derive their target shard
+Aggregate commands and Process Manager or Agent commands/events derive their target shard
 internally and persist their envelope in the target Entity Inbox before any
 handler runs. Local intake can directly drain the persisted Inbox in the
 current request path. Attached `ServerEnvironment` ports acknowledge admission

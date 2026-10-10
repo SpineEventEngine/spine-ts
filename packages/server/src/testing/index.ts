@@ -13,8 +13,47 @@
  */
 
 import { ServerEnvironmentLifecycle } from "../server/server-environment.js";
+import type { Agent } from "../entity/entity.js";
 import { boundedContextAccess, type BoundedContext } from "../context/bounded-context.js";
-import type { Command, Event } from "@spine-event-engine/proto";
+import { clone } from "@bufbuild/protobuf";
+import type { HistoryPage, HistoryRead } from "@spine-event-engine/ai";
+import { Validate } from "@spine-event-engine/core";
+import {
+  EventIdSchema,
+  EventSchema,
+  type Command,
+  type Event,
+  type EventId,
+} from "@spine-event-engine/proto";
+import type { AgentHistoryEntry } from "@spine-event-engine/proto/agent";
+import type { TenantId } from "@spine-event-engine/proto";
+import { EventStore } from "@spine-event-engine/storage";
+import type {
+  AgentHistoryOrderKey,
+  AgentHistoryPage,
+  AgentHistoryView,
+} from "@spine-event-engine/storage/provider";
+import {
+  repositoryAccess,
+  type ConcreteRepositoryEntityType,
+  type Repository,
+  type RepositoryEntityId,
+  type RepositoryEntityType,
+  type RepositoryStateSchema,
+  type RepositoryView,
+} from "../repository/repository.js";
+
+type AgentHistoryReader = (
+  repository: RepositoryView,
+  entityId: unknown,
+  view: AgentHistoryView,
+  read: {
+    readonly count: number;
+    readonly maxBytes: number;
+    readonly after?: AgentHistoryOrderKey;
+  },
+  tenantId?: TenantId,
+) => Promise<AgentHistoryPage>;
 
 export {
   unpackExternalEvent,
@@ -26,7 +65,9 @@ export {
 /**
  * Provides deterministic server-environment cleanup for package tests.
  */
-export const ServerTests: { readonly resetEnvironment: () => Promise<void> } = Object.freeze({
+export const ServerTests: {
+  readonly resetEnvironment: () => Promise<void>;
+} = Object.freeze({
   // prettier-ignore
 
   /**
@@ -70,4 +111,119 @@ export function observeProducedSignals(
   },
 ): { readonly close: () => void } {
   return boundedContextAccess.observeProducedSignals(context, observer);
+}
+
+/**
+ * Reads a repository's Agent audit records during a BlackBox test.
+ *
+ * This observation does not construct an application Entity or publish System Events.
+ *
+ * @param repository Registered Agent repository in the running test Bounded Context.
+ * @param entityId Typed Agent identifier.
+ * @param view Indexed history category to observe.
+ * @param read Requested count, byte budget, and complete continuation key.
+ * @param tenantId Complete tenant identifier for a multitenant test.
+ * @returns Provider-backed audit entries and continuation status.
+ */
+export const readAgentHistory: AgentHistoryReader = (repository, entityId, view, read, tenantId) =>
+  repositoryAccess.agentHistory(repository, entityId, view, read, tenantId);
+
+/**
+ * Reads retained Agent history through the same cursor contract as Entity handlers.
+ *
+ * @param context Running test Bounded Context that registered the repository.
+ * @typeParam EntityType Generated Agent class registered by the Bounded Context.
+ * @param target Typed Agent repository or its generated class.
+ * @param entityId Typed identifier of the Agent to inspect.
+ * @param request Page size and optional continuation from an earlier full-history page.
+ * @param tenantId Fixed tenant of a multitenant BlackBox; absent for a single tenant.
+ * @returns Newest-first complete history entries and continuation for older entries.
+ */
+export function readAgentHistoryPage<
+  EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>,
+>(
+  context: BoundedContext,
+  target: (Repository<EntityType> | EntityType) &
+    (EntityType["prototype"] extends Agent<
+      RepositoryEntityId<EntityType>,
+      RepositoryStateSchema<EntityType>
+    >
+      ? unknown
+      : never),
+  entityId: NoInfer<RepositoryEntityId<EntityType>>,
+  request: HistoryRead,
+  tenantId?: TenantId,
+): Promise<HistoryPage<AgentHistoryEntry>> {
+  const repository =
+    typeof target === "function"
+      ? context.registeredRepositories().find((view) => view.entityType === target)
+      : target;
+  if (repository === undefined)
+    throw new TypeError("Agent audit target is not registered in this BlackBox Bounded Context.");
+  return agentHistoryView(context, repository, entityId, request, tenantId);
+}
+
+/**
+ * Reads a Bounded Context-issued repository view for framework conformance checks.
+ *
+ * @param context Running test Bounded Context that issued the view.
+ * @param repository Bounded Context-issued repository view.
+ * @param entityId Entity ID presented by the framework test.
+ * @param request Page size and optional opaque cursor.
+ * @param tenantId Fixed tenant when the Bounded Context is multitenant.
+ * @returns Provider-backed Agent history page.
+ */
+export function agentHistoryView(
+  context: BoundedContext,
+  repository: RepositoryView,
+  entityId: unknown,
+  request: HistoryRead,
+  tenantId?: TenantId,
+): Promise<HistoryPage<AgentHistoryEntry>> {
+  const registered = boundedContextAccess.resolveRepository(context, repository);
+  if (registered === undefined)
+    throw new TypeError(
+      "Agent audit repository is not registered in this BlackBox Bounded Context.",
+    );
+  return repositoryAccess.agentHistoryPage(registered, entityId, request, tenantId);
+}
+
+/**
+ * Reads persisted System Events by their original IDs from the paired System Context.
+ *
+ * @param context Application Bounded Context whose System EventStore is inspected.
+ * @param ids Exact Event IDs in the requested result order; missing IDs are omitted.
+ * @param tenantId Fixed tenant of a multitenant BlackBox; absent for a single tenant.
+ * @returns Independent Event envelopes in requested order, or an empty array for no IDs.
+ */
+export async function readSystemEvents(
+  context: BoundedContext,
+  ids: readonly EventId[],
+  tenantId?: TenantId,
+): Promise<readonly Event[]> {
+  if (ids.length === 0) return [];
+  for (const id of ids) {
+    Validate.check(EventIdSchema, id);
+    if (id.value.trim().length === 0)
+      throw new TypeError("System Event read requires a nonblank EventId.");
+  }
+  const system = boundedContextAccess.systemPairing(context).system;
+  if (!system.storesEvents) throw new Error("This Bounded Context does not persist System Events.");
+  const store = new EventStore(
+    {
+      name: system.name.value,
+      multitenant: system.multitenant,
+      ...(tenantId === undefined ? {} : { tenantId }),
+    },
+    boundedContextAccess.storageFactory(context),
+  );
+  try {
+    const found = new Map((await store.read({ ids })).map((event) => [event.id?.value, event]));
+    return ids.flatMap((id) => {
+      const event = found.get(id.value);
+      return event === undefined ? [] : [clone(EventSchema, event)];
+    });
+  } finally {
+    store.close();
+  }
 }

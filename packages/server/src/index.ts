@@ -137,6 +137,7 @@ export {
 
 export {
   Aggregate,
+  Agent,
   Entity,
   type EntityFamily,
   type EntityLifecycleFlags,
@@ -242,10 +243,14 @@ export { EventRouting, type EventRoute } from "./repository/event-routing.js";
 export { StateUpdateRouting, type StateUpdateRoute } from "./repository/state-update-routing.js";
 
 export {
+  type AgentExecutionStatus,
+  type AgentHistoryReader,
+  type AgentReadScope,
   type ConcreteRepositoryEntityType,
   Repository,
   type RepositoryCommandRoute,
   type RepositoryEntityType,
+  type RepositoryEntityId,
   type RepositoryEventRoute,
   RepositoryIdentityError,
   type RepositoryIdentityErrorCode,

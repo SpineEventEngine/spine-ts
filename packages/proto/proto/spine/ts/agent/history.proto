@@ -1,0 +1,99 @@
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+
+syntax = "proto3";
+
+package spine.ts.agent;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/timestamp.proto";
+import "spine/core/event.proto";
+import "spine/options.proto";
+import "spine/ts/agent/model.proto";
+
+option (type_url_prefix) = "type.spine.io";
+
+// Identifies one recorded model or tool request or response.
+message ConversationRecordId {
+  // Identifier assigned when the exchange is recorded.
+  string value = 1 [(required) = true];
+}
+
+// Continuation returned by one Agent history read method.
+message AgentHistoryCursor {
+  // Opaque scope and complete ordering-key continuation.
+  string value = 1 [(required) = true];
+}
+
+// One request or response exchanged with a model or tool.
+message ConversationRecord {
+  // Identity of this immutable record.
+  ConversationRecordId id = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Conversation continued by this exchange.
+  ConversationId conversation = 2 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Model operation during which the exchange occurred.
+  AiOperationId operation = 3 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Occurrence timestamp supplied by Spine Time.
+  google.protobuf.Timestamp occurred_at = 4 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Exactly one documented generation, decision or tool content message.
+  google.protobuf.Any content = 5 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Physical model request when this record concerns a provider request.
+  AiAttemptId attempt = 6 [(validate) = true];
+
+  // Logical tool call when this record concerns external tool execution.
+  AiToolCallId tool_call = 7 [(validate) = true];
+}
+
+// One entry in the Agent's combined repository history.
+message AgentHistoryEntry {
+  // Original occurrence timestamp of the enclosed record or Event.
+  google.protobuf.Timestamp occurred_at = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Exactly one recorded item in the combined history.
+  oneof item {
+    option (choice).required = true;
+
+    // Model or tool request or response.
+    ConversationRecord conversation_record = 2 [(validate) = true];
+
+    // Original System Event concerning this Agent.
+    spine.core.Event system_event = 3 [(validate) = true];
+
+    // Original domain Event emitted by this Agent.
+    spine.core.Event domain_event = 4 [(validate) = true];
+  }
+}

@@ -16,6 +16,7 @@ import * as http2 from "node:http2";
 import type { AddressInfo } from "node:net";
 
 import { connectNodeAdapter } from "@connectrpc/connect-node";
+import type { AiRegistry } from "@spine-event-engine/ai";
 
 import {
   BoundedContext,
@@ -88,6 +89,8 @@ export class Server {
 
   readonly #contexts: ServerContext[] = [];
 
+  #aiRegistry: AiRegistry | undefined;
+
   readonly #resources: { close(): unknown }[] = [];
 
   readonly #listenerLifecycles: ListenerLifecycle[] = [];
@@ -155,6 +158,18 @@ export class Server {
    */
   add(context: BoundedContext | BoundedContextBuilder): this {
     this.#contexts.push(context);
+    return this;
+  }
+
+  /**
+   * Sets the default AI registry for Bounded Context builders added to this server.
+   * An explicit Bounded Context registry takes precedence.
+   *
+   * @param registry Factory-created deployment registry.
+   * @returns This server builder.
+   */
+  withAi(registry: AiRegistry): this {
+    this.#aiRegistry = registry;
     return this;
   }
 
@@ -425,7 +440,11 @@ export class Server {
       if (conflicted) throw conflict;
       for (const entry of this.#contexts) {
         const context = boundedContextAccess.isBuilder(entry)
-          ? await boundedContextAccess.build(entry, this.#environment.storageFactory)
+          ? await boundedContextAccess.build(
+              entry,
+              this.#environment.storageFactory,
+              this.#aiRegistry,
+            )
           : entry;
         if (boundedContextAccess.isBuilder(entry)) this.#admitContext(context, admission);
         contexts.push(context);

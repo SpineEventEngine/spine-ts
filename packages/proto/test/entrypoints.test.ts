@@ -16,6 +16,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { AiOutcome, DecisionQuestionKind } from "../src/agent/index.js";
 
 function resolveEntrypoint(specifier: string) {
   return spawnSync(
@@ -26,6 +27,13 @@ function resolveEntrypoint(specifier: string) {
 }
 
 describe("@spine-event-engine/proto package entrypoints", () => {
+  it("preserves Agent enum members in type and value positions", () => {
+    const admitted: AiOutcome.ADMITTED = AiOutcome.ADMITTED;
+    const choice: DecisionQuestionKind.CHOICE = DecisionQuestionKind.CHOICE;
+    expect(admitted).toBe(AiOutcome.ADMITTED);
+    expect(choice).toBe(DecisionQuestionKind.CHOICE);
+  });
+
   it("exposes the root groups plus canonical sources, compiled generated modules, and manifest", () => {
     const packageJson = JSON.parse(
       readFileSync(resolve("packages/proto/package.json"), "utf8"),
@@ -35,6 +43,7 @@ describe("@spine-event-engine/proto package entrypoints", () => {
       [
         ".",
         "./auth",
+        "./agent",
         "./client",
         "./delivery",
         "./delivery-server",
@@ -50,6 +59,7 @@ describe("@spine-event-engine/proto package entrypoints", () => {
     for (const supported of [
       "@spine-event-engine/proto",
       "@spine-event-engine/proto/auth",
+      "@spine-event-engine/proto/agent",
       "@spine-event-engine/proto/client",
       "@spine-event-engine/proto/delivery",
       "@spine-event-engine/proto/delivery-server",

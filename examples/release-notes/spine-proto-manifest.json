@@ -1,0 +1,24 @@
+{
+  "formatVersion": 2,
+  "generationId": "ac9a82e2-4d6e-4cc4-a6ec-8c17c1e36050",
+  "packageName": "@spine-event-engine/example-release-notes",
+  "packageVersion": "2.0.0-snapshot.23",
+  "protoFiles": [
+    "spine/examples/releasenotes/commands.proto",
+    "spine/examples/releasenotes/events.proto",
+    "spine/examples/releasenotes/rejections.proto",
+    "spine/examples/releasenotes/states.proto",
+    "spine/examples/releasenotes/types.proto"
+  ],
+  "generatedExports": {
+    "spine/examples/releasenotes/commands.proto": "generated/spine/examples/releasenotes/commands_pb.js",
+    "spine/examples/releasenotes/events.proto": "generated/spine/examples/releasenotes/events_pb.js",
+    "spine/examples/releasenotes/rejections.proto": "generated/spine/examples/releasenotes/rejections_pb.js",
+    "spine/examples/releasenotes/states.proto": "generated/spine/examples/releasenotes/states_pb.js",
+    "spine/examples/releasenotes/types.proto": "generated/spine/examples/releasenotes/types_pb.js"
+  },
+  "dependencies": [
+    "@spine-event-engine/proto"
+  ],
+  "moduleExport": "releaseNotesProtoModule"
+}
