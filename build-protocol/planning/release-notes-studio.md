@@ -3,8 +3,8 @@
 ## Purpose and scope
 
 Build a small desktop example in the existing Agent PR. A developer selects a
-local Git repository and a release range, then gets release notes with links to
-the changes that support them. The developer can ask for changes, edit the
+local Git repository and a release range, then gets release notes with evidence references
+beside the claims they support. The developer can ask for changes, edit the
 text, approve a version, and export Markdown.
 
 The example must demonstrate useful Agent behavior: signal-triggered model

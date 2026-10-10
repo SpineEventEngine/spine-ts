@@ -22,8 +22,8 @@ import type { BrowserWindowConstructorOptions } from "electron";
  */
 export const windowOptions = (preload: string): BrowserWindowConstructorOptions => {
   return {
-    width: 900,
-    height: 700,
+    width: 1200,
+    height: 820,
     minWidth: 640,
     minHeight: 480,
     title: "Release Notes Studio",

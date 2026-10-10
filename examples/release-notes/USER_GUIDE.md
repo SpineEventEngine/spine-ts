@@ -261,6 +261,11 @@ approval; the trusted service writes only the bytes from the corresponding
 `ReleaseNotesExportPrepared` Event. Neither the Agent nor the model approves or
 writes a release announcement.
 
+The **Preview** tab requires saved edits before approval or export. It renders
+Markdown without opening links, loading remote images, or executing HTML. Link
+and image destinations remain readable, and **Show export text** exposes the
+exact Markdown supplied to approval and export.
+
 The desktop asks for a destination before posting the export Command. Cancelling
 that dialog leaves the draft's Version unchanged. The
 [macOS save dialog](https://developer.apple.com/documentation/appkit/nsopensavepaneldelegate/panel%28_%3Auserenteredfilename%3Aconfirmed%3A%29)
@@ -333,6 +338,13 @@ Repository text is untrusted input. Instructions found in a commit message,
 patch, or file do not grant additional tools or authorize publishing.
 
 ## 8. Read what happened
+
+The desktop's **Activity** tab presents readable summaries. Its **View** choices
+map to the four history methods below: **Everything**, **Writing**, **Progress**,
+and **Draft changes**, respectively. **Load activity** loads the newest page;
+**Earlier activity** continues from its cursor. The UI does not show internal
+IDs, raw JSON, or provider request bodies. The recorded data remains available
+through the repository API.
 
 History is recorded for every Agent. There is no recording switch. Its repository
 keeps indexes for that Agent instance; the desktop does not scan all System
@@ -454,7 +466,8 @@ content can be sent there as model input or a tool result. Export before quittin
 if you want to keep the approved release notes. Reopening the app does not
 reconstruct drafts from credentials or automatically repeat generation.
 
-Closing the window during active or unconfirmed generation offers **Wait** and
+Choosing **Quit**, or closing the window during active or unconfirmed generation,
+offers **Wait** and
 **Stop and quit**. Wait keeps the window and backend session running. Stop and
 quit closes the Bounded Context before the window. Local cancellation does not
 prove that the provider did no work or consumed no plan usage.

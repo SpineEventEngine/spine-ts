@@ -23,7 +23,12 @@ The ChatGPT subscription adapter checkpoint is implemented, reviewed, and pushed
 production history/execution reads are implemented and reviewed for domain integration
 (D-0134). Append-only deployment registration and accepted-signal model selection
 are implemented and reviewed as domain-integration prerequisites (D-0135). The first version uses existing in-memory storage; persistent domain
-storage is deferred. Final desktop release/security qualification is pending.
+storage is deferred. Desktop UI polish and three fresh independent review-and-fix
+rounds are complete. Final local release qualification passes: 6,222 tests,
+all coverage thresholds, both dependency audits, all 21 external package
+consumers and offline publication trials, and six Electron checks. PR #18
+records the branch's Build/Security results. Live ChatGPT subscription interaction
+was not exercised by the controlled desktop/provider checks.
 The three additional Anthropic
 review-and-fix rounds and the two further requested rounds are complete, each
 with a fresh reviewer and no inherited conversation or memory. The signed-thinking continuation defect is

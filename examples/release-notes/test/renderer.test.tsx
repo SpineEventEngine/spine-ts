@@ -76,7 +76,7 @@ test("account switching ignores the prior catalog and distinguishes registration
       blockSignIn
         ? Promise.reject(
             new Error(
-              "Error invoking remote method: Wait for the active generation or stop and quit.",
+              "Error invoking remote method: Writing is still in progress. Wait, or quit and stop it.",
             ),
           )
         : Promise.resolve(status("client-A")),
@@ -130,13 +130,13 @@ test("account switching ignores the prior catalog and distinguishes registration
   await act(async () => {
     await import("../src/renderer.js");
   });
-  await screen.findByRole("option", { name: "same@example.com (client-A)" });
-  expect(screen.getByRole("option", { name: "subject-only (client-C)" })).toBeTruthy();
+  await screen.findByRole("option", { name: "same@example.com · 1" });
+  expect(screen.getByRole("option", { name: "ChatGPT account · 3" })).toBeTruthy();
   await screen.findByRole("option", { name: "Model A" });
   await waitFor(() => {
     expect(currentModelCalls).toBe(1);
   });
-  fireEvent.change(screen.getByLabelText("Available to this account"), {
+  fireEvent.change(screen.getByLabelText("Choose a model"), {
     target: { value: "model-A" },
   });
   fireEvent.change(screen.getByLabelText("Account"), { target: { value: "client-B" } });
@@ -149,7 +149,7 @@ test("account switching ignores the prior catalog and distinguishes registration
     oldCurrentA.reject(new Error("private stale account model"));
     await Promise.allSettled([modelA.promise, oldCurrentA.promise]);
   });
-  expect(selectedValue("Available to this account")).toBe("");
+  expect(selectedValue("Choose a model")).toBe("");
   expect(screen.queryByRole("status")).toBeNull();
   await act(async () => {
     releaseB?.([
@@ -158,14 +158,14 @@ test("account switching ignores the prior catalog and distinguishes registration
     ]);
     await catalogB;
   });
-  fireEvent.change(screen.getByLabelText("Available to this account"), {
+  fireEvent.change(screen.getByLabelText("Choose a model"), {
     target: { value: "model-B" },
   });
-  fireEvent.change(screen.getByLabelText("Available to this account"), {
+  fireEvent.change(screen.getByLabelText("Choose a model"), {
     target: { value: "model-C" },
   });
   await waitFor(() => {
-    expect(selectedValue("Available to this account")).toBe("model-C");
+    expect(selectedValue("Choose a model")).toBe("model-C");
   });
   await waitFor(() => {
     expect(currentModelCalls).toBe(2);
@@ -175,12 +175,12 @@ test("account switching ignores the prior catalog and distinguishes registration
     await oldCurrentB.promise;
   });
   expect(screen.queryByRole("status")).toBeNull();
-  expect(selectedValue("Available to this account")).toBe("model-C");
+  expect(selectedValue("Choose a model")).toBe("model-C");
   await act(async () => {
     releaseModelB?.();
     await modelB;
   });
-  expect(selectedValue("Available to this account")).toBe("model-C");
+  expect(selectedValue("Choose a model")).toBe("model-C");
   failCurrentModel = true;
   fireEvent.change(screen.getByLabelText("Account"), { target: { value: "client-A" } });
   await waitFor(() => {
@@ -195,8 +195,8 @@ test("account switching ignores the prior catalog and distinguishes registration
     expect(screen.getByRole("status").textContent).toBe("Selected model is unavailable.");
   });
   expect(screen.getByRole("status").textContent).not.toContain("private model lookup details");
-  expect(screen.getByRole("option", { name: "same@example.com (client-A)" })).toBeTruthy();
-  expect(screen.getByRole("option", { name: "same@example.com (client-B)" })).toBeTruthy();
+  expect(screen.getByRole("option", { name: "same@example.com · 1" })).toBeTruthy();
+  expect(screen.getByRole("option", { name: "same@example.com · 2" })).toBeTruthy();
   failCurrentModel = false;
   fireEvent.change(screen.getByLabelText("Account"), { target: { value: "client-B" } });
   await waitFor(() => {
@@ -229,7 +229,7 @@ test("account switching ignores the prior catalog and distinguishes registration
   });
   expect(screen.queryByRole("status")).toBeNull();
   expect(screen.getByRole("option", { name: "Model B" })).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "Retry pending-client" }));
+  fireEvent.click(screen.getByRole("button", { name: "Continue sign-in 1" }));
   await waitFor(() => {
     expect(reconnected).toBe("pending-client");
   });
@@ -237,7 +237,7 @@ test("account switching ignores the prior catalog and distinguishes registration
   fireEvent.click(screen.getByRole("button", { name: "Continue with ChatGPT" }));
   await waitFor(() => {
     expect(screen.getByRole("status").textContent).toBe(
-      "Wait for the active generation or stop and quit.",
+      "Writing is still in progress. Wait, or quit and stop it.",
     );
   });
   failCatalog = true;
@@ -247,7 +247,7 @@ test("account switching ignores the prior catalog and distinguishes registration
   });
   expect(screen.getByRole("status").textContent).not.toContain("provider-token-private");
   failReconnect = true;
-  fireEvent.click(screen.getByRole("button", { name: "Reconnect" }));
+  fireEvent.click(screen.getByRole("button", { name: "Refresh connection" }));
   await waitFor(() => {
     expect(screen.getByRole("status").textContent).toBe(
       "The account action could not be completed.",
@@ -264,11 +264,11 @@ test("account switching ignores the prior catalog and distinguishes registration
   fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
   await waitFor(() => {
     expect(screen.getByRole("status").textContent).toBe(
-      "Signed out locally; remote revocation was not confirmed.",
+      "Signed out on this computer. We could not confirm that OpenAI removed the connection.",
     );
   });
   failReconnect = false;
-  fireEvent.click(screen.getByRole("button", { name: "Retry pending-client" }));
+  fireEvent.click(screen.getByRole("button", { name: "Continue sign-in 1" }));
   await waitFor(() => {
     expect(selectedValue("Account")).toBe("client-A");
   });

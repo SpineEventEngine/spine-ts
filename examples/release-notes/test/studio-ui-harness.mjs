@@ -51,7 +51,7 @@ const account = {
 const plan = new PlanModelSelection(
   { status: async () => account },
   {
-    models: async () => [{ slug: "fixture-model", displayName: "Fixture model" }],
+    models: async () => [{ slug: "fixture-model", displayName: "Release writing model" }],
     accessToken: async () => "fixture-token",
   },
 );
@@ -91,7 +91,7 @@ void app.whenReady().then(async () => {
       case "status":
         return account;
       case "models":
-        return [{ slug: "fixture-model", displayName: "Fixture model" }];
+        return [{ slug: "fixture-model", displayName: "Release writing model" }];
       case "current-model":
         return { model: (await plan.activeBinding())?.model ?? "" };
       case "select-model":
@@ -116,8 +116,8 @@ function providerResponse(number) {
         heading: "Changes",
         entries: [
           {
-            text: "Changed release file.",
-            evidence: [{ commit: { value: target }, parent: { value: base }, path: "notes.txt" }],
+            text: "CSV imports now check for a header row and explain which column is missing.",
+            evidence: [{ commit: { value: target }, parent: { value: base }, path: "import.ts" }],
           },
         ],
       },

@@ -191,25 +191,23 @@ it("registers one validated IPC boundary and rejects forged frames before applic
   await expect(handler(event, "usage", null)).resolves.toBeNull();
   expect(fixture.openExternal).toHaveBeenCalledWith("https://chatgpt.com/#settings/usage");
   await expect(handler(event, "history", { id, category: "other", pageSize: 20 })).rejects.toThrow(
-    "History is unavailable",
+    "Activity could not be loaded",
   );
   await expect(
     handler({ ...event, senderFrame: { url: "https://attacker.invalid" } }, "status", null),
-  ).rejects.toThrow("The requested action could not be confirmed");
+  ).rejects.toThrow("We could not confirm this action");
   await expect(handler({ ...event, sender: { id: 99 } }, "session", null)).rejects.toThrow(
-    "The requested action could not be confirmed",
+    "We could not confirm this action",
   );
   await expect(handler({ ...event, senderFrame: undefined }, "status", null)).rejects.toThrow(
-    "The requested action could not be confirmed",
+    "We could not confirm this action",
   );
-  await expect(handler(event, 7, null)).rejects.toThrow(
-    "The requested action could not be confirmed",
-  );
+  await expect(handler(event, 7, null)).rejects.toThrow("We could not confirm this action");
   await expect(handler(event, "select-model", null)).rejects.toThrow(
-    "The requested action could not be confirmed",
+    "We could not confirm this action",
   );
   await expect(handler(event, "run-shell", { executable: "/bin/sh" })).rejects.toThrow(
-    "The requested action could not be confirmed",
+    "We could not confirm this action",
   );
   expect(fixture.auth.status).toHaveBeenCalledOnce();
   expect(fixture.studio.session).toHaveBeenCalledOnce();

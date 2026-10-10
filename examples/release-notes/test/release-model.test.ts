@@ -55,11 +55,13 @@ it("renders full immutable evidence references without activating path Markdown"
   const markdown = new TextDecoder().decode(
     ReleaseMarkdown.render(create(ReleaseTitleSchema, { value: "October release" }), document),
   );
-  expect(markdown).toContain(`commit=${commit} parent=${parent}`);
   expect(markdown).toContain(
-    "path=&quot;docs/[launch](javascript:alert(1))&lt;&amp;&gt;\\&quot;&#39;x\\nnote.md&quot;",
+    `in commit <code>${commit}</code>, compared with parent <code>${parent}</code>`,
   );
-  expect(markdown).not.toContain('path="docs/[launch](javascript:alert(1))');
+  expect(markdown).toContain(
+    "<code>&quot;docs/[launch](javascript:alert(1))&lt;&amp;&gt;\\&quot;&#39;x\\nnote.md&quot;</code>",
+  );
+  expect(markdown).not.toContain('"docs/[launch](javascript:alert(1))');
 });
 
 it("requires every proposed claim to cite exact accepted catalog evidence", () => {

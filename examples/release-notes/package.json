@@ -22,6 +22,7 @@
     "@bufbuild/protobuf": "2.12.1",
     "@connectrpc/connect": "2.1.2",
     "@modelcontextprotocol/server": "2.3.1",
+    "@radix-ui/react-tabs": "1.1.22",
     "@spine-event-engine/ai": "workspace:*",
     "@spine-event-engine/ai-vercel-ax": "workspace:*",
     "@spine-event-engine/client-node": "workspace:*",
@@ -30,9 +31,11 @@
     "@spine-event-engine/server": "workspace:*",
     "@spine-event-engine/storage": "workspace:*",
     "electron": "44.7.0",
+    "lucide-react": "1.28.0",
     "openid-client": "6.8.8",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "react-markdown": "10.1.0",
     "zod": "4.6.5"
   },
   "devDependencies": {

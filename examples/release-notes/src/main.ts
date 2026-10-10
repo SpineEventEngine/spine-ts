@@ -121,8 +121,9 @@ const Runtime = {
         buttons: ["Wait", "Stop and quit"],
         defaultId: 0,
         cancelId: 0,
-        message: "A release generation is still active or its outcome is unknown.",
-        detail: "Waiting keeps this session open. Stopping may still consume plan usage.",
+        message: "Your release notes may still be in progress.",
+        detail:
+          "Wait keeps this window open. If you stop and quit, your drafts will disappear and ChatGPT usage may still count.",
       });
       return choice.response === 1 ? "stop" : "wait";
     });

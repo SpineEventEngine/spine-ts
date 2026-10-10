@@ -36,10 +36,10 @@ const escapeHtml = (value: string): string =>
   });
 
 const evidenceLine = (reference: ReleaseEvidenceReference): string => {
-  const literal =
-    `commit=${reference.commit?.value ?? ""} ` +
-    `parent=${reference.parent?.value ?? ""} path=${JSON.stringify(reference.path)}`;
-  return `  - Evidence: <code>${escapeHtml(literal)}</code>`;
+  const path = escapeHtml(JSON.stringify(reference.path));
+  const commit = escapeHtml(reference.commit?.value ?? "");
+  const parent = escapeHtml(reference.parent?.value ?? "");
+  return `  - Evidence: <code>${path}</code> in commit <code>${commit}</code>, compared with parent <code>${parent}</code>`;
 };
 
 /**

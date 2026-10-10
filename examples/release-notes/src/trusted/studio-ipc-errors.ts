@@ -14,13 +14,13 @@
 
 const stale = "The draft changed. Read the current draft before trying again.";
 const generation =
-  "Generation acceptance is unconfirmed. Read the current draft; retry the saved generation if offered.";
-const changedInputs = "Generation inputs changed. Read the current draft before generating again.";
-const history = "History is unavailable. Try loading this view again.";
+  "We cannot confirm whether writing started. Check this draft; use Retry saved draft only if it appears.";
+const changedInputs = "The draft changed before writing could start. Refresh it, then try again.";
+const history = "Activity could not be loaded. Try again.";
 const exported =
-  "Export outcome is unconfirmed. Check the selected destination before trying again.";
-const wait = "Wait for the active generation or stop and quit.";
-const generic = "The requested action could not be confirmed. Review the current draft.";
+  "We cannot confirm whether the file was saved. Check the chosen location before exporting again.";
+const wait = "Writing is still in progress. Wait, or quit and stop it.";
+const generic = "We could not confirm this action. Refresh the draft and try again.";
 const safeMessages = [stale, generation, changedInputs, history, exported, wait, generic] as const;
 
 /**
@@ -43,7 +43,11 @@ export const StudioIpcErrors = {
       ].includes(detail)
     )
       return stale;
-    if (detail === wait || detail === "Wait for the current account or generation action.")
+    if (
+      detail === wait ||
+      detail === "Wait for the current account or generation action." ||
+      detail === "Wait for the active generation or stop and quit."
+    )
       return wait;
     if (detail === "Generation inputs changed; read the current draft.") return changedInputs;
     if (command === "generate" || command === "repeat-generation") return generation;

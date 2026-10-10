@@ -5,10 +5,13 @@
 High-risk runtime/public-contract task authorized on 7 October 2026. Base:
 `658da1cdddcb8fd40f9205b1c200abc3a58dd62e` (snapshot.22). Feature branch:
 `agent-entities`; worktree: native managed `agent-readiness/spine-ts`.
-Adapter composition, the bounded transport and Agent family foundation are
-verified. The AI facade, repository history binding and all history providers are
-accepted. Scripted testing and production adapters are accepted at856e5efcf.
-Durable execution and MCP integration are in progress. Physical Entity deletion is explicitly deferred.
+The Agent runtime, AI facade, repository history providers, durable execution,
+MCP integration, production adapters, and desktop example passed local release
+and exact-commit CI at `6ee952766`. Desktop UI polish and three fresh independent
+review-and-fix rounds are complete. The final full release profile passes with
+6,222 tests and all coverage thresholds; both dependency audits pass. Package
+qualification follows below. The existing PR records branch CI results.
+Physical Entity deletion remains explicitly deferred.
 
 The approved specification is `AGENT_ENTITIES_API_TASK_2026-10-02.md` and its
 `AGENT_HISTORY_PROPOSAL.md` appendix in the user's
@@ -5718,3 +5721,245 @@ existing mechanical function remains explicitly `gpt-6-luna` / `low`. After the
 local full gate, rebuild and rerun packaged desktop checks for the changed
 renderer. No dependency, authentication, framework, or serialized contract has
 changed, so their completed review dispositions remain current.
+
+### Release Notes Studio visual polish and three independent reviews
+
+Human request: make the complete desktop UI polished and approachable, without
+framework jargon or internal technical information. Component libraries are
+permitted. After implementation, run three consecutive independent code-review
+and correction rounds, each using a new standalone subagent with no memory,
+then stop that reviewer and never reuse it for another round.
+
+This is a standard presentation milestone continuing the existing Agent PR and
+worktree. Starting commit: `6ee95276656bab59725a702fafcc0b88ea7c5e56`. Prior local
+release, archive trial, six Electron checks, and exact-commit Build/Security CI
+all pass. The earlier live subscription check remains blocked by the locked
+Mac; this does not block controlled rendered UI checks. Expected active work:
+2–4 hours, with CI waiting additional.
+
+Acceptance: coherent desktop layout and typography; clear sign-in/setup/edit/
+preview/approval/export flow; human-readable activity and errors; no raw JSON,
+Proto types, account client IDs, framework versions, digests, or execution-state
+codes in the UI. Git branches, file names, and change evidence remain available
+where relevant to release preparation. Preserve application state, Version
+checks, exact export bytes, history pagination, provider/privacy boundaries,
+and all existing behavior. Verify signed-out, empty, editing, preview, activity,
+loading, error, narrow-window, and keyboard states using rendered screenshots
+and existing Electron/React tests. No network fonts or production fixture data.
+
+The same existing implementer is explicitly configured `gpt-6-sol` / `medium`,
+with responsibility for the private example UI, related presentation errors,
+window dimensions, its tests, documentation labels, dependencies and lockfile.
+The parent edits task records and evaluates rendered screens. No overlapping
+production writer, memory, or child subagents. Later rounds use fresh instances of the existing reviewer roles with
+`fork_turns=none`: performance/reliability and style/maintainability use explicit
+`gpt-6-sol` / `medium`; the third round also supplies the final security concern
+and uses the existing security reviewer with explicit `gpt-6-sol` / `high`. They receive the full requirements and changeset directly,
+not previous reviewer conclusions. Fix every confirmed finding before the next
+round. The surface supports explicit profiles; actual runtime introspection is
+not exposed. Reviewer completion and explicit interruption retire each round;
+the surface has no separate agent-deletion tool.
+
+Skills read: accessibility, webapp-testing, requesting-code-review in
+`/Users/armiol/.agents/skills/`. Use their focus/contrast/keyboard, rendered-screen,
+and independent-review guidance. Existing TypeScript Playwright/Electron tests
+are the appropriate repository harness; Python server helpers are unnecessary.
+The project role definitions and human requirement to fix all findings override
+the review skill's generic role/minor-deferral suggestions. No Figma or image
+skill is needed: this is a local application UI, without an external design file
+or bitmap asset requirement. Official Radix Tabs, shadcn/ui introduction, and
+Lucide React docs were inspected. Use narrow accessible Radix primitives plus
+already-pinned Lucide icons and custom CSS; do not add an unrelated build system
+merely to adopt a component style. Renderer dependencies remain private.
+
+Run focused tests, affected typechecks/lint/format/docs gates, and meaningful
+changed-source coverage before review. Complete the three requested rounds
+sequentially. Run the full release gate once after corrections converge,
+including fresh dependency audits, final packaged desktop checks, immediate
+feature-branch push, and exact-commit CI. Do not weaken tests or coverage. No
+new framework concepts, public contracts, authentication schemes, or application
+business policies belong to this visual milestone.
+
+Review scope clarification: the three human-requested fresh rounds inspect the
+PR changeset from merge base `658da1cdddcb8fd40f9205b1c200abc3a58dd62e`, emphasizing
+the desktop workflow and current UI delta from `6ee952766`. Each receives the
+requirements ledger and current source directly, without earlier reviewer
+conclusions or conversation memory. Large generated/task-record diffs do not
+replace review of authored runtime, API, application, and behavior-test code.
+The user request for three consecutive rounds supersedes the normal selective
+single-wave count. Parent visual inspection and deterministic style/docs gates
+remain required before those rounds.
+
+Initial visual inspection confirms the new desktop composition fits the first
+1200×820 viewport. Parent feedback requests plain From/To range labels, removal
+of Git ancestry jargon, Export rather than Share, and a secondary sidebar Quit
+action. Activity must render actual recorded message shapes without exposing
+raw structured output or internal identifiers. Both dependency audits pass with
+no known vulnerabilities after adding the private UI dependencies. Focused
+editor and account tests pass during implementation; this is not the final
+review or release gate.
+
+Parent visual and source inspection corrected populated-layout overflow, visible
+draft IDs, duplicate headings, small-text and input-border contrast, and crowded
+small-window controls. The final screens use a compact current-release panel,
+Write/Sources/Preview/Activity tabs, and plain summaries of actual Agent records.
+The controlled Git fixture now implements the behavior described in its notes.
+Rendered Markdown and exported Markdown bytes are checked separately. Parent
+also identified a Sources-panel race: a slower earlier selection could replace
+the latest patch. The writer reproduced it with deferred replies and corrected
+the private UI without changing framework contracts. Focused regression tests
+pass. Desktop keyboard, 640×480, and 200% zoom checks report no horizontal
+overflow. Parent inspected the editor, preview, activity, and narrow screenshots.
+The parent updates README/USER_GUIDE labels and workflow prose; the writer keeps
+source/test changes. Documentation audience validation passes.
+
+Implementation freeze: 21 private Vitest files / 163 tests and all six Electron
+checks pass. Affected typechecks, ESLint, cleanup, TSDoc, copyright, Time-read and
+format checks pass; parent docs/API/snippet and diff-whitespace checks pass.
+The focused coverage run is diagnostic and correctly fails the global threshold
+when unrelated suites do not run. Example branch totals changed from 1110/1240
+to 1162/1302. Replacing those totals in the prior complete release result projects
+20612/22902 (90.00087%); only the final full run can establish release coverage.
+
+Round 1 dispatch: a fresh performance/reliability reviewer, explicitly
+`gpt-6-sol` / `medium`, `fork_turns=none`, with no memory, previous review records,
+subagents, edits, or commits. It reviews authored PR code against requirements,
+including UI state preservation, preview/export fidelity, source/history reads,
+and framework/provider lifecycle contracts. Configuration is explicit; this
+surface does not expose separate runtime self-introspection. The current
+implementer is retained for one complete correction batch after the review.
+
+Round 1 completed (`studio_ui_review_1`, explicitly configured Sol/medium;
+standalone, no memory or previous conclusions). Accepted four findings: P1
+later edits can be overwritten by an in-flight save; P1 preview/approval can use
+older saved content while edits exist or arrive during preview; P2 completed
+Agent execution can hide a failed application outcome; P2 From/To edits can
+leave an earlier comparison selected. The writer receives one correction batch
+with delayed-response and outcome tests. Source-range correction must also
+ignore a chooser response for fields changed while it was pending. These are
+private UI rules; no framework Version propagation or new persisted counters
+are authorized. Recheck focused behavior and cheap gates before round 2.
+
+Parent rendering probe adds one confirmed presentation finding to round 1's
+correction batch: the inert Markdown renderer removed link destinations and
+entire image references while exporting those original bytes. Preserve readable
+inert links/image placeholders and provide access to the actual export text
+without loading remote resources, enabling navigation, executing HTML, or
+changing canonical Markdown. This is document content, not internal AI records.
+Cover it with a focused preview regression and keep approval/export byte checks.
+
+Round 1 corrections are verified: 170 private tests and six Electron checks
+pass, including delayed save, local/authoritative preview invalidation, failed
+application outcomes and changed-range/late-chooser cases. Inert document links
+and images retain their destinations; the export-text disclosure preserves
+exact-byte inspection. Affected type/lint/format/Time/TSDoc/copyright and
+whitespace checks pass. Focused app branches are 1185/1327; the complete release
+run still determines the global result. Reviewer 1 was interrupted after
+completion and corrections, then retired without reuse.
+
+Round 2 dispatch: fresh existing style/maintainability reviewer, explicitly
+`gpt-6-sol` / `medium`, `fork_turns=none`, no memory, earlier review conclusions,
+subagents or writes. It independently reviews authored PR code, emphasizing
+current UI structure, visible workflow, regression coverage, documentation
+accuracy and public-contract consistency. Configuration is explicit; separate
+runtime introspection is unavailable. The same writer receives the complete
+finding batch after this round ends.
+
+Round 2 completed (`studio_ui_review_2`, explicit Sol/medium, standalone, no
+previous findings or memory). Accepted: P1 clean/repeated Save can revoke
+approval or pending work; P2 slower draft selection or initial session loading
+can replace a newer choice; P2 safe failure messages do not distinguish useful
+recovery actions. The reviewer clarified its source-link finding: a local Git
+repository may have no authoritative portable URL. It withdrew the P1 claim
+and reclassified this as P2 documentation/presentation consistency. Correct the
+plan's link overclaim and render readable citations preserving exact commit,
+parent and path. No remote integration or invented URL is authorized. The
+writer receives all four accepted corrections together; parent adjusts prose.
+
+Round 2 corrections are verified: 21 private files / 181 tests and six packaged
+Electron checks pass. Clean build/tooling, ESLint, cleanup, TSDoc, copyright,
+Time-read, formatting and whitespace checks pass. Parent documentation audience
+check passes and the updated full-page Preview was inspected. Failure advice
+separates a response timeout, temporary rate limit and per-draft work limit.
+Focused app branches are 1213/1358; final global coverage remains to be measured.
+Reviewer 2 was interrupted and retired after corrections, without reuse.
+
+Round 3 dispatch: fresh existing final security reviewer, explicitly
+`gpt-6-sol` / `high`, `fork_turns=none`, without memory, earlier review conclusions,
+subagents, writes or commits. Review the authored PR changeset, concentrating on
+provider/authentication, MCP, desktop IPC, secret handling, safe content
+rendering and the current human-facing workflow. This is the release-readiness
+security concern and the third human-requested independent code review. Explicit
+configuration is available; separate runtime introspection is not exposed.
+The existing writer receives any complete accepted correction batch.
+
+Round 3 completed (`studio_ui_review_3`, explicit Sol/high, fresh standalone,
+no memory or prior conclusions). Two confirmed findings are accepted: P1 a
+Refresh response can pair intervening local edits with a newer draft Version;
+P2 delayed Save/Refresh/Approve/Export completion can replace a later draft
+selection. Preserve the edited document's original Version and ignore UI
+completion for a no-longer-selected draft. These remain private example rules.
+Return both findings together to the existing writer, with deferred-response
+regressions and focused checks. The review's read-only production dependency
+audit reports zero advisories; the complete local release profile is pending.
+
+Round 3 corrections are verified and frozen. The document retains its source
+Version while edits remain; Refresh cannot rebase intervening edits. Private
+selection checks prevent delayed draft, generation, preview and notice updates
+from replacing a later choice, including A-to-B-to-A and the second asynchronous
+read in export/picker actions. All 196 example tests, cheap static gates, build,
+package and six Electron checks pass. Focused app branches are 1245/1392, which
+projects 90.0096% globally against the prior complete baseline; only the final
+full profile establishes that result. Reviewer 3 was interrupted and retired
+without reuse. All three requested fresh standalone no-memory review/fix rounds
+are complete; every accepted finding is resolved.
+
+Review concern dispositions for this UI milestone: performance/reliability
+reviewed in rounds 1 and 3 and corrected; style/maintainability and documentation
+reviewed in round 2 and corrected; final security reviewed in round 3, with no
+additional security defect reported. Public TypeScript/Proto API changes are
+N/A: this milestone changes the private example and UI dependencies, without
+framework exports or serialized contracts. Existing public snippet/API checks
+remain in the full gate. Parent checked readable UI copy, current task status,
+README workflow and local citation claims; no extra integration is promised.
+
+Final mechanical dispatch reuses the existing orchestrator-dispatched function
+`studio_release_checks`, explicitly configured `gpt-6-luna` / `low`. It runs the
+cheap preflight, then one complete release profile, dependency audits, archive
+consumer/offline publication trial and desktop package checks. No production
+writes, commits or pushes are delegated. Runtime metadata beyond that immutable
+configured profile is unavailable. The parent integrates and checks exact-SHA
+Build/Security CI after local gates pass.
+
+Final preflight invocation correction: `verify:task -- --coverage` was given
+example paths, but `requiredTaskTests` expands changes outside `packages/` to
+all repository suites. This started an unintended concurrent full test run
+with the default short timeouts and reported failures/timeouts in provider,
+Agent-capacity, Datastore-Time and multi-machine suites. The dedicated process
+group was stopped; no matching process remained. The log stays in `/tmp`.
+Deterministic gates preceding those tests passed. Use the already-passing
+196-test focused result, finish missing deterministic snippet/dependency checks,
+and then run the prescribed `verify:release` profile once with its existing
+sequential/15-second settings. Do not treat the interrupted run as a pass or
+change source/timeouts to accommodate the invocation mistake.
+
+Final full release profile passes: 388 test files passed / one skipped, 6,222
+tests passed / one skipped. Coverage: statements 34492/36799 (93.73%), branches
+20695/22992 (90.0096%; reporter shows 90.00%), functions 8745/9159 (95.47%), lines
+31612/33084 (95.55%). This confirms the previously timed-out suites in the
+prescribed profile; no source or timeout settings were changed for them. Both
+full and production audits report no known vulnerabilities. Node 24.18.0,
+npm 11.16.0 and pnpm 11.9.0 match the prescribed versions; the npm/Rekor
+provenance regression passes. No packages were published.
+
+Final package qualification passes: all 21 prepared package archives pass strict
+external consumer installation, isolation, TypeScript import compilation and
+execution. Their offline publication trial passes normal, partial-failure,
+rerun, delayed-read, fatal-read and read-only scenarios. Final desktop build,
+macOS package and all six Electron tests pass after the full generated build.
+No unexpected generated artifacts entered the changeset. The local changeset
+and all three independent review correction rounds are accepted. Push the
+feature commit immediately; PR #18 and its exact-commit Build/Security checks
+provide the remote acceptance record. No new PR, merge or publication is
+performed. Live ChatGPT subscription interaction was not exercised in this UI
+qualification; controlled desktop/provider tests do not claim that evidence.

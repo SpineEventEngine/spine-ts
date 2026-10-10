@@ -422,8 +422,11 @@ describe("release notes through BlackBox", () => {
       );
       const pendingApprovalVersion = await currentVersion(context);
       const markdown = new TextEncoder().encode(
-        `# October release\n\n## Changes\n\n- Faster queries.\n  - Evidence: <code>commit=${"b".repeat(40)} parent=${"a".repeat(40)} path=&quot;dir/a&lt;&amp;&gt;\\&quot;\\n.md&quot;</code>\n`,
+        `# October release\n\n## Changes\n\n- Faster queries.\n  - Evidence: <code>&quot;dir/a&lt;&amp;&gt;\\&quot;\\n.md&quot;</code> in commit <code>${"b".repeat(40)}</code>, compared with parent <code>${"a".repeat(40)}</code>\n`,
       );
+      expect(
+        ReleaseMarkdown.render(create(ReleaseTitleSchema, { value: "October release" }), document),
+      ).toEqual(markdown);
       const digest = createHash("sha256").update(markdown).digest("hex");
       expect(
         (

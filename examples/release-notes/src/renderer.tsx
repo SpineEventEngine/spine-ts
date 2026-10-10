@@ -14,6 +14,7 @@
 
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { createRoot } from "react-dom/client";
+import { CircleHelp, LogOut, Power, Sparkles } from "lucide-react";
 
 import type { DesktopAuthStatus } from "./trusted/desktop-auth.js";
 import { StudioIpcErrors } from "./trusted/studio-ipc-errors.js";
@@ -151,7 +152,9 @@ const useSignOut = (
       const result = await window.releaseNotes.signOut(clientId);
       onStatus(result.status);
       if (!result.revocationConfirmed)
-        onNotice("Signed out locally; remote revocation was not confirmed.");
+        onNotice(
+          "Signed out on this computer. We could not confirm that OpenAI removed the connection.",
+        );
     } catch (error) {
       onNotice(StudioIpcErrors.display(error, "Sign-out could not be completed."));
     } finally {
@@ -279,9 +282,9 @@ const AccountPicker = ({
       }}
     >
       <option value="">Select an account</option>
-      {status.accounts.map((account) => (
+      {status.accounts.map((account, index) => (
         <option key={account.clientId} value={account.clientId}>
-          {account.email ?? account.subject} ({account.clientId})
+          {account.email ?? "ChatGPT account"} · {index + 1}
         </option>
       ))}
     </select>
@@ -294,32 +297,50 @@ const AccountActions = ({ status, busy, run, signOut }: ReturnType<typeof useAcc
       Continue with ChatGPT
     </button>
     {status.accounts.length > 0 && <AccountPicker status={status} busy={busy} run={run} />}
-    {status.pendingClientIds.map((clientId) => (
+    {status.pendingClientIds.map((clientId, index) => (
       <button
         key={clientId}
         disabled={busy}
         onClick={() => void run(() => window.releaseNotes.reconnect(clientId))}
       >
-        Retry {clientId}
+        Continue sign-in {index + 1}
       </button>
     ))}
-    <p>{status.planEnabled ? "Using ChatGPT plan" : "ChatGPT plan use is not enabled"}</p>
+    <p className="account-state">
+      {status.planEnabled ? "Ready to write with ChatGPT" : "Connect a ChatGPT plan to write"}
+    </p>
     {status.selectedClientId && (
-      <>
-        <button
-          disabled={busy}
-          onClick={() =>
-            void run(() => window.releaseNotes.reconnect(status.selectedClientId ?? ""))
-          }
-        >
-          Reconnect
-        </button>
-        <button disabled={busy} onClick={() => void signOut(status.selectedClientId ?? "")}>
-          Sign out
-        </button>
-      </>
+      <SelectedAccountActions
+        clientId={status.selectedClientId}
+        busy={busy}
+        run={run}
+        signOut={signOut}
+      />
     )}
-    <button onClick={() => void window.releaseNotes.manageUsage()}>Manage usage</button>
+    <button className="text-button" onClick={() => void window.releaseNotes.manageUsage()}>
+      <CircleHelp aria-hidden="true" size={15} /> View plan usage
+    </button>
+  </>
+);
+
+const SelectedAccountActions = ({
+  clientId,
+  busy,
+  run,
+  signOut,
+}: {
+  clientId: string;
+  busy: boolean;
+  run: ReturnType<typeof useAccount>["run"];
+  signOut: ReturnType<typeof useAccount>["signOut"];
+}) => (
+  <>
+    <button disabled={busy} onClick={() => void run(() => window.releaseNotes.reconnect(clientId))}>
+      Refresh connection
+    </button>
+    <button disabled={busy} onClick={() => void signOut(clientId)}>
+      <LogOut aria-hidden="true" size={15} /> Sign out
+    </button>
   </>
 );
 
@@ -334,10 +355,10 @@ const ModelPanel = ({
   model: string;
   select: (slug: string) => Promise<void>;
 }) => (
-  <section aria-label="Model">
-    <h2>Model</h2>
+  <section className="model-settings" aria-label="Writing model">
+    <h2>Writing model</h2>
     <label>
-      Available to this account
+      Choose a model
       <select
         value={model}
         disabled={!status.planEnabled || models.length === 0}
@@ -354,26 +375,95 @@ const ModelPanel = ({
   </section>
 );
 
+const SidebarSettings = ({
+  account,
+  models,
+}: {
+  account: ReturnType<typeof useAccount>;
+  models: ReturnType<typeof useModels>;
+}) => {
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  return (
+    <>
+      <button
+        className="sidebar-settings-toggle"
+        type="button"
+        aria-controls="sidebar-settings"
+        aria-expanded={settingsOpen}
+        onClick={() => {
+          setSettingsOpen(!settingsOpen);
+        }}
+      >
+        Account and model
+      </button>
+      <div id="sidebar-settings" className={`sidebar-settings${settingsOpen ? " is-open" : ""}`}>
+        <section className="account-settings" aria-label="ChatGPT account">
+          <h2>ChatGPT account</h2>
+          <AccountActions {...account} />
+        </section>
+        <ModelPanel status={account.status} {...models} />
+      </div>
+    </>
+  );
+};
+
+const IdentitySidebar = ({
+  account,
+  models,
+}: {
+  account: ReturnType<typeof useAccount>;
+  models: ReturnType<typeof useModels>;
+}) => {
+  return (
+    <aside className="identity-sidebar" aria-label="Account and writing settings">
+      <div className="brand-mark">
+        <Sparkles aria-hidden="true" size={20} />
+      </div>
+      <p className="eyebrow">Writing workspace</p>
+      <h1>
+        Release Notes
+        <br />
+        Studio
+      </h1>
+      <p className="sidebar-intro">Turn committed changes into clear notes for your readers.</p>
+      <div className="sidebar-divider" />
+      <SidebarSettings account={account} models={models} />
+      <p className="privacy-note">Your sign-in stays protected on this computer.</p>
+      <button
+        className="sidebar-quit text-button"
+        type="button"
+        onClick={() => void window.releaseNotes.stopAndQuit()}
+      >
+        <Power aria-hidden="true" size={14} /> Quit
+      </button>
+    </aside>
+  );
+};
+
 const App = () => {
   const account = useAccount();
   const models = useModels(account.status, account.setNotice);
   return (
-    <main>
-      <h1>Release Notes Studio</h1>
-      <p>
-        Review committed changes, draft release notes, and approve the text before export. Connect a
-        ChatGPT account to generate a draft.
-      </p>
-      <section aria-label="ChatGPT account">
-        <h2>ChatGPT account</h2>
-        <AccountActions {...account} />
-      </section>
-      <ModelPanel status={account.status} {...models} />
-      <StudioPanel
-        modelReady={account.status.planEnabled && Boolean(models.model)}
-        notice={account.setNotice}
-      />
-      {account.notice && <p role="status">{account.notice}</p>}
+    <main className="app-shell">
+      <IdentitySidebar account={account} models={models} />
+      <div className="app-content">
+        <header className="app-header">
+          <div>
+            <p className="eyebrow">Your workspace</p>
+            <h2>Prepare a release</h2>
+          </div>
+          <span className="header-badge">Draft · Review · Export</span>
+        </header>
+        {account.notice && (
+          <p className="notice-banner" role="status">
+            {account.notice}
+          </p>
+        )}
+        <StudioPanel
+          modelReady={account.status.planEnabled && Boolean(models.model)}
+          notice={account.setNotice}
+        />
+      </div>
     </main>
   );
 };

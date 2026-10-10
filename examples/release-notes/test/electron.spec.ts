@@ -74,10 +74,9 @@ test("desktop shell opens one isolated window with account controls", async () =
   try {
     const window = await app.firstWindow();
     await expect(window.getByRole("button", { name: "Continue with ChatGPT" })).toBeVisible();
-    await expect(
-      window.getByRole("button", { name: "Choose repository and comparison" }),
-    ).toBeVisible();
-    await expect(window.getByRole("button", { name: "Stop and quit" })).toBeVisible();
+    await expect(window.getByRole("button", { name: "Choose repository" })).toBeVisible();
+    await expect(window.getByRole("button", { name: "Quit" })).toBeVisible();
+    await window.screenshot({ path: "/tmp/spine-ui-signedout.png" });
     expect(await window.evaluate(() => typeof process)).toBe("undefined");
     expect(await window.evaluate(() => typeof window.localStorage.getItem("access_token"))).toBe(
       "object",
@@ -120,20 +119,22 @@ test("packaged editor opens an authoritative draft from a native-selected compar
       dialog.showOpenDialog = () => Promise.resolve({ canceled: false, filePaths: [selected] });
     }, repository);
     const window = await app.firstWindow();
-    await window.getByLabel("Base revision").fill(base);
-    await window.getByLabel("Target revision").fill(target);
-    await window.getByRole("button", { name: "Choose repository and comparison" }).click();
-    await expect(window.getByText(`${base} → ${target}`)).toBeVisible();
+    await window.getByLabel("From").fill(base);
+    await window.getByLabel("To").fill(target);
+    await window.getByRole("button", { name: "Choose repository" }).click();
+    await expect(window.getByText(`${base.slice(0, 8)} → ${target.slice(0, 8)}`)).toBeVisible();
     await window.getByLabel("Release title").fill("Packaged release");
     await window.getByLabel("Audience").fill("SDK users");
     await window.getByRole("button", { name: "Open release draft" }).click();
     await expect(window.getByRole("heading", { name: "Packaged release" })).toBeVisible();
-    await expect(window.getByRole("button", { name: "Generate draft" })).toBeDisabled();
-    await window.getByLabel("Inspect committed evidence").selectOption("0");
-    await expect(window.getByLabel("Committed patch")).toContainText("+After");
+    await expect(window.getByRole("button", { name: "Write a draft" })).toBeDisabled();
+    await window.getByRole("tab", { name: "Sources" }).click();
+    await window.getByLabel("Choose a change to inspect").selectOption("0");
+    await expect(window.getByLabel("Change details")).toContainText("+After");
+    await window.getByRole("tab", { name: "Write" }).click();
     await window.getByRole("button", { name: "Add section" }).click();
-    await window.getByRole("button", { name: "Add claim" }).click();
-    await window.getByLabel("Claim").fill("Changed release file.");
+    await window.getByRole("button", { name: "Add entry" }).click();
+    await window.getByRole("textbox", { name: "Entry", exact: true }).fill("Changed release file.");
     await window.screenshot({ path: "/tmp/spine-release-notes-packaged.png", fullPage: true });
     await window.reload();
     await expect(window.getByRole("heading", { name: "Packaged release" })).toBeVisible();
@@ -219,11 +220,17 @@ test("isolated packaged UI generates, reviews history, approves, and saves exact
   git("init", "--quiet");
   git("config", "user.name", "Fixture");
   git("config", "user.email", "fixture@example.invalid");
-  writeFileSync(join(repository, "notes.txt"), "Before\n");
-  git("add", "notes.txt");
+  writeFileSync(
+    join(repository, "import.ts"),
+    'export const importContacts = (csv: string) => csv.split("\\n").slice(1);\n',
+  );
+  git("add", "import.ts");
   git("commit", "--quiet", "-m", "Base");
   const base = git("rev-parse", "HEAD");
-  writeFileSync(join(repository, "notes.txt"), "After\n");
+  writeFileSync(
+    join(repository, "import.ts"),
+    'export const importContacts = (csv: string) => {\n  const [header, ...rows] = csv.trim().split("\\n");\n  for (const required of ["name", "email"]) {\n    if (!header?.split(",").includes(required)) throw new Error(`Missing ${required} column`);\n  }\n  return rows;\n};\n',
+  );
   git("commit", "--quiet", "-am", "Release");
   const target = git("rev-parse", "HEAD");
   const executablePath = (await readFile(resolve(directory, "out/app-path.txt"), "utf8")).trim();
@@ -241,53 +248,103 @@ test("isolated packaged UI generates, reviews history, approves, and saves exact
   });
   try {
     const window = await app.firstWindow();
-    await window.getByLabel("Base revision").fill(base);
-    await window.getByLabel("Target revision").fill(target);
-    await window.getByRole("button", { name: "Choose repository and comparison" }).click();
-    await window.getByLabel("Release title").fill("UI release");
-    await window.getByLabel("Audience").fill("SDK users");
+    await window.getByLabel("From").fill(base);
+    await window.getByLabel("To").fill(target);
+    await window.getByRole("button", { name: "Choose repository" }).click();
+    await window.getByLabel("Release title").fill("CSV import improvements");
+    await window.getByLabel("Audience").fill("People importing contacts");
     await window.getByRole("button", { name: "Open release draft" }).click();
-    await window.getByLabel("Available to this account").selectOption("fixture-model");
-    await expect(window.getByRole("button", { name: "Generate draft" })).toBeEnabled();
-    await window.getByRole("button", { name: "Generate draft" }).click();
-    await expect(window.getByLabel("Claim")).toHaveValue("Changed release file.");
-    await window.getByRole("button", { name: "Preview release notes" }).click();
-    const preview = await window.getByLabel("Markdown preview").textContent();
-    expect(preview).toContain("Changed release file.");
-    await window.getByRole("button", { name: "Approve reviewed notes" }).click();
+    await window.getByLabel("Choose a model").selectOption("fixture-model");
+    await expect(window.getByRole("button", { name: "Write a draft" })).toBeEnabled();
+    await window.getByRole("button", { name: "Write a draft" }).click();
+    await window.screenshot({ path: "/tmp/spine-ui-writing.png" });
+    await expect(window.getByRole("textbox", { name: "Entry", exact: true })).toHaveValue(
+      "CSV imports now check for a header row and explain which column is missing.",
+    );
+    await window.screenshot({ path: "/tmp/spine-ui-editor.png" });
+    await window.getByRole("tab", { name: "Sources" }).click();
+    await window.getByLabel("Choose a change to inspect").selectOption("0");
+    await expect(window.getByLabel("Change details")).toContainText("Missing ${required} column");
+    await window.screenshot({ path: "/tmp/spine-ui-sources.png" });
+    await window.getByRole("tab", { name: "Sources" }).focus();
+    await window.keyboard.press("ArrowRight");
+    await expect(window.getByRole("tab", { name: "Preview" })).toHaveAttribute(
+      "data-state",
+      "active",
+    );
+    await window.getByRole("button", { name: "Refresh preview" }).click();
+    await expect(window.getByLabel("Release notes preview")).toContainText(
+      "CSV imports now check for a header row and explain which column is missing.",
+    );
+    const expectedMarkdown = `# CSV import improvements\n\n## Changes\n\n- CSV imports now check for a header row and explain which column is missing.\n  - Evidence: <code>&quot;import.ts&quot;</code> in commit <code>${target}</code>, compared with parent <code>${base}</code>\n`;
+    await window.screenshot({ path: "/tmp/spine-ui-preview.png", fullPage: true });
+    await window.getByRole("button", { name: "Approve release notes" }).click();
     await app.evaluate(({ dialog }) => {
       dialog.showSaveDialog = () => Promise.resolve({ canceled: true, filePath: "" });
     });
-    await window.getByRole("button", { name: "Export approved release notes" }).click();
-    await expect(window.getByRole("status")).toHaveText("Export cancelled; no file was written.");
+    await window.getByRole("button", { name: "Export release notes" }).click();
+    await expect(window.locator(".notice-banner")).toHaveText(
+      "Export cancelled; no file was written.",
+    );
     expect(await readFile(exportPath, "utf8").catch(() => null)).toBeNull();
     await app.evaluate(({ dialog }, selected) => {
       dialog.showSaveDialog = () => Promise.resolve({ canceled: false, filePath: selected });
     }, repository);
-    await window.getByRole("button", { name: "Export approved release notes" }).click();
-    await expect(window.getByRole("status")).toContainText("Read the current draft");
+    await window.getByRole("button", { name: "Export release notes" }).click();
+    await expect(window.locator(".notice-banner")).toContainText("Read the current draft");
     expect(await readFile(exportPath, "utf8").catch(() => null)).toBeNull();
     await window.reload();
-    await expect(
-      window.getByRole("button", { name: "Export approved release notes" }),
-    ).toBeEnabled();
+    await window.getByRole("tab", { name: "Preview" }).click();
+    await expect(window.getByRole("button", { name: "Export release notes" })).toBeEnabled();
     await app.evaluate(({ dialog }, selected) => {
       dialog.showSaveDialog = () => Promise.resolve({ canceled: false, filePath: selected });
     }, exportPath);
-    await window.getByRole("button", { name: "Export approved release notes" }).click();
-    await expect.poll(async () => readFile(exportPath, "utf8").catch(() => null)).toBe(preview);
-    await window.getByRole("button", { name: "Export approved release notes" }).click();
-    await expect(window.getByRole("status")).toHaveText("Approved Markdown exported.");
-    expect(await readFile(exportPath, "utf8")).toBe(preview);
+    await window.getByRole("button", { name: "Export release notes" }).click();
+    await expect
+      .poll(async () => readFile(exportPath, "utf8").catch(() => null))
+      .toBe(expectedMarkdown);
+    await window.getByRole("button", { name: "Export release notes" }).click();
+    await expect(window.locator(".notice-banner")).toHaveText("Approved Markdown exported.");
+    expect(await readFile(exportPath, "utf8")).toBe(expectedMarkdown);
+    await window.getByRole("tab", { name: "Activity" }).click();
     await window
-      .getByRole("region", { name: "Agent history" })
+      .getByRole("region", { name: "Activity" })
       .getByLabel("View")
       .selectOption("conversation");
-    await window.getByRole("button", { name: "Load history" }).click();
-    await expect(window.getByRole("region", { name: "Agent history" })).toContainText(
-      "Model or tool exchange",
+    await window.getByRole("button", { name: "Load activity" }).click();
+    await expect(window.getByRole("region", { name: "Activity" })).toContainText(
+      "Writing response",
     );
-    await window.screenshot({ path: "/tmp/spine-release-notes-controlled-ui.png", fullPage: true });
+    await expect(window.getByRole("region", { name: "Activity" })).toContainText(
+      "Proposed 1 section with 1 entry.",
+    );
+    await expect(window.getByRole("region", { name: "Activity" })).not.toContainText('"sections"');
+    await window.screenshot({ path: "/tmp/spine-ui-activity.png" });
+    await app.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows()[0]?.webContents.setZoomFactor(2);
+    });
+    await window.evaluate(() => {
+      globalThis.scrollTo(0, 0);
+    });
+    expect(
+      await window.evaluate(
+        () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+      ),
+    ).toBe(true);
+    await window.screenshot({ path: "/tmp/spine-ui-zoom200.png" });
+    await app.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows()[0]?.webContents.setZoomFactor(1);
+    });
+    await window.setViewportSize({ width: 640, height: 480 });
+    await window.evaluate(() => {
+      globalThis.scrollTo(0, 0);
+    });
+    expect(
+      await window.evaluate(
+        () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+      ),
+    ).toBe(true);
+    await window.screenshot({ path: "/tmp/spine-ui-narrow.png" });
   } finally {
     await app.close();
     rmSync(repository, { recursive: true, force: true });

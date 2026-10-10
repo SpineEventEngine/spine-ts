@@ -328,7 +328,9 @@ it("binds an accepted generation to its model and committed Git evidence through
     await accountAction;
     expect(bodies).toHaveLength(2);
     const preview = await studio.preview(draft.id);
-    expect(new TextDecoder().decode(preview.markdown)).toContain("path=&quot;notes.txt&quot;");
+    expect(new TextDecoder().decode(preview.markdown)).toContain(
+      "Evidence: <code>&quot;notes.txt&quot;</code> in commit",
+    );
     const approved = await studio.approve(draft.id, preview.version, preview.markdown);
     expect(approved.approvalDigest).toBe(preview.digest);
     expect(await studio.prepareExport(draft.id, approved.version)).toEqual(preview.markdown);

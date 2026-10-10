@@ -38,34 +38,41 @@ Docker container, or separately installed database is required.
 ## Prepare a release
 
 1. Choose **Continue with ChatGPT** and complete sign-in in the system browser.
-   Select an account with plan permission, then choose one of the models offered
-   for that account. Signing in alone does not grant plan inference permission.
-2. Enter the base and target revisions, then choose the local repository. The
-   app resolves both revisions to full commit IDs. The base must be an ancestor
-   of the target.
-3. Enter a release title and audience, then open a draft. Review the comparison
-   before generation.
+   Select an account with plan permission, then choose a writing model. In a
+   small window, expand **Account and model** to reach these controls. Signing
+   in alone does not grant plan inference permission.
+2. Enter the earlier commit, branch, or tag in **From**, and the later one in
+   **To**, then choose the local repository. The earlier commit must be in the
+   later commit's history. Changes you have not committed are excluded.
+3. Enter a release title and audience, then choose **Open release draft**.
+   After opening a draft, **Change repository or commits** expands the setup
+   controls. **Session drafts** switches between drafts in the running app.
 4. Add an optional instruction, such as “Explain changes that require library
-   users to update their code,” and generate the draft. Generation uses the
-   selected account and model; the app does not switch them while work is active.
-5. Inspect the entries and their evidence. A valid citation proves that the
-   referenced change is in the comparison, not that the model's explanation is
-   correct. Read the committed patch when checking a claim.
-6. Edit the notes or submit another generation with a more specific instruction.
-   Save edits before reviewing the Markdown. An old Agent proposal cannot replace
-   an edit that the Aggregate has already accepted.
-7. Preview the Markdown and approve the reviewed notes. Export uses those exact
-   approved bytes and a native file dialog. Cancelling the dialog does not save
-   a file or advance the draft's Version. The macOS dialog asks before replacing
-   an existing file. If export fails, read the current draft before retrying;
-   the app does not report a failed write as a successful save.
-8. In Agent history, use **View** to select the combined history (`all`),
-   conversation records, System Events, or Agent-emitted domain Events. Choose
-   **Load history**, then **Older entries** to continue to earlier records.
-9. Export before ending the backend session. Reloading its window keeps the live
-   session; reopening after backend exit starts with empty drafts and history.
+   users to update their code,” then choose **Write a draft**. The app uses the
+   selected account and model and does not switch them while writing.
+5. In **Write**, edit the entries and select their sources. Use **Sources** to
+   inspect committed changes. A matching citation proves that a change belongs
+   to the comparison; it does not prove the explanation is correct. Exported
+   citations name the file, commit, and parent commit so the evidence can be
+   located in the local repository without a public hosting URL.
+6. Choose **Save edits**, or ask for another draft with more specific instructions.
+   Switching tabs keeps unsaved edits. An older suggestion cannot replace an edit
+   that the application has already accepted.
+7. Open **Preview**, choose **Refresh preview**, and review the formatted notes.
+   Save unsaved edits first. Links and images show their destinations without
+   opening or loading them; **Show export text** reveals the exact Markdown.
+   Choose **Approve release notes**, then **Export release notes** to save the
+   approved Markdown through the native file dialog. Cancelling does not save
+   a file. The macOS dialog asks before replacing an existing file. If saving
+   fails, check the destination and refresh the draft before trying again.
+8. In **Activity**, use **View** to choose **Everything**, **Writing**,
+   **Progress**, or **Draft changes**. Choose **Load activity**, then
+   **Earlier activity** to continue. Entries are summaries of recorded writing
+   and source lookups, with the newest first; internal records are not displayed.
+9. Export before choosing **Quit**. Reloading the window keeps the running
+   session. Reopening after quitting starts with empty drafts and activity.
 
-If submission remains unconfirmed, **Retry unconfirmed generation** repeats the
+If submission remains unconfirmed, **Retry saved draft** repeats the
 saved Command with its original instruction, account, model, and comparison.
 It does not use newly edited inputs. The app does not repost automatically, and
 the Aggregate's retained receipt prevents an accepted generation from starting
@@ -77,7 +84,7 @@ to generate again from the current draft; it does not repeat the rejected
 Command. A timeout without a confirmed outcome stays unconfirmed. Reloading the
 window preserves a rejection already observed by the running backend.
 
-While generation is active or unconfirmed, closing the window offers **Wait**
+While generation is active or unconfirmed, **Quit** or closing the window offers **Wait**
 or **Stop and quit**. Wait keeps the session open. Stopping closes the Bounded
 Context before the window, but the provider may already have performed work and
 charged plan usage. If the app stops after writing an export but before showing
@@ -93,7 +100,7 @@ selected account's model catalog instead of assuming a universal model list.
 Tokens are encrypted with Electron `safeStorage` and remain in the trusted
 process. They are not passed to the renderer, stored in domain messages or Agent
 history, or included in exports. Refresh is tied to the same issued registration
-and verified account. **Manage usage** opens the account's ChatGPT usage settings.
+and verified account. **View plan usage** opens the account's ChatGPT usage settings.
 
 If an initial grant fails with `invalid_grant`, retry using the retained issued
 client registration. Reconnection uses fresh browser authorization secrets.

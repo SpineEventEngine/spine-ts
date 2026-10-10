@@ -26,28 +26,28 @@ it("maps stale review, uncertain generation, history, and export failures withou
       Promise.reject(new Error("Bearer secret-token at /private/path")),
     ),
   ).rejects.toThrow(
-    "Generation acceptance is unconfirmed. Read the current draft; retry the saved generation if offered.",
+    "We cannot confirm whether writing started. Check this draft; use Retry saved draft only if it appears.",
   );
   await expect(
     StudioIpcErrors.execute("generate", () =>
       Promise.reject(new Error("Generation inputs changed; read the current draft.")),
     ),
-  ).rejects.toThrow("Generation inputs changed. Read the current draft before generating again.");
+  ).rejects.toThrow("The draft changed before writing could start. Refresh it, then try again.");
   await expect(
     StudioIpcErrors.execute("history", () => Promise.reject(new Error("private history token"))),
-  ).rejects.toThrow("History is unavailable. Try loading this view again.");
+  ).rejects.toThrow("Activity could not be loaded. Try again.");
   await expect(
     StudioIpcErrors.execute("export", () => Promise.reject(new Error("private destination"))),
   ).rejects.toThrow(
-    "Export outcome is unconfirmed. Check the selected destination before trying again.",
+    "We cannot confirm whether the file was saved. Check the chosen location before exporting again.",
   );
   const safe = StudioIpcErrors.display(
     new Error(
-      "Error invoking remote method: Generation acceptance is unconfirmed. Read the current draft; retry the saved generation if offered.",
+      "Error invoking remote method: We cannot confirm whether writing started. Check this draft; use Retry saved draft only if it appears.",
     ),
     "fallback",
   );
-  expect(safe).toContain("retry the saved generation");
+  expect(safe).toContain("Retry saved draft");
   expect(StudioIpcErrors.display(new Error("Bearer secret-token"), "fallback")).toBe("fallback");
 });
 
@@ -57,13 +57,13 @@ it("keeps non-Error failures private and returns the unchanged result on success
     result,
   );
   expect(StudioIpcErrors.message("session", "Bearer secret-token")).toBe(
-    "The requested action could not be confirmed. Review the current draft.",
+    "We could not confirm this action. Refresh the draft and try again.",
   );
   await expect(
     StudioIpcErrors.execute("select-account", () =>
       Promise.reject(new Error("Wait for the current account or generation action.")),
     ),
-  ).rejects.toThrow("Wait for the active generation or stop and quit.");
+  ).rejects.toThrow("Writing is still in progress. Wait, or quit and stop it.");
   expect(StudioIpcErrors.display("Bearer secret-token", "Read current draft")).toBe(
     "Read current draft",
   );
