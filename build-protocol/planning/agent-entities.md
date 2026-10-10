@@ -5963,3 +5963,41 @@ feature commit immediately; PR #18 and its exact-commit Build/Security checks
 provide the remote acceptance record. No new PR, merge or publication is
 performed. Live ChatGPT subscription interaction was not exercised in this UI
 qualification; controlled desktop/provider tests do not claim that evidence.
+
+Remote CI correction after UI commit `1b5f9f266`: exact-SHA Security passed,
+but Build failed solely because `packages/proto-tools/test/package-bin.test.ts`
+exceeded its 120-second limit while making an isolated worktree, installing
+from the offline store and performing a canonical clean build. All other 6,221
+tests passed. Logs do not identify the slow subprocess. This does not reopen the
+completed UI review rounds. Apply the systematic-debugging skill: collect staged
+command timing and inspect the test's intended regression before choosing a
+bounded correction. Retain the existing Sol/medium writer for investigation and
+any accepted test correction; parent retains records and integration. Expected
+active work is 0.25–0.75 hours, plus CI waiting. No blind retry, removed assertion,
+weakened coverage threshold or arbitrary runtime change is authorized.
+
+Investigation at committed HEAD measured checkout 0.7 seconds, offline install
+2.4 seconds and the canonical clean build 54.4 seconds; its runtime companion
+was present. CI's first canonical build took approximately 50.7 seconds. The
+exact delayed stage of the second CI build remains unknown because its output
+was captured. Accept a micro, test-only correction: preserve all commands and
+assertions, give the complete isolated build 240 seconds, and print stage start
+and elapsed diagnostics. This accommodates the observed CI overrun without
+weakening the artifact regression. No runtime, build command, coverage threshold,
+public API or application behavior changes. Existing Sol/medium writer applies
+and checks the correction; parent integrates it. Focused test plus formatting,
+lint, tooling typecheck and diff checks precede the next CI release profile.
+The previously passing local full release remains evidence for unchanged runtime;
+remote CI will rerun the full profile on the correction commit. Review concern
+dispositions for this mechanical test correction: style is checked by lint and
+parent diff inspection; documentation, public TypeScript/API and runtime
+reliability are N/A because their source and claims are unchanged. The three
+requested independent UI review/fix rounds remain complete.
+
+The correction passes both focused packaging tests (66.23 seconds total):
+checkout 406 ms, offline install 2856 ms, canonical build 60060 ms and cleanup
+2376 ms. Tooling typecheck, affected ESLint, Prettier, cleanup, TSDoc, copyright
+and diff checks pass. Parent inspected that commands, artifact assertion and
+package contents assertion are unchanged. Integrate and push the test correction;
+exact-commit Build/Security results on PR #18 supply the subsequent remote
+release evidence. No new full local profile is claimed for this test-only edit.
