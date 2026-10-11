@@ -6001,3 +6001,141 @@ and diff checks pass. Parent inspected that commands, artifact assertion and
 package contents assertion are unchanged. Integrate and push the test correction;
 exact-commit Build/Security results on PR #18 supply the subsequent remote
 release evidence. No new full local profile is claimed for this test-only edit.
+
+### Dropdown rendering correction — 2026-10-11
+
+Human reports all Release Notes Studio dropdowns render incorrectly. Continue
+this existing PR/worktree; do not start a separate feature. Classify as a bounded
+standard private-UI correction. Estimate 0.5–1 active hour for reproducing closed
+and opened controls, correcting shared presentation, focused checks and review.
+Acceptance: account, model, session draft, source inspection, activity view and
+multi-source selection remain readable and operable at normal/narrow widths and
+200% zoom; long labels must not obscure affordances or overflow the window.
+Preserve selection semantics, keyboard access and private application rules.
+First gather Electron rendering evidence; do not guess from DOM tests alone.
+Apply previously selected systematic-debugging and webapp-testing skills (read
+again for this correction); use the project's existing Electron/Playwright
+harness in place of the skill's generic Python web-server recipe. Existing
+explicit Sol/medium implementer handles bounded UI/test files; parent handles
+records/integration and visual acceptance. No subagents may delegate. Desktop
+supports explicit required profiles. A fresh focused Sol/medium reviewer will
+inspect the correction after mechanical checks; prior completed review rounds
+remain closed. Actual child runtime metadata beyond configured profiles is not
+exposed. No public API, domain contracts, auth flow or storage changes intended.
+
+Additional human feedback in the same correction: the left panel must fill the
+whole vertical space, including a page taller than the viewport; reduce visible
+text and use icons where appropriate. Extend visual acceptance to tall-page
+sidebar continuity and normal/narrow scrolling. Remove repeated guidance, shorten
+labels, and give icon-only actions accessible names plus discoverable tooltips.
+Retain concise meaningful disclosure about model transmission and in-memory
+lifetime; do not hide essential choices or introduce unlabelled controls.
+
+Reproduction confirms clipped selected draft titles (202px field), clipped source
+paths (174px multi-select) and sidebar background ending before the taller page.
+Native open popup capture is blocked by macOS lock; Playwright captures only the
+closed native control. User unlock requested asynchronously, independent work
+continues. Accept one private Radix Select wrapper for the five single selectors
+and wrapped checkbox rows for multiple evidence selection. Official Radix Select
+API inspected at https://www.radix-ui.com/primitives/docs/components/select;
+controlled values, keyboard/typeahead and portal positioning avoid inventing
+selection behavior. Verify exact package version before installation. Retain
+handlers and values; empty source placeholder must not map to index zero. Use
+full-height desktop background with sticky controls; reset at narrow breakpoint.
+Trim duplicate prose/headings and use accessible labelled secondary-action icons.
+Updated estimate 1–1.5 active hours plus CI. Existing Sol/medium writer performs
+implementation and focused regression/real Electron checks. Parent visually
+accepts open DOM menus, tall page, narrow window and zoom captures before review.
+
+Radix Select 2.3.8 confirmed against official docs and npm. Initial behavioral
+regressions fail with native controls and pass with the replacement menu and
+checkbox rows. Existing native-change test drivers require migration to actual
+menu/checkbox interactions; their temporary failures are not accepted as a
+passing suite. Scoped review dispatch planned after mechanical convergence:
+fresh performance/reliability reviewer, explicit gpt-6-sol / medium, no memory,
+no prior review conclusions, no subdelegation. Review private selection semantics,
+keyboard/focus, overflow/scrolling, sidebar continuity and icon accessibility;
+include source and applicable tests/docs, not the unrelated full PR history.
+Style and documentation concerns receive parent inspection of the bounded diff;
+framework/public API concern is N/A because no exported package API or contract
+changes. Registry dependency audits and deterministic documentation checks remain
+required before acceptance.
+
+Implementation checkpoint: private Radix menus and evidence checkboxes replace
+native controls; aside stretches through the page with a sticky, scrollable inner
+panel. Parent rejected full-width secondary icon buttons on visual inspection;
+replaced with compact account toolbar. Preview guidance and duplicate headings
+trimmed. Preserve plain disclosure and main action labels. Parent also caught a
+failed pending draft choice leaving a mismatched selected label; regression now
+passes with existing selection intent checks retained. Focused Studio/renderer
+suite passes 70 tests; build/package and controlled packaged writing-to-export
+workflow pass. Parent inspected opened account/draft/source menus and final
+preview screenshots in /tmp, accepting appearance and full-height rail. Remaining
+qualification covers long labels, many sources, narrow/zoom menus, final static
+checks and independent review. Native popup limitation is irrelevant to the new
+DOM-rendered menus; no live sign-in is claimed.
+
+Production UI frozen for scoped review after 70 focused tests, tooling typecheck,
+ESLint, cleanup, TSDoc and diff checks pass. Dispatch `studio_dropdown_review` as
+the existing performance/reliability reviewer, explicit gpt-6-sol / medium,
+fork_turns none, no memory or earlier conclusions. Read-only scope is current
+uncommitted correction versus HEAD efd89f64b, including new ChoiceSelect. Existing
+writer only finishes Electron fixture viewport/capture checks during review;
+production changes pause until reviewer findings are collected. Screenshot of
+200% needs capture/viewport reconciliation before visual acceptance; do not claim
+that one complete yet. Native desktop is locked, DOM-rendered menus remain
+inspectable in controlled Electron tests.
+
+Mechanical dispatch reuses `studio_release_checks`, explicit retained gpt-6-luna /
+low function. While independent review runs, inspect final focused coverage for
+private UI sources, run dependency audits and deterministic docs checks. Do not
+start expensive full release profile until findings and UI fixtures converge.
+Production remains frozen: apparent long-page rail failure was traced to retained
+Electron zoom2 (1200 physical pixels produced 600 CSS pixels/mobile header), not
+confirmed CSS failure. Writer resets fixture zoom explicitly, without source fix.
+
+Independent `studio_dropdown_review` completed clean for selection races, failed
+loads, checkbox citations, keyboard/focus and sidebar reachability. Explicit
+Sol/medium dispatch confirmed; no runtime metadata beyond configured profile.
+Reviewer interrupted and retired without reuse. Parent reviewed remaining model
+and activity popup captures plus corrected zoom2 header/menu captures: full
+option text wraps, account settings and Quit remain reachable. All seven Electron
+checks pass, including 14-source list scrolling, keyboard model choice, normal/
+640px/zoom2 layout and packaged Agent/tool/approval/export flow. Fix test fixture
+window/zoom persistence explicitly; no CSS workaround for incorrect test state.
+Final mechanical focused coverage/audits/docs are in progress before full release.
+
+Writer reports production/tests frozen: 70 UI tests and 7 Electron checks pass;
+tooling typecheck, ESLint, cleanup, TSDoc, copyright, time-read and diff checks pass.
+No review findings remain. Retained Luna/low mechanical function is authorized
+to run one verify:release after focused coverage/audit/docs preflight is green.
+Do not invoke verify:task (its changed-example classification expands the suite).
+No new local archive trial is needed for these private renderer/dependency edits;
+prior 21-archive consumer/trial checks passed and PR CI reruns release preparation
+and trial after push. Parent will commit/push and follow exact-commit CI.
+
+Dependency audits report no vulnerabilities; API documentation and audience
+checks pass. Focused execution passes 199 tests/21 files, but its first coverage
+invocation omitted the application include scope, so repository-wide thresholds
+correctly failed on partial execution. Do not call that a green coverage gate.
+The attempted source-only include also omitted executed dist JavaScript before
+source-map remapping; it is not evidence of a runtime regression. Stop scoped
+reruns. The ordinary selected run provides app coverage inspection (1249/1396
+branches), compared with the UI-final baseline 1245/1392. Reject the older saved
+app baseline 894/1189 because it predates the accepted UI milestone. Global 90%
+thresholds apply to the complete repository, not a newly invented per-example
+gate. Tests, static checks and changed-source coverage inspection establish the
+cheap preflight; the single normal verify:release run now establishes global
+coverage with unchanged configuration and thresholds.
+
+Final release qualification passes: 388 files passed / one skipped, 6,225 tests
+passed / one skipped, 750.58 seconds. Global coverage is statements 34516/36823
+(93.73%), branches 20699/22996 (90.01%), functions 8752/9166 (95.48%), and
+lines 31632/33104 (95.55%). The isolated canonical build completed in 60.154 seconds.
+Both dependency audits and all documentation/static gates pass. Parent updated
+README guidance for checkbox sources and labelled icons/keyboard menus, then
+runs its formatting/audience checks before integration. Existing user guide's
+Agent/auth/domain explanation is unchanged. Source, tests and independent review
+are accepted. Temporary controlled desktop harness was closed; screenshots remain
+in /tmp. Commit/push this correction to agent-entities; exact-SHA Build/Security
+on PR #18 provide remote evidence. No new PR, merge, publication or live sign-in.

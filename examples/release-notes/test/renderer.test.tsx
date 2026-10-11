@@ -16,14 +16,26 @@
 
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { act } from "react";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 
 import type { DesktopAuthStatus } from "../src/trusted/desktop-auth.js";
 
-const selectedValue = (label: string): string => {
-  const element = screen.getByLabelText(label);
-  if (!(element instanceof HTMLSelectElement)) throw new Error(`${label} is not a select element.`);
-  return element.value;
+HTMLElement.prototype.scrollIntoView = vi.fn();
+
+const choose = (label: string, option: string): void => {
+  fireEvent.click(screen.getByRole("combobox", { name: label }));
+  fireEvent.click(screen.getByRole("option", { name: option }));
+};
+
+const selectedValue = (label: string): string =>
+  screen.getByRole("combobox", { name: label }).textContent.trim();
+
+const hasOption = (label: string, option: string): boolean => {
+  fireEvent.click(screen.getByRole("combobox", { name: label }));
+  const found = screen.queryByRole("option", { name: option }) !== null;
+  const listbox = screen.queryByRole("listbox");
+  if (listbox) fireEvent.keyDown(listbox, { key: "Escape" });
+  return found;
 };
 
 test("account switching ignores the prior catalog and distinguishes registrations", async () => {
@@ -130,26 +142,27 @@ test("account switching ignores the prior catalog and distinguishes registration
   await act(async () => {
     await import("../src/renderer.js");
   });
-  await screen.findByRole("option", { name: "same@example.com · 1" });
-  expect(screen.getByRole("option", { name: "ChatGPT account · 3" })).toBeTruthy();
-  await screen.findByRole("option", { name: "Model A" });
+  await screen.findByRole("combobox", { name: "Account" });
+  expect(hasOption("Account", "same@example.com · 1")).toBe(true);
+  expect(hasOption("Account", "ChatGPT account · 3")).toBe(true);
+  await waitFor(() => {
+    expect(hasOption("Model", "Model A")).toBe(true);
+  });
   await waitFor(() => {
     expect(currentModelCalls).toBe(1);
   });
-  fireEvent.change(screen.getByLabelText("Choose a model"), {
-    target: { value: "model-A" },
-  });
-  fireEvent.change(screen.getByLabelText("Account"), { target: { value: "client-B" } });
+  choose("Model", "Model A");
+  choose("Account", "same@example.com · 2");
   await waitFor(() => {
-    expect(selectedValue("Account")).toBe("client-B");
+    expect(selectedValue("Account")).toContain("same@example.com · 2");
   });
-  expect(screen.queryByRole("option", { name: "Model A" })).toBeNull();
+  expect(hasOption("Model", "Model A")).toBe(false);
   await act(async () => {
     modelA.reject(new Error("private stale model selection"));
     oldCurrentA.reject(new Error("private stale account model"));
     await Promise.allSettled([modelA.promise, oldCurrentA.promise]);
   });
-  expect(selectedValue("Choose a model")).toBe("");
+  expect(selectedValue("Model")).toContain("Select a model");
   expect(screen.queryByRole("status")).toBeNull();
   await act(async () => {
     releaseB?.([
@@ -158,14 +171,10 @@ test("account switching ignores the prior catalog and distinguishes registration
     ]);
     await catalogB;
   });
-  fireEvent.change(screen.getByLabelText("Choose a model"), {
-    target: { value: "model-B" },
-  });
-  fireEvent.change(screen.getByLabelText("Choose a model"), {
-    target: { value: "model-C" },
-  });
+  choose("Model", "Model B");
+  choose("Model", "Model C");
   await waitFor(() => {
-    expect(selectedValue("Choose a model")).toBe("model-C");
+    expect(selectedValue("Model")).toContain("Model C");
   });
   await waitFor(() => {
     expect(currentModelCalls).toBe(2);
@@ -175,63 +184,68 @@ test("account switching ignores the prior catalog and distinguishes registration
     await oldCurrentB.promise;
   });
   expect(screen.queryByRole("status")).toBeNull();
-  expect(selectedValue("Choose a model")).toBe("model-C");
+  expect(selectedValue("Model")).toContain("Model C");
   await act(async () => {
     releaseModelB?.();
     await modelB;
   });
-  expect(selectedValue("Choose a model")).toBe("model-C");
+  expect(selectedValue("Model")).toContain("Model C");
   failCurrentModel = true;
-  fireEvent.change(screen.getByLabelText("Account"), { target: { value: "client-A" } });
+  choose("Account", "same@example.com · 1");
   await waitFor(() => {
-    expect(selectedValue("Account")).toBe("client-A");
+    expect(selectedValue("Account")).toContain("same@example.com · 1");
   });
   await act(async () => {
     resolveA?.([{ slug: "model-A", displayName: "Model A" }]);
     await catalogA;
   });
-  expect(screen.getByRole("option", { name: "Model A" })).toBeTruthy();
+  expect(hasOption("Model", "Model A")).toBe(true);
   await waitFor(() => {
     expect(screen.getByRole("status").textContent).toBe("Selected model is unavailable.");
   });
   expect(screen.getByRole("status").textContent).not.toContain("private model lookup details");
-  expect(screen.getByRole("option", { name: "same@example.com · 1" })).toBeTruthy();
-  expect(screen.getByRole("option", { name: "same@example.com · 2" })).toBeTruthy();
+  expect(hasOption("Account", "same@example.com · 1")).toBe(true);
+  expect(hasOption("Account", "same@example.com · 2")).toBe(true);
   failCurrentModel = false;
-  fireEvent.change(screen.getByLabelText("Account"), { target: { value: "client-B" } });
+  choose("Account", "same@example.com · 2");
   await waitFor(() => {
-    expect(selectedValue("Account")).toBe("client-B");
+    expect(selectedValue("Account")).toContain("same@example.com · 2");
   });
-  fireEvent.change(screen.getByLabelText("Account"), { target: { value: "client-A" } });
+  choose("Account", "same@example.com · 1");
   await waitFor(() => {
     expect(aCatalogCalls).toBe(3);
   });
-  fireEvent.change(screen.getByLabelText("Account"), { target: { value: "client-B" } });
+  choose("Account", "same@example.com · 2");
   await waitFor(() => {
-    expect(selectedValue("Account")).toBe("client-B");
+    expect(selectedValue("Account")).toContain("same@example.com · 2");
   });
   await act(async () => {
     staleCatalogSuccess.resolve([{ slug: "model-A", displayName: "Model A" }]);
     await staleCatalogSuccess.promise;
   });
-  expect(screen.queryByRole("option", { name: "Model A" })).toBeNull();
-  fireEvent.change(screen.getByLabelText("Account"), { target: { value: "client-A" } });
+  expect(hasOption("Model", "Model A")).toBe(false);
+  choose("Account", "same@example.com · 1");
   await waitFor(() => {
     expect(aCatalogCalls).toBe(4);
   });
-  fireEvent.change(screen.getByLabelText("Account"), { target: { value: "client-B" } });
+  choose("Account", "same@example.com · 2");
   await waitFor(() => {
-    expect(selectedValue("Account")).toBe("client-B");
+    expect(selectedValue("Account")).toContain("same@example.com · 2");
   });
   await act(async () => {
     staleCatalogFailure.reject(new Error("private old account catalog"));
     await Promise.allSettled([staleCatalogFailure.promise]);
   });
   expect(screen.queryByRole("status")).toBeNull();
-  expect(screen.getByRole("option", { name: "Model B" })).toBeTruthy();
+  expect(hasOption("Model", "Model B")).toBe(true);
   fireEvent.click(screen.getByRole("button", { name: "Continue sign-in 1" }));
   await waitFor(() => {
     expect(reconnected).toBe("pending-client");
+  });
+  await waitFor(() => {
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", { name: "Continue with ChatGPT" }).disabled,
+    ).toBe(false);
   });
   blockSignIn = true;
   fireEvent.click(screen.getByRole("button", { name: "Continue with ChatGPT" }));
@@ -241,7 +255,7 @@ test("account switching ignores the prior catalog and distinguishes registration
     );
   });
   failCatalog = true;
-  fireEvent.change(screen.getByLabelText("Account"), { target: { value: "client-B" } });
+  choose("Account", "same@example.com · 2");
   await waitFor(() => {
     expect(screen.getByRole("status").textContent).toBe("Models for this account are unavailable.");
   });
@@ -270,7 +284,7 @@ test("account switching ignores the prior catalog and distinguishes registration
   failReconnect = false;
   fireEvent.click(screen.getByRole("button", { name: "Continue sign-in 1" }));
   await waitFor(() => {
-    expect(selectedValue("Account")).toBe("client-A");
+    expect(selectedValue("Account")).toContain("same@example.com · 1");
   });
   revocationConfirmed = true;
   fireEvent.click(screen.getByRole("button", { name: "Sign out" }));

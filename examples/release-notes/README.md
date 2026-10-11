@@ -50,7 +50,7 @@ Docker container, or separately installed database is required.
 4. Add an optional instruction, such as “Explain changes that require library
    users to update their code,” then choose **Write a draft**. The app uses the
    selected account and model and does not switch them while writing.
-5. In **Write**, edit the entries and select their sources. Use **Sources** to
+5. In **Write**, edit the entries and check the source files beside each entry. Use **Sources** to
    inspect committed changes. A matching citation proves that a change belongs
    to the comparison; it does not prove the explanation is correct. Exported
    citations name the file, commit, and parent commit so the evidence can be
@@ -71,6 +71,10 @@ Docker container, or separately installed database is required.
    and source lookups, with the newest first; internal records are not displayed.
 9. Export before choosing **Quit**. Reloading the window keeps the running
    session. Reopening after quitting starts with empty drafts and activity.
+
+Refresh, removal, and account actions use icons. Hover over an icon to see its
+action; each control also has an accessible name for screen readers. Menus support
+arrow keys and typing to find an option.
 
 If submission remains unconfirmed, **Retry saved draft** repeats the
 saved Command with its original instruction, account, model, and comparison.

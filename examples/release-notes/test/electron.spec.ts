@@ -13,7 +13,7 @@
  */
 
 import { execFileSync, spawn } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createRequire } from "node:module";
@@ -21,6 +21,11 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { _electron as electron, expect, test } from "@playwright/test";
 import { GitReleaseComparison } from "../src/trusted/git-release.js";
+
+const choose = async (window: import("@playwright/test").Page, label: string, option: string) => {
+  await window.getByRole("combobox", { name: label }).click();
+  await window.getByRole("option", { name: option }).click();
+};
 
 const directory = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const electronPath = createRequire(import.meta.url)("electron") as string;
@@ -73,6 +78,10 @@ test("desktop shell opens one isolated window with account controls", async () =
   const app = await electron.launch({ executablePath: electronPath, args: [directory] });
   try {
     const window = await app.firstWindow();
+    await app.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows()[0]?.webContents.setZoomFactor(1);
+    });
+    await window.setViewportSize({ width: 1200, height: 820 });
     await expect(window.getByRole("button", { name: "Continue with ChatGPT" })).toBeVisible();
     await expect(window.getByRole("button", { name: "Choose repository" })).toBeVisible();
     await expect(window.getByRole("button", { name: "Quit" })).toBeVisible();
@@ -91,6 +100,10 @@ test("packaged macOS app opens the same isolated account shell", async () => {
   const app = await electron.launch({ executablePath });
   try {
     const window = await app.firstWindow();
+    await app.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows()[0]?.webContents.setZoomFactor(1);
+    });
+    await window.setViewportSize({ width: 1200, height: 820 });
     await expect(window.getByRole("button", { name: "Continue with ChatGPT" })).toBeVisible();
     expect(await window.evaluate(() => typeof process)).toBe("undefined");
   } finally {
@@ -129,7 +142,8 @@ test("packaged editor opens an authoritative draft from a native-selected compar
     await expect(window.getByRole("heading", { name: "Packaged release" })).toBeVisible();
     await expect(window.getByRole("button", { name: "Write a draft" })).toBeDisabled();
     await window.getByRole("tab", { name: "Sources" }).click();
-    await window.getByLabel("Choose a change to inspect").selectOption("0");
+    await window.getByRole("combobox", { name: "Choose a change to inspect" }).click();
+    await window.getByRole("option").first().click();
     await expect(window.getByLabel("Change details")).toContainText("+After");
     await window.getByRole("tab", { name: "Write" }).click();
     await window.getByRole("button", { name: "Add section" }).click();
@@ -149,6 +163,103 @@ test("packaged editor opens an authoritative draft from a native-selected compar
     await expect(window.getByLabel("Session drafts")).toHaveCount(0);
   } finally {
     await restarted.close();
+  }
+});
+
+test("long draft titles and many source choices remain readable and reachable", async () => {
+  const repository = mkdtempSync(join(tmpdir(), "spine-choice-list-"));
+  const git = (...args: string[]) =>
+    execFileSync("/usr/bin/git", args, { cwd: repository, encoding: "utf8" }).trim();
+  git("init", "--quiet");
+  git("config", "user.name", "Fixture");
+  git("config", "user.email", "fixture@example.invalid");
+  writeFileSync(join(repository, "README.md"), "Baseline\n");
+  git("add", ".");
+  git("commit", "--quiet", "-m", "Base");
+  const base = git("rev-parse", "HEAD");
+  mkdirSync(join(repository, "docs"));
+  for (let index = 0; index < 14; index++) {
+    writeFileSync(
+      join(repository, "docs", `validation-${String(index)}-release-notes.md`),
+      "Improved import validation.\n",
+    );
+  }
+  git("add", ".");
+  git("commit", "--quiet", "-m", "Release");
+  const target = git("rev-parse", "HEAD");
+  const executablePath = (await readFile(resolve(directory, "out/app-path.txt"), "utf8")).trim();
+  const app = await electron.launch({ executablePath });
+  try {
+    const window = await app.firstWindow();
+    await app.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows()[0]?.webContents.setZoomFactor(1);
+    });
+    await window.setViewportSize({ width: 1200, height: 820 });
+    await window.getByLabel("From").fill(base);
+    await window.getByLabel("To").fill(target);
+    await app.evaluate(({ dialog }, selected) => {
+      dialog.showOpenDialog = () => Promise.resolve({ canceled: false, filePaths: [selected] });
+    }, repository);
+    await window.getByRole("button", { name: "Choose repository" }).click();
+    const title = "CSV import header validation and clearer missing-column errors";
+    await window.getByLabel("Release title").fill(title);
+    await window.getByLabel("Audience").fill("People importing contacts");
+    await window.getByRole("button", { name: "Open release draft" }).click();
+    await window.getByRole("combobox", { name: "Session drafts" }).click();
+    await expect(window.getByRole("option", { name: title })).toBeVisible();
+    await window.screenshot({ path: "/tmp/spine-choice-long-title.png" });
+    await window.keyboard.press("Escape");
+    await window.getByRole("button", { name: "Add section" }).click();
+    await window.getByRole("button", { name: "Add entry" }).click();
+    await expect(window.getByRole("checkbox")).toHaveCount(14);
+    await window.screenshot({ path: "/tmp/spine-choice-many-sources-top.png" });
+    const last = window.getByRole("checkbox", { name: /validation-13-release-notes\.md/ });
+    await last.check();
+    await expect(last).toBeChecked();
+    expect(
+      await window
+        .locator(".source-list")
+        .evaluate((element) => element.scrollHeight > element.clientHeight),
+    ).toBe(true);
+    await window.screenshot({ path: "/tmp/spine-choice-many-sources.png" });
+    const railBounds = await window.evaluate(() => ({
+      rail: document.querySelector(".identity-sidebar")?.getBoundingClientRect().bottom ?? 0,
+      shell: document.querySelector(".app-shell")?.getBoundingClientRect().bottom ?? 0,
+      width: document.documentElement.clientWidth,
+    }));
+    expect(railBounds.width).toBeGreaterThan(700);
+    expect(railBounds.rail).toBeGreaterThanOrEqual(railBounds.shell - 1);
+    await app.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows()[0]?.webContents.setZoomFactor(2);
+    });
+    await window.evaluate(() => {
+      globalThis.scrollTo(0, 0);
+    });
+    await expect(window.getByRole("button", { name: "Account and model" })).toBeVisible();
+    await expect(window.getByRole("button", { name: "Quit" })).toBeVisible();
+    await window.screenshot({ path: "/tmp/spine-choice-zoom200-header.png" });
+    await window.getByRole("combobox", { name: "Session drafts" }).click();
+    await window.screenshot({ path: "/tmp/spine-choice-zoom200-open.png" });
+    await expect(window.getByRole("option", { name: title })).toBeVisible();
+    expect(
+      await window.evaluate(
+        () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+      ),
+    ).toBe(true);
+    await window.keyboard.press("Escape");
+    await app.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows()[0]?.webContents.setZoomFactor(1);
+    });
+    await window.setViewportSize({ width: 640, height: 480 });
+    await window.evaluate(() => {
+      globalThis.scrollTo(0, 0);
+    });
+    await window.getByRole("combobox", { name: "Session drafts" }).click();
+    await window.screenshot({ path: "/tmp/spine-choice-narrow-open.png" });
+    await expect(window.getByRole("option", { name: title })).toBeVisible();
+  } finally {
+    await app.close();
+    rmSync(repository, { recursive: true, force: true });
   }
 });
 
@@ -254,7 +365,22 @@ test("isolated packaged UI generates, reviews history, approves, and saves exact
     await window.getByLabel("Release title").fill("CSV import improvements");
     await window.getByLabel("Audience").fill("People importing contacts");
     await window.getByRole("button", { name: "Open release draft" }).click();
-    await window.getByLabel("Choose a model").selectOption("fixture-model");
+    await window.getByRole("combobox", { name: "Account" }).click();
+    await expect(window.getByRole("option", { name: "ChatGPT account · 1" })).toBeVisible();
+    await window.screenshot({ path: "/tmp/spine-choice-account-open.png" });
+    await window.keyboard.press("Escape");
+    await window.getByRole("combobox", { name: "Session drafts" }).click();
+    await expect(window.getByRole("option", { name: "CSV import improvements" })).toBeVisible();
+    await window.screenshot({ path: "/tmp/spine-choice-drafts-open.png" });
+    await window.keyboard.press("Escape");
+    await window.getByRole("combobox", { name: "Model" }).click();
+    await expect(window.getByRole("option", { name: "Release writing model" })).toBeVisible();
+    await window.screenshot({ path: "/tmp/spine-choice-model-open.png" });
+    await window.keyboard.press("ArrowDown");
+    await window.keyboard.press("Enter");
+    await expect(window.getByRole("combobox", { name: "Model" })).toContainText(
+      "Release writing model",
+    );
     await expect(window.getByRole("button", { name: "Write a draft" })).toBeEnabled();
     await window.getByRole("button", { name: "Write a draft" }).click();
     await window.screenshot({ path: "/tmp/spine-ui-writing.png" });
@@ -263,7 +389,9 @@ test("isolated packaged UI generates, reviews history, approves, and saves exact
     );
     await window.screenshot({ path: "/tmp/spine-ui-editor.png" });
     await window.getByRole("tab", { name: "Sources" }).click();
-    await window.getByLabel("Choose a change to inspect").selectOption("0");
+    await window.getByRole("combobox", { name: "Choose a change to inspect" }).click();
+    await window.screenshot({ path: "/tmp/spine-choice-changes-open.png" });
+    await window.getByRole("option").first().click();
     await expect(window.getByLabel("Change details")).toContainText("Missing ${required} column");
     await window.screenshot({ path: "/tmp/spine-ui-sources.png" });
     await window.getByRole("tab", { name: "Sources" }).focus();
@@ -307,10 +435,10 @@ test("isolated packaged UI generates, reviews history, approves, and saves exact
     await expect(window.locator(".notice-banner")).toHaveText("Approved Markdown exported.");
     expect(await readFile(exportPath, "utf8")).toBe(expectedMarkdown);
     await window.getByRole("tab", { name: "Activity" }).click();
-    await window
-      .getByRole("region", { name: "Activity" })
-      .getByLabel("View")
-      .selectOption("conversation");
+    await window.getByRole("combobox", { name: "View" }).click();
+    await window.screenshot({ path: "/tmp/spine-choice-activity-open.png" });
+    await window.keyboard.press("Escape");
+    await choose(window, "View", "Writing");
     await window.getByRole("button", { name: "Load activity" }).click();
     await expect(window.getByRole("region", { name: "Activity" })).toContainText(
       "Writing response",
@@ -320,6 +448,13 @@ test("isolated packaged UI generates, reviews history, approves, and saves exact
     );
     await expect(window.getByRole("region", { name: "Activity" })).not.toContainText('"sections"');
     await window.screenshot({ path: "/tmp/spine-ui-activity.png" });
+    expect(
+      await window.evaluate(() => {
+        const rail = document.querySelector(".identity-sidebar")?.getBoundingClientRect();
+        const shell = document.querySelector(".app-shell")?.getBoundingClientRect();
+        return rail !== undefined && shell !== undefined && rail.bottom >= shell.bottom - 1;
+      }),
+    ).toBe(true);
     await app.evaluate(({ BrowserWindow }) => {
       BrowserWindow.getAllWindows()[0]?.webContents.setZoomFactor(2);
     });

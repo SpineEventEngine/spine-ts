@@ -21,8 +21,16 @@ import {
   type SetStateAction,
 } from "react";
 import * as Tabs from "@radix-ui/react-tabs";
-import { BookOpen, FileText, History as HistoryIcon, PenLine } from "lucide-react";
+import {
+  BookOpen,
+  FileText,
+  History as HistoryIcon,
+  PenLine,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import { ChoiceSelect } from "./choice-select.js";
 import { StudioIpcErrors } from "./trusted/studio-ipc-errors.js";
 
 interface Evidence {
@@ -249,36 +257,35 @@ const EvidenceSummary = ({ comparison }: { comparison: Comparison }) => (
 
 const EvidencePicker = ({
   evidence,
+  selected,
   select,
 }: {
   evidence: readonly Evidence[];
+  selected: string;
   select: (index: number) => void;
 }) => (
-  <label>
-    Choose a change to inspect
-    <select
-      defaultValue=""
-      onChange={(event) => {
-        const index = Number(event.target.value);
-        if (Number.isInteger(index)) select(index);
-      }}
-    >
-      <option value="">Select a change</option>
-      {evidence.map((item, index) => (
-        <option key={index} value={index}>
-          {item.commit.slice(0, 8)} {changeLabel(item.status)} {item.path}
-        </option>
-      ))}
-    </select>
-  </label>
+  <ChoiceSelect
+    label="Choose a change to inspect"
+    value={selected}
+    placeholder="Select a change"
+    options={evidence.map((item, index) => ({
+      value: String(index),
+      label: `${item.commit.slice(0, 8)} ${changeLabel(item.status)} ${item.path}`,
+    }))}
+    onChange={(value) => {
+      select(Number(value));
+    }}
+  />
 );
 
 const useEvidencePatch = (comparison: Comparison) => {
   const [patch, setPatch] = useState("");
   const [notice, setNotice] = useState("");
+  const [selected, setSelected] = useState("");
   const selectedPatch = useRef(0);
   const select = (index: number) => {
     const request = ++selectedPatch.current;
+    setSelected(String(index));
     setPatch("");
     setNotice("");
     void window.releaseNotes
@@ -287,24 +294,28 @@ const useEvidencePatch = (comparison: Comparison) => {
         if (request !== selectedPatch.current) return;
         setPatch(result.complete ? (result.patch ?? "") : "");
         setNotice(result.complete ? "" : "This change cannot be shown here.");
+        if (!result.complete) setSelected("");
       })
       .catch(() => {
         if (request !== selectedPatch.current) return;
         setNotice("This committed patch is unavailable.");
+        setSelected("");
       });
   };
-  return { patch, notice, select };
+  return { patch, notice, selected, select };
 };
 
 const EvidencePanel = ({ comparison }: { comparison: Comparison }) => {
   const evidence = useEvidencePatch(comparison);
   return (
     <section className="sources-panel" aria-label="Sources and changes">
-      <p className="eyebrow">Committed changes</p>
       <h2>Sources and changes</h2>
-      <p className="supporting-copy">Use these changes to check the wording in your notes.</p>
       <EvidenceSummary comparison={comparison} />
-      <EvidencePicker evidence={comparison.evidence} select={evidence.select} />
+      <EvidencePicker
+        evidence={comparison.evidence}
+        selected={evidence.selected}
+        select={evidence.select}
+      />
       {evidence.notice && <p role="status">{evidence.notice}</p>}
       {evidence.patch && (
         <pre className="source-patch" aria-label="Change details">
@@ -322,38 +333,54 @@ interface EntryEditorProps {
   remove: () => void;
 }
 
-const CitationPicker = ({ entry, evidence, update }: Omit<EntryEditorProps, "remove">) => (
-  <label>
-    Sources for this entry
-    <select
-      multiple
-      value={entry.evidence.map((item) =>
-        evidence
-          .findIndex(
-            (candidate) =>
-              candidate.commit === item.commit.value &&
-              candidate.parent === item.parent.value &&
-              candidate.path === item.path,
-          )
-          .toString(),
-      )}
+const sameCitation = (selected: Citation, item: Evidence): boolean =>
+  selected.commit.value === item.commit &&
+  selected.parent.value === item.parent &&
+  selected.path === item.path;
+
+const CitationChoice = ({
+  entry,
+  item,
+  update,
+}: {
+  entry: Entry;
+  item: Evidence;
+  update: (entry: Entry) => void;
+}) => (
+  <label className="source-choice">
+    <input
+      type="checkbox"
+      checked={entry.evidence.some((selected) => sameCitation(selected, item))}
       onChange={(event) => {
         update({
           ...entry,
-          evidence: [...event.target.selectedOptions]
-            .map((option) => evidence[Number(option.value)])
-            .filter((item): item is Evidence => item !== undefined)
-            .map(citation),
+          evidence: event.target.checked
+            ? [...entry.evidence, citation(item)]
+            : entry.evidence.filter((selected) => !sameCitation(selected, item)),
         });
       }}
-    >
-      {evidence.map((item, index) => (
-        <option key={index} value={index}>
-          {item.commit.slice(0, 12)} {item.path}
-        </option>
-      ))}
-    </select>
+    />
+    <span>
+      <strong>{item.path}</strong>
+      <small>{item.commit.slice(0, 8)}</small>
+    </span>
   </label>
+);
+
+const CitationPicker = ({ entry, evidence, update }: Omit<EntryEditorProps, "remove">) => (
+  <fieldset className="source-choices">
+    <legend>Sources for this entry</legend>
+    <div className="source-list">
+      {evidence.map((item, index) => (
+        <CitationChoice
+          key={`${String(index)}:${item.path}`}
+          entry={entry}
+          item={item}
+          update={update}
+        />
+      ))}
+    </div>
+  </fieldset>
 );
 
 const EntryEditor = ({ entry, evidence, update, remove }: EntryEditorProps) => (
@@ -369,8 +396,14 @@ const EntryEditor = ({ entry, evidence, update, remove }: EntryEditorProps) => (
       />
     </label>
     <CitationPicker entry={entry} evidence={evidence} update={update} />
-    <button type="button" onClick={remove}>
-      Remove entry
+    <button
+      className="icon-action"
+      type="button"
+      aria-label="Remove entry"
+      title="Remove entry"
+      onClick={remove}
+    >
+      <Trash2 aria-hidden="true" size={16} />
     </button>
   </div>
 );
@@ -483,12 +516,15 @@ const SectionButtons = ({ document, section, index, update }: SectionEditorProps
       Add entry
     </button>
     <button
+      className="icon-action"
       type="button"
+      aria-label="Remove section"
+      title="Remove section"
       onClick={() => {
         update({ sections: document.sections.filter((_, position) => position !== index) });
       }}
     >
-      Remove section
+      <Trash2 aria-hidden="true" size={16} />
     </button>
   </>
 );
@@ -639,28 +675,18 @@ const HistoryView = ({
   category: string;
   select: (value: string) => void;
 }) => (
-  <label>
-    View
-    <select
-      value={category}
-      onChange={(event) => {
-        select(event.target.value);
-      }}
-    >
-      {(["all", "conversation", "system", "domain"] as const).map((value) => (
-        <option key={value} value={value}>
-          {
-            {
-              all: "Everything",
-              conversation: "Writing",
-              system: "Progress",
-              domain: "Draft changes",
-            }[value]
-          }
-        </option>
-      ))}
-    </select>
-  </label>
+  <ChoiceSelect
+    label="View"
+    value={category}
+    placeholder="Choose activity"
+    options={[
+      { value: "all", label: "Everything" },
+      { value: "conversation", label: "Writing" },
+      { value: "system", label: "Progress" },
+      { value: "domain", label: "Draft changes" },
+    ]}
+    onChange={select}
+  />
 );
 
 interface HistoryPageState {
@@ -742,11 +768,16 @@ const HistoryPanel = ({ id }: { id: string }) => {
   const history = useHistoryPage(id);
   return (
     <section className="activity-panel" aria-label="Activity">
-      <p className="eyebrow">What happened</p>
       <h2>Activity</h2>
       <HistoryView category={history.category} select={history.select} />
-      <button type="button" onClick={() => void history.load()}>
-        Load activity
+      <button
+        className="icon-action"
+        type="button"
+        aria-label="Load activity"
+        title="Load activity"
+        onClick={() => void history.load()}
+      >
+        <RefreshCw aria-hidden="true" size={16} />
       </button>
       <HistoryRecords items={history.items} category={history.category} />
       {history.cursor && (
@@ -993,8 +1024,14 @@ const GenerationActions = (props: GenerationActionsProps) => (
     {props.generation !== undefined && props.phase === "unknown" && (
       <RetryAdmission onRetry={props.repeat} />
     )}
-    <button className="text-button" type="button" onClick={props.reread}>
-      Refresh draft
+    <button
+      className="icon-action"
+      type="button"
+      aria-label="Refresh draft"
+      title="Refresh draft"
+      onClick={props.reread}
+    >
+      <RefreshCw aria-hidden="true" size={16} />
     </button>
   </div>
 );
@@ -1055,7 +1092,7 @@ const GenerationSection = (props: GenerationActionsProps) => (
   <section className="draft-heading" aria-label="Release draft">
     <div className="draft-heading-row">
       <div>
-        <p className="eyebrow">Release draft · {props.draft.audience}</p>
+        <p className="eyebrow">For {props.draft.audience}</p>
         <h2>{props.draft.title}</h2>
       </div>
       <span className="status-pill" role="status">
@@ -1063,8 +1100,8 @@ const GenerationSection = (props: GenerationActionsProps) => (
       </span>
     </div>
     <p className="disclosure">
-      Selected changes and your instructions are sent to OpenAI when you write a draft. Your drafts
-      and activity disappear when you quit.
+      Writing sends selected changes and instructions to OpenAI. Drafts and activity disappear when
+      you quit.
     </p>
     {generationAdvice(props.phase, props.draft) && (
       <p className="field-hint">{generationAdvice(props.phase, props.draft)}</p>
@@ -1117,10 +1154,16 @@ const PreviewBox = ({ preview, approve }: { preview: Preview; approve: () => voi
 
 const ReviewSection = (props: ReviewProps) => (
   <section className="review-panel" aria-label="Preview and export">
-    <h2>Preview your release notes</h2>
-    <p>Review the final wording before approving it for export.</p>
-    <button type="button" disabled={props.dirty} onClick={props.makePreview}>
-      Refresh preview
+    <h2>Preview</h2>
+    <button
+      className="icon-action"
+      type="button"
+      aria-label="Refresh preview"
+      title="Refresh preview"
+      disabled={props.dirty}
+      onClick={props.makePreview}
+    >
+      <RefreshCw aria-hidden="true" size={16} />
     </button>
     {props.dirty && <p className="field-hint">Save your edits before previewing or exporting.</p>}
     {props.preview && !props.dirty && (
@@ -1336,7 +1379,6 @@ const WritingTab = ({
   <Tabs.Content className="workspace-tab-panel" value="write" forceMount>
     <div className="panel-heading">
       <div>
-        <p className="eyebrow">Your draft</p>
         <h2>Edit entries</h2>
       </div>
       <button
@@ -1509,26 +1551,27 @@ const SessionDraftPicker = ({
 }: {
   titles: Readonly<Record<string, string>>;
   selected: string;
-  select: (id: string) => void;
-}) =>
-  Object.keys(titles).length > 0 ? (
-    <label>
-      Session drafts
-      <select
-        value={selected}
-        onChange={(event) => {
-          select(event.target.value);
-        }}
-      >
-        <option value="">Select a draft</option>
-        {Object.entries(titles).map(([id, title]) => (
-          <option key={id} value={id}>
-            {title}
-          </option>
-        ))}
-      </select>
-    </label>
+  select: (id: string, onFailure: () => void) => void;
+}) => {
+  const [choice, setChoice] = useState(selected);
+  useEffect(() => {
+    setChoice(selected);
+  }, [selected]);
+  return Object.keys(titles).length > 0 ? (
+    <ChoiceSelect
+      label="Session drafts"
+      value={choice}
+      placeholder="Select a draft"
+      options={Object.entries(titles).map(([id, title]) => ({ value: id, label: title }))}
+      onChange={(id) => {
+        setChoice(id);
+        select(id, () => {
+          setChoice(selected);
+        });
+      }}
+    />
   ) : null;
+};
 
 const DraftFields = ({
   title,
@@ -1637,15 +1680,20 @@ const SelectedDraftPicker = ({
   <SessionDraftPicker
     titles={session.titles}
     selected={session.draft?.id ?? ""}
-    select={(id) => {
+    select={(id, onFailure) => {
       const selection = session.beginSelection();
       run(async () => {
-        const current = await window.releaseNotes.readDraft(id);
-        if (!session.isCurrentSelection(selection)) return;
-        const active = await window.releaseNotes.session();
-        if (!session.isCurrentSelection(selection)) return;
-        session.setDraft(current);
-        session.setGeneration(active.generations[id]);
+        try {
+          const current = await window.releaseNotes.readDraft(id);
+          if (!session.isCurrentSelection(selection)) return;
+          const active = await window.releaseNotes.session();
+          if (!session.isCurrentSelection(selection)) return;
+          session.setDraft(current);
+          session.setGeneration(active.generations[id]);
+        } catch (error) {
+          if (session.isCurrentSelection(selection)) onFailure();
+          throw error;
+        }
       });
     }}
   />
@@ -1703,8 +1751,7 @@ const ComparisonPanelView = ({
   controls: ReactElement;
 }) => (
   <section className="setup-panel" aria-label="Release setup">
-    <p className="eyebrow">{session.draft ? "Current release" : "Step 1 · Set up"}</p>
-    <h2>{session.draft ? "Your release" : "Choose your changes"}</h2>
+    {!session.draft && <h2>Choose your changes</h2>}
     {!session.draft && (
       <p className="supporting-copy">Select a repository and the range you want to describe.</p>
     )}

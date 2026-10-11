@@ -22,6 +22,20 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
+HTMLElement.prototype.scrollIntoView = vi.fn();
+
+const choose = (label: string, option: string, container: HTMLElement = document.body): void => {
+  fireEvent.click(within(container).getByRole("combobox", { name: label }));
+  fireEvent.click(screen.getByRole("option", { name: option }));
+};
+
+const chooseAt = (label: string, index: number): void => {
+  fireEvent.click(screen.getByRole("combobox", { name: label }));
+  const option = screen.getAllByRole("option")[index];
+  if (!option) throw new Error(`Missing ${label} choice ${String(index)}.`);
+  fireEvent.click(option);
+};
+
 const labeled = (name: string, index: number): HTMLElement => {
   const element = screen.getAllByLabelText(name)[index];
   if (!element) throw new Error(`Missing ${name} control.`);
@@ -61,6 +75,67 @@ const editableDraft = () => ({
   comparison: { selectionId: "s", base: "a", target: "b", commits: [], changes: [], evidence: [] },
   generationStatus: "staged",
   document: { sections: [{ heading: "Changes", entries: [{ text: "First", evidence: [] }] }] },
+});
+
+it("opens the session draft menu with readable full titles and keyboard selection", async () => {
+  const first = { ...editableDraft(), id: "first", title: "CSV import improvements" };
+  const second = {
+    ...editableDraft(),
+    id: "second",
+    title: "Header validation and clearer import errors",
+  };
+  Object.defineProperty(window, "releaseNotes", {
+    configurable: true,
+    value: {
+      session: () => Promise.resolve({ drafts: [second.id, first.id], generations: {} }),
+      readDraft: (id: string) => Promise.resolve(id === first.id ? first : second),
+    },
+  });
+  render(<StudioPanel modelReady notice={vi.fn()} />);
+  const drafts = await screen.findByRole("combobox", { name: "Session drafts" });
+  expect(drafts.tagName).toBe("BUTTON");
+  expect(await screen.findByRole("heading", { name: first.title })).toBeTruthy();
+  fireEvent.click(drafts);
+  expect(screen.getByRole("option", { name: second.title })).toBeTruthy();
+  fireEvent.click(screen.getByRole("option", { name: second.title }));
+  expect(await screen.findByRole("heading", { name: second.title })).toBeTruthy();
+});
+
+it("shows each source as a wrapped checkbox with an explicit selected state", async () => {
+  const draft = editableDraft();
+  const evidence = [
+    {
+      commit: "a".repeat(40),
+      parent: "b".repeat(40),
+      path: "docs/long-release-notes-filename.md",
+      status: "M",
+    },
+    { commit: "a".repeat(40), parent: "b".repeat(40), path: "import.ts", status: "M" },
+    ...Array.from({ length: 12 }, (_, index) => ({
+      commit: "a".repeat(40),
+      parent: "b".repeat(40),
+      path: `src/validation-${String(index)}.ts`,
+      status: "M",
+    })),
+  ];
+  Object.defineProperty(window, "releaseNotes", {
+    configurable: true,
+    value: {
+      session: () => Promise.resolve({ drafts: [draft.id], generations: {} }),
+      readDraft: () => Promise.resolve({ ...draft, comparison: { ...draft.comparison, evidence } }),
+    },
+  });
+  render(<StudioPanel modelReady notice={vi.fn()} />);
+  const source = await screen.findByRole("checkbox", {
+    name: /docs\/long-release-notes-filename\.md/,
+  });
+  expect((source as HTMLInputElement).checked).toBe(false);
+  fireEvent.click(source);
+  expect((source as HTMLInputElement).checked).toBe(true);
+  expect(screen.getByRole<HTMLInputElement>("checkbox", { name: /import\.ts/ }).checked).toBe(
+    false,
+  );
+  expect(screen.getAllByRole("checkbox")).toHaveLength(14);
 });
 
 it("keeps text typed after Save begins and requires saving before review", async () => {
@@ -257,11 +332,11 @@ it("ignores an old Refresh that finishes after a new draft selection starts", as
     selectSecond.resolve(second);
     await Promise.resolve();
   });
-  const picker = await screen.findByLabelText("Session drafts");
-  fireEvent.change(picker, { target: { value: first.id } });
+  await screen.findByRole("combobox", { name: "Session drafts" });
+  choose("Session drafts", first.title);
   expect(await screen.findByRole("heading", { name: first.title })).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Refresh draft" }));
-  fireEvent.change(picker, { target: { value: second.id } });
+  choose("Session drafts", second.title);
   await act(async () => {
     refresh.resolve({ ...first, version: { number: "2" } });
     await Promise.resolve();
@@ -285,12 +360,12 @@ it("does not show an older draft after its delayed Save completes during another
     },
   });
   render(<StudioPanel modelReady notice={vi.fn()} />);
-  const picker = await screen.findByLabelText("Session drafts");
-  fireEvent.change(picker, { target: { value: first.id } });
+  await screen.findByRole("combobox", { name: "Session drafts" });
+  choose("Session drafts", first.title);
   expect(await screen.findByRole("heading", { name: first.title })).toBeTruthy();
   fireEvent.change(screen.getByLabelText("Entry"), { target: { value: "Changed first" } });
   fireEvent.click(screen.getByRole("button", { name: "Save edits" }));
-  fireEvent.change(picker, { target: { value: second.id } });
+  choose("Session drafts", second.title);
   expect(await screen.findByRole("heading", { name: second.title })).toBeTruthy();
   await act(async () => {
     pending.resolve({ ...first, version: { number: "2" } });
@@ -325,15 +400,15 @@ it("ignores an exported draft read that finishes after another selection", async
     },
   });
   render(<StudioPanel modelReady notice={vi.fn()} />);
-  const picker = await screen.findByLabelText("Session drafts");
-  fireEvent.change(picker, { target: { value: first.id } });
+  await screen.findByRole("combobox", { name: "Session drafts" });
+  choose("Session drafts", first.title);
   expect(await screen.findByRole("heading", { name: first.title })).toBeTruthy();
   fireEvent.click(screen.getByRole("tab", { name: "Preview" }));
   fireEvent.click(screen.getByRole("button", { name: "Export release notes" }));
   await waitFor(() => {
     expect(firstReads).toBe(3);
   });
-  fireEvent.change(picker, { target: { value: second.id } });
+  choose("Session drafts", second.title);
   expect(await screen.findByRole("heading", { name: second.title })).toBeTruthy();
   await act(async () => {
     oldRead.resolve({ ...first, version: { number: "2" } });
@@ -358,18 +433,46 @@ it("ignores an old picker session response after another draft is selected", asy
     },
   });
   render(<StudioPanel modelReady notice={vi.fn()} />);
-  const picker = await screen.findByLabelText("Session drafts");
-  fireEvent.change(picker, { target: { value: first.id } });
+  await screen.findByRole("combobox", { name: "Session drafts" });
+  choose("Session drafts", first.title);
   await waitFor(() => {
     expect(sessionReads).toBe(2);
   });
-  fireEvent.change(picker, { target: { value: second.id } });
+  choose("Session drafts", second.title);
   expect(await screen.findByRole("heading", { name: second.title })).toBeTruthy();
   await act(async () => {
     oldSession.resolve({ drafts: [first.id, second.id], generations: {} });
     await Promise.resolve();
   });
   expect(screen.getByRole("heading", { name: second.title })).toBeTruthy();
+});
+
+it("shows the current draft again when a pending draft choice fails", async () => {
+  const first = { ...editableDraft(), id: "first", title: "First release" };
+  const second = { ...editableDraft(), id: "second", title: "Second release" };
+  let firstReads = 0;
+  Object.defineProperty(window, "releaseNotes", {
+    configurable: true,
+    value: {
+      session: () => Promise.resolve({ drafts: [first.id, second.id], generations: {} }),
+      readDraft: (id: string) => {
+        if (id !== first.id) return Promise.resolve(second);
+        return ++firstReads === 2
+          ? Promise.reject(new Error("draft unavailable"))
+          : Promise.resolve(first);
+      },
+    },
+  });
+  render(<StudioPanel modelReady notice={vi.fn()} />);
+  await screen.findByRole("combobox", { name: "Session drafts" });
+  choose("Session drafts", first.title);
+  await waitFor(() => {
+    expect(screen.getByRole("combobox", { name: "Session drafts" }).textContent).toContain(
+      second.title,
+    );
+  });
+  choose("Session drafts", first.title);
+  expect(await screen.findByRole("heading", { name: first.title })).toBeTruthy();
 });
 
 it("does not apply an old Save after selecting A, then B, then A again", async () => {
@@ -394,14 +497,14 @@ it("does not apply an old Save after selecting A, then B, then A again", async (
     },
   });
   render(<StudioPanel modelReady notice={vi.fn()} />);
-  const picker = await screen.findByLabelText("Session drafts");
-  fireEvent.change(picker, { target: { value: first.id } });
+  await screen.findByRole("combobox", { name: "Session drafts" });
+  choose("Session drafts", first.title);
   expect(await screen.findByRole("heading", { name: first.title })).toBeTruthy();
   fireEvent.change(screen.getByLabelText("Entry"), { target: { value: "Old edit" } });
   fireEvent.click(screen.getByRole("button", { name: "Save edits" }));
-  fireEvent.change(picker, { target: { value: second.id } });
+  choose("Session drafts", second.title);
   expect(await screen.findByRole("heading", { name: second.title })).toBeTruthy();
-  fireEvent.change(picker, { target: { value: first.id } });
+  choose("Session drafts", first.title);
   expect(await screen.findByRole("heading", { name: first.title })).toBeTruthy();
   await act(async () => {
     pending.resolve({ ...first, version: { number: "2" } });
@@ -437,11 +540,11 @@ it("does not bind an old generation after choosing another draft", async () => {
     },
   });
   render(<StudioPanel modelReady notice={vi.fn()} />);
-  const picker = await screen.findByLabelText("Session drafts");
-  fireEvent.change(picker, { target: { value: first.id } });
+  await screen.findByRole("combobox", { name: "Session drafts" });
+  choose("Session drafts", first.title);
   expect(await screen.findByRole("heading", { name: first.title })).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Write a draft" }));
-  fireEvent.change(picker, { target: { value: second.id } });
+  choose("Session drafts", second.title);
   expect(await screen.findByRole("heading", { name: second.title })).toBeTruthy();
   await act(async () => {
     pending.resolve({ generation: "old-generation" });
@@ -471,11 +574,11 @@ it("does not show an old lost-acknowledgment warning after switching drafts", as
     },
   });
   render(<StudioPanel modelReady notice={notice} />);
-  const picker = await screen.findByLabelText("Session drafts");
-  fireEvent.change(picker, { target: { value: first.id } });
+  await screen.findByRole("combobox", { name: "Session drafts" });
+  choose("Session drafts", first.title);
   expect(await screen.findByRole("heading", { name: first.title })).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Write a draft" }));
-  fireEvent.change(picker, { target: { value: second.id } });
+  choose("Session drafts", second.title);
   expect(await screen.findByRole("heading", { name: second.title })).toBeTruthy();
   await act(async () => {
     pending.reject(new Error("old acknowledgment lost"));
@@ -532,11 +635,11 @@ it("does not bind an old explicit retry after another draft is selected", async 
     },
   });
   render(<StudioPanel modelReady notice={vi.fn()} />);
-  const picker = await screen.findByLabelText("Session drafts");
-  fireEvent.change(picker, { target: { value: first.id } });
+  await screen.findByRole("combobox", { name: "Session drafts" });
+  choose("Session drafts", first.title);
   expect(await screen.findByRole("button", { name: "Retry saved draft" })).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Retry saved draft" }));
-  fireEvent.change(picker, { target: { value: second.id } });
+  choose("Session drafts", second.title);
   expect(await screen.findByRole("heading", { name: second.title })).toBeTruthy();
   await act(async () => {
     pending.resolve({ generation: "first-generation" });
@@ -575,15 +678,15 @@ it.each(["approve", "export"] as const)(
       },
     });
     render(<StudioPanel modelReady notice={notice} />);
-    const picker = await screen.findByLabelText("Session drafts");
-    fireEvent.change(picker, { target: { value: first.id } });
+    await screen.findByRole("combobox", { name: "Session drafts" });
+    choose("Session drafts", first.title);
     expect(await screen.findByRole("heading", { name: first.title })).toBeTruthy();
     fireEvent.click(screen.getByRole("tab", { name: "Preview" }));
     if (action === "approve") {
       fireEvent.click(screen.getByRole("button", { name: "Refresh preview" }));
       fireEvent.click(await screen.findByRole("button", { name: "Approve release notes" }));
     } else fireEvent.click(screen.getByRole("button", { name: "Export release notes" }));
-    fireEvent.change(picker, { target: { value: second.id } });
+    choose("Session drafts", second.title);
     expect(await screen.findByRole("heading", { name: second.title })).toBeTruthy();
     await act(async () => {
       pending.resolve(
@@ -614,9 +717,9 @@ it("keeps the later draft choice when earlier reads finish last", async () => {
     },
   });
   render(<StudioPanel modelReady notice={vi.fn()} />);
-  const picker = await screen.findByLabelText("Session drafts");
-  fireEvent.change(picker, { target: { value: first.id } });
-  fireEvent.change(picker, { target: { value: second.id } });
+  await screen.findByRole("combobox", { name: "Session drafts" });
+  choose("Session drafts", first.title);
+  choose("Session drafts", second.title);
   await act(async () => {
     newRead.resolve(second);
     await Promise.resolve();
@@ -751,12 +854,12 @@ it("does not show a preview after the user starts choosing another draft", async
     },
   });
   render(<StudioPanel modelReady notice={vi.fn()} />);
-  const picker = await screen.findByLabelText("Session drafts");
-  fireEvent.change(picker, { target: { value: first.id } });
+  await screen.findByRole("combobox", { name: "Session drafts" });
+  choose("Session drafts", first.title);
   expect(await screen.findByRole("heading", { name: first.title })).toBeTruthy();
   fireEvent.click(screen.getByRole("tab", { name: "Preview" }));
   fireEvent.click(screen.getByRole("button", { name: "Refresh preview" }));
-  fireEvent.change(picker, { target: { value: second.id } });
+  choose("Session drafts", second.title);
   await act(async () => {
     pendingPreview.resolve({
       version: first.version,
@@ -947,12 +1050,9 @@ it("saves multiple edited sections and selected citations with the displayed Ver
   if (!(heading instanceof HTMLInputElement)) throw new Error("Section title is missing.");
   expect(heading.value).toBe("Highlights");
   fireEvent.change(labeled("Entry", 0), { target: { value: "Updated" } });
-  const picker = labeled("Sources for this entry", 0);
-  if (!(picker instanceof HTMLSelectElement)) throw new Error("Citation picker is missing.");
-  const citation = picker.options[0];
-  if (!citation) throw new Error("Citation option is missing.");
-  citation.selected = true;
-  fireEvent.change(picker);
+  const source = screen.getAllByRole("checkbox", { name: /src\/change\.ts/ })[0];
+  if (!source) throw new Error("Expected the first source checkbox.");
+  fireEvent.click(source);
   fireEvent.click(buttonAt("Remove entry", 1));
   fireEvent.click(buttonAt("Add entry", 1));
   fireEvent.change(labeled("Entry", 2), { target: { value: "Another detail" } });
@@ -1544,7 +1644,7 @@ it("ignores a delayed generation read after the user selects another draft", asy
   await waitFor(() => {
     expect(firstReads).toBe(2);
   });
-  fireEvent.change(screen.getByLabelText("Session drafts"), { target: { value: "B" } });
+  choose("Session drafts", "Second");
   await screen.findByRole("heading", { name: "Second" });
   await act(async () => {
     delayed.resolve({ ...first, version: { number: "2" }, title: "Stale First" });
@@ -1669,7 +1769,7 @@ it("keeps delayed and duplicate history pages within the selected view", async (
   fireEvent.click(await screen.findByRole("tab", { name: "Activity" }));
   const panel = await screen.findByRole("region", { name: "Activity" });
   fireEvent.click(within(panel).getByRole("button", { name: "Load activity" }));
-  fireEvent.change(within(panel).getByLabelText("View"), { target: { value: "system" } });
+  choose("View", "Progress", panel);
   fireEvent.click(within(panel).getByRole("button", { name: "Load activity" }));
   await within(panel).findByText("Progress update");
   const button = await within(panel).findByRole("button", { name: "Earlier activity" });
@@ -1722,7 +1822,7 @@ it("retries an unavailable history page without losing its cursor or changing vi
   render(<StudioPanel modelReady notice={vi.fn()} />);
   fireEvent.click(await screen.findByRole("tab", { name: "Activity" }));
   const panel = await screen.findByRole("region", { name: "Activity" });
-  fireEvent.change(within(panel).getByLabelText("View"), { target: { value: "system" } });
+  choose("View", "Progress", panel);
   fireEvent.click(within(panel).getByRole("button", { name: "Load activity" }));
   fireEvent.click(await within(panel).findByRole("button", { name: "Earlier activity" }));
   expect((await within(panel).findByRole("status")).textContent).toContain("unavailable");
@@ -1766,7 +1866,7 @@ it("recovers from an initial history read failure without losing the selected dr
   render(<StudioPanel modelReady notice={vi.fn()} />);
   fireEvent.click(await screen.findByRole("tab", { name: "Activity" }));
   const panel = await screen.findByRole("region", { name: "Activity" });
-  fireEvent.change(within(panel).getByLabelText("View"), { target: { value: "domain" } });
+  choose("View", "Draft changes", panel);
   fireEvent.click(within(panel).getByRole("button", { name: "Load activity" }));
   expect((await within(panel).findByRole("status")).textContent).toContain("unavailable");
   expect(within(panel).queryByText("private history detail")).toBeNull();
@@ -1811,7 +1911,7 @@ it("ignores an old history view's delayed failure after changing categories", as
   await waitFor(() => {
     expect(history).toHaveBeenCalledWith("draft", "all", 20, undefined);
   });
-  fireEvent.change(within(panel).getByLabelText("View"), { target: { value: "system" } });
+  choose("View", "Progress", panel);
   fireEvent.click(within(panel).getByRole("button", { name: "Load activity" }));
   expect(await within(panel).findByText("Progress update")).toBeTruthy();
   old.reject(new Error("private old history detail"));
@@ -1855,6 +1955,7 @@ it("keeps the current draft when native comparison selection is cancelled", asyn
     expect(chooseComparison).toHaveBeenCalledOnce();
   });
   expect(screen.getByRole("heading", { name: "Existing release" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("combobox", { name: "Session drafts" }));
   expect(screen.getByRole("option", { name: "Existing release" })).toBeTruthy();
 });
 
@@ -1891,12 +1992,12 @@ it("keeps recorded evidence available after a patch read fails and is retried", 
   });
   render(<StudioPanel modelReady notice={vi.fn()} />);
   fireEvent.click(await screen.findByRole("tab", { name: "Sources" }));
-  const select = await screen.findByLabelText("Choose a change to inspect");
-  fireEvent.change(select, { target: { value: "0" } });
+  await screen.findByRole("combobox", { name: "Choose a change to inspect" });
+  chooseAt("Choose a change to inspect", 0);
   expect(await screen.findByText("This committed patch is unavailable.")).toBeTruthy();
   expect(screen.queryByText("private Git diagnostics")).toBeNull();
   unavailable = false;
-  fireEvent.change(select, { target: { value: "0" } });
+  chooseAt("Choose a change to inspect", 0);
   expect((await screen.findByLabelText("Change details")).textContent).toContain(
     "+Visible committed change",
   );
@@ -1942,9 +2043,8 @@ it("shows only the latest selected change when an earlier patch finishes later",
   });
   render(<StudioPanel modelReady notice={vi.fn()} />);
   fireEvent.click(await screen.findByRole("tab", { name: "Sources" }));
-  const select = screen.getByLabelText("Choose a change to inspect");
-  fireEvent.change(select, { target: { value: "0" } });
-  fireEvent.change(select, { target: { value: "1" } });
+  chooseAt("Choose a change to inspect", 0);
+  chooseAt("Choose a change to inspect", 1);
   await act(async () => {
     pending.get(1)?.({ complete: true, patch: "+Second change" });
     await Promise.resolve();
@@ -2113,13 +2213,13 @@ it("renders model, system, and domain history with occurrence times and content 
   ).toBeGreaterThan(0);
   expect(within(panel).queryByText(/GenerationResponse|@type|SHA-256/)).toBeNull();
   expect(within(panel).queryByText(/"sections"|rawOutput/)).toBeNull();
-  fireEvent.change(within(panel).getByLabelText("View"), { target: { value: "system" } });
+  choose("View", "Progress", panel);
   fireEvent.click(within(panel).getByRole("button", { name: "Load activity" }));
   await within(panel).findByText("Writing stopped");
   expect(
     within(panel).getByText(new Date("2026-10-09T12:01:00Z").toLocaleString(), { exact: false }),
   ).toBeTruthy();
-  fireEvent.change(within(panel).getByLabelText("View"), { target: { value: "domain" } });
+  choose("View", "Draft changes", panel);
   fireEvent.click(within(panel).getByRole("button", { name: "Load activity" }));
   await within(panel).findByText("Notes proposed");
 });
@@ -2198,12 +2298,12 @@ it("does not show an old draft's delayed history after switching drafts", async 
   } as unknown as StudioBridge;
   Object.defineProperty(window, "releaseNotes", { configurable: true, value: bridge });
   render(<StudioPanel modelReady notice={vi.fn()} />);
-  await screen.findByRole("option", { name: "First" });
-  fireEvent.change(screen.getByLabelText("Session drafts"), { target: { value: first.id } });
+  await screen.findByRole("combobox", { name: "Session drafts" });
+  choose("Session drafts", first.title);
   await screen.findByRole("heading", { name: "First" });
   fireEvent.click(screen.getByRole("tab", { name: "Activity" }));
   fireEvent.click(screen.getByRole("button", { name: "Load activity" }));
-  fireEvent.change(screen.getByLabelText("Session drafts"), { target: { value: second.id } });
+  choose("Session drafts", second.title);
   await screen.findByRole("heading", { name: "Second" });
   fireEvent.click(screen.getByRole("tab", { name: "Activity" }));
   fireEvent.click(screen.getByRole("button", { name: "Load activity" }));
@@ -2351,7 +2451,7 @@ it("keeps generation gated without a plan while showing complete evidence and ol
     "disabled",
     true,
   );
-  fireEvent.change(screen.getByLabelText("Choose a change to inspect"), { target: { value: "0" } });
+  chooseAt("Choose a change to inspect", 0);
   expect(await screen.findByText("This change cannot be shown here.")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Load activity" }));
   fireEvent.click(await screen.findByRole("button", { name: "Earlier activity" }));

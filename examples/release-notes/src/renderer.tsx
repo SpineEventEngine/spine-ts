@@ -14,11 +14,12 @@
 
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { createRoot } from "react-dom/client";
-import { CircleHelp, LogOut, Power, Sparkles } from "lucide-react";
+import { CircleHelp, LogOut, Power, RefreshCw, Sparkles } from "lucide-react";
 
 import type { DesktopAuthStatus } from "./trusted/desktop-auth.js";
 import { StudioIpcErrors } from "./trusted/studio-ipc-errors.js";
 import { StudioPanel, type StudioBridge } from "./studio-ui.js";
+import { ChoiceSelect } from "./choice-select.js";
 
 interface ModelChoice {
   /**
@@ -271,24 +272,37 @@ const AccountPicker = ({
   busy,
   run,
 }: Pick<ReturnType<typeof useAccount>, "status" | "busy" | "run">) => (
-  <label>
-    Account
-    <select
-      value={status.selectedClientId ?? ""}
-      disabled={busy}
-      onChange={(event) => {
-        if (event.target.value)
-          void run(() => window.releaseNotes.selectAccount(event.target.value));
-      }}
-    >
-      <option value="">Select an account</option>
-      {status.accounts.map((account, index) => (
-        <option key={account.clientId} value={account.clientId}>
-          {account.email ?? "ChatGPT account"} · {index + 1}
-        </option>
-      ))}
-    </select>
-  </label>
+  <ChoiceSelect
+    label="Account"
+    value={status.selectedClientId ?? ""}
+    disabled={busy}
+    placeholder="Select an account"
+    options={status.accounts.map((account, index) => ({
+      value: account.clientId,
+      label: `${account.email ?? "ChatGPT account"} · ${String(index + 1)}`,
+    }))}
+    onChange={(clientId) => {
+      void run(() => window.releaseNotes.selectAccount(clientId));
+    }}
+  />
+);
+
+const PendingSignIns = ({
+  status,
+  busy,
+  run,
+}: Pick<ReturnType<typeof useAccount>, "status" | "busy" | "run">) => (
+  <>
+    {status.pendingClientIds.map((clientId, index) => (
+      <button
+        key={clientId}
+        disabled={busy}
+        onClick={() => void run(() => window.releaseNotes.reconnect(clientId))}
+      >
+        Continue sign-in {String(index + 1)}
+      </button>
+    ))}
+  </>
 );
 
 const AccountActions = ({ status, busy, run, signOut }: ReturnType<typeof useAccount>) => (
@@ -297,29 +311,28 @@ const AccountActions = ({ status, busy, run, signOut }: ReturnType<typeof useAcc
       Continue with ChatGPT
     </button>
     {status.accounts.length > 0 && <AccountPicker status={status} busy={busy} run={run} />}
-    {status.pendingClientIds.map((clientId, index) => (
-      <button
-        key={clientId}
-        disabled={busy}
-        onClick={() => void run(() => window.releaseNotes.reconnect(clientId))}
-      >
-        Continue sign-in {index + 1}
-      </button>
-    ))}
+    <PendingSignIns status={status} busy={busy} run={run} />
     <p className="account-state">
       {status.planEnabled ? "Ready to write with ChatGPT" : "Connect a ChatGPT plan to write"}
     </p>
-    {status.selectedClientId && (
-      <SelectedAccountActions
-        clientId={status.selectedClientId}
-        busy={busy}
-        run={run}
-        signOut={signOut}
-      />
-    )}
-    <button className="text-button" onClick={() => void window.releaseNotes.manageUsage()}>
-      <CircleHelp aria-hidden="true" size={15} /> View plan usage
-    </button>
+    <div className="account-tools" role="group" aria-label="Account actions">
+      {status.selectedClientId && (
+        <SelectedAccountActions
+          clientId={status.selectedClientId}
+          busy={busy}
+          run={run}
+          signOut={signOut}
+        />
+      )}
+      <button
+        className="icon-action"
+        aria-label="View plan usage"
+        title="View plan usage"
+        onClick={() => void window.releaseNotes.manageUsage()}
+      >
+        <CircleHelp aria-hidden="true" size={17} />
+      </button>
+    </div>
   </>
 );
 
@@ -335,11 +348,23 @@ const SelectedAccountActions = ({
   signOut: ReturnType<typeof useAccount>["signOut"];
 }) => (
   <>
-    <button disabled={busy} onClick={() => void run(() => window.releaseNotes.reconnect(clientId))}>
-      Refresh connection
+    <button
+      className="icon-action"
+      aria-label="Refresh connection"
+      title="Refresh connection"
+      disabled={busy}
+      onClick={() => void run(() => window.releaseNotes.reconnect(clientId))}
+    >
+      <RefreshCw aria-hidden="true" size={17} />
     </button>
-    <button disabled={busy} onClick={() => void signOut(clientId)}>
-      <LogOut aria-hidden="true" size={15} /> Sign out
+    <button
+      className="icon-action"
+      aria-label="Sign out"
+      title="Sign out"
+      disabled={busy}
+      onClick={() => void signOut(clientId)}
+    >
+      <LogOut aria-hidden="true" size={17} />
     </button>
   </>
 );
@@ -356,22 +381,16 @@ const ModelPanel = ({
   select: (slug: string) => Promise<void>;
 }) => (
   <section className="model-settings" aria-label="Writing model">
-    <h2>Writing model</h2>
-    <label>
-      Choose a model
-      <select
-        value={model}
-        disabled={!status.planEnabled || models.length === 0}
-        onChange={(event) => void select(event.target.value)}
-      >
-        <option value="">Select a model</option>
-        {models.map((choice) => (
-          <option key={choice.slug} value={choice.slug}>
-            {choice.displayName}
-          </option>
-        ))}
-      </select>
-    </label>
+    <ChoiceSelect
+      label="Model"
+      value={model}
+      disabled={!status.planEnabled || models.length === 0}
+      placeholder="Select a model"
+      options={models.map((choice) => ({ value: choice.slug, label: choice.displayName }))}
+      onChange={(slug) => {
+        void select(slug);
+      }}
+    />
   </section>
 );
 
@@ -398,7 +417,6 @@ const SidebarSettings = ({
       </button>
       <div id="sidebar-settings" className={`sidebar-settings${settingsOpen ? " is-open" : ""}`}>
         <section className="account-settings" aria-label="ChatGPT account">
-          <h2>ChatGPT account</h2>
           <AccountActions {...account} />
         </section>
         <ModelPanel status={account.status} {...models} />
@@ -416,26 +434,22 @@ const IdentitySidebar = ({
 }) => {
   return (
     <aside className="identity-sidebar" aria-label="Account and writing settings">
-      <div className="brand-mark">
-        <Sparkles aria-hidden="true" size={20} />
+      <div className="sidebar-inner">
+        <div className="brand-mark">
+          <Sparkles aria-hidden="true" size={20} />
+        </div>
+        <h1>Release Notes Studio</h1>
+        <div className="sidebar-divider" />
+        <SidebarSettings account={account} models={models} />
+        <p className="privacy-note">Sign-in stays protected on this computer.</p>
+        <button
+          className="sidebar-quit text-button"
+          type="button"
+          onClick={() => void window.releaseNotes.stopAndQuit()}
+        >
+          <Power aria-hidden="true" size={14} /> Quit
+        </button>
       </div>
-      <p className="eyebrow">Writing workspace</p>
-      <h1>
-        Release Notes
-        <br />
-        Studio
-      </h1>
-      <p className="sidebar-intro">Turn committed changes into clear notes for your readers.</p>
-      <div className="sidebar-divider" />
-      <SidebarSettings account={account} models={models} />
-      <p className="privacy-note">Your sign-in stays protected on this computer.</p>
-      <button
-        className="sidebar-quit text-button"
-        type="button"
-        onClick={() => void window.releaseNotes.stopAndQuit()}
-      >
-        <Power aria-hidden="true" size={14} /> Quit
-      </button>
     </aside>
   );
 };
@@ -449,10 +463,8 @@ const App = () => {
       <div className="app-content">
         <header className="app-header">
           <div>
-            <p className="eyebrow">Your workspace</p>
-            <h2>Prepare a release</h2>
+            <h2>Release notes</h2>
           </div>
-          <span className="header-badge">Draft · Review · Export</span>
         </header>
         {account.notice && (
           <p className="notice-banner" role="status">
