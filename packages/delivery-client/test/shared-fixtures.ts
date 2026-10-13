@@ -260,8 +260,9 @@ export function message(kind: "command" | "event", id = "message-1", payloadByte
 
 export function domainMessage(id = "message-1"): InboxMessage {
   const taskId = create(TaskIdSchema, { value: "task-1" });
+  const commandId = create(CommandIdSchema, { uuid: id });
   const command = create(CommandSchema, {
-    id: create(CommandIdSchema, { uuid: id }),
+    id: commandId,
     message: AnyMessages.pack(
       CreateTaskSchema,
       create(CreateTaskSchema, {
@@ -277,7 +278,7 @@ export function domainMessage(id = "message-1"): InboxMessage {
       targetId: AnyMessages.pack(TaskIdSchema, taskId),
       targetTypeUrl: TypeUrls.derive(TaskSchema),
     },
-    signalId: "signal-1",
+    signalId: commandId.uuid,
     signal: AnyMessages.pack(CommandSchema, command, { validate: false }),
     label: "HANDLE_COMMAND" as const,
     status: "TO_DELIVER" as const,

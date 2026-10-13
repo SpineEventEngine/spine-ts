@@ -1,0 +1,33 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/storage-mysql/test/mysql-builder-contract.test.ts (14 tests | 1 failed) 12ms
+     × enforces MySQL Entity-commit source, history, event-ID, and close guards before opening tables 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/storage-mysql/test/mysql-builder-contract.test.ts > MysqlStorageFactory builder contract > enforces MySQL Entity-commit source, history, event-ID, and close guards before opening tables
+AssertionError: expected [Function] to throw error matching /requires delivery-event IDs/i but got 'Entity commit record does not identif…'
+
+- Expected:
+/requires delivery-event IDs/i
+
++ Received:
+"Entity commit record does not identify the requested Entity."
+
+ ❯ packages/storage-mysql/test/mysql-builder-contract.test.ts:412:83
+    410|
+    411|     const missingId = EntityCommitStorageFactories.create(factory, ent…
+    412|     await expect(missingId.commit({ ...mutation, events: [create(Event…
+       |                                                                                   ^
+    413|       /requires delivery-event IDs/i,
+    414|     );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 13 passed (14)
+   Start at  19:53:44
+   Duration  423ms (transform 212ms, setup 0ms, import 311ms, tests 12ms, environment 0ms)
+

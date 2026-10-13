@@ -1,0 +1,25 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+{"severity":"WARN","timestamp":"2026-10-13T18:53:22.412Z","message":"Stand subscription registry is not persistent.","contextName":"ManagedProjects","operation":"stand.registry","reasonCode":"volatile"}
+{"severity":"WARN","timestamp":"2026-10-13T18:53:22.413Z","message":"Stand subscription registry is not persistent.","contextName":"ExternalProjects","operation":"stand.registry","reasonCode":"volatile"}
+{"severity":"WARN","timestamp":"2026-10-13T18:53:22.415Z","message":"Stand subscription registry is not persistent.","contextName":"ManagedProjects","operation":"stand.registry","reasonCode":"volatile"}
+{"severity":"WARN","timestamp":"2026-10-13T18:53:22.416Z","message":"Stand subscription registry is not persistent.","contextName":"ExternalProjects","operation":"stand.registry","reasonCode":"volatile"}
+{"severity":"WARN","timestamp":"2026-10-13T18:53:22.416Z","message":"Stand subscription registry is not persistent.","contextName":"ManagedProjects","operation":"stand.registry","reasonCode":"volatile"}
+{"severity":"WARN","timestamp":"2026-10-13T18:53:22.417Z","message":"Stand subscription registry is not persistent.","contextName":"ExternalProjects","operation":"stand.registry","reasonCode":"volatile"}
+{"severity":"WARN","timestamp":"2026-10-13T18:53:22.421Z","message":"Stand subscription registry is not persistent.","contextName":"ManagedProjects","operation":"stand.registry","reasonCode":"volatile"}
+{"severity":"WARN","timestamp":"2026-10-13T18:53:22.421Z","message":"Stand subscription registry is not persistent.","contextName":"ExternalProjects","operation":"stand.registry","reasonCode":"volatile"}
+{"severity":"WARN","timestamp":"2026-10-13T18:53:22.974Z","message":"Stand subscription registry is not persistent.","contextName":"ManagedProjects","operation":"stand.registry","reasonCode":"volatile"}
+{"severity":"WARN","timestamp":"2026-10-13T18:53:22.974Z","message":"Stand subscription registry is not persistent.","contextName":"ManagedProjects","operation":"stand.registry","reasonCode":"volatile"}
+{"severity":"WARN","timestamp":"2026-10-13T18:53:22.975Z","message":"Stand subscription registry is not persistent.","contextName":"ExternalProjects","operation":"stand.registry","reasonCode":"volatile"}
+{"severity":"WARN","timestamp":"2026-10-13T18:53:22.975Z","message":"Stand subscription registry is not persistent.","contextName":"ExternalProjects","operation":"stand.registry","reasonCode":"volatile"}
+{"severity":"WARN","timestamp":"2026-10-13T18:53:23.684Z","message":"Stand subscription registry is not persistent.","contextName":"ManagedProjects","operation":"stand.registry","reasonCode":"volatile"}
+{"severity":"WARN","timestamp":"2026-10-13T18:53:23.685Z","message":"Stand subscription registry is not persistent.","contextName":"ExternalProjects","operation":"stand.registry","reasonCode":"volatile"}
+{"severity":"WARN","timestamp":"2026-10-13T18:53:23.685Z","message":"Stand subscription registry is not persistent.","contextName":"ManagedProjects","operation":"stand.registry","reasonCode":"volatile"}
+{"severity":"WARN","timestamp":"2026-10-13T18:53:23.686Z","message":"Stand subscription registry is not persistent.","contextName":"ExternalProjects","operation":"stand.registry","reasonCode":"volatile"}
+
+ Test Files  14 passed (14)
+      Tests  129 passed (129)
+   Start at  19:53:20
+   Duration  8.84s (transform 7.42s, setup 0ms, import 11.62s, tests 17.80s, environment 1ms)
+

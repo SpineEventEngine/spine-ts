@@ -1,0 +1,43 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/storage-datastore/test/datastore/entity-history.test.ts (30 tests | 2 failed | 28 skipped) 6ms
+     × retries an immutable history insert when a colliding row disappears before inspection 5ms
+     × bounds immutable history insert attempts when each collision disappears 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/storage-datastore/test/datastore/entity-history.test.ts > Datastore generated Entity records > retries an immutable history insert when a colliding row disappears before inspection
+AssertionError: promise rejected "Error: Immutable history record was not r…" instead of resolving
+ ❯ packages/storage-datastore/test/datastore/entity-history.test.ts:122:58
+    120|     );
+    121|
+    122|     await expect(storage.states.append(record("one", 1))).resolves.toB…
+       |                                                          ^
+    123|     expect(compareAndSet).toHaveBeenCalledTimes(2);
+    124|     expect(read).toHaveBeenCalledOnce();
+
+Caused by: Error: Immutable history record was not retained.
+ ❯ immutable packages/storage-datastore/src/datastore/entity-history.ts:646:37
+ ❯ packages/storage-datastore/test/datastore/entity-history.test.ts:122:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  packages/storage-datastore/test/datastore/entity-history.test.ts > Datastore generated Entity records > bounds immutable history insert attempts when each collision disappears
+AssertionError: expected "vi.fn()" to be called 3 times, but got 1 times
+ ❯ packages/storage-datastore/test/datastore/entity-history.test.ts:136:27
+    134|
+    135|     await expect(storage.states.append(record("one", 1))).rejects.toTh…
+    136|     expect(compareAndSet).toHaveBeenCalledTimes(3);
+       |                           ^
+    137|     expect(read).toHaveBeenCalledTimes(3);
+    138|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 28 skipped (30)
+   Start at  19:51:07
+   Duration  509ms (transform 217ms, setup 0ms, import 403ms, tests 6ms, environment 0ms)
+

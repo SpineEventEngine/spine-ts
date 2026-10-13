@@ -31,7 +31,7 @@ import {
 } from "@spine-event-engine/storage/provider";
 import type { EntityStorageInput } from "@spine-event-engine/storage/provider";
 import { eventStoreRecordSpec } from "@spine-event-engine/storage/provider";
-import type { TenantId } from "@spine-event-engine/proto";
+import type { Event, TenantId } from "@spine-event-engine/proto";
 import {
   EntityRecordSchema,
   type EntityRecord,
@@ -896,8 +896,46 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
       throw new MysqlStorageOperationError("Entity state history is disabled.");
     if (!this.entity.eventHistory && (input.diagnostics?.length ?? 0) > 0)
       throw new MysqlStorageOperationError("Entity event history is disabled.");
-    if ((input.events ?? []).some((event) => event.id === undefined))
-      throw new MysqlStorageOperationError("Entity commit requires delivery-event IDs.");
+    this.validateRows(input);
+    this.validateEventIds(input.diagnostics, "diagnostic");
+    this.validateEventIds(input.events, "delivery");
+  }
+
+  /**
+   * Rejects current and state-history rows for another Entity before I/O.
+   *
+   * @typeParam Id Committed Entity identifier type.
+   * @typeParam State Committed Entity state type.
+   * @param input Supplies the rows and requested Entity identifier.
+   */
+  private validateRows<Id, State extends Message>(
+    input: import("@spine-event-engine/storage/provider").EntityCommitInput<Id, State>,
+  ): void {
+    for (const record of [input.next, ...(input.states ?? [])]) {
+      const decoded =
+        record.entityId === undefined ? undefined : input.entity.id.unpack(record.entityId);
+      if (
+        decoded === undefined ||
+        input.entity.id.key(decoded) !== input.entity.id.key(input.entityId)
+      )
+        throw new MysqlStorageOperationError(
+          "Entity commit record does not identify the requested Entity.",
+        );
+    }
+  }
+
+  /**
+   * Rejects missing, blank, or repeated IDs in one Event family before I/O.
+   *
+   * @param events Supplies diagnostic or delivery Events.
+   * @param family Identifies the Event family in a safe failure message.
+   */
+  private validateEventIds(events: readonly Event[] | undefined, family: string): void {
+    const ids = events?.map((event) => event.id?.value) ?? [];
+    if (ids.some((id) => id === undefined || id.trim() === "") || new Set(ids).size !== ids.length)
+      throw new MysqlStorageOperationError(
+        `Entity commit requires non-blank unique ${family} event IDs.`,
+      );
   }
 
   /**

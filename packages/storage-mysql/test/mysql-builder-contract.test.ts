@@ -12,10 +12,10 @@
  * the License.
  */
 
-import { create, type Message } from "@bufbuild/protobuf";
+import { create, fromBinary, type Message } from "@bufbuild/protobuf";
 import { AnySchema, StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { createPool } from "mysql2/promise";
-import { StringifierRegistry } from "@spine-event-engine/core";
+import { Identifiers, StringifierRegistry } from "@spine-event-engine/core";
 import { EventSchema, TenantIdSchema, UserIdSchema } from "@spine-event-engine/proto";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { EntityCommitStorageFactories } from "@spine-event-engine/storage/provider";
@@ -27,6 +27,11 @@ import {
   type StorageContext,
 } from "@spine-event-engine/storage";
 import { describe, expect, it, vi } from "vitest";
+import {
+  TaskIdSchema,
+  TaskListIdSchema,
+} from "../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
+import { TaskSchema } from "../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 
 import {
   MysqlStorageFactory,
@@ -366,11 +371,22 @@ describe("MysqlStorageFactory builder contract", () => {
       .setOptions({ url: "mysql://db.example/commits" })
       .build();
     const entity = entityInput({ name: "commits", multitenant: false });
+    const taskId = create(TaskIdSchema, { value: "entity" });
     const mutation = {
       context: entity.context,
       entity,
-      entityId: "entity",
-      next: create(EntityRecordSchema),
+      entityId: taskId,
+      next: create(EntityRecordSchema, {
+        entityId: Identifiers.pack(TaskIdSchema, taskId),
+        state: Identifiers.pack(
+          TaskSchema,
+          create(TaskSchema, {
+            id: taskId,
+            title: "Task",
+            taskListId: create(TaskListIdSchema, { value: "list-1" }),
+          }),
+        ),
+      }),
     };
     const closed = EntityCommitStorageFactories.create(factory, entity);
     closed.close();
@@ -410,7 +426,7 @@ describe("MysqlStorageFactory builder contract", () => {
 
     const missingId = EntityCommitStorageFactories.create(factory, entity);
     await expect(missingId.commit({ ...mutation, events: [create(EventSchema)] })).rejects.toThrow(
-      /requires delivery-event IDs/i,
+      /requires non-blank unique delivery event IDs/i,
     );
     missingId.close();
     factory.close();
@@ -470,23 +486,30 @@ describe("MysqlStorageFactory builder contract", () => {
 
 function entityInput(context: StorageContext, stateHistory = true, eventHistory = true) {
   const recordSpec = new RecordSpec({
-    sourceType: StringValueSchema,
+    sourceType: TaskSchema,
     recordType: EntityRecordSchema,
-    idKind: "string",
-    extractId: () => "entity",
+    idSchema: TaskIdSchema,
+    extractId: (record) => {
+      if (record.entityId === undefined) throw new Error("Task Entity ID is required.");
+      return fromBinary(TaskIdSchema, record.entityId.value);
+    },
   });
   return {
     context,
     id: {
-      clone: (id: string) => id,
-      key: (id: string) => id,
-      pack: () => create(AnySchema),
-      unpack: () => undefined,
+      clone: (id: ReturnType<typeof create<typeof TaskIdSchema>>) => create(TaskIdSchema, id),
+      key: (id: ReturnType<typeof create<typeof TaskIdSchema>>) => id.value,
+      pack: (id: ReturnType<typeof create<typeof TaskIdSchema>>) =>
+        Identifiers.pack(TaskIdSchema, id),
+      unpack: (packed: ReturnType<typeof create<typeof AnySchema>>) =>
+        packed.typeUrl.endsWith(`/${TaskIdSchema.typeName}`)
+          ? fromBinary(TaskIdSchema, packed.value)
+          : undefined,
     },
     columns: [],
     recordSpec,
-    sourceType: StringValueSchema,
-    stateSchema: StringValueSchema,
+    sourceType: TaskSchema,
+    stateSchema: TaskSchema,
     stateHistory,
     eventHistory,
   };

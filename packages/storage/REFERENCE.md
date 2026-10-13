@@ -117,7 +117,8 @@ fails. Retrying the same input continues with those IDs. `accept()` and
 `acceptThenAppend()` are strict new-admission operations: an existing ID is
 rejected even when its Event is identical. `acceptThenAppend()` checks absence,
 runs its callback, then inserts with an atomic absent-slot condition. Competing
-callbacks may both run, but at most one Event is inserted and dispatched.
+callbacks may both run and may each have effects, but at most one Event is stored.
+The framework EventBus dispatches only after strict insertion succeeds.
 
 History ports are lazy. When a history is disabled, the in-memory provider does
 not open or allocate its grouped records. Current Entity loading always uses
@@ -131,10 +132,12 @@ errors reject. There is no Entity conflict result. This changes the published
 `storage/provider` types for custom adapters; application APIs and persisted
 record layouts are unchanged.
 
-Every provider captures the prepared input before I/O and writes state history,
+The built-in providers capture prepared input before I/O and write state history,
 diagnostic Events, delivery Events, then current state as independent records.
-A later failure leaves completed writes in place; an identical retry reuses
-versions and Event IDs without rerunning the handler. The presence of a delivery
-Event alone does not prove the entire Entity save completed. Concurrent saves
-may interleave, including current-state writes. Automatic Entity versions,
+SQL and Datastore providers automatically retry one classified transient Entity
+persistence failure using that captured input. In memory, a caller retry must
+reuse the same versions and Event IDs without rerunning the handler. A later
+failure leaves completed writes in place. The presence of a delivery Event
+alone does not prove the entire Entity save completed. Concurrent saves may
+interleave, including current-state writes. Automatic Entity versions,
 single-record atomic compare-and-set, and immutable-record checks remain.

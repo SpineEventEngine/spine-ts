@@ -66,8 +66,9 @@ idempotent and drains live handles and pools. A closed factory cannot create new
 handles.
 
 The provider supports record CRUD, compare-and-set, immutable append, Entity
-state and event history, delivery cleanup, declared-column filtering, sorting,
-limits, offsets, and continuations through the common storage API. It uses
+state and event history, declared-column filtering, sorting, limits, offsets,
+and continuations through the common storage API. Eligible Inbox cleanup deletes
+the message ID directly through record storage. It uses
 PostgreSQL `BYTEA`, parameterized `$1`-style values, and PostgreSQL's configured
 text collation. Collation ordering can differ from JavaScript ordering, so
 applications should choose and document their database collation deliberately.

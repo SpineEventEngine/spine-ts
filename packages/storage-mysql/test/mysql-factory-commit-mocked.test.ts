@@ -257,6 +257,30 @@ describe("MysqlStorageFactory mocked entity commits", () => {
       commits.commit({ context, entity, entityId: taskId, next }),
     ).resolves.toBeUndefined();
     expect(seam.calls).toEqual(["families.prepare", "events.prepare", "write"]);
+    const eventWithId = (value: string) =>
+      create(EventSchema, { id: create(EventIdSchema, { value }), message: domainEvent });
+    const otherId = create(TaskIdSchema, { value: "another-task" });
+    const otherRecord = create(EntityRecordSchema, {
+      entityId: Identifiers.pack(TaskIdSchema, otherId),
+      state: next.state,
+    });
+    for (const invalid of [
+      { events: [eventWithId(" ")] },
+      { events: [eventWithId("duplicate"), eventWithId("duplicate")] },
+      { events: [create(EventSchema, { message: domainEvent })] },
+      { diagnostics: [create(EventSchema, { message: domainEvent })] },
+      { diagnostics: [eventWithId(" ")] },
+      { diagnostics: [eventWithId("duplicate"), eventWithId("duplicate")] },
+      { next: create(EntityRecordSchema, { state: next.state }) },
+      { next: otherRecord },
+      { states: [otherRecord] },
+    ]) {
+      seam.calls = [];
+      await expect(
+        commits.commit({ context, entity, entityId: taskId, next, ...invalid }),
+      ).rejects.toThrow(/Entity commit/);
+      expect(seam.calls).toEqual([]);
+    }
     await expect(
       commits.commit({
         context,

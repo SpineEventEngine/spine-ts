@@ -641,16 +641,20 @@ async function immutable<I, R extends Message>(
   record: R,
 ): Promise<void> {
   const id = records.recordSpec.idValueIn(record);
-  if (await records.compareAndSet(id, undefined, record)) return;
-  const existing = await records.read(id);
-  if (existing === undefined) throw new Error("Immutable history record was not retained.");
-  if (
-    !same(
-      toBinary(records.recordSpec.recordType, existing),
-      toBinary(records.recordSpec.recordType, record),
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (await records.compareAndSet(id, undefined, record)) return;
+    const existing = await records.read(id);
+    if (existing === undefined) continue;
+    if (
+      !same(
+        toBinary(records.recordSpec.recordType, existing),
+        toBinary(records.recordSpec.recordType, record),
+      )
     )
-  )
-    throw new Error("Immutable history record has divergent content.");
+      throw new Error("Immutable history record has divergent content.");
+    return;
+  }
+  throw new Error("Immutable history record was not retained.");
 }
 
 function same(left: Uint8Array, right: Uint8Array): boolean {

@@ -20,7 +20,7 @@ import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/se
 import { ColumnTypes, RecordColumn, RecordSpec } from "@spine-event-engine/storage";
 import { EntityCommitStorageFactories } from "@spine-event-engine/storage/provider";
 import type { EntityStorageInput } from "@spine-event-engine/storage/provider";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   TaskIdSchema,
   TaskListIdSchema,
@@ -33,6 +33,7 @@ import {
 } from "../../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 
 import { DatastoreStorageFactory } from "../../src/index.js";
+import { DatastoreEntityStorage } from "../../src/datastore/entity-history.js";
 import { HistoryDatastoreBackend } from "./entity-history-fixture.js";
 
 function taskId(value: string): TaskId {
@@ -110,6 +111,47 @@ function factory(backend: HistoryDatastoreBackend) {
 }
 
 describe("Datastore generated Entity records", () => {
+  it("retries an immutable history insert when a colliding row disappears before inspection", async () => {
+    const compareAndSet = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    const read = vi.fn().mockResolvedValue(undefined);
+    const entity = input();
+    const storage = new DatastoreEntityStorage(
+      entity,
+      (spec) =>
+        ({
+          recordSpec: spec,
+          compareAndSet,
+          read,
+          isOpen: () => true,
+          close: () => undefined,
+        }) as never,
+    );
+
+    await expect(storage.states.append(record("one", 1))).resolves.toBeUndefined();
+    expect(compareAndSet).toHaveBeenCalledTimes(2);
+    expect(read).toHaveBeenCalledOnce();
+  });
+
+  it("bounds immutable history insert attempts when each collision disappears", async () => {
+    const compareAndSet = vi.fn().mockResolvedValue(false);
+    const read = vi.fn().mockResolvedValue(undefined);
+    const entity = input();
+    const storage = new DatastoreEntityStorage(
+      entity,
+      (spec) =>
+        ({
+          recordSpec: spec,
+          compareAndSet,
+          read,
+          isOpen: () => true,
+          close: () => undefined,
+        }) as never,
+    );
+
+    await expect(storage.states.append(record("one", 1))).rejects.toThrow(/not retained/);
+    expect(compareAndSet).toHaveBeenCalledTimes(3);
+    expect(read).toHaveBeenCalledTimes(3);
+  });
   it("stores current, state history, diagnostic history, and Event Store in separate generated families", async () => {
     const backend = new HistoryDatastoreBackend();
     const storage = factory(backend).createEntityStorage(input());

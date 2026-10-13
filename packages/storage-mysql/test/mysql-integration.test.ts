@@ -513,7 +513,7 @@ live("MySQL-family record layout", () => {
           ...mutation(context, input, "missing-event-id"),
           events: [create(EventSchema)],
         }),
-      ).rejects.toThrow(/requires delivery-event IDs/i);
+      ).rejects.toThrow(/requires non-blank unique delivery event IDs/i);
     } finally {
       commits.close();
     }

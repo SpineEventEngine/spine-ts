@@ -1,0 +1,2 @@
+$ node scripts/check-cleanup-rules.mjs
+Cleanup enforcement checks passed.
