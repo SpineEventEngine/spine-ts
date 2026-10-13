@@ -31,4 +31,3 @@ Caused by: Error: temporary Cancel failure
       Tests  1 failed | 82 skipped (83)
    Start at  21:26:44
    Duration  472ms (transform 217ms, setup 0ms, import 328ms, tests 39ms, environment 0ms)
-

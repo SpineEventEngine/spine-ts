@@ -32,4 +32,3 @@ AssertionError: expected [ 'a' ] to deeply equal [ 'a', 'b' ]
       Tests  1 failed | 45 passed (46)
    Start at  21:40:54
    Duration  636ms (transform 33ms, setup 0ms, import 41ms, tests 495ms, environment 0ms)
-

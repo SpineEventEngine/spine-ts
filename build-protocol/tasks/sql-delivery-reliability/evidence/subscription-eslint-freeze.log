@@ -9,4 +9,3 @@
   5580:33  error  Unsafe member access .update on an `any` value        @typescript-eslint/no-unsafe-member-access
 
 ✖ 7 problems (7 errors, 0 warnings)
-

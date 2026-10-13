@@ -24,4 +24,3 @@ If this is a long-running hook, pass a timeout value as the last argument or con
       Tests  1 failed | 35 passed (36)
    Start at  21:39:52
    Duration  11.45s (transform 258ms, setup 0ms, import 421ms, tests 10.93s, environment 0ms)
-

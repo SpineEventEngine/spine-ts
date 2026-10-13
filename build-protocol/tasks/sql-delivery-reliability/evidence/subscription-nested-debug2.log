@@ -7,7 +7,7 @@
 ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
 
  FAIL  packages/auth/test/dynamic-subscription-creator.test.ts > DynamicSubscriptionCreator > rewrites only each immediate recursive child ID while preserving protobuf identity and updates
-Error: nested cleanup failures: 
+Error: nested cleanup failures:
  ❯ packages/auth/test/dynamic-subscription-creator.test.ts:1210:56
     1208|     });
     1209|     expect(relayed[1]).toEqual(update);
@@ -27,4 +27,3 @@ Caused by: Error: backend child cleanup remains incomplete.
       Tests  1 failed | 44 skipped (45)
    Start at  21:38:48
    Duration  1.52s (transform 256ms, setup 0ms, import 395ms, tests 1.02s, environment 0ms)
-

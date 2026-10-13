@@ -32,4 +32,3 @@ AssertionError: expected { kind: 'rejected', …(1) } to deeply equal { kind: 'c
       Tests  1 failed | 72 skipped (73)
    Start at  21:28:07
    Duration  521ms (transform 266ms, setup 0ms, import 413ms, tests 8ms, environment 0ms)
-

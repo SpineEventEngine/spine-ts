@@ -3,4 +3,3 @@
   2273:12  error  Async generator function has no 'await' expression  @typescript-eslint/require-await
 
 ✖ 1 problem (1 error, 0 warnings)
-

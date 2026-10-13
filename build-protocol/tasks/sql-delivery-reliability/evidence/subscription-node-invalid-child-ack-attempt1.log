@@ -33,4 +33,3 @@ AssertionError: expected ConnectError: [internal] internal error { …(4) } to m
       Tests  1 failed | 37 skipped (38)
    Start at  22:16:25
    Duration  540ms (transform 250ms, setup 0ms, import 410ms, tests 31ms, environment 0ms)
-

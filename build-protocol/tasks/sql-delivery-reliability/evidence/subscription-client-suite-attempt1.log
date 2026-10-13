@@ -612,4 +612,3 @@ ClientProtocolError: Client protocol error: subscription activation ACK is missi
       Tests  43 failed | 34 passed (77)
    Start at  21:21:34
    Duration  24.77s (transform 210ms, setup 0ms, import 321ms, tests 24.33s, environment 0ms)
-

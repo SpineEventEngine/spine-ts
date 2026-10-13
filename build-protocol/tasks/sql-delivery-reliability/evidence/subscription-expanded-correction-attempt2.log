@@ -48,4 +48,3 @@ Received: "COMMAND_POST_ERROR"
       Tests  2 failed | 128 passed (130)
    Start at  22:08:01
    Duration  2.24s (transform 726ms, setup 0ms, import 1.12s, tests 1.43s, environment 0ms)
-

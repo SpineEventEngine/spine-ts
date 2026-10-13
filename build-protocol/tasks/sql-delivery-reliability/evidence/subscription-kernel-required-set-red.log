@@ -102,4 +102,3 @@ AssertionError: expected [ 'ready' ] to deeply equal [ 'late', 'ready' ]
       Tests  2 failed | 47 skipped (49)
    Start at  21:50:32
    Duration  1.22s (transform 39ms, setup 0ms, import 47ms, tests 1.06s, environment 0ms)
-
