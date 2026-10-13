@@ -8066,3 +8066,30 @@ Native live evidence used a disposable demo repository and real granted ChatGPT
 plan access. The final source bundle was independently built and its worker
 exercised; it also launches at the fresh sign-in screen. Signed/notarized installer
 production remains outside the source example's supported local-build route.
+
+Remote follow-up: migration commit dfb9d167c pushed immediately to official
+agent-entities. CI Build run 38447227334 passed full and production audits, then
+failed Linux mobrowser gen before tests: its native SDK looks for sibling
+@mobrowser/cli/proto.js inside the isolated SDK package's pnpm dependency scope.
+That absolute path is absent. Local macOS full release remains passing; exact
+migration CI is not ready. Existing implementer resumes (explicit configured
+Sol/medium) for a bounded vendor/pnpm generation-layout correction, with Linux
+reproduction and cheap checks before any broader retry. No generated sources
+will be committed or generation skipped. No public/runtime contract change is
+proposed by this build-path investigation.
+
+Linux generation correction: the pinned SDK 2.18.0 package extension now
+supplies its missing CLI dependency, with the matching lockfile edge. An
+isolated pnpm install resolves the exact SDK-local proto.js path from the
+Linux failure. Full Linux native execution was not available locally; the
+exact-commit Linux CI release profile will confirm it. Frozen-lock installation,
+local generation, 26 focused package tests, full/production audits, dependency
+policy, cleanup, targeted lint/format and diff checks pass. This deterministic
+dependency metadata correction changes no public API, native runtime, domain,
+AI, storage or security contract; the completed specialist dispositions remain
+applicable. The existing implementer's explicit Sol/medium profile is confirmed;
+runtime self-introspection is unavailable. The prior complete local release
+profile remains evidence for unchanged runtime code; CI runs the full profile
+on the corrected dependency graph. No native app rebuild is needed. Push the
+correction immediately and require both verify and publication trial to pass
+before remote acceptance.

@@ -190,6 +190,20 @@ describe("package metadata", () => {
     expect(workspace.overrides?.["smol-toml"]).toBe("1.7.1");
   });
 
+  it("links the Linux desktop generator CLI beside its SDK executable", () => {
+    const workspace = parse(readFileSync(join(repoRoot, "pnpm-workspace.yaml"), "utf8"));
+    const lockfile = parse(readFileSync(join(repoRoot, "pnpm-lock.yaml"), "utf8"));
+    expect(
+      workspace.packageExtensions?.["@mobrowser/sdk-linux-x64@2.18.0"]?.dependencies?.[
+        "@mobrowser/cli"
+      ],
+    ).toBe("2.18.0");
+    const sdkSnapshot = Object.entries(lockfile.snapshots ?? {}).find(([key]) =>
+      key.startsWith("@mobrowser/sdk-linux-x64@2.18.0"),
+    )?.[1];
+    expect(sdkSnapshot?.dependencies?.["@mobrowser/cli"]).toMatch(/^2\.18\.0/u);
+  });
+
   it("declares Apache-2.0 for every framework package without classifying examples as publishable", () => {
     const frameworkPackages = productionPackagePaths(repoRoot);
 

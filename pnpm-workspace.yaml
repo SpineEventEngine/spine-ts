@@ -3,6 +3,11 @@ packages:
   - "packages/*/test-fixtures"
   - "examples/*"
   - "examples/*/*"
+packageExtensions:
+  # The Linux SDK executable invokes @mobrowser/cli/proto.js from its own pnpm package directory.
+  "@mobrowser/sdk-linux-x64@2.18.0":
+    dependencies:
+      "@mobrowser/cli": 2.18.0
 overrides:
   # MōBrowser CLI's ^0.5 range excludes the release fixing ZIP resource exhaustion and extraction advisories.
   "@mobrowser/cli>adm-zip": 0.6.1
