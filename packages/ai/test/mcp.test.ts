@@ -46,6 +46,17 @@ const limits = {
 };
 
 describe("MCP connection and authorization configuration", () => {
+  it("accepts a policy without application byte or time ceilings", () => {
+    const registration = Mcp.server({
+      ...base,
+      transport: { kind: "stdio", executable: "/bin/tool", args: [] },
+      tools: { search: { effect: "read", authorize: () => true } },
+    });
+    expect(mcpDefinition(registration).tools.search).toMatchObject({ effect: "read" });
+    expect(mcpDefinition(registration).tools.search).not.toHaveProperty("timeoutMs");
+    expect(mcpDefinition(registration).tools.search).not.toHaveProperty("maxArgumentBytes");
+    expect(mcpDefinition(registration).tools.search).not.toHaveProperty("maxResultBytes");
+  });
   it("exposes registered server identities through immutable runtime lookups", () => {
     const first = Mcp.server({
       ...base,

@@ -98,7 +98,7 @@ interface AgentModelSelectionAccess {
     scope: AiScope,
     preferences: readonly ModelPreference[],
     signal: AbortSignal,
-    deadlineEpochMs: number,
+    deadlineEpochMs: number | undefined,
     sourceMessage?: Any,
   ): Promise<readonly AgentSelectedModel[]>;
 
@@ -121,7 +121,7 @@ interface AgentModelSelectionAccess {
     scope: AiScope,
     preferences: readonly ModelPreference[],
     signal: AbortSignal,
-    deadlineEpochMs: number,
+    deadlineEpochMs: number | undefined,
     kind: "generation" | "decision",
     sourceMessage?: Any,
   ): Promise<AgentSelectedModel>;
@@ -143,7 +143,7 @@ interface AgentModelSelectionAccess {
     repository: RepositoryAiOptions,
     scope: AiScope,
     signal: AbortSignal,
-    deadlineEpochMs: number,
+    deadlineEpochMs: number | undefined,
     kind: "generation" | "decision",
     sourceMessage?: Any,
   ): Promise<ModelRef | undefined>;
@@ -167,7 +167,7 @@ interface AgentModelSelectionAccess {
     scope: AiScope,
     preferences: readonly ModelPreference[],
     signal: AbortSignal,
-    deadlineEpochMs: number,
+    deadlineEpochMs: number | undefined,
     kind: "generation" | "decision",
     sourceMessage?: Any,
   ): Promise<ReturnType<typeof selectDeployment>>;
@@ -189,7 +189,7 @@ interface AgentModelSelectionAccess {
     scope: AiScope,
     reference: ModelRef | undefined,
     signal: AbortSignal,
-    deadlineEpochMs: number,
+    deadlineEpochMs: number | undefined,
   ): Promise<void>;
 
   /**
@@ -205,7 +205,7 @@ interface AgentModelSelectionAccess {
   invokeHook<Value>(
     registry: AiRegistry,
     signal: AbortSignal,
-    deadlineEpochMs: number,
+    deadlineEpochMs: number | undefined,
     callback: (control: AiControl) => Value | Promise<Value>,
   ): Promise<Value>;
 
@@ -221,7 +221,7 @@ interface AgentModelSelectionAccess {
     backend: ReturnType<typeof backendDefinition>,
     scope: AiScope,
     signal: AbortSignal,
-    deadlineEpochMs: number,
+    deadlineEpochMs: number | undefined,
   ): Promise<NonNullable<AgentSelectedModel["connection"]>>;
 
   /**
@@ -242,9 +242,29 @@ interface AgentModelSelectionAccess {
   awaitHook<Value>(
     work: Value | Promise<Value>,
     signal: AbortSignal,
-    deadlineEpochMs: number,
+    deadlineEpochMs: number | undefined,
   ): Promise<Value>;
 }
+
+/**
+ * Chooses the earliest configured callback or invocation deadline.
+ * @param registry Effective callback policy.
+ * @param invocationDeadline Accepted invocation deadline, when configured.
+ * @returns Absolute callback deadline, or undefined when no ceiling applies.
+ */
+const selectionHookDeadline = (
+  registry: AiRegistry,
+  invocationDeadline: number | undefined,
+): number | undefined => {
+  const hookTimeoutMs = registryOptions(registry).hookTimeoutMs;
+  const hookDeadline =
+    hookTimeoutMs === undefined ? undefined : Time.currentTimeMillis() + hookTimeoutMs;
+  return invocationDeadline === undefined
+    ? hookDeadline
+    : hookDeadline === undefined
+      ? invocationDeadline
+      : Math.min(invocationDeadline, hookDeadline);
+};
 
 /**
  * Selects and authenticates each available model kind at execution start.
@@ -306,7 +326,7 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
     scope: AiScope,
     preferences: readonly ModelPreference[],
     signal: AbortSignal,
-    deadlineEpochMs: number,
+    deadlineEpochMs: number | undefined,
     sourceMessage?: Any,
   ): Promise<readonly AgentSelectedModel[]> {
     const selected: AgentSelectedModel[] = [];
@@ -346,7 +366,7 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
     scope: AiScope,
     preferences: readonly ModelPreference[],
     signal: AbortSignal,
-    deadlineEpochMs: number,
+    deadlineEpochMs: number | undefined,
     kind: "generation" | "decision",
     sourceMessage?: Any,
   ): Promise<AgentSelectedModel> {
@@ -392,7 +412,7 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
     scope: AiScope,
     preferences: readonly ModelPreference[],
     signal: AbortSignal,
-    deadlineEpochMs: number,
+    deadlineEpochMs: number | undefined,
     kind: "generation" | "decision",
     sourceMessage?: Any,
   ): Promise<ReturnType<typeof selectDeployment>> {
@@ -432,7 +452,7 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
     repository: RepositoryAiOptions,
     scope: AiScope,
     signal: AbortSignal,
-    deadlineEpochMs: number,
+    deadlineEpochMs: number | undefined,
     kind: "generation" | "decision",
     sourceMessage?: Any,
   ): Promise<ModelRef | undefined> {
@@ -463,7 +483,7 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
     scope: AiScope,
     reference: ModelRef | undefined,
     signal: AbortSignal,
-    deadlineEpochMs: number,
+    deadlineEpochMs: number | undefined,
   ): Promise<void> {
     if (repository.authorizeSelection === undefined) return;
     const allowed = await this.invokeHook(registry, signal, deadlineEpochMs, (control) =>
@@ -485,33 +505,35 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
   async invokeHook<Value>(
     registry: AiRegistry,
     signal: AbortSignal,
-    deadlineEpochMs: number,
+    deadlineEpochMs: number | undefined,
     callback: (control: AiControl) => Value | Promise<Value>,
   ): Promise<Value> {
-    const deadline = Math.min(
-      deadlineEpochMs,
-      Time.currentTimeMillis() +
-        (registryOptions(registry).hookTimeoutMs ??
-          registryOptions(registry).invocationLimits.deadlineMs),
-    );
+    const deadline = selectionHookDeadline(registry, deadlineEpochMs);
     if (signal.aborted) throw new Error("Agent model selection cancelled.");
-    if (deadline <= Time.currentTimeMillis()) throw new Error("Agent model selection expired.");
+    if (deadline !== undefined && deadline <= Time.currentTimeMillis())
+      throw new Error("Agent model selection expired.");
     const controller = new AbortController();
     const linked = AbortSignal.any([signal, controller.signal]);
-    const timer = setTimeout(
-      () => {
-        controller.abort();
-      },
-      Math.max(0, deadline - Time.currentTimeMillis()),
-    );
+    const timer =
+      deadline === undefined
+        ? undefined
+        : setTimeout(
+            () => {
+              controller.abort();
+            },
+            Math.max(0, deadline - Time.currentTimeMillis()),
+          );
     try {
       return await this.awaitHook(
-        callback({ signal: linked, deadlineEpochMs: deadline }),
+        callback({
+          signal: linked,
+          ...(deadline === undefined ? {} : { deadlineEpochMs: deadline }),
+        }),
         linked,
         deadline,
       );
     } finally {
-      clearTimeout(timer);
+      if (timer !== undefined) clearTimeout(timer);
       controller.abort();
     }
   },
@@ -563,19 +585,19 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
     backend: ReturnType<typeof backendDefinition>,
     scope: AiScope,
     signal: AbortSignal,
-    deadlineEpochMs: number,
+    deadlineEpochMs: number | undefined,
   ): Promise<NonNullable<AgentSelectedModel["connection"]>> {
     if (signal.aborted) throw new Error("Agent model selection cancelled.");
-    if (deadlineEpochMs <= Time.currentTimeMillis())
+    if (deadlineEpochMs !== undefined && deadlineEpochMs <= Time.currentTimeMillis())
       throw new Error("Agent model selection expired.");
-    const control = { signal, deadlineEpochMs };
+    const control = { signal, ...(deadlineEpochMs === undefined ? {} : { deadlineEpochMs }) };
     const identity = await this.awaitHook(
       backend.resolveIdentity(scope, control),
       signal,
       deadlineEpochMs,
     );
     signal.throwIfAborted();
-    if (deadlineEpochMs <= Time.currentTimeMillis())
+    if (deadlineEpochMs !== undefined && deadlineEpochMs <= Time.currentTimeMillis())
       throw new Error("Agent model selection expired.");
     const allowed = await this.awaitHook(
       backend.authorizeUse(scope, identity, control),
@@ -614,22 +636,24 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
   awaitHook<Value>(
     work: Value | Promise<Value>,
     signal: AbortSignal,
-    deadlineEpochMs: number,
+    deadlineEpochMs: number | undefined,
   ): Promise<Value> {
-    const remaining = deadlineEpochMs - Time.currentTimeMillis();
+    const remaining =
+      deadlineEpochMs === undefined ? undefined : deadlineEpochMs - Time.currentTimeMillis();
     if (signal.aborted) return Promise.reject(new Error("Agent model selection cancelled."));
-    if (remaining <= 0) return Promise.reject(new Error("Agent model selection expired."));
+    if (remaining !== undefined && remaining <= 0)
+      return Promise.reject(new Error("Agent model selection expired."));
     return new Promise<Value>((resolve, reject) => {
       const abort = () => {
-        clearTimeout(timer);
+        if (timer !== undefined) clearTimeout(timer);
         reject(new Error("Agent model selection cancelled."));
       };
-      const timer = setTimeout(abort, remaining);
+      const timer = remaining === undefined ? undefined : setTimeout(abort, remaining);
       signal.addEventListener("abort", abort, { once: true });
       Promise.resolve(work)
         .then(resolve, reject)
         .finally(() => {
-          clearTimeout(timer);
+          if (timer !== undefined) clearTimeout(timer);
           signal.removeEventListener("abort", abort);
         })
         .catch(() => undefined);

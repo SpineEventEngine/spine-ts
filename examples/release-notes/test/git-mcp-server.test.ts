@@ -25,6 +25,13 @@ import { ReleaseGitRegistration } from "../src/trusted/git-mcp-registration.js";
 import { GitMcpServer } from "../src/trusted/git-mcp-server.js";
 import { GitReleaseComparison } from "../src/trusted/git-release.js";
 
+it("returns a valid large structured tool result without a local byte ceiling", () => {
+  const text = "x".repeat(210_000);
+  const result = GitMcpServer.success({ text });
+  expect(result.isError).not.toBe(true);
+  expect(result.structuredContent).toEqual({ text });
+});
+
 it("serves pinned evidence and rejects paths outside the catalog through the SDK protocol", async () => {
   const directory = mkdtempSync(join(tmpdir(), "spine-mcp-memory-"));
   const gitExecutable = execFileSync("which", ["git"], { encoding: "utf8" }).trim();

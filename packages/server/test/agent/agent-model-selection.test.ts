@@ -154,6 +154,19 @@ function selectionRegistry(
 }
 
 describe("Agent model authorization scope", () => {
+  it("awaits an unbounded hook until cancellation when no deadline is configured", async () => {
+    const controller = new AbortController();
+    const timeout = vi.spyOn(globalThis, "setTimeout");
+    const pending = AgentModelSelection.awaitHook(
+      new Promise<never>(() => undefined),
+      controller.signal,
+      undefined,
+    );
+    expect(timeout).not.toHaveBeenCalled();
+    controller.abort();
+    await expect(pending).rejects.toThrow("cancelled");
+    timeout.mockRestore();
+  });
   it("uses the accepted support Command and claim-time preference before authorizing a deployment", async () => {
     const authorized = vi.fn(() => true);
     const { registry, preferred } = selectionRegistry(authorized);

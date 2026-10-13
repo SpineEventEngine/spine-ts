@@ -552,9 +552,10 @@ Entity's handling operation; database reads and writes remain short operations.
 Another Agent instance can make progress while this one waits for its model.
 
 Define the operation with `AiModel.define()`. Its generated Proto descriptors
-describe the input and result. Its instructions explain the job. Its limits bound
-requests, elapsed time, bytes, output tokens, and permitted tool calls. Native
-schema output and prompt-and-validate output are explicit choices; both require
+describe the input and result. Its instructions explain the job. Applications can
+optionally limit requests, elapsed time, bytes, output tokens, and tool calls.
+Omitted settings do not impose framework defaults. Native schema output and
+prompt-and-validate output are explicit choices; both require
 local validation before the Agent receives a successful result. An application
 validation rule can reject a reply that ignores a known business constraint.
 
@@ -565,8 +566,8 @@ a person responsible for sending the reply.
 
 Configure authenticated model deployments outside Entity code through
 `AiRegistry` and the optional [Vercel and Ax adapter](../packages/ai-vercel-ax/README.md).
-The Entity depends only on Spine APIs. The registry also supplies finite limits
-shared by all model calls made while handling one signal. MCP tools are registered
+The registry can also apply optional ceilings shared by all model calls made
+while handling one signal. MCP tools are registered
 explicitly, with an allowlist and application authorization; tool access is not
 inferred from the model's text.
 

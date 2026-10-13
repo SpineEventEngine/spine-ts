@@ -62,7 +62,7 @@ export interface AgentHistoryScope {
  * @param view Indexed history view.
  * @param request Public read request.
  * @param live Loads the current provider page only when needed.
- * @param maxBytes Effective response-byte ceiling for this read.
+ * @param maxBytes Optional response-byte ceiling for this read.
  * @returns The saved or newly loaded complete provider page.
  */
 export type AgentHistoryJournal = (
@@ -70,7 +70,7 @@ export type AgentHistoryJournal = (
   view: AgentHistoryView,
   request: HistoryRead,
   live: () => Promise<AgentHistoryPage>,
-  maxBytes: number,
+  maxBytes: number | undefined,
 ) => Promise<AgentHistoryPage>;
 
 /**
@@ -100,13 +100,12 @@ export interface AgentHistoryBinding<Id> {
   readonly journal?: AgentHistoryJournal;
 
   /**
-   * Maximum serialized entry bytes in one response; defaults to 1 MiB.
+   * Optional maximum serialized entry bytes in one response.
    */
   readonly maxBytes?: number;
 }
 
 const bindings = new WeakMap<object, AgentHistoryBinding<unknown>>();
-const maxHistoryBytes = 1_048_576;
 
 /**
  * Internal accessors shared by the Agent base and repository runtime.
@@ -411,28 +410,27 @@ const AgentHistoryPages = Object.freeze({
     view: AgentHistoryView,
     request: HistoryRead,
     after: AgentHistoryOrderKey | undefined,
-    maxBytes: number,
+    maxBytes: number | undefined,
   ): Promise<AgentHistoryPage> {
     return binding.storage.read({
       entityId: binding.entityId,
       view,
       ...(after === undefined ? {} : { after }),
       count: request.pageSize,
-      maxBytes,
+      ...(maxBytes === undefined ? {} : { maxBytes }),
     });
   },
 
   /**
-   * Resolves a finite byte budget before live or journaled reads.
+   * Validates a supplied byte budget before live or journaled reads.
    *
    * @param configured Optional runtime byte limit.
    * @returns Validated byte limit.
    */
-  limit(configured: number | undefined): number {
-    const maxBytes = configured ?? maxHistoryBytes;
-    if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0)
+  limit(configured: number | undefined): number | undefined {
+    if (configured !== undefined && (!Number.isSafeInteger(configured) || configured <= 0))
       throw new RangeError("Agent history maxBytes must be a positive safe integer.");
-    return maxBytes;
+    return configured;
   },
 
   /**
@@ -503,11 +501,12 @@ const AgentHistoryCursorValues = Object.freeze({
     value: string | undefined,
     scope: AgentHistoryScope,
     view: AgentHistoryView,
-    maxBytes: number,
+    maxBytes: number | undefined,
   ): AgentHistoryOrderKey | undefined {
     if (value === undefined) return undefined;
     try {
-      if (value.length > this.maxLength(scope, view, maxBytes)) throw new Error();
+      if (maxBytes !== undefined && value.length > this.maxLength(scope, view, maxBytes))
+        throw new Error();
       const cursor = this.parse(value);
       if (
         cursor.version !== 1 ||

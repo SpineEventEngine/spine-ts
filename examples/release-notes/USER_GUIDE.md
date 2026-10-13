@@ -2,8 +2,10 @@
 
 A Git log tells a maintainer what changed. It rarely explains those changes in
 language suitable for a release announcement. Release Notes Studio lets a
-maintainer select two committed revisions, ask for a draft, inspect the cited
-changes, edit the text, and approve the exact Markdown to export.
+maintainer select two committed revisions, ask for a draft, edit arbitrary
+Markdown, preview it, and export the exact current bytes. The validated citation
+evidence remains available through recorded history APIs, not a desktop history
+screen.
 
 The model proposes text. The application decides which proposal to accept, and
 the person decides which text to publish. There is no background generation.
@@ -17,16 +19,16 @@ Suppose a document-conversion library added password-protected PDF support,
 fixed page rotation, and removed a deprecated option. A maintainer chooses the
 release range and asks for notes aimed at library users.
 
-| Step                 | Responsible code                        | What happens                                                                                 | Timing                                                                             |
-| -------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Choose the range     | Trusted desktop service                 | Resolves both revisions to full commit IDs and reads a bounded catalog of committed changes. | Asynchronous Git processes.                                                        |
-| Submit generation    | Trusted desktop service                 | Posts `RequestReleaseGeneration` with the selected inputs and model/account reference.       | Asynchronous Command submission.                                                   |
-| Accept the inputs    | `ReleaseDraft` Aggregate                | Checks the Command and emits `ReleaseGenerationRequested`.                                   | Synchronous handler; persistence and Event delivery are asynchronous.              |
-| Draft the notes      | `ReleaseNotesAgent`                     | Reacts to that Event and awaits `this.ai.invoke(...)`.                                       | Asynchronous model interaction, including any MCP lookups and correction attempts. |
-| Return the proposal  | `ReleaseNotesAgent`                     | Emits `ReleaseNotesProposed`, or a domain failure Event.                                     | Local result construction; persistence and delivery are asynchronous.              |
-| Accept or discard it | `ReleaseDraft` Aggregate                | Applies the application's rules for whether the proposal still belongs to the draft.         | Synchronous handler; persistence and delivery are asynchronous.                    |
-| Show the result      | Projection and desktop service          | Expose committed draft state and history to the renderer.                                    | Asynchronous reads and notifications; synchronous rendering.                       |
-| Approve and export   | Aggregate, then trusted desktop service | Accepts the reviewed bytes; prepares them for a native file save.                            | Synchronous domain decisions, followed by asynchronous file writing.               |
+| Step                 | Responsible code                        | What happens                                                                              | Timing                                                                             |
+| -------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Choose the range     | Trusted desktop service                 | Resolves both revisions to full commit IDs and reads a catalog of committed changes.      | Asynchronous Git processes.                                                        |
+| Submit generation    | Trusted desktop service                 | Posts `RequestReleaseGeneration` with the selected inputs and model/account reference.    | Asynchronous Command submission.                                                   |
+| Accept the inputs    | `ReleaseDraft` Aggregate                | Checks the Command and emits `ReleaseGenerationRequested`.                                | Synchronous handler; persistence and Event delivery are asynchronous.              |
+| Draft the notes      | `ReleaseNotesAgent`                     | Reacts to that Event and awaits `this.ai.invoke(...)`.                                    | Asynchronous model interaction, including any MCP lookups and correction attempts. |
+| Return the proposal  | `ReleaseNotesAgent`                     | Emits `ReleaseNotesProposed`, or a domain failure Event.                                  | Local result construction; persistence and delivery are asynchronous.              |
+| Accept or discard it | `ReleaseDraft` Aggregate                | Applies the application's rules for whether the proposal still belongs to the draft.      | Synchronous handler; persistence and delivery are asynchronous.                    |
+| Show the result      | Projection and desktop service          | Expose committed draft state and history to the renderer.                                 | Asynchronous reads and notifications; synchronous rendering.                       |
+| Edit and export      | Aggregate, then trusted desktop service | Stores exact UTF-8 Markdown and prepares a Version-bound snapshot for native file saving. | Synchronous domain decisions, followed by asynchronous file writing.               |
 
 An acknowledgement from `Client.post()` is not proof that all those steps have
 finished. The desktop service reads the committed outcome and the Agent's
@@ -104,13 +106,6 @@ const draftReleaseNotes = AiModel.define({
         { server: "release-git", tool: "read_change_patch" },
         { server: "release-git", tool: "read_release_file" },
     ],
-    limits: {
-        modelRequests: 3,
-        toolCalls: 6,
-        deadlineMs: 120_000,
-        maxInputBytes: 256_000,
-        maxOutputBytes: 32_000,
-    },
     validation: {
         version: "1",
         check: ReleaseDocumentValidation.check,
@@ -123,22 +118,21 @@ For example, a model might cite `rotation.ts` even though that file is absent
 from the accepted comparison. Parsing JSON does not catch that mistake. The
 application validator checks the exact commit, parent, and path against the
 catalog, and returns an `UNLISTED_EVIDENCE` issue with its field path. The runtime
-can include that issue in a recorded correction attempt, within the same limits.
+can include that issue in a recorded correction attempt.
 
 A plain-text answer cannot become a `ReleaseNotesDocument` merely because the
 model was asked for one. The adapter parses the answer, validates its structure,
 and runs the application check before returning a successful typed result.
 The ChatGPT plan profile uses `prompt-and-validate`; it does not promise native
-schema-constrained generation. Exhausting the allowed attempts produces a failed
-outcome for the handler to interpret.
+schema-constrained generation. A configured attempt ceiling, when reached,
+produces a failed outcome for the handler to interpret.
 
 These checks establish that the cited evidence belongs to the selected range.
 They cannot establish that every sentence correctly explains the code. Human
 review remains necessary.
 
-The model's limits are also subject to the invocation-wide limits registered
-in the Bounded Context. They are ceilings, not promised numbers of attempts.
-Tool continuation and correction both consume the available model requests.
+Applications may configure model and invocation-wide ceilings. Tool continuation
+and correction both count toward a configured model-request ceiling.
 
 ## 4. React to the accepted Event
 
@@ -236,7 +230,7 @@ This example solves the problem in its Aggregate. When it accepts a generation
 Command, it remembers the generation ID and the Aggregate Version associated
 with those inputs. Its Event explicitly carries those values; the Agent
 explicitly copies them into its result Event. The Aggregate accepts the proposal
-only when it matches the pending generation. Editing or approving the draft
+only when it matches the pending generation. Editing or canceling the draft
 clears that pending generation.
 
 These are application rules. An Agent does not automatically carry another
@@ -255,24 +249,40 @@ report the rejected generation and allow a fresh Command using the current
 draft. No Agent execution begins for that rejected Command. This is different
 from rejecting a conflicting repeat of work that was already accepted.
 
-Approval is another explicit Command. It records the reviewed Markdown bytes
-and digest. Export preparation checks the current Command Version and retained
-approval; the trusted service writes only the bytes from the corresponding
-`ReleaseNotesExportPrepared` Event. Neither the Agent nor the model approves or
-writes a release announcement.
+The accepted proposal remains structured and evidence-validated. The
+Aggregate converts it once to initial clean Markdown; citation details remain
+in proposal history, not in the editable document. Subsequent edits replace
+arbitrary UTF-8 Markdown bytes at an expected Version, including empty content.
+No parser turns those edits back into a structured proposal. A matching
+`CancelReleaseGeneration` clears only its pending generation and preserves the
+current Markdown. A later proposal for that generation is discarded.
 
-The **Preview** tab requires saved edits before approval or export. It renders
-Markdown without opening links, loading remote images, or executing HTML. Link
-and image destinations remain readable, and **Show export text** exposes the
-exact Markdown supplied to approval and export.
+The workspace opens only after a usable ChatGPT sign-in. After restarting,
+choose a stored usable account in the dialog. On **Your releases**, **New
+release** starts the **Changes** → **Style** → **Write** wizard. A native
+project picker returns an opaque handle and real local refs; the trusted
+process resolves the selected comparison. The Changes step shows commit and file
+counts before **Next**. **Writing style** offers Customers or Developers,
+Plain or Friendly tone, optional Notes, and an account model. Tone and Notes
+become model instructions. The sign-out icon is at the right of the top bar.
 
-The desktop asks for a destination before posting the export Command. Cancelling
-that dialog leaves the draft's Version unchanged. The
+When writing succeeds, the result opens in the exact Markdown editor. Autosave queues
+edits and advances from acknowledged Versions; navigation and export flush the
+latest text. **Saved for this session** means those exact bytes were accepted.
+The **Preview** tab renders Markdown without opening links, loading remote
+images, or executing HTML. **Copy Markdown** uses the current editor buffer.
+The selected changes and structured citation evidence remain available in
+recorded history, but are not inserted into exported prose.
+
+`PrepareReleaseNotesExport` checks the current Version and emits a neutral
+snapshot with the digest and exact Markdown bytes. The trusted service writes
+only bytes correlated with that draft, producer, and Version; it does not
+approve on the person's behalf. The desktop asks for a destination before
+posting this Command. Canceling that dialog saves no file. The
 [macOS save dialog](https://developer.apple.com/documentation/appkit/nsopensavepaneldelegate/panel%28_%3Auserenteredfilename%3Aconfirmed%3A%29)
-asks before replacing an existing file. A failed write is reported as a failure;
-read the current draft before retrying. If the app stops after writing the file
-but before showing success, inspect the selected destination: the file may
-already exist. Reopening the app never repeats an export automatically.
+asks before replacing an existing file. If the app stops after writing but
+before showing success, inspect the destination: the file may already exist.
+Reopening the app never repeats an export automatically.
 
 ## 6. Connect an authenticated model
 
@@ -324,13 +334,13 @@ local stdio MCP worker. The Agent's model definition permits only three tools:
 | `read_release_file`    | Read a cataloged committed file.               |
 
 The model supplies tool arguments. The framework checks them against the
-advertised schemas and configured policy, records the call, enforces its bounds,
+advertised schemas and configured policy, records the call, enforces any configured bounds,
 and returns the supported result to the model. The worker checks membership in
 the accepted catalog before reading Git objects.
 
 The worker cannot execute an arbitrary shell command or read an arbitrary
 filesystem path. It uses full commit IDs, so moving a branch after selection
-does not change the accepted input. Binary, missing, or oversized detail is
+does not change the accepted input. Binary or missing detail is
 reported as incomplete. Selecting another repository or a narrower range is an
 application action, not something the model can do through these tools.
 
@@ -339,12 +349,10 @@ patch, or file do not grant additional tools or authorize publishing.
 
 ## 8. Read what happened
 
-The desktop's **Activity** tab presents readable summaries. Its **View** choices
-map to the four history methods below: **Everything**, **Writing**, **Progress**,
-and **Draft changes**, respectively. **Load activity** loads the newest page;
-**Earlier activity** continues from its cursor. The UI does not show internal
-IDs, raw JSON, or provider request bodies. The recorded data remains available
-through the repository API.
+The desktop keeps the writing view focused on the current release. The recorded
+history remains available through the repository API: use the methods below to
+read all activity, writing attempts, progress, or draft changes. The desktop
+does not show internal IDs, raw JSON, or provider request bodies.
 
 History is recorded for every Agent. There is no recording switch. Its repository
 keeps indexes for that Agent instance; the desktop does not scan all System
@@ -358,8 +366,8 @@ Events in the Bounded Context to find a few interactions.
 | `domainEventHistory`  | Domain Event envelopes emitted by this Agent.                                             |
 
 Each call reads a page. Its `nextCursor` reads older entries. A page size is not
-a retention limit; continue until no cursor remains. The page byte bound can
-return fewer entries than requested.
+a retention limit; continue until no cursor remains. An explicitly configured
+page byte bound can return fewer entries than requested.
 
 A trusted application can obtain the registered repository and read a page:
 
@@ -407,7 +415,7 @@ itself send that history to the model or invoke a model. The handler must decide
 which information belongs in the next typed input.
 
 The Agent's emitted domain history contains proposals and failures. The
-Aggregate's later acceptance and approval Events belong to the Aggregate, not
+Aggregate's later acceptance and edit Events belong to the Aggregate, not
 to the Agent's `domainEventHistory`.
 
 The repository also exposes `agentExecution(id, sourceSignalId, scope)`.
@@ -442,7 +450,7 @@ Agent history. A scripted AI backend is useful for application decisions; real
 protocol fixtures are useful for adapter and MCP integration.
 
 The example's [domain tests](test/release-domain.test.ts) exercise stale edits,
-proposal acceptance, duplicate generation, approval, and export without a live
+proposal acceptance, duplicate generation, exact Markdown edits, and export without a live
 account. Its [Agent integration test](test/release-agent.test.ts) combines
 `BlackBox`, the actual Responses adapter, a controlled provider stream, and a
 real local Git MCP worker. It deliberately returns an unlisted citation before
@@ -462,17 +470,17 @@ Ending the backend process loses that session. Saved sign-in registrations and
 explicitly exported Markdown are separate persisted data.
 
 The application runs locally, but inference runs at OpenAI. Selected repository
-content can be sent there as model input or a tool result. Export before quitting
-if you want to keep the approved release notes. Reopening the app does not
+content can be sent there as model input or a tool result. Save Markdown before quitting
+if you want to keep the edited release notes. Reopening the app does not
 reconstruct drafts from credentials or automatically repeat generation.
 
-Choosing **Quit**, or closing the window during active or unconfirmed generation,
+Closing the window during active or unconfirmed generation
 offers **Wait** and
-**Stop and quit**. Wait keeps the window and backend session running. Stop and
-quit closes the Bounded Context before the window. Local cancellation does not
+**Stop**. Wait keeps the window and backend session running. Stop closes the
+Bounded Context before the window. Local cancellation does not
 prove that the provider did no work or consumed no plan usage.
 
-The reusable Agent behavior is typed invocation, bounded attempts and tools,
+The reusable Agent behavior is typed invocation, optional configured attempt and tool bounds,
 authorization hooks, recorded interactions, saved execution progress, and indexed
 history. The release workflow—including Git policy, proposal acceptance,
-approval, account selection UI, and file export—is this application's code.
+exact Markdown editing, account selection UI, and file export—is this application's code.

@@ -12,13 +12,13 @@
  * the License.
  */
 
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import { createRoot } from "react-dom/client";
-import { CircleHelp, LogOut, Power, RefreshCw, Sparkles } from "lucide-react";
+import { ArrowRight, FileText } from "lucide-react";
 
 import type { DesktopAuthStatus } from "./trusted/desktop-auth.js";
 import { StudioIpcErrors } from "./trusted/studio-ipc-errors.js";
-import { StudioPanel, type StudioBridge } from "./studio-ui.js";
+import { StudioFlow, type StudioFlowBridge } from "./studio-flow.js";
 import { ChoiceSelect } from "./choice-select.js";
 
 interface ModelChoice {
@@ -36,7 +36,7 @@ interface ModelCatalog {
   readonly clientId: string;
   readonly models: readonly ModelChoice[];
 }
-interface ReleaseNotesBridge extends StudioBridge {
+interface ReleaseNotesBridge extends StudioFlowBridge {
   /**
    * Returns the account's selected model after renderer reload.
    *
@@ -57,6 +57,13 @@ interface ReleaseNotesBridge extends StudioBridge {
    * @returns The sign in result.
    */
   signIn(): Promise<DesktopAuthStatus>;
+
+  /**
+   * Starts a separate ChatGPT account registration.
+   *
+   * @returns Renderer-safe account status.
+   */
+  addAccount(): Promise<DesktopAuthStatus>;
 
   /**
    * Connects the issued account in the browser.
@@ -123,24 +130,48 @@ const useAccount = () => {
     pendingClientIds: [],
   });
   const [busy, setBusy] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [statusFailed, setStatusFailed] = useState(false);
   const [notice, setNotice] = useState("");
-  useEffect(() => {
-    void window.releaseNotes.status().then(setStatus);
-  }, []);
-  const run = async (action: () => Promise<DesktopAuthStatus>) => {
+  const refresh = async () => {
     setBusy(true);
     setNotice("");
     try {
-      setStatus(await action());
+      setStatus(await window.releaseNotes.status());
+      setStatusFailed(false);
     } catch (error) {
-      setNotice(StudioIpcErrors.display(error, "The account action could not be completed."));
+      setStatusFailed(true);
+      setNotice(StudioIpcErrors.display(error, "Could not check your ChatGPT connection."));
     } finally {
+      setLoaded(true);
       setBusy(false);
     }
   };
+  useEffect(() => {
+    void refresh();
+  }, []);
+  const run = accountAction(setStatus, setBusy, setNotice);
   const signOut = useSignOut(setStatus, setBusy, setNotice);
-  return { status, busy, notice, setNotice, run, signOut };
+  return { status, busy, loaded, statusFailed, notice, setNotice, run, signOut, refresh };
 };
+
+const accountAction =
+  (
+    onStatus: (value: DesktopAuthStatus) => void,
+    onBusy: (value: boolean) => void,
+    onNotice: (value: string) => void,
+  ) =>
+  async (action: () => Promise<DesktopAuthStatus>) => {
+    onBusy(true);
+    onNotice("");
+    try {
+      onStatus(await action());
+    } catch (error) {
+      onNotice(StudioIpcErrors.display(error, "The account action could not be completed."));
+    } finally {
+      onBusy(false);
+    }
+  };
 
 const useSignOut = (
   onStatus: (value: DesktopAuthStatus) => void,
@@ -158,6 +189,7 @@ const useSignOut = (
         );
     } catch (error) {
       onNotice(StudioIpcErrors.display(error, "Sign-out could not be completed."));
+      throw error;
     } finally {
       onBusy(false);
     }
@@ -204,7 +236,7 @@ const useCurrentModel = (
   status: DesktopAuthStatus,
   models: readonly ModelChoice[],
   pending: RefObject<{ clientId: string | undefined; version: number }>,
-  onChoice: (choice: { clientId: string; model: string } | undefined) => void,
+  onChoice: (choice: { clientId: string; model: string; confirmed: boolean } | undefined) => void,
   onNotice: (value: string) => void,
 ) => {
   useEffect(() => {
@@ -221,7 +253,7 @@ const useCurrentModel = (
           pending.current.version === version &&
           models.some((item) => item.slug === result.model)
         )
-          onChoice({ clientId, model: result.model });
+          onChoice({ clientId, model: result.model, confirmed: true });
       })
       .catch(() => {
         if (current && pending.current.clientId === clientId && pending.current.version === version)
@@ -233,9 +265,78 @@ const useCurrentModel = (
   }, [status.selectedClientId, models]);
 };
 
+interface ModelSelection {
+  clientId: string;
+  model: string;
+  version: number;
+}
+
+interface ModelChoiceState {
+  clientId: string;
+  model: string;
+  confirmed: boolean;
+}
+
+interface ModelSelectionPending {
+  clientId: string | undefined;
+  version: number;
+}
+
+const confirmModelSelection = async (
+  requested: ModelSelection,
+  pending: RefObject<ModelSelectionPending>,
+  onChoice: (value: ModelChoiceState | undefined) => void,
+  onNotice: (value: string) => void,
+) => {
+  const isCurrent = () =>
+    pending.current.clientId === requested.clientId &&
+    pending.current.version === requested.version;
+  try {
+    const result = await window.releaseNotes.selectModel(requested.clientId, requested.model);
+    if (isCurrent()) {
+      onChoice({ clientId: requested.clientId, model: result.model, confirmed: true });
+      onNotice("");
+    }
+  } catch (error) {
+    if (isCurrent()) {
+      onChoice(undefined);
+      onNotice(
+        StudioIpcErrors.display(error, "That model is no longer available to this account."),
+      );
+    }
+  }
+};
+
+const drainModelSelections = async (
+  pending: RefObject<ModelSelectionPending>,
+  queued: RefObject<ModelSelection | undefined>,
+  preparing: RefObject<boolean>,
+  onChoice: (value: ModelChoiceState | undefined) => void,
+  onNotice: (value: string) => void,
+) => {
+  if (preparing.current) return;
+  preparing.current = true;
+  try {
+    while (queued.current) {
+      const requested = queued.current;
+      queued.current = undefined;
+      if (
+        pending.current.clientId !== requested.clientId ||
+        pending.current.version !== requested.version
+      )
+        continue;
+      await confirmModelSelection(requested, pending, onChoice, onNotice);
+    }
+  } finally {
+    preparing.current = false;
+  }
+};
+
 const useModels = (status: DesktopAuthStatus, onNotice: (value: string) => void) => {
-  const [choice, setChoice] = useState<{ clientId: string; model: string }>();
+  const [choice, setChoice] = useState<ModelChoiceState>();
   const pending = useRef({ clientId: status.selectedClientId, version: 0 });
+  const queued = useRef<ModelSelection | undefined>(undefined);
+  const preparing = useRef(false);
   if (pending.current.clientId !== status.selectedClientId) {
     pending.current = { clientId: status.selectedClientId, version: pending.current.version + 1 };
   }
@@ -247,24 +348,17 @@ const useModels = (status: DesktopAuthStatus, onNotice: (value: string) => void)
     const clientId = status.selectedClientId;
     if (!clientId) return;
     const version = ++pending.current.version;
-    try {
-      const result = await window.releaseNotes.selectModel(clientId, slug);
-      if (pending.current.clientId === clientId && pending.current.version === version) {
-        setChoice({ clientId, model: result.model });
-      }
-    } catch (error) {
-      if (pending.current.clientId === clientId && pending.current.version === version) {
-        onNotice(
-          StudioIpcErrors.display(error, "That model is no longer available to this account."),
-        );
-      }
-    }
+    setChoice({ clientId, model: slug, confirmed: false });
+    onNotice("");
+    queued.current = { clientId, model: slug, version };
+    await drainModelSelections(pending, queued, preparing, setChoice, onNotice);
   };
   const model =
     choice !== undefined && choice.clientId === status.selectedClientId && status.planEnabled
       ? choice.model
       : "";
-  return { models, model, select };
+  const modelPending = model !== "" && choice?.confirmed === false;
+  return { models, model, modelPending, select };
 };
 
 const AccountPicker = ({
@@ -287,196 +381,143 @@ const AccountPicker = ({
   />
 );
 
-const PendingSignIns = ({
-  status,
-  busy,
-  run,
-}: Pick<ReturnType<typeof useAccount>, "status" | "busy" | "run">) => (
-  <>
-    {status.pendingClientIds.map((clientId, index) => (
-      <button
-        key={clientId}
-        disabled={busy}
-        onClick={() => void run(() => window.releaseNotes.reconnect(clientId))}
-      >
-        Continue sign-in {String(index + 1)}
-      </button>
-    ))}
-  </>
-);
+const trapSignInFocus = (event: KeyboardEvent<HTMLDivElement>, gate: HTMLDivElement | null) => {
+  if (event.target instanceof Element && event.target.closest('[role="listbox"]')) return;
+  if (event.key === "Escape") event.preventDefault();
+  if (event.key !== "Tab") return;
+  const controls = Array.from(
+    gate?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? [],
+  );
+  if (controls.length === 0) return;
+  const current = controls.indexOf(document.activeElement as HTMLButtonElement);
+  const next = event.shiftKey
+    ? (current - 1 + controls.length) % controls.length
+    : (current + 1) % controls.length;
+  event.preventDefault();
+  controls[next]?.focus();
+};
 
-const AccountActions = ({ status, busy, run, signOut }: ReturnType<typeof useAccount>) => (
-  <>
-    <button disabled={busy} onClick={() => void run(() => window.releaseNotes.signIn())}>
-      Continue with ChatGPT
-    </button>
-    {status.accounts.length > 0 && <AccountPicker status={status} busy={busy} run={run} />}
-    <PendingSignIns status={status} busy={busy} run={run} />
-    <p className="account-state">
-      {status.planEnabled ? "Ready to write with ChatGPT" : "Connect a ChatGPT plan to write"}
-    </p>
-    <div className="account-tools" role="group" aria-label="Account actions">
-      {status.selectedClientId && (
-        <SelectedAccountActions
-          clientId={status.selectedClientId}
-          busy={busy}
-          run={run}
-          signOut={signOut}
-        />
-      )}
-      <button
-        className="icon-action"
-        aria-label="View plan usage"
-        title="View plan usage"
-        onClick={() => void window.releaseNotes.manageUsage()}
-      >
-        <CircleHelp aria-hidden="true" size={17} />
-      </button>
-    </div>
-  </>
-);
-
-const SelectedAccountActions = ({
-  clientId,
-  busy,
-  run,
-  signOut,
-}: {
-  clientId: string;
-  busy: boolean;
-  run: ReturnType<typeof useAccount>["run"];
-  signOut: ReturnType<typeof useAccount>["signOut"];
-}) => (
-  <>
-    <button
-      className="icon-action"
-      aria-label="Refresh connection"
-      title="Refresh connection"
-      disabled={busy}
-      onClick={() => void run(() => window.releaseNotes.reconnect(clientId))}
-    >
-      <RefreshCw aria-hidden="true" size={17} />
-    </button>
-    <button
-      className="icon-action"
-      aria-label="Sign out"
-      title="Sign out"
-      disabled={busy}
-      onClick={() => void signOut(clientId)}
-    >
-      <LogOut aria-hidden="true" size={17} />
-    </button>
-  </>
-);
-
-const ModelPanel = ({
-  status,
-  models,
-  model,
-  select,
-}: {
-  status: DesktopAuthStatus;
-  models: readonly ModelChoice[];
-  model: string;
-  select: (slug: string) => Promise<void>;
-}) => (
-  <section className="model-settings" aria-label="Writing model">
-    <ChoiceSelect
-      label="Model"
-      value={model}
-      disabled={!status.planEnabled || models.length === 0}
-      placeholder="Select a model"
-      options={models.map((choice) => ({ value: choice.slug, label: choice.displayName }))}
-      onChange={(slug) => {
-        void select(slug);
-      }}
-    />
-  </section>
-);
-
-const SidebarSettings = ({
-  account,
-  models,
-}: {
-  account: ReturnType<typeof useAccount>;
-  models: ReturnType<typeof useModels>;
-}) => {
-  const [settingsOpen, setSettingsOpen] = useState(false);
+const SignInPrimaryAction = ({ account }: { account: ReturnType<typeof useAccount> }) => {
+  const selected = account.status.selectedClientId;
+  const retryStatus = account.statusFailed;
+  const label = retryStatus
+    ? "Check connection again"
+    : account.busy
+      ? "Complete sign-in in your browser…"
+      : selected
+        ? "Reconnect ChatGPT account"
+        : account.status.pendingClientIds.length > 0
+          ? "Continue sign-in"
+          : "Sign in with ChatGPT";
+  const action = retryStatus
+    ? account.refresh
+    : () =>
+        account.run(() =>
+          selected ? window.releaseNotes.reconnect(selected) : window.releaseNotes.signIn(),
+        );
   return (
-    <>
-      <button
-        className="sidebar-settings-toggle"
-        type="button"
-        aria-controls="sidebar-settings"
-        aria-expanded={settingsOpen}
-        onClick={() => {
-          setSettingsOpen(!settingsOpen);
-        }}
-      >
-        Account and model
-      </button>
-      <div id="sidebar-settings" className={`sidebar-settings${settingsOpen ? " is-open" : ""}`}>
-        <section className="account-settings" aria-label="ChatGPT account">
-          <AccountActions {...account} />
-        </section>
-        <ModelPanel status={account.status} {...models} />
-      </div>
-    </>
+    <button className="primary-button" disabled={account.busy} onClick={() => void action()}>
+      {label}
+      {!account.busy && <ArrowRight aria-hidden="true" size={16} />}
+    </button>
   );
 };
 
-const IdentitySidebar = ({
-  account,
-  models,
-}: {
-  account: ReturnType<typeof useAccount>;
-  models: ReturnType<typeof useModels>;
-}) => {
-  return (
-    <aside className="identity-sidebar" aria-label="Account and writing settings">
-      <div className="sidebar-inner">
-        <div className="brand-mark">
-          <Sparkles aria-hidden="true" size={20} />
-        </div>
-        <h1>Release Notes Studio</h1>
-        <div className="sidebar-divider" />
-        <SidebarSettings account={account} models={models} />
-        <p className="privacy-note">Sign-in stays protected on this computer.</p>
+const SignInControls = ({ account }: { account: ReturnType<typeof useAccount> }) => (
+  <div className="sign-in-controls">
+    <SignInPrimaryAction account={account} />
+    {!account.statusFailed && account.status.accounts.length > 0 && <AccountPicker {...account} />}
+    {!account.statusFailed &&
+      (Boolean(account.status.selectedClientId) ||
+        (account.status.pendingClientIds.length > 0 && Boolean(account.notice))) && (
         <button
-          className="sidebar-quit text-button"
-          type="button"
-          onClick={() => void window.releaseNotes.stopAndQuit()}
+          className="text-button alternate-account"
+          disabled={account.busy}
+          onClick={() => void account.run(() => window.releaseNotes.addAccount())}
         >
-          <Power aria-hidden="true" size={14} /> Quit
+          Use another account
         </button>
+      )}
+  </div>
+);
+
+const SignInDialogBody = ({ account }: { account: ReturnType<typeof useAccount> }) => (
+  <>
+    <span className="sign-in-brand-mark">
+      <FileText aria-hidden="true" size={22} />
+    </span>
+    <p className="sign-in-brand-name">Release Notes Studio</p>
+    <h1 id="sign-in-title">Welcome</h1>
+    <p className="sign-in-intro">Draft release notes with your ChatGPT plan.</p>
+    {account.loaded ? (
+      <SignInControls account={account} />
+    ) : (
+      <p role="status">Checking your connection…</p>
+    )}
+    {account.notice && (
+      <p className="notice-banner" role="status">
+        {account.notice}
+      </p>
+    )}
+  </>
+);
+
+const SignInGate = ({ account }: { account: ReturnType<typeof useAccount> }) => {
+  const gate = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    gate.current?.querySelector<HTMLButtonElement>("button")?.focus();
+  }, [account.loaded]);
+  return (
+    <div className="sign-in-screen">
+      <div
+        ref={gate}
+        className="sign-in-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sign-in-title"
+        onKeyDown={(event) => {
+          trapSignInFocus(event, gate.current);
+        }}
+      >
+        <SignInDialogBody account={account} />
       </div>
-    </aside>
+    </div>
   );
 };
 
 const App = () => {
   const account = useAccount();
   const models = useModels(account.status, account.setNotice);
+  if (!account.loaded || !account.status.planEnabled || !account.status.selectedClientId)
+    return <SignInGate account={account} />;
   return (
-    <main className="app-shell">
-      <IdentitySidebar account={account} models={models} />
-      <div className="app-content">
-        <header className="app-header">
-          <div>
-            <h2>Release notes</h2>
-          </div>
-        </header>
-        {account.notice && (
-          <p className="notice-banner" role="status">
-            {account.notice}
-          </p>
-        )}
-        <StudioPanel
-          modelReady={account.status.planEnabled && Boolean(models.model)}
-          notice={account.setNotice}
-        />
-      </div>
-    </main>
+    <>
+      <StudioFlow
+        bridge={window.releaseNotes}
+        models={models.models}
+        model={models.model}
+        modelPending={models.modelPending}
+        selectModel={models.select}
+        signOut={() => account.signOut(account.status.selectedClientId ?? "")}
+        onNotice={account.setNotice}
+        clearSuccessNotice={() => {
+          if (account.notice === "Markdown exported." || account.notice === "Markdown copied.")
+            account.setNotice("");
+        }}
+      />
+      {account.notice && (
+        <p
+          className={
+            account.notice === "Markdown exported." || account.notice === "Markdown copied."
+              ? "notice-toast"
+              : "notice-banner"
+          }
+          role="status"
+        >
+          {account.notice}
+        </p>
+      )}
+    </>
   );
 };
 

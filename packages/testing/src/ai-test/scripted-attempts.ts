@@ -562,7 +562,10 @@ export const ScriptedAttempts: ScriptedAttemptOps = Object.freeze({
    */
   record(request: AiBackendExecution, attempt: number, prior?: RequestRecord): RequestRecord {
     const inputJson = toJsonString(request.definition.input, request.input);
-    if (Buffer.byteLength(inputJson, "utf8") > request.definition.limits.maxInputBytes)
+    if (
+      request.definition.limits.maxInputBytes !== undefined &&
+      Buffer.byteLength(inputJson, "utf8") > request.definition.limits.maxInputBytes
+    )
       throw new RangeError("Scripted prepared input exceeds the capability byte limit.");
     return {
       operation: request.operationId.value,
@@ -841,7 +844,7 @@ export const ScriptedAttempts: ScriptedAttemptOps = Object.freeze({
       throw new TypeError("Generation script used for decision backend.");
     const bytes = Buffer.byteLength(script.text, "utf8");
     request.control.onReceived(ticket.id, bytes);
-    if (bytes > ticket.maxOutputBytes)
+    if (ticket.maxOutputBytes !== undefined && bytes > ticket.maxOutputBytes)
       return this.failure(request, ticket, "BUDGET_EXCEEDED", false, script.usage);
     record.candidateText = script.text;
     const admitted = await request.control.admitGeneration(
@@ -886,7 +889,7 @@ export const ScriptedAttempts: ScriptedAttemptOps = Object.freeze({
     const text = JSON.stringify(script.result);
     const bytes = Buffer.byteLength(text, "utf8");
     request.control.onReceived(ticket.id, bytes);
-    if (bytes > ticket.maxOutputBytes)
+    if (ticket.maxOutputBytes !== undefined && bytes > ticket.maxOutputBytes)
       return this.failure(request, ticket, "BUDGET_EXCEEDED", false, script.usage);
     const admitted = await request.control.admitDecision(
       script.result,

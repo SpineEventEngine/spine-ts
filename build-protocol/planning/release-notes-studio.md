@@ -1,5 +1,13 @@
 # Release Notes Studio
 
+The 12 October dashboard/wizard design supersedes this original plan's UI flow,
+approval stage, and structured editing contract. The current acceptance criteria
+and implementation mapping are in [the Agent task](agent-entities.md#dashboard-and-wizard-redesign--12-october-2026).
+The new flow ends in an editable Markdown document with Preview and direct Export.
+In-memory storage, signal-driven generation, source evidence, account isolation,
+and mandatory history recording remain requirements; a history panel is not part
+of the newly approved screens. The original plan below records the earlier design.
+
 ## Purpose and scope
 
 Build a small desktop example in the existing Agent PR. A developer selects a
@@ -296,9 +304,13 @@ and the official [Electron example](https://developers.openai.com/cookbook/artic
 Implement this first, as a new module inside the existing
 `@spine-event-engine/ai-vercel-ax` package, exposed through `VercelAx`. Do not
 create another published package. Document its configuration separately from
-API-key OpenAI Responses. Browser sign-in, account pickers, token persistence,
-and refresh-session management belong to the application authentication service.
-Register the profile through `VercelAx.chatgptPlanModel(...)`: keep identity and
+API-key OpenAI Responses. Native browser/loopback handling, account pickers, and
+credential persistence belong to the application. The shared
+`VercelAx.chatgptPlanSession(...)` handles OAuth validation, token exchange and
+refresh, account model discovery, and revocation. Its `model(...)` method binds
+the selected account and model to a deployment without exposing tokens to
+application code. Applications with an existing token service may instead
+register through `VercelAx.chatgptPlanModel(...)`: keep identity and
 authorization callbacks, but have its connection callback return an explicit
 access token and matching identity. The adapter constructs the SDK model using
 its guarded fetch; reject this profile through the generic caller-built model

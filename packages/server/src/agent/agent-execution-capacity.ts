@@ -31,7 +31,7 @@ interface RetainedRequest extends CapacityRequest {
 const capacities = new WeakMap<AiRegistry, AgentExecutionCapacity>();
 
 /**
- * Bounds active Agent transitions and resident waiting hints across one AI registry.
+ * Schedules active Agent transitions and resident waiting hints across one AI registry.
  */
 export class AgentExecutionCapacity {
   readonly #entries = new Map<string, RetainedRequest>();
@@ -41,21 +41,19 @@ export class AgentExecutionCapacity {
   readonly #waiting: RetainedRequest[] = [];
 
   /**
-   * Creates a registry gate with finite active and resident waiting limits.
+   * Creates a registry gate with optional active and resident waiting limits.
    * @param concurrent Maximum simultaneously active Agent transitions.
    * @param queued Maximum additional resident waiting descriptors.
    */
   constructor(
-    private readonly concurrent: number,
-    private readonly queued: number,
+    private readonly concurrent?: number,
+    private readonly queued?: number,
   ) {
     if (
-      !Number.isSafeInteger(concurrent) ||
-      concurrent < 1 ||
-      !Number.isSafeInteger(queued) ||
-      queued < 0
+      (concurrent !== undefined && (!Number.isSafeInteger(concurrent) || concurrent < 1)) ||
+      (queued !== undefined && (!Number.isSafeInteger(queued) || queued < 0))
     )
-      throw new TypeError("Agent execution capacity requires finite registry limits.");
+      throw new TypeError("Agent execution capacity requires valid configured registry limits.");
   }
 
   /**
@@ -81,7 +79,12 @@ export class AgentExecutionCapacity {
    * @returns Whether another descriptor must remain only in durable storage.
    */
   full(): boolean {
-    return this.#active.size >= this.concurrent && this.#waiting.length >= this.queued;
+    return (
+      this.concurrent !== undefined &&
+      this.#active.size >= this.concurrent &&
+      this.queued !== undefined &&
+      this.#waiting.length >= this.queued
+    );
   }
 
   /**
@@ -104,7 +107,7 @@ export class AgentExecutionCapacity {
     };
     this.#entries.set(entry.key, entry);
     entry.signal.addEventListener("abort", entry.onAbort, { once: true });
-    if (this.#active.size < this.concurrent) this.#start(entry);
+    if (this.concurrent === undefined || this.#active.size < this.concurrent) this.#start(entry);
     else this.#waiting.push(entry);
     return completion.promise;
   }
@@ -146,7 +149,10 @@ export class AgentExecutionCapacity {
     if (entry.settled) return;
     this.#active.delete(entry);
     this.#settle(entry, error);
-    while (this.#active.size < this.concurrent && this.#waiting.length > 0) {
+    while (
+      (this.concurrent === undefined || this.#active.size < this.concurrent) &&
+      this.#waiting.length > 0
+    ) {
       const next = this.#waiting.shift();
       if (next !== undefined && !next.settled) this.#start(next);
     }

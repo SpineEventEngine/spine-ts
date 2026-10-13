@@ -5,12 +5,19 @@
 High-risk runtime/public-contract task authorized on 7 October 2026. Base:
 `658da1cdddcb8fd40f9205b1c200abc3a58dd62e` (snapshot.22). Feature branch:
 `agent-entities`; worktree: native managed `agent-readiness/spine-ts`.
-The Agent runtime, AI facade, repository history providers, durable execution,
-MCP integration, production adapters, and desktop example passed local release
-and exact-commit CI at `6ee952766`. Desktop UI polish and three fresh independent
-review-and-fix rounds are complete. The final full release profile passes with
-6,222 tests and all coverage thresholds; both dependency audits pass. Package
-qualification follows below. The existing PR records branch CI results.
+Earlier Agent implementation passed local release and exact-commit CI at
+`6ee952766`, including 6,222 tests and both dependency audits. The later desktop
+UI changes completed three independent review-and-fix rounds. Subsequent live
+failures required the current optional-limit and shared ChatGPT session changes;
+those changes now have focused checks, independent specialist/security review
+and corrections. Real native ChatGPT generation succeeded on 13 October in the
+latest reviewed package. Editing, Preview, export, reopening and sign-out also
+passed in the preceding checkpoint. The human then rejected oversized UI scale;
+the proportional desktop sizing correction now passes native inspection at
+1200x820 and 720x720, including a final narrow field-spacing correction. The
+updated app is open for human review. Final release qualification and push
+remain pending; its first pass stopped at 12 mechanical ESLint errors before
+coverage. Earlier green CI does not cover this dirty changeset.
 Physical Entity deletion remains explicitly deferred.
 
 The approved specification is `AGENT_ENTITIES_API_TASK_2026-10-02.md` and its
@@ -30,7 +37,8 @@ no dependency on future physical deletion. Historical proposals are superseded.
 - Vercel supplies provider integration; Ax structured generation/correction must
   use a controlled Vercel request path. Support actual non-generative decisions,
   including Jev, separately from generation. Validate Proto output and account
-  for every request/correction/tool execution under bounded budgets.
+  for every request/correction/tool execution. Limits are optional; enforce
+  explicitly configured budgets without inventing defaults or replacement caps.
 - Explicit ConversationId; mandatory conversation, System and emitted domain
   event records. Repository-indexed fullHistory, conversationHistory,
   systemEventHistory and domainEventHistory return newest first. No arbitrary
@@ -39,9 +47,12 @@ no dependency on future physical deletion. Historical proposals are superseded.
   existing record ID/category resolves ties. Framework runtime time reads use
   Time. TSX and non-runtime scripts remain excluded.
 - Authenticated registry defaults resolve at app/Bounded Context/repository/instance
-  scope. No login protocol implementation. Credential refresh cannot silently
-  change an accepted invocation's identity. MCP tools are authorized, bounded
-  and intercepted for audit. Unknown write outcomes are not automatically resent.
+  scope. The approved ChatGPT adapter session now supplies reusable provider
+  OAuth, catalog, token refresh and revocation; native browser/loopback handling
+  and protected persistence remain application responsibilities. Credential
+  refresh cannot silently change an accepted invocation's identity. MCP tools
+  are authorized and intercepted for audit, with optional configured limits.
+  Unknown write outcomes are not automatically resent.
 - Reuse saved model results and relevant reads on recovery. Preserve accepted
   recipients, actor/tenant, revisions, budgets and named call identity. One
   transition per instance; slow inference must not stall other instances in the
@@ -6139,3 +6150,1414 @@ Agent/auth/domain explanation is unchanged. Source, tests and independent review
 are accepted. Temporary controlled desktop harness was closed; screenshots remain
 in /tmp. Commit/push this correction to agent-entities; exact-SHA Build/Security
 on PR #18 provide remote evidence. No new PR, merge, publication or live sign-in.
+
+## Approved Studio design implementation — 12 October 2026
+
+Continue PR #18 on agent-entities in the existing isolated agent-readiness
+worktree. Baseline 43a30947e08f20fe23b77ba2c59f191c9b86ad21 passed Build and
+Security. Official origin/master fetched; PR remains open. Standard UI milestone;
+no new framework, domain, serialized, auth-provider, or persistence contract.
+Estimate: 1–1.5 active hours plus remote checks. Desktop supports explicit
+Sol/medium and Luna/low child dispatch; runtime self-introspection is unavailable.
+
+Acceptance: implement the approved generated mockup's slim full-height green
+sidebar, draft navigation above account/model controls, wider ivory workspace,
+compact instructions, clean document, and reduced repeated text. The real UI
+must explain Choose changes → Write → Review → Approve → Save. Draft selection
+and New release replace the misleading change-current-draft wording. Generation
+is primary only before content exists; Rewrite draft is secondary afterwards
+and must not silently discard unsaved edits. Use Edit, Sources, Preview, Activity
+views. Ready for review and Approved make status explicit. View Markdown exposes
+exact export bytes; Save Markdown opens the existing approved-file save flow.
+Keep selected changes sent to OpenAI and in-memory lifetime disclosures visible.
+Put connection refresh, plan usage, and sign-out behind a labelled account menu,
+with real model names and connected/sign-in states. No undefined back/settings
+actions. Source references should be inspectable without raw hashes dominating
+the reading view; do not alter approved bytes or silently misrepresent content.
+Preserve approval invalidation, selection/save races, keyboard accessibility,
+Radix menus, narrow/zoom reachability, and the in-memory domain implementation.
+Show actual implemented UI to the human, not only another image mockup.
+
+Visual reference: generated image at
+/Users/armiol/.codex/generated_images/01a0a4f4-ff5d-7b31-822b-bf590ae01185/exec-8109a706-5c9b-486e-8f84-3b933ec81b8e.png.
+It is review input, not a runtime asset.
+
+Skill applicability: current session catalog and complete readable SKILL.md
+entrypoint listing under ~/.agents/skills inspected using rg --files; local
+.skill-lock.json confirms anthropics/skills webapp-testing and obra/superpowers
+verification-before-completion. Expected-skills manifest inspected. Both selected
+skills read in full. Use the repository's existing Electron/Playwright harness
+in place of the generic Python server recipe. Imagegen was used to create the
+approved reference; no further raster generation is needed for implementation.
+Architecture/planning/worktree skills are not selected: this continues the
+approved private UI flow in the established feature worktree.
+
+Dispatch studio_design_implementation: existing implementer role, explicit
+gpt-6-sol / medium, no inherited conversation. Sole production writer for
+examples/release-notes renderer/components/CSS/tests and its README/USER_GUIDE.
+No subagents, commits, pushes, shared runtime changes, or new dependencies without
+a concrete need. Parent handles task records and integration. Focused behavior
+checks and rendered Electron screenshots precede independent review. Review
+lanes: style and reliability relevant; documentation for updated workflow
+claims; TypeScript/public API N/A because no framework exports/contracts change.
+Mechanical function will use explicit Luna/low. Do not invoke verify:task with
+example paths as an alleged focused run: its current classifier expands them.
+Use focused tests/static checks, then one verify:release after convergence.
+
+Human clarification during implementation: ChatGPT sign-in is the first action.
+Until sign-in is confirmed, present only a modal sign-in screen over a neutral
+app background; no workspace, draft controls, repository picker, or draft data
+may be visible/interactable. Resolve a valid restored sign-in before showing the
+workspace. Show loading/failure and reconnect/account selection within the modal
+where necessary; retain keyboard focus and an accessible dialog name. Signing
+out returns to this modal. This is renderer gating over the existing trusted
+auth state, not a new authentication mechanism or persistence rule.
+
+Implementation/visual checkpoint: primary actions now progress Write, Review,
+Approve, Save. The first screen is a modal sign-in gate; workspace mounts only
+for a confirmed usable selected account. Parent accepted final sign-in, review,
+approved, and narrow-menu captures after reducing rewrite/account controls and
+ensuring footer actions remain in the normal viewport. Captures are in /tmp.
+Full-height sidebar and selected-source lookup remain, with source controls
+separated from the document. Source display removes only generated citation
+metadata; authored nested Evidence text and exact exported Markdown remain.
+A suspected preview race was an incorrect test-driver click on a Radix tab;
+correcting the interaction established the existing path, so no new effect was
+added. Unsaved edits prevent destructive navigation/rewrite; current draft stays
+mounted during new-release setup. Author reports 74 focused checks plus build,
+package, tooling typecheck/lint and seven Electron checks passing. Additional
+modal failure/keyboard branch checks finish before review.
+
+Dispatch studio_design_checks as orchestrator mechanical function: explicit
+gpt-6-luna / low, no inherited conversation, read-only checks over current UI
+correction. This function is not a new project role. Do not start expensive
+profile before author freeze and independent review convergence.
+
+Independent mechanical preflight passed docs API/audience, copyright, time reads,
+diff checks, and both dependency audits. Cleanup found nine callables over the
+35-line limit; TSDoc found one undocumented navigationHost parameter. All were
+accepted and returned to the same writer. Parent formatted the task record.
+Writer reports cohesive component splits now pass cleanup/TSDoc/tooling tsc;
+focused tests and packaged UI flow are rerun before the review freeze. The
+duplicate setup welcome panel was removed; accepted visuals otherwise remain.
+
+Planned fresh review wave after clean preflight: studio_design_style uses the
+existing style/maintainability reviewer, explicit gpt-6-sol / medium;
+studio_design_reliability uses the existing performance/reliability reviewer,
+explicit gpt-6-sol / medium; studio_design_docs uses the existing documentation
+reviewer, explicit gpt-6-luna / medium. Every reviewer starts with fork_turns none
+and no memory or earlier conclusions, reads only the current requirements and
+assigned changed paths against 43a30947, and makes no edits or subagents. Collect
+the entire wave before one correction batch. Public TypeScript/API reviewer N/A:
+changes are private desktop view code and guide prose, with no public framework
+or serialized contract. Auth-provider/security mechanism is unchanged; reliability
+review includes modal focus, rendering gates, credential-free UI errors, and
+account lifecycle. Existing final Agent release security review remains in scope
+for that unchanged implementation; no new provider or credential handling here.
+
+Fresh review wave completed. Explicit dispatch fields confirmed for style and
+reliability (Sol/medium) and documentation (Luna/medium); runtime metadata is not
+exposed beyond configured profiles. Documentation is clean. Accept four distinct
+findings: draft selection during a pending save can discard later edits; delayed
+new-draft completion can override navigation back to the current draft; repeated
+source-link selection can retain a manually selected different patch; workflow
+progression never highlights Approve. Return one bounded correction batch to the
+existing writer, with focused regressions and affected desktop checks. No public
+contract or framework mechanism is needed. Review existing affected concerns
+again after corrections; do not reopen unrelated review lanes.
+
+Targeted follow-up confirms source reselection and Approve progression resolved,
+but identifies two P1 navigation paths: edits made after an initially clean draft
+selection begins can be discarded when its asynchronous read completes; using the
+shared selection invalidation on Back can leave the preserved draft's generation
+poller holding obsolete callbacks. Correct both in the existing implementation
+context, with deferred selection/typing and active generation/New release/Back
+regressions. This is a targeted P1 continuation, not another broad review wave.
+Packaged build passed; seven desktop checks passed and the final flow timed out;
+classify that result after the corrected navigation paths are exercised.
+
+Second targeted P1 check closes deferred-selection edit loss and the Back/poller
+case. Reliability finds the related failed-picker path: beginning selection
+invalidates current-draft callbacks even if the async read fails, leaving the
+preserved clean draft unable to accept polling updates. Accept and fix this
+remaining P1 with separate local pending-selection and active-draft lifetimes;
+cover active generation after a rejected picker read. No framework change.
+Focused suite currently 80, fresh packaged Electron 8/8; update evidence after fix.
+
+Review convergence: style closes delayed selection/edit loss; reliability closes
+Back and failed-picker polling. Pending UI choice and active draft callbacks now
+have separate lifetimes, without framework changes. Regressions reproduced the
+reported bugs before correction. Studio tests 81/81 and static gates pass; the
+writer rebuilds packaged desktop for the last fix. Every accepted finding is
+resolved; documentation remains clean, public-API concern N/A as recorded.
+Reviewers retired after acceptance. Resume the previously recorded Luna/low
+mechanical function for cheap preflight and one full verify:release. Parent
+inspected refreshed sign-in and preview images; Approve is now current when the
+preview is ready. No live subscription sign-in or cloud generation was performed.
+
+Final author freeze: all 83 focused UI tests and all 8 packaged Electron checks pass,
+with fresh build/package and static gates. Intermediate desktop runs had one
+non-reproducing timeout and one title-input mismatch; isolated retries and final
+full runs pass. No production change was made solely to suppress those results.
+Logs remain in /tmp/studio-picker-*.log. Resume full release now; implementation
+and reviewer profiles accepted against explicit dispatch metadata. No active
+source writer remains. Final captures refreshed from the passing desktop run.
+
+Human live review reopens sign-in correctness. After successful OpenAI consent,
+the modal remains signed out and displays Sign in, Continue sign-in 1, Check
+connection again, and an unrelated draft error. Required correction: diagnose
+post-consent failure and finish usable sign-in; remove numbered pending-client
+controls and competing redundant actions. Show one state-appropriate primary
+action, a meaningful progress/error message, and Quit. Keep the workspace gated.
+Estimate 0.5–1.5 active hours plus release/CI checks. Full release run interrupted
+because source scope reopens. No result from that run establishes final readiness.
+Systematic-debugging skill read at ~/.agents/skills/systematic-debugging/SKILL.md;
+trace callback, token exchange, status verification and safe error conversion
+before changing protocol behavior. Never print credentials, authorization codes,
+secret files or token responses. Existing implementer Sol/medium will investigate
+and fix bounded auth/UI paths; parent records and integrates. User is interacting
+with the actual app; do not click consent or sign-in for them.
+
+Diagnosis boundary: pending issued-client presence proves callback validation and
+staging succeeded. The live failure is still unproven between discovery, exchange,
+identity validation and persistence. Official current OpenAI sign-in docs and
+public discovery metadata inspected; endpoints/issuer/RS256/public-client auth
+match current configuration. Docs prescribe fresh authorization using retained
+issued ID after invalid_grant; do not assume that is the live failure.
+Accepted diagnostic mechanism: trusted console line with fixed stage/class and
+exact allowlisted OAuth/library codes only; unknown values become other. Never
+emit exception text, arbitrary code, cause, response body, token, claims or URL.
+Tests include secret sentinel values. Keep OIDC verification unchanged.
+Private desktop action split preserves Add account as a new registration while
+gated sign-in resumes a staged registration. Validate the additional add-account
+IPC action and its arguments; no public framework/domain contract changes.
+The Mac is locked. Finish concrete build/checks before requesting a human live
+retry; successful fixture tests alone cannot establish real authorization works.
+
+Auth correction tests reproduce the old behavior, then pass with single-action
+UI, internal staged retry, separate Add account, and fixed auth IPC text. Safe
+stage reporting distinguishes exchange, local identity validation and encrypted
+persistence; exact allowlists prevent provider/secret prose escaping. Before
+human retry, run a fresh bounded performance/reliability review with explicit
+Sol/medium and no inherited memory. Scope private auth/IPC transitions and gate
+behavior, not the already-accepted document editor changes. Private API/TSDoc,
+style and guide claims receive deterministic checks plus parent inspection;
+no framework public API changes. Live failure remains unproven; final security
+and release acceptance must account for the completed auth correction.
+
+Fresh auth reviewer studio_auth_retry_review (explicit Sol/medium, fork none,
+no memory) accepts preserved verification/safe diagnostic paths but finds gated
+recovery can trap a selected account without direct-plan permission or a failed
+staged registration. Accept a contextual Use another account text link using
+existing add-account IPC, with one primary retry/reconnect action; never restore
+the redundant numbered/recheck button stack. Add regressions for both cases.
+Parent also finds guide automatic-restoration wording too broad: DesktopAuth
+selection is in memory, so restart may require choosing a saved account. Correct
+prose to actual selection behavior, without adding persistence. Return one batch
+to existing writer, then targeted rereview. Human unlock/retry question pending.
+
+Targeted auth follow-up closes the recovery P1. One primary action remains;
+Use another account is available for an unusable selected account or failed
+staged registration. New regressions and packaged failure-state fixture cover
+both paths. Final focused renderer checks 3/3, packaged Electron 9/9, build,
+package and static checks pass. Safe diagnostics remain fixed allowlisted codes;
+no real credentials or live token responses were read. Configured reviewer and
+writer profiles match explicit dispatch; actual runtime metadata is unavailable.
+The latest desktop observation confirms the Mac remains locked. Human unlock
+and real sign-in retry are required to diagnose the post-consent failure. The
+updated app is packaged locally but is not claimed ready or auth-correct. Full
+release verification remains interrupted, not passed; do not commit/push or
+claim task completion until the live failure is resolved and final gates pass.
+
+## Dashboard and wizard redesign — 12 October 2026
+
+The human accepted the seven image-gen screens and requested their translation
+into code. This supersedes the sidebar, review/approval stages, structured-only
+editor and earlier UI layouts. Continue in the existing agent-entities worktree;
+preserve all current auth corrections and unrelated work. Live post-consent auth
+failure remains unresolved and requires the human retry; do not claim otherwise.
+
+Acceptance: modal sign-in on blank background; visible Sign out on every signed-in
+screen returning to that gate; dashboard of this session's previous results;
+New release wizard with Changes, Style and Writing steps; project selection,
+release title, From/To, change counts; audience, tone, optional notes, account
+model selection; cancelable progress; finished editable Markdown and Preview
+with primary Export, copy action and return to Dashboard. No sidebar, approval
+stage, fake progress, or internal technical UI. Keep controls, type, spacing and
+colors consistent with approved pictures. Preserve safe exact-byte export,
+account fencing, in-memory retention, immutable Git evidence and framework APIs.
+Existing results must reopen without losing edits; editing, preview and export
+must use the same Markdown. Do not fake arbitrary Markdown via a lossy parser or
+an automatic approval click hidden behind Export.
+
+High-risk example application change because replacing the approval/export
+contract and structured editor may affect serialized domain messages. Estimate
+3–5 active hours plus checks. First run one bounded architecture mapping pass:
+existing requirements_splitter role, explicit gpt-6-astra/high, fork none. Then
+same existing implementer context (explicit gpt-6-sol/medium), sole example writer.
+Parent manages this record. Runtime metadata unavailable beyond configured
+profiles; desktop supports every required explicit dispatch. No children spawn
+children. Do not create another branch/PR or modify framework runtime.
+
+Skill applicability: same installed inventory/manifest evidence as prior slice;
+imagegen was read and used for approved screens. webapp-testing and
+verification-before-completion reread for rendered inspection and evidence-based
+completion. Reuse repository Electron/Playwright harness instead of skill's Python
+server wrapper. No new library needed for existing React, Radix controls and
+Markdown preview. A separate planning-with-files or architecture-patterns skill
+would duplicate the existing bounded protocol/record. Reviews after focused
+checks: correctness/reliability, style, docs/API as affected, final security for
+changed auth/export boundaries. One full release after convergence; earlier
+interrupted run is not evidence. Keep diagnostics outside repository.
+
+Approved image directory:
+/Users/armiol/.codex/generated_images/01a0a4f4-ff5d-7b31-822b-bf590ae01185/
+
+- Sign in: exec-f4cda253-b19a-4e80-9e0e-0e000d783066.png
+- Dashboard: exec-93cc0fb9-e20b-4213-98bf-81e3c719a255.png
+- Changes: exec-14794d7d-f40b-48f6-9b9e-25434aeb3285.png
+- Style: exec-7c6eb4b5-56a0-4bde-8453-19ac0e5fee96.png
+- Writing: exec-82eab247-aa97-4fda-b0c0-122fe619d193.png
+- Markdown: exec-f4fbc6db-7feb-4d58-8ee0-cf55ead1e8b9.png
+- Preview: exec-d2d8779d-c60b-41ed-91ec-6e89c5d54c41.png
+
+Architecture mapping studio_wizard_mapping completed with explicit Astra/high,
+fork none, read-only, all seven reference images inspected. Accepted example-only
+contract changes: authoritative UTF-8 Markdown replaces editable structured
+sections; validated AI proposals convert once; neutral export snapshot replaces
+approval; removed Proto tags/names are reserved. Existing Version/correlated
+Event/native-path guarantees remain. Add trusted opaque project selection and
+bounded local ref catalog for real wizard controls. Add domain-specific generation
+cancellation; preserve execution/account fencing until settlement, best-effort
+transport abort through existing platformFetch. No framework cancellation API.
+Sequential autosave must retain newer typed text; flush before navigation,
+sign-out and exact-byte export. No Time in TSX, persistence, new dependencies,
+lossy Markdown parser or automatic hidden approval. Same implementer receives
+one four-slice packet (domain/export, wizard inputs, cancellation, UI integration).
+Initial sign-in and presentation tests pass; full flow integration continues.
+
+Implementation checkpoint: new sign-in/presentation tests pass, domain Markdown
+round-trip/export tests pass, and the first cancellation test exposed required
+validation rejecting a valid empty Markdown value. That schema constraint was
+removed, descriptors regenerated and runtime rebuilt; generation, cancellation
+with late proposal, and idempotence checks pass. Trusted opaque project/ref lookup
+passes a real Git fixture; new dashboard/wizard/editor controller is mounted and
+typechecks. Superseded studio-ui source/tests are being replaced with regressions
+for the new flow, not retained as unused screens.
+
+Parent input inspection identified Protobuf bytes becoming base64 in model JSON.
+Accepted bounded refinement: retain authoritative Markdown bytes for edit/export,
+but record readable current Markdown text in the accepted generation snapshot;
+reject invalid UTF-8 at the edit boundary and assert the actual model input. No
+framework or provider adapter contract change. Remaining work: async autosave,
+cancel/sign-out/export/navigation tests, old contract test migration, visual
+comparison, independent review, release checks and the separate live auth retry.
+
+Contract subset frozen after example typecheck and 10 domain/service checks;
+overall focused run is 33 tests across six files. Dispatch existing
+TypeScript/API-docs reviewer studio_wizard_contract_review, explicit Sol/medium,
+fork none, no memory or prior review conclusions. Scope example five Proto files,
+domain/index and markdown, trusted/studio-service and studio-files, generated
+manifest and the new contract tests. Old approval-based domain/desktop/IPC tests
+are under migration and excluded from this early bounded review; UI/IPC remains
+an active writer slice. Do not return a partial-wave correction batch. Other
+review lanes follow after their scope freezes. No framework public API changes.
+
+Early contract review completed: configured TypeScript/API reviewer Sol/medium
+matches explicit dispatch; runtime metadata not exposed. Accept one P2: comments
+in types.proto for ReleaseNoteEntry/ReleaseNotesSection/ReleaseNotesDocument and
+domain/markdown.ts still describe editable/approved structured documents. Describe
+proposal-only data and one-time initial Markdown conversion; corresponding private
+studio-service approved-byte wording can be corrected with the same batch. No
+other confirmed P0–P2 in the frozen subset. Retain this finding until the complete
+relevant review wave is collected. Writer cleanup, TSDoc and typecheck now pass;
+33 focused tests remain green. Desktop tests/docs/screenshots are still pending.
+
+New flow regression passes Export, canceled save dialog, further edit and Export
+again using the advanced Entity Version and exact Unicode/whitespace bytes.
+Writing-to-editor, desktop/IPC and auth gate/recovery migrations pass. Writer
+continues example docs, CSS cleanup and packaged Electron checks. Dashboard
+metadata uses actual content-change time (edit or staged generation, creation
+fallback); merely opening a result must not change its Edited timestamp. Keep
+this session-only presentation metadata in trusted service/Desktop, using Time
+there and no Time imports in TSX. This does not reopen the Proto/domain contract.
+
+Build/package and cleanup/TSDoc checks pass. Packaged walkthrough first exposed a
+test selecting hashes absent from the revision-name catalog, then a real Writing
+poll effect that could start before its generation reference was assigned and
+never restart. Existing writer adds a focused regression and reactive generation
+dependency before source freeze. Parent deterministic guide check also removed
+the obsolete Activity-tab claim; history APIs remain documented independently.
+Estimated remaining walkthrough, reviews, fixes and final checks: 1–2 active hours,
+plus any live sign-in wait requiring human participation.
+
+Production/docs freeze: 25 example Vitest files / 142 tests, cleanup, TSDoc,
+ESLint and example tooling typecheck pass. Reactive-generation polling has a
+red/green deferred-acceptance regression. Package capture remains in progress;
+writer changes only harness/screenshots unless a new desktop defect appears.
+Dispatch fresh standalone performance_reliability_reviewer and
+style_maintainability_reviewer roles, each explicit gpt-6-sol/medium, fork none,
+no memory/prior review conclusions, read-only, no children. Scope diff against
+43a30947e08f20fe23b77ba2c59f191c9b86ad21 in the example only. Reliability covers
+autosave/navigation, generation cancellation/sign-out/account fencing and exact
+export; style covers new UI/private-boundary modules, obsolete code and API
+documentation formatting. A documentation_reviewer (explicit Luna/medium) follows
+as capacity permits. Existing early API review remains applicable. Gather every
+lane plus held P2 before sending one correction batch to the current writer.
+Configured profiles are explicit; actual runtime metadata unavailable.
+
+First complete review wave collected. Configured explicit profiles accepted;
+actual runtime metadata not exposed. Documentation reviewer Luna/medium reports
+no actionable findings. Reliability Sol/medium reports four accepted issues:
+failed:reason terminal status missed; uncertain generation UI cannot repeat its
+retained submission; failed draft creation can advertise a ghost and cannot
+reconcile/retry; late session refresh can erase newer generation references.
+Style Sol/medium adds missing comparison counts and incomplete ARIA/keyboard
+tabs. Its failure-outcome finding is merged with reliability. Broad removal of
+unused history/repeat IPC is not accepted: repeat is needed by recovery and
+history APIs remain part of the tutorial; only demonstrably obsolete UI glue
+may be pruned. Early contract P2 comments also enter this batch. Reviewers retired.
+
+Parent rendered review finds Style uses a free audience field and tone dropdown
+instead of approved paired segmented choices, causing footer overflow at
+1536x1024; Changes has wrong field order and Continue caption; Writing has long
+heading, no project/release context and wrong alignment; editor tab styles leave
+a second underline; success notices move the header and look like warnings.
+Correct those against the seven accepted images, keeping real data and accessible
+controls. Use existing ChoiceSelect/Radix where appropriate and capture truly
+open menus, not focused native-select screenshots. Provide readable representative
+fixture captures separately from exact-byte Unicode regression content. Only
+staged generation opens a completed editor; errors/cancel remain explicit.
+One combined batch returns to the same implementer; focused red/green tests,
+static checks and new captures follow. No framework change. Estimated corrections
+0.5–1 active hour within the remaining review/check estimate.
+
+Correction checkpoint: red/green tests reproduced failed work opening editor,
+lost generation acknowledgement returning to Style, reload ignoring retained
+generation, and pending draft creation failing recovery. Four regressions now
+pass with bounded flow/service changes. Same retained generation uses
+repeatGeneration; session refresh preserves newer references. Visual/keyboard
+corrections and their updated Radix/label tests remain underway.
+
+First correction batch converged: 25 example files / 147 tests plus 10 focused
+flow tests pass; Prettier, cleanup, TSDoc, example tooling typecheck and ESLint
+pass. Parent inspected updated captures: segmented style controls, actual counts,
+centered Writing and open Radix menus now match the accepted layout. Secondary
+card text and dropdown type were adjusted; final package/captures follow.
+Source frozen for the second sequential independent review requested by the human.
+Dispatch fresh performance_reliability_reviewer studio_wizard_review_2 with
+explicit gpt-6-sol/medium and fork none; no memory, no earlier review conclusions,
+no children, read-only. Cover current example lifecycle, command recovery,
+versioned exact-Markdown edit/export and failure/cancel navigation. Inspect
+changed example contracts/API documentation and accessible controls as relevant;
+no framework changes or expensive suites. Actual runtime metadata unavailable;
+configured explicit role/profile is the acceptance evidence.
+
+Second independent review completes with four accepted corrections: edited draft
+status must reopen the editor; failed export after committed preparation must
+reconcile Version without losing text; cancellation UI must await the correlated
+canceled/ignored decision; newline-heavy Markdown must not create one DOM node
+per line or an unbounded textarea size. Reviewer clarified and retracted the
+stronger cancellation claim: committed CancelIgnored already advances Version
+and rejects a stale retained Request. No new domain/framework mechanism is
+needed. Cover both command commit orders and route by authoritative outcome.
+Parent adds a minor rendered issue: success toast remains after navigation into
+a new wizard and obscures narrow controls; clear it on navigation or expire it
+without hiding pending failures. Existing writer receives one correction batch,
+then cheap checks and third fresh sequential review. Reviewer retired; explicit
+Sol/medium profile accepted with no runtime metadata exposed.
+
+Second fix batch source freeze: 25 example files / 152 tests, cleanup, TSDoc,
+ESLint, tooling typecheck, build/package and 4 packaged Electron cases pass.
+Parent requires an additional tests-only CancelIgnored-before-unaccepted-Request
+regression: receipt replay after matching Cancel is different. Writer adds the
+actual Version-bound ordering test before final correctness review.
+Dispatch mechanical preflight function studio_wizard_preflight (default role,
+explicit gpt-6-luna/low, fork none, no children). It runs missing deterministic
+Proto/time/docs/changed-format/diff gates, checks supplied current result logs,
+and reports any concrete failure. It must not modify source/records, run full
+release yet, change thresholds, or inspect real credentials. Reuse current
+focused tests; source is frozen. Actual runtime metadata unavailable; explicit
+configured profile recorded. Parent records results.
+
+Opposite command-order regression passes: CancelIgnored commits before retained
+Request at its original Version, then the typed rejection arrives and no Agent
+input Event is emitted. Focused domain 4/4, tooling typecheck and ESLint exit 0.
+Mechanical preflight passes diff, time reads, generated Proto lint and all three
+documentation gates. Freshness found stale generated comments/manifest; existing
+writer regenerates through the approved workflow before final review. No current
+coverage report exists; final release profile remains required.
+
+Dispatch third fresh independent performance_reliability_reviewer with explicit
+gpt-6-sol/medium, fork none, no memory, no children. Review current example diff
+and affected lifecycle, exact Markdown, cancellation, auth gates and accessible
+wizard behavior independently. Read-only, no expensive checks or credential
+access. Actual runtime metadata unavailable; explicit configured role/profile
+is the acceptance evidence.
+
+Approved Proto regeneration, current-output freshness and repository formatting
+all exit 0. The generator refreshed ignored output and the tracked generation
+manifest; its generation-ID convention was not changed. Source/tests frozen.
+The actual packaged screenshots were refreshed in the external review gallery.
+Native inspection remains blocked by the locked Mac; the human unlock request
+is pending, and no real-auth success is claimed.
+
+Dispatch final release-readiness security_reviewer with explicit gpt-6-sol/high,
+fork none, no memory/children, read-only. Scope changed example auth diagnostics,
+renderer/native IPC, Git inputs, Markdown preview/export and cancellation/account
+boundaries. No real credentials, provider calls, broad suites or source edits.
+No new framework/API audit. Actual runtime metadata unavailable; immutable
+configured profile and explicit dispatch fields are acceptance evidence.
+
+Third independent reviewer completes (explicit Sol/medium accepted, runtime
+metadata unavailable). Three confirmed corrections: edit commit followed by lost
+acknowledgement must reconcile Version before further saves while retaining the
+live buffer; cancellation intent must survive generation acknowledgement
+recovery; abandoned native project/comparison catalogs must be released without
+invalidating admitted drafts. Formatting check also identifies missing TSDoc
+blank lines before tags. User guide must not imply absent citation-inspection UI.
+One combined batch returned to the existing writer. These are example-local
+corrections, not framework lifecycle abstractions. Focused regressions precede
+static checks. Security lane runs independently on trust boundaries.
+
+Remaining estimate 0.5–1 active hour for correction batch, security review and
+full gates, plus human participation for real sign-in. Mechanical Luna/low
+function continues unchanged profile with independent cheap node/copyright,
+logging/dependency/release-readiness and audit gates while source correction
+converges. No source-sensitive broad tests or full release until frozen.
+
+Final security review reports no confirmed defects in changed authentication
+diagnostics, IPC provenance, trusted Git, safe Markdown rendering, correlated
+export and active-generation account fencing. No live credentials/provider call
+was used; real auth failure remains unconfirmed. Explicit Sol/high profile
+accepted, runtime metadata unavailable. Reopen only for material trust-boundary
+changes in pending corrections.
+Remaining cheap gates all exit 0: node version, copyright, logging containment,
+production dependencies, release readiness, and audit:release. Full and
+production audits report no known vulnerabilities. Mechanical explicit Luna/low
+profile accepted with runtime metadata unavailable. Logs remain outside repo.
+
+Third correction regressions reproduced lost edit acknowledgement, lost Cancel
+during generation recovery and abandoned comparison retention, then passed with
+example-local fixes. Affected test checkpoint 23/23; build, cleanup and format
+pass. Two deterministic TSDoc/test-lint issues corrected before source freeze.
+After freeze, same independent third reviewer checks only these corrected paths;
+no new broad review cycle. Same mechanical Luna/low function runs final
+verify:release once; existing writer handles package/Electron separately.
+
+Third correction source freeze: focused flow/service 23/23; build, cleanup,
+TSDoc, ESLint, format and package exit 0; packaged Electron 4/4 exit 0. Updated
+guide matches the actual controls. Final verify:release is now running through
+the mechanical Luna/low function. Final narrow correction re-review is pending.
+The prior self-imposed no-commit hold for authentication is superseded for this
+separately approved UI redesign: after local final gates pass, preserve a UI
+checkpoint on the existing official feature branch and push it immediately.
+That checkpoint is not a claim of live authentication success or overall release
+readiness; real post-consent failure remains blocked on a human retry. No PR
+creation, merge, master write, new version bump or provider validation weakening.
+
+Third reviewer confirms all four scoped corrections resolved (autosave recovery,
+retained cancellation, comparison lifecycle, TSDoc formatting). It reviewed
+source and focused evidence without repeating tests. Reviewer retired; explicit
+Sol/medium profile accepted with runtime metadata unavailable. All three fresh
+independent review-and-fix rounds are complete.
+
+Resume after human-reported interruption: no prior children or verification
+process remain. Final release log confirms every generated/static gate passed;
+coverage started but was interrupted without results. Resume only the exact
+remaining vitest coverage command with release settings, not a redundant build.
+Dispatch mechanical function studio_release_resume (default role), explicit
+gpt-6-luna/low, fork none, no children, no edits/credentials/provider calls.
+Record exact exit and focused failure evidence; no automatic retry or threshold
+change. Desktop supports explicit profiles; actual runtime metadata unavailable.
+Remaining estimate 20–40 minutes for coverage, any corrections and official
+feature checkpoint push, excluding human live sign-in participation.
+
+Human correction: broad checks do not establish that the desktop app works
+while real sign-in fails. Stop the resumed coverage run and prioritize live
+authentication diagnosis; fixture sign-in remains only contract/test evidence.
+No full-suite success or app readiness claim. Capture only allowlisted stage/code
+diagnostics on the next actual authorization; no raw token/account/callback data.
+
+Coverage process terminated. Packaged app relaunched under a diagnostic wrapper
+that discards stdout and all stderr except the exact safe auth stage/category/code
+line; no credentials or raw provider messages persisted. Human retry requested.
+Dispatch existing implementer role studio_live_auth_fix, explicit gpt-6-sol/medium,
+fork none, no children. Responsibility restricted to example auth source/tests;
+start read-only trace and wait for live diagnostic before any protocol fix.
+Parent handles actual desktop interaction. No broad suite, provider validation
+weakening, credential inspection, commits or pushes. Configured explicit profile
+accepted; actual runtime metadata unavailable.
+
+Actual human retry captured identity-verify / other / other, after successful
+callback and authorizationCodeGrant. Configuration enables signature checks and
+expected nonce/state/PKCE. Local saveCodeGrant and refresh compare claims.aud
+as a scalar, although JWT audience can be an array. Investigate signed-array
+regression before minimal correction; preserve library validation. Official
+OpenAI registration/sign-in documentation fetched via OpenAI Docs confirms
+signature, issuer, audience, expiry, nonce and issued-client identity checks.
+
+Signed audience-array regressions fail the old local identity comparisons after
+openid-client succeeds, both initial grant and refresh. Minimal correction keeps
+issued-client membership for string or array audience; underlying signature,
+issuer, expiry, nonce and account continuity checks unchanged. Focused auth
+suite 51/51 passes including wrong-audience and forged-signature rejection.
+Example build/package underway for actual human sign-in retry. No broad suite
+is resumed before the real app works.
+
+Real post-fix sign-in confirmed through native UI: returning authorized account
+completes browser flow, gate disappears, Your releases/New release/Sign out appear.
+No credential data read or logged. Next actual blocker: model catalog unavailable.
+Official models-and-inference page confirms current endpoint and models/slug/
+display_name/visibility structure. Existing implementer continues with safe fixed
+catalog failure classification before any limit or parser change. Broad tests
+remain stopped until real app workflow works.
+
+Stored-account retry confirms actual catalog failure at body/byte-limit: successful
+response exceeds the old 256 KB cap. Correct the finite reader allowance for a
+metadata-rich official catalog and add a representative >256 KB regression; no
+entry truncation or raw response logging. Existing implementer continues. Live
+end-to-end check will use a small self-authored Contact book Git example, not
+user/private repository data.
+
+Human rule, 12 October: no artificial limits anywhere in code without explicit
+approval of the specific limit. Recorded in AGENTS.md. The replacement 8 MiB
+catalog cap is unapproved too. Existing implementer studio_live_auth_fix retains
+its explicitly dispatched gpt-6-sol/medium profile; remove catalog byte, entry,
+field-length and deadline caps, preserve protocol/type/authentication validation,
+and replace cap-rejection tests with full-catalog acceptance tests. No broad
+suite or provider calls. Parent continues live workflow and records outcomes.
+
+Human UI correction: wizard progress must span the full card width. Micro CSS
+change by parent in renderer.css: first two steps and connecting rules flex to
+fill remaining space; final Write label reaches the card's right edge. Remove
+fixed connector widths including responsive overrides. Acceptance: shared left
+and right edges at wide and narrow window sizes; no overflow or label overlap.
+
+Catalog caps removed; focused auth tests 52/52, example build/package and diff
+whitespace checks pass. Parent observed actual account models in the native picker.
+Wizard progress component rendered with actual source/CSS at 1536, 640 and 375px:
+first/last step edges match card edges, no horizontal overflow. Screenshots checked
+in /tmp only. Isolated Chrome render used because Playwright browser cache absent.
+
+Real sample generation after GPT-6-Luna selection failed with Writing needs
+attention. Do not claim full workflow success. Existing implementer prioritizes
+fixed safe generation diagnostics to identify cause before broad checks. It also
+removes unapproved example refs/Markdown caps and investigates outcome waits with
+lifecycle cancellation. Framework-required model budgets need contract analysis;
+do not silently replace them with arbitrary larger numbers. All broad checks
+remain stopped until the real workflow succeeds.
+
+Human final-report requirement: explain additions to framework packages versus
+code remaining in the example to make each scenario work. Review the boundary
+before completion: application code should configure remote model interaction
+and implement domain behavior, not build substantial provider interaction glue.
+Report concrete public APIs, configuration examples, and any remaining gaps;
+do not present example-specific infrastructure as a framework capability.
+
+Dispatch read-only package-boundary inventory function studio_api_inventory,
+explicit gpt-6-luna/medium, fork none, no memory or children. Enumerate actual
+framework public APIs and example-side interaction/auth/orchestration code,
+with concrete file references and reuse gaps. No redesign/edits/tests/provider
+calls. Desktop supports explicit profiles; actual runtime metadata unavailable.
+
+Real diagnostic retry produced only fixed generation code TOOL_FAILED (no HTTP
+failure line). Continue MCP/Git execution diagnosis; native sign-in and model
+catalog succeeded again. Current app wrapper captures only allowlisted fixed
+stage/code/status lines in /tmp/spine-live-generation-safe.log.
+
+Read-only package inventory accepted under explicit Luna/medium dispatch,
+actual runtime metadata unavailable. Framework supplies model definition,
+registry, Agent invocation/history, Vercel/Ax inference/streaming/tool execution,
+and BlackBox AI scripting. Material gap: SiwcSession (~747 LOC) implements
+reusable OpenAI OAuth/discovery/token/refresh/revocation/catalog protocol in the
+example; PlanModelSelection (~273 LOC) implements account-to-adapter binding.
+The framework currently starts at authenticated connect callbacks. Do not label
+all OAuth code desktop-specific: browser UI, loopback/OS credential persistence
+are distinct from provider protocol. Include this distinction and concrete APIs
+in the required final report and assess reusable boundary before completion.
+
+Read-only inventory function studio_api_inventory continues with its original
+explicit Luna/medium profile to catalogue example artificial limits and required
+framework configuration knobs, distinguishing paging/timers/protocol constraints.
+No edits or provider calls. This supports applying the recorded human rule after
+the live tool failure is resolved; no invented replacement ceilings.
+
+Confirmed deterministic root cause of live TOOL_FAILED: two simultaneous valid
+MCP calls to one session fail at transport.setCallTicket with MCP call already
+active. Single-call fixture did not cover this. Existing Sol/medium implementer
+corrects per-session call scheduling, preserving cancellation/deadline and separate
+session concurrency, then reruns narrow regression and packages for real retry.
+
+The human no-artificial-limits rule exposes a public-contract problem: AiLimits,
+AiInvocationLimits and MCP policy currently require finite ceilings. At this
+material contract boundary, dispatch one read-only requirements_splitter pass,
+explicit gpt-6-astra/high, fork none/no memory/children, to propose the smallest
+consistent optional-limit contract and migration, not numeric infinity or huge
+replacement caps. No production writes or tests. Parent retains decisions;
+current live MCP fix stays first. Actual runtime metadata unavailable; desktop
+supports the explicit configured profile.
+
+MCP per-session serialization regression passes (39 protocol tests) and package
+build succeeds. Real retry then fails UNAVAILABLE with a recorded patch request
+but no corresponding tool response. Full-runtime controlled model regressions
+with multiple tools, including two patch calls for distinct files, pass. Thus
+live workflow is still not verified. Existing implementer adds temporary fixed
+stage/error classification at journal/dispatch/finish boundaries; no raw model
+arguments or exception bodies. Do not repeat broad suites during diagnosis.
+
+Optional-limit contract architecture pass accepted: explicitly dispatched
+requirements_splitter Astra/high; no writes/provider calls/children; runtime
+metadata unavailable. Smallest approach: absent optional fields in existing TS
+contracts mean no application ceiling; preserve presence in persisted messages
+without numeric Infinity/huge substitutes or proto3 optional keyword. Preserve
+cancellation, receipts/replay, shared-budget accounting when configured, and real
+backend representability limits. Hidden Ax retries/steps, MCP discovery/setup,
+history byte and scheduler ceilings require coordinated changes. This is a
+separate high-risk milestone after current live fix converges, not a small cap
+increase. Estimated architecture scope 12–20h including reviews/checks; not yet
+dispatched for production edits. No compatibility layer or unrelated cleanup.
+
+Latest live retry corrects the earlier tool-history interpretation: all tool
+proposals have matching requested/responded records, and no MCP dispatch error
+was recorded. Exact fixed stream reason is Provider stream failed, without HTTP
+status/provider error code. The prior dispatch-unfinished label meant no failed
+ToolResponse was found; it did not prove an unfinished tool call. Current focused
+work distinguishes opening the continuation stream from consuming it. No broad
+verification or completion claim until the real editor/export workflow succeeds.
+
+Final report acceptance: include concrete framework APIs and app configuration,
+plus an explicit accounting of example domain/UI/platform code versus reusable
+provider plumbing. The existing OAuth/catalog/refresh gap must be resolved or
+clearly identified; a provider connect callback alone must not be presented as
+a configuration-only sign-in integration.
+
+Material public-boundary follow-up: the human explicitly requires end-user model
+interaction code to be configuration rather than substantial provider plumbing.
+Reuse the existing requirements_splitter (explicit Astra/high original dispatch,
+no children/memory) for a read-only API extraction plan from SiwcSession and
+PlanModelSelection into the existing adapter package. Keep Electron browser/
+loopback/vault and release-domain behavior application-side. No production
+writes or provider calls; current Sol/medium implementer remains sole writer.
+This architecture pass is justified by the newly confirmed reusable auth gap,
+not a repeat of optional-limit analysis. Actual runtime metadata unavailable.
+
+Subscription API architecture accepted in principle from existing explicitly
+configured requirements_splitter Astra/high (read-only, no children or memory;
+actual runtime metadata unavailable). Proposed existing-package factory
+VercelAx.chatgptPlanSession provides begin/complete/accounts/models/signOut/model
+using current openid-client protocol, opaque pending authorization and protected
+credential-store callbacks. Keep browser/loopback/OS encryption/account UI and
+release authorization in app. No new package, generic auth subsystem or Proto.
+Existing implementer performs extraction after live fix, followed by focused
+protocol/declaration/docs checks and relevant reviews. Estimate 6–10 hours;
+coordinate hidden openid-client 30s default deadline with no-limit rule.
+
+Current live failure narrowed further: HTTP fetch reached initial and two later
+requests, then readModelStream received an SDK APICallError. No HTTP non-OK line.
+All tools were admitted/responded. Inspect the typed error and stream source
+before another live retry; do not substitute mocked success for this failure.
+
+Native verification temporarily blocked: CUA reports Mac locked and requires
+human unlock; async question sent. Do not use a shell/UI side channel. Continue
+deterministic reproduction and no-unapproved-limits work while waiting. Current
+app remains running; no live success claim. Latest diagnostic build passed, but
+has not been launched. Existing implementer will propose the concrete optional
+contract migration before production edits.
+
+Dispatch dependency-verification follow-up to studio_api_inventory using its
+original explicitly configured Luna/medium profile, no memory/children/writes.
+Read installed Ax source/types for an actual no-ceiling continuation mode or
+small existing-runner integration. No arbitrary huge step/retry counts; report
+exact behavior and public supported API. This is independent of current writer.
+
+Optional-limit implementation milestone accepted (high-risk, 12–20h communicated).
+Existing sole implementer studio_live_auth_fix retains explicitly configured
+Sol/medium role, no children. Deterministic SDK plus scoped-gate proof confirms
+valid SSE above the local 32KiB ceiling becomes APICallError status200 with exact
+framework response-byte-limit cause (one focused test passed). This proves a
+mechanism, not yet the observed live cause while Mac remains locked.
+
+Acceptance: omitted/empty/partial limits impose no unsupplied ceiling; explicit
+zero differs from absence where meaningful; supplied values remain validated.
+Persist presence using appropriate message fields without proto3 optional or
+Infinity/sentinel maxima. Preserve cancellation, durable attempt receipts,
+replay, configured shared accounting and normal Entity serialization. Repository
+limits must actually affect effective limits. Remove hidden adapter/Ax/MCP and
+example ceilings, preserve paging/access to all content and real documented host
+constraints. No compatibility scaffolding or unrelated framework abstractions.
+Implement in coherent compileable slices, focused tests only during convergence;
+relevant review wave and one full required profile after live workflow works.
+Dependency verification of Ax continuation proceeds read-only in parallel.
+Subscription-session extraction follows this milestone in the same writer.
+
+Bounded-fetch focused suite passed35/35, including valid-SSE wrapper regression.
+Accepted dependency-verification result from explicitly dispatched Luna/medium,
+no runtime metadata: Ax25 offers numeric retries/steps with defaults3/25; no
+documented no-ceiling mode was found. Existing bridge also requires finite
+request counts. This is a demonstrated architecture blocker, so the existing
+requirements_splitter Astra/high refines only the concrete supported Ax runner
+approach. Do not invent upstream capability or replace finite bounds with huge
+numbers. Sol/medium implementer proceeds coherent contracts/persisted presence/
+server accounting slices independently, deferring Ax control-loop edits until
+that decision. Native app remains untouched while Mac is locked.
+
+The Proto generation checksum failure is routine: both edited Agent contracts
+are in manifest ownedSources, not pinned upstream sources. Parent inspected the
+enclosing JSON section and corrected the implementer's initial blocker claim;
+update local checksums/descriptors normally, without inventing extension types.
+
+Ax architecture found no resumable generator API and suggested a packaged patch.
+Parent has not accepted that substantial packaging change. Before selecting it,
+verify the existing public numeric option with adapter-local positive infinity
+on the pinned installed dependency: no framework/public/persisted Infinity is
+authorized. Dispatch a temporary-file-only deterministic proof to the existing
+Luna/medium verification function. It must cover more than25 tool rounds and
+more than3 corrections with no network, cancellation and transcript behavior.
+This examines actual public-option behavior; it must not claim upstream documents
+an unlimited mode or change production code.
+
+Focused progress: Ai model/registry20tests and typebuild pass; local Proto
+generation and typebuild pass; targeted Agent history and MCP shared-byte
+presence tests pass. Migration is incomplete and server/adapter must not yet be
+claimed buildable/live-ready.
+
+Ax decision: accepted the smallest adapter-local use of public numeric options
+Number.POSITIVE_INFINITY for maxSteps/maxRetries, supported by pinned-source
+inspection and a temporary deterministic public AxGen.forward proof:30tool turns
+then success,5invalid candidates then success, and cancellation after one chat.
+Only one original user prompt per continuation. This is observed pinned Ax25
+behavior, not an upstream documented unlimited guarantee. No Infinity in public
+framework configuration, Proto, stored records, or provider payloads; add full
+production adapter transcript/ticket/cancellation regression and inspect telemetry
+before acceptance. Reject unnecessary maintained fork/bundled Ax packaging here.
+
+Anthropic protocol reference checked against official docs:
+https://platform.claude.com/docs/en/api/messages/create requires max_tokens;
+https://platform.claude.com/docs/en/api/models/retrieve publishes nullable
+max_tokens as actual model capacity. Pinned Vercel Anthropic SDK supplies known
+model capacities but guesses for unknown IDs. No arbitrary fallback is accepted;
+unknown model must have explicit caller value or verified provider capacity,
+with placement evaluated before changing model-neutral capability APIs.
+
+Human replied Continue to unlock prompt; CUA confirms native app is accessible
+again. Parent restarts last complete diagnostic package and repeats only the
+self-authored Contact book sample, while implementation source migration proceeds
+without packaging. Current safe wrapper session52584. This diagnostic run is
+not a validation of the unfinished optional-limit implementation.
+
+Human reports saved-account sign-in layout regression. Parent isolated micro UI
+fix in renderer.tsx/renderer.css only; current implementer explicitly excludes
+these files. Cause: conditional AccountPicker added directly into sign-in dialog
+with gap0 and no full-width control grouping. Acceptance: separated aligned full-
+width controls, visible keyboard focus, no overlap/overflow in no-account and
+saved-account desktop/narrow states; remove redundant browser hint. Estimate
+0.25h communicated. No auth/domain behavior changes, no new behavioral tests
+for geometry; existing auth tests and visual inspection cover this correction.
+
+Latest human UI direction: remove Quit from every Studio screen and remove its
+exclusive renderer IPC/preload route; preserve native window close. Use only the
+Sign out icon at the header's right content edge, with accessible name/tooltip.
+Parent micro changes: grouped sign-in controls with spacing/full-width account
+picker, removed browser hint and Quit footer, reduced focus outline thickness
+without hiding keyboard focus, and icon-only sign-out. Renderer gate/auth tests
+2/2 and flow-view tests2/2 pass; four parent UI files pass Prettier. These source
+changes are not yet packaged or visually accepted. Existing implementer removed
+Quit bridge plus guide references; four focused suites12/12 pass. No broad suite.
+
+Native generation retry on the prior complete diagnostic package now confirms
+exact cause, rather than inferring it: HTTP200 response stream throws SDK read
+APICallError caused by local response-byte-limit. All proposed tools were admitted
+and responded. UI still Writing failed. Safe log only contains fixed classifiers;
+no provider payload or credentials. Implementer notified to finish removal of
+example cap/optional runtime bounds and classify an explicitly configured wrapped
+transport limit as BUDGET_EXCEEDED. Then focused checks, coherent build/package,
+and actual generate/edit/preview/export flow before any success claim.
+
+Current optional migration evidence: transport36tests pass; atomic saved server
+reservation and MCP budget68tests pass. No allowance is fabricated when none was
+configured; transportReserved records pre-send status independently of byte0.
+Connected adapter/server build is still incomplete. Current native diagnostic
+session81705 is idle on failure screen. Parent has released packaging prohibition
+once implementation is coherent; child must notify before replacing package.
+
+Read-only documentation inventory dispatched to existing studio_api_inventory
+function (original explicit gpt-6-luna/medium, no memory/children; runtime metadata
+not exposed). Locate mandatory/default-limit prose contradicted by optional-limit
+migration. No production edits or builds; prepare one documentation correction
+batch after runtime convergence.
+
+Accepted read-only documentation inventory from existing Luna/medium function;
+explicit original profile confirmed, runtime metadata unavailable. Parent updated
+four reference/guide files to describe optional operation/invocation ceilings and
+actual byte accounting. Prettier passes. Numeric snippets/registry concurrency
+and MCP-specific prose await coherent final API; do not claim all caps removed.
+Parent authorizes an internal checkpoint app package as soon as focused checks
+pass with the proven 32KiB example response cap removed. This restores the real
+workflow first; remaining MCP/default-limit cleanup and session extraction remain
+required afterward. Child must notify before package so parent can close old app.
+
+Checkpoint focused integration exposed no-deadline stall before provider dispatch.
+Parent read-only repository inspection identified selectMissingModels rejecting
+undefined started.deadline before selectKind; authorizePreferenceChanges and
+handlerDeadline made the same mandatory-deadline assumption. Returned one concrete
+correction batch to existing implementer, no overlapping edits. Preserve errors
+for missing start facts/corrupt configured deadline and claim cancellation while
+allowing an intentionally absent deadline. Renewable claim lease timings are not
+total operation ceilings. Native old package remains idle; no new live call yet.
+
+Parent micro UI cap cleanup (studio-flow.tsx and existing CSS): removed title200
+and instruction1500 maxlength attributes and dashboard first-line160-character
+slice. Card preview uses CSS line cropping without changing the retained string.
+Existing flow/view18tests pass and formatting passes. No backend-limit-removal
+claim. Parent sent exact file edits to implementer to avoid overlapping writes.
+
+Additional no-deadline diagnosis using built public Validate.message confirms an
+empty AgentInvocationBounds message fails `(required)` as default. Returned this
+to implementer along with same risk for AgentNamedOperation.limits. This requires
+presence/validation semantics matching no configured ceilings, not a fake numeric
+bound to make serialization pass. No parent runtime edits.
+
+Checkpoint convergence: code now accepts absent deadline and empty limit messages
+through repository selection/handler awaiting and persisted Proto validation.
+Success-path release-agent fixture incidentally configured total output and
+recovery ceilings both1M; reservation projection correctly exceeded recovery
+allowance after removing per-call cap. Removed incidental fixture ceilings while
+retaining dedicated configured-budget tests. Implementer reports project build
+pass and five focused suites255tests pass, diff whitespace clean. Packaging is
+now authorized/in progress; no live-success claim yet.
+
+Native CUA getAX timed out120s then getState20s twice, resetting its kernel.
+Parent stopped only its known diagnostic app PID17173 via TERM; wrapper returned
+App exit0. User availability question is pending. Continue code/packaging without
+requiring an answer, but live app validation needs functioning native control.
+
+Checkpoint package build and package commands exited0. Parent launched replacement
+native app with safe diagnostic wrapper session24120. CUA now explicitly reports
+Mac locked; live check awaits manual unlock (availability question already pending).
+Do not claim model generation fixed end-to-end yet. Current native app package is
+the255-test checkpoint; implementer continues MCP optional-cap source migration
+without repackaging until parent can test this exact candidate.
+
+MCP follow-up: parent identified unconditionally scheduling VercelMcpSession's
+now-optional deadline; undefined becameNaN and immediately cancelled every call.
+Existing implementer added direct red/green call regression and fixed timer guard.
+Connected typebuild and MCP/Studio/registry/capacity60tests pass. Discovery/setup
+hidden caps are removed, including70KB setup and nine-page discovery regressions.
+Parent adapter/facade prose now reflects optional MCP policy and removed discovery
+caps; registry numeric example settings removed now that capacity options are
+optional. Model limits container omission still requested before final docs.
+
+Parent removed UI sign-out120-poll ceiling; completion/termination or actual
+bridge error determines outcome, retaining1s cadence. Existing flow/gate17tests
+pass. Current package remains unchanged. New source still needs final connected
+checks and native review; do not substitute this source evidence for live success.
+
+Current checkpoint follow-up: icon-only Sign out retains title/accessible name
+and a44px click target, flex-end alignment at the header content edge. Included
+in the existing packaged checkpoint; visual confirmation still awaits unlock.
+Narrow AI README/REFERENCE snippet compilation exits0. Existing Luna/medium
+read-only documentation/API function resumed to inventory framework vs example
+responsibilities for the requested final report; original explicit dispatch
+confirmed, runtime metadata not exposed. No new write stream or live call.
+
+Accepted current Luna/medium API inventory: inference/token callback is already
+provided by adapter, but SiwcSession protocol lifecycle still remains in example.
+Do not present session extraction as complete. Same read-only dependency function
+continues with pinned openid-client public no-timeout/cancellation API inspection
+for agreed extraction. Original explicit profile verified; no memory or children.
+Adapter README snippet compilation exits0. Native CUA retry timed out120s; no live
+model call from replacement checkpoint is present in safe log. Current package
+remains unchanged while source-only work continues.
+
+Scheduler default4/4/64 disposition from implementation: per-turn page processing,
+resident cache, urgent-priority optimization retain periodic/cursor reachability;
+these are not total work ceilings. Keep them. Agent history1MiB is a real per-read
+ceiling and must become optional through storage/server and persisted read request,
+using the accepted wrapper-presence pattern and replay/large-page regressions.
+
+History optional-byte slice passes connected proto/storage/ai/server compilation
+and29focused history/replay/provider tests, including >1MiB entries and explicit
+zero rejection. Parent updates server README/REFERENCE and storage REFERENCE to
+remove1MiB/default-bound claims; runtime writer retains TSDoc/tests.
+
+Material provider-contract boundary: Anthropic requires wire max_tokens even when
+application maxOutputTokens is omitted. SDK fallback uses guessed model mappings.
+Existing requirements splitter (original explicit Astra/high, no memory/children,
+read-only) checks proposed optional provider-verified capacity on VercelConnection,
+identity binding and audit/replay of effective wire value. No generic entity
+contract or automatic catalog call proposed. This is a material boundary check,
+not a repeat of the approved optional-limits architecture. Runtime metadata is
+not exposed. Implementation pauses only this provider-specific field pending
+that bounded assessment; Ax regression work can continue independently.
+
+Accepted bounded Astra/high provider-contract assessment (original explicit
+profile, no memory/children; runtime metadata unavailable): connection-scoped
+anthropicOutputTokenCapacity is the application's verified provider capacity,
+not an AiModel budget. Reject wrong profile/invalid values/conflicting explicit
+ceiling; absent both must not use SDK guesses. Effective wire max_tokens belongs
+in existing prepared-request provider metadata/digest with lowering revision3,
+and physical fetch must reject SDK clamping/thinking changes before dispatch.
+No new Proto/Event or inference-time metadata call. Existing implementer remains
+responsible. Parent README capacity-parameter snippets compile after source field
+addition; reference documents semantics. Models API max_tokens source checked:
+https://platform.claude.com/docs/en/api/models/retrieve . No hardcoded capacity
+added to examples.
+
+Ax full factory173tests pass including26tool calls/27model responses and4invalid
+candidates before5thsuccess. Infinity stays adapter-local; telemetry records
+actual counts and usage. Bridge maxRetries0 prevents physical resend and is not
+a workflow cap. Anthropic suite176tests passed before final altered-wire case,
+which passed separately; final focused completion still pending implementer.
+
+Shared-session extraction checkpoint: example SiwcSession source removed; OAuth
+protocol now resides in ai-vercel-ax. Public factory options are agentName,
+credentials and optional platformFetch. Pending attempt exposes only browser URL;
+private state/nonce/verifier remain in session. Session accounts/pendingClientIds/
+models/model/signOut replace example token interpretation/binding; DesktopAuth
+retains browser and loopback lifecycle, store retains OS-encrypted persistence.
+Session-level fetch propagates to inference by default. Parent public examples
+compile and selected docs format checks pass; existing audience checker passes.
+
+Focused implementation evidence: connected adapter/release-notes/support build
+passes; auth/session/model-selection71tests pass; real signed-grant test covers
+subject binding/drift; delayed-refresh app-authorization race red/green verifies
+recheck before returning connection; native-close abort test passes. PostgreSQL/
+MySQL/Datastore narrow builds and9history-boundary tests pass using shared optional
+byte paging helper. Changed-source TSDoc, ESLint and dependency checks now pass.
+Remaining before review: focused combined compile/tests, cleanup/time/logging,
+Anthropic materialization/replay cases, temporary generation diagnostics cleanup.
+No app repackage/live generation since checkpoint; native control unavailable.
+
+Cancellation correction checkpoint: existing explicit Sol/medium implementer
+confirmed red/green late-save and already-aborted complete tests, then stalled
+revocation cancellation and native-close sign-out tests. Public signOut accepts
+an optional AbortSignal and clears local tokens even when revocation is
+cancelled; result still reports remote confirmation. Parent README/REFERENCE
+describe these semantics. Time-read and logging gates pass. Cleanup extraction
+continues before fresh concern-specific review. No live generation success or
+new package is claimed.
+
+Current-source preflight converged: 257 adapter/session/desktop/selection tests,
+270 optional-bound/MCP/replay/history tests, and 36 focused tests after helper
+extraction pass. One null-normalization regression was caught and corrected;
+final registry tests pass 9/9. Affected builds, ESLint, TSDoc, cleanup, full
+format check, Time/logging/dependency checks, Buf lint, generated-current check
+and diff whitespace check pass. Existing explicit Sol/medium implementer remains
+available for one collected correction batch. Native generation remains blocked
+by Mac lock; no release profile, fresh package or live success claim.
+
+Fresh concern-specific review wave planned now, with no inherited conversation,
+memory use, writes or child agents. Existing performance_reliability_reviewer:
+explicit gpt-6-sol/medium for optional bounds, replay, MCP and session races.
+Existing typescript_api_docs_reviewer: explicit gpt-6-sol/medium for optional
+TS/Proto contracts, exports and public session semantics. Existing
+documentation_reviewer: explicit gpt-6-luna/medium for current user-facing
+README/reference/guide claims and examples. Existing style_maintainability_reviewer:
+explicit gpt-6-sol/medium for affected extraction and example boundaries, after
+capacity becomes available. All four canonical concerns apply. Security remains
+the final release-readiness gate after convergence; it is not replaced by this
+wave. Desktop supports explicit dispatch; actual runtime metadata unavailable.
+Collect the full wave before returning accepted findings to the same implementer.
+
+Review wave collected: optional_runtime_review (performance/reliability,
+explicit Sol/medium) found delayed-read token reuse after sign-out and overlapping
+grant saves not fully awaited before credential clearing. optional_api_review
+(explicit Sol/medium) reports no current-schema issues; old-wire compatibility
+concern withdrawn under the human's no-legacy requirement. optional_docs_review
+(explicit Luna/medium) requests conditional success wording in the example guide.
+optional_style_review (explicit Sol/medium) requests adapter session tests beside
+the adapter and removal of an obsolete approval error branch. Its proposed
+cross-generation cancellation issue was withdrawn after tracing the existing
+admission and terminal-execution gates; no speculative new mechanism will be added.
+All dispatches used explicit profiles, fork none, no memory/children or edits;
+runtime metadata unavailable. Completed reviewers were interrupted/closed.
+Return this single accepted batch to the existing Sol/medium implementer, then
+rerun focused checks and re-review only the corrected reliability paths.
+
+Accepted review batch corrected in the existing explicit Sol/medium implementer:
+accessToken now rejects a changed grant version across async reads/refresh;
+all concurrent per-client grant saves are tracked and awaited before clear.
+Both defects reproduced red before correction. Generic protocol tests now live
+in ai-vercel-ax/test/chatgpt-plan-session.test.ts with a copying in-memory store
+port; example siwc-session tests retain encrypted-store/restart integration.
+Obsolete approval error classification removed; guide workflow success wording
+made conditional. Final 85 focused tests pass, including package session61 and
+example persistence3. Affected TypeScript, ESLint, formatting, cleanup, TSDoc and
+diff whitespace checks pass. Same scoped independent reliability reviewer
+confirmed both corrections and no introduced findings; canonical review concerns
+are resolved for this slice. Both participants completed and were closed using
+the available interrupt control; their contexts remain recoverable for follow-up.
+
+Real blocker: latest CUA app access explicitly reports Mac locked. User unlock
+question pending. Current running checkpoint already includes icon-only
+right-aligned Sign out and removes the original response cap, but source now
+contains subsequent reviewed session/MCP/history changes not yet repackaged.
+Do not claim native generation succeeds. After unlock, prove current live
+generation root-cause correction, then coordinate latest package/complete native
+flow, final release-readiness security review, release checks and branch push.
+No broad release suite, new package, commit or push was done during this blocked
+interval. Framework-versus-example final report remains an acceptance item.
+
+13 October live checkpoint: human unlocked Mac; CUA native access works. Selected
+the existing account, synthetic Contact book repository v1.0..v1.1 and GPT-6-Luna.
+Real provider generation completed and opened editable Markdown with the actual
+name/email/case/whitespace search change. Edited Markdown, rendered Preview,
+exported release-notes-live-check.md in the synthetic repository, verified exact
+file contents, returned to Dashboard and reopened retained edits. Sign-out
+returned to Welcome; native close exited the app. This confirms the packaged
+response-cap fix, not yet the later reviewed source. Package latest source next,
+then repeat live generation before release qualification.
+
+Dispatch mechanical packaging function with explicit gpt-6-luna/low, no memory,
+children or source edits; build/package only, no broad release profile or live
+provider calls. Then final release-readiness security_reviewer with explicit
+gpt-6-sol/high for current auth/session/MCP/optional-limit changes. Runtime model
+metadata unavailable; explicit configured profiles required and supported.
+
+Latest source native sign-in reached Dashboard. Human rejected the rendered UI
+scale: reduce typography, controls, icons and spacing proportionally throughout
+sign-in, dashboard, wizard and editor; preserve approved layout and native zoom.
+CSS currently uses 62px headings, 57–70px actions and 120px dashboard top margin.
+Apply desktop scale against Apple HIG typography, then inspect native rendering.
+Dispatch bounded UI implementation function explicit gpt-6-sol/medium, fork none,
+no memory/children. Scope renderer.css and icon sizes in renderer.tsx,
+studio-flow.tsx, studio-flow-view.tsx, studio-markdown-view.tsx only. Concurrent
+runtime implementer retains adapter/tests/trusted code. Runtime metadata is not
+exposed; configured dispatch is explicit. Acceptance: 13–14px body, restrained
+headings, compact controls/spacing, full-width progress, readable editor, no
+lost functionality. Estimate 0.5–1h for adjustment and live check.
+
+Final security reviewer explicit Sol/high found quadratic stdio concatenation
+and missed already-aborted connection setup. Same existing Sol/medium implementer
+is correcting both without adding default limits. Focused regressions reproduced
+both and now pass; full focused checks and scoped re-review remain.
+
+Security correction complete: 222 focused factory/MCP tests and adapter build,
+lint/format/cleanup/TSDoc/diff checks passed. Same independent Sol/high security
+reviewer re-reviewed both corrections and found no actionable regressions.
+No default ceilings added. Native latest-source generation is in progress.
+UI scale assignment extended only to editor line/gutter geometry needed by the
+font change; CSS and JS geometry must agree. No content limit may be added.
+Dispatch read-only framework/application responsibility inventory, explicit
+Luna/medium function, fork none/no memory/children; no edits/tests/provider calls.
+
+Latest reviewed source native result: sign-in completed, synthetic Contact book
+v1.0..v1.1 with GPT-6-Luna produced editable Markdown: Version 1.1 / Search /
+name-or-email search ignoring case and surrounding spaces. Provider generation
+is now directly observed in the latest packaged source, before the two isolated
+security corrections and CSS scale correction. No live failure remains in that
+flow. Final rebuilt visual check and release qualification remain.
+
+Desktop scale correction returned from explicit Sol/medium implementation:
+14px body, 30px headings, 36px buttons, 52px topbar, 40px dashboard top gap,
+190px cards, 30px progress circles, 24px editor rows with synchronized gutter.
+Four view tests, example build, targeted lint/format and diff check pass.
+Existing gutter test scope was extended to reflect new row geometry.
+13 October Mac locked again after latest-package generation completed; unlock
+question remains pending. Do not overwrite the running package before native
+close. Build/preflight and responsibility analysis can proceed independently.
+
+Read-only inventory explicit Luna/medium completed: reusable OAuth/PKCE/OIDC,
+refresh/catalog/revocation and deployment binding are in ai-vercel-ax; example
+retains native browser/loopback, encrypted host storage, account/model UX policy,
+Git tool implementations and release domain. No concrete generic provider
+protocol duplication remained in the inspected app boundary. Runtime metadata
+unavailable; explicit configured dispatch accepted.
+
+Dispatch mechanical preflight function explicit Luna/low, fork none, no memory,
+children or edits. Run current cheap checks, affected tests/coverage inspection
+and tooling typecheck; no full release profile, packaging or provider/UI calls.
+
+After 4 focused view tests/build/lint/format passed, same existing independent
+style reviewer dispatched for sizing-only review with explicit configured
+Sol/medium: CSS consistency/responsive fit and editor gutter geometry. No memory,
+children, edits or UI calls. Reliability/API/docs concerns are N/A for pure
+styling; gutter calculation is included in scoped correctness inspection/test.
+Final security concern already resolved separately; no new auth/runtime changes.
+
+Current mechanical preflight: 481 tests across 25 focused files passed; format,
+diff, audience docs and all snippets passed. Tooling typecheck failed on eight
+remaining optional-bound assumptions in testing backend and tests. Returned one
+batch to existing explicit Sol/medium runtime implementer, extending scope to
+packages/testing/src/ai-test-backend.ts, scripted-attempts.ts and affected tests.
+No release profile started. Review also found fixed gutter clipping five-digit
+line numbers; same UI implementer fixes digit-dependent width and existing long
+scroll test. No new default limit or content limit is authorized.
+
+Sizing review correction: gutter width now grows with document line-count digits;
+existing test reaches line 10,001. Four view tests/build/lint/format/diff pass;
+same independent Sol/medium reviewer rechecked corrected geometry and is clean.
+Both dependency audits pass, no known vulnerabilities. Preflight found no current
+machine-readable coverage reports; focused coverage for newly corrected testing
+runtime paths is requested, avoiding a premature full-release run.
+
+Optional-bound tooling corrections converged: complete tooling typecheck passes;
+392 tests in 11 affected files and targeted lint pass. Focused testing-backend
+coverage: 20 tests pass; changed runtime files 93.96% lines/90.2% branches,
+including absent and explicit cases for model request/input/output guards.
+Parent inspected the four production guards; they enforce only present values
+and introduce no defaults. Remaining changes are fixture typing/formatting and
+one requested TSDoc blank line. These deterministic corrections do not reopen
+unaffected specialist lanes. Final targeted formatting, TSDoc and diff checks passed.
+
+Current handoff blocker: after two explicit Mac-locked responses, final native
+CUA access timed out. Unlock question remains pending. Smaller renderer source
+is built and style-reviewed, but running .app is the earlier large-scale build;
+it has not been closed/replaced. Do not claim visual acceptance or updated
+packaged UI. Real generation was already proved in that latest pre-sizing
+package. When native access resumes: close native window, build/package final
+source, inspect sign-in/dashboard/changes/style/editor at desktop and narrow
+widths, then final release qualification and commit/push. No full release run,
+commit, push, or CI claim for current dirty source. Framework/application
+responsibility report is ready for the human.
+
+Human unlocked Mac again. Native access resumed and confirmed the successful
+Contact book Markdown remains in the prior package. Closed native window;
+app inventory confirms Studio exited. Rebuild/package latest corrected source,
+then inspect compact UI. Estimate communicated 0.25–0.5h. Packaging mechanical
+function dispatched to existing Luna/low context; explicit configured profile,
+no children/memory/source edits. Desktop supports required dispatch profiles.
+
+Native compact UI inspection: sign-in/account selection, Dashboard and Changes
+render correctly at 1200x820. Progress row spans card. At 720x720 Style reflows
+without horizontal clipping; model dropdown opens fully above trigger. Actual
+narrow screenshot found Audience/Tone gap collapsed by shared field-row rule.
+Same explicit Sol/medium UI implementer added 12px row-gap only to narrow
+rs-style-options; format/diff/renderer build passed. Deterministic CSS correction
+does not reopen unrelated review lanes. Final refresh will include this rule.
+
+Rebuilt compact package real native generation succeeded again with GPT-6-Luna.
+Edited Markdown and rendered Preview at 720x720; content and controls fit, with
+natural vertical scrolling on the narrow Style page. No horizontal page overflow.
+Preparing final spacing-only package refresh. No further model/transport change.
+
+Source converged after observed native sizing correction. Mandatory cheap
+preflight passed tooling typecheck, 481 broad focused tests plus 392 correction
+suite tests, focused changed testing runtime coverage, lint/format/TSDoc,
+documentation snippets/audience, Protobuf/generated checks and both audits.
+Native real generation and editing/Preview passed in compact build. Dispatch
+one final release profile to existing mechanical verification context explicit
+Luna/low after packaging completes; no memory/children/edits/provider or UI calls.
+Full release execution is a final qualification, not a diagnostic loop. Keep
+app available for human review while it runs. Runtime metadata unavailable.
+
+Final compact package refreshed and native narrow spacing correction visibly
+confirmed at720x720; normal1200x820 restored and app left open at Style for human
+review. Sign-in/account reuse, dashboard, wizard/dropdown, live generation,
+Markdown editing and Preview have passed native checks. The analysis/UI blocker
+is resolved.
+
+Final release profile first attempt stopped before coverage at full ESLint:
+12 deterministic errors across existing changed runtime/tests. Generated source
+checks/build/tooling typecheck passed. Same explicitSol/medium implementation
+context is correcting the full finding batch; run full ESLint and complete cheap
+preflight before retry. No code review concern reopened for mechanical lint;
+if a semantic fix becomes necessary, scope its tests/review appropriately.
+
+Full-lint correction batch complete: repository ESLint and tooling typecheck
+pass; 87 affected tests plus 36 bounded-fetch tests pass; formatting/diff pass.
+No limit/default behavior changed. bounded-fetch internal callback now spells
+its absent numeric result as undefined rather than an invalid void union, with
+fixture returns aligned. Continue remaining cheap gates then repeat final release
+profile, which has not yet reached coverage. Existing explicit Luna/low mechanical
+context remains responsible; no memory/children/source edits.
+
+Remaining cheap gates all passed except one malformed copyright header in the
+new optional-bound Proto test. Orchestrator micro correction copied the exact
+canonical header from the adjacent Proto contract test; no behavior change.
+Existing explicit Luna/low mechanical context will confirm this gate and run
+the final release profile. No additional review lane needed for header spelling.
+
+Release pre-test gates subsequently found seven new ChatGPT session exports
+missing from the API documentation expectation list. Same explicit Sol/medium
+implementation context corrects that deterministic public-export inventory.
+All runtime/build/lint gates passed; coverage has not started. Complete every
+remaining pre-test gate, including API docs and release readiness, before
+continuing the coverage command from the release profile. Do not repeat the
+entire build to diagnose a documentation inventory error.
+
+Full coverage stage completed with 390 passing files, four failing files and
+one skipped (6,224 passing tests, six failing, one skipped); no final coverage
+report was emitted. Accepted correction batch: packaged adapter README link
+escapes archive; one schema test still rejects omitted optional limits; two
+support BlackBox tests reach their existing eventual timeout. Same explicit
+Sol/medium implementation context investigates and corrects these cases, with
+focused tests before any full rerun. Do not raise timeouts or restore arbitrary
+limits. Remaining gates before coverage passed. Native application remains open
+and live behavior is not affected by these qualification failures.
+
+Qualification correction causes confirmed: valid and invalid-then-corrected
+support replies already passed with the original explicit budget. The two
+malformed-only tests assumed the removed model-level retry default and now
+script a terminal refusal; incidental fixture ceilings were removed without
+raising waits. Schema assertions accept omitted limits, and the adapter README
+uses a package-safe repository URL. Support/schema focused coverage passes
+13 tests and archive/external-consumer focused coverage passes 20 tests. These
+are deterministic test/documentation corrections to reviewed behavior; no
+production semantics changed and no reviewer lane is reopened. Complete cheap
+gates, then repeat full coverage.
+
+Final test run passes all 6,230 tests (394 files, one file/test skipped), but
+global branch coverage is 21,075/23,499 (89.68%), below the existing90% gate.
+Statements93.43%, functions95.18%, lines95.24% pass. A scripts-first LCOV
+analysis in /tmp identifies uncovered branches in changed model handling,
+history paging, session and Studio workflow code. Same explicit Sol/medium
+implementation context adds focused behavior tests; no threshold reductions or
+coverage exclusions. Archive proof/offline trial proceeds in existing explicit
+Luna/low mechanical context against runtime-identical source, with only the
+preparation script's incremental proto-tools build and no cleanbuild or UI work.
+
+The generated-clean checker and full ESLint collided on a transient Proto
+output path when run concurrently. The checker cleaned it; sequential ESLint
+passed. These gates must stay sequential. Coverage output was piped through tee
+without pipefail; its zero status was not accepted because the explicit report
+failed the branch threshold. Future mechanical commands preserve producer exit
+status and capture an incremental log.
+
+Current runtime archive qualification passes: all21 snapshot.23 package archives
+prepared, inspected and consumed from a separate installation. Offline trial
+passes normal, partial failure, rerun, delayed-read recovery, fatal-read and
+read-only scenarios. Logs/artifacts remain in /tmp, no publication performed.
+Existing explicit Luna/low mechanical function reported command exit0 for each
+stage. This evidence remains current while subsequent edits are test-only.
+
+Dispatch one focused performance/reliability review using existing role, explicit
+gpt-6-sol/medium, fresh context/no memory/no children. Scope: map remaining
+uncovered changed model and Studio-service branches to meaningful behavior
+tests and check the new regression tests for masked failures. Read-only, no
+production changes. Expected/configured profile is explicit; runtime metadata
+is not exposed. Other concerns remain previously accepted; no new public,
+serialized or security contract is introduced by this test-only expansion.
+
+Human reports slow model dropdown and requires optimistic UI. Standard bounded
+UI correction; estimate0.25–0.5h communicated. Code trace shows renderer waits
+for selectModel before setting choice; trusted selection fetches catalog and
+then session.model fetches it again. New existing implementer role assignment
+explicit gpt-6-sol/medium, fresh context/no memory/no children, limited to
+renderer/flow and model-selection files/tests. Current writer freezes those
+files and continues Studio same-ID opening race plus separate coverage tests.
+Acceptance: choice appears before deferred IPC settles; latest choice wins;
+account/sign-out invalidates old responses; failed preparation remains
+recoverable; generation cannot use old/unconfirmed model; redundant catalog
+fetch removed only while authoritative adapter/account checks remain intact.
+Use deferred tests before fixes and native check after package convergence.
+
+Reliability review reproduced concurrent same-ID draft opening duplicate
+submission and tracking loss. Existing Sol/medium service writer adds per-ID
+in-flight submission sharing within Studio (not framework), preserves
+input-conflict rejection and uncertain retry behavior, and supplies regression.
+Scoped independent reliability re-review follows.
+
+Optimistic model selection focused checks pass34 tests (broader37 before final
+format); tooling, changed lint, format and diff pass. Integration trace found
+StudioAccountGate rejects overlapping account actions; renderer now displays
+latest selection immediately but sends only one registration at a time, skips
+superseded queued choices and prepares the newest after current settlement.
+A->B->C regression uses a bridge that rejects overlapping calls, expects A/C
+only. Write waits for confirmation; failure permits retry and stale account
+responses are ignored. Duplicate pre-registration catalog read removed;
+adapter model() remains authoritative and account checks surround binding.
+Existing explicit Sol/medium reliability reviewer checks this slice independently.
+
+Studio opening race second regression covers concurrent retained retry after
+uncertain initial post. Shared helper now covers initial and recovery paths,
+clears only matching in-flight promise. Compiled Studio7 and factory182 tests
+pass; independent scoped reliability re-review clean. Replay corruption cases
+assert their specific errors plus zero model/tool dispatch.
+
+Independent Sol/medium reliability review accepts optimistic selection and
+serialized latest-choice preparation; pending Write and account guards tested.
+Native old dashboard confirmed empty (no draft to preserve); closed via system
+window control and app inventory confirmed exit. Existing Luna/low mechanical
+context builds/packages latest reviewed UI/service corrections now, ahead of
+full coverage. Current runtime writers freeze production files during package
+refresh; remaining work is tests. Parent performs native selection check.
+
+Latest packaged native check passes optimistic model selection. Selecting
+GPT-6.1-Sol immediately displayed that value with Preparing model and disabled
+Write; changing to GPT-6-Luna immediately displayed Luna before preparation
+finished. Write enabled after confirmation. Native app remains open on Style
+with the synthetic Contact book v1.0 to v1.1 comparison for human review.
+Build/package exit0 reported by the existing explicit Luna/low function.
+Remaining qualification is meaningful branch coverage expansion and final
+mechanical gates; no remote CI claim applies to these unpushed changes.
+
+Reuse existing mechanical function configured explicit gpt-6-luna/low to
+measure focused UI branch coverage in an isolated temporary output directory.
+No source/build/package changes during native review. Compare module-level
+counts to baseline rather than shifted line identifiers. Runtime metadata is
+not exposed; configured dispatch remains explicit.
+
+Focused UI coverage passes39 tests across7 files with Vitest exit0. Isolated
+partial-suite thresholds were disabled only for collecting coverage, not for
+qualification; repository90% gate is unchanged. Source module counts changed
+from renderer74/110 to102/118, flow138/182 to156/190 and trusted model selection
+31/42 to29/40. Compare whole module records to avoid shifted-line double counts.
+Mechanical role/profile acceptance remains explicit Luna/low. Full suite is
+still required before accepting the coverage threshold.
+
+Latest combined branch estimate is21180/23518 (90.058%) after replacing changed
+UI/service module records and unioning only unchanged-source branches. Freeze
+coverage work after any already-running meaningful case; actual full gate is
+authoritative. Existing independent performance/reliability reviewer explicit
+gpt-6-sol/medium checks final test additions for domain-correct assertions and
+unmasked behavior failures. No runtime re-review needed beyond accepted slices.
+Configured profile explicit; runtime metadata not exposed.
+
+Final test-only review found two missing synchronization/assertion checks in
+release-markdown-domain: input conflicts accepted any delivery, and stale
+export counted Events before correlated rejection. Existing Sol/medium writer
+fixes both; remaining reviewed tests accepted. Existing explicit Luna/low
+mechanical function begins sequential cheap preflight (build first, final
+tooling/lint after test correction), no full coverage before convergence.
+
+Both final test findings corrected: await typed ReleaseExportUnavailable or
+ReleaseInputsConflict matching draft ID before checking absence of a second
+export or retained Version/state. Focused domain4/tooling/scoped lint/diff pass.
+Existing independent Sol/medium reviewer rechecks these two corrections only.
+Test sources frozen; remaining cheap gates proceed sequentially. Remaining
+estimate0.25–0.5h for full qualification/push if no further failure occurs.
+
+Scoped independent re-review is clean; typed rejection correlation resolves
+both findings. Existing explicit Luna/low mechanical function is authorized
+to run the full canonical coverage command once after all cheap gates pass.
+Producer status must be preserved. No source mutations while qualification
+runs. No new review lane is warranted by the test-only corrections.
+
+Cheap preflight found function-size violations in new renderer selection
+helpers, a callable-summary wording failure for sharedOpenDraft, and formatting
+in an added Anthropic test. Existing explicit Sol/medium implementation context
+receives the complete mechanical batch; no coverage run until corrected.
+Preserve optimistic selection semantics while extracting cohesive functions.
+Remove rejected Stable wording from touched helper docs. Recheck affected UI
+reliability after extraction and rerun cheap gates.
+
+Mechanical correction complete: renderer helpers extracted without changed
+selection behavior; direct Returns summary for sharedOpenDraft; Anthropic test
+formatted. Focused UI30/service7 and cleanup/TSDoc/tooling/scoped lint/format/diff
+pass. Independent existing Sol/medium extraction re-review clean. Current
+generated build then canonical full coverage resumes through the existing
+explicit Luna/low function. Other unchanged preflight checks all pass, including
+both dependency audits (no known vulnerabilities). No runtime/source mutations
+during the full run.
+
+Mechanical context was completed while correction messages were queued; resumed
+with followup_task (explicit existing Luna/low configuration) to actually start
+the post-correction generated build and full coverage. Do not count messages
+sent to completed agents as dispatched running work.
+
+Final canonical Vitest report:396 files passed/1 skipped;6273 tests passed/1
+skipped in754.44s. Statements93.73%, branches90.07%, functions95.43%, lines95.52%;
+all configured thresholds satisfied. Parent inspected final report and found
+no FAIL/ERROR/unhandled marker. Mechanical shell wrapper failed after Vitest
+by assigning its exit status to zsh's read-only status variable; a captured
+producer exit code is unavailable and is not claimed. Accept actual completed
+test/coverage report, not wrapper exit1, as behavioral evidence. Do not rerun
+13 minutes of tests solely for the wrapper; future wrappers use task-specific
+variable names. All cheap gates, dependency audits,21 archive consumers and
+offline publication trials remain current.
+Native pre-extraction package passed immediate choice/preparation checks. Final
+renderer extraction passed focused tests and independent review; no visual
+behavior change. Mac locked on final app inspection, so leave the running app
+and its session untouched. Source ready for feature-branch commit/push.

@@ -88,7 +88,9 @@ describe("release Git MCP worker over the framework's bounded stdio client", () 
             id: String(++sequence),
             signal: controller.signal,
             deadlineEpochMs: Date.now() + 10_000,
-            maxOutputBytes: request.maxOutputBytes,
+            ...(request.maxOutputBytes === undefined
+              ? {}
+              : { maxOutputBytes: request.maxOutputBytes }),
           }),
         onReceived: () => undefined,
         finishMessage: () => Promise.resolve(),

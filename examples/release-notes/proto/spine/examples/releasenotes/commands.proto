@@ -76,7 +76,7 @@ message RequestReleaseGeneration {
   ReleaseModelSelection selection = 7 [(required) = true, (validate) = true];
 }
 
-// Replaces the structured release notes the editor reviewed.
+// Replaces the exact Markdown bytes at the displayed Entity Version.
 message EditReleaseNotes {
   // Identifies the release draft targeted by this Command.
   ReleaseDraftId id = 1 [(required) = true, (validate) = true];
@@ -84,26 +84,23 @@ message EditReleaseNotes {
   // Current Entity Version read with the draft state.
   spine.core.Version expected_version = 2 [(required) = true, (validate) = true];
 
-  // Carries structured release note entries with catalog citations.
-  ReleaseNotesDocument document = 3 [(validate) = true];
+  reserved 3;
+  reserved "document";
+
+  // Exact replacement Markdown, including empty content.
+  ReleaseMarkdownContent markdown = 4 [(validate) = true];
 }
 
-// Approves one exact rendered document for export.
-message ApproveReleaseNotes {
-  // Identifies the release draft targeted by this Command.
+// Stops a matching pending generation without changing current Markdown.
+message CancelReleaseGeneration {
+  // Draft whose generation is being stopped.
   ReleaseDraftId id = 1 [(required) = true, (validate) = true];
 
-  // Current Entity Version read with the draft state.
-  spine.core.Version expected_version = 2 [(required) = true, (validate) = true];
-
-  // Digest displayed for the exact Markdown bytes.
-  string digest = 3 [(required) = true];
-
-  // Exact UTF-8 Markdown bytes displayed for approval.
-  bytes markdown = 4 [(required) = true];
+  // Exact generation to stop; an older ID cannot stop a newer one.
+  ReleaseGenerationId generation = 2 [(required) = true, (validate) = true];
 }
 
-// Requests an immutable approved snapshot for a trusted file export.
+// Requests an immutable current snapshot for a trusted file export.
 message PrepareReleaseNotesExport {
   // Identifies the release draft targeted by this Command.
   ReleaseDraftId id = 1 [(required) = true, (validate) = true];

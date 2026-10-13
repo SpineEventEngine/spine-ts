@@ -50,12 +50,12 @@ export interface AiMcpMessageTicket {
   /**
    * Absolute send deadline.
    */
-  readonly deadlineEpochMs: number;
+  readonly deadlineEpochMs?: number;
 
   /**
-   * Full decoded response credit reserved before dispatch.
+   * Full decoded response credit, when configured, reserved before dispatch.
    */
-  readonly maxOutputBytes: number;
+  readonly maxOutputBytes?: number;
 }
 
 /**
@@ -78,9 +78,9 @@ export interface AiMcpMessageRequest {
   readonly inputBytes: number;
 
   /**
-   * Full response credit requested for this message.
+   * Optional full response credit requested for this message.
    */
-  readonly maxOutputBytes: number;
+  readonly maxOutputBytes?: number;
 
   /**
    * Runtime-assigned tool call identity, present only for tool dispatch.
@@ -100,7 +100,7 @@ export interface AiMcpProtocolControl {
   /**
    * Invocation deadline.
    */
-  readonly deadlineEpochMs: number;
+  readonly deadlineEpochMs?: number;
 
   /**
    * Reads current epoch milliseconds from the runtime clock.
@@ -310,8 +310,8 @@ export interface AiMcpProtocolSession {
     options: {
       readonly toolCallId: string;
       readonly signal: AbortSignal;
-      readonly deadlineEpochMs: number;
-      readonly maxResultBytes: number;
+      readonly deadlineEpochMs?: number;
+      readonly maxResultBytes?: number;
     },
   ): Promise<AiMcpToolResult>;
 

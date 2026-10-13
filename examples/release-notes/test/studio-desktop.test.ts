@@ -20,18 +20,15 @@ import type { BrowserWindow } from "electron";
 import { afterEach, expect, it, vi } from "vitest";
 import { VersionSchema } from "@spine-event-engine/proto";
 
-import { ReleaseNotesDocumentSchema } from "../generated/spine/examples/releasenotes/types_pb.js";
 import { StudioDesktop } from "../src/trusted/studio-desktop.js";
 import type { ReleaseStudio, StudioDraft } from "../src/trusted/studio-service.js";
 
 const native = vi.hoisted(() => ({
   open: vi.fn(),
   save: vi.fn(),
-  quit: vi.fn(),
 }));
 
 vi.mock("electron", () => ({
-  app: { quit: native.quit },
   dialog: { showOpenDialog: native.open, showSaveDialog: native.save },
 }));
 
@@ -42,65 +39,31 @@ afterEach(() => {
 const window = { destroy: vi.fn() } as unknown as BrowserWindow;
 const version = create(VersionSchema, { number: 7 });
 
-it("projects nested committed evidence and approval without credentials", () => {
-  const document = create(ReleaseNotesDocumentSchema, {
-    sections: [
-      {
-        heading: "Changes",
-        entries: [
-          {
-            text: "Fix",
-            evidence: [
-              {
-                commit: { value: "a".repeat(40) },
-                parent: { value: "b".repeat(40) },
-                path: "nested/<fix>.ts",
-              },
-            ],
-          },
-        ],
-      },
-    ],
-  });
+it("projects exact Markdown without credentials", () => {
+  const markdown = new TextEncoder().encode("# Café 🐈\n\nTrailing  \n");
   const draft: StudioDraft = {
     id: "draft",
     version,
     title: "October",
     audience: "SDK users",
-    generationStatus: "approved",
+    generationStatus: "staged",
     comparison: {
       selectionId: "selection",
+      projectName: "fixture",
+      baseLabel: "base",
+      targetLabel: "target",
       base: "a",
       target: "b",
       commits: [],
       changes: [],
       evidence: [],
     },
-    document,
-    approvalDigest: "digest",
+    markdown,
   };
   const projected = StudioDesktop.draft(draft);
+  markdown[0] = 0;
   expect(projected.version).toEqual(toJson(VersionSchema, version));
-  expect(projected.document).toEqual({
-    sections: [
-      {
-        heading: "Changes",
-        entries: [
-          {
-            text: "Fix",
-            evidence: [
-              {
-                commit: { value: "a".repeat(40) },
-                parent: { value: "b".repeat(40) },
-                path: "nested/<fix>.ts",
-              },
-            ],
-          },
-        ],
-      },
-    ],
-  });
-  expect(projected.approvalDigest).toBe("digest");
+  expect(projected.markdown).toEqual(new TextEncoder().encode("# Café 🐈\n\nTrailing  \n"));
   expect(JSON.stringify(projected)).not.toContain("accessToken");
 });
 
@@ -187,35 +150,36 @@ it("returns admitted generation and indexed history through fixed desktop action
   expect(evidencePatch).toHaveBeenCalledWith("comparison", 0);
 });
 
-it("transports editor Version and exact review bytes through trusted actions", async () => {
-  const document = create(ReleaseNotesDocumentSchema, {
-    sections: [{ heading: "Changes", entries: [] }],
-  });
+it("transports exact editor bytes, stable draft ID, and cancel through trusted actions", async () => {
+  const bytes = new TextEncoder().encode("# Café 🐈\n");
   const draft: StudioDraft = {
     id: "draft",
     version,
     title: "October",
     audience: "SDK users",
-    generationStatus: "approved",
+    generationStatus: "staged",
     comparison: {
       selectionId: "selection",
+      projectName: "fixture",
+      baseLabel: "base",
+      targetLabel: "target",
       base: "a",
       target: "b",
       commits: [],
       changes: [],
       evidence: [],
     },
-    document,
+    markdown: bytes,
   };
-  const bytes = new Uint8Array([35, 32, 65, 10]);
   const edit = vi.fn().mockResolvedValue(draft);
-  const approve = vi.fn().mockResolvedValue({ ...draft, approvalDigest: "reviewed" });
+  const cancelGeneration = vi.fn().mockResolvedValue(draft);
+  const openDraft = vi.fn().mockResolvedValue(draft);
   const studio = {
     readDraft: vi.fn().mockResolvedValue(draft),
-    openDraft: vi.fn().mockResolvedValue(draft),
+    openDraft,
     edit,
-    preview: vi.fn().mockResolvedValue({ version, markdown: bytes, digest: "reviewed" }),
-    approve,
+    cancelGeneration,
+    preview: vi.fn().mockResolvedValue({ version, markdown: bytes, digest: "snapshot" }),
   } as unknown as ReleaseStudio;
   const inputVersion = toJson(VersionSchema, version);
   await expect(
@@ -223,34 +187,36 @@ it("transports editor Version and exact review bytes through trusted actions", a
   ).resolves.toMatchObject({ id: "draft", version: inputVersion });
   await expect(
     StudioDesktop.action(window, studio, "open-draft", {
+      id: "retained-id",
       selectionId: "selection",
       title: "October",
       audience: "SDK users",
     }),
   ).resolves.toMatchObject({ id: "draft" });
-  const edited = await StudioDesktop.action(window, studio, "edit", {
-    id: "draft",
-    version: inputVersion,
-    document: toJson(ReleaseNotesDocumentSchema, document),
-  });
-  expect(edited).toMatchObject({ document: { sections: [{ heading: "Changes", entries: [] }] } });
-  expect(edit).toHaveBeenCalledWith("draft", version, document);
-  await expect(StudioDesktop.action(window, studio, "preview", { id: "draft" })).resolves.toEqual({
-    version: inputVersion,
-    markdown: bytes,
-    digest: "reviewed",
-  });
+  expect(openDraft).toHaveBeenCalledWith("selection", "October", "SDK users", "retained-id");
   await expect(
-    StudioDesktop.action(window, studio, "approve", {
+    StudioDesktop.action(window, studio, "edit", {
       id: "draft",
       version: inputVersion,
       markdown: bytes,
     }),
-  ).resolves.toMatchObject({ approvalDigest: "reviewed" });
-  expect(approve).toHaveBeenCalledWith("draft", version, bytes);
+  ).resolves.toMatchObject({ markdown: bytes });
+  expect(edit).toHaveBeenCalledWith("draft", version, bytes);
+  await expect(StudioDesktop.action(window, studio, "preview", { id: "draft" })).resolves.toEqual({
+    version: inputVersion,
+    markdown: bytes,
+    digest: "snapshot",
+  });
+  await expect(
+    StudioDesktop.action(window, studio, "cancel-generation", {
+      id: "draft",
+      generation: "generation",
+    }),
+  ).resolves.toMatchObject({ id: "draft" });
+  expect(cancelGeneration).toHaveBeenCalledWith("draft", "generation");
 });
 
-it("cancels export before the Command and writes only exact approved bytes", async () => {
+it("cancels export before the Command and writes only exact saved bytes", async () => {
   const directory = await mkdtemp(join(tmpdir(), "spine-desktop-export-"));
   try {
     const destination = join(directory, "notes.md");
@@ -272,24 +238,4 @@ it("cancels export before the Command and writes only exact approved bytes", asy
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
-});
-
-it("closes the in-memory context before destroying the window and quitting", async () => {
-  const sequence: string[] = [];
-  const studio = {
-    close: () => {
-      sequence.push("close");
-      return Promise.resolve();
-    },
-  } as unknown as ReleaseStudio;
-  native.quit.mockImplementation(() => {
-    sequence.push("quit");
-  });
-  const closing = {
-    destroy: () => {
-      sequence.push("destroy");
-    },
-  } as unknown as BrowserWindow;
-  await StudioDesktop.action(closing, studio, "stop-quit", null);
-  expect(sequence).toEqual(["close", "destroy", "quit"]);
 });

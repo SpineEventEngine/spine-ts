@@ -296,7 +296,7 @@ export class StreamCollectionError extends Error {
 type Part = V3Part | V4Part;
 type Options = V3Options | V4Options;
 interface StreamDeadline {
-  readonly deadlineEpochMs: number;
+  readonly deadlineEpochMs?: number;
   readonly nowEpochMs: () => number;
 }
 
@@ -308,19 +308,21 @@ interface StreamDeadline {
  */
 const deadlineSignal = (source: AbortSignal | undefined, deadline: StreamDeadline) => {
   const controller = new AbortController();
-  const remaining = deadline.deadlineEpochMs - deadline.nowEpochMs();
-  let expired = !Number.isFinite(remaining) || remaining <= 0;
+  const due = deadline.deadlineEpochMs;
+  const remaining = due === undefined ? undefined : due - deadline.nowEpochMs();
+  let expired = remaining !== undefined && (!Number.isFinite(remaining) || remaining <= 0);
   const abort = () => {
     controller.abort();
   };
   if (source?.aborted || expired) abort();
   source?.addEventListener("abort", abort, { once: true });
-  const cancelTimer = expired
-    ? undefined
-    : scheduleBoundedDeadline(deadline.deadlineEpochMs, deadline.nowEpochMs, () => {
-        expired = true;
-        abort();
-      });
+  const cancelTimer =
+    due === undefined || expired
+      ? undefined
+      : scheduleBoundedDeadline(due, deadline.nowEpochMs, () => {
+          expired = true;
+          abort();
+        });
   return {
     signal: controller.signal,
     expired: () => expired,
@@ -412,6 +414,23 @@ const failureReason = (signal: AbortSignal | undefined, expired: boolean): strin
       : "Provider stream failed";
 
 /**
+ * Maps transport-owned fixed failures without exposing the caught exception.
+ */
+const safeTransportCause = (error: unknown): string | undefined => {
+  if (!(error instanceof Error) || error.name !== "Error") return undefined;
+  const known = new Map([
+    ["Provider transport response byte limit exceeded", "response-byte-limit"],
+    ["Provider transport response read failed", "response-read-failed"],
+    ["Provider transport deadline exceeded", "deadline"],
+    ["Provider transport cancelled", "cancelled"],
+    ["Provider transport clock unavailable", "clock-unavailable"],
+    ["Provider transport revoked", "revoked"],
+    ["Provider transport reader cancelled", "reader-cancelled"],
+  ]);
+  return known.get(error.message);
+};
+
+/**
  * Opens one provider stream and closes a stream that appears after cancellation.
  * @param model Pinned direct-stream provider.
  * @param options Matching published call options.
@@ -451,12 +470,12 @@ const openBoundedStream = async (
 export const collectModelStream = async (
   model: StreamModel,
   options: Options,
-  maxParsedBytes: number,
+  maxParsedBytes: number | undefined,
   deadline?: StreamDeadline,
   anthropic = false,
   openai = false,
 ): Promise<StreamedModelResult> => {
-  if (!Number.isSafeInteger(maxParsedBytes) || maxParsedBytes < 1)
+  if (maxParsedBytes !== undefined && (!Number.isSafeInteger(maxParsedBytes) || maxParsedBytes < 1))
     throw new TypeError("Parsed output limit is invalid");
   const guard = deadline ? deadlineSignal(options.abortSignal, deadline) : undefined;
   const signal = guard?.signal ?? options.abortSignal;
@@ -471,8 +490,7 @@ export const collectModelStream = async (
     return await readModelStream(result.stream, state, signal, maxParsedBytes, guard?.expired);
   } catch (error) {
     if (error instanceof StreamCollectionError) throw error;
-    const statusCode = APICallError.isInstance(error) ? error.statusCode : undefined;
-    return fail(state, failureReason(signal, guard?.expired() ?? false), statusCode);
+    return failProviderStream(state, error, failureReason(signal, guard?.expired() ?? false));
   } finally {
     guard?.dispose();
   }
@@ -506,7 +524,7 @@ const readModelStream = async (
   stream: ReadableStream<Part>,
   state: State,
   signal: AbortSignal | undefined,
-  maxParsedBytes: number,
+  maxParsedBytes: number | undefined,
   deadlineExpired?: () => boolean,
 ): Promise<StreamedModelResult> => {
   const reader = stream.getReader();
@@ -522,8 +540,9 @@ const readModelStream = async (
     return { ...partial(state), finishReason: state.finishReason as "stop" | "tool-calls" };
   } catch (error) {
     if (error instanceof StreamCollectionError) throw error;
-    return fail(
+    return failProviderStream(
       state,
+      error,
       deadlineExpired?.()
         ? "Provider request deadline exceeded"
         : signal?.aborted
@@ -534,6 +553,18 @@ const readModelStream = async (
     if (!complete) void reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
+};
+
+/**
+ * Preserves a configured transport ceiling through SDK-wrapped stream errors.
+ */
+const failProviderStream = (state: State, error: unknown, fallback: string): never => {
+  const apiError = APICallError.isInstance(error) ? error : undefined;
+  const reason =
+    safeTransportCause(apiError?.cause ?? error) === "response-byte-limit"
+      ? "Provider transport response byte limit exceeded"
+      : fallback;
+  return fail(state, reason, apiError?.statusCode);
 };
 
 /**
@@ -592,7 +623,7 @@ const openStream = async (model: StreamModel, options: Options) => {
  * @param part Published provider stream part.
  * @param limit Maximum parsed output bytes.
  */
-const acceptPart = (state: State, part: Part, limit: number): void => {
+const acceptPart = (state: State, part: Part, limit: number | undefined): void => {
   if (state.anthropic) acceptAnthropicPart(state, part, limit);
   if (state.openai && part.type === "raw") acceptOpenAiRaw(state, part.rawValue, limit);
   if (part.type === "text-delta") {
@@ -628,7 +659,7 @@ const objectValue = (value: unknown): Record<string, unknown> | undefined =>
  * @param raw SDK raw Responses event.
  * @param limit Retained-output byte limit.
  */
-const acceptOpenAiRaw = (state: State, raw: unknown, limit: number): void => {
+const acceptOpenAiRaw = (state: State, raw: unknown, limit: number | undefined): void => {
   const event = objectValue(raw);
   if (!event || typeof event.type !== "string") return fail(state, "Invalid Responses event");
   const openai = state.openai;
@@ -703,7 +734,11 @@ const addOpenAiItem = (state: State, event: Record<string, unknown>): void => {
  * @param event Complete output item event.
  * @param limit Retained-output byte limit.
  */
-const acceptOpenAiItem = (state: State, event: Record<string, unknown>, limit: number): void => {
+const acceptOpenAiItem = (
+  state: State,
+  event: Record<string, unknown>,
+  limit: number | undefined,
+): void => {
   const item = objectValue(event.item);
   const openai = state.openai;
   if (!openai || !item) return fail(state, "Responses output item invalid");
@@ -721,7 +756,8 @@ const acceptOpenAiItem = (state: State, event: Record<string, unknown>, limit: n
     fail(state, "Responses output item invalid");
   const block = parseOpenAiItem(state, item);
   const bytes = Buffer.byteLength(JSON.stringify(block));
-  if (bytes > limit - openai.rawBytes) fail(state, "Parsed output limit exceeded");
+  if (limit !== undefined && bytes > limit - openai.rawBytes)
+    fail(state, "Parsed output limit exceeded");
   openai.rawBytes += bytes;
   openai.items.push(block);
   openai.added.delete(event.output_index as number);
@@ -872,7 +908,7 @@ const assertOpenAiProjection = (state: State): void => {
  * @param part One SDK stream part.
  * @param limit Full retained-content allowance.
  */
-const acceptAnthropicPart = (state: State, part: Part, limit: number): void => {
+const acceptAnthropicPart = (state: State, part: Part, limit: number | undefined): void => {
   const content = state.anthropic;
   if (!content) return;
   if (
@@ -928,7 +964,7 @@ const anthropicStart = (
   state: State,
   content: AnthropicState,
   part: Extract<Part, { type: "text-start" | "reasoning-start" | "tool-input-start" }>,
-  limit: number,
+  limit: number | undefined,
 ): void => {
   if (content.open.has(part.id) || content.closed.has(part.id))
     fail(state, "Duplicate Anthropic content start");
@@ -961,7 +997,7 @@ const anthropicReasoningStart = (
   content: AnthropicState,
   part: Extract<Part, { type: "reasoning-start" }>,
   index: number,
-  limit: number,
+  limit: number | undefined,
 ): void => {
   const metadata = part.providerMetadata?.anthropic;
   const redacted = metadata?.redactedData;
@@ -989,7 +1025,7 @@ const anthropicDelta = (
   state: State,
   content: AnthropicState,
   part: Extract<Part, { type: "text-delta" | "reasoning-delta" }>,
-  limit: number,
+  limit: number | undefined,
 ): void => {
   const opened = content.open.get(part.id);
   if (!opened) return fail(state, "Orphan Anthropic content delta");
@@ -1015,7 +1051,7 @@ const anthropicReasoningDelta = (
   state: State,
   block: Extract<AnthropicBlock, { type: "thinking" }>,
   part: Extract<Part, { type: "reasoning-delta" }>,
-  limit: number,
+  limit: number | undefined,
 ): void => {
   const signature = part.providerMetadata?.anthropic?.signature;
   if (part.providerMetadata?.anthropic?.redactedData !== undefined)
@@ -1039,7 +1075,7 @@ const anthropicToolInput = (
   state: State,
   content: AnthropicState,
   part: Extract<Part, { type: "tool-input-delta" | "tool-input-end" }>,
-  limit: number,
+  limit: number | undefined,
 ): void => {
   const opened = content.open.get(part.id);
   if (opened?.kind !== "tool-call" || opened.inputEnded)
@@ -1065,7 +1101,7 @@ const anthropicEnd = (
   state: State,
   content: AnthropicState,
   part: Extract<Part, { type: "text-end" | "reasoning-end" | "tool-call" }>,
-  limit: number,
+  limit: number | undefined,
 ): void => {
   const id = part.type === "tool-call" ? part.toolCallId : part.id;
   const opened = content.open.get(id);
@@ -1104,7 +1140,7 @@ const anthropicToolEnd = (
   block: AnthropicBlock | undefined,
   opened: AnthropicOpenBlock,
   part: Extract<Part, { type: "tool-call" }>,
-  limit: number,
+  limit: number | undefined,
 ): void => {
   if (block?.type !== "tool-call" || block.call.name !== part.toolName || !opened.inputEnded)
     return fail(state, "Anthropic tool content changed");
@@ -1120,7 +1156,7 @@ const anthropicToolEnd = (
  * @param value Decoded text or tool input.
  * @param limit Maximum retained bytes.
  */
-const addBytes = (state: State, value: string, limit: number): void => {
+const addBytes = (state: State, value: string, limit: number | undefined): void => {
   addByteCount(state, new TextEncoder().encode(value).byteLength, limit);
 };
 
@@ -1130,8 +1166,9 @@ const addBytes = (state: State, value: string, limit: number): void => {
  * @param bytes Exact additional encoded bytes.
  * @param limit Ticket output allowance.
  */
-const addByteCount = (state: State, bytes: number, limit: number): void => {
-  if (bytes > limit - state.bytes) fail(state, "Parsed output limit exceeded");
+const addByteCount = (state: State, bytes: number, limit: number | undefined): void => {
+  if (limit !== undefined && bytes > limit - state.bytes)
+    fail(state, "Parsed output limit exceeded");
   state.bytes += bytes;
 };
 

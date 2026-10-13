@@ -68,3 +68,17 @@ it("keeps non-Error failures private and returns the unchanged result on success
     "Read current draft",
   );
 });
+
+it("reports sign-in failure as an account action without exposing provider details", async () => {
+  await expect(
+    StudioIpcErrors.execute("sign-in", () =>
+      Promise.reject(new Error("Bearer private-token invalid_grant at /private/path")),
+    ),
+  ).rejects.toThrow("ChatGPT sign-in did not finish. Try again.");
+  expect(
+    StudioIpcErrors.display(
+      new Error("Error invoking remote method: ChatGPT sign-in did not finish. Try again."),
+      "fallback",
+    ),
+  ).toBe("ChatGPT sign-in did not finish. Try again.");
+});

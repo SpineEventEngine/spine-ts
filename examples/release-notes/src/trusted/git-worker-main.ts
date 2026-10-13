@@ -20,8 +20,8 @@ import { GitReleaseComparison } from "./git-release.js";
 
 const bindingSchema = z
   .object({
-    repository: z.string().min(1).max(4096),
-    gitExecutable: z.string().min(1).max(4096),
+    repository: z.string().min(1),
+    gitExecutable: z.string().min(1),
     base: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/),
     target: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/),
     repositoryDevice: z.number().int().nonnegative(),

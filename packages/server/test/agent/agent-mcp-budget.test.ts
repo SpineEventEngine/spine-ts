@@ -119,6 +119,32 @@ function protocol(record: AgentExecutionRecord): AgentProtocolEvidence {
 }
 
 describe("Agent MCP protocol budget", () => {
+  it("journals a measured setup response without an application output ceiling", async () => {
+    const { budget, record } = fixture();
+    const started = record().started;
+    if (!started) throw new Error("Expected started invocation.");
+    started.bounds = undefined;
+    const ticket = await budget.reserveMessage("lookup", {
+      phase: "setup",
+      method: "initialize",
+      inputBytes: 8,
+    });
+    expect(ticket.maxOutputBytes).toBeUndefined();
+    budget.onReceived(ticket.id, 70_000);
+    await budget.finishMessage(ticket.id, 70_000);
+    expect(protocol(record()).reservedResponseBytes).toBe(0n);
+    expect(protocol(record()).receivedBytes).toBe(70_000n);
+  });
+  it("keeps measured byte accounting without absent invocation ceilings", () => {
+    const record = create(AgentExecutionRecordSchema, {
+      started: create(AgentExecutionStartSchema, {
+        bounds: create(AgentInvocationBoundsSchema),
+      }),
+    });
+    expect(() => {
+      AgentMcpBudget.checkSharedBytes(record, 100, 200);
+    }).not.toThrow();
+  });
   it("rejects invalid physical bounds and a call without an intent before journaling", async () => {
     const { budget, record } = fixture();
     const setup = {
@@ -510,15 +536,14 @@ describe("Agent MCP protocol budget", () => {
     budget.onReceived(ticket.id, 2);
     await budget.finishMessage(ticket.id);
     expect(protocol(record()).receivedBytes).toBeUndefined();
-    await expect(
-      budget.reserveMessage("lookup", {
-        phase: "setup",
-        method: "tools/list",
-        inputBytes: 1,
-        maxOutputBytes: 4,
-      }),
-    ).rejects.toThrow("output byte credit");
-    expect(record().journal).toHaveLength(1);
+    const next = await budget.reserveMessage("lookup", {
+      phase: "setup",
+      method: "tools/list",
+      inputBytes: 1,
+      maxOutputBytes: 4,
+    });
+    expect(next.maxOutputBytes).toBe(3);
+    expect(record().journal).toHaveLength(2);
   });
 
   it("classifies exhausted physical-message credit before another send", async () => {

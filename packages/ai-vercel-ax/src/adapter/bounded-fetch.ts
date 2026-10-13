@@ -22,25 +22,48 @@ export interface ProviderAttemptTicket {
   readonly id: string;
 
   /**
+   * Anthropic max_tokens recorded before this physical request.
+   */
+  readonly expectedAnthropicMaxTokens?: number;
+
+  /**
    * Actual materialized request-body byte ceiling.
    */
-  readonly maxInputBytes: number;
+  readonly maxInputBytes?: number;
 
   /**
    * Reserved per-response allowance, already narrowed by invocation credit.
    */
-  readonly maxOutputBytes: number;
+  readonly maxOutputBytes?: number;
 
   /**
    * Absolute deadline read against the runtime's current Time value.
    */
-  readonly deadlineEpochMs: number;
+  readonly deadlineEpochMs?: number;
 
   /**
    * Operation cancellation and execution-fence loss signal.
    */
   readonly signal: AbortSignal;
 }
+
+/**
+ * Copies an admitted durable ticket without retaining mutable caller fields.
+ *
+ * @param ticket Runtime-approved provider attempt.
+ * @returns Frozen ticket for one physical fetch.
+ */
+const acceptedTicket = (ticket: ProviderAttemptTicket): ProviderAttemptTicket =>
+  Object.freeze({
+    id: ticket.id,
+    ...(ticket.expectedAnthropicMaxTokens === undefined
+      ? {}
+      : { expectedAnthropicMaxTokens: ticket.expectedAnthropicMaxTokens }),
+    ...(ticket.maxInputBytes === undefined ? {} : { maxInputBytes: ticket.maxInputBytes }),
+    ...(ticket.maxOutputBytes === undefined ? {} : { maxOutputBytes: ticket.maxOutputBytes }),
+    ...(ticket.deadlineEpochMs === undefined ? {} : { deadlineEpochMs: ticket.deadlineEpochMs }),
+    signal: ticket.signal,
+  });
 
 /**
  * Runtime callbacks required to guard one trusted provider connection.
@@ -57,6 +80,14 @@ export interface BoundedFetchOptions {
   readonly platformFetch: typeof globalThis.fetch;
 
   /**
+   * Checks provider-specific wire fields after body materialization and before dispatch.
+   *
+   * @param body Materialized provider request bytes.
+   * @param ticket Durable attempt ticket expected to match those bytes.
+   */
+  readonly verifyMaterializedRequest?: (body: Uint8Array, ticket: ProviderAttemptTicket) => void;
+
+  /**
    * Returns whether the current execution fence still permits work.
    * @returns True while this execution may still dispatch or record bytes.
    */
@@ -69,13 +100,17 @@ export interface BoundedFetchOptions {
   readonly nowEpochMs: () => number;
 
   /**
-   * Persists the existing attempt and full output credit before network dispatch.
+   * Persists the existing attempt and any configured output credit before network dispatch.
    * @param ticketId Existing physical attempt identity.
    * @param inputBytes Actual materialized request body bytes.
-   * @param outputCredit Maximum response body bytes reserved for this attempt.
-   * @returns Completion of the durable reservation barrier.
+   * @param outputCredit Configured response byte ceiling, if any.
+   * @returns Effective response credit after the durable reservation barrier, if finite.
    */
-  readonly reserve: (ticketId: string, inputBytes: number, outputCredit: number) => Promise<void>;
+  readonly reserve: (
+    ticketId: string,
+    inputBytes: number,
+    outputCredit?: number,
+  ) => Promise<number | undefined>;
 
   /**
    * Records actual decoded response-body bytes, including a rejected crossing chunk.
@@ -119,6 +154,7 @@ interface ActiveAttempt {
   closed: boolean;
   closeReason?: string;
   received: number;
+  effectiveOutputBytes?: number;
 }
 
 /**
@@ -172,14 +208,16 @@ class FetchGate implements BoundedProviderFetch {
       this.close(attempt, "cancelled");
       throw failure("cancelled");
     }
-    const now = this.currentTime();
-    if (!Number.isFinite(now)) {
-      this.close(attempt, "clock unavailable");
-      throw failure("clock unavailable");
-    }
-    if (now >= attempt.ticket.deadlineEpochMs) {
-      this.close(attempt, "deadline exceeded");
-      throw failure("deadline exceeded");
+    if (attempt.ticket.deadlineEpochMs !== undefined) {
+      const now = this.currentTime();
+      if (!Number.isFinite(now)) {
+        this.close(attempt, "clock unavailable");
+        throw failure("clock unavailable");
+      }
+      if (now >= attempt.ticket.deadlineEpochMs) {
+        this.close(attempt, "deadline exceeded");
+        throw failure("deadline exceeded");
+      }
     }
   };
 
@@ -201,7 +239,9 @@ class FetchGate implements BoundedProviderFetch {
 
   private scheduleDeadline = (attempt: ActiveAttempt): void => {
     if (attempt.closed) return;
-    const remaining = attempt.ticket.deadlineEpochMs - this.currentTime();
+    const deadline = attempt.ticket.deadlineEpochMs;
+    if (deadline === undefined) return;
+    const remaining = deadline - this.currentTime();
     if (!Number.isFinite(remaining)) {
       this.close(attempt, "clock unavailable");
       return;
@@ -221,13 +261,7 @@ class FetchGate implements BoundedProviderFetch {
   readonly admit = (ticket: ProviderAttemptTicket): void => {
     if (this.revoked || (this.active && !this.active.closed))
       throw failure("attempt already active");
-    const accepted = Object.freeze({
-      id: ticket.id,
-      maxInputBytes: ticket.maxInputBytes,
-      maxOutputBytes: ticket.maxOutputBytes,
-      deadlineEpochMs: ticket.deadlineEpochMs,
-      signal: ticket.signal,
-    });
+    const accepted = acceptedTicket(ticket);
     validateTicket(accepted);
     let rejectCancelled!: (error: Error) => void;
     const cancelled = new Promise<never>((_resolve, reject) => (rejectCancelled = reject));
@@ -241,6 +275,9 @@ class FetchGate implements BoundedProviderFetch {
       consumed: false,
       closed: false,
       received: 0,
+      ...(accepted.maxOutputBytes === undefined
+        ? {}
+        : { effectiveOutputBytes: accepted.maxOutputBytes }),
     };
     attempt.onAbort = () => {
       this.close(attempt, "cancelled");
@@ -261,10 +298,18 @@ class FetchGate implements BoundedProviderFetch {
     const body = await this.prepareBody(init?.body, attempt);
     attempt.consumed = true;
     try {
-      await Promise.race([
+      this.options.verifyMaterializedRequest?.(body, attempt.ticket);
+      const reserved = await Promise.race([
         this.options.reserve(attempt.ticket.id, body.byteLength, attempt.ticket.maxOutputBytes),
         attempt.cancelled,
       ]);
+      if (reserved !== undefined) {
+        if (!Number.isSafeInteger(reserved) || reserved <= 0) throw failure("invalid reservation");
+        attempt.effectiveOutputBytes =
+          attempt.effectiveOutputBytes === undefined
+            ? reserved
+            : Math.min(attempt.effectiveOutputBytes, reserved);
+      }
       this.check(attempt);
       return await this.dispatch(approvedUrl, init, body, attempt);
     } catch (error) {
@@ -364,30 +409,35 @@ const canonicalUrl = (input: string | URL): string => {
 const validateTicket = (ticket: ProviderAttemptTicket): void => {
   if (
     !ticket.id ||
-    !Number.isSafeInteger(ticket.maxInputBytes) ||
-    ticket.maxInputBytes < 0 ||
-    !Number.isSafeInteger(ticket.maxOutputBytes) ||
-    ticket.maxOutputBytes <= 0 ||
-    !Number.isFinite(ticket.deadlineEpochMs)
+    (ticket.maxInputBytes !== undefined &&
+      (!Number.isSafeInteger(ticket.maxInputBytes) || ticket.maxInputBytes < 0)) ||
+    (ticket.maxOutputBytes !== undefined &&
+      (!Number.isSafeInteger(ticket.maxOutputBytes) || ticket.maxOutputBytes <= 0)) ||
+    (ticket.deadlineEpochMs !== undefined && !Number.isFinite(ticket.deadlineEpochMs))
   )
     throw failure("invalid attempt");
 };
 
 const materializeBody = async (
   body: BodyInit | null | undefined,
-  limit: number,
+  limit?: number,
 ): Promise<Uint8Array> => {
   if (body == null) return new Uint8Array();
   if (typeof body === "string") {
-    if (body.length > limit) throw failure("request body exceeds limit");
+    if (limit !== undefined && body.length > limit) throw failure("request body exceeds limit");
     return boundedBytes(new TextEncoder().encode(body), limit);
   }
   if (body instanceof URLSearchParams)
-    return boundedBytes(new TextEncoder().encode(serializeParams(body, limit)), limit);
+    return boundedBytes(
+      new TextEncoder().encode(
+        limit === undefined ? body.toString() : serializeParams(body, limit),
+      ),
+      limit,
+    );
   if (body instanceof ArrayBuffer) return boundedBytes(new Uint8Array(body), limit);
   if (ArrayBuffer.isView(body))
     return boundedBytes(new Uint8Array(body.buffer, body.byteOffset, body.byteLength), limit);
-  if (body instanceof Blob && body.size <= limit)
+  if (body instanceof Blob && (limit === undefined || body.size <= limit))
     return boundedBytes(new Uint8Array(await body.arrayBuffer()), limit);
   throw failure("request body unsupported or exceeds limit");
 };
@@ -406,8 +456,8 @@ const serializeParams = (params: URLSearchParams, limit: number): string => {
   return result;
 };
 
-const boundedBytes = (bytes: Uint8Array, limit: number): Uint8Array => {
-  if (bytes.byteLength > limit) throw failure("request body exceeds limit");
+const boundedBytes = (bytes: Uint8Array, limit?: number): Uint8Array => {
+  if (limit !== undefined && bytes.byteLength > limit) throw failure("request body exceeds limit");
   return bytes;
 };
 
@@ -483,10 +533,13 @@ const pullChunk = async (
       return;
     }
     const bytes = result.value.byteLength;
-    const remaining = attempt.ticket.maxOutputBytes - attempt.received;
+    const remaining =
+      attempt.effectiveOutputBytes === undefined
+        ? undefined
+        : attempt.effectiveOutputBytes - attempt.received;
     options.onReceived(attempt.ticket.id, bytes);
     onCheck(attempt);
-    if (bytes > remaining) throw failure("response byte limit exceeded");
+    if (remaining !== undefined && bytes > remaining) throw failure("response byte limit exceeded");
     attempt.received += bytes;
     controller.enqueue(result.value);
   } catch (error) {

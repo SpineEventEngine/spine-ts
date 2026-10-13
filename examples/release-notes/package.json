@@ -33,7 +33,6 @@
     "@spine-event-engine/storage": "workspace:*",
     "electron": "44.7.0",
     "lucide-react": "1.28.0",
-    "openid-client": "6.8.8",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-markdown": "10.1.0",

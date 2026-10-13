@@ -38,11 +38,8 @@ message ReleaseDraftState {
   // Names the readers whose needs shape these release notes.
   string audience = 4;
 
-  // Carries structured release note entries with catalog citations.
-  ReleaseNotesDocument document = 5 [(validate) = true];
-
-  // Carries the reviewed Markdown bytes and digest accepted for export.
-  ReleaseApproval approval = 7 [(validate) = true];
+  reserved 5, 7;
+  reserved "document", "approval";
 
   // Latest generation still eligible to stage a proposal.
   ReleaseGenerationId pending_generation = 8 [(validate) = true];
@@ -58,6 +55,9 @@ message ReleaseDraftState {
 
   // Shows a safe visible status for the latest accepted generation.
   string generation_status = 12;
+
+  // Authoritative exact editable Markdown bytes.
+  ReleaseMarkdownContent markdown = 13 [(validate) = true];
 }
 
 // Per-draft Agent progress, separate from its audited interaction history.
@@ -91,15 +91,15 @@ message ReleaseDraftView {
   // Names the readers whose needs shape these release notes.
   string audience = 4;
 
-  // Carries structured release note entries with catalog citations.
-  ReleaseNotesDocument document = 5 [(validate) = true];
-
-  // Carries the reviewed Markdown bytes and digest accepted for export.
-  ReleaseApproval approval = 7 [(validate) = true];
+  reserved 5, 7;
+  reserved "document", "approval";
 
   // Shows a safe visible status for the latest accepted generation.
   string generation_status = 8;
 
   // Correlates this outcome with one accepted model generation.
   ReleaseGenerationId generation = 9 [(validate) = true];
+
+  // Authoritative exact editable Markdown bytes.
+  ReleaseMarkdownContent markdown = 10 [(validate) = true];
 }

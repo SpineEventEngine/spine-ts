@@ -181,7 +181,7 @@ export class AgentHistoryIndex {
     view: AgentHistoryView,
     after: AgentHistoryOrderKey | undefined,
     count: number,
-    maxBytes: number,
+    maxBytes: number | undefined,
   ): AgentHistoryPage {
     const records = this.#view(view);
     const start =
@@ -194,7 +194,7 @@ export class AgentHistoryIndex {
     while (index >= 0 && entries.length < count) {
       const record = records[index];
       if (record === undefined) throw new Error("Agent history index changed during read.");
-      if (record.bytes.length > maxBytes - bytes) {
+      if (maxBytes !== undefined && record.bytes.length > maxBytes - bytes) {
         if (entries.length === 0)
           throw new RangeError("Agent history first entry exceeds maxBytes.");
         break;

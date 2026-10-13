@@ -28,6 +28,7 @@ import {
   AgentInvocationBoundsSchema,
   AgentInvocationKeySchema,
   AgentProjectionReadResultSchema,
+  AgentHistoryReadRequestSchema,
   type AgentExecutionRecord,
 } from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
 import { describe, expect, it } from "vitest";
@@ -43,7 +44,7 @@ import {
 
 const scope = { context: "Support", tenant: "null", repository: "support.Agent", entity: "A" };
 
-function readSession(recordedReads: bigint, maxRecoveryBytes: bigint) {
+function readSession(recordedReads?: bigint, maxRecoveryBytes?: bigint) {
   let record = create(AgentExecutionRecordSchema, {
     accepted: create(AgentAcceptedInvocationSchema, {
       key: create(AgentInvocationKeySchema, {
@@ -51,7 +52,10 @@ function readSession(recordedReads: bigint, maxRecoveryBytes: bigint) {
       }),
     }),
     started: create(AgentExecutionStartSchema, {
-      bounds: create(AgentInvocationBoundsSchema, { recordedReads, maxRecoveryBytes }),
+      bounds: create(AgentInvocationBoundsSchema, {
+        ...(recordedReads === undefined ? {} : { recordedReads }),
+        ...(maxRecoveryBytes === undefined ? {} : { maxRecoveryBytes }),
+      }),
     }),
   });
   return {
@@ -65,6 +69,61 @@ function readSession(recordedReads: bigint, maxRecoveryBytes: bigint) {
 }
 
 describe("Agent saved history reads", () => {
+  it("serializes an omitted byte ceiling distinctly from a supplied zero and replays it", async () => {
+    const session = readSession();
+    const page = { entries: [], hasMore: false };
+    await new AgentReadRuntime(session, 0).history(
+      scope,
+      { kind: "full" },
+      { pageSize: 1 },
+      () => Promise.resolve(page),
+      undefined,
+    );
+    const evidence = session.record().journal[0]?.evidence;
+    if (evidence?.case !== "read" || evidence.value.request === undefined)
+      throw new Error("Expected saved history request.");
+    expect(
+      AnyMessages.unpack(evidence.value.request, AgentHistoryReadRequestSchema)?.maxBytes,
+    ).toBeUndefined();
+    expect(
+      await new AgentReadRuntime(session, 0).history(
+        scope,
+        { kind: "full" },
+        { pageSize: 1 },
+        () => Promise.reject(new Error("Unexpected live read.")),
+        undefined,
+      ),
+    ).toEqual(page);
+    await expect(
+      new AgentReadRuntime(readSession(), 0).history(
+        scope,
+        { kind: "full" },
+        { pageSize: 1 },
+        () => Promise.resolve(page),
+        0,
+      ),
+    ).rejects.toThrow("maxBytes must be a positive safe integer");
+  });
+  it("records repeated pages when read and recovery ceilings are absent", async () => {
+    const session = readSession();
+    const runtime = new AgentReadRuntime(session, 0);
+    const page = { entries: [], hasMore: false };
+    await runtime.history(
+      scope,
+      { kind: "conversation", conversation: create(ConversationIdSchema, { value: "first" }) },
+      { pageSize: 1 },
+      () => Promise.resolve(page),
+      1_024,
+    );
+    await runtime.history(
+      scope,
+      { kind: "conversation", conversation: create(ConversationIdSchema, { value: "second" }) },
+      { pageSize: 1 },
+      () => Promise.resolve(page),
+      1_024,
+    );
+    expect(session.record().journal).toHaveLength(2);
+  });
   it("retains a conversation cursor and rejects a changed cursor on replay", async () => {
     const session = readSession(1n, 10_000n);
     const conversation = create(ConversationIdSchema, { value: "ticket-T-1" });

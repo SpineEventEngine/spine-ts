@@ -30,7 +30,7 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { GitReleaseComparison } from "../src/trusted/git-release.js";
+import { GitProject, GitReleaseComparison } from "../src/trusted/git-release.js";
 
 const gitExecutable = execFileSync("which", ["git"], { encoding: "utf8" }).trim();
 const directories: string[] = [];
@@ -61,6 +61,27 @@ afterEach(() => {
 });
 
 describe("trusted Git release comparison", () => {
+  it("lists real local project revisions without returning an unverified ref", async () => {
+    const directory = repository();
+    commit(directory, "notes.txt", "before\n", "Base");
+    commit(directory, "notes.txt", "after\n", "Change");
+    git(directory, "tag", "v1.0.0", "HEAD~1");
+    const selected = await GitProject.select(directory, gitExecutable);
+    expect(selected.repository).toBe(realpathSync(directory));
+    expect(selected.refs).toContain("v1.0.0");
+    expect(selected.refs).toContain("HEAD");
+    expect(selected.refs).toContain("HEAD~1");
+    expect(selected.refs).not.toContain("imaginary-branch");
+  });
+  it("lists every local ref beyond the former 200-ref cap", async () => {
+    const directory = repository();
+    commit(directory, "notes.txt", "before\n", "Base");
+    commit(directory, "notes.txt", "after\n", "Change");
+    for (let index = 0; index < 201; index++)
+      git(directory, "tag", `release-${String(index).padStart(3, "0")}`);
+    const selected = await GitProject.select(directory, gitExecutable);
+    expect(selected.refs.filter((ref) => ref.startsWith("release-"))).toHaveLength(201);
+  });
   it("pins moved refs and restricts detail reads to verified evidence", async () => {
     const directory = repository();
     const base = commit(directory, "notes.txt", "before\n", "Base release");
@@ -176,7 +197,7 @@ describe("trusted Git release comparison", () => {
     expect((await comparison.readReleaseFile("renamed[1].txt")).text).toBe("topic\n");
   });
 
-  it("reports symlinks, binary content, and oversize files as incomplete evidence", async () => {
+  it("reports symlinks and binary content while reading a large committed file", async () => {
     const directory = repository();
     const base = commit(directory, "base.txt", "base\n", "Base");
     writeFileSync(join(directory, "binary.dat"), Buffer.from([0, 1, 2, 3]));
@@ -198,10 +219,9 @@ describe("trusted Git release comparison", () => {
       complete: false,
       reason: "binary-file",
     });
-    expect(await comparison.readReleaseFile("large.txt")).toMatchObject({
-      complete: false,
-      reason: "file-unavailable-or-too-large",
-    });
+    const large = await comparison.readReleaseFile("large.txt");
+    expect(large.complete).toBe(true);
+    expect(large.text).toHaveLength(210_000);
     const binary = comparison.evidence.find((entry) => entry.path === "binary.dat");
     if (!binary) throw new Error("Expected binary evidence.");
     expect(await comparison.readChangePatch(binary)).toMatchObject({
@@ -244,9 +264,14 @@ describe("trusted Git release comparison", () => {
       target: "HEAD",
     });
     const entries = [];
+    const complete = comparison.listReleaseChanges();
+    expect(complete.nextPageToken).toBeUndefined();
+    expect(complete.entries).toHaveLength(
+      comparison.commits.length + comparison.changes.length + comparison.evidence.length,
+    );
     let token: string | undefined;
     do {
-      const page = comparison.listReleaseChanges(token);
+      const page = comparison.listReleaseChanges(token, 20);
       entries.push(...page.entries);
       token = page.nextPageToken;
     } while (token !== undefined);
@@ -283,16 +308,20 @@ describe("trusted Git release comparison", () => {
     ).rejects.toThrow("worktree");
   });
 
-  it("refuses a complete claim when a selected range has too many commits", async () => {
+  it("accepts a selected range with more than 200 commits", async () => {
     const directory = repository();
     const base = commit(directory, "notes.txt", "0\n", "Base");
     let target = base;
     for (let index = 1; index <= 201; index++) {
       target = commit(directory, "notes.txt", `${String(index)}\n`, `Change ${String(index)}`);
     }
-    await expect(
-      GitReleaseComparison.open({ repository: directory, gitExecutable, base, target }),
-    ).rejects.toThrow("Commit catalog exceeds bound");
+    const comparison = await GitReleaseComparison.open({
+      repository: directory,
+      gitExecutable,
+      base,
+      target,
+    });
+    expect(comparison.commits).toHaveLength(201);
   }, 20_000);
 
   it("rejects cancelled reads and a replaced repository path", async () => {
@@ -332,7 +361,7 @@ describe("trusted Git release comparison", () => {
     writeFileSync(join(directory, "change.txt"), "uncommitted\n");
     expect(await comparison.readReleaseFile("change.txt")).toMatchObject({
       complete: false,
-      reason: "file-unavailable-or-too-large",
+      reason: "file-unavailable",
     });
   });
 
@@ -385,7 +414,7 @@ describe("trusted Git release comparison", () => {
     expect(altered.catalogDigest()).not.toBe(accepted.catalogDigest());
   });
 
-  it("stops admission on cancellation, expired deadline, and aggregate catalog bytes", async () => {
+  it("honors cancellation and explicit deadline while accepting a large catalog", async () => {
     const directory = repository();
     const base = commit(directory, "base.txt", "base\n", "Base");
     const target = commit(directory, "target.txt", "target\n", "Target");
@@ -399,9 +428,9 @@ describe("trusted Git release comparison", () => {
     const large = "s".repeat(115_000);
     commit(directory, "first.txt", "first\n", large);
     commit(directory, "second.txt", "second\n", large);
-    await expect(GitReleaseComparison.open({ ...input, target: "HEAD" })).rejects.toThrow(
-      /bound|narrow/i,
-    );
+    const expanded = await GitReleaseComparison.open({ ...input, target: "HEAD" });
+    expect(expanded.commits).toHaveLength(3);
+    expect(expanded.commits[1]?.subject).toHaveLength(115_000);
   });
 
   it("kills an in-flight Git command and never starts the next command after cancellation or deadline", async () => {

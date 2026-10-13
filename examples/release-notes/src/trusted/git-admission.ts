@@ -13,7 +13,6 @@
  */
 
 import { Time } from "@spine-event-engine/core";
-
 import { GitCommand } from "./git-command.js";
 
 /**
@@ -26,56 +25,52 @@ export interface GitAdmissionControl {
   readonly signal?: AbortSignal;
 
   /**
-   * Absolute caller deadline, further capped to ten seconds.
+   * Optional absolute caller deadline.
    */
   readonly deadlineEpochMs?: number;
 }
 
 /**
- * Applies one aggregate time, physical output, and retained catalog budget.
+ * Applies caller cancellation and any explicit deadline to one comparison.
  */
 export class GitAdmission {
   private readonly control: GitAdmissionControl | undefined;
 
   private readonly controller = new AbortController();
 
-  private readonly timer: ReturnType<typeof setTimeout>;
-
-  private commandBytes = 0;
-
-  private catalogBytes = 0;
+  private timer: ReturnType<typeof setTimeout> | undefined;
 
   /**
-   * Starts one bounded comparison admission.
+   * Starts one comparison admission.
    *
    * @param control Optional caller cancellation and deadline.
    */
   constructor(control?: GitAdmissionControl) {
     this.control = control;
-    const deadline = Math.min(
-      Time.currentTimeMillis() + 10_000,
-      control?.deadlineEpochMs ?? Number.POSITIVE_INFINITY,
-    );
-    const remaining = deadline - Time.currentTimeMillis();
     const cancel = () => {
       this.controller.abort(new Error("Git admission cancelled."));
     };
     control?.signal?.addEventListener("abort", cancel, { once: true });
     this.cancelCaller = cancel;
     if (control?.signal?.aborted) cancel();
-    if (remaining <= 0) this.controller.abort(new Error("Git admission deadline exceeded."));
-    this.timer = setTimeout(
-      () => {
-        this.controller.abort(new Error("Git admission deadline exceeded."));
-      },
-      Math.max(0, remaining),
-    );
+    const deadlineEpochMs = control?.deadlineEpochMs;
+    if (deadlineEpochMs !== undefined) {
+      const schedule = () => {
+        const remaining = deadlineEpochMs - Time.currentTimeMillis();
+        if (remaining <= 0) {
+          this.controller.abort(new Error("Git admission deadline exceeded."));
+          return;
+        }
+        this.timer = setTimeout(schedule, Math.min(remaining, 2_147_483_647));
+      };
+      schedule();
+    }
   }
 
   private readonly cancelCaller: () => void;
 
   /**
-   * Executes a Git command under the shared cancellation and output budget.
+   * Executes a Git command under shared cancellation.
    *
    * @param executable Trusted Git executable.
    * @param repository Selected repository.
@@ -84,43 +79,32 @@ export class GitAdmission {
    */
   async run(executable: string, repository: string, args: readonly string[]): Promise<Buffer> {
     this.controller.signal.throwIfAborted();
-    const remaining = 200_000 - this.commandBytes;
-    if (remaining <= 0) throw new Error("Git aggregate output bound exceeded; narrow the range.");
     let output: Buffer;
     try {
-      output = await GitCommand.run(
-        executable,
-        repository,
-        args,
-        remaining,
-        this.controller.signal,
-      );
+      output = await GitCommand.run(executable, repository, args, this.controller.signal);
     } catch (error) {
       this.controller.signal.throwIfAborted();
       throw error;
     }
     this.controller.signal.throwIfAborted();
-    this.commandBytes += output.byteLength;
     return output;
   }
 
   /**
-   * Records retained catalog bytes before appending one entry.
+   * Checks caller cancellation before appending one entry.
    *
-   * @param value Proposed immutable catalog entry.
+   * @param _value Proposed immutable catalog entry.
    */
-  record(value: unknown): void {
+  record(_value: unknown): void {
+    void _value;
     this.controller.signal.throwIfAborted();
-    this.catalogBytes += Buffer.byteLength(JSON.stringify(value), "utf8");
-    if (this.catalogBytes > 200_000)
-      throw new Error("Git aggregate catalog bound exceeded; narrow the range.");
   }
 
   /**
    * Clears the deadline and linked caller signal.
    */
   close(): void {
-    clearTimeout(this.timer);
+    if (this.timer) clearTimeout(this.timer);
     this.control?.signal?.removeEventListener("abort", this.cancelCaller);
   }
 }

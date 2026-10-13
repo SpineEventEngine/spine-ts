@@ -205,24 +205,26 @@ const awaitDecision = async <T>(
   ticket: AiAttemptTicket,
 ): Promise<T> => {
   const { control } = request;
-  const remaining = ticket.deadlineEpochMs - control.nowEpochMs();
-  if (!Number.isFinite(remaining) || remaining <= 0)
+  const deadline = ticket.deadlineEpochMs;
+  const remaining = deadline === undefined ? undefined : deadline - control.nowEpochMs();
+  if (remaining !== undefined && (!Number.isFinite(remaining) || remaining <= 0))
     throw new DecisionDeadlineError("Decision deadline exceeded");
-  let cancelTimer!: () => void;
+  let cancelTimer: (() => void) | undefined;
   let abort!: () => void;
   const cancelled = new Promise<never>((_resolve, reject) => {
     abort = () => {
       reject(new Error("Decision cancelled"));
     };
     control.signal.addEventListener("abort", abort, { once: true });
-    cancelTimer = scheduleBoundedDeadline(ticket.deadlineEpochMs, control.nowEpochMs, () => {
-      reject(new DecisionDeadlineError("Decision deadline exceeded"));
-    });
+    if (deadline !== undefined)
+      cancelTimer = scheduleBoundedDeadline(deadline, control.nowEpochMs, () => {
+        reject(new DecisionDeadlineError("Decision deadline exceeded"));
+      });
   });
   try {
     return await Promise.race([pending, cancelled]);
   } finally {
-    cancelTimer();
+    cancelTimer?.();
     control.signal.removeEventListener("abort", abort);
   }
 };
@@ -320,6 +322,36 @@ const providerFailure = async (
 };
 
 /**
+ * Returns the ticket failure that takes precedence over a provider error.
+ */
+const ticketFailure = (
+  request: AiBackendExecution,
+  ticket: AiAttemptTicket,
+): AiFailure["code"] | undefined => {
+  if (ticket.signal.aborted) return "CANCELLED";
+  if (
+    ticket.deadlineEpochMs !== undefined &&
+    request.control.nowEpochMs() >= ticket.deadlineEpochMs
+  )
+    return "DEADLINE_EXCEEDED";
+  return undefined;
+};
+
+/**
+ * Validates provider question kinds before beginning a physical attempt.
+ */
+const decisionModel = (request: AiBackendExecution) => {
+  if (request.definition.kind !== "decision") throw new TypeError("Decision capability required");
+  const connection = providerConnection(request.model);
+  if (!("doDecide" in connection.model) && !("doEvaluate" in connection.model))
+    throw new TypeError("V4 decision model required");
+  const supported = new Set(connection.model.supportedQuestionTypes);
+  if (Object.values(request.definition.questions).some((question) => !supported.has(question.type)))
+    throw new TypeError("Decision question kind is unsupported by provider");
+  return connection;
+};
+
+/**
  * Sends a no-retry provider decision and preserves journal failures.
  * @param request Selected decision execution.
  * @param ticket Durable physical attempt.
@@ -342,7 +374,7 @@ const providerDecision = async (
   const state = toJsonString(request.definition.input, request.input);
   let result: Awaited<ReturnType<typeof experimental_decide>>;
   try {
-    if (request.control.nowEpochMs() >= ticket.deadlineEpochMs)
+    if (ticketFailure(request, ticket) === "DEADLINE_EXCEEDED")
       throw new DecisionDeadlineError("Decision deadline exceeded");
     result = await awaitDecision(
       experimental_decide({ model, state, questions, maxRetries: 0, abortSignal: ticket.signal }),
@@ -353,7 +385,7 @@ const providerDecision = async (
     if (request.control.signal.aborted || !request.control.hasAuthority()) throw error;
     if (
       error instanceof DecisionDeadlineError ||
-      request.control.nowEpochMs() >= ticket.deadlineEpochMs
+      ticketFailure(request, ticket) === "DEADLINE_EXCEEDED"
     )
       return providerFailure(request, ticket, "DEADLINE_EXCEEDED", false);
     return providerFailure(request, ticket);
@@ -385,30 +417,21 @@ const replayDecision = (request: AiBackendExecution, replay: AiAttemptReplay): A
  * @returns Admitted mapped Proto or safe recorded failure.
  */
 export const executeDecision = async (request: AiBackendExecution): Promise<AiBackendOutcome> => {
-  if (request.definition.kind !== "decision") throw new TypeError("Decision capability required");
-  const connection = providerConnection(request.model);
-  if (!("doDecide" in connection.model) && !("doEvaluate" in connection.model))
-    throw new TypeError("V4 decision model required");
-  const supported = new Set(connection.model.supportedQuestionTypes);
-  if (Object.values(request.definition.questions).some((question) => !supported.has(question.type)))
-    throw new TypeError("Decision question kind is unsupported by provider");
+  const connection = decisionModel(request);
   const attempt = await request.control.beginAttempt({
     kind: "decision",
     content: requestContent(request),
   });
   if ("kind" in attempt) return replayDecision(request, attempt);
   const ticket = attempt;
-  if (ticket.signal.aborted) return providerFailure(request, ticket, "CANCELLED", false);
-  if (request.control.nowEpochMs() >= ticket.deadlineEpochMs)
-    return providerFailure(request, ticket, "DEADLINE_EXCEEDED", false);
+  const expired = ticketFailure(request, ticket);
+  if (expired) return providerFailure(request, ticket, expired, false);
   try {
     connection.gate.admit(ticket);
   } catch (error) {
     // The ticket signal can change while gate admission reads the clock.
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-    if (ticket.signal.aborted) return providerFailure(request, ticket, "CANCELLED", false);
-    if (request.control.nowEpochMs() >= ticket.deadlineEpochMs)
-      return providerFailure(request, ticket, "DEADLINE_EXCEEDED", false);
+    const failed = ticketFailure(request, ticket);
+    if (failed) return providerFailure(request, ticket, failed, false);
     throw error;
   }
   try {

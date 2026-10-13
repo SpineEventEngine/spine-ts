@@ -18,7 +18,7 @@ import process from "node:process";
 import { pathToFileURL, URL } from "node:url";
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
 
-const scriptIndex = process.argv.findIndex((value) => value.endsWith("studio-ui-harness.mjs"));
+const scriptIndex = process.argv.findIndex((value) => value.endsWith("studio-flow-harness.mjs"));
 const [appRoot, repository, exportPath, base, target] = process.argv.slice(scriptIndex + 1);
 if (!appRoot || !repository || !exportPath || !base || !target)
   throw new Error("UI fixture paths and revisions are required.");
@@ -42,16 +42,25 @@ const server = createServer((request, response) => {
   })().catch(() => response.writeHead(500).end());
 });
 
-const account = {
-  accounts: [{ clientId: "client", subject: "subject", planEnabled: true }],
+const signedIn = {
+  accounts: [
+    {
+      clientId: "client",
+      subject: "subject",
+      email: "reviewer@example.invalid",
+      planEnabled: true,
+    },
+  ],
   selectedClientId: "client",
   planEnabled: true,
   pendingClientIds: [],
 };
+const signedOut = { accounts: [], planEnabled: false, pendingClientIds: [] };
+let account = process.argv.includes("--signed-out") ? signedOut : signedIn;
 const plan = new PlanModelSelection(
   { status: async () => account },
   {
-    models: async () => [{ slug: "fixture-model", displayName: "Release writing model" }],
+    models: async () => [{ slug: "fixture-model", displayName: "Demo model" }],
     accessToken: async () => "fixture-token",
   },
 );
@@ -90,8 +99,14 @@ void app.whenReady().then(async () => {
     switch (command) {
       case "status":
         return account;
+      case "sign-out":
+        account = signedOut;
+        return { status: account, revocationConfirmed: true };
+      case "sign-in":
+        account = signedIn;
+        return account;
       case "models":
-        return [{ slug: "fixture-model", displayName: "Release writing model" }];
+        return [{ slug: "fixture-model", displayName: "Demo model" }];
       case "current-model":
         return { model: (await plan.activeBinding())?.model ?? "" };
       case "select-model":
@@ -113,10 +128,32 @@ function providerResponse(number) {
   const text = JSON.stringify({
     sections: [
       {
-        heading: "Changes",
+        heading: "What's new",
         entries: [
           {
-            text: "CSV imports now check for a header row and explain which column is missing.",
+            text: "Find messages faster with improved search.",
+            evidence: [{ commit: { value: target }, parent: { value: base }, path: "import.ts" }],
+          },
+          {
+            text: "Export filtered results as CSV.",
+            evidence: [{ commit: { value: target }, parent: { value: base }, path: "import.ts" }],
+          },
+        ],
+      },
+      {
+        heading: "Improvements",
+        entries: [
+          {
+            text: "The inbox loads faster for large teams.",
+            evidence: [{ commit: { value: target }, parent: { value: base }, path: "import.ts" }],
+          },
+        ],
+      },
+      {
+        heading: "Fixes",
+        entries: [
+          {
+            text: "Corrected dates in downloaded reports.",
             evidence: [{ commit: { value: target }, parent: { value: base }, path: "import.ts" }],
           },
         ],

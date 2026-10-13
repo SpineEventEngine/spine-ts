@@ -462,6 +462,97 @@ describe("direct bounded Vercel model stream", () => {
     ).rejects.toThrow("projection mismatch");
   });
 
+  it.each([
+    ["different tool name", "other", '{"ticket":"T"}'],
+    ["different tool arguments", "tool_0", '{"ticket":"changed"}'],
+  ] as const)(
+    "rejects a Responses %s between raw and SDK tool output",
+    async (_case, name, input) => {
+      await expect(
+        collectModelStream(
+          model([
+            {
+              type: "raw",
+              rawValue: {
+                type: "response.output_item.added",
+                output_index: 0,
+                item: { type: "function_call", id: "function-1" },
+              },
+            },
+            {
+              type: "raw",
+              rawValue: {
+                type: "response.output_item.done",
+                output_index: 0,
+                item: {
+                  type: "function_call",
+                  id: "function-1",
+                  call_id: "call-1",
+                  name: "tool_0",
+                  namespace: "spine_mcp",
+                  arguments: '{"ticket":"T"}',
+                },
+              },
+            },
+            { type: "tool-call", toolCallId: "call-1", toolName: name, input },
+            { type: "raw", rawValue: { type: "response.completed", response: {} } },
+            { type: "finish", finishReason: { unified: "tool-calls", raw: "completed" }, usage },
+          ]),
+          options,
+          undefined,
+          undefined,
+          false,
+          true,
+        ),
+      ).rejects.toThrow("projection mismatch");
+    },
+  );
+
+  it("retains a Responses commentary message when the provider omits annotations", async () => {
+    const result = await collectModelStream(
+      model([
+        {
+          type: "raw",
+          rawValue: {
+            type: "response.output_item.added",
+            output_index: 0,
+            item: { type: "message", id: "message-1" },
+          },
+        },
+        {
+          type: "raw",
+          rawValue: {
+            type: "response.output_item.done",
+            output_index: 0,
+            item: {
+              type: "message",
+              id: "message-1",
+              role: "assistant",
+              phase: "commentary",
+              content: [{ type: "output_text", text: "Working" }],
+            },
+          },
+        },
+        { type: "text-delta", id: "message-1", delta: "Working" },
+        { type: "raw", rawValue: { type: "response.completed", response: {} } },
+        { type: "finish", finishReason: { unified: "stop", raw: "completed" }, usage },
+      ]),
+      options,
+      undefined,
+      undefined,
+      false,
+      true,
+    );
+    expect(result.openaiContent?.items).toEqual([
+      {
+        id: "message-1",
+        type: "message",
+        phase: "commentary",
+        parts: [{ type: "output_text", text: "Working" }],
+      },
+    ]);
+  });
+
   it("rejects contradictory Responses terminal and later output events", async () => {
     for (const extra of [
       { type: "response.completed", response: {} },
@@ -599,6 +690,84 @@ describe("direct bounded Vercel model stream", () => {
     expect((failure as StreamCollectionError).partial.text).toBe("partial");
     expect(JSON.stringify(failure)).not.toContain("private provider prose");
   });
+
+  it.each([
+    {
+      terminal: "response.failed",
+      status: 401,
+      code: "invalid_token",
+      reason: "Provider response failed",
+      providerCode: "invalid_token",
+      statusCode: 401,
+    },
+    {
+      terminal: "response.incomplete",
+      status: 403,
+      code: "subscription_sharing_unavailable",
+      reason: "Provider response incomplete",
+      providerCode: "subscription_sharing_unavailable",
+      statusCode: 403,
+    },
+    {
+      terminal: "response.failed",
+      status: 500,
+      code: "private_provider_code",
+      reason: "Provider response failed",
+      providerCode: undefined,
+      statusCode: undefined,
+    },
+  ])(
+    "retains only approved $terminal status and code diagnostics",
+    async ({ terminal, status, code, reason, providerCode, statusCode }) => {
+      const failure = await collectModelStream(
+        model([
+          {
+            type: "raw",
+            rawValue: {
+              type: terminal,
+              response: { error: { status, code, message: "private provider prose" } },
+            },
+          },
+        ]),
+        options,
+        undefined,
+        undefined,
+        false,
+        true,
+      ).catch((error: unknown) => error);
+      expect(failure).toBeInstanceOf(StreamCollectionError);
+      expect(failure).toMatchObject({ message: reason, providerCode, statusCode });
+      expect(JSON.stringify(failure)).not.toContain("private provider prose");
+      expect(JSON.stringify(failure)).not.toContain("private_provider_code");
+    },
+  );
+
+  it.each([
+    { rawValue: null, reason: "Invalid Responses event" },
+    {
+      rawValue: { type: "response.completed", response: { status: "incomplete" } },
+      reason: "Provider response incomplete",
+    },
+    {
+      rawValue: { type: "response.output_item.added", item: null },
+      reason: "Responses output item invalid",
+    },
+  ])(
+    "rejects an invalid Responses event without retaining its body",
+    async ({ rawValue, reason }) => {
+      const failure = await collectModelStream(
+        model([{ type: "raw", rawValue }]),
+        options,
+        undefined,
+        undefined,
+        false,
+        true,
+      ).catch((error: unknown) => error);
+      expect(failure).toBeInstanceOf(StreamCollectionError);
+      expect(failure).toMatchObject({ message: reason });
+      expect((failure as StreamCollectionError).partial.openaiContent?.items).toEqual([]);
+    },
+  );
 
   it("bounds an encrypted reasoning item before retaining it", async () => {
     const failure = await collectModelStream(

@@ -31,6 +31,7 @@ import { executeGeneration } from "./generation.js";
 import { executeDecision } from "./decision.js";
 import { createMcpProtocolFactory } from "./mcp-protocol.js";
 import { chatgptPlanProfile } from "./chatgpt-plan-profile.js";
+import { ChatgptPlanSession, type ChatgptPlanSessionOptions } from "./chatgpt-plan-session.js";
 
 /**
  * Operation-scoped provider fetch supplied to a trusted connection callback.
@@ -157,6 +158,11 @@ export interface VercelConnection<M> {
    * Identity associated with the trusted credential binding.
    */
   readonly identity: AiConnectionIdentity;
+
+  /**
+   * Verified output-token capacity of this exact Anthropic model.
+   */
+  readonly anthropicOutputTokenCapacity?: number;
 }
 
 /**
@@ -264,6 +270,11 @@ export interface ProviderConnection<M> {
   readonly capabilities: VercelProviderCapabilities;
 
   /**
+   * Verified output-token capacity for the selected Anthropic model.
+   */
+  readonly anthropicOutputTokenCapacity?: number;
+
+  /**
    * Fetch gate admitting one durable attempt at a time.
    */
   readonly gate: BoundedProviderFetch;
@@ -338,6 +349,13 @@ const checkConnectionIdentity = <M extends StreamModel | VercelDecisionModel>(
   capabilities: VercelProviderCapabilities,
 ): void => {
   checkIdentity(expected, result.identity);
+  const capacity = result.anthropicOutputTokenCapacity;
+  if (capacity !== undefined) {
+    if (capabilities.id !== anthropicProfile.id)
+      throw new TypeError("Anthropic output-token capacity requires Anthropic Messages.");
+    if (!Number.isSafeInteger(capacity) || capacity <= 0)
+      throw new RangeError("Anthropic output-token capacity must be a positive safe integer.");
+  }
   if (
     (capabilities.id === anthropicProfile.id || capabilities.id === chatgptPlanProfile.id) &&
     result.model.modelId !== expected.model
@@ -356,26 +374,54 @@ const awaitConnection = async <M extends StreamModel | VercelDecisionModel>(
   pending: Promise<VercelConnection<M>>,
   control: AiExecutionControl,
 ) => {
-  const remaining = control.deadlineEpochMs - control.nowEpochMs();
-  if (!Number.isFinite(remaining) || remaining <= 0)
+  const deadline = control.deadlineEpochMs;
+  const remaining = deadline === undefined ? undefined : deadline - control.nowEpochMs();
+  if (remaining !== undefined && (!Number.isFinite(remaining) || remaining <= 0))
     throw new Error("Connection deadline exceeded");
-  let cancelTimer!: () => void;
+  let cancelTimer: (() => void) | undefined;
   let abort!: () => void;
   const cancelled = new Promise<never>((_resolve, reject) => {
     abort = () => {
       reject(new Error("Connection cancelled"));
     };
     control.signal.addEventListener("abort", abort, { once: true });
-    cancelTimer = scheduleBoundedDeadline(control.deadlineEpochMs, control.nowEpochMs, () => {
-      reject(new Error("Connection deadline exceeded"));
-    });
+    if (control.signal.aborted) abort();
+    else if (deadline !== undefined)
+      cancelTimer = scheduleBoundedDeadline(deadline, control.nowEpochMs, () => {
+        reject(new Error("Connection deadline exceeded"));
+      });
   });
   try {
     return await Promise.race([pending, cancelled]);
   } finally {
-    cancelTimer();
+    cancelTimer?.();
     control.signal.removeEventListener("abort", abort);
   }
+};
+
+/**
+ * Rejects SDK-modified Anthropic token counts before any physical request.
+ *
+ * @param body Materialized Anthropic request body.
+ * @param ticket Durable attempt with the recorded wire token count.
+ */
+const verifyAnthropicTokens = (
+  body: Uint8Array,
+  ticket: { readonly expectedAnthropicMaxTokens?: number },
+): void => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(new TextDecoder().decode(body)) as unknown;
+  } catch {
+    throw new TypeError("Anthropic request body invalid.");
+  }
+  if (
+    typeof parsed !== "object" ||
+    parsed === null ||
+    !("max_tokens" in parsed) ||
+    parsed.max_tokens !== ticket.expectedAnthropicMaxTokens
+  )
+    throw new TypeError("Anthropic max_tokens changed before dispatch.");
 };
 
 /**
@@ -399,6 +445,9 @@ const scopedGate = <M extends StreamModel | VercelDecisionModel>(
   return createBoundedProviderFetch({
     allowedUrls: [url.href],
     platformFetch: options.platformFetch ?? globalThis.fetch,
+    ...(options.capabilities.id === anthropicProfile.id
+      ? { verifyMaterializedRequest: verifyAnthropicTokens }
+      : {}),
     hasAuthority: control.hasAuthority,
     nowEpochMs: control.nowEpochMs,
     reserve: control.reserveTransport,
@@ -415,10 +464,27 @@ const scopedGate = <M extends StreamModel | VercelDecisionModel>(
  */
 const assertConnectionActive = (control: AiExecutionControl): void => {
   if (control.signal.aborted || !control.hasAuthority()) throw new Error("Connection cancelled");
-  const remaining = control.deadlineEpochMs - control.nowEpochMs();
-  if (!Number.isFinite(remaining) || remaining <= 0)
+  const deadline = control.deadlineEpochMs;
+  const remaining = deadline === undefined ? undefined : deadline - control.nowEpochMs();
+  if (remaining !== undefined && (!Number.isFinite(remaining) || remaining <= 0))
     throw new Error("Connection deadline exceeded");
 };
+
+/**
+ * Passes only caller cancellation, optional deadline, and guarded fetch to the callback.
+ *
+ * @param control Durable execution controls.
+ * @param fetch Guarded provider fetch.
+ * @returns Restricted connection controls.
+ */
+const connectionControl = (
+  control: AiExecutionControl,
+  fetch: typeof globalThis.fetch,
+): VercelConnectControl => ({
+  signal: control.signal,
+  ...(control.deadlineEpochMs === undefined ? {} : { deadlineEpochMs: control.deadlineEpochMs }),
+  fetch,
+});
 
 /**
  * Constructs an inert scoped fetch and verifies the callback's connection identity.
@@ -441,18 +507,18 @@ const connect = async <M extends StreamModel | VercelDecisionModel>(
   const gate = scopedGate(options, authorized, control, received);
   try {
     const result = await awaitConnection(
-      Promise.resolve(
-        options.connect(scope, authorized, {
-          signal: control.signal,
-          deadlineEpochMs: control.deadlineEpochMs,
-          fetch: gate.fetch,
-        }),
-      ),
+      Promise.resolve(options.connect(scope, authorized, connectionControl(control, gate.fetch))),
       control,
     );
     checkConnectionIdentity(authorized, result, options.capabilities);
     assertConnectionActive(control);
-    const handle = connectionHandle(result.model, options.capabilities, gate, received);
+    const handle = connectionHandle(
+      result.model,
+      options.capabilities,
+      gate,
+      received,
+      result.anthropicOutputTokenCapacity,
+    );
     return { model: handle, identity: authorized };
   } catch (error) {
     gate.revoke();
@@ -472,11 +538,13 @@ const connectionHandle = (
   capabilities: VercelProviderCapabilities,
   gate: BoundedProviderFetch,
   received: Map<string, number>,
+  anthropicOutputTokenCapacity: number | undefined,
 ): object => {
   const handle = Object.freeze({});
   connections.set(handle, {
     model,
     capabilities,
+    ...(anthropicOutputTokenCapacity === undefined ? {} : { anthropicOutputTokenCapacity }),
     gate,
     receivedBytes: (ticketId) => received.get(ticketId),
   });
@@ -507,6 +575,16 @@ export const registerGeneration = (
  * Factory for tested OpenAI Responses and Anthropic Messages connections.
  */
 export const VercelAx = {
+  /**
+   * Creates a trusted ChatGPT plan OAuth, catalog, and token session.
+   *
+   * @param options Trusted application name, credential store, and fetch policy.
+   * @returns Session for verified account grants and model registrations.
+   */
+  chatgptPlanSession(options: ChatgptPlanSessionOptions): ChatgptPlanSession {
+    return new ChatgptPlanSession(options);
+  },
+
   /**
    * Tested generation provider capabilities.
    */

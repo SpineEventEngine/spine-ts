@@ -135,6 +135,7 @@ describe("Agent history binding", () => {
     AgentHistoryReads.bind(agent, {
       storage,
       entityId: id,
+      maxBytes: 1_048_576,
       scope: {
         context: "Support",
         tenant: "null",
@@ -543,6 +544,33 @@ describe("Agent history binding", () => {
     );
     AgentHistoryReads.bind(agent, { storage, entityId: id, scope });
     await expect(agent.readFull({ pageSize: 1 })).rejects.toThrow("empty continuation");
+  });
+
+  it("passes no byte ceiling to storage when history has no configured ceiling", async () => {
+    const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-unbounded" });
+    const agent = new ReadingAgent({
+      id,
+      schema: SupportReplyAgentStateSchema,
+      state: create(SupportReplyAgentStateSchema, { id }),
+      version: create(VersionSchema),
+    });
+    const read = vi.fn(() => Promise.resolve({ entries: [], hasMore: false }));
+    AgentHistoryReads.bind(agent, {
+      entityId: id,
+      scope: {
+        context: "Support",
+        tenant: "null",
+        repository: SupportReplyAgentStateSchema.typeName,
+        entity: id.ticketNumber,
+      },
+      storage: { append: () => Promise.resolve(), read, close: () => undefined },
+    });
+    await agent.readFull({ pageSize: 1 });
+    expect(read).toHaveBeenCalledWith({
+      entityId: id,
+      view: { kind: "full" },
+      count: 1,
+    });
   });
 
   it("rejects provider pages that contain another history category", async () => {

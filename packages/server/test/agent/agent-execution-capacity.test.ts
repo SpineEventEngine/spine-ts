@@ -35,6 +35,26 @@ function registry(concurrentOperations: number, queuedOperations: number) {
 }
 
 describe("shared Agent execution capacity", () => {
+  it("starts independent work without an application concurrency ceiling", async () => {
+    const capacity = AgentExecutionCapacity.for(AiRegistry.create({ defaultModels: {} }));
+    const releases: (() => void)[] = [];
+    let started = 0;
+    const submit = (key: string) =>
+      capacity.trySubmit({
+        key,
+        signal: new AbortController().signal,
+        run: () => {
+          started += 1;
+          return new Promise<void>((resolve) => releases.push(resolve));
+        },
+      });
+    const first = submit("first");
+    const second = submit("second");
+    await Promise.resolve();
+    expect(started).toBe(2);
+    for (const release of releases) release();
+    await Promise.all([first, second]);
+  });
   it("rejects cancelled admission and releases a slot after execution fails", async () => {
     const capacity = AgentExecutionCapacity.for(registry(1, 0));
     const cancelled = new AbortController();

@@ -244,28 +244,28 @@ enum AgentInvocationStatus {
 // Whole-transition limits spanning every selected handler.
 message AgentInvocationBounds {
   // Maximum named operations across all selected handlers.
-  uint64 operations = 1;
+  google.protobuf.UInt64Value operations = 1;
 
   // Maximum physical model requests across the whole invocation.
-  uint64 model_requests = 2;
+  google.protobuf.UInt64Value model_requests = 2;
 
   // Maximum external tool calls across the whole invocation.
-  uint64 tool_calls = 3;
+  google.protobuf.UInt64Value tool_calls = 3;
 
   // Maximum recorded query and history reads across all handlers.
-  uint64 recorded_reads = 4;
+  google.protobuf.UInt64Value recorded_reads = 4;
 
   // Maximum elapsed milliseconds after execution starts.
-  uint64 deadline_millis = 5;
+  google.protobuf.UInt64Value deadline_millis = 5;
 
   // Maximum cumulative model, tool and setup input bytes.
-  uint64 total_input_bytes = 6;
+  google.protobuf.UInt64Value total_input_bytes = 6;
 
   // Maximum cumulative reserved model, tool and setup output bytes.
-  uint64 total_output_bytes = 7;
+  google.protobuf.UInt64Value total_output_bytes = 7;
 
   // Maximum retained execution evidence bytes for recovery.
-  uint64 max_recovery_bytes = 8;
+  google.protobuf.UInt64Value max_recovery_bytes = 8;
 }
 
 // Durable whole-transition charges, including unresolved reservations.
@@ -316,10 +316,7 @@ message AgentSelectedModel {
 // Invocation facts fixed only when execution begins.
 message AgentExecutionStart {
   // Absolute deadline sampled when execution began, excluding queue wait.
-  google.protobuf.Timestamp deadline = 1 [
-    (required) = true,
-    (validate) = true
-  ];
+  google.protobuf.Timestamp deadline = 1 [(validate) = true];
 
   // Entity version observed before the first selected handler.
   spine.core.Version initial_version = 2 [
@@ -328,10 +325,7 @@ message AgentExecutionStart {
   ];
 
   // Whole-invocation limits, distinct from limits of each model call.
-  AgentInvocationBounds bounds = 3 [
-    (required) = true,
-    (validate) = true
-  ];
+  AgentInvocationBounds bounds = 3 [(validate) = true];
 
   // Selected deployment and connection identity for each model kind.
   repeated AgentSelectedModel models = 4 [(validate) = true];
@@ -373,10 +367,7 @@ message AgentNamedOperation {
   ];
 
   // Effective bounds for this one model operation.
-  spine.ts.agent.AiOperationLimits limits = 5 [
-    (required) = true,
-    (validate) = true
-  ];
+  spine.ts.agent.AiOperationLimits limits = 5 [(validate) = true];
 
   // Exact dynamic typed application facts before backend rendering.
   google.protobuf.Any input = 6 [
@@ -418,10 +409,7 @@ message AgentNamedOperation {
   repeated AgentSavedFailure diagnostics = 14 [(validate) = true];
 
   // Absolute operation deadline fixed at creation and bounded by the invocation deadline.
-  google.protobuf.Timestamp deadline = 15 [
-    (required) = true,
-    (validate) = true
-  ];
+  google.protobuf.Timestamp deadline = 15 [(validate) = true];
 }
 
 // Indexed history view selected by a recorded Agent read.
@@ -456,8 +444,8 @@ message AgentHistoryReadRequest {
   // Original opaque continuation; absent on the first page.
   spine.ts.agent.AgentHistoryCursor cursor = 4 [(validate) = true];
 
-  // Positive serialized-byte bound applied to this page.
-  uint64 max_bytes = 5 [(min).value = "1"];
+  // Optional positive serialized-byte bound applied to this page.
+  google.protobuf.UInt64Value max_bytes = 5;
 }
 
 // Complete provider page returned by one recorded history read.
@@ -563,6 +551,9 @@ message AgentAttemptEvidence {
 
   // Exact serialized provider request-body bytes charged before dispatch.
   uint64 input_bytes = 12;
+
+  // The transport barrier completed, including when no response ceiling is configured.
+  bool transport_reserved = 13;
 }
 
 // Persisted tool intent and observed result, including uncertain writes.

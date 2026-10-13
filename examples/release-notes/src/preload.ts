@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld(
     status: () => ipcRenderer.invoke("release-notes:command", "status", null),
     currentModel: () => ipcRenderer.invoke("release-notes:command", "current-model", null),
     signIn: () => ipcRenderer.invoke("release-notes:command", "sign-in", null),
+    addAccount: () => ipcRenderer.invoke("release-notes:command", "add-account", null),
     reconnect: (clientId: string) =>
       ipcRenderer.invoke("release-notes:command", "reconnect", clientId),
     selectAccount: (clientId: string) =>
@@ -31,17 +32,27 @@ contextBridge.exposeInMainWorld(
       ipcRenderer.invoke("release-notes:command", "sign-out", clientId),
     manageUsage: () => ipcRenderer.invoke("release-notes:command", "usage", null),
     session: () => ipcRenderer.invoke("release-notes:command", "session", null),
+    chooseProject: () => ipcRenderer.invoke("release-notes:command", "choose-project", null),
+    compareProject: (handle: string, base: string, target: string) =>
+      ipcRenderer.invoke("release-notes:command", "compare-project", { handle, base, target }),
     chooseComparison: (base: string, target: string) =>
       ipcRenderer.invoke("release-notes:command", "choose-comparison", { base, target }),
     evidencePatch: (selectionId: string, index: number) =>
       ipcRenderer.invoke("release-notes:command", "evidence-patch", { selectionId, index }),
-    openDraft: (selectionId: string, title: string, audience: string) =>
-      ipcRenderer.invoke("release-notes:command", "open-draft", { selectionId, title, audience }),
+    openDraft: (id: string, selectionId: string, title: string, audience: string) =>
+      ipcRenderer.invoke("release-notes:command", "open-draft", {
+        id,
+        selectionId,
+        title,
+        audience,
+      }),
     readDraft: (id: string) => ipcRenderer.invoke("release-notes:command", "read-draft", { id }),
     generate: (id: string, instruction: string) =>
       ipcRenderer.invoke("release-notes:command", "generate", { id, instruction }),
     repeatGeneration: (generation: string) =>
       ipcRenderer.invoke("release-notes:command", "repeat-generation", { generation }),
+    cancelGeneration: (id: string, generation: string) =>
+      ipcRenderer.invoke("release-notes:command", "cancel-generation", { id, generation }),
     phase: (generation: string) =>
       ipcRenderer.invoke("release-notes:command", "phase", { generation }),
     history: (id: string, category: string, pageSize: number, cursor?: string) =>
@@ -51,13 +62,10 @@ contextBridge.exposeInMainWorld(
         pageSize,
         ...(cursor === undefined ? {} : { cursor }),
       }),
-    edit: (id: string, version: object, document: object) =>
-      ipcRenderer.invoke("release-notes:command", "edit", { id, version, document }),
+    edit: (id: string, version: object, markdown: Uint8Array) =>
+      ipcRenderer.invoke("release-notes:command", "edit", { id, version, markdown }),
     preview: (id: string) => ipcRenderer.invoke("release-notes:command", "preview", { id }),
-    approve: (id: string, version: object, markdown: Uint8Array) =>
-      ipcRenderer.invoke("release-notes:command", "approve", { id, version, markdown }),
-    exportApproved: (id: string, version: object) =>
+    exportMarkdown: (id: string, version: object) =>
       ipcRenderer.invoke("release-notes:command", "export", { id, version }),
-    stopAndQuit: () => ipcRenderer.invoke("release-notes:command", "stop-quit", null),
   }),
 );

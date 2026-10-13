@@ -75,6 +75,7 @@ describe("descriptor-derived output admission", () => {
 
   it("represents 64-bit integers as exact decimal strings and rejects unsafe JSON numbers", () => {
     const schema = deriveOutputSchema(AiOperationLimitsSchema);
+    expect(schema.required).toEqual([]);
     expect(schema.properties.deadlineMs).toMatchObject({
       type: "object",
       properties: { value: { type: "string" } },
@@ -94,7 +95,7 @@ describe("descriptor-derived output admission", () => {
       ).ok,
     ).toBe(false);
     expect(parseCandidate(AiOperationLimitsSchema, valid.replace('"10"', '"-10"')).ok).toBe(false);
-    expect(parseCandidate(AiOperationLimitsSchema, "{}").ok).toBe(false);
+    expect(parseCandidate(AiOperationLimitsSchema, "{}").ok).toBe(true);
   });
 
   it("preserves enum, repeated message, scalar list, bool and wrapper shapes", () => {

@@ -287,7 +287,8 @@ export class AiTestBackend {
         outcome.ok ||
         request.definition.kind !== "generation" ||
         outcome.failure.code !== "INVALID_OUTPUT" ||
-        record.attempt >= request.definition.limits.modelRequests
+        (request.definition.limits.modelRequests !== undefined &&
+          record.attempt >= request.definition.limits.modelRequests)
       )
         return outcome;
       prior = record;

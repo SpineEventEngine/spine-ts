@@ -13,10 +13,9 @@
  */
 
 import { fromJson, toJson, type JsonValue } from "@bufbuild/protobuf";
-import { app, dialog, type BrowserWindow } from "electron";
+import { dialog, type BrowserWindow } from "electron";
 import { VersionSchema } from "@spine-event-engine/proto";
 
-import { ReleaseNotesDocumentSchema } from "../../generated/spine/examples/releasenotes/types_pb.js";
 import type { StudioIpcCommand } from "./studio-ipc.js";
 import type { ReleaseStudio, StudioDraft } from "./studio-service.js";
 import { StudioFiles } from "./studio-files.js";
@@ -35,7 +34,7 @@ export const StudioDesktop = {
    * Maps an authoritative draft into credential-free renderer data.
    *
    * @param value Draft state paired with its framework Version.
-   * @returns Detached document and comparison fields for IPC.
+   * @returns Detached Markdown and comparison fields for IPC.
    */
   draft(value: StudioDraft): Record<string, unknown> {
     return {
@@ -45,20 +44,8 @@ export const StudioDesktop = {
       audience: value.audience,
       comparison: value.comparison,
       generationStatus: value.generationStatus,
-      document: {
-        sections: value.document.sections.map((section) => ({
-          heading: section.heading,
-          entries: section.entries.map((entry) => ({
-            text: entry.text,
-            evidence: entry.evidence.map((reference) => ({
-              commit: { value: reference.commit?.value ?? "" },
-              parent: { value: reference.parent?.value ?? "" },
-              path: reference.path,
-            })),
-          })),
-        })),
-      },
-      ...(value.approvalDigest ? { approvalDigest: value.approvalDigest } : {}),
+      markdown: new Uint8Array(value.markdown),
+      lastEditedAt: value.lastEditedAt,
     };
   },
 
@@ -84,26 +71,41 @@ export const StudioDesktop = {
   },
 
   /**
-   * Writes only correlated approved bytes to a native-selected path.
+   * Opens a native project picker and returns only a private handle and real refs.
+   * @param window Current application window.
+   * @param studio Trusted session service.
+   * @returns Selected project metadata or null after cancellation.
+   */
+  async selectProject(window: BrowserWindow, studio: ReleaseStudio): Promise<unknown> {
+    const selected = await dialog.showOpenDialog(window, {
+      title: "Choose Git project",
+      properties: ["openDirectory"],
+    });
+    if (selected.canceled || selected.filePaths.length !== 1) return null;
+    return studio.selectProject(selected.filePaths[0] ?? "");
+  },
+
+  /**
+   * Writes only correlated current Markdown bytes to a native-selected path.
    *
    * @param window Isolated application window for the dialog.
    * @param studio Trusted in-memory release workflow.
    * @param input Validated draft identifier and Version.
-   * @returns Whether the exact approved export was saved.
+   * @returns Whether the exact current export was saved.
    */
-  async exportApproved(
+  async exportMarkdown(
     window: BrowserWindow,
     studio: ReleaseStudio,
     input: Record<string, unknown> | null,
   ): Promise<{ saved: boolean }> {
     const selected = await dialog.showSaveDialog(window, {
-      title: "Export approved release notes",
+      title: "Export release notes",
       defaultPath: "release-notes.md",
       filters: [{ name: "Markdown", extensions: ["md"] }],
     });
     if (selected.canceled || !selected.filePath) return { saved: false };
     const bytes = await studio.prepareExport(text(input, "id"), version(input));
-    await StudioFiles.writeApproved(selected.filePath, bytes);
+    await StudioFiles.writeMarkdown(selected.filePath, bytes);
     return { saved: true };
   },
 
@@ -124,11 +126,14 @@ export const StudioDesktop = {
   ): Promise<unknown> {
     if (
       command === "session" ||
+      command === "choose-project" ||
+      command === "compare-project" ||
       command === "choose-comparison" ||
       command === "open-draft" ||
       command === "read-draft" ||
       command === "generate" ||
       command === "repeat-generation" ||
+      command === "cancel-generation" ||
       command === "phase" ||
       command === "history" ||
       command === "evidence-patch"
@@ -152,29 +157,111 @@ export const StudioDesktop = {
     command: StudioIpcCommand,
     input: Record<string, unknown> | null,
   ): Promise<unknown> {
+    if (
+      command === "choose-project" ||
+      command === "compare-project" ||
+      command === "choose-comparison"
+    )
+      return this.projectAction(window, studio, command, input);
     switch (command) {
       case "session":
         return studio.session();
-      case "choose-comparison":
-        return this.selectComparison(window, studio, input);
       case "open-draft":
         return this.openDraft(studio, input);
       case "read-draft":
         return this.draft(await studio.readDraft(text(input, "id")));
+      case "generate":
+        return this.generation(studio, command, input);
+      case "repeat-generation":
+        return this.generation(studio, command, input);
+      case "cancel-generation":
+        return this.generation(studio, command, input);
+      case "phase":
+        return this.generation(studio, command, input);
+      case "history":
+        return this.sources(studio, command, input);
+      case "evidence-patch":
+        return this.sources(studio, command, input);
+      default:
+        throw new Error("Invalid draft or history action.");
+    }
+  },
+
+  /**
+   * Routes a native project choice or pinned comparison.
+   *
+   * @param window Isolated application window.
+   * @param studio Trusted Studio service.
+   * @param command Validated project action.
+   * @param input Validated comparison input.
+   * @returns Private project metadata or a pinned comparison.
+   */
+  async projectAction(
+    window: BrowserWindow,
+    studio: ReleaseStudio,
+    command: "choose-project" | "compare-project" | "choose-comparison",
+    input: Record<string, unknown> | null,
+  ): Promise<unknown> {
+    switch (command) {
+      case "choose-project":
+        return this.selectProject(window, studio);
+      case "compare-project":
+        return studio.compareProject(
+          text(input, "handle"),
+          text(input, "base"),
+          text(input, "target"),
+        );
+      case "choose-comparison":
+        return this.selectComparison(window, studio, input);
+    }
+  },
+
+  /**
+   * Dispatches bounded source inspection actions.
+   *
+   * @param studio Trusted Studio service.
+   * @param command Validated source action.
+   * @param input Validated action input.
+   * @returns Credential-free source result.
+   */
+  async sources(
+    studio: ReleaseStudio,
+    command: "history" | "evidence-patch",
+    input: Record<string, unknown> | null,
+  ): Promise<unknown> {
+    return command === "history"
+      ? this.history(studio, input)
+      : studio.evidencePatch(text(input, "selectionId"), field(input, "index") as number);
+  },
+
+  /**
+   * Dispatches generation actions with their configured execution controls.
+   *
+   * @param studio Trusted Studio service.
+   * @param command Validated generation action.
+   * @param input Validated action input.
+   * @returns Credential-free generation result.
+   */
+  async generation(
+    studio: ReleaseStudio,
+    command: StudioIpcCommand,
+    input: Record<string, unknown> | null,
+  ): Promise<unknown> {
+    switch (command) {
       case "generate":
         return {
           generation: await studio.requestGeneration(text(input, "id"), text(input, "instruction")),
         };
       case "repeat-generation":
         return { generation: await studio.repeatGeneration(text(input, "generation")) };
+      case "cancel-generation":
+        return this.draft(
+          await studio.cancelGeneration(text(input, "id"), text(input, "generation")),
+        );
       case "phase":
         return studio.generationObservation(text(input, "generation"));
-      case "history":
-        return this.history(studio, input);
-      case "evidence-patch":
-        return studio.evidencePatch(text(input, "selectionId"), field(input, "index") as number);
       default:
-        throw new Error("Invalid draft or history action.");
+        throw new Error("Invalid generation action.");
     }
   },
 
@@ -204,15 +291,8 @@ export const StudioDesktop = {
           digest: result.digest,
         };
       }
-      case "approve":
-        return this.approveDraft(studio, input);
       case "export":
-        return this.exportApproved(window, studio, input);
-      case "stop-quit":
-        await studio.close();
-        window.destroy();
-        app.quit();
-        return null;
+        return this.exportMarkdown(window, studio, input);
       default:
         throw new Error("Invalid review or lifecycle action.");
     }
@@ -231,6 +311,7 @@ export const StudioDesktop = {
         text(input, "selectionId"),
         text(input, "title"),
         text(input, "audience"),
+        text(input, "id"),
       ),
     );
   },
@@ -252,39 +333,15 @@ export const StudioDesktop = {
   },
 
   /**
-   * Applies an editor document against its displayed framework Version.
+   * Applies exact Markdown against its displayed framework Version.
    *
    * @param studio Trusted in-memory release workflow.
-   * @param input Validated draft, Version, and structured document.
+   * @param input Validated draft, Version, and Markdown bytes.
    * @returns Updated authoritative draft projection.
    */
   async editDraft(studio: ReleaseStudio, input: Record<string, unknown> | null): Promise<unknown> {
     return this.draft(
-      await studio.edit(
-        text(input, "id"),
-        version(input),
-        fromJson(ReleaseNotesDocumentSchema, field(input, "document") as JsonValue),
-      ),
-    );
-  },
-
-  /**
-   * Records approval of only the reviewed Markdown bytes and current Version.
-   *
-   * @param studio Trusted in-memory release workflow.
-   * @param input Validated draft, Version, and detached Markdown bytes.
-   * @returns Approved authoritative draft projection.
-   */
-  async approveDraft(
-    studio: ReleaseStudio,
-    input: Record<string, unknown> | null,
-  ): Promise<unknown> {
-    return this.draft(
-      await studio.approve(
-        text(input, "id"),
-        version(input),
-        field(input, "markdown") as Uint8Array,
-      ),
+      await studio.edit(text(input, "id"), version(input), field(input, "markdown") as Uint8Array),
     );
   },
 };

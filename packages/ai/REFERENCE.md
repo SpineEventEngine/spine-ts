@@ -7,7 +7,8 @@ Audience: application developers and adapter implementers.
 `AiModel.define()` describes one application operation. It validates and copies
 its definition synchronously; defining it does not call a provider. Input and
 output are generated Protobuf descriptors. The definition includes a name,
-version, finite limits, and either generation instructions or decision questions.
+version, and either generation instructions or decision questions. Applications
+may configure ceilings for an operation; omitted values impose no such ceiling.
 Register the resulting object among the Agent repository's `ai.models`.
 
 A `ModelRef` identifies a configured deployment by name and revision.
@@ -17,8 +18,8 @@ endpoint and model identity. They are separate from the application operation:
 the same drafting operation can use a different permitted deployment without
 putting provider SDK calls in its Entity handler.
 
-`AiRegistry.create()` validates defaults, invocation limits, concurrency and queue
-bounds. Register deployments with `register()` and configured MCP servers with
+`AiRegistry.create()` validates deployment defaults and any configured invocation,
+concurrency or queue ceilings. Register deployments with `register()` and configured MCP servers with
 `registerTools()`. Defaults, limits and tool policy freeze when the runtime
 binds the registry. `register()` can append a unique deployment afterward;
 existing references and policy cannot be replaced.
@@ -63,11 +64,11 @@ Return concrete issues with a code, field path, and safe message. A field path c
 be empty for an issue affecting the whole result. The callback receives the same
 input facts as the operation; it must not fetch new data or perform side effects.
 
-A response that fails validation may lead to a corrective request within the existing request,
-time and byte limits. The correction includes the actual detected issues, and the
+A response that fails validation may lead to a corrective request, subject to any
+configured request, time and byte ceilings. The correction includes the actual detected issues, and the
 runtime retains that request as another attempt. It cannot describe an alleged
 hallucination that no validation rule detected. Refusal, cancellation, exhausted
-limits and unknown external write outcomes have explicit failure paths.
+configured limits and unknown external write outcomes have explicit failure paths.
 
 Native output schemas support a conservative descriptor subset. Unsupported
 fields or options produce field-specific errors before dispatch. See the
@@ -85,35 +86,42 @@ execution must be supported by the deployment. See the
 
 ## Limits and tools
 
-Capability limits cover physical model requests, tool calls, elapsed time, input
-bytes, output bytes and generation tokens. Registry invocation limits also bound
-all operations and recorded reads across the signal's selected handlers. Recovery
-uses saved counts and deadlines. Completed exchanges charge their measured response
-bytes. If the complete byte count is unknown, the full response allowance stays
-reserved; interruption does not grant another free request.
+Applications may set ceilings for physical model requests, tool calls, elapsed
+time, input bytes, output bytes and generation tokens. Each setting is optional.
+Registry invocation settings may additionally limit work shared by all selected
+handlers of one signal, including recorded reads. Omitting a setting does not
+substitute a framework default. Cancellation remains available without a deadline.
 
-Generation `maxOutputTokens` is optional. Set it only when the selected
-deployment can enforce a token ceiling; an adapter that cannot enforce an
-explicit ceiling rejects the call before inference. Physical request count,
-tool count, deadline, input bytes, and output bytes are always required. Byte
-limits bound materialized and received data, not model tokens.
+Recovery retains measured usage and any configured deadline. Completed exchanges
+record their received byte counts. When a configured shared output ceiling applies,
+the runtime reserves the remaining allowance before dispatch; if a response ends
+without a complete byte count, that reservation remains charged. Without an output
+ceiling, the runtime still records dispatch and measured bytes.
+
+Set `maxOutputTokens` only when the deployment can enforce it. An adapter that
+cannot enforce an explicit token ceiling rejects the call before inference. Byte
+ceilings apply to materialized and received data, including protocol framing;
+they are different from model token counts.
 
 Await each model call before starting the next one in the same handler. Concurrent
 calls, an unfinished call when the handler returns, and reuse of a facade after
 its handler finishes are programming errors.
 
-Bounded Contexts that share one `AiRegistry` object also share its execution capacity
-within that process. `concurrentOperations` bounds active Agent executions;
-`queuedOperations` bounds additional work waiting in memory for capacity. Further
-accepted signals remain in durable storage until capacity is available. Waiting
-before a fresh execution starts does not consume its deadline. Recovery preserves
-the deadline of an execution that already started. Separate registry objects and
-separate processes do not share this capacity limit.
+Bounded Contexts that share one `AiRegistry` object also share any configured
+execution capacity within that process. `concurrentOperations` can limit active
+Agent executions; `queuedOperations` can limit additional work waiting in memory
+for a slot. Both settings are optional. If capacity is configured and full, further
+accepted signals remain in durable storage until a slot becomes available. Waiting
+before execution does not consume a configured execution deadline. Recovery keeps
+the deadline of an execution that already started. Separate registries and
+processes do not share these settings.
 
 `Mcp.server()` validates an explicitly configured tool server. A generation
 capability lists the server/tool references it may use. Connection and per-call
 authorization receive the accepted actor, tenant and Agent scope. The runtime
 records tool intent before dispatch and retains results before model continuation.
+Per-tool timeouts and argument/result byte ceilings are optional; no values are
+substituted when they are omitted.
 A write whose result is unknown cannot be sent again automatically. Supported
 content and protocol limits are documented by the optional adapter; model text
 cannot add a server, change credentials, or extend a tool's permission.
@@ -131,6 +139,8 @@ Supply a generation deployment created with `VercelAx.model()` as shown in the
 [adapter quickstart](../ai-vercel-ax/README.md). Register `knowledgeDraft` among
 the Agent repository's `ai.models`, then invoke that capability from its handler.
 
+<!-- prettier-ignore-start -->
+
 <!-- docs-snippet-path: examples/support/src/index.ts -->
 
 ```ts
@@ -140,67 +150,47 @@ import { SupportReplySchema } from "../generated/spine/examples/support/types_pb
 
 /** Drafts a reply using supplied facts and the permitted knowledge lookup. */
 const knowledgeDraft = AiModel.define({
-  name: "knowledge-support-reply",
-  version: "1",
-  kind: "generation",
-  input: DraftSupportReplySchema,
-  output: SupportReplySchema,
-  outputMode: "prompt-and-validate",
-  instructions:
-    "Use the reported facts and relevant knowledge articles to draft a reply for human review.",
-  tools: [{ server: "knowledge", tool: "lookup" }],
-  limits: {
-    modelRequests: 3,
-    toolCalls: 1,
-    deadlineMs: 30_000,
-    maxInputBytes: 16_000,
-    maxOutputBytes: 8_000,
-    maxOutputTokens: 1_000,
-  },
+    name: "knowledge-support-reply",
+    version: "1",
+    kind: "generation",
+    input: DraftSupportReplySchema,
+    output: SupportReplySchema,
+    outputMode: "prompt-and-validate",
+    instructions:
+        "Use the reported facts and relevant knowledge articles to draft a reply for human review.",
+    tools: [{ server: "knowledge", tool: "lookup" }],
 });
 
 /** Permits only lookup on the public demonstration knowledge service. */
 const knowledge = Mcp.server({
-  id: "knowledge",
-  revision: "1",
-  transport: { kind: "streamable-http", url: "http://127.0.0.1:3333/mcp" },
-  authorizeConnect: () => true,
-  tools: {
-    lookup: {
-      effect: "read",
-      timeoutMs: 5_000,
-      maxArgumentBytes: 1_024,
-      maxResultBytes: 4_096,
-      authorize: () => true,
+    id: "knowledge",
+    revision: "1",
+    transport: { kind: "streamable-http", url: "http://127.0.0.1:3333/mcp" },
+    authorizeConnect: () => true,
+    tools: {
+        lookup: {
+            effect: "read",
+            authorize: () => true,
+        },
     },
-  },
 });
 
 /**
  * Registers a local public knowledge lookup and a configured generation model.
+ *
  * @param deployment Authenticated model registration created by the application.
  * @returns Registry for BoundedContextBuilder.withAi().
  */
 function supportAi(deployment: AiBackendRegistration): AiRegistry {
-  return AiRegistry.create({
-    defaultModels: { generation: deployment.ref },
-    invocationLimits: {
-      operations: 1,
-      modelRequests: 3,
-      toolCalls: 1,
-      recordedReads: 0,
-      deadlineMs: 30_000,
-      totalInputBytes: 65_536,
-      totalOutputBytes: 262_144,
-      maxRecoveryBytes: 262_144,
-    },
-    concurrentOperations: 4,
-    queuedOperations: 8,
-  })
-    .register(deployment)
-    .registerTools(knowledge);
+    return AiRegistry.create({
+        defaultModels: { generation: deployment.ref },
+    })
+        .register(deployment)
+        .registerTools(knowledge);
 }
 ```
+
+<!-- prettier-ignore-end -->
 
 The `true` callbacks permit access to this public demonstration service. For a
 restricted service, `authorizeConnect(scope, control)` checks connection access;
@@ -211,8 +201,9 @@ control)` for a configured stdio process. Resolve secrets in these callbacks;
 do not put them in model input or recorded identity.
 
 No MCP client or transport is created in Entity code. The selected Vercel adapter
-supplies it when the operation runs. Setup traffic and tool responses consume the
-invocation's byte budget, so allow space for discovery as well as model output.
+supplies it when the operation runs. Setup traffic and tool responses contribute
+to the invocation's measured byte counts. If you configure a byte ceiling, include discovery
+as well as model output.
 See the [adapter transport limits](../ai-vercel-ax/REFERENCE.md) for supported
 schemas, result content and HTTP/stdio behavior, and the
 [full Agent/MCP test](../server-blackbox-tests/test/agent-vercel-mcp-blackbox.test.ts)
@@ -228,8 +219,8 @@ System Events, and `domainEventHistory()` reads emitted domain Events.
 
 All four take a positive `pageSize` and an optional opaque `cursor`, return newest
 entries first, and provide `nextCursor` for older records. There is no 100-record
-retention limit. Page byte bounds can return fewer entries than requested. A
-cursor belongs to its Agent, tenant, repository, category and conversation.
+retention limit. A cursor belongs to its Agent, tenant, repository, category and
+conversation.
 Recording is mandatory and continues through logical Entity deletion or archive.
 
 `AiTestBackend` scripts deployment responses while `BlackBox` remains the test

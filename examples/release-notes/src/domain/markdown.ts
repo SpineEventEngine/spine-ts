@@ -13,54 +13,27 @@
  */
 
 import type {
-  ReleaseEvidenceReference,
   ReleaseNotesDocument,
   ReleaseTitle,
 } from "../../generated/spine/examples/releasenotes/types_pb.js";
 import { createHash } from "node:crypto";
 
-const escapeHtml = (value: string): string =>
-  value.replace(/[&<>"']/g, (character) => {
-    switch (character) {
-      case "&":
-        return "&amp;";
-      case "<":
-        return "&lt;";
-      case ">":
-        return "&gt;";
-      case '"':
-        return "&quot;";
-      default:
-        return "&#39;";
-    }
-  });
-
-const evidenceLine = (reference: ReleaseEvidenceReference): string => {
-  const path = escapeHtml(JSON.stringify(reference.path));
-  const commit = escapeHtml(reference.commit?.value ?? "");
-  const parent = escapeHtml(reference.parent?.value ?? "");
-  return `  - Evidence: <code>${path}</code> in commit <code>${commit}</code>, compared with parent <code>${parent}</code>`;
-};
-
 /**
- * Keeps Markdown rendering and exact-byte checks consistent for approval and export.
+ * Converts one validated model proposal into the initial clean editor Markdown.
  */
 export const ReleaseMarkdown = {
   /**
-   * Renders the exact reviewable Markdown bytes from structured draft content.
+   * Renders the initial Markdown once, retaining citations only in proposal history.
    *
    * @param title Editor-supplied release title.
    * @param document Current structured document.
-   * @returns Canonical UTF-8 bytes for approval and export.
+   * @returns Initial UTF-8 Markdown bytes accepted from the model proposal.
    */
   render(title: ReleaseTitle, document: ReleaseNotesDocument): Uint8Array {
     const lines = [`# ${title.value}`, ""];
     for (const section of document.sections) {
       lines.push(`## ${section.heading}`, "");
-      for (const entry of section.entries) {
-        lines.push(`- ${entry.text}`);
-        for (const reference of entry.evidence) lines.push(evidenceLine(reference));
-      }
+      for (const entry of section.entries) lines.push(`- ${entry.text}`);
       lines.push("");
     }
     return new TextEncoder().encode(`${lines.join("\n").replace(/\n+$/, "")}\n`);

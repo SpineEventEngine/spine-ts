@@ -68,6 +68,16 @@ function deployment(name: string) {
 }
 
 describe("application AI registry", () => {
+  it("preserves absent whole-invocation and callback ceilings", () => {
+    const registry = AiRegistry.create({
+      defaultModels: {},
+      invocationLimits: {},
+      concurrentOperations: 1,
+      queuedOperations: 0,
+    });
+    expect(registryOptions(registry).invocationLimits).toEqual({});
+    expect(registryOptions(registry).hookTimeoutMs).toBeUndefined();
+  });
   it("rejects fabricated registrations and invalid limits", () => {
     const registry = AiRegistry.create({
       defaultModels: {},
@@ -89,11 +99,11 @@ describe("application AI registry", () => {
     expect(() =>
       AiRegistry.create({
         defaultModels: {},
-        invocationLimits: undefined,
+        invocationLimits: null,
         concurrentOperations: 1,
         queuedOperations: 0,
       } as never),
-    ).toThrow("invocationLimits are required");
+    ).toThrow("invocationLimits must be an object");
     expect(() =>
       AiRegistry.create({
         defaultModels: undefined,
@@ -304,7 +314,7 @@ describe("application AI registry", () => {
       freezeRegistry(mismatch);
     }).toThrow("compatible");
     options.invocationLimits.operations = 100;
-    expect(registryOptions(registry).invocationLimits.operations).toBe(2);
+    expect(registryOptions(registry).invocationLimits?.operations).toBe(2);
     expect(() => AiRegistry.create({ ...options, hookTimeoutMs: 1001 })).toThrow("hookTimeoutMs");
     expect(() => AiRegistry.create({ ...options, concurrentOperations: 0 })).toThrow(
       "concurrentOperations",

@@ -28,7 +28,7 @@ const environment = Object.freeze({
 });
 
 /**
- * Runs fixed Git subcommands under a bounded, noninteractive process policy.
+ * Runs fixed Git subcommands under a noninteractive process policy.
  */
 export const GitCommand = {
   /**
@@ -37,15 +37,13 @@ export const GitCommand = {
    * @param executable Trusted absolute Git executable.
    * @param repository Selected absolute repository path.
    * @param args Fixed argument array.
-   * @param maxBytes Maximum stdout bytes.
    * @param signal Optional cancellation signal.
-   * @returns Complete bounded stdout bytes.
+   * @returns Complete stdout bytes.
    */
   async run(
     executable: string,
     repository: string,
     args: readonly string[],
-    maxBytes = 2_000_000,
     signal?: AbortSignal,
   ): Promise<Buffer> {
     if (!executable.startsWith("/") || !repository.startsWith("/"))
@@ -71,48 +69,35 @@ export const GitCommand = {
         stdio: ["ignore", "pipe", "pipe"],
       },
     );
-    return this.collect(child, maxBytes, signal);
+    return this.collect(child, signal);
   },
 
   /**
-   * Collects output while enforcing the physical byte and time limits.
+   * Collects output while honoring cancellation.
    *
    * @param child Spawned Git process.
-   * @param maxBytes Maximum stdout bytes.
    * @param signal Optional cancellation signal.
-   * @returns Complete bounded stdout bytes.
+   * @returns Complete stdout bytes.
    */
-  async collect(
-    child: ReturnType<typeof spawn>,
-    maxBytes: number,
-    signal?: AbortSignal,
-  ): Promise<Buffer> {
+  async collect(child: ReturnType<typeof spawn>, signal?: AbortSignal): Promise<Buffer> {
     if (!child.stdout || !child.stderr) {
       child.kill("SIGKILL");
       throw new Error("Git process streams are unavailable.");
     }
     const chunks: Buffer[] = [];
-    const received = { bytes: 0, exceeded: false };
     const cancel = () => child.kill("SIGKILL");
-    const timer = setTimeout(cancel, 10_000);
     signal?.addEventListener("abort", cancel, { once: true });
     child.stdout.on("data", (chunk: Buffer) => {
-      received.bytes += chunk.length;
-      if (received.bytes > maxBytes) {
-        received.exceeded = true;
-        cancel();
-      } else chunks.push(chunk);
+      chunks.push(chunk);
     });
     child.stderr.resume();
     const code = await new Promise<number | null>((resolve, reject) => {
       child.once("error", reject);
       child.once("close", resolve);
     }).finally(() => {
-      clearTimeout(timer);
       signal?.removeEventListener("abort", cancel);
     });
     signal?.throwIfAborted();
-    if (received.exceeded) throw new Error("Git output byte bound exceeded.");
     if (code !== 0) throw new Error("Git operation failed or timed out.");
     return Buffer.concat(chunks);
   },

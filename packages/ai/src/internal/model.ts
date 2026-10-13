@@ -28,6 +28,17 @@ const aiModelBrand: unique symbol = Symbol("SpineAiModel");
 const models = new WeakSet<object>();
 
 /**
+ * Normalized model definition with an empty limits object when limits are omitted.
+ *
+ * @typeParam I Input message descriptor.
+ * @typeParam O Output message descriptor.
+ */
+type NormalizedAiModelDefinition<
+  I extends MessageSchema,
+  O extends MessageSchema,
+> = AiModelDefinition<I, O> & { readonly limits: AiLimits };
+
+/**
  * Factory-created typed capability accepted by the Agent runtime.
  *
  * @typeParam I - Input message descriptor.
@@ -42,7 +53,7 @@ export interface AiModel<I extends MessageSchema, O extends MessageSchema> {
   /**
    * Validated immutable capability definition.
    */
-  readonly definition: Readonly<AiModelDefinition<I, O>>;
+  readonly definition: Readonly<NormalizedAiModelDefinition<I, O>>;
 }
 
 /**
@@ -118,27 +129,39 @@ export const modelRefKey = (candidate: ModelRefMessage): string => {
 };
 
 /**
- * Copies validated operation limits.
+ * Copies validated, explicitly configured operation limits.
  * @param limits Caller-supplied mutable limits.
  * @param kind Capability kind.
- * @returns Immutable bounded limits.
+ * @returns Immutable configured limits with absent ceilings preserved.
  */
-const copyLimits = (limits: AiLimits, kind: "generation" | "decision"): AiLimits => {
+const copyLimits = (limits: AiLimits | undefined, kind: "generation" | "decision"): AiLimits => {
+  if (limits === undefined) return Object.freeze({});
   const supplied: unknown = limits;
-  if (typeof supplied !== "object" || supplied === null) throw new TypeError("limits are required");
+  if (typeof supplied !== "object" || supplied === null)
+    throw new TypeError("limits must be an object");
   const copy = {
-    modelRequests: positiveInteger(limits.modelRequests, "modelRequests"),
-    toolCalls: positiveInteger(limits.toolCalls, "toolCalls", true),
-    deadlineMs: positiveInteger(limits.deadlineMs, "deadlineMs"),
-    maxInputBytes: positiveInteger(limits.maxInputBytes, "maxInputBytes"),
-    maxOutputBytes: positiveInteger(limits.maxOutputBytes, "maxOutputBytes"),
+    ...(limits.modelRequests === undefined
+      ? {}
+      : { modelRequests: positiveInteger(limits.modelRequests, "modelRequests") }),
+    ...(limits.toolCalls === undefined
+      ? {}
+      : { toolCalls: positiveInteger(limits.toolCalls, "toolCalls", true) }),
+    ...(limits.deadlineMs === undefined
+      ? {}
+      : { deadlineMs: positiveInteger(limits.deadlineMs, "deadlineMs") }),
+    ...(limits.maxInputBytes === undefined
+      ? {}
+      : { maxInputBytes: positiveInteger(limits.maxInputBytes, "maxInputBytes") }),
+    ...(limits.maxOutputBytes === undefined
+      ? {}
+      : { maxOutputBytes: positiveInteger(limits.maxOutputBytes, "maxOutputBytes") }),
     ...(limits.maxOutputTokens !== undefined
       ? { maxOutputTokens: positiveInteger(limits.maxOutputTokens, "maxOutputTokens") }
       : {}),
   };
   if (kind === "decision" && copy.maxOutputTokens !== undefined)
     throw new TypeError("decision maxOutputTokens is unsupported");
-  if (kind === "decision" && copy.toolCalls !== 0)
+  if (kind === "decision" && copy.toolCalls !== undefined && copy.toolCalls !== 0)
     throw new TypeError("decision toolCalls must be zero");
   return Object.freeze(copy);
 };
@@ -230,7 +253,7 @@ const copyBase = <I extends MessageSchema, O extends MessageSchema>(
  */
 const copyDecision = <I extends MessageSchema, O extends MessageSchema>(
   definition: Extract<AiModelDefinition<I, O>, { kind: "decision" }>,
-): AiModelDefinition<I, O> => {
+): NormalizedAiModelDefinition<I, O> => {
   const mapping: unknown = definition.mapping;
   if (
     typeof mapping !== "object" ||
@@ -265,7 +288,7 @@ const copyDecision = <I extends MessageSchema, O extends MessageSchema>(
  */
 const copyDefinition = <I extends MessageSchema, O extends MessageSchema>(
   definition: AiModelDefinition<I, O>,
-): AiModelDefinition<I, O> => {
+): NormalizedAiModelDefinition<I, O> => {
   if (definition.kind === "generation") {
     const mode: unknown = definition.outputMode;
     if (mode !== "native-schema" && mode !== "prompt-and-validate")

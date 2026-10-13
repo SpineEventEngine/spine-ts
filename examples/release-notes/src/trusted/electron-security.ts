@@ -131,6 +131,7 @@ export const validateIpc = (
   if (
     command === "status" ||
     command === "sign-in" ||
+    command === "add-account" ||
     command === "usage" ||
     command === "current-model"
   ) {

@@ -12,17 +12,13 @@
  * the License.
  */
 
-import {
-  ModelRef,
-  type AiBackendRegistration,
-  type AiConnectionIdentity,
-} from "@spine-event-engine/ai";
+import { ModelRef, type AiBackendRegistration } from "@spine-event-engine/ai";
 
 import type { DesktopAuth } from "./desktop-auth.js";
-import type { SiwcSession } from "./siwc-session.js";
+import type { ChatgptPlanSession } from "@spine-event-engine/ai-vercel-ax";
 
 type AuthPort = Pick<DesktopAuth, "status">;
-type SessionPort = Pick<SiwcSession, "models" | "accessToken">;
+type SessionPort = Pick<ChatgptPlanSession, "models" | "model">;
 
 interface Selection {
   /**
@@ -57,6 +53,8 @@ export class PlanModelSelection {
 
   private selectionVersion = 0;
 
+  private transportAbort?: { readonly generation: string; readonly controller: AbortController };
+
   /**
    * Initializes the trusted service.
    *
@@ -89,23 +87,14 @@ export class PlanModelSelection {
    */
   async select(clientId: string, model: string, ref: ModelRef): Promise<AiBackendRegistration> {
     const version = ++this.selectionVersion;
+    this.selected = undefined;
     const status = await this.auth.status();
     const account = status.accounts.find((candidate) => candidate.clientId === clientId);
     if (status.selectedClientId !== clientId || !account?.planEnabled || !status.planEnabled) {
       throw new Error("ChatGPT plan account is not selected.");
     }
-    if (!(await this.session.models(clientId)).some((candidate) => candidate.slug === model)) {
-      throw new Error("Model is not available to this account.");
-    }
-    await this.assertSelectionCurrent(version, clientId, account.subject);
     const selection = { clientId, subject: account.subject, model };
-    const identity: AiConnectionIdentity = Object.freeze({
-      provider: "openai-chatgpt-plan",
-      account: `${clientId}:${account.subject}`,
-      endpoint: "https://api.openai.com/v1",
-      model,
-    });
-    const registration = await this.createRegistration(ref, selection, identity);
+    const registration = await this.createRegistration(ref, selection);
     await this.assertSelectionCurrent(version, clientId, account.subject);
     this.selected = { ...selection, registration };
     return registration;
@@ -157,42 +146,57 @@ export class PlanModelSelection {
    *
    * @param ref Immutable deployment reference.
    * @param selection Verified account and model binding.
-   * @param identity Authorized provider deployment identity.
    * @returns Registration whose callbacks recheck this binding.
    */
   private async createRegistration(
     ref: ModelRef,
     selection: Omit<Selection, "registration">,
-    identity: AiConnectionIdentity,
   ): Promise<AiBackendRegistration> {
-    const { VercelAx } = await import("@spine-event-engine/ai-vercel-ax");
-    const registration = VercelAx.chatgptPlanModel({
+    const registration = await this.session.model({
       ref,
-      resolveIdentity: () => identity,
-      authorizeUse: async (_scope, expected) =>
-        (await this.active(selection)) &&
-        expected.provider === identity.provider &&
-        expected.account === identity.account &&
-        expected.endpoint === identity.endpoint &&
-        expected.model === identity.model,
-      connect: async () => {
-        if (
-          !(await this.active(selection)) ||
-          !(await this.session.models(selection.clientId)).some(
-            (candidate) => candidate.slug === selection.model,
-          ) ||
-          !(await this.active(selection))
-        ) {
-          throw new Error("ChatGPT account or model selection changed.");
-        }
-        const accessToken = await this.session.accessToken(selection.clientId);
-        if (!(await this.active(selection))) {
-          throw new Error("ChatGPT account or model selection changed.");
-        }
-        return { accessToken, identity };
-      },
+      clientId: selection.clientId,
+      model: selection.model,
+      platformFetch: (input, init) => this.providerFetch(input, init),
+      authorizeUse: () => this.active(selection),
     });
     return registration;
+  }
+
+  /**
+   * Fetches through the active generation cancellation signal.
+   *
+   * @param input Provider request URL.
+   * @param init Provider request options.
+   * @returns Provider response with fixed diagnostic metadata on failure.
+   */
+  private async providerFetch(
+    input: RequestInfo | URL,
+    init: RequestInit | undefined,
+  ): Promise<Response> {
+    const signals = [init?.signal, this.transportAbort?.controller.signal].filter(
+      (signal): signal is AbortSignal => signal !== undefined && signal !== null,
+    );
+    let response: Response;
+    try {
+      response = await globalThis.fetch(input, {
+        ...init,
+        ...(signals.length ? { signal: AbortSignal.any(signals) } : {}),
+      });
+    } catch (error) {
+      const code =
+        error instanceof Error && error.name === "AbortError"
+          ? "abort-error"
+          : error instanceof TypeError
+            ? "type-error"
+            : "other";
+      console.error(`[Release Notes Studio generation] stage=provider-fetch code=${code}`);
+      throw error;
+    }
+    if (!response.ok)
+      console.error(
+        `[Release Notes Studio generation] stage=provider-response code=http-status status=${String(response.status)}`,
+      );
+    return response;
   }
 
   /**
@@ -202,6 +206,22 @@ export class PlanModelSelection {
    */
   current(): AiBackendRegistration | undefined {
     return this.selected?.registration;
+  }
+
+  /**
+   * Binds provider requests to the one generation admitted by the trusted Studio.
+   * @param generation Accepted generation identity.
+   */
+  beginGeneration(generation: string): void {
+    this.transportAbort = { generation, controller: new AbortController() };
+  }
+
+  /**
+   * Stops current and subsequent provider fetches for the canceled generation.
+   * @param generation Exact generation selected for cancellation.
+   */
+  abortGeneration(generation: string): void {
+    if (this.transportAbort?.generation === generation) this.transportAbort.controller.abort();
   }
 
   /**

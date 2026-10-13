@@ -44,23 +44,39 @@ interface RegistryState {
 const registries = new WeakMap<AiRegistry, RegistryState>();
 
 /**
- * Copies whole-signal limits with required finite bounds.
+ * Copies only explicitly configured whole-signal ceilings.
  * @param limits Caller-supplied limits.
  * @returns Immutable invocation limits.
  */
 const copyInvocationLimits = (limits: AiInvocationLimits): AiInvocationLimits => {
   const candidate: unknown = limits;
   if (typeof candidate !== "object" || candidate === null)
-    throw new TypeError("invocationLimits are required");
+    throw new TypeError("invocationLimits must be an object");
   return Object.freeze({
-    operations: positiveInteger(limits.operations, "operations"),
-    modelRequests: positiveInteger(limits.modelRequests, "modelRequests"),
-    toolCalls: positiveInteger(limits.toolCalls, "toolCalls", true),
-    recordedReads: positiveInteger(limits.recordedReads, "recordedReads", true),
-    deadlineMs: positiveInteger(limits.deadlineMs, "deadlineMs"),
-    totalInputBytes: positiveInteger(limits.totalInputBytes, "totalInputBytes"),
-    totalOutputBytes: positiveInteger(limits.totalOutputBytes, "totalOutputBytes"),
-    maxRecoveryBytes: positiveInteger(limits.maxRecoveryBytes, "maxRecoveryBytes"),
+    ...(limits.operations === undefined
+      ? {}
+      : { operations: positiveInteger(limits.operations, "operations") }),
+    ...(limits.modelRequests === undefined
+      ? {}
+      : { modelRequests: positiveInteger(limits.modelRequests, "modelRequests") }),
+    ...(limits.toolCalls === undefined
+      ? {}
+      : { toolCalls: positiveInteger(limits.toolCalls, "toolCalls", true) }),
+    ...(limits.recordedReads === undefined
+      ? {}
+      : { recordedReads: positiveInteger(limits.recordedReads, "recordedReads", true) }),
+    ...(limits.deadlineMs === undefined
+      ? {}
+      : { deadlineMs: positiveInteger(limits.deadlineMs, "deadlineMs") }),
+    ...(limits.totalInputBytes === undefined
+      ? {}
+      : { totalInputBytes: positiveInteger(limits.totalInputBytes, "totalInputBytes") }),
+    ...(limits.totalOutputBytes === undefined
+      ? {}
+      : { totalOutputBytes: positiveInteger(limits.totalOutputBytes, "totalOutputBytes") }),
+    ...(limits.maxRecoveryBytes === undefined
+      ? {}
+      : { maxRecoveryBytes: positiveInteger(limits.maxRecoveryBytes, "maxRecoveryBytes") }),
   });
 };
 
@@ -83,6 +99,41 @@ const copyDefaults = (defaults: AiDefaultModels): AiDefaultModels => {
     ...(defaults.generation ? { generation: copy(defaults.generation) } : {}),
     ...(defaults.decision ? { decision: copy(defaults.decision) } : {}),
   });
+};
+
+/**
+ * Validates and freezes the registry's explicitly configured controls.
+ * @param options Caller-supplied defaults and optional ceilings.
+ * @returns Immutable registry options.
+ */
+const copyRegistryOptions = (options: AiRegistryOptions): Readonly<AiRegistryOptions> => {
+  const suppliedLimits: unknown = options.invocationLimits;
+  if (suppliedLimits === null) throw new TypeError("invocationLimits must be an object");
+  const copy = Object.freeze({
+    defaultModels: copyDefaults(options.defaultModels),
+    invocationLimits: copyInvocationLimits(options.invocationLimits ?? {}),
+    ...(options.concurrentOperations === undefined
+      ? {}
+      : {
+          concurrentOperations: positiveInteger(
+            options.concurrentOperations,
+            "concurrentOperations",
+          ),
+        }),
+    ...(options.queuedOperations === undefined
+      ? {}
+      : { queuedOperations: positiveInteger(options.queuedOperations, "queuedOperations", true) }),
+    ...(options.hookTimeoutMs === undefined
+      ? {}
+      : { hookTimeoutMs: positiveInteger(options.hookTimeoutMs, "hookTimeoutMs") }),
+  });
+  if (
+    copy.hookTimeoutMs !== undefined &&
+    copy.invocationLimits.deadlineMs !== undefined &&
+    copy.hookTimeoutMs > copy.invocationLimits.deadlineMs
+  )
+    throw new TypeError("hookTimeoutMs cannot exceed invocation deadlineMs");
+  return copy;
 };
 
 /**
@@ -114,18 +165,7 @@ export class AiRegistry {
    * @returns Registry with append-only deployments and build-time tool policy.
    */
   static create(options: AiRegistryOptions): AiRegistry {
-    const copy = Object.freeze({
-      defaultModels: copyDefaults(options.defaultModels),
-      invocationLimits: copyInvocationLimits(options.invocationLimits),
-      concurrentOperations: positiveInteger(options.concurrentOperations, "concurrentOperations"),
-      queuedOperations: positiveInteger(options.queuedOperations, "queuedOperations", true),
-      hookTimeoutMs: positiveInteger(
-        options.hookTimeoutMs ?? Math.min(5000, options.invocationLimits.deadlineMs),
-        "hookTimeoutMs",
-      ),
-    });
-    if (copy.hookTimeoutMs > copy.invocationLimits.deadlineMs)
-      throw new TypeError("hookTimeoutMs cannot exceed invocation deadlineMs");
+    const copy = copyRegistryOptions(options);
     const registry = new AiRegistry();
     registries.set(registry, {
       options: copy,

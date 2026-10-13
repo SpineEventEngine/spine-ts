@@ -15,6 +15,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createServer } from "node:http";
 import { gzipSync } from "node:zlib";
+import { createOpenAI } from "@ai-sdk/openai";
 
 import { createBoundedProviderFetch } from "../src/adapter/bounded-fetch.js";
 
@@ -42,7 +43,7 @@ function fixture(chunks: readonly Uint8Array[], status = 200): Response {
 
 function harness(response: Response = fixture([encoder.encode("done")])) {
   const network = vi.fn<typeof fetch>().mockResolvedValue(response);
-  const reserve = vi.fn(() => Promise.resolve());
+  const reserve = vi.fn(() => Promise.resolve(undefined));
   const received: number[] = [];
   let authority = true;
   let now = 100;
@@ -56,12 +57,13 @@ function harness(response: Response = fixture([encoder.encode("done")])) {
       received.push(bytes);
     },
   });
-  const admit = (overrides: Partial<Parameters<typeof transport.admit>[0]> = {}) => {
+  const admit = (
+    overrides: Partial<Parameters<typeof transport.admit>[0]> = {},
+    withoutBounds = false,
+  ) => {
     transport.admit({
       id: "attempt-1",
-      maxInputBytes: 20,
-      maxOutputBytes: 20,
-      deadlineEpochMs: 1_000,
+      ...(withoutBounds ? {} : { maxInputBytes: 20, maxOutputBytes: 20, deadlineEpochMs: 1_000 }),
       signal: new AbortController().signal,
       ...overrides,
     });
@@ -78,6 +80,54 @@ function harness(response: Response = fixture([encoder.encode("done")])) {
 }
 
 describe("bounded provider fetch", () => {
+  it("reads a complete response without an unconfigured output ceiling", async () => {
+    const body = "x".repeat(33_000);
+    const h = harness(fixture([encoder.encode(body)]));
+    h.admit({}, true);
+    h.setNow(2_000);
+    const response = await h.transport.fetch(url, { method: "POST", body: "x" });
+    expect(await response.text()).toBe(body);
+    expect(h.reserve).toHaveBeenCalledWith("attempt-1", 1, undefined);
+    expect(h.received).toEqual([33_000]);
+  });
+  it("surfaces an SDK-wrapped read error when valid SSE exceeds the admitted raw byte ceiling", async () => {
+    const accepted =
+      'data: {"type":"response.in_progress","response":{"id":"fixture","created_at":1,"model":"fixture"}}\n\n';
+    const response = new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode(accepted));
+          setTimeout(() => {
+            controller.enqueue(encoder.encode(`: ${"x".repeat(33_000)}\n\n`));
+            controller.close();
+          }, 75);
+        },
+      }),
+      { status: 200, headers: { "content-type": "text/event-stream" } },
+    );
+    const h = harness(response);
+    h.admit({ maxInputBytes: 10_000, maxOutputBytes: 32_768 });
+    const model = createOpenAI({
+      apiKey: "fixture",
+      baseURL: "https://provider.example/v1",
+      fetch: h.transport.fetch,
+    }).responses("fixture");
+    const { stream } = await model.doStream({
+      prompt: [{ role: "user", content: [{ type: "text", text: "fixture" }] }],
+    });
+    const reader = stream.getReader();
+    await expect(
+      (async () => {
+        for (;;) {
+          if ((await reader.read()).done) return;
+        }
+      })(),
+    ).rejects.toMatchObject({
+      name: "AI_APICallError",
+      statusCode: 200,
+      cause: { message: "Provider transport response byte limit exceeded" },
+    });
+  });
   it("is inert until admission and permits one dispatch for one ticket", async () => {
     const h = harness();
     await expect(h.transport.fetch(url, { method: "POST", body: "x" })).rejects.toThrow();
@@ -205,7 +255,7 @@ describe("bounded provider fetch", () => {
       platformFetch: network,
       hasAuthority: () => true,
       nowEpochMs: () => 100,
-      reserve: () => new Promise<void>(() => undefined),
+      reserve: () => new Promise<number | undefined>(() => undefined),
       onReceived: () => {
         throw new Error("must not receive");
       },
@@ -254,7 +304,7 @@ describe("bounded provider fetch", () => {
         platformFetch: network,
         hasAuthority: () => true,
         nowEpochMs: () => now,
-        reserve: () => Promise.resolve(),
+        reserve: () => Promise.resolve(undefined),
         onReceived: () => undefined,
       });
       transport.admit({
@@ -308,7 +358,7 @@ describe("bounded provider fetch", () => {
         platformFetch: network,
         hasAuthority: () => true,
         nowEpochMs: () => now,
-        reserve: () => Promise.resolve(),
+        reserve: () => Promise.resolve(undefined),
         onReceived: () => undefined,
       });
       transport.admit({
@@ -370,7 +420,7 @@ describe("bounded provider fetch", () => {
       nowEpochMs: () => {
         throw new Error("secret clock detail");
       },
-      reserve: () => Promise.resolve(),
+      reserve: () => Promise.resolve(undefined),
       onReceived: () => undefined,
     });
     expect(() => {
@@ -518,7 +568,7 @@ describe("bounded provider fetch", () => {
   it("does not expose reservation or fetch exception details and does not refund credit", async () => {
     const secret = "Bearer hidden-provider-credential";
     const network = vi.fn<typeof fetch>().mockRejectedValue(new Error(secret));
-    const reserve = vi.fn(() => Promise.resolve());
+    const reserve = vi.fn(() => Promise.resolve(undefined));
     const transport = createBoundedProviderFetch({
       allowedUrls: [url],
       platformFetch: network,
@@ -572,7 +622,7 @@ describe("bounded provider fetch", () => {
       platformFetch: vi.fn<typeof fetch>().mockResolvedValue(fixture([encoder.encode("x")])),
       hasAuthority: () => true,
       nowEpochMs: () => 100,
-      reserve: () => Promise.resolve(),
+      reserve: () => Promise.resolve(undefined),
       onReceived: () => {
         throw new Error("write limit for secret tenant token");
       },
@@ -614,7 +664,7 @@ describe("bounded provider fetch", () => {
           .mockResolvedValue(
             new Response(new ReadableStream({ pull: () => new Promise<void>(() => undefined) })),
           ),
-        reserve: () => Promise.resolve(),
+        reserve: () => Promise.resolve(undefined),
         onReceived: () => undefined,
       });
       transport.admit({
@@ -688,7 +738,7 @@ describe("bounded provider fetch", () => {
         platformFetch: fetch,
         hasAuthority: () => true,
         nowEpochMs: () => 100,
-        reserve: () => Promise.resolve(),
+        reserve: () => Promise.resolve(undefined),
         onReceived: (_id, bytes) => {
           received.push(bytes);
         },

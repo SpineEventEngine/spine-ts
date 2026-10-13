@@ -157,7 +157,10 @@ class MemoryAgentHistoryHandle<Id> implements AgentHistoryStorage<Id> {
   #validateRead(request: AgentHistoryRead<Id>): void {
     if (!Number.isSafeInteger(request.count) || request.count <= 0)
       throw new RangeError("Agent history count must be a positive safe integer.");
-    if (!Number.isSafeInteger(request.maxBytes) || request.maxBytes <= 0)
+    if (
+      request.maxBytes !== undefined &&
+      (!Number.isSafeInteger(request.maxBytes) || request.maxBytes <= 0)
+    )
       throw new RangeError("Agent history maxBytes must be a positive safe integer.");
     const category = request.view.kind;
     if (request.after !== undefined && category !== "full" && request.after.category !== category)

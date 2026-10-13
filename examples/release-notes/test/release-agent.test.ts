@@ -28,7 +28,7 @@ import {
 } from "@spine-event-engine/proto/agent";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { BlackBox } from "@spine-event-engine/testing";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 
 import {
   OpenReleaseDraftSchema,
@@ -39,6 +39,7 @@ import {
   ReleaseGenerationFailedSchema,
   ReleaseGenerationRequestedSchema,
   ReleaseNotesStagedSchema,
+  ReleaseNotesProposedSchema,
   type ReleaseNotesStaged,
 } from "../generated/spine/examples/releasenotes/events_pb.js";
 import { ReleaseDraftStateSchema } from "../generated/spine/examples/releasenotes/states_pb.js";
@@ -65,6 +66,54 @@ const stream = (events: readonly object[]) =>
   events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("");
 
 function responses(number: number, base: string, target: string): string {
+  if (number === 1) {
+    const calls = [
+      { name: "tool_0", arguments: "{}" },
+      {
+        name: "tool_1",
+        arguments: JSON.stringify({ commit: target, parent: base, path: "notes.txt" }),
+      },
+      {
+        name: "tool_1",
+        arguments: JSON.stringify({ commit: target, parent: base, path: "readme.txt" }),
+      },
+    ];
+    return stream([
+      {
+        type: "response.created",
+        response: { id: "resp-1", created_at: 1, model: "fixture-model" },
+      },
+      ...calls.flatMap((call, output_index) => {
+        const item = {
+          type: "function_call",
+          id: `fc-${String(output_index)}`,
+          call_id: `provider-call-${String(output_index)}`,
+          name: call.name,
+          namespace: "spine_mcp",
+          arguments: call.arguments,
+          status: "completed",
+        };
+        return [
+          { type: "response.output_item.added", output_index, item },
+          {
+            type: "response.function_call_arguments.done",
+            item_id: item.id,
+            output_index,
+            arguments: call.arguments,
+          },
+          { type: "response.output_item.done", output_index, item },
+        ];
+      }),
+      {
+        type: "response.completed",
+        response: {
+          id: "resp-1",
+          status: "completed",
+          usage: { input_tokens: 10, output_tokens: 8 },
+        },
+      },
+    ]);
+  }
   const tool = number === 1;
   const argumentsJson = "{}";
   const text = JSON.stringify({
@@ -170,7 +219,8 @@ it("uses the real Agent, plan Responses, and local Git tool before staging evide
   git("commit", "--quiet", "-m", "Before");
   const base = git("rev-parse", "HEAD");
   writeFileSync(join(directory, "notes.txt"), "after\n");
-  git("add", "notes.txt");
+  writeFileSync(join(directory, "readme.txt"), "new file\n");
+  git("add", "-A");
   git("commit", "--quiet", "-m", "Change notes");
   const target = git("rev-parse", "HEAD");
   const comparison = await GitReleaseComparison.open({
@@ -213,16 +263,7 @@ it("uses the real Agent, plan Responses, and local Git tool before staging evide
   });
   const registry = AiRegistry.create({
     defaultModels: { generation: model.ref },
-    invocationLimits: {
-      operations: 1,
-      modelRequests: 3,
-      toolCalls: 6,
-      recordedReads: 0,
-      deadlineMs: 20_000,
-      totalInputBytes: 256_000,
-      totalOutputBytes: 1_000_000,
-      maxRecoveryBytes: 1_000_000,
-    },
+    invocationLimits: {},
     concurrentOperations: 1,
     queuedOperations: 0,
   })
@@ -268,13 +309,22 @@ it("uses the real Agent, plan Responses, and local Git tool before staging evide
             subject: "Change notes",
           }),
         ],
-        changes: [create(ReleaseChangeSchema, { path: "notes.txt", status: "M" })],
+        changes: [
+          create(ReleaseChangeSchema, { path: "notes.txt", status: "M" }),
+          create(ReleaseChangeSchema, { path: "readme.txt", status: "A" }),
+        ],
         evidence: [
           create(ReleaseEvidenceSchema, {
             commit: create(GitCommitIdSchema, { value: target }),
             parent: create(GitCommitIdSchema, { value: base }),
             path: "notes.txt",
             status: "M",
+          }),
+          create(ReleaseEvidenceSchema, {
+            commit: create(GitCommitIdSchema, { value: target }),
+            parent: create(GitCommitIdSchema, { value: base }),
+            path: "readme.txt",
+            status: "A",
           }),
         ],
       }),
@@ -330,7 +380,14 @@ it("uses the real Agent, plan Responses, and local Git tool before staging evide
     if (result[0]?.kind === "failed")
       throw new Error(`Generation failed with safe reason ${result[0].reason}.`);
     if (result[0]?.kind !== "staged") throw new Error("Generation did not stage.");
-    expect(result[0].staged.document?.sections[0]?.entries[0]?.evidence[0]?.path).toBe("notes.txt");
+    const proposal = box.assertEvents().flatMap((event) => {
+      const value = event.message && AnyMessages.unpack(event.message, ReleaseNotesProposedSchema);
+      return value ? [value] : [];
+    });
+    expect(proposal[0]?.document?.sections[0]?.entries[0]?.evidence[0]?.path).toBe("notes.txt");
+    expect(new TextDecoder().decode(result[0].staged.markdown?.utf8)).toContain(
+      "- Changed release file.",
+    );
     expect(providerBodies).toHaveLength(3);
     expect(JSON.stringify(providerBodies[1])).toContain('"type":"function_call_output"');
     const requested = box
@@ -374,6 +431,7 @@ it("uses the real Agent, plan Responses, and local Git tool before staging evide
     expect(acknowledged[0]?.generation?.value).toBe("generation-1");
     expect(providerBodies).toHaveLength(3);
     comparisonAvailable = false;
+    const report = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const current = await context.stand().readVersioned(ReleaseDraftStateSchema, id);
     if (!current?.version) throw new Error("Staged draft has no Entity Version.");
     expect(
@@ -407,6 +465,10 @@ it("uses the real Agent, plan Responses, and local Git tool before staging evide
     );
     expect(failed[0]?.generation?.value).toBe("generation-2");
     expect(failed[0]?.reason).toBe("AUTHENTICATION_REQUIRED");
+    expect(report).toHaveBeenCalledWith(
+      "[Release Notes Studio generation] stage=invoke code=AUTHENTICATION_REQUIRED",
+    );
+    report.mockRestore();
     expect(failed[0]?.operation?.value).toBeTruthy();
     expect(providerBodies).toHaveLength(3);
   } finally {

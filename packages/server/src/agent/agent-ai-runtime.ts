@@ -413,6 +413,7 @@ export class AgentAiRuntime implements AgentAi {
     model: AiModel<I, O>,
     request: InvokeRequest<I>,
   ): AgentNamedOperation {
+    const deadline = this.#operationDeadline(model.definition.limits.deadlineMs);
     return create(AgentNamedOperationSchema, {
       handlerOrdinal: this.handlerOrdinal,
       callName: request.call,
@@ -422,17 +423,25 @@ export class AgentAiRuntime implements AgentAi {
       input: AnyMessages.pack(model.definition.input, request.input),
       capability: create(AiCapabilityNameSchema, { value: model.definition.name }),
       capabilityRevision: create(AiCapabilityRevisionSchema, { value: model.definition.version }),
-      deadline: this.#operationDeadline(model.definition.limits.deadlineMs),
+      ...(deadline === undefined ? {} : { deadline }),
     });
   }
 
   /**
    * Samples Time once and caps a capability deadline at the saved invocation deadline.
    */
-  #operationDeadline(durationMs: number) {
+  #operationDeadline(durationMs: number | undefined) {
+    const invocationDeadline = this.#invocationDeadline();
+    if (durationMs === undefined && invocationDeadline === undefined) return undefined;
     const now = Time.currentTime();
     const nowMs = Number(now.seconds) * 1_000 + Math.floor(now.nanos / 1_000_000);
-    const deadlineMs = Math.min(nowMs + durationMs, this.#invocationDeadline());
+    const deadlineMs =
+      durationMs === undefined
+        ? invocationDeadline
+        : invocationDeadline === undefined
+          ? nowMs + durationMs
+          : Math.min(nowMs + durationMs, invocationDeadline);
+    if (deadlineMs === undefined) throw new Error("Agent deadline calculation unavailable.");
     return create(TimestampSchema, {
       seconds: BigInt(Math.floor(deadlineMs / 1_000)),
       nanos: (deadlineMs % 1_000) * 1_000_000,
@@ -664,7 +673,7 @@ export class AgentAiRuntime implements AgentAi {
       operation,
       session: this.session,
       signal: this.#signal,
-      deadlineEpochMs,
+      ...(deadlineEpochMs === undefined ? {} : { deadlineEpochMs }),
       reserveMessage: (server, message) => budget.reserveMessage(server, message),
       onReceived: (id, bytes) => {
         budget.onReceived(id, bytes);
@@ -815,7 +824,10 @@ export class AgentAiRuntime implements AgentAi {
   ) {
     if (saved === undefined) throw new Error("Saved Agent connection identity is absent.");
     const deadlineEpochMs = this.#deadline(operation);
-    const control = { signal: this.#signal, deadlineEpochMs };
+    const control = {
+      signal: this.#signal,
+      ...(deadlineEpochMs === undefined ? {} : { deadlineEpochMs }),
+    };
     const identity = await AgentModelSelection.awaitHook(
       backend.resolveIdentity(this.scope, control),
       this.#signal,
@@ -826,20 +838,28 @@ export class AgentAiRuntime implements AgentAi {
       this.#signal,
       deadlineEpochMs,
     );
-    if (
-      !authorized ||
-      !this.#sameIdentity(identity, {
-        provider: saved.provider?.value ?? "",
-        account: saved.account?.value ?? "",
-        endpoint: saved.endpoint?.value ?? "",
-        model: saved.model?.value ?? "",
-      })
-    )
+    if (!authorized || !this.#sameIdentity(identity, this.#savedIdentity(saved)))
       throw new AgentExecutionFault(
         "REVISION_CHANGED",
         "Agent model identity or authorization changed.",
       );
     return identity;
+  }
+
+  /**
+   * Copies credential-free identity fields from a saved model connection.
+   * @param saved Durable selected connection fields.
+   * @returns Identity comparable with the current model binding.
+   */
+  #savedIdentity(
+    saved: NonNullable<AgentExecutionRecord["started"]>["models"][number]["connection"],
+  ) {
+    return {
+      provider: saved?.provider?.value ?? "",
+      account: saved?.account?.value ?? "",
+      endpoint: saved?.endpoint?.value ?? "",
+      model: saved?.model?.value ?? "",
+    };
   }
 
   /**
@@ -860,22 +880,32 @@ export class AgentAiRuntime implements AgentAi {
   /**
    * Reads the saved invocation deadline without extending it on restart.
    */
-  #invocationDeadline(): number {
+  #invocationDeadline(): number | undefined {
     const deadline = this.session.record().started?.deadline;
-    if (deadline === undefined) throw new Error("Agent AI deadline was not saved.");
+    if (deadline === undefined) {
+      if (this.session.record().started?.bounds?.deadlineMillis !== undefined)
+        throw new Error("Agent invocation deadline was not saved.");
+      return undefined;
+    }
     return Number(deadline.seconds) * 1_000 + Math.floor(deadline.nanos / 1_000_000);
   }
 
   /**
    * Reads the persisted per-capability absolute deadline.
    */
-  #deadline(operation: AgentNamedOperation): number {
+  #deadline(operation: AgentNamedOperation): number | undefined {
     const deadline = operation.deadline;
-    if (deadline === undefined) throw new Error("Agent capability deadline was not saved.");
-    return Math.min(
-      this.#invocationDeadline(),
-      Number(deadline.seconds) * 1_000 + Math.floor(deadline.nanos / 1_000_000),
-    );
+    const invocationDeadline = this.#invocationDeadline();
+    if (deadline === undefined) {
+      if (operation.limits?.deadlineMs !== undefined)
+        throw new Error("Agent operation deadline was not saved.");
+      return invocationDeadline;
+    }
+    const operationDeadline =
+      Number(deadline.seconds) * 1_000 + Math.floor(deadline.nanos / 1_000_000);
+    return invocationDeadline === undefined
+      ? operationDeadline
+      : Math.min(invocationDeadline, operationDeadline);
   }
 
   /**
@@ -914,11 +944,21 @@ export class AgentAiRuntime implements AgentAi {
   #limits(model: Model) {
     const limits = model.definition.limits;
     return create(AiOperationLimitsSchema, {
-      modelRequests: create(RequestLimitSchema, { value: limits.modelRequests }),
-      toolCalls: create(ToolLimitSchema, { value: limits.toolCalls }),
-      deadlineMs: create(AiDeadlineMillisSchema, { value: BigInt(limits.deadlineMs) }),
-      maxInputBytes: create(InputBytesSchema, { value: BigInt(limits.maxInputBytes) }),
-      maxOutputBytes: create(OutputBytesSchema, { value: BigInt(limits.maxOutputBytes) }),
+      ...(limits.modelRequests === undefined
+        ? {}
+        : { modelRequests: create(RequestLimitSchema, { value: limits.modelRequests }) }),
+      ...(limits.toolCalls === undefined
+        ? {}
+        : { toolCalls: create(ToolLimitSchema, { value: limits.toolCalls }) }),
+      ...(limits.deadlineMs === undefined
+        ? {}
+        : { deadlineMs: create(AiDeadlineMillisSchema, { value: BigInt(limits.deadlineMs) }) }),
+      ...(limits.maxInputBytes === undefined
+        ? {}
+        : { maxInputBytes: create(InputBytesSchema, { value: BigInt(limits.maxInputBytes) }) }),
+      ...(limits.maxOutputBytes === undefined
+        ? {}
+        : { maxOutputBytes: create(OutputBytesSchema, { value: BigInt(limits.maxOutputBytes) }) }),
       ...(limits.maxOutputTokens === undefined
         ? {}
         : {
@@ -942,9 +982,11 @@ export class AgentAiRuntime implements AgentAi {
     let attemptNumber = 0;
     return {
       signal: this.#signal,
-      deadlineEpochMs,
+      ...(deadlineEpochMs === undefined ? {} : { deadlineEpochMs }),
       nowEpochMs: () => Time.currentTimeMillis(),
-      hasAuthority: () => !this.#signal.aborted && Time.currentTimeMillis() < deadlineEpochMs,
+      hasAuthority: () =>
+        !this.#signal.aborted &&
+        (deadlineEpochMs === undefined || Time.currentTimeMillis() < deadlineEpochMs),
       beginAttempt: (request) => this.#beginAttempt(operation, model, request, ++attemptNumber),
       reserveTransport: (id, bytes, credit) => this.#reserve(id, bytes, credit, model),
       onReceived: (id, bytes) => {
@@ -1004,8 +1046,8 @@ export class AgentAiRuntime implements AgentAi {
           diagnostic: create(AiDiagnosticIdSchema, { value: failure.diagnosticId }),
         }),
       );
-      const limit = Number(record.started?.bounds?.maxRecoveryBytes ?? 0n);
-      if (AgentExecutionSizes.record(record) > limit)
+      const limit = record.started?.bounds?.maxRecoveryBytes;
+      if (limit !== undefined && BigInt(AgentExecutionSizes.record(record)) > limit)
         throw new Error("Agent diagnostic exceeds the invocation recovery byte bound.");
       return record;
     });
@@ -1057,16 +1099,8 @@ export class AgentAiRuntime implements AgentAi {
   ) {
     const prior = this.#priorAttempt(operation, number);
     if (prior !== undefined) return this.#replayAttempt(operation, request, prior);
-    if (this.#signal.aborted || Time.currentTimeMillis() >= this.#deadline(operation))
-      throw new Error("Agent model attempt deadline expired.");
-    if (
-      number > model.definition.limits.modelRequests ||
-      this.#attemptCount() >= Number(this.session.record().started?.bounds?.modelRequests ?? 0n)
-    )
-      throw new AgentExecutionFault(
-        "MODEL_BUDGET_EXCEEDED",
-        "Agent physical model request budget is exhausted.",
-      );
+    const deadlineEpochMs = this.#deadline(operation);
+    this.#checkAttemptBounds(model, number, deadlineEpochMs);
     const id = randomUUID();
     const requestContent =
       request.kind === "generation"
@@ -1076,11 +1110,36 @@ export class AgentAiRuntime implements AgentAi {
     await this.#saveAttempt(operation, request, number, id, history);
     return {
       id,
-      maxInputBytes: model.definition.limits.maxInputBytes,
-      maxOutputBytes: model.definition.limits.maxOutputBytes,
-      deadlineEpochMs: this.#deadline(operation),
+      ...(model.definition.limits.maxInputBytes === undefined
+        ? {}
+        : { maxInputBytes: model.definition.limits.maxInputBytes }),
+      ...(model.definition.limits.maxOutputBytes === undefined
+        ? {}
+        : { maxOutputBytes: model.definition.limits.maxOutputBytes }),
+      ...(deadlineEpochMs === undefined ? {} : { deadlineEpochMs }),
       signal: this.#signal,
     };
+  }
+
+  /**
+   * Checks the selected model's explicit request and deadline bounds before journaling.
+   */
+  #checkAttemptBounds(model: Model, number: number, deadlineEpochMs: number | undefined): void {
+    if (
+      this.#signal.aborted ||
+      (deadlineEpochMs !== undefined && Time.currentTimeMillis() >= deadlineEpochMs)
+    )
+      throw new Error("Agent model attempt deadline expired.");
+    const operationLimit = model.definition.limits.modelRequests;
+    const invocationLimit = this.session.record().started?.bounds?.modelRequests;
+    if (
+      (operationLimit !== undefined && number > operationLimit) ||
+      (invocationLimit !== undefined && this.#attemptCount() >= Number(invocationLimit))
+    )
+      throw new AgentExecutionFault(
+        "MODEL_BUDGET_EXCEEDED",
+        "Agent physical model request budget is exhausted.",
+      );
   }
 
   /**
@@ -1202,28 +1261,77 @@ export class AgentAiRuntime implements AgentAi {
   /**
    * Reserves transport bytes and provider persistence capacity before dispatch.
    */
-  async #reserve(id: string, bytes: number, credit: number, model: Model): Promise<void> {
+  async #reserve(
+    id: string,
+    bytes: number,
+    credit: number | undefined,
+    model: Model,
+  ): Promise<number | undefined> {
+    const inputLimit = model.definition.limits.maxInputBytes;
+    const outputLimit = model.definition.limits.maxOutputBytes;
+    const configuredCredit = credit ?? outputLimit;
     if (
       !Number.isSafeInteger(bytes) ||
       bytes < 0 ||
-      bytes > model.definition.limits.maxInputBytes ||
-      !Number.isSafeInteger(credit) ||
-      credit < 1 ||
-      credit > model.definition.limits.maxOutputBytes
+      (inputLimit !== undefined && bytes > inputLimit) ||
+      (credit !== undefined && (!Number.isSafeInteger(credit) || credit < 1)) ||
+      (outputLimit !== undefined && credit !== undefined && credit > outputLimit)
     )
       throw new Error("Agent provider request exceeds its operation byte bounds.");
     const record = this.session.record();
-    AgentMcpBudget.checkSharedBytes(record, bytes, credit);
-    this.#findAttempt(record, id).inputBytes = BigInt(bytes);
-    this.#checkCapacity(record, credit, model);
+    const previous = this.#findAttempt(record, id);
+    if (previous.transportReserved) throw new Error("Agent transport ticket was already reserved.");
+    const proposedCredit = this.#outputCredit(record, configuredCredit, bytes);
+    AgentMcpBudget.checkSharedBytes(record, bytes, proposedCredit ?? 0);
+    if (proposedCredit !== undefined) this.#checkCapacity(record, proposedCredit, model);
+    let effectiveCredit: number | undefined;
     await this.session.update((current) => {
-      const evidence = this.#findAttempt(current, id);
-      if (evidence.reservedResponseBytes !== 0n)
-        throw new Error("Agent transport ticket was already reserved.");
-      evidence.inputBytes = BigInt(bytes);
-      evidence.reservedResponseBytes = BigInt(credit);
+      effectiveCredit = this.#applyReservation(current, id, bytes, configuredCredit, model);
       return current;
     });
+    return effectiveCredit;
+  }
+
+  /**
+   * Narrows explicitly configured provider credit by remaining invocation credit.
+   */
+  #outputCredit(
+    record: AgentExecutionRecord,
+    configured: number | undefined,
+    bytes: number,
+  ): number | undefined {
+    const remaining = AgentMcpBudget.remainingOutputCredit(record);
+    if (remaining !== undefined && remaining < 1n)
+      AgentMcpBudget.checkSharedBytes(record, bytes, 1);
+    const available = remaining === undefined ? undefined : Number(remaining);
+    if (available !== undefined && !Number.isSafeInteger(available))
+      throw new Error("Agent invocation output credit is not a safe byte count.");
+    return configured === undefined
+      ? available
+      : available === undefined
+        ? configured
+        : Math.min(configured, available);
+  }
+
+  /**
+   * Applies one atomic transport reservation to the fenced execution record.
+   */
+  #applyReservation(
+    record: AgentExecutionRecord,
+    id: string,
+    bytes: number,
+    configured: number | undefined,
+    model: Model,
+  ): number | undefined {
+    const evidence = this.#findAttempt(record, id);
+    if (evidence.transportReserved) throw new Error("Agent transport ticket was already reserved.");
+    const credit = this.#outputCredit(record, configured, bytes);
+    AgentMcpBudget.checkSharedBytes(record, bytes, credit ?? 0);
+    evidence.inputBytes = BigInt(bytes);
+    if (credit !== undefined) this.#checkCapacity(record, credit, model);
+    evidence.reservedResponseBytes = BigInt(credit ?? 0);
+    evidence.transportReserved = true;
+    return credit;
   }
 
   /**
@@ -1293,7 +1401,7 @@ export class AgentAiRuntime implements AgentAi {
     completion: AiAttemptCompletion,
     observedBytes: number | undefined,
   ): void {
-    if (evidence.reservedResponseBytes === 0n || evidence.response.case !== undefined)
+    if (!evidence.transportReserved || evidence.response.case !== undefined)
       throw new Error("Agent model attempt has no live reservation.");
     if (
       observedBytes !== undefined &&
@@ -1303,7 +1411,7 @@ export class AgentAiRuntime implements AgentAi {
       throw new Error("Agent model receipt byte counts disagree.");
     const bytes = completion.receivedBytes;
     if (bytes !== undefined) {
-      if (bytes > Number(evidence.reservedResponseBytes))
+      if (evidence.reservedResponseBytes !== 0n && bytes > Number(evidence.reservedResponseBytes))
         throw new Error("Agent model response exceeded reserved bytes.");
       evidence.receivedBytes = BigInt(bytes);
     }
@@ -1370,8 +1478,8 @@ export class AgentAiRuntime implements AgentAi {
    * Checks complete provider wrappers with a maximally credited response.
    */
   #checkCapacity(record: AgentExecutionRecord, credit: number, model: Model): void {
-    const recoveryLimit = Number(record.started?.bounds?.maxRecoveryBytes ?? 0n);
-    if (!Number.isSafeInteger(recoveryLimit) || recoveryLimit < 1 || credit > recoveryLimit)
+    const recoveryLimit = record.started?.bounds?.maxRecoveryBytes;
+    if (recoveryLimit !== undefined && BigInt(credit) > recoveryLimit)
       throw new Error("Agent model credit exceeds invocation recovery bytes.");
     const projected = this.#projectedRecord(record, 1, model);
     const creditBytes = BigInt(credit);
@@ -1402,13 +1510,13 @@ export class AgentAiRuntime implements AgentAi {
    * Applies invocation and provider byte limits to projected persistent rows.
    */
   #checkProjectedBounds(
-    recoveryLimit: number,
+    recoveryLimit: bigint | undefined,
     recordBytes: bigint,
     headBytes: number,
     historyBytes: readonly bigint[],
   ): void {
     const capacity = this.session.capacity();
-    if (recordBytes > BigInt(recoveryLimit))
+    if (recoveryLimit !== undefined && recordBytes > recoveryLimit)
       throw new Error("Agent model evidence exceeds invocation recovery bytes.");
     if (
       capacity.executionRecordBytes !== undefined &&

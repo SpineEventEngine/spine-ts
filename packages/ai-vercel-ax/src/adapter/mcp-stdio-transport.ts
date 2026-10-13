@@ -17,7 +17,6 @@ import { validateJSONRPCMessage, type JSONRPCMessage, type MCPTransport } from "
 import type { AiMcpProtocolControl, AiMcpMessageTicket } from "@spine-event-engine/ai/spi/adapter";
 import { scheduleBoundedDeadline } from "./deadline.js";
 
-const maximumSetupBytes = 65_536;
 const terminationGraceMs = 100;
 const forcedExitMs = 1_000;
 
@@ -69,7 +68,7 @@ export class BoundedMcpStdioTransport implements MCPTransport {
 
   private childExited = false;
 
-  private callTicket: { readonly id: string; readonly maxOutputBytes: number } | undefined;
+  private callTicket: { readonly id: string; readonly maxOutputBytes?: number } | undefined;
 
   /**
    * Captures only application-configured process settings and scoped environment.
@@ -131,9 +130,9 @@ export class BoundedMcpStdioTransport implements MCPTransport {
    * @param id Runtime tool-call identity.
    * @param maxOutputBytes Reserved decoded result limit.
    */
-  setCallTicket(id: string, maxOutputBytes: number): void {
+  setCallTicket(id: string, maxOutputBytes?: number): void {
     if (this.callTicket) throw new Error("MCP call already active");
-    this.callTicket = { id, maxOutputBytes };
+    this.callTicket = { id, ...(maxOutputBytes === undefined ? {} : { maxOutputBytes }) };
   }
 
   /**
@@ -162,7 +161,9 @@ export class BoundedMcpStdioTransport implements MCPTransport {
       phase: method === "tools/call" ? "call" : "setup",
       method,
       inputBytes: Buffer.byteLength(body),
-      maxOutputBytes: callTicket?.maxOutputBytes ?? maximumSetupBytes,
+      ...(callTicket?.maxOutputBytes === undefined
+        ? {}
+        : { maxOutputBytes: callTicket.maxOutputBytes }),
       ...(method === "tools/call" && callTicket ? { toolCallId: callTicket.id } : {}),
     });
     await this.writeReserved(message, body, ticket, options?.signal);
@@ -187,7 +188,8 @@ export class BoundedMcpStdioTransport implements MCPTransport {
       if (
         ticket.signal.aborted ||
         signal?.aborted ||
-        this.control.nowEpochMs() >= ticket.deadlineEpochMs
+        (ticket.deadlineEpochMs !== undefined &&
+          this.control.nowEpochMs() >= ticket.deadlineEpochMs)
       )
         throw new Error("MCP stdio send cancelled");
       if ("id" in message && message.id !== undefined)
@@ -221,11 +223,10 @@ export class BoundedMcpStdioTransport implements MCPTransport {
     const cancel = () => {
       void this.fail(new Error("MCP stdio deadline or cancellation")).catch(() => undefined);
     };
-    const stopTimer = scheduleBoundedDeadline(
-      ticket.deadlineEpochMs,
-      this.control.nowEpochMs,
-      cancel,
-    );
+    const stopTimer =
+      ticket.deadlineEpochMs === undefined
+        ? () => undefined
+        : scheduleBoundedDeadline(ticket.deadlineEpochMs, this.control.nowEpochMs, cancel);
     ticket.signal.addEventListener("abort", cancel, { once: true });
     this.control.signal.addEventListener("abort", cancel, { once: true });
     const cancelDeadline = () => {
@@ -255,36 +256,33 @@ export class BoundedMcpStdioTransport implements MCPTransport {
       await this.fail(new Error("MCP stdio byte budget exceeded"));
       return;
     }
-    if (pending.received > pending.ticket.maxOutputBytes) {
+    if (
+      pending.ticket.maxOutputBytes !== undefined &&
+      pending.received > pending.ticket.maxOutputBytes
+    ) {
       await this.fail(new Error("MCP stdio response exceeds byte limit"));
       return;
     }
+    const newline = chunk.indexOf(10);
+    if (newline >= 0 && newline !== chunk.byteLength - 1) {
+      await this.fail(new Error("MCP stdio returned extra output"));
+      return;
+    }
     pending.chunks.push(chunk);
-    const bytes = Buffer.concat(pending.chunks);
-    const newline = bytes.indexOf(10);
     if (newline < 0) return;
-    await this.finishReceived(pending, bytes, newline);
+    await this.finishReceived(pending, Buffer.concat(pending.chunks));
   }
 
   /**
    * Persists a complete child line before delivering its validated response.
    * @param pending Current physical protocol reservation.
-   * @param bytes Collected bounded stdout bytes.
-   * @param newline Final line delimiter position.
+   * @param bytes Complete stdout line including its final delimiter.
    * @returns Completion after receipt persistence and SDK notification.
    */
-  private async finishReceived(
-    pending: PendingMessage,
-    bytes: Buffer,
-    newline: number,
-  ): Promise<void> {
-    if (newline !== bytes.length - 1) {
-      await this.fail(new Error("MCP stdio returned extra output"));
-      return;
-    }
+  private async finishReceived(pending: PendingMessage, bytes: Buffer): Promise<void> {
     let message: JSONRPCMessage;
     try {
-      message = validateJSONRPCMessage(JSON.parse(bytes.subarray(0, newline).toString("utf8")));
+      message = validateJSONRPCMessage(JSON.parse(bytes.subarray(0, -1).toString("utf8")));
       if (!("id" in message) || message.id !== pending.messageId)
         throw new Error("MCP stdio response ID mismatch");
     } catch {
@@ -372,7 +370,10 @@ export class BoundedMcpStdioTransport implements MCPTransport {
   private assertActive(): void {
     if (this.closed || this.control.signal.aborted || !this.control.hasAuthority())
       throw new Error("MCP stdio connection cancelled");
-    if (this.control.nowEpochMs() >= this.control.deadlineEpochMs)
+    if (
+      this.control.deadlineEpochMs !== undefined &&
+      this.control.nowEpochMs() >= this.control.deadlineEpochMs
+    )
       throw new Error("MCP stdio connection deadline exceeded");
   }
 

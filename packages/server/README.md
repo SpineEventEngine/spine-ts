@@ -151,10 +151,10 @@ Pages run newest first and return an opaque `nextCursor` when older entries
 remain. Cursors are bound to the Bounded Context, tenant, repository, Agent ID, read
 method, and conversation. Ordering uses full timestamp precision, then
 conversation/System/domain category, then the existing record ID in unsigned
-UTF-8 order. A page contains at most `pageSize` entries and may contain fewer
-when the independent 1 MiB serialized-byte limit is reached; its cursor resumes
-the remaining older entries. If the first entry exceeds the byte limit, the
-read fails explicitly. Agent history is retained through archive and
+UTF-8 order. A page contains at most `pageSize` entries. The framework adds no
+page-byte ceiling. Reads made during a handler count toward any configured
+invocation limits for recorded reads and recovery data.
+Agent history is retained through archive and
 logical deletion. System dispatch audit and emitted domain Events use their
 original Event envelopes in repository history.
 

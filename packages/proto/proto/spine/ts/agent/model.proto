@@ -191,31 +191,19 @@ message AiTokenCount {
 // Effective bounds for one model operation.
 message AiOperationLimits {
   // Maximum physical provider requests including corrections.
-  AiModelRequestLimit model_requests = 1 [
-    (required) = true,
-    (validate) = true
-  ];
+  AiModelRequestLimit model_requests = 1 [(validate) = true];
 
   // Maximum external tool calls; zero disables tools.
   AiToolCallLimit tool_calls = 2 [(validate) = true];
 
   // Maximum elapsed milliseconds.
-  AiDeadlineMillis deadline_ms = 3 [
-    (required) = true,
-    (validate) = true
-  ];
+  AiDeadlineMillis deadline_ms = 3 [(validate) = true];
 
   // Maximum materialized request bytes.
-  AiInputByteLimit max_input_bytes = 4 [
-    (required) = true,
-    (validate) = true
-  ];
+  AiInputByteLimit max_input_bytes = 4 [(validate) = true];
 
   // Maximum received response bytes.
-  AiOutputByteLimit max_output_bytes = 5 [
-    (required) = true,
-    (validate) = true
-  ];
+  AiOutputByteLimit max_output_bytes = 5 [(validate) = true];
 
   // Optional generation output token limit; absent for decisions and unsupported profiles.
   AiOutputTokenLimit max_output_tokens = 6 [(validate) = true];

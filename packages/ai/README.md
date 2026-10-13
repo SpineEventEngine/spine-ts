@@ -14,33 +14,29 @@ pnpm add @spine-event-engine/ai@snapshot @spine-event-engine/proto@snapshot @buf
 
 The input and output descriptors below are generated from your application's domain Protos. The import points to this repository's support-ticket fixture; replace it with your application's generated path.
 
+<!-- prettier-ignore-start -->
+
 <!-- docs-snippet-path: packages/ai/test/public-contracts.test.ts -->
 
 ```ts
 import { AiModel } from "@spine-event-engine/ai";
 import {
-  SupportTicketFactsSchema,
-  ProposedSupportReplySchema,
+    SupportTicketFactsSchema,
+    ProposedSupportReplySchema,
 } from "../../server/test-fixtures/generated/entity-metadata/support_ai_types_pb.js";
 
 const draftReply = AiModel.define({
-  name: "draft-support-reply",
-  version: "v1",
-  kind: "generation",
-  input: SupportTicketFactsSchema,
-  output: ProposedSupportReplySchema,
-  instructions: "Draft a support reply for human review.",
-  outputMode: "native-schema",
-  limits: {
-    modelRequests: 2,
-    toolCalls: 0,
-    deadlineMs: 30_000,
-    maxInputBytes: 8_192,
-    maxOutputBytes: 8_192,
-    maxOutputTokens: 512,
-  },
+    name: "draft-support-reply",
+    version: "v1",
+    kind: "generation",
+    input: SupportTicketFactsSchema,
+    output: ProposedSupportReplySchema,
+    instructions: "Draft a support reply for human review.",
+    outputMode: "native-schema",
 });
 ```
+
+<!-- prettier-ignore-end -->
 
 `AiModel.define()` validates the capability and snapshots its settings before a model request. To check the facade in this repository without credentials or network access, run `pnpm exec vitest run packages/ai/test` from the root. See [REFERENCE.md](REFERENCE.md) for supported contracts and limits.
 

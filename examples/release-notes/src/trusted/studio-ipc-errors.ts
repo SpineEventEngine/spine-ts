@@ -21,7 +21,19 @@ const exported =
   "We cannot confirm whether the file was saved. Check the chosen location before exporting again.";
 const wait = "Writing is still in progress. Wait, or quit and stop it.";
 const generic = "We could not confirm this action. Refresh the draft and try again.";
-const safeMessages = [stale, generation, changedInputs, history, exported, wait, generic] as const;
+const signIn = "ChatGPT sign-in did not finish. Try again.";
+const accountStatus = "Could not check your ChatGPT connection. Try again.";
+const safeMessages = [
+  stale,
+  generation,
+  changedInputs,
+  history,
+  exported,
+  wait,
+  signIn,
+  accountStatus,
+  generic,
+] as const;
 
 /**
  * Prevents credentials and provider prose from crossing the renderer boundary.
@@ -37,19 +49,21 @@ export const StudioIpcErrors = {
   message(command: unknown, error: unknown): string {
     const detail = error instanceof Error ? error.message : "";
     if (
-      [
-        "The displayed draft Version is stale.",
-        "Approval no longer matches the current draft.",
-      ].includes(detail)
+      detail === "IPC sender is not the application renderer." ||
+      detail === "Unexpected IPC argument."
     )
-      return stale;
+      return generic;
+    if (detail === "The displayed draft Version is stale.") return stale;
     if (
       detail === wait ||
       detail === "Wait for the current account or generation action." ||
-      detail === "Wait for the active generation or stop and quit."
+      detail === "Wait for the active generation or stop it before closing."
     )
       return wait;
     if (detail === "Generation inputs changed; read the current draft.") return changedInputs;
+    if (command === "sign-in" || command === "add-account" || command === "reconnect")
+      return signIn;
+    if (command === "status") return accountStatus;
     if (command === "generate" || command === "repeat-generation") return generation;
     if (command === "history") return history;
     if (command === "export") return exported;

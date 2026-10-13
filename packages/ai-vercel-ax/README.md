@@ -43,11 +43,108 @@ const registration = VercelAx.model({
 
 Supply real authenticated identity and authorization callbacks in an application. The runtime admits requests and persists attempt, budget, and result records before this adapter dispatches; using a registration outside that runtime does not provide those guarantees. To check the adapter's credential-free protocol fixtures in this repository, run `pnpm exec vitest run packages/ai-vercel-ax/test/factory.test.ts` from the root. See [REFERENCE.md](REFERENCE.md) for the supported profiles and boundaries.
 
+## Sign in with a ChatGPT plan
+
+`VercelAx.chatgptPlanSession()` provides browser authorization, token verification
+and refresh, account model discovery, and sign-out. Configure it in the trusted
+server or desktop process. The application supplies credential persistence and
+opens the system browser; it does not implement the OAuth exchange.
+
+<!-- prettier-ignore-start -->
+<!-- docs-snippet-path: packages/ai-vercel-ax/test/factory.test.ts -->
+
+```ts
+import {
+    VercelAx,
+    type ChatgptPlanCredentialStore,
+    type ChatgptPlanSession,
+} from "@spine-event-engine/ai-vercel-ax";
+
+/**
+ * Connects the application credential store to ChatGPT sign-in.
+ *
+ * @param credentials Trusted persistence; encrypt saved tokens at rest.
+ * @returns Session shared by sign-in and model registration.
+ */
+function createPlanSession(credentials: ChatgptPlanCredentialStore) {
+    return VercelAx.chatgptPlanSession({
+        agentName: "Release Notes Studio",
+        credentials,
+    });
+}
+
+/**
+ * Completes sign-in using a loopback listener supplied by the desktop app.
+ *
+ * @param session Configured ChatGPT session.
+ * @param redirectUri URL of the already listening local callback server.
+ * @param onOpenBrowser Opens the authorization URL in the system browser.
+ * @param onReceiveCallback Waits for the browser callback URL.
+ * @returns Verified account details without tokens.
+ */
+async function signIn(
+    session: ChatgptPlanSession,
+    redirectUri: string,
+    onOpenBrowser: (url: string) => Promise<void>,
+    onReceiveCallback: () => Promise<URL>,
+) {
+    const attempt = await session.begin(redirectUri);
+    await onOpenBrowser(attempt.authorizationUrl);
+    return session.complete(attempt, await onReceiveCallback());
+}
+```
+<!-- prettier-ignore-end -->
+
+Keep the session and authorization attempt in the trusted process. Only the
+browser URL goes to the browser. `accounts()` returns account details suitable
+for display; `models(clientId)` returns the account's available model choices.
+`signOut(clientId, signal?)` attempts remote revocation, clears local tokens even
+if cancelled, and reports whether revocation was confirmed. The application closes
+its local callback listener when sign-in ends or the window closes.
+
+Register the selected model without retrieving access tokens in application code:
+
+<!-- prettier-ignore-start -->
+<!-- docs-snippet-path: packages/ai-vercel-ax/test/factory.test.ts -->
+
+```ts
+import { type AiScope, type ModelRef } from "@spine-event-engine/ai";
+import { type ChatgptPlanSession } from "@spine-event-engine/ai-vercel-ax";
+
+/**
+ * Creates a deployment for the account and model selected in the application.
+ *
+ * @param session Configured session with a completed sign-in.
+ * @param ref Application deployment reference for AiRegistry.
+ * @param clientId Selected account's issued client ID.
+ * @param model Exact slug returned by the account's model catalog.
+ * @param onAuthorize Checks whether the accepted signal may use this selection.
+ * @returns Deployment to register in AiRegistry.
+ */
+function selectedPlanModel(
+    session: ChatgptPlanSession,
+    ref: ModelRef,
+    clientId: string,
+    model: string,
+    onAuthorize: (scope: AiScope) => boolean | Promise<boolean>,
+) {
+    return session.model({ ref, clientId, model, authorizeUse: onAuthorize });
+}
+```
+<!-- prettier-ignore-end -->
+
+The session binds the deployment to the selected account and model, refreshes
+its credential when needed, and rechecks the application permission callback.
+Agent handlers continue to use `this.ai.invoke(...)`; they receive no tokens or
+provider clients. See [Release Notes Studio](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/release-notes/README.md)
+for the native browser callback and encrypted credential store.
+
 ## ChatGPT plan Responses registration
 
 Use `VercelAx.chatgptPlanModel()` for an account with ChatGPT plan inference permission.
-The application handles sign-in, registration selection, token refresh, and model
-discovery. This adapter accepts the selected account and model through the same
+This lower-level factory is available when the application already has its own
+sign-in and token service. Otherwise, use `chatgptPlanSession()` above. The factory
+accepts the selected account and model through the same
 trusted identity and authorization callbacks as the API-key profile. Its
 connection callback returns a nonempty OAuth access token. The adapter binds
 that token and the authorized endpoint explicitly to the pinned OpenAI SDK,
@@ -93,7 +190,8 @@ the adapter records the credential-free deployment identity and request/response
 Define the generation capability with `outputMode: "prompt-and-validate"` and
 omit `maxOutputTokens`. An explicit token ceiling and native-schema mode are
 rejected before inference for this profile. Request count, tool count, byte,
-and deadline bounds remain mandatory.
+and deadline ceilings are optional application settings. Omitted settings do not
+impose a framework default.
 
 The profile sends stateless streamed Responses with developer instructions,
 `store: false`, and encrypted reasoning included for local tool continuation.
@@ -103,14 +201,14 @@ perform sign-in or retry a failed inference outside the Agent runtime.
 
 For local MCP tools, discovery accepts the pinned server SDK's root
 `https://json-schema.org/draft/2020-12/schema` declaration and records the
-equivalent bounded schema without that dialect marker. Discovery still rejects
-unknown dialects, remote references, unsupported keywords, excessive nesting,
-and schemas over the configured byte limit before a model request.
+equivalent schema without that dialect marker. Discovery rejects unknown dialects,
+remote references and unsupported keywords before a model request. Discovery
+traffic is counted against any application-configured byte ceiling.
 Denied MCP connection authorization becomes a saved, nonretryable
-`AUTHENTICATION_REQUIRED` Agent result. Unsupported bounded tool discovery
+`AUTHENTICATION_REQUIRED` Agent result. Unsupported tool discovery
 becomes `UNSUPPORTED_CAPABILITY` during setup. Transport, cancellation, journal,
 and storage faults in that setup still reject the execution rather than becoming
-model results. Later tool-call failures have their separate bounded tool
+model results. Later tool-call failures have their separate recorded tool
 outcomes.
 
 ## Anthropic Messages registration
@@ -125,40 +223,53 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { ModelRef } from "@spine-event-engine/ai";
 import { VercelAx } from "@spine-event-engine/ai-vercel-ax";
 
-const apiKey = process.env.ANTHROPIC_API_KEY;
-if (!apiKey) throw new Error("ANTHROPIC_API_KEY is required");
-
 /**
- * Credential-free Anthropic deployment selected for support replies.
+ * Registers Claude for support replies using the selected model's capacity.
+ *
+ * @param apiKey Secret for the configured Anthropic account.
+ * @param outputTokenCapacity Provider-verified output capacity for this exact model.
+ * @returns Generation deployment to register in AiRegistry.
  */
-const identity = {
-    provider: "anthropic",
-    account: "support-account",
-    endpoint: "https://api.anthropic.com/v1",
-    model: "claude-sonnet-4-5",
-};
+function registerClaude(apiKey: string, outputTokenCapacity: number) {
+    const identity = {
+        provider: "anthropic",
+        account: "support-account",
+        endpoint: "https://api.anthropic.com/v1",
+        model: "claude-sonnet-4-5",
+    };
 
-/**
- * Registers guarded Anthropic Messages generation for the support capability.
- */
-const registration = VercelAx.model({
-    ref: ModelRef.of("support-reply", "r1"),
-    capabilities: VercelAx.capabilities.anthropicMessages(),
-    resolveIdentity: () => identity,
-    authorizeUse: () => true,
-    connect: (_scope, expected, control) => ({
-        model: createAnthropic({
-            apiKey,
-            baseURL: expected.endpoint,
-            fetch: control.fetch,
-        }).messages(expected.model),
-        identity: expected,
-    }),
-});
+    return VercelAx.model({
+        ref: ModelRef.of("support-reply", "r1"),
+        capabilities: VercelAx.capabilities.anthropicMessages(),
+        resolveIdentity: () => identity,
+        authorizeUse: () => true,
+        connect: (_scope, expected, control) => ({
+            model: createAnthropic({
+                apiKey,
+                baseURL: expected.endpoint,
+                fetch: control.fetch,
+            }).messages(expected.model),
+            identity: expected,
+            anthropicOutputTokenCapacity: outputTokenCapacity,
+        }),
+    });
+}
 ```
 <!-- prettier-ignore-end -->
 
-Replace the example's identity and authorization callbacks with checks against the authenticated application scope. If your application supplies bearer tokens, pass its scoped token source to this registration function:
+Anthropic requires `max_tokens` in every Messages request. Supply the selected
+model's verified capacity, for example from its `max_tokens` field in the
+[Models API](https://platform.claude.com/docs/en/api/models/retrieve).
+`anthropicOutputTokenCapacity` describes that provider constraint. It does not add
+an application budget to `AiModel`. An explicitly configured `maxOutputTokens`
+ceiling takes precedence; a ceiling above a supplied capacity is rejected.
+Without either value, the adapter reports `UNSUPPORTED_CAPABILITY` before
+inference instead of guessing. It records the effective value with the request
+and rejects SDK changes to that value before sending.
+
+Replace the example's identity and authorization callbacks with checks against
+the authenticated application scope. If your application supplies bearer tokens,
+pass its scoped token source to this registration function:
 
 <!-- prettier-ignore-start -->
 <!-- docs-snippet-path: packages/ai-vercel-ax/test/factory.test.ts -->
@@ -172,9 +283,13 @@ import { VercelAx } from "@spine-event-engine/ai-vercel-ax";
  * Registers Anthropic Messages with a trusted application token source.
  *
  * @param tokens Application hook that supplies a bearer token for the authenticated scope.
+ * @param outputTokenCapacity Provider-verified output capacity for this exact model.
  * @returns Guarded generation registration.
  */
-function registerWithToken(tokens: { forScope(scope: AiScope): Promise<string> }) {
+function registerWithToken(
+    tokens: { forScope(scope: AiScope): Promise<string> },
+    outputTokenCapacity: number,
+) {
     /**
      * Credential-free deployment used for authorization and routing.
      */
@@ -197,6 +312,7 @@ function registerWithToken(tokens: { forScope(scope: AiScope): Promise<string> }
                 fetch: control.fetch,
             }).messages(expected.model),
             identity: expected,
+            anthropicOutputTokenCapacity: outputTokenCapacity,
         }),
     });
 }

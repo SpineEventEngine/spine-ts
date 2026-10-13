@@ -32,7 +32,7 @@ export const AgentHistoryPages = {
    * @returns Independent original entries and continuation status.
    */
   async read(
-    input: { readonly count: number; readonly maxBytes: number },
+    input: { readonly count: number; readonly maxBytes?: number },
     after: string | undefined,
     fetch: (after: string | undefined, limit: number) => Promise<readonly AgentHistoryRecord[]>,
   ): Promise<AgentHistoryPage> {
@@ -47,7 +47,10 @@ export const AgentHistoryPages = {
       for (const record of records) {
         const entry = AgentHistoryPages.entry(record);
         const length = toBinary(AgentHistoryEntrySchema, entry).length;
-        if (entries.length === input.count || length > input.maxBytes - bytes) {
+        if (
+          entries.length === input.count ||
+          (input.maxBytes !== undefined && length > input.maxBytes - bytes)
+        ) {
           if (entries.length === 0)
             throw new RangeError("Agent history first entry exceeds maxBytes.");
           return { entries: Object.freeze(entries), hasMore: true };
@@ -64,10 +67,13 @@ export const AgentHistoryPages = {
    * Rejects malformed provider read bounds before query work.
    * @param input Caller-supplied count and byte limits.
    */
-  validate(input: { readonly count: number; readonly maxBytes: number }): void {
+  validate(input: { readonly count: number; readonly maxBytes?: number }): void {
     if (!Number.isSafeInteger(input.count) || input.count <= 0)
       throw new RangeError("Agent history count must be a positive safe integer.");
-    if (!Number.isSafeInteger(input.maxBytes) || input.maxBytes <= 0)
+    if (
+      input.maxBytes !== undefined &&
+      (!Number.isSafeInteger(input.maxBytes) || input.maxBytes <= 0)
+    )
       throw new RangeError("Agent history maxBytes must be a positive safe integer.");
   },
 

@@ -25,7 +25,7 @@ type CloseAuth = Pick<DesktopAuth, "close">;
  */
 export const StudioWindowClose = {
   /**
-   * Registers the native Wait or Stop and quit decision for the active session.
+   * Registers the native Wait or Stop decision when the user closes the window.
    *
    * @param window Native application window.
    * @param studio In-memory Bounded Context session.

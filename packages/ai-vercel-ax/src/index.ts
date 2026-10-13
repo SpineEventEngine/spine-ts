@@ -17,6 +17,15 @@
  */
 export { VercelAx, VercelDecision } from "./adapter/factory.js";
 export type {
+  ChatgptPlanSession,
+  ChatgptPlanSessionOptions,
+  PlanSessionModelOptions,
+  ChatgptPlanCredentialStore,
+  ChatgptPlanRegistration,
+  PendingAuthorization,
+  ConnectedAccount,
+} from "./adapter/chatgpt-plan-session.js";
+export type {
   ChatgptPlanModelOptions,
   VercelConnectControl,
   VercelConnection,

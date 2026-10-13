@@ -100,15 +100,14 @@ try {
   if (current.generationStatus !== "staged")
     throw new Error(`Generation ${current.generationStatus}`);
   const preview = await studio.preview(draft.id);
-  const approved = await studio.approve(draft.id, preview.version, preview.markdown);
-  const exported = await studio.prepareExport(draft.id, approved.version);
+  const exported = await studio.prepareExport(draft.id, preview.version);
   if (
     Buffer.compare(Buffer.from(exported), Buffer.from(preview.markdown)) !== 0 ||
     (await studio.generationPhase(generation)) !== "completed" ||
     attempts !== 2
   )
     throw new Error("Packaged Agent workflow was not complete.");
-  process.stdout.write(JSON.stringify({ staged: true, attempts, approved: true, exported: true }));
+  process.stdout.write(JSON.stringify({ staged: true, attempts, exported: true }));
 } finally {
   await studio?.close();
   server.close();

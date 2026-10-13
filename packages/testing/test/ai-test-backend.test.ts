@@ -85,7 +85,7 @@ const facts = create(SupportReplyFactsSchema, {
   ticketRevision: 9_007_199_254_740_993n,
 });
 
-function harness(backend: AiTestBackend, model = generation) {
+function harness(backend: AiTestBackend, model = generation, unboundedTicket = false) {
   const controller = new AbortController();
   const attempts: unknown[] = [];
   const completions: unknown[] = [];
@@ -99,8 +99,7 @@ function harness(backend: AiTestBackend, model = generation) {
       attempts.push(request);
       return Promise.resolve({
         id: `ticket-${String(attempts.length)}`,
-        maxInputBytes: 4000,
-        maxOutputBytes: 4000,
+        ...(unboundedTicket ? {} : { maxInputBytes: 4000, maxOutputBytes: 4000 }),
         deadlineEpochMs: Date.now() + 1000,
         signal: controller.signal,
       });
@@ -143,6 +142,77 @@ function harness(backend: AiTestBackend, model = generation) {
 }
 
 describe("AiTestBackend", () => {
+  it("continues corrections and admits large scripted text with omitted bounds", async () => {
+    const unbounded = AiModel.define({
+      name: "unbounded-support-reply",
+      version: "v1",
+      kind: "generation",
+      input: SupportReplyFactsSchema,
+      output: ProposedSupportReplySchema,
+      instructions: "Draft a support reply",
+      outputMode: "prompt-and-validate",
+      limits: {},
+    });
+    const backend = AiTestBackend.create({
+      ref: ModelRef.of("unbounded", "v1"),
+      kind: "generation",
+    });
+    const reply = "R".repeat(5_000);
+    backend
+      .forModel(unbounded)
+      .respondWithText("not JSON")
+      .respondWithText("not JSON")
+      .respondWithText("not JSON")
+      .respondWith(create(ProposedSupportReplySchema, { reply }));
+    const run = harness(backend, unbounded, true);
+    const request = {
+      ...run.request,
+      input: create(SupportReplyFactsSchema, { ...facts, question: "Q".repeat(5_000) }),
+    } as AiBackendExecution;
+    await expect(backendDefinition(backend.registration).execute(request)).resolves.toMatchObject({
+      ok: true,
+      value: { reply },
+    });
+    expect(run.attempts).toHaveLength(4);
+    backend.assertSatisfied();
+  });
+
+  it("admits a large scripted decision with no response-byte ceiling", async () => {
+    const unbounded = AiModel.define({
+      name: "unbounded-decision",
+      version: "v1",
+      kind: "decision",
+      input: SupportReplyFactsSchema,
+      output: ProposedSupportReplySchema,
+      questions: { safe: { type: "boolean", instructions: "Is the reply safe?" } },
+      mapping: {
+        version: "v1",
+        toMessage: () => create(ProposedSupportReplySchema, { reply: "Approved" }),
+      },
+      limits: {},
+    });
+    const backend = AiTestBackend.create({
+      ref: ModelRef.of("unbounded-decision", "v1"),
+      kind: "decision",
+    });
+    const answers = Object.fromEntries(
+      Array.from({ length: 250 }, (_, index) => [
+        `question-${String(index)}`,
+        { type: "boolean" as const, probability: 0.5 },
+      ]),
+    );
+    backend.forModel(unbounded).respondWithDecision({
+      answers: { ...answers, safe: { type: "boolean", probability: 0.5 } },
+    });
+    const run = harness(backend, unbounded, true);
+    await expect(
+      backendDefinition(backend.registration).execute(run.request),
+    ).resolves.toMatchObject({
+      ok: true,
+    });
+    backend.assertSatisfied();
+  });
+
   it("rejects saved response-kind and diagnostic changes without consuming scripts", async () => {
     const backend = AiTestBackend.create({ ref: ModelRef.of("fixture", "v1"), kind: "decision" });
     backend.forModel(decision).refuse();

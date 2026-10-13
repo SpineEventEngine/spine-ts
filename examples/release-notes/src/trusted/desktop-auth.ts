@@ -13,11 +13,12 @@
  */
 
 import { openLoopback, type LoopbackListener } from "./loopback.js";
-import type { CredentialStore } from "./credential-store.js";
-import type { ConnectedAccount, SiwcSession } from "./siwc-session.js";
+import type { ConnectedAccount, ChatgptPlanSession } from "@spine-event-engine/ai-vercel-ax";
 
-type SessionPort = Pick<SiwcSession, "begin" | "complete" | "models" | "signOut">;
-type StorePort = Pick<CredentialStore, "registrations" | "pendingClientIds">;
+type SessionPort = Pick<
+  ChatgptPlanSession,
+  "begin" | "complete" | "models" | "signOut" | "accounts" | "pendingClientIds"
+>;
 
 /**
  * Renderer-visible account state contains no credentials or browser hints.
@@ -74,6 +75,16 @@ export class DesktopAuth {
   private signingIn = false;
 
   /**
+   * Cancels the active OAuth request when native window shutdown begins.
+   */
+  private signInAbort: AbortController | undefined;
+
+  /**
+   * Cancels remote revocation requests when the native window closes.
+   */
+  private readonly signOutAborts = new Set<AbortController>();
+
+  /**
    * The closed value.
    */
   private closed = false;
@@ -82,16 +93,24 @@ export class DesktopAuth {
    * Initializes the trusted service.
    *
    * @param session The session for this operation.
-   * @param store The store for this operation.
    * @param openExternal The open external for this operation.
    * @param openCallback Opens the local browser callback listener.
    */
   constructor(
     private readonly session: SessionPort,
-    private readonly store: StorePort,
     private readonly openExternal: (url: string) => Promise<void>,
     private readonly openCallback: () => Promise<LoopbackListener> = openLoopback,
   ) {}
+
+  /**
+   * Retries the latest unfinished issued-client registration when present.
+   *
+   * @returns Renderer-safe account status after browser authorization.
+   */
+  async signInOrResume(): Promise<DesktopAuthStatus> {
+    const staged = (await this.session.pendingClientIds()).at(-1);
+    return this.signIn(staged);
+  }
 
   /**
    * Opens the browser and completes local authorization.
@@ -102,6 +121,8 @@ export class DesktopAuth {
   async signIn(clientId?: string): Promise<DesktopAuthStatus> {
     if (this.closed || this.signingIn) throw new Error("Sign-in is unavailable.");
     this.signingIn = true;
+    const abort = new AbortController();
+    this.signInAbort = abort;
     let listener: LoopbackListener | undefined;
     try {
       this.starting = this.openCallback();
@@ -116,6 +137,7 @@ export class DesktopAuth {
         attempt,
         callback,
         () => !this.closed && this.pending === listener,
+        abort.signal,
       );
       if (this.isClosed()) throw new Error("Sign-in was canceled.");
       this.selectedClientId = account.clientId;
@@ -127,6 +149,7 @@ export class DesktopAuth {
         if (this.pending === listener) this.pending = undefined;
         this.starting = undefined;
         this.signingIn = false;
+        if (this.signInAbort === abort) this.signInAbort = undefined;
       }
     }
   }
@@ -146,17 +169,8 @@ export class DesktopAuth {
    * @returns The status result.
    */
   async status(): Promise<DesktopAuthStatus> {
-    const pendingClientIds = await this.store.pendingClientIds();
-    const accounts = (await this.store.registrations())
-      .filter((registration) => registration.subject)
-      .map((registration) => ({
-        clientId: registration.clientId,
-        subject: registration.subject,
-        ...(registration.email === undefined ? {} : { email: registration.email }),
-        planEnabled:
-          !!registration.accessToken &&
-          !!registration.scopes?.includes("chatgpt.tokens.use.direct"),
-      }));
+    const pendingClientIds = await this.session.pendingClientIds();
+    const accounts = await this.session.accounts();
     const selected = accounts.find((account) => account.clientId === this.selectedClientId);
     return {
       ...(selected === undefined ? {} : { selectedClientId: selected.clientId }),
@@ -202,9 +216,15 @@ export class DesktopAuth {
     clientId: string,
   ): Promise<{ status: DesktopAuthStatus; revocationConfirmed: boolean }> {
     if (clientId !== this.selectedClientId) throw new Error("Account selection changed.");
-    const revocationConfirmed = await this.session.signOut(clientId);
-    this.selectedClientId = undefined;
-    return { status: await this.status(), revocationConfirmed };
+    const abort = new AbortController();
+    this.signOutAborts.add(abort);
+    try {
+      const revocationConfirmed = await this.session.signOut(clientId, abort.signal);
+      this.selectedClientId = undefined;
+      return { status: await this.status(), revocationConfirmed };
+    } finally {
+      this.signOutAborts.delete(abort);
+    }
   }
 
   /**
@@ -214,6 +234,8 @@ export class DesktopAuth {
    */
   async close(): Promise<void> {
     this.closed = true;
+    this.signInAbort?.abort();
+    for (const abort of this.signOutAborts) abort.abort();
     const listener = this.pending ?? (await this.starting?.catch(() => undefined));
     await listener?.close();
   }

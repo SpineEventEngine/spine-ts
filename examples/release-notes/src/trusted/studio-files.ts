@@ -16,17 +16,17 @@ import { randomUUID } from "node:crypto";
 import { open, rename, rm } from "node:fs/promises";
 
 /**
- * Persists approved export bytes after the trusted native save dialog.
+ * Persists correlated current Markdown after the trusted native save dialog.
  */
 export const StudioFiles = {
   /**
    * Replaces the selected destination atomically after syncing a private temporary file.
    *
    * @param destination Path selected through the native save dialog.
-   * @param bytes Exact immutable bytes from the correlated approval Event.
+   * @param bytes Exact immutable bytes from the correlated export Event.
    * @returns Completion after the private temporary file is renamed into place.
    */
-  async writeApproved(destination: string, bytes: Uint8Array): Promise<void> {
+  async writeMarkdown(destination: string, bytes: Uint8Array): Promise<void> {
     const temporary = `${destination}.${randomUUID()}.tmp`;
     try {
       const file = await open(temporary, "wx", 0o600);

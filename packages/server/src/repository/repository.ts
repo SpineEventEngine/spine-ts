@@ -1804,7 +1804,7 @@ export interface RepositoryAccess {
     view: AgentHistoryView,
     read: {
       readonly count: number;
-      readonly maxBytes: number;
+      readonly maxBytes?: number;
       readonly after?: AgentHistoryOrderKey;
     },
     tenantId?: TenantId,
@@ -2040,7 +2040,7 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
     view: AgentHistoryView,
     read: {
       readonly count: number;
-      readonly maxBytes: number;
+      readonly maxBytes?: number;
       readonly after?: AgentHistoryOrderKey;
     },
     tenantId?: TenantId,
@@ -4708,7 +4708,7 @@ const AgentExecutionRunner = {
       if (entry.evidence.case !== "attempt") return false;
       const attempt = entry.evidence.value;
       return (
-        attempt.reservedResponseBytes > 0n &&
+        attempt.transportReserved &&
         attempt.response.case === undefined &&
         !this.hasSavedOperationResult(record, attempt.operation?.value)
       );
@@ -4835,7 +4835,7 @@ const AgentExecutionRunner = {
     return record.journal.flatMap((entry) => {
       if (entry.evidence.case !== "attempt") return [];
       const attempt = entry.evidence.value;
-      return attempt.reservedResponseBytes > 0n &&
+      return attempt.transportReserved &&
         attempt.response.case === undefined &&
         !this.hasSavedOperationResult(record, attempt.operation?.value) &&
         attempt.attempt !== undefined
@@ -5120,10 +5120,9 @@ const AgentExecutionRunner = {
     const policy = repositoryAccess.agentConfiguration(repository).ai;
     if (policy?.authorizeSelection === undefined) return;
     const accepted = session.record().accepted;
-    const deadline = session.record().started?.deadline;
-    if (runtime.ai === undefined || accepted === undefined || deadline === undefined)
+    if (runtime.ai === undefined || accepted === undefined)
       throw new Error("Agent model preference requires accepted start facts.");
-    const deadlineMs = Number(deadline.seconds) * 1_000 + Math.floor(deadline.nanos / 1_000_000);
+    const deadlineMs = this.savedModelDeadline(session, "preference");
     const scope = AgentModelSelection.scope(accepted, repository.stateSchema, tenantId);
     for (const kind of [AiModelKind.GENERATION, AiModelKind.DECISION]) {
       const previous = this.preferenceModel(session.initialPreferences(), kind);
@@ -5144,6 +5143,25 @@ const AgentExecutionRunner = {
         deadlineMs,
       );
     }
+  },
+
+  /**
+   * Reads an optional saved model deadline and detects incomplete persisted bounds.
+   * @param session Fenced Agent execution session.
+   * @param context Selection or preference authorization context.
+   * @returns Saved absolute deadline, when configured.
+   */
+  savedModelDeadline(
+    session: AgentExecutionSession,
+    context: "preference" | "selection",
+  ): number | undefined {
+    const record = session.record();
+    const deadline = record.started?.deadline;
+    if (deadline === undefined && record.started?.bounds?.deadlineMillis !== undefined)
+      throw new Error(`Agent model ${context} deadline was not saved.`);
+    return deadline === undefined
+      ? undefined
+      : Number(deadline.seconds) * 1_000 + Math.floor(deadline.nanos / 1_000_000);
   },
 
   /**
@@ -5735,10 +5753,11 @@ const AgentExecutionRunner = {
     const ai = runtime.ai;
     if (accepted.key === undefined || ai === undefined || configuration.ai === undefined)
       throw new Error("Agent execution start requires accepted work and AI policy.");
-    const limits = registryOptions(ai).invocationLimits;
-    const deadline = addMillis(Time.currentTime(), limits.deadlineMs);
+    const limits = registryOptions(ai).invocationLimits ?? {};
     return create(AgentExecutionStartSchema, {
-      deadline,
+      ...(limits.deadlineMs === undefined
+        ? {}
+        : { deadline: addMillis(Time.currentTime(), limits.deadlineMs) }),
       initialVersion: RepositoryEntities.priorVersion(loaded.current),
       bounds: this.invocationBounds(limits),
     });
@@ -5762,10 +5781,9 @@ const AgentExecutionRunner = {
   ): Promise<AgentExecutionRecord> {
     const ai = runtime.ai;
     const configuration = repositoryAccess.agentConfiguration(repository).ai;
-    const deadline = session.record().started?.deadline;
-    if (ai === undefined || configuration === undefined || deadline === undefined)
+    if (ai === undefined || configuration === undefined)
       throw new Error("Agent model selection requires saved start facts and AI policy.");
-    const deadlineMs = Number(deadline.seconds) * 1_000 + Math.floor(deadline.nanos / 1_000_000);
+    const deadlineMs = this.savedModelDeadline(session, "selection");
     const source = accepted.signal.value?.message;
     for (const kind of ["generation", "decision"] as const) {
       if (!configuration.models.some((model) => model.definition.kind === kind)) continue;
@@ -5845,14 +5863,24 @@ const AgentExecutionRunner = {
    */
   invocationBounds(limits: AiInvocationLimits): AgentInvocationBounds {
     return create(AgentInvocationBoundsSchema, {
-      operations: BigInt(limits.operations),
-      modelRequests: BigInt(limits.modelRequests),
-      toolCalls: BigInt(limits.toolCalls),
-      recordedReads: BigInt(limits.recordedReads),
-      deadlineMillis: BigInt(limits.deadlineMs),
-      totalInputBytes: BigInt(limits.totalInputBytes),
-      totalOutputBytes: BigInt(limits.totalOutputBytes),
-      maxRecoveryBytes: BigInt(limits.maxRecoveryBytes),
+      ...(limits.operations === undefined ? {} : { operations: BigInt(limits.operations) }),
+      ...(limits.modelRequests === undefined
+        ? {}
+        : { modelRequests: BigInt(limits.modelRequests) }),
+      ...(limits.toolCalls === undefined ? {} : { toolCalls: BigInt(limits.toolCalls) }),
+      ...(limits.recordedReads === undefined
+        ? {}
+        : { recordedReads: BigInt(limits.recordedReads) }),
+      ...(limits.deadlineMs === undefined ? {} : { deadlineMillis: BigInt(limits.deadlineMs) }),
+      ...(limits.totalInputBytes === undefined
+        ? {}
+        : { totalInputBytes: BigInt(limits.totalInputBytes) }),
+      ...(limits.totalOutputBytes === undefined
+        ? {}
+        : { totalOutputBytes: BigInt(limits.totalOutputBytes) }),
+      ...(limits.maxRecoveryBytes === undefined
+        ? {}
+        : { maxRecoveryBytes: BigInt(limits.maxRecoveryBytes) }),
     });
   },
 
@@ -6118,13 +6146,16 @@ const AgentExecutionRunner = {
    * @param session Current fenced execution session.
    * @returns Absolute saved deadline in milliseconds.
    */
-  handlerDeadline(session: AgentExecutionSession): number {
+  handlerDeadline(session: AgentExecutionSession): number | undefined {
     const record = session.record();
     const deadline = record.started?.deadline;
-    if (deadline === undefined) throw new Error("Agent handler requires its saved deadline.");
+    if (deadline === undefined && record.started?.bounds?.deadlineMillis !== undefined)
+      throw new Error("Agent handler requires its saved deadline.");
     if (session.signal.aborted || this.deadlineExpired(record))
       throw new Error("Agent handler deadline or claim ended.");
-    return Number(deadline.seconds) * 1_000 + Math.floor(deadline.nanos / 1_000_000);
+    return deadline === undefined
+      ? undefined
+      : Number(deadline.seconds) * 1_000 + Math.floor(deadline.nanos / 1_000_000);
   },
 
   /**
@@ -6138,7 +6169,7 @@ const AgentExecutionRunner = {
   async awaitHandler<Value>(
     work: Promise<Value>,
     signal: AbortSignal,
-    deadlineEpochMs: number,
+    deadlineEpochMs: number | undefined,
   ): Promise<Value> {
     let timer: ReturnType<typeof setTimeout> | undefined;
     let abort: () => void = () => undefined;
@@ -6147,6 +6178,7 @@ const AgentExecutionRunner = {
         reject(new Error("Agent handler claim ended."));
       };
       const tick = () => {
+        if (deadlineEpochMs === undefined) return;
         const remaining = deadlineEpochMs - Time.currentTimeMillis();
         if (remaining <= 0) reject(new Error("Agent handler deadline expired."));
         else timer = setTimeout(tick, Math.min(remaining, 2_147_483_647));
@@ -6157,7 +6189,10 @@ const AgentExecutionRunner = {
     });
     try {
       const result = await Promise.race([work, cutoff]);
-      if (signal.aborted || Time.currentTimeMillis() >= deadlineEpochMs)
+      if (
+        signal.aborted ||
+        (deadlineEpochMs !== undefined && Time.currentTimeMillis() >= deadlineEpochMs)
+      )
         throw new Error("Agent handler deadline or claim ended.");
       return result;
     } finally {

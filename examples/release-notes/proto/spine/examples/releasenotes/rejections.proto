@@ -32,9 +32,9 @@ message StaleReleaseEdit {
   ReleaseDraftId id = 1 [(required) = true, (validate) = true];
 }
 
-// Rejects approval of an older Entity Version or different Markdown bytes.
-message StaleReleaseApproval {
-  // Identifies the release draft to which this domain outcome applies.
+// Rejects editor bytes that are not valid UTF-8 Markdown.
+message InvalidReleaseMarkdown {
+  // Identifies the draft whose submitted bytes cannot be used as Markdown.
   ReleaseDraftId id = 1 [(required) = true, (validate) = true];
 }
 
@@ -62,7 +62,7 @@ message ReleaseInputsConflict {
   ReleaseDraftId id = 1 [(required) = true, (validate) = true];
 }
 
-// Rejects export when current content lacks exact approval.
+// Rejects export against an unavailable or stale current draft.
 message ReleaseExportUnavailable {
   // Identifies the release draft to which this domain outcome applies.
   ReleaseDraftId id = 1 [(required) = true, (validate) = true];

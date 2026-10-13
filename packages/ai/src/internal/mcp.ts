@@ -97,9 +97,20 @@ const copyPolicy = (name: string, policy: McpToolPolicy): McpToolPolicy => {
     throw new TypeError(`tool ${name} authorize is required`);
   return Object.freeze({
     effect: policy.effect,
-    timeoutMs: positiveInteger(policy.timeoutMs, `tool ${name} timeoutMs`),
-    maxArgumentBytes: positiveInteger(policy.maxArgumentBytes, `tool ${name} maxArgumentBytes`),
-    maxResultBytes: positiveInteger(policy.maxResultBytes, `tool ${name} maxResultBytes`),
+    ...(policy.timeoutMs === undefined
+      ? {}
+      : { timeoutMs: positiveInteger(policy.timeoutMs, `tool ${name} timeoutMs`) }),
+    ...(policy.maxArgumentBytes === undefined
+      ? {}
+      : {
+          maxArgumentBytes: positiveInteger(
+            policy.maxArgumentBytes,
+            `tool ${name} maxArgumentBytes`,
+          ),
+        }),
+    ...(policy.maxResultBytes === undefined
+      ? {}
+      : { maxResultBytes: positiveInteger(policy.maxResultBytes, `tool ${name} maxResultBytes`) }),
     authorize: policy.authorize,
   });
 };

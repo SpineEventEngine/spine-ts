@@ -47,6 +47,7 @@ const fixture = vi.hoisted(() => {
   const auth = {
     status: vi.fn().mockResolvedValue({ accounts: [], planEnabled: false }),
     signIn: vi.fn().mockResolvedValue({ signedIn: true }),
+    signInOrResume: vi.fn().mockResolvedValue({ signedIn: true }),
     selectAccount: vi.fn().mockResolvedValue({ selected: true }),
     models: vi.fn().mockResolvedValue([{ slug: "account-model" }]),
     signOut: vi.fn().mockResolvedValue({ revoked: true }),
@@ -108,17 +109,14 @@ vi.mock("electron", () => ({
 vi.mock("../src/trusted/desktop-auth.js", () => ({
   DesktopAuth: function DesktopAuth(
     _session: unknown,
-    _store: unknown,
     openAuthUrl: (url: string) => Promise<void>,
   ) {
     fixture.openAuthUrl = openAuthUrl;
     return fixture.auth;
   },
 }));
-vi.mock("../src/trusted/siwc-session.js", () => ({
-  SiwcSession: function SiwcSession() {
-    return {};
-  },
+vi.mock("@spine-event-engine/ai-vercel-ax", () => ({
+  VercelAx: { chatgptPlanSession: () => ({}) },
 }));
 vi.mock("../src/trusted/credential-store.js", () => ({
   CredentialStore: function CredentialStore() {
@@ -179,6 +177,9 @@ it("registers one validated IPC boundary and rejects forged frames before applic
   ).resolves.toEqual({ model: "account-model" });
   expect(fixture.plan.selectDiscovered).toHaveBeenCalledWith("issued-client", "account-model");
   await expect(handler(event, "sign-in", null)).resolves.toEqual({ signedIn: true });
+  expect(fixture.auth.signInOrResume).toHaveBeenCalledOnce();
+  await expect(handler(event, "add-account", null)).resolves.toEqual({ signedIn: true });
+  expect(fixture.auth.signIn).toHaveBeenCalledWith();
   await expect(handler(event, "reconnect", "issued-client")).resolves.toEqual({ signedIn: true });
   expect(fixture.auth.signIn).toHaveBeenLastCalledWith("issued-client");
   await expect(handler(event, "select-account", "issued-client")).resolves.toEqual({

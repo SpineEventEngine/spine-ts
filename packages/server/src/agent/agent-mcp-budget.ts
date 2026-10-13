@@ -116,7 +116,7 @@ export class AgentMcpBudget {
   constructor(
     private readonly session: JournalSession,
     private readonly operation: AgentNamedOperation,
-    private readonly deadlineEpochMs: number,
+    private readonly deadlineEpochMs: number | undefined,
     private readonly audit: AgentInteractionAudit | undefined,
   ) {}
 
@@ -135,6 +135,29 @@ export class AgentMcpBudget {
           : 0n),
       0n,
     );
+    const remaining = AgentMcpBudget.remainingOutputCredit(record);
+    const inputLimit = record.started?.bounds?.totalInputBytes;
+    if (inputLimit !== undefined && spent + BigInt(input) > inputLimit)
+      throw new AgentExecutionFault(
+        "TOOL_BUDGET_EXCEEDED",
+        "Agent invocation input byte budget is exhausted.",
+      );
+    if (remaining !== undefined && BigInt(output) > remaining)
+      throw new AgentExecutionFault(
+        "TOOL_BUDGET_EXCEEDED",
+        "Agent invocation output byte credit is exhausted.",
+      );
+  }
+
+  /**
+   * Returns unspent configured invocation output credit, if configured.
+   *
+   * @param record Durable execution record containing receipts and optional bounds.
+   * @returns Remaining byte credit, or undefined when no total bound was configured.
+   */
+  static remainingOutputCredit(record: AgentExecutionRecord): bigint | undefined {
+    const limit = record.started?.bounds?.totalOutputBytes;
+    if (limit === undefined) return undefined;
     const reserved = record.journal.reduce(
       (sum, entry) =>
         sum +
@@ -143,16 +166,7 @@ export class AgentMcpBudget {
           : 0n),
       0n,
     );
-    if (spent + BigInt(input) > (record.started?.bounds?.totalInputBytes ?? 0n))
-      throw new AgentExecutionFault(
-        "TOOL_BUDGET_EXCEEDED",
-        "Agent invocation input byte budget is exhausted.",
-      );
-    if (reserved + BigInt(output) > (record.started?.bounds?.totalOutputBytes ?? 0n))
-      throw new AgentExecutionFault(
-        "TOOL_BUDGET_EXCEEDED",
-        "Agent invocation output byte credit is exhausted.",
-      );
+    return limit - reserved;
   }
 
   /**
@@ -164,23 +178,49 @@ export class AgentMcpBudget {
   async reserveMessage(server: string, request: AiMcpMessageRequest): Promise<AiMcpMessageTicket> {
     this.#checkRequest(server, request);
     const id = randomUUID();
+    let effectiveCredit: number | undefined;
     await this.session.update((record) => {
       if (request.phase === "call" && request.toolCallId !== undefined)
         this.#checkCallIntent(record, server, request.toolCallId);
-      AgentMcpBudget.checkSharedBytes(record, request.inputBytes, request.maxOutputBytes);
-      const entry = this.#entry(server, id, request, record.journal.length);
+      effectiveCredit = this.#responseCredit(record, request);
+      AgentMcpBudget.checkSharedBytes(record, request.inputBytes, effectiveCredit ?? 0);
+      const entry = this.#entry(server, id, request, record.journal.length, effectiveCredit);
       record.journal.push(entry);
       this.#checkCapacity(record);
-      if (request.phase === "call" && request.toolCallId !== undefined)
-        this.#checkCallCapacity(record, request.toolCallId, request.maxOutputBytes);
+      if (
+        request.phase === "call" &&
+        request.toolCallId !== undefined &&
+        effectiveCredit !== undefined
+      )
+        this.#checkCallCapacity(record, request.toolCallId, effectiveCredit);
       return record;
     });
     return {
       id,
       signal: this.session.signal,
-      deadlineEpochMs: this.deadlineEpochMs,
-      maxOutputBytes: request.maxOutputBytes,
+      ...(this.deadlineEpochMs === undefined ? {} : { deadlineEpochMs: this.deadlineEpochMs }),
+      ...(effectiveCredit === undefined ? {} : { maxOutputBytes: effectiveCredit }),
     };
+  }
+
+  /**
+   * Narrows optional message credit by remaining configured invocation credit.
+   * @param record Current durable execution record.
+   * @param request Physical MCP message request.
+   * @returns Effective byte credit, or undefined when no ceiling is configured.
+   */
+  #responseCredit(record: AgentExecutionRecord, request: AiMcpMessageRequest): number | undefined {
+    const remaining = AgentMcpBudget.remainingOutputCredit(record);
+    if (remaining !== undefined && remaining < 1n)
+      AgentMcpBudget.checkSharedBytes(record, request.inputBytes, 1);
+    const available = remaining === undefined ? undefined : Number(remaining);
+    if (available !== undefined && !Number.isSafeInteger(available))
+      throw new Error("Agent MCP invocation output credit is not a safe byte count.");
+    return request.maxOutputBytes === undefined
+      ? available
+      : available === undefined
+        ? request.maxOutputBytes
+        : Math.min(request.maxOutputBytes, available);
   }
 
   /**
@@ -194,7 +234,7 @@ export class AgentMcpBudget {
     const evidence = this.#evidence(this.session.record(), ticketId);
     if (evidence.settled) throw new Error("Agent MCP message already settled.");
     const next = (this.#received.get(ticketId) ?? 0) + bytes;
-    if (next > Number(evidence.reservedResponseBytes))
+    if (evidence.reservedResponseBytes > 0n && next > Number(evidence.reservedResponseBytes))
       throw new Error("Agent MCP response exceeded reserved bytes.");
     this.#received.set(ticketId, next);
   }
@@ -217,12 +257,13 @@ export class AgentMcpBudget {
         if (
           !Number.isSafeInteger(bytes) ||
           bytes < 0 ||
-          bytes > Number(evidence.reservedResponseBytes)
+          (evidence.reservedResponseBytes > 0n && bytes > Number(evidence.reservedResponseBytes))
         )
           throw new Error("Agent MCP response exceeded reserved bytes.");
         evidence.receivedBytes = BigInt(bytes);
       }
       evidence.settled = true;
+      this.#checkCapacity(record);
       return record;
     });
     this.#received.delete(ticketId);
@@ -238,7 +279,7 @@ export class AgentMcpBudget {
   async journalToolIntent(
     invocation: AiToolInvocation,
     facts: Pick<ToolRequest, "server" | "tool" | "argumentsJson" | "effect">,
-    operationLimit: number,
+    operationLimit: number | undefined,
   ): Promise<AgentMcpIntent> {
     const current = this.session.record();
     this.#checkProposal(current, invocation);
@@ -276,7 +317,7 @@ export class AgentMcpBudget {
   async #saveIntent(
     invocation: AiToolInvocation,
     facts: Pick<ToolRequest, "server" | "tool" | "argumentsJson" | "effect">,
-    operationLimit: number,
+    operationLimit: number | undefined,
   ): Promise<AgentMcpIntent> {
     const callId = randomUUID();
     const request = this.#toolRequest(facts, callId);
@@ -303,16 +344,17 @@ export class AgentMcpBudget {
    * @param record Current fenced execution image.
    * @param operationLimit Selected capability's tool limit.
    */
-  #checkToolCount(record: AgentExecutionRecord, operationLimit: number): void {
+  #checkToolCount(record: AgentExecutionRecord, operationLimit: number | undefined): void {
     const calls = record.journal.filter((entry) => entry.evidence.case === "tool");
     const operationCalls = calls.filter(
       (entry) =>
         entry.evidence.case === "tool" &&
         entry.evidence.value.operation?.value === this.operation.operation?.value,
     );
+    const invocationLimit = record.started?.bounds?.toolCalls;
     if (
-      operationCalls.length >= operationLimit ||
-      calls.length >= Number(record.started?.bounds?.toolCalls ?? 0n)
+      (operationLimit !== undefined && operationCalls.length >= operationLimit) ||
+      (invocationLimit !== undefined && calls.length >= Number(invocationLimit))
     )
       throw new AgentExecutionFault(
         "TOOL_BUDGET_EXCEEDED",
@@ -583,15 +625,18 @@ export class AgentMcpBudget {
    * Validates a bounded physical send under the active fence and saved deadline.
    */
   #checkRequest(server: string, request: AiMcpMessageRequest): void {
-    if (this.session.signal.aborted || Time.currentTimeMillis() >= this.deadlineEpochMs)
+    if (
+      this.session.signal.aborted ||
+      (this.deadlineEpochMs !== undefined && Time.currentTimeMillis() >= this.deadlineEpochMs)
+    )
       throw new Error("Agent MCP execution deadline expired.");
     if (server.trim().length === 0 || request.method.trim().length === 0)
       throw new Error("Agent MCP server and method must be nonblank.");
     if (
       !Number.isSafeInteger(request.inputBytes) ||
       request.inputBytes < 0 ||
-      !Number.isSafeInteger(request.maxOutputBytes) ||
-      request.maxOutputBytes < 1
+      (request.maxOutputBytes !== undefined &&
+        (!Number.isSafeInteger(request.maxOutputBytes) || request.maxOutputBytes < 1))
     )
       throw new Error("Agent MCP physical message byte bounds are invalid.");
     if ((request.phase === "call") !== (request.toolCallId !== undefined))
@@ -601,7 +646,13 @@ export class AgentMcpBudget {
   /**
    * Constructs exact journal evidence for the reserved physical message.
    */
-  #entry(server: string, id: string, request: AiMcpMessageRequest, ordinal: number) {
+  #entry(
+    server: string,
+    id: string,
+    request: AiMcpMessageRequest,
+    ordinal: number,
+    credit?: number,
+  ) {
     return create(JournalEntrySchema, {
       ordinal: BigInt(ordinal),
       evidence: {
@@ -616,7 +667,7 @@ export class AgentMcpBudget {
               : AgentProtocolPhase.AGENT_PROTOCOL_CALL,
           method: request.method,
           inputBytes: BigInt(request.inputBytes),
-          reservedResponseBytes: BigInt(request.maxOutputBytes),
+          reservedResponseBytes: BigInt(credit ?? 0),
           ...(request.toolCallId === undefined
             ? {}
             : {
@@ -643,7 +694,8 @@ export class AgentMcpBudget {
    */
   #checkCapacity(record: AgentExecutionRecord, history: readonly AgentHistoryEntry[] = []): void {
     const size = AgentExecutionSizes.record(record);
-    if (size > Number(record.started?.bounds?.maxRecoveryBytes ?? 0n))
+    const recoveryLimit = record.started?.bounds?.maxRecoveryBytes;
+    if (recoveryLimit !== undefined && size > Number(recoveryLimit))
       throw new Error("Agent MCP journal exceeds invocation recovery bytes.");
     const capacity = this.session.capacity();
     const headBytes = this.#headBytes(record);

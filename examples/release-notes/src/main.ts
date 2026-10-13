@@ -25,9 +25,9 @@ import {
 } from "electron";
 
 import { CredentialStore } from "./trusted/credential-store.js";
+import { VercelAx } from "@spine-event-engine/ai-vercel-ax";
 import { DesktopAuth } from "./trusted/desktop-auth.js";
 import { assertIpcSender, electronCipher, validateIpc } from "./trusted/electron-security.js";
-import { SiwcSession } from "./trusted/siwc-session.js";
 import { PlanModelSelection } from "./trusted/plan-model-selection.js";
 import { ReleaseStudio } from "./trusted/studio-service.js";
 import { isStudioIpcCommand, validateStudioIpc } from "./trusted/studio-ipc.js";
@@ -53,8 +53,11 @@ const Runtime = {
       join(app.getPath("userData"), "credentials"),
       electronCipher(safeStorage),
     );
-    const session = new SiwcSession(store);
-    const auth = new DesktopAuth(session, store, async (url) => {
+    const session = VercelAx.chatgptPlanSession({
+      agentName: "Release Notes Studio",
+      credentials: store,
+    });
+    const auth = new DesktopAuth(session, async (url) => {
       if (new URL(url).origin !== "https://auth.openai.com")
         throw new Error("Invalid sign-in destination.");
       await shell.openExternal(url);
@@ -118,12 +121,12 @@ const Runtime = {
     StudioWindowClose.install(window, studio, auth, async () => {
       const choice = await dialog.showMessageBox(window, {
         type: "warning",
-        buttons: ["Wait", "Stop and quit"],
+        buttons: ["Wait", "Stop"],
         defaultId: 0,
         cancelId: 0,
         message: "Your release notes may still be in progress.",
         detail:
-          "Wait keeps this window open. If you stop and quit, your drafts will disappear and ChatGPT usage may still count.",
+          "Wait keeps this window open. If you stop, your drafts will disappear and ChatGPT usage may still count.",
       });
       return choice.response === 1 ? "stop" : "wait";
     });
@@ -229,6 +232,8 @@ const Runtime = {
       case "current-model":
         return { model: (await plan.activeBinding())?.model ?? "" };
       case "sign-in":
+        return await auth.signInOrResume();
+      case "add-account":
         return await auth.signIn();
       case "reconnect":
         return await auth.signIn(clientId);

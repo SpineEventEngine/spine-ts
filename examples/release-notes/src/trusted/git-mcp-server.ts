@@ -43,14 +43,13 @@ export const GitMcpServer = {
   },
 
   /**
-   * Creates a structured success response within the transport budget.
+   * Creates a structured success response.
    *
    * @param value Credential-free tool result.
    * @returns Structured and text result for MCP clients.
    */
   success(value: Record<string, unknown>): CallToolResult {
     const encoded = JSON.stringify(value);
-    if (Buffer.byteLength(encoded, "utf8") > 200_000) return this.denied();
     return { content: [{ type: "text" as const, text: encoded }], structuredContent: value };
   },
 
@@ -69,7 +68,7 @@ export const GitMcpServer = {
   },
 
   /**
-   * Registers bounded catalog paging.
+   * Registers optional catalog paging.
    *
    * @param server SDK server.
    * @param comparison Immutable accepted comparison.
@@ -80,14 +79,16 @@ export const GitMcpServer = {
       {
         title: "List release changes",
         description:
-          "Page through accepted commits, changed paths, and per-parent patch evidence until nextPageToken is absent.",
-        inputSchema: z.object({ pageToken: z.string().optional() }).strict(),
+          "List accepted commits, changed paths, and per-parent patch evidence. Set pageSize to page through results until nextPageToken is absent.",
+        inputSchema: z
+          .object({ pageToken: z.string().optional(), pageSize: z.number().optional() })
+          .strict(),
         annotations,
       },
-      ({ pageToken }, context) => {
+      ({ pageToken, pageSize }, context) => {
         if (context.mcpReq.signal.aborted) return this.denied();
         try {
-          return this.success(comparison.listReleaseChanges(pageToken));
+          return this.success(comparison.listReleaseChanges(pageToken, pageSize));
         } catch {
           return this.denied();
         }

@@ -68,9 +68,6 @@ export const ReleaseGitRegistration = {
     const active = (scope: AiScope, control: AiControl) => this.active(options, scope, control);
     const policy = {
       effect: "read" as const,
-      timeoutMs: 10_000,
-      maxArgumentBytes: 16_384,
-      maxResultBytes: 512_000,
       authorize: async (scope: AiScope, _call: unknown, control: AiControl) =>
         (await active(scope, control)) !== undefined,
     };
@@ -109,11 +106,18 @@ export const ReleaseGitRegistration = {
     scope: AiScope,
     control: AiControl,
   ): Promise<GitReleaseComparison | undefined> {
-    if (control.signal.aborted || Time.currentTimeMillis() >= control.deadlineEpochMs)
+    if (
+      control.signal.aborted ||
+      (control.deadlineEpochMs !== undefined && Time.currentTimeMillis() >= control.deadlineEpochMs)
+    )
       return undefined;
     const comparison = await options.resolveComparison(scope, control);
     control.signal.throwIfAborted();
-    if (Time.currentTimeMillis() >= control.deadlineEpochMs) return undefined;
+    if (
+      control.deadlineEpochMs !== undefined &&
+      Time.currentTimeMillis() >= control.deadlineEpochMs
+    )
+      return undefined;
     return comparison;
   },
 };

@@ -14,6 +14,7 @@
 
 import { createHash } from "node:crypto";
 import { realpath, stat } from "node:fs/promises";
+import { basename } from "node:path";
 
 import { GitAdmission, type GitAdmissionControl } from "./git-admission.js";
 import { GitCommand } from "./git-command.js";
@@ -42,6 +43,83 @@ export interface GitComparisonInput {
    */
   readonly target: string;
 }
+
+/**
+ * Credential-free choices for a native-selected local Git project.
+ */
+export interface GitProjectSelection {
+  /**
+   * Canonical trusted path, never exposed through renderer IPC.
+   */
+  readonly repository: string;
+
+  /**
+   * Basename displayed in the dashboard and wizard.
+   */
+  readonly name: string;
+
+  /**
+   * Actual local refs and available HEAD revisions.
+   */
+  readonly refs: readonly string[];
+}
+
+/**
+ * Resolves only actual local refs while retaining the canonical path in the trusted process.
+ */
+export const GitProject = {
+  /**
+   * Inspects a native-picked Git worktree with bounded noninteractive commands.
+   * @param repository Native-picked directory.
+   * @param gitExecutable Trusted Git executable.
+   * @returns Canonical project path, display name, and actual refs.
+   */
+  async select(repository: string, gitExecutable: string): Promise<GitProjectSelection> {
+    const selected = await realpath(repository);
+    const run = (args: readonly string[]) => GitCommand.run(gitExecutable, selected, args);
+    if ((await run(["rev-parse", "--is-bare-repository"])).toString("utf8") !== "false\n")
+      throw new Error("Selected Git repository requires a worktree.");
+    const root = (await run(["rev-parse", "--show-toplevel"])).toString("utf8").trimEnd();
+    if (!root.startsWith("/")) throw new Error("Selected Git repository root is invalid.");
+    const canonical = await realpath(root);
+    const listed = (
+      await GitCommand.run(gitExecutable, canonical, [
+        "for-each-ref",
+        "--format=%(refname:short)",
+        "refs/heads",
+        "refs/tags",
+      ])
+    )
+      .toString("utf8")
+      .split("\n")
+      .filter(Boolean);
+    const refs = await availableRefs(gitExecutable, canonical, listed);
+    if (refs.length < 2) throw new Error("Select a repository with two available revisions.");
+    return { repository: canonical, name: basename(canonical), refs };
+  },
+};
+
+const availableRefs = async (
+  gitExecutable: string,
+  canonical: string,
+  listed: readonly string[],
+): Promise<string[]> => {
+  const refs = [...new Set(listed)];
+  for (const revision of ["HEAD", "HEAD~1"]) {
+    try {
+      await GitCommand.run(gitExecutable, canonical, [
+        "rev-parse",
+        "--verify",
+        "--end-of-options",
+        `${revision}^{commit}`,
+      ]);
+      refs.push(revision);
+    } catch {
+      /* This repository does not contain that revision. */
+    }
+  }
+  return refs;
+};
 
 /**
  * Fixed cross-process comparison with selected repository identity.
@@ -318,7 +396,6 @@ export class GitReleaseComparison {
         "--",
       ]),
     );
-    if (changes.length > 2_000) throw new Error("Change catalog exceeds bound; narrow the range.");
     for (const change of changes) admission.record(change);
     return changes;
   }
@@ -358,7 +435,6 @@ export class GitReleaseComparison {
       await run(["rev-list", "--parents", "--reverse", `${base}..${target}`]),
     ).trim();
     const ids = rows ? rows.split("\n") : [];
-    if (ids.length > 200) throw new Error("Commit catalog exceeds bound; narrow the range.");
     const commits: GitCommit[] = [];
     const evidence: GitEvidence[] = [];
     for (const row of ids) {
@@ -375,8 +451,6 @@ export class GitReleaseComparison {
           admission.record(item);
           evidence.push(item);
         }
-        if (evidence.length > 2_000)
-          throw new Error("Evidence catalog exceeds bound; narrow the range.");
       }
     }
     return { commits, evidence };
@@ -413,16 +487,15 @@ export class GitReleaseComparison {
    * Executes a command only while the selected path retains its identity.
    *
    * @param args Fixed Git arguments.
-   * @param maxBytes Maximum stdout bytes.
    * @param signal Optional cancellation signal.
-   * @returns Complete bounded command output.
+   * @returns Complete command output.
    */
-  private async run(args: string[], maxBytes?: number, signal?: AbortSignal): Promise<Buffer> {
+  private async run(args: string[], signal?: AbortSignal): Promise<Buffer> {
     const info = await stat(this.repository);
     if (info.dev !== this.repositoryDevice || info.ino !== this.repositoryInode) {
       throw new Error("Selected Git repository changed.");
     }
-    return GitCommand.run(this.executable, this.repository, args, maxBytes, signal);
+    return GitCommand.run(this.executable, this.repository, args, signal);
   }
 
   /**
@@ -462,27 +535,35 @@ export class GitReleaseComparison {
   }
 
   /**
-   * Lists the complete accepted catalog in bounded pages.
+   * Lists the accepted catalog, paging only when a size is requested.
    *
    * @param pageToken Optional continuation from the previous page.
+   * @param pageSize Optional caller-selected positive page size.
    * @returns One page and an explicit continuation when more remains.
    */
-  listReleaseChanges(pageToken?: string): {
+  listReleaseChanges(
+    pageToken?: string,
+    pageSize?: number,
+  ): {
     readonly entries: readonly GitListingEntry[];
     readonly complete: true;
     readonly nextPageToken?: string;
   } {
-    if (pageToken !== undefined && !/^(?:0|[1-9][0-9]{0,5})$/.test(pageToken)) {
+    if (pageToken !== undefined && !/^(?:0|[1-9][0-9]*)$/.test(pageToken)) {
       throw new Error("Invalid catalog page token.");
     }
     const offset = pageToken === undefined ? 0 : Number(pageToken);
+    if (!Number.isSafeInteger(offset)) throw new Error("Invalid catalog page token.");
+    if (pageSize !== undefined && (!Number.isSafeInteger(pageSize) || pageSize < 1))
+      throw new Error("Invalid catalog page size.");
     const entries: GitListingEntry[] = [
       ...this.commits.map((entry) => ({ ...entry, kind: "commit" as const })),
       ...this.changes.map((entry) => ({ ...entry, kind: "change" as const })),
       ...this.evidence.map((entry) => ({ ...entry, kind: "evidence" as const })),
     ];
     if (offset > entries.length) throw new Error("Invalid catalog page token.");
-    const next = offset + 20;
+    const next =
+      pageSize === undefined ? entries.length : Math.min(entries.length, offset + pageSize);
     return {
       entries: entries.slice(offset, next),
       complete: true,
@@ -537,7 +618,6 @@ export class GitReleaseComparison {
             "--",
             ...paths,
           ],
-          200_000,
           signal,
         ),
       );
@@ -546,7 +626,7 @@ export class GitReleaseComparison {
       }
       return { complete: true, patch };
     } catch {
-      return { complete: false, reason: "patch-unavailable-or-too-large" };
+      return { complete: false, reason: "patch-unavailable" };
     }
   }
 
@@ -565,20 +645,14 @@ export class GitReleaseComparison {
       throw new Error("Requested release file is outside the verified catalog.");
     }
     const tree = GitCodec.text(
-      await this.run(
-        ["ls-tree", "-z", this.targetCommit, "--", `:(literal)${path}`],
-        undefined,
-        signal,
-      ),
+      await this.run(["ls-tree", "-z", this.targetCommit, "--", `:(literal)${path}`], signal),
     );
     const match = /^(100644|100755) blob ([a-f0-9]{40}|[a-f0-9]{64})\t([^\0]+)\0$/.exec(tree);
     const objectId = match?.[2];
     if (match?.[3] !== path || objectId === undefined)
       return { complete: false, targetCommit: this.targetCommit, reason: "not-regular-file" };
     try {
-      const content = GitCodec.text(
-        await this.run(["cat-file", "blob", objectId], 200_000, signal),
-      );
+      const content = GitCodec.text(await this.run(["cat-file", "blob", objectId], signal));
       if (content.includes("\0"))
         return { complete: false, targetCommit: this.targetCommit, reason: "binary-file" };
       return { complete: true, targetCommit: this.targetCommit, text: content };
@@ -586,7 +660,7 @@ export class GitReleaseComparison {
       return {
         complete: false,
         targetCommit: this.targetCommit,
-        reason: "file-unavailable-or-too-large",
+        reason: "file-unavailable",
       };
     }
   }

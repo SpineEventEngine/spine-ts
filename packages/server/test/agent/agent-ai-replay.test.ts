@@ -96,6 +96,16 @@ const generation = AiModel.define({
   outputMode: "prompt-and-validate",
   limits: { ...limits, maxOutputTokens: 100 },
 });
+const unboundedGeneration = AiModel.define({
+  name: "propose-support-reply",
+  version: "v1",
+  kind: "generation",
+  input: SupportTicketFactsSchema,
+  output: ProposedSupportReplySchema,
+  instructions: "Propose a support reply.",
+  outputMode: "prompt-and-validate",
+  limits: {},
+});
 const correctiveGeneration = AiModel.define({
   name: "propose-support-reply",
   version: "v1",
@@ -155,6 +165,7 @@ function harness(
   boundaryFault?: BoundaryFault,
   anthropicPrepared = false,
   setupFailure?: "denied" | "unsupported",
+  unbounded = false,
 ) {
   const model =
     kind === "decision"
@@ -163,7 +174,9 @@ function harness(
         ? mcpGeneration
         : correction
           ? correctiveGeneration
-          : generation;
+          : unbounded
+            ? unboundedGeneration
+            : generation;
   const ref = ModelRef.of(`scripted-${kind}`, "v1");
   const selectedIdentity = anthropicPrepared
     ? { ...identity, provider: "anthropic", model: "claude-sonnet-4-5" }
@@ -361,7 +374,7 @@ function harness(
           throw error;
         }
       }
-      await execution.control.reserveTransport(attempt.id, 20, 200);
+      await execution.control.reserveTransport(attempt.id, 20, unbounded ? undefined : 200);
       physicalRequests++;
       if (fail) {
         const failure = await execution.control.recordFailure("UNAVAILABLE", true);
@@ -430,18 +443,25 @@ function harness(
     status: AgentInvocationStatus.AGENT_INVOCATION_ACTIVE,
     claimToken: "claim-7",
     started: create(AgentExecutionStartSchema, {
-      deadline: create(TimestampSchema, { seconds: Time.currentTime().seconds + 60n }),
+      ...(unbounded
+        ? {}
+        : { deadline: create(TimestampSchema, { seconds: Time.currentTime().seconds + 60n }) }),
       initialVersion: create(VersionSchema, { number: 0 }),
-      bounds: create(AgentInvocationBoundsSchema, {
-        operations: 1n,
-        modelRequests: correction ? 2n : 1n,
-        toolCalls: setupFailure ? 1n : 0n,
-        recordedReads: 0n,
-        deadlineMillis: 60_000n,
-        totalInputBytes: 4_000n,
-        totalOutputBytes: 4_000n,
-        maxRecoveryBytes: 24_000n,
-      }),
+      bounds: create(
+        AgentInvocationBoundsSchema,
+        unbounded
+          ? {}
+          : {
+              operations: 1n,
+              modelRequests: correction ? 2n : 1n,
+              toolCalls: setupFailure ? 1n : 0n,
+              recordedReads: 0n,
+              deadlineMillis: 60_000n,
+              totalInputBytes: 4_000n,
+              totalOutputBytes: 4_000n,
+              maxRecoveryBytes: 24_000n,
+            },
+      ),
       models: [
         create(AgentSelectedModelSchema, {
           kind: kind === "generation" ? 1 : 2,
@@ -484,16 +504,18 @@ function harness(
   };
   let registry = AiRegistry.create({
     defaultModels: { [kind]: ref },
-    invocationLimits: {
-      operations: 1,
-      modelRequests: correction ? 2 : 1,
-      toolCalls: setupFailure ? 1 : 0,
-      recordedReads: 0,
-      deadlineMs: 60_000,
-      totalInputBytes: 4_000,
-      totalOutputBytes: 4_000,
-      maxRecoveryBytes: 24_000,
-    },
+    invocationLimits: unbounded
+      ? {}
+      : {
+          operations: 1,
+          modelRequests: correction ? 2 : 1,
+          toolCalls: setupFailure ? 1 : 0,
+          recordedReads: 0,
+          deadlineMs: 60_000,
+          totalInputBytes: 4_000,
+          totalOutputBytes: 4_000,
+          maxRecoveryBytes: 24_000,
+        },
     concurrentOperations: 1,
     queuedOperations: 0,
   }).register(backend);
@@ -587,6 +609,18 @@ function harness(
 }
 
 describe("Agent AI replay from a persisted execution journal", () => {
+  it("persists a physical attempt without an unconfigured byte or deadline ceiling", async () => {
+    const fixture = harness("generation", false, false, undefined, false, undefined, true);
+    await expect(
+      fixture.runtime().invoke(unboundedGeneration, { call: "draft", conversation, input }),
+    ).resolves.toMatchObject({ ok: true });
+    const attempt = fixture.saved().journal.find((entry) => entry.evidence.case === "attempt");
+    expect(attempt?.evidence.case).toBe("attempt");
+    if (attempt?.evidence.case !== "attempt") throw new Error("Expected physical attempt.");
+    expect(attempt.evidence.value.transportReserved).toBe(true);
+    expect(attempt.evidence.value.reservedResponseBytes).toBe(0n);
+    expect(attempt.evidence.value.receivedBytes).toBe(10n);
+  });
   it("rejects a missing saved deployment before executing the backend", async () => {
     const fixture = harness("generation");
     fixture.changeSaved((record) => {
@@ -678,7 +712,9 @@ describe("Agent AI replay from a persisted execution journal", () => {
     await expect(
       fixture.runtime().invoke(generation, { call: "draft", conversation, input }),
     ).rejects.toThrow(
-      fault === "invalid-credit" || fault === "unknown-ticket" ? message : "cancelled",
+      fault === "invalid-credit" || fault === "unknown-ticket" || fault === "duplicate-reservation"
+        ? message
+        : "cancelled",
     );
     const boundaryError = fixture.boundaryError();
     if (!(boundaryError instanceof Error)) throw new Error("Expected Agent boundary failure.");

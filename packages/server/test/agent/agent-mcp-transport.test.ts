@@ -182,7 +182,9 @@ describe("real MCP transport through Agent runtime", () => {
           id: `physical-${String(++sequence)}`,
           signal: controller.signal,
           deadlineEpochMs: Date.now() + 5_000,
-          maxOutputBytes: request.maxOutputBytes,
+          ...(request.maxOutputBytes === undefined
+            ? {}
+            : { maxOutputBytes: request.maxOutputBytes }),
         });
       }),
       onReceived: vi.fn<AgentMcpHost["onReceived"]>((_id, bytes) => {

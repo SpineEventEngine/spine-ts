@@ -36,6 +36,8 @@ test("IPC rejects an unexpected sender and structured arguments", () => {
   };
   expect(validateIpc(good, "models", "issued-client")).toBe("issued-client");
   expect(validateIpc(good, "current-model", null)).toBeNull();
+  expect(validateIpc(good, "add-account", null)).toBeNull();
+  expect(() => validateIpc(good, "add-account", "issued-client")).toThrow();
   expect(() => validateIpc(good, "status", { token: "secret" })).toThrow("Unexpected IPC argument");
   expect(() => validateIpc({ ...good, senderId: 5 }, "models", "issued-client")).toThrow();
   expect(() =>

@@ -338,9 +338,6 @@ importers:
       lucide-react:
         specifier: 1.28.0
         version: 1.28.0(react@19.2.8)
-      openid-client:
-        specifier: 6.8.8
-        version: 6.8.8
       react:
         specifier: 19.2.8
         version: 19.2.8
@@ -497,6 +494,9 @@ importers:
       ajv:
         specifier: 8.20.0
         version: 8.20.0
+      openid-client:
+        specifier: 6.8.8
+        version: 6.8.8
     devDependencies:
       '@ai-sdk/anthropic':
         specifier: 4.0.72

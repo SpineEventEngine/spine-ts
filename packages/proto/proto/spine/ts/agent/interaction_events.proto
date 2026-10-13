@@ -87,10 +87,7 @@ message AgentAiOperationStarted {
   ];
 
   // Effective physical, tool, time and byte limits.
-  AiOperationLimits limits = 5 [
-    (required) = true,
-    (validate) = true
-  ];
+  AiOperationLimits limits = 5 [(validate) = true];
 
   // Non-secret connection identity after authorization.
   AiConnectionIdentity connection = 6 [(validate) = true];

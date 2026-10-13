@@ -19,15 +19,15 @@ import { expect, it } from "vitest";
 
 import { StudioFiles } from "../src/trusted/studio-files.js";
 
-it("writes only the approved bytes atomically and cleans failed temporary writes", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "spine-approved-file-"));
+it("writes only the saved Markdown bytes atomically and cleans failed temporary writes", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "spine-markdown-file-"));
   try {
     const destination = join(directory, "release.md");
-    const approved = new Uint8Array([35, 32, 82, 101, 108, 101, 97, 115, 101, 10]);
-    await StudioFiles.writeApproved(destination, approved);
-    expect(await readFile(destination)).toEqual(Buffer.from(approved));
+    const markdown = new Uint8Array([35, 32, 82, 101, 108, 101, 97, 115, 101, 10]);
+    await StudioFiles.writeMarkdown(destination, markdown);
+    expect(await readFile(destination)).toEqual(Buffer.from(markdown));
     await expect(
-      StudioFiles.writeApproved(join(directory, "missing", "release.md"), approved),
+      StudioFiles.writeMarkdown(join(directory, "missing", "release.md"), markdown),
     ).rejects.toThrow();
     expect(await readdir(directory)).toEqual(["release.md"]);
   } finally {

@@ -182,7 +182,7 @@ const advertisedFunctions = (request: AiBackendExecution) => {
  * @param tool Discovered tool metadata.
  * @param index Model-visible tool position.
  * @param seen Previously checked references.
- * @returns Bounded model-visible tool metadata.
+ * @returns Validated model-visible tool metadata.
  */
 const advertisedFunction = (
   reference: { server: string; tool: string },
@@ -194,17 +194,12 @@ const advertisedFunction = (
   if (tool?.server !== reference.server || tool.tool !== reference.tool || seen.has(key))
     throw new TypeError("MCP tool catalog mismatch");
   seen.add(key);
-  if (
-    Buffer.byteLength(tool.description) > 4_096 ||
-    Buffer.byteLength(tool.inputSchemaJson) > 16_384 ||
-    (tool.outputSchemaJson !== undefined && Buffer.byteLength(tool.outputSchemaJson) > 16_384)
-  )
-    throw new TypeError("MCP tool catalog exceeds limit");
   const schema = JSON.parse(tool.inputSchemaJson) as JSONSchema7;
   if (schema.type !== "object") throw new TypeError("MCP tool schema must be an object");
   const axSchema = axToolSchema(schema as Record<string, unknown>);
   if (JSON.stringify(canonicalJsonValue(axSchema)) !== tool.inputSchemaJson)
     throw new TypeError("MCP tool schema unsupported by Ax");
+  if (tool.outputSchemaJson !== undefined) validateOutputSchema(tool.outputSchemaJson);
   return {
     modelName: `tool_${String(index)}`,
     server: tool.server,
@@ -215,6 +210,22 @@ const advertisedFunction = (
     schema,
     axSchema,
   };
+};
+
+/**
+ * Validates exact output-schema JSON before exposing a tool to the model.
+ * @param encoded Canonical advertised output schema.
+ */
+const validateOutputSchema = (encoded: string): void => {
+  const schema = JSON.parse(encoded) as unknown;
+  if (
+    typeof schema !== "object" ||
+    schema === null ||
+    Array.isArray(schema) ||
+    (schema as Record<string, unknown>).type !== "object" ||
+    JSON.stringify(canonicalJsonValue(schema)) !== encoded
+  )
+    throw new TypeError("MCP tool output schema invalid");
 };
 
 /**
@@ -335,7 +346,8 @@ const rejectClosedTicket = async (
   state: GenerationState,
   ticket: AiAttemptTicket,
 ): Promise<void> => {
-  const expired = request.control.nowEpochMs() >= ticket.deadlineEpochMs;
+  const expired =
+    ticket.deadlineEpochMs !== undefined && request.control.nowEpochMs() >= ticket.deadlineEpochMs;
   if (!ticket.signal.aborted && !expired) return;
   const error = new StreamCollectionError(
     expired ? "Provider request deadline exceeded" : "Provider request cancelled",
@@ -361,7 +373,11 @@ const admitGenerationTicket = async (
 ): Promise<void> => {
   await rejectClosedTicket(request, state, ticket);
   try {
-    providerConnection(request.model).gate.admit(ticket);
+    const expectedAnthropicMaxTokens = effectiveAnthropicMaxTokens(request);
+    providerConnection(request.model).gate.admit({
+      ...ticket,
+      ...(expectedAnthropicMaxTokens === undefined ? {} : { expectedAnthropicMaxTokens }),
+    });
   } catch (error) {
     await rejectClosedTicket(request, state, ticket);
     throw error;
@@ -404,6 +420,17 @@ const preparedTool = (tool: ReturnType<typeof advertisedFunctions>[number]) => (
 });
 
 /**
+ * Returns the required Anthropic wire token count for this selected model.
+ */
+const effectiveAnthropicMaxTokens = (request: AiBackendExecution): number | undefined => {
+  if (request.definition.kind !== "generation")
+    throw new TypeError("Generation capability required");
+  const connection = providerConnection(request.model);
+  if (connection.capabilities.id !== "anthropic-messages-v1") return undefined;
+  return request.definition.limits.maxOutputTokens ?? connection.anthropicOutputTokenCapacity;
+};
+
+/**
  * @param request Selected generation.
  * @param settings Selected provider options.
  * @returns Profile-specific lowering record.
@@ -422,9 +449,10 @@ const preparedProvider = (request: AiBackendExecution, settings: ProviderSetting
   if (profile === "anthropic-messages-v1")
     return {
       profile,
-      lowering: "anthropic-4.0.72-v2",
+      lowering: "anthropic-4.0.72-v3",
       outputMode: request.definition.outputMode,
       providerOptions: settings ?? null,
+      maxTokens: effectiveAnthropicMaxTokens(request),
     };
   return undefined;
 };
@@ -920,7 +948,8 @@ const receipt = (request: AiBackendExecution, ticket: AiAttemptTicket) => {
  */
 const failureReceipt = (request: AiBackendExecution, ticket: AiAttemptTicket) => {
   const known = receipt(request, ticket);
-  return known.receivedBytes !== undefined && known.receivedBytes <= ticket.maxOutputBytes
+  return known.receivedBytes !== undefined &&
+    (ticket.maxOutputBytes === undefined || known.receivedBytes <= ticket.maxOutputBytes)
     ? known
     : {};
 };
@@ -1010,6 +1039,11 @@ const classifyStreamFailure = (
     return { code: "DEADLINE_EXCEEDED", retryable: false, outcome: AiOutcome.FAILED };
   if (error.message.includes("cancelled"))
     return { code: "CANCELLED", retryable: false, outcome: AiOutcome.FAILED };
+  if (
+    error.message === "Provider transport response byte limit exceeded" ||
+    error.message === "Parsed output limit exceeded"
+  )
+    return { code: "BUDGET_EXCEEDED", retryable: false, outcome: AiOutcome.FAILED };
   if (error.partial.finishReason === "length" || error.message.includes("limit"))
     return { code: "INVALID_OUTPUT", retryable: false, outcome: AiOutcome.INVALID_OUTPUT };
   if (error.partial.finishReason === "content-filter")
@@ -1455,8 +1489,11 @@ const providerOptions = (
     tools: advertisedFunctions(request).map((tool) => providerTool(tool, chatgptPlan)),
     abortSignal: ticket.signal,
     ...(chatgptPlan ? { includeRawChunks: true } : {}),
-    ...(definition.limits.maxOutputTokens
-      ? { maxOutputTokens: definition.limits.maxOutputTokens }
+    ...((effectiveAnthropicMaxTokens(request) ?? definition.limits.maxOutputTokens) !== undefined
+      ? {
+          maxOutputTokens:
+            effectiveAnthropicMaxTokens(request) ?? definition.limits.maxOutputTokens,
+        }
       : {}),
     responseFormat:
       definition.outputMode === "native-schema"
@@ -1545,10 +1582,12 @@ const collectAttempt = async (
       connection.model,
       options,
       ticket.maxOutputBytes,
-      {
-        deadlineEpochMs: ticket.deadlineEpochMs,
-        nowEpochMs: request.control.nowEpochMs,
-      },
+      ticket.deadlineEpochMs === undefined
+        ? undefined
+        : {
+            deadlineEpochMs: ticket.deadlineEpochMs,
+            nowEpochMs: request.control.nowEpochMs,
+          },
       connection.capabilities.id === "anthropic-messages-v1",
       connection.capabilities.id === "chatgpt-plan-responses-v1",
     );
@@ -1563,24 +1602,25 @@ const collectAttempt = async (
 };
 
 /**
- * Runs Ax corrections and tool continuations through one controlled stream.
+ * Builds the Ax bridge that routes model turns through durable attempt controls.
  * @param request Selected generation execution.
  * @param model Authenticated provider model.
  * @param schema Descriptor-derived output schema.
  * @param state Attempt and admission state.
- * @returns Completion after Ax stops or exhausts its request allowance.
+ * @returns Controlled bridge for the selected provider.
  */
-const runProgram = async (
+const generationBridge = (
   request: AiBackendExecution,
   model: StreamModel,
   schema: JSONSchema7,
   state: GenerationState,
-): Promise<void> => {
+): ReturnType<typeof AxVercelBridge.createControlled> => {
   const definition = request.definition;
   if (definition.kind !== "generation") throw new TypeError("Generation capability required");
-  const generator = correctionGenerator(state);
-  const service = AxVercelBridge.createControlled(model, {
-    maxRequests: definition.limits.modelRequests,
+  const bridgeOptions = {
+    ...(definition.limits.modelRequests === undefined
+      ? {}
+      : { maxRequests: definition.limits.modelRequests }),
     onChat: (_model, prepared) => chat(request, state, prepared, schema),
     ...(["anthropic-messages-v1", "chatgpt-plan-responses-v1"].includes(
       providerConnection(request.model).capabilities.id,
@@ -1592,13 +1632,33 @@ const runProgram = async (
           ) => recordedAssistant(state, message, index),
         }
       : {}),
-  });
+  } satisfies Parameters<typeof AxVercelBridge.createControlled>[1];
+  return AxVercelBridge.createControlled(model, bridgeOptions);
+};
+
+/**
+ * Runs Ax corrections and tool continuations through one controlled stream.
+ */
+const runProgram = async (
+  request: AiBackendExecution,
+  model: StreamModel,
+  schema: JSONSchema7,
+  state: GenerationState,
+): Promise<void> => {
+  const definition = request.definition;
+  if (definition.kind !== "generation") throw new TypeError("Generation capability required");
+  const generator = correctionGenerator(state);
+  const service = generationBridge(request, model, schema, state);
   await generator.forward(
     service,
     { facts: toJsonString(definition.input, request.input) },
     {
       structuredOutputMode: "native",
-      maxRetries: definition.limits.modelRequests - 1,
+      maxRetries:
+        definition.limits.modelRequests === undefined
+          ? Number.POSITIVE_INFINITY
+          : definition.limits.modelRequests - 1,
+      maxSteps: Number.POSITIVE_INFINITY,
       functions: runtimeFunctions(request, state),
       abortSignal: request.control.signal,
     },
@@ -1647,7 +1707,9 @@ export const executeGeneration = async (request: AiBackendExecution): Promise<Ai
     await runProgram(request, connection.model, schema, state);
     if (state.admission?.ok) return { ok: true, value: state.admission.value };
   } catch (error) {
-    if (state.barrierFailed) throw error;
+    if (state.barrierFailed) {
+      throw error;
+    }
     state.failure ??= await recordFailure(request, state, "INVALID_OUTPUT", false);
   } finally {
     connection.gate.revoke();
@@ -1666,6 +1728,15 @@ const unsupportedGeneration = (request: AiBackendExecution): boolean => {
   const definition = request.definition;
   if (definition.kind !== "generation") throw new TypeError("Generation capability required");
   const capabilities = providerConnection(request.model).capabilities;
+  if (capabilities.id === "anthropic-messages-v1") {
+    const configured = definition.limits.maxOutputTokens;
+    const capacity = providerConnection(request.model).anthropicOutputTokenCapacity;
+    if (
+      (configured === undefined && capacity === undefined) ||
+      (configured !== undefined && capacity !== undefined && configured > capacity)
+    )
+      return true;
+  }
   if (
     capabilities.tokenCeiling === "unsupported" &&
     definition.limits.maxOutputTokens !== undefined

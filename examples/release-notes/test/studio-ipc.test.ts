@@ -57,14 +57,18 @@ it("permits only bounded workflow actions without repository or destination path
     pageSize: 101,
   });
   expect(() =>
-    validateStudioIpc("approve", {
+    validateStudioIpc("edit", {
       id,
       version: { number: 1 },
       markdown: "not bytes",
     }),
   ).toThrow();
-  expect(validateStudioIpc("stop-quit", null)).toBeNull();
-  expect(() => validateStudioIpc("stop-quit", { command: "anything" })).toThrow();
+  expect(isStudioIpcCommand("approve")).toBe(false);
+  expect(validateStudioIpc("cancel-generation", { id, generation: id })).toEqual({
+    id,
+    generation: id,
+  });
+  expect(isStudioIpcCommand("stop-quit")).toBe(false);
 });
 
 it("keeps history view and cursor exact while rejecting malformed paging", () => {
@@ -78,30 +82,54 @@ it("keeps history view and cursor exact while rejecting malformed paging", () =>
   });
   expect(() => validateStudioIpc("history", { id, category: "unknown", pageSize: 20 })).toThrow();
   expect(() => validateStudioIpc("history", { id, category: "domain", pageSize: 1.5 })).toThrow();
-  expect(() =>
+  expect(
     validateStudioIpc("history", {
       id,
       category: "domain",
       pageSize: 20,
       cursor: "x".repeat(4_097),
     }),
-  ).toThrow();
+  ).toMatchObject({ cursor: "x".repeat(4_097) });
   expect(() =>
     validateStudioIpc("history", { id, category: "domain", pageSize: 20, tenant: "other" }),
   ).toThrow();
 });
 
-it("copies exact approval bytes and rejects oversized editor input", () => {
+it("accepts long valid editor and comparison fields without local character ceilings", () => {
+  expect(
+    validateStudioIpc("choose-comparison", {
+      base: "b".repeat(129),
+      target: "t".repeat(129),
+    }),
+  ).toMatchObject({ base: "b".repeat(129) });
+  expect(
+    validateStudioIpc("open-draft", {
+      id,
+      selectionId: id,
+      title: "t".repeat(201),
+      audience: "a".repeat(501),
+    }),
+  ).toMatchObject({ title: "t".repeat(201) });
+  expect(
+    validateStudioIpc("generate", {
+      id,
+      instruction: "i".repeat(2_001),
+    }),
+  ).toMatchObject({ instruction: "i".repeat(2_001) });
+  expect(validateStudioIpc("evidence-patch", { selectionId: id, index: 2_001 })).toMatchObject({
+    index: 2_001,
+  });
+});
+
+it("copies exact editor bytes beyond the former Markdown cap", () => {
   const markdown = new Uint8Array([35, 32, 65, 10]);
-  const approved = validateStudioIpc("approve", { id, version: { number: "7" }, markdown });
+  const edited = validateStudioIpc("edit", { id, version: { number: "7" }, markdown });
   markdown[0] = 0;
-  expect(approved?.markdown).toEqual(new Uint8Array([35, 32, 65, 10]));
-  expect(() =>
-    validateStudioIpc("approve", { id, version: {}, markdown: new Uint8Array(1_000_001) }),
-  ).toThrow();
-  expect(() =>
-    validateStudioIpc("edit", { id, version: {}, document: { text: "x".repeat(128_000) } }),
-  ).toThrow();
+  expect(edited?.markdown).toEqual(new Uint8Array([35, 32, 65, 10]));
+  const large = new Uint8Array(1_000_001);
+  const accepted = validateStudioIpc("edit", { id, version: {}, markdown: large });
+  expect(accepted?.markdown).toEqual(large);
+  expect(accepted?.markdown).not.toBe(large);
 });
 
 it("refuses malformed identifiers and evidence positions before privileged actions", () => {

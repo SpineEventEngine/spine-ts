@@ -155,9 +155,9 @@ export interface AgentHistoryRead<Id> {
   readonly count: number;
 
   /**
-   * Maximum sum of serialized AgentHistoryEntry byte lengths.
+   * Optional maximum sum of serialized AgentHistoryEntry byte lengths.
    */
-  readonly maxBytes: number;
+  readonly maxBytes?: number;
 }
 
 /**

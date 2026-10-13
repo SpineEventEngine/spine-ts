@@ -14,19 +14,20 @@
 
 const commands = [
   "session",
+  "choose-project",
+  "compare-project",
   "choose-comparison",
   "open-draft",
   "read-draft",
   "generate",
   "repeat-generation",
+  "cancel-generation",
   "phase",
   "history",
   "evidence-patch",
   "edit",
   "preview",
-  "approve",
   "export",
-  "stop-quit",
 ] as const;
 
 /**
@@ -75,19 +76,13 @@ const StudioInput = {
   },
 
   /**
-   * Validates required bounded text without control characters.
+   * Validates required text without control characters.
    *
    * @param value Untrusted renderer field.
-   * @param limit Maximum permitted character count.
    * @returns Validated text.
    */
-  text(value: unknown, limit: number): string {
-    if (
-      typeof value !== "string" ||
-      !value.trim() ||
-      value.length > limit ||
-      StudioInput.containsControl(value)
-    )
+  text(value: unknown): string {
+    if (typeof value !== "string" || !value.trim() || StudioInput.containsControl(value))
       throw new Error("Invalid studio action text.");
     return value;
   },
@@ -99,26 +94,21 @@ const StudioInput = {
    * @returns Bounded UUID string.
    */
   id(value: unknown): string {
-    const result = StudioInput.text(value, 36);
+    const result = StudioInput.text(value);
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(result))
       throw new Error("Invalid studio reference.");
     return result;
   },
 
   /**
-   * Validates the byte bound and object shape of Protobuf JSON input.
+   * Validates the object shape of Protobuf JSON input.
    *
    * @param value Structured-clone editor input.
-   * @returns Bounded object for later schema conversion.
+   * @returns Object for later schema conversion.
    */
   json(value: unknown): unknown {
-    if (
-      typeof value !== "object" ||
-      value === null ||
-      Array.isArray(value) ||
-      JSON.stringify(value).length > 128_000
-    )
-      throw new Error("Invalid or oversized structured editor value.");
+    if (typeof value !== "object" || value === null || Array.isArray(value))
+      throw new Error("Invalid structured editor value.");
     return value;
   },
 
@@ -130,7 +120,7 @@ const StudioInput = {
    */
   comparison(argument: unknown): Record<string, unknown> {
     const input = StudioInput.record(argument, ["base", "target"]);
-    return { base: StudioInput.text(input.base, 128), target: StudioInput.text(input.target, 128) };
+    return { base: StudioInput.text(input.base), target: StudioInput.text(input.target) };
   },
 
   /**
@@ -140,11 +130,12 @@ const StudioInput = {
    * @returns Bounded draft metadata.
    */
   draft(argument: unknown): Record<string, unknown> {
-    const input = StudioInput.record(argument, ["selectionId", "title", "audience"]);
+    const input = StudioInput.record(argument, ["id", "selectionId", "title", "audience"]);
     return {
+      id: StudioInput.id(input.id),
       selectionId: StudioInput.id(input.selectionId),
-      title: StudioInput.text(input.title, 200),
-      audience: StudioInput.text(input.audience, 500),
+      title: StudioInput.text(input.title),
+      audience: StudioInput.text(input.audience),
     };
   },
 
@@ -156,11 +147,7 @@ const StudioInput = {
    */
   generation(argument: unknown): Record<string, unknown> {
     const input = StudioInput.record(argument, ["id", "instruction"]);
-    if (
-      typeof input.instruction !== "string" ||
-      input.instruction.length > 2_000 ||
-      StudioInput.containsControl(input.instruction)
-    )
+    if (typeof input.instruction !== "string" || StudioInput.containsControl(input.instruction))
       throw new Error("Invalid generation instruction.");
     return { id: StudioInput.id(input.id), instruction: input.instruction };
   },
@@ -190,7 +177,7 @@ const StudioInput = {
       id: StudioInput.id(input.id),
       category: input.category,
       pageSize: input.pageSize,
-      ...(hasCursor ? { cursor: StudioInput.text(input.cursor, 4_096) } : {}),
+      ...(hasCursor ? { cursor: StudioInput.text(input.cursor) } : {}),
     };
   },
 
@@ -202,36 +189,21 @@ const StudioInput = {
    */
   evidence(argument: unknown): Record<string, unknown> {
     const input = StudioInput.record(argument, ["selectionId", "index"]);
-    if (!Number.isInteger(input.index) || Number(input.index) < 0 || Number(input.index) > 2_000)
+    if (!Number.isSafeInteger(input.index) || Number(input.index) < 0)
       throw new Error("Invalid evidence position.");
     return { selectionId: StudioInput.id(input.selectionId), index: input.index };
   },
 
   /**
-   * Validates a structured edit and the Version paired with it.
+   * Validates exact UTF-8 Markdown and its displayed Version.
    *
    * @param argument Untrusted editor snapshot.
-   * @returns Bounded document and Version input.
+   * @returns Detached Markdown and Version input.
    */
   edit(argument: unknown): Record<string, unknown> {
-    const input = StudioInput.record(argument, ["id", "version", "document"]);
-    return {
-      id: StudioInput.id(input.id),
-      version: StudioInput.json(input.version),
-      document: StudioInput.json(input.document),
-    };
-  },
-
-  /**
-   * Copies bounded Markdown bytes before exact approval.
-   *
-   * @param argument Untrusted approval input.
-   * @returns Detached bytes with draft identifier and Version.
-   */
-  approve(argument: unknown): Record<string, unknown> {
     const input = StudioInput.record(argument, ["id", "version", "markdown"]);
-    if (!(input.markdown instanceof Uint8Array) || input.markdown.length > 1_000_000)
-      throw new Error("Invalid approval bytes.");
+    if (!(input.markdown instanceof Uint8Array)) throw new Error("Invalid Markdown bytes.");
+    new TextDecoder("utf-8", { fatal: true }).decode(input.markdown);
     return {
       id: StudioInput.id(input.id),
       version: StudioInput.json(input.version),
@@ -240,7 +212,18 @@ const StudioInput = {
   },
 
   /**
-   * Validates export identity and current approved Version.
+   * Validates the exact generation selected for cancellation.
+   *
+   * @param argument Untrusted cancellation input.
+   * @returns Scoped draft and generation identifiers.
+   */
+  cancellation(argument: unknown): Record<string, unknown> {
+    const input = StudioInput.record(argument, ["id", "generation"]);
+    return { id: StudioInput.id(input.id), generation: StudioInput.id(input.generation) };
+  },
+
+  /**
+   * Validates export identity and current Version.
    *
    * @param argument Untrusted export input.
    * @returns Draft identifier and bounded Version object.
@@ -275,27 +258,61 @@ export const validateStudioIpc = (
   command: StudioIpcCommand,
   argument: unknown,
 ): Record<string, unknown> | null => {
-  if (command === "stop-quit" || command === "session") {
+  if (command === "session") {
     if (argument !== null) throw new Error("Unexpected studio action argument.");
     return null;
   }
+  if (
+    command === "open-draft" ||
+    command === "generate" ||
+    command === "repeat-generation" ||
+    command === "cancel-generation"
+  )
+    return validateDraftAction(command, argument);
+  if (
+    command === "choose-project" ||
+    command === "compare-project" ||
+    command === "choose-comparison"
+  )
+    return validateProjectAction(command, argument);
+  if (command === "history") return StudioInput.history(argument);
+  if (command === "evidence-patch") return StudioInput.evidence(argument);
   switch (command) {
-    case "choose-comparison":
-      return StudioInput.comparison(argument);
+    case "edit":
+      return validateEditorAction(command, argument);
+    case "export":
+      return validateEditorAction(command, argument);
+    case "phase":
+      return validateEditorAction(command, argument);
+    case "read-draft":
+    case "preview":
+      return validateEditorAction(command, argument);
+  }
+};
+
+const validateDraftAction = (
+  command: "open-draft" | "generate" | "repeat-generation" | "cancel-generation",
+  argument: unknown,
+): Record<string, unknown> => {
+  switch (command) {
     case "open-draft":
       return StudioInput.draft(argument);
     case "generate":
       return StudioInput.generation(argument);
     case "repeat-generation":
       return StudioInput.oneId(argument, "generation");
-    case "history":
-      return StudioInput.history(argument);
-    case "evidence-patch":
-      return StudioInput.evidence(argument);
+    case "cancel-generation":
+      return StudioInput.cancellation(argument);
+  }
+};
+
+const validateEditorAction = (
+  command: "edit" | "export" | "phase" | "read-draft" | "preview",
+  argument: unknown,
+): Record<string, unknown> => {
+  switch (command) {
     case "edit":
       return StudioInput.edit(argument);
-    case "approve":
-      return StudioInput.approve(argument);
     case "export":
       return StudioInput.export(argument);
     case "phase":
@@ -304,4 +321,21 @@ export const validateStudioIpc = (
     case "preview":
       return StudioInput.oneId(argument, "id");
   }
+};
+
+const validateProjectAction = (
+  command: "choose-project" | "compare-project" | "choose-comparison",
+  argument: unknown,
+): Record<string, unknown> | null => {
+  if (command === "choose-project") {
+    if (argument !== null) throw new Error("Unexpected studio action argument.");
+    return null;
+  }
+  if (command === "choose-comparison") return StudioInput.comparison(argument);
+  const input = StudioInput.record(argument, ["handle", "base", "target"]);
+  return {
+    handle: StudioInput.id(input.handle),
+    base: StudioInput.text(input.base),
+    target: StudioInput.text(input.target),
+  };
 };

@@ -34,6 +34,18 @@ const limits = {
 };
 
 describe("typed AI capability declarations", () => {
+  it("preserves absence of application limits on a generation capability", () => {
+    const model = AiModel.define({
+      name: "draft-without-application-ceilings",
+      version: "v1",
+      kind: "generation",
+      input: SupportTicketFactsSchema,
+      output: ProposedSupportReplySchema,
+      instructions: "Draft a response",
+      outputMode: "prompt-and-validate",
+    });
+    expect(model.definition.limits).toEqual({});
+  });
   it("copies and freezes validated definitions so later caller mutation cannot widen limits", () => {
     const input = { ...limits };
     const model = AiModel.define({
@@ -90,8 +102,8 @@ describe("typed AI capability declarations", () => {
     expect(() =>
       AiModel.define({ ...definition, limits: { ...limits, maxOutputTokens: 0 } }),
     ).toThrow("maxOutputTokens");
-    expect(() => AiModel.define({ ...definition, limits: undefined } as never)).toThrow(
-      "limits are required",
+    expect(() => AiModel.define({ ...definition, limits: null } as never)).toThrow(
+      "limits must be an object",
     );
   });
 

@@ -48,8 +48,11 @@ message ReleaseInputsChanged {
   // Names the readers whose needs shape these release notes.
   string audience = 3 [(required) = true];
 
-  // Carries structured release note entries with catalog citations.
-  ReleaseNotesDocument document = 5 [(validate) = true];
+  reserved 5;
+  reserved "document";
+
+  // Resulting exact Markdown (cleared when the comparison changes).
+  ReleaseMarkdownContent markdown = 6 [(validate) = true];
 }
 
 // Complete accepted input snapshot delivered to the per-draft Agent.
@@ -75,8 +78,8 @@ message ReleaseGenerationRequested {
   // Conveys the editor’s requested emphasis for this generation.
   ReleaseInstruction instruction = 7 [(required) = true, (validate) = true];
 
-  // Supplies earlier edited entries as context for another generation.
-  ReleaseNotesDocument current_document = 8 [(validate) = true];
+  reserved 8;
+  reserved "current_document";
 
   // Conversation reused for later generations.
   spine.ts.agent.ConversationId conversation = 9 [(required) = true, (validate) = true];
@@ -89,6 +92,12 @@ message ReleaseGenerationRequested {
 
   // Names the release represented by this editable draft.
   ReleaseTitle title = 12 [(required) = true, (validate) = true];
+
+  reserved 13;
+  reserved "current_markdown";
+
+  // Supplies readable current Markdown as context for another generation.
+  string current_markdown_text = 14;
 }
 
 // Acknowledges an exact accepted generation replay without starting another operation.
@@ -147,8 +156,11 @@ message ReleaseNotesStaged {
   // Correlates this outcome with one accepted model generation.
   ReleaseGenerationId generation = 2 [(required) = true, (validate) = true];
 
-  // Carries structured release note entries with catalog citations.
-  ReleaseNotesDocument document = 4 [(required) = true, (validate) = true];
+  reserved 4;
+  reserved "document";
+
+  // Initial clean Markdown accepted from the structured proposal.
+  ReleaseMarkdownContent markdown = 5 [(validate) = true];
 }
 
 // Authoritative draft decision keeping a stale proposal out of the draft.
@@ -173,29 +185,44 @@ message ReleaseGenerationStatusChanged {
   string reason = 4 [(required) = true];
 }
 
-// Records one editor replacement of structured entries.
+// Records one exact editor replacement of Markdown bytes.
 message ReleaseNotesEdited {
   // Identifies the release draft to which this domain outcome applies.
   ReleaseDraftId id = 1 [(required) = true, (validate) = true];
 
-  // Carries structured release note entries with catalog citations.
-  ReleaseNotesDocument document = 3 [(validate) = true];
+  reserved 3;
+  reserved "document";
+
+  // Exact replacement bytes, including empty content.
+  ReleaseMarkdownContent markdown = 4 [(validate) = true];
 }
 
-// Records exact approved Markdown bytes for a reviewed document.
-message ReleaseNotesApproved {
-  // Identifies the release draft to which this domain outcome applies.
+// Records explicit cancellation of a matching pending generation.
+message ReleaseGenerationCanceled {
+  // Draft whose pending generation was stopped.
   ReleaseDraftId id = 1 [(required) = true, (validate) = true];
 
-  // Carries the reviewed Markdown bytes and digest accepted for export.
-  ReleaseApproval approval = 2 [(required) = true, (validate) = true];
+  // Matches the pending request without stopping any later generation.
+  ReleaseGenerationId generation = 2 [(required) = true, (validate) = true];
 }
 
-// Provides an immutable approved snapshot to the trusted export service.
+// Acknowledges a stale cancellation without touching a newer generation.
+message ReleaseGenerationCancelIgnored {
+  // Draft that received the stale cancellation.
+  ReleaseDraftId id = 1 [(required) = true, (validate) = true];
+
+  // Older or already canceled generation whose request had no effect.
+  ReleaseGenerationId generation = 2 [(required) = true, (validate) = true];
+}
+
+// Provides an immutable current snapshot to the trusted export service.
 message ReleaseNotesExportPrepared {
   // Identifies the release draft to which this domain outcome applies.
   ReleaseDraftId id = 1 [(required) = true, (validate) = true];
 
-  // Carries the reviewed Markdown bytes and digest accepted for export.
-  ReleaseApproval approval = 2 [(required) = true, (validate) = true];
+  reserved 2;
+  reserved "approval";
+
+  // Correlated exact Markdown, Version, and digest.
+  ReleaseExportSnapshot snapshot = 3 [(required) = true, (validate) = true];
 }

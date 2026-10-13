@@ -436,7 +436,7 @@
     },
     {
       "localPath": "packages/proto/proto/spine/server/agent/execution_record.proto",
-      "sha256": "051cff9a1c7873f40c34101f7d30c86416775ed18fce3223a3eb7452adf83db4"
+      "sha256": "059ddc8d09b006f3854f7ed877bcab26141ab1228d3de0ad8871c8c243b4543b"
     },
     {
       "localPath": "packages/proto/proto/spine/server/agent/history_record.proto",
@@ -452,11 +452,11 @@
     },
     {
       "localPath": "packages/proto/proto/spine/ts/agent/interaction_events.proto",
-      "sha256": "9c991d632faf035c8489e88235ee55308f9ff6dfb29cfe664cf579ca96d1c01e"
+      "sha256": "e975e3fae68ff9ee59fb967ac3ae87bc0709e483b139b6d2d31276f5a3bebb8f"
     },
     {
       "localPath": "packages/proto/proto/spine/ts/agent/model.proto",
-      "sha256": "e8cfcc1b53731627fbdeaeaeb74a59b98b05510bb7044ceffb493ac2ab3292e1"
+      "sha256": "f3fc4fe4e244a9d9a397d2a62bc1246bf1bf038c93f07be633d480eb4e44ff9c"
     }
   ]
 }

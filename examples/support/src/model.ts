@@ -68,12 +68,4 @@ export const draftSupportReply: AiCapability<
       return issues;
     },
   },
-  limits: {
-    modelRequests: 2,
-    toolCalls: 0,
-    deadlineMs: 30_000,
-    maxInputBytes: 16_000,
-    maxOutputBytes: 8_000,
-    maxOutputTokens: 1_000,
-  },
 });

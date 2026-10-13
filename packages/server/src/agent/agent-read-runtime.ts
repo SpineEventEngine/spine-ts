@@ -100,7 +100,7 @@ export class AgentReadRuntime {
     view: AgentHistoryView,
     request: HistoryRead,
     live: () => Promise<AgentHistoryPage>,
-    maxBytes: number,
+    maxBytes: number | undefined,
   ): Promise<AgentHistoryPage> {
     this.#pending++;
     const read = this.#tail.then(() => this.#history(scope, view, request, live, maxBytes));
@@ -299,7 +299,7 @@ export class AgentReadRuntime {
     view: AgentHistoryView,
     request: HistoryRead,
     live: () => Promise<AgentHistoryPage>,
-    maxBytes: number,
+    maxBytes: number | undefined,
   ): Promise<AgentHistoryPage> {
     this.#checkScope(scope);
     const named = `history:${String(this.#cursor)}`;
@@ -344,7 +344,9 @@ export class AgentReadRuntime {
   /**
    * Encodes the complete public request and effective byte ceiling.
    */
-  #request(view: AgentHistoryView, request: HistoryRead, maxBytes: number) {
+  #request(view: AgentHistoryView, request: HistoryRead, maxBytes: number | undefined) {
+    if (maxBytes !== undefined && (!Number.isSafeInteger(maxBytes) || maxBytes <= 0))
+      throw new RangeError("Agent history maxBytes must be a positive safe integer.");
     const kind = {
       full: AgentHistoryReadKind.AGENT_HISTORY_READ_FULL,
       conversation: AgentHistoryReadKind.AGENT_HISTORY_READ_CONVERSATION,
@@ -360,7 +362,7 @@ export class AgentReadRuntime {
         ...(request.cursor === undefined
           ? {}
           : { cursor: clone(AgentHistoryCursorSchema, request.cursor) }),
-        maxBytes: BigInt(maxBytes),
+        ...(maxBytes === undefined ? {} : { maxBytes: BigInt(maxBytes) }),
       }),
     );
   }
@@ -425,7 +427,8 @@ export class AgentReadRuntime {
    */
   #checkBudget(record: AgentExecutionRecord): void {
     const count = record.journal.filter((entry) => entry.evidence.case === "read").length;
-    if (BigInt(count) >= (record.started?.bounds?.recordedReads ?? 0n))
+    const limit = record.started?.bounds?.recordedReads;
+    if (limit !== undefined && BigInt(count) >= limit)
       throw new AgentExecutionFault(
         "READ_BUDGET_EXCEEDED",
         "Agent recorded read budget is exhausted.",
@@ -469,8 +472,9 @@ export class AgentReadRuntime {
   #checkCapacity(record: AgentExecutionRecord): void {
     const size = AgentExecutionSizes.record(record);
     const providerLimit = this.session.capacity().executionRecordBytes;
+    const configuredLimit = record.started?.bounds?.maxRecoveryBytes;
     if (
-      BigInt(size) > (record.started?.bounds?.maxRecoveryBytes ?? 0n) ||
+      (configuredLimit !== undefined && BigInt(size) > configuredLimit) ||
       (providerLimit !== undefined && size > providerLimit)
     )
       throw new Error("Agent read snapshot exceeds durable record bytes.");

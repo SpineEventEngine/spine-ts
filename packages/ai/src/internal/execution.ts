@@ -31,6 +31,7 @@ import type {
   AiControl,
   AiDecisionResult,
   AiFailure,
+  AiLimits,
   AiModelDefinition,
   AiScope,
   AiValidationIssue,
@@ -226,17 +227,17 @@ export interface AiAttemptTicket {
   /**
    * * Actual serialized provider request-body ceiling.
    */
-  readonly maxInputBytes: number;
+  readonly maxInputBytes?: number;
 
   /**
    * * Full reserved decoded response-body allowance.
    */
-  readonly maxOutputBytes: number;
+  readonly maxOutputBytes?: number;
 
   /**
    * * Absolute deadline read through the runtime Time service.
    */
-  readonly deadlineEpochMs: number;
+  readonly deadlineEpochMs?: number;
 
   /**
    * * Cancellation and execution-fence loss signal.
@@ -388,14 +389,14 @@ export interface AiExecutionControl extends AiControl {
    * Records transport bytes against the existing attempt ticket.
    * @param ticketId Runtime-assigned attempt ID.
    * @param inputBytes Actual serialized provider request-body bytes.
-   * @param outputCredit Full output allowance held through crash uncertainty.
-   * @returns Completion of the durable reservation barrier.
+   * @param outputCredit Configured output allowance, if present.
+   * @returns Effective finite credit after the durable reservation barrier, if any.
    */
   readonly reserveTransport: (
     ticketId: string,
     inputBytes: number,
-    outputCredit: number,
-  ) => Promise<void>;
+    outputCredit?: number,
+  ) => Promise<number | undefined>;
 
   /**
    * Records a received platform chunk before parser delivery.
@@ -495,7 +496,9 @@ export interface AiBackendExecution {
   /**
    * * Registered typed capability and limits.
    */
-  readonly definition: Readonly<AiModelDefinition<MessageSchema, MessageSchema>>;
+  readonly definition: Readonly<
+    AiModelDefinition<MessageSchema, MessageSchema> & { readonly limits: AiLimits }
+  >;
 
   /**
    * * Validated application facts.

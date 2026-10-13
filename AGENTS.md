@@ -23,6 +23,15 @@ a Command, treats a Command as an Event, or substitutes one identifier type for
 another is invalid because it hides contract mistakes and teaches the wrong
 API.
 
+## Artificial Limits
+
+Do not introduce artificial limits anywhere in the code unless the human has
+explicitly approved the specific limit. This includes hard-coded caps, default
+caps, truncation, timeouts, and retry budgets. Making a limit configurable does
+not substitute for approval. Do not raise an unapproved limit to another
+arbitrary value. Distinguish externally required protocol constraints from
+application-imposed limits, and identify the source of required constraints.
+
 ## Wording
 
 Avoid `own`, `owns`, `owned`, `owner`, and `ownership` unless the possession or

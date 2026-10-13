@@ -34,7 +34,16 @@ export const StudioAccountGate = {
     account: unknown,
     action: () => Promise<Result>,
   ): Promise<Result> {
-    if (!["sign-in", "reconnect", "select-account", "select-model", "sign-out"].includes(command))
+    if (
+      ![
+        "sign-in",
+        "add-account",
+        "reconnect",
+        "select-account",
+        "select-model",
+        "sign-out",
+      ].includes(command)
+    )
       return action();
     return studio.withAccountTransition(async () => {
       await this.requireUnlocked(studio, command, account);
@@ -55,7 +64,16 @@ export const StudioAccountGate = {
     command: string,
     account: unknown,
   ): Promise<void> {
-    if (!["sign-in", "reconnect", "select-account", "select-model", "sign-out"].includes(command))
+    if (
+      ![
+        "sign-in",
+        "add-account",
+        "reconnect",
+        "select-account",
+        "select-model",
+        "sign-out",
+      ].includes(command)
+    )
       return;
     if (!(await studio.selectionLocked())) return;
     if (
@@ -64,6 +82,6 @@ export const StudioAccountGate = {
       (await studio.allowsReconnect(account))
     )
       return;
-    throw new Error("Wait for the active generation or stop and quit.");
+    throw new Error("Wait for the active generation or stop it before closing.");
   },
 };

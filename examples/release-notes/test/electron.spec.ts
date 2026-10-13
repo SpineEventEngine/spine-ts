@@ -22,11 +22,6 @@ import { fileURLToPath } from "node:url";
 import { _electron as electron, expect, test } from "@playwright/test";
 import { GitReleaseComparison } from "../src/trusted/git-release.js";
 
-const choose = async (window: import("@playwright/test").Page, label: string, option: string) => {
-  await window.getByRole("combobox", { name: label }).click();
-  await window.getByRole("option", { name: option }).click();
-};
-
 const directory = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const electronPath = createRequire(import.meta.url)("electron") as string;
 
@@ -74,204 +69,152 @@ async function workerTools(executable: string, worker: string, binding: string):
   }
 }
 
-test("desktop shell opens one isolated window with account controls", async () => {
-  const app = await electron.launch({ executablePath: electronPath, args: [directory] });
-  try {
-    const window = await app.firstWindow();
-    await app.evaluate(({ BrowserWindow }) => {
-      BrowserWindow.getAllWindows()[0]?.webContents.setZoomFactor(1);
-    });
-    await window.setViewportSize({ width: 1200, height: 820 });
-    await expect(window.getByRole("button", { name: "Continue with ChatGPT" })).toBeVisible();
-    await expect(window.getByRole("button", { name: "Choose repository" })).toBeVisible();
-    await expect(window.getByRole("button", { name: "Quit" })).toBeVisible();
-    await window.screenshot({ path: "/tmp/spine-ui-signedout.png" });
-    expect(await window.evaluate(() => typeof process)).toBe("undefined");
-    expect(await window.evaluate(() => typeof window.localStorage.getItem("access_token"))).toBe(
-      "object",
-    );
-  } finally {
-    await app.close();
+test("development and packaged apps open the isolated sign-in dialog", async () => {
+  const packaged = (await readFile(resolve(directory, "out/app-path.txt"), "utf8")).trim();
+  for (const [executablePath, args] of [
+    [electronPath, [directory]],
+    [packaged, []],
+  ] as [string, string[]][]) {
+    const app = await electron.launch({ executablePath, args });
+    try {
+      const window = await app.firstWindow();
+      await window.setViewportSize({ width: 1536, height: 1024 });
+      await expect(window.getByRole("dialog", { name: "Welcome" })).toBeVisible();
+      await expect(
+        window.getByRole("button", {
+          name: /Sign in with ChatGPT|Continue sign-in|Reconnect ChatGPT account/,
+        }),
+      ).toBeVisible();
+      await expect(window.getByRole("button", { name: "New release" })).toHaveCount(0);
+      expect(await window.evaluate(() => typeof process)).toBe("undefined");
+    } finally {
+      await app.close();
+    }
   }
 });
 
-test("packaged macOS app opens the same isolated account shell", async () => {
-  const executablePath = (await readFile(resolve(directory, "out/app-path.txt"), "utf8")).trim();
-  const app = await electron.launch({ executablePath });
-  try {
-    const window = await app.firstWindow();
-    await app.evaluate(({ BrowserWindow }) => {
-      BrowserWindow.getAllWindows()[0]?.webContents.setZoomFactor(1);
-    });
-    await window.setViewportSize({ width: 1200, height: 820 });
-    await expect(window.getByRole("button", { name: "Continue with ChatGPT" })).toBeVisible();
-    expect(await window.evaluate(() => typeof process)).toBe("undefined");
-  } finally {
-    await app.close();
-  }
-});
-
-test("packaged editor opens an authoritative draft from a native-selected comparison", async () => {
-  const repository = mkdtempSync(join(tmpdir(), "spine-packaged-draft-"));
+test("packaged sample flow chooses real refs, writes, edits, previews, and exports exact Markdown", async () => {
+  test.setTimeout(90_000);
+  const fixtureRoot = mkdtempSync(join(tmpdir(), "spine-flow-ui-"));
+  const repository = join(fixtureRoot, "Customer portal");
+  mkdirSync(repository);
   const git = (...args: string[]) =>
     execFileSync("/usr/bin/git", args, { cwd: repository, encoding: "utf8" }).trim();
+  const exportPath = join(repository, "release.md");
   git("init", "--quiet");
   git("config", "user.name", "Fixture");
   git("config", "user.email", "fixture@example.invalid");
-  writeFileSync(join(repository, "notes.txt"), "Before\n");
-  git("add", "notes.txt");
+  writeFileSync(join(repository, "import.ts"), "export const value = 1;\n");
+  git("add", "import.ts");
   git("commit", "--quiet", "-m", "Base");
   const base = git("rev-parse", "HEAD");
-  writeFileSync(join(repository, "notes.txt"), "After\n");
-  git("commit", "--quiet", "-am", "Release");
+  writeFileSync(join(repository, "import.ts"), "export const value = 2;\n");
+  git("commit", "--quiet", "-am", "Improve import");
   const target = git("rev-parse", "HEAD");
   const executablePath = (await readFile(resolve(directory, "out/app-path.txt"), "utf8")).trim();
-  const app = await electron.launch({ executablePath });
+  const appRoot = resolve(executablePath, "../../Resources/app.asar");
+  const fixtureArgs = [
+    resolve(directory, "test/studio-flow-harness.mjs"),
+    appRoot,
+    repository,
+    exportPath,
+    base,
+    target,
+  ];
+  const signInApp = await electron.launch({
+    executablePath: electronPath,
+    args: [...fixtureArgs, "--signed-out"],
+  });
   try {
-    await app.evaluate(({ dialog }, selected) => {
-      dialog.showOpenDialog = () => Promise.resolve({ canceled: false, filePaths: [selected] });
-    }, repository);
+    const welcome = await signInApp.firstWindow();
+    await welcome.setViewportSize({ width: 1536, height: 1024 });
+    await expect(welcome.getByRole("button", { name: "Sign in with ChatGPT" })).toBeVisible();
+    await welcome.screenshot({ path: "/tmp/spine-redesign-signin.png" });
+  } finally {
+    await signInApp.close();
+  }
+  const app = await electron.launch({
+    executablePath: electronPath,
+    args: fixtureArgs,
+  });
+  try {
     const window = await app.firstWindow();
-    await window.getByLabel("From").fill(base);
-    await window.getByLabel("To").fill(target);
-    await window.getByRole("button", { name: "Choose repository" }).click();
-    await expect(window.getByText(`${base.slice(0, 8)} → ${target.slice(0, 8)}`)).toBeVisible();
-    await window.getByLabel("Release title").fill("Packaged release");
-    await window.getByLabel("Audience").fill("SDK users");
-    await window.getByRole("button", { name: "Open release draft" }).click();
-    await expect(window.getByRole("heading", { name: "Packaged release" })).toBeVisible();
-    await expect(window.getByRole("button", { name: "Write a draft" })).toBeDisabled();
-    await window.getByRole("tab", { name: "Sources" }).click();
-    await window.getByRole("combobox", { name: "Choose a change to inspect" }).click();
-    await window.getByRole("option").first().click();
-    await expect(window.getByLabel("Change details")).toContainText("+After");
-    await window.getByRole("tab", { name: "Write" }).click();
-    await window.getByRole("button", { name: "Add section" }).click();
-    await window.getByRole("button", { name: "Add entry" }).click();
-    await window.getByRole("textbox", { name: "Entry", exact: true }).fill("Changed release file.");
-    await window.screenshot({ path: "/tmp/spine-release-notes-packaged.png", fullPage: true });
-    await window.reload();
-    await expect(window.getByRole("heading", { name: "Packaged release" })).toBeVisible();
-  } finally {
-    await app.close();
-    rmSync(repository, { recursive: true, force: true });
-  }
-  const restarted = await electron.launch({ executablePath });
-  try {
-    const window = await restarted.firstWindow();
-    await expect(window.getByRole("heading", { name: "Packaged release" })).toHaveCount(0);
-    await expect(window.getByLabel("Session drafts")).toHaveCount(0);
-  } finally {
-    await restarted.close();
-  }
-});
-
-test("long draft titles and many source choices remain readable and reachable", async () => {
-  const repository = mkdtempSync(join(tmpdir(), "spine-choice-list-"));
-  const git = (...args: string[]) =>
-    execFileSync("/usr/bin/git", args, { cwd: repository, encoding: "utf8" }).trim();
-  git("init", "--quiet");
-  git("config", "user.name", "Fixture");
-  git("config", "user.email", "fixture@example.invalid");
-  writeFileSync(join(repository, "README.md"), "Baseline\n");
-  git("add", ".");
-  git("commit", "--quiet", "-m", "Base");
-  const base = git("rev-parse", "HEAD");
-  mkdirSync(join(repository, "docs"));
-  for (let index = 0; index < 14; index++) {
-    writeFileSync(
-      join(repository, "docs", `validation-${String(index)}-release-notes.md`),
-      "Improved import validation.\n",
+    await app.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows()[0]?.webContents.setZoomFactor(1);
+    });
+    await window.setViewportSize({ width: 1536, height: 1024 });
+    await expect(window.getByRole("heading", { name: "Your releases" })).toBeVisible();
+    await window.screenshot({ path: "/tmp/spine-redesign-dashboard.png" });
+    await window.getByRole("button", { name: "New release" }).click();
+    await expect(window.getByRole("heading", { name: "Choose changes" })).toBeVisible();
+    await window.screenshot({ path: "/tmp/spine-redesign-changes.png" });
+    await window.getByRole("button", { name: "Choose a Git project" }).click();
+    await expect(window.getByRole("combobox", { name: "From" })).toBeEnabled();
+    await window.getByRole("combobox", { name: "From" }).click();
+    await expect(window.getByRole("option", { name: "HEAD~1" })).toBeVisible();
+    await window.screenshot({ path: "/tmp/spine-redesign-ref-dropdown.png" });
+    await window.getByRole("option", { name: "HEAD~1" }).click();
+    await window.getByRole("combobox", { name: "To" }).click();
+    await window.getByRole("option", { name: "HEAD", exact: true }).click();
+    await window.getByRole("textbox", { name: "Release" }).fill("v2.4.0");
+    await expect(window.getByText("1 commit · 1 file")).toBeVisible();
+    await window.screenshot({ path: "/tmp/spine-redesign-changes-filled.png" });
+    await window.getByRole("button", { name: "Next" }).click();
+    await expect(window.getByRole("heading", { name: "Writing style" })).toBeVisible();
+    await window.getByRole("combobox", { name: "Model" }).click();
+    await expect(window.getByRole("option", { name: "Demo model" })).toBeVisible();
+    await window.screenshot({ path: "/tmp/spine-redesign-model-dropdown.png" });
+    await window.getByRole("option", { name: "Demo model" }).click();
+    await expect(window.getByRole("button", { name: "Write" })).toBeEnabled();
+    await window.screenshot({ path: "/tmp/spine-redesign-style.png" });
+    await window.getByRole("button", { name: "Write" }).click();
+    await window.screenshot({ path: "/tmp/spine-redesign-writing.png" });
+    const editor = window.getByRole("textbox", { name: "Markdown" });
+    await expect(editor).toHaveValue(/Find messages faster/, {
+      timeout: 30_000,
+    });
+    const text =
+      "# Customer portal v2.4.0\n\n## What's new\n- Find messages faster with improved search.\n- Export filtered results as CSV.\n\n## Improvements\n- The inbox loads faster for large teams.\n\n## Fixes\n- Corrected dates in downloaded reports.\n";
+    await editor.fill(text);
+    await expect(window.getByRole("status")).toHaveText("Saved for this session");
+    await window.screenshot({ path: "/tmp/spine-redesign-editor.png" });
+    await window.getByRole("button", { name: "Copy Markdown" }).click();
+    await expect(window.getByText("Markdown copied.")).toBeVisible();
+    await window.getByRole("tab", { name: "Preview" }).click();
+    await expect(window.getByRole("tabpanel", { name: "Preview" })).toContainText(
+      "Corrected dates",
     );
-  }
-  git("add", ".");
-  git("commit", "--quiet", "-m", "Release");
-  const target = git("rev-parse", "HEAD");
-  const executablePath = (await readFile(resolve(directory, "out/app-path.txt"), "utf8")).trim();
-  const app = await electron.launch({ executablePath });
-  try {
-    const window = await app.firstWindow();
-    await app.evaluate(({ BrowserWindow }) => {
-      BrowserWindow.getAllWindows()[0]?.webContents.setZoomFactor(1);
-    });
-    await window.setViewportSize({ width: 1200, height: 820 });
-    await window.getByLabel("From").fill(base);
-    await window.getByLabel("To").fill(target);
-    await app.evaluate(({ dialog }, selected) => {
-      dialog.showOpenDialog = () => Promise.resolve({ canceled: false, filePaths: [selected] });
-    }, repository);
-    await window.getByRole("button", { name: "Choose repository" }).click();
-    const title = "CSV import header validation and clearer missing-column errors";
-    await window.getByLabel("Release title").fill(title);
-    await window.getByLabel("Audience").fill("People importing contacts");
-    await window.getByRole("button", { name: "Open release draft" }).click();
-    await window.getByRole("combobox", { name: "Session drafts" }).click();
-    await expect(window.getByRole("option", { name: title })).toBeVisible();
-    await window.screenshot({ path: "/tmp/spine-choice-long-title.png" });
-    await window.keyboard.press("Escape");
-    await window.getByRole("button", { name: "Add section" }).click();
-    await window.getByRole("button", { name: "Add entry" }).click();
-    await expect(window.getByRole("checkbox")).toHaveCount(14);
-    await window.screenshot({ path: "/tmp/spine-choice-many-sources-top.png" });
-    const last = window.getByRole("checkbox", { name: /validation-13-release-notes\.md/ });
-    await last.check();
-    await expect(last).toBeChecked();
-    expect(
-      await window
-        .locator(".source-list")
-        .evaluate((element) => element.scrollHeight > element.clientHeight),
-    ).toBe(true);
-    await window.screenshot({ path: "/tmp/spine-choice-many-sources.png" });
-    const railBounds = await window.evaluate(() => ({
-      rail: document.querySelector(".identity-sidebar")?.getBoundingClientRect().bottom ?? 0,
-      shell: document.querySelector(".app-shell")?.getBoundingClientRect().bottom ?? 0,
-      width: document.documentElement.clientWidth,
-    }));
-    expect(railBounds.width).toBeGreaterThan(700);
-    expect(railBounds.rail).toBeGreaterThanOrEqual(railBounds.shell - 1);
-    await app.evaluate(({ BrowserWindow }) => {
-      BrowserWindow.getAllWindows()[0]?.webContents.setZoomFactor(2);
-    });
-    await window.evaluate(() => {
-      globalThis.scrollTo(0, 0);
-    });
-    await expect(window.getByRole("button", { name: "Account and model" })).toBeVisible();
-    await expect(window.getByRole("button", { name: "Quit" })).toBeVisible();
-    await window.screenshot({ path: "/tmp/spine-choice-zoom200-header.png" });
-    await window.getByRole("combobox", { name: "Session drafts" }).click();
-    await window.screenshot({ path: "/tmp/spine-choice-zoom200-open.png" });
-    await expect(window.getByRole("option", { name: title })).toBeVisible();
-    expect(
-      await window.evaluate(
-        () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
-      ),
-    ).toBe(true);
-    await window.keyboard.press("Escape");
-    await app.evaluate(({ BrowserWindow }) => {
-      BrowserWindow.getAllWindows()[0]?.webContents.setZoomFactor(1);
-    });
+    await window.screenshot({ path: "/tmp/spine-redesign-preview.png" });
+    await window.setViewportSize({ width: 1200, height: 788 });
+    await window.screenshot({ path: "/tmp/spine-redesign-normal-preview.png" });
+    await window.setViewportSize({ width: 1536, height: 1024 });
+    await window.getByRole("button", { name: "Export" }).click();
+    await expect.poll(async () => readFile(exportPath, "utf8").catch(() => null)).toBe(text);
+    await window.getByRole("button", { name: "Dashboard" }).click();
+    await expect(window.getByRole("button", { name: /Customer portal/ })).toBeVisible();
+    await expect(window.getByText("Markdown exported.")).toHaveCount(0);
+    await window.screenshot({ path: "/tmp/spine-redesign-dashboard-populated.png" });
     await window.setViewportSize({ width: 640, height: 480 });
-    await window.evaluate(() => {
-      globalThis.scrollTo(0, 0);
-    });
-    await window.getByRole("combobox", { name: "Session drafts" }).click();
-    await window.screenshot({ path: "/tmp/spine-choice-narrow-open.png" });
-    await expect(window.getByRole("option", { name: title })).toBeVisible();
+    await window.screenshot({ path: "/tmp/spine-redesign-narrow.png" });
+    await window.getByRole("button", { name: "New release" }).click();
+    await window.screenshot({ path: "/tmp/spine-redesign-narrow-changes.png" });
+    expect(await window.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+    await window.getByRole("button", { name: "Sign out" }).click();
+    await expect(window.getByRole("dialog", { name: "Welcome" })).toBeVisible();
+    await expect(window.getByRole("button", { name: "New release" })).toHaveCount(0);
   } finally {
     await app.close();
-    rmSync(repository, { recursive: true, force: true });
+    rmSync(fixtureRoot, { recursive: true, force: true });
   }
 });
 
 test("development and packaged Electron binaries serve the scoped Git worker", async () => {
   const repository = mkdtempSync(join(tmpdir(), "spine-electron-git-"));
   try {
-    const gitExecutable = execFileSync("which", ["git"], { encoding: "utf8" }).trim();
     const git = (...args: string[]) =>
-      execFileSync(gitExecutable, args, {
-        cwd: repository,
-        encoding: "utf8",
-      }).trim();
+      execFileSync("/usr/bin/git", args, { cwd: repository, encoding: "utf8" }).trim();
     git("init", "--quiet");
     git("config", "user.name", "Fixture");
     git("config", "user.email", "fixture@example.invalid");
@@ -281,21 +224,19 @@ test("development and packaged Electron binaries serve the scoped Git worker", a
     const base = git("rev-parse", "HEAD");
     writeFileSync(join(repository, "release.md"), "after\n");
     git("commit", "--quiet", "-am", "Release");
-    const target = git("rev-parse", "HEAD");
-    const comparison = await GitReleaseComparison.open({ repository, gitExecutable, base, target });
+    const comparison = await GitReleaseComparison.open({
+      repository,
+      gitExecutable: "/usr/bin/git",
+      base,
+      target: git("rev-parse", "HEAD"),
+    });
     const binding = JSON.stringify(comparison.workerBinding());
-    const packagedExecutable = (
-      await readFile(resolve(directory, "out/app-path.txt"), "utf8")
-    ).trim();
-    const workers = [
+    const packaged = (await readFile(resolve(directory, "out/app-path.txt"), "utf8")).trim();
+    for (const [executable, worker] of [
       [electronPath, resolve(directory, "dist/src/git-worker.mjs")],
-      [
-        packagedExecutable,
-        resolve(packagedExecutable, "../../Resources/app.asar/src/git-worker.mjs"),
-      ],
-    ];
-    for (const [executable, worker] of workers) {
-      if (executable === undefined || worker === undefined) throw new Error("Worker path missing.");
+      [packaged, resolve(packaged, "../../Resources/app.asar/src/git-worker.mjs")],
+    ]) {
+      if (!executable || !worker) throw new Error("Worker path missing.");
       expect(await workerTools(executable, worker, binding)).toEqual([
         "list_release_changes",
         "read_change_patch",
@@ -307,181 +248,13 @@ test("development and packaged Electron binaries serve the scoped Git worker", a
   }
 });
 
-test("packaged runtime completes a real Agent generation, Git tool call, approval, and export", async () => {
+test("packaged runtime completes generation and exact neutral Markdown export", async () => {
   const executablePath = (await readFile(resolve(directory, "out/app-path.txt"), "utf8")).trim();
   const appRoot = resolve(executablePath, "../../Resources/app.asar");
   const output = execFileSync(
     executablePath,
     [resolve(directory, "test/packaged-studio-probe.mjs"), appRoot],
-    {
-      env: { ELECTRON_RUN_AS_NODE: "1" },
-      encoding: "utf8",
-      timeout: 30_000,
-      maxBuffer: 4096,
-    },
+    { env: { ELECTRON_RUN_AS_NODE: "1" }, encoding: "utf8", timeout: 30_000, maxBuffer: 4096 },
   );
-  expect(JSON.parse(output)).toEqual({ staged: true, attempts: 2, approved: true, exported: true });
-});
-
-test("isolated packaged UI generates, reviews history, approves, and saves exact native export bytes", async () => {
-  const repository = mkdtempSync(join(tmpdir(), "spine-ui-workflow-"));
-  const exportPath = join(repository, "approved.md");
-  const git = (...args: string[]) =>
-    execFileSync("/usr/bin/git", args, { cwd: repository, encoding: "utf8" }).trim();
-  git("init", "--quiet");
-  git("config", "user.name", "Fixture");
-  git("config", "user.email", "fixture@example.invalid");
-  writeFileSync(
-    join(repository, "import.ts"),
-    'export const importContacts = (csv: string) => csv.split("\\n").slice(1);\n',
-  );
-  git("add", "import.ts");
-  git("commit", "--quiet", "-m", "Base");
-  const base = git("rev-parse", "HEAD");
-  writeFileSync(
-    join(repository, "import.ts"),
-    'export const importContacts = (csv: string) => {\n  const [header, ...rows] = csv.trim().split("\\n");\n  for (const required of ["name", "email"]) {\n    if (!header?.split(",").includes(required)) throw new Error(`Missing ${required} column`);\n  }\n  return rows;\n};\n',
-  );
-  git("commit", "--quiet", "-am", "Release");
-  const target = git("rev-parse", "HEAD");
-  const executablePath = (await readFile(resolve(directory, "out/app-path.txt"), "utf8")).trim();
-  const appRoot = resolve(executablePath, "../../Resources/app.asar");
-  const app = await electron.launch({
-    executablePath: electronPath,
-    args: [
-      resolve(directory, "test/studio-ui-harness.mjs"),
-      appRoot,
-      repository,
-      exportPath,
-      base,
-      target,
-    ],
-  });
-  try {
-    const window = await app.firstWindow();
-    await window.getByLabel("From").fill(base);
-    await window.getByLabel("To").fill(target);
-    await window.getByRole("button", { name: "Choose repository" }).click();
-    await window.getByLabel("Release title").fill("CSV import improvements");
-    await window.getByLabel("Audience").fill("People importing contacts");
-    await window.getByRole("button", { name: "Open release draft" }).click();
-    await window.getByRole("combobox", { name: "Account" }).click();
-    await expect(window.getByRole("option", { name: "ChatGPT account · 1" })).toBeVisible();
-    await window.screenshot({ path: "/tmp/spine-choice-account-open.png" });
-    await window.keyboard.press("Escape");
-    await window.getByRole("combobox", { name: "Session drafts" }).click();
-    await expect(window.getByRole("option", { name: "CSV import improvements" })).toBeVisible();
-    await window.screenshot({ path: "/tmp/spine-choice-drafts-open.png" });
-    await window.keyboard.press("Escape");
-    await window.getByRole("combobox", { name: "Model" }).click();
-    await expect(window.getByRole("option", { name: "Release writing model" })).toBeVisible();
-    await window.screenshot({ path: "/tmp/spine-choice-model-open.png" });
-    await window.keyboard.press("ArrowDown");
-    await window.keyboard.press("Enter");
-    await expect(window.getByRole("combobox", { name: "Model" })).toContainText(
-      "Release writing model",
-    );
-    await expect(window.getByRole("button", { name: "Write a draft" })).toBeEnabled();
-    await window.getByRole("button", { name: "Write a draft" }).click();
-    await window.screenshot({ path: "/tmp/spine-ui-writing.png" });
-    await expect(window.getByRole("textbox", { name: "Entry", exact: true })).toHaveValue(
-      "CSV imports now check for a header row and explain which column is missing.",
-    );
-    await window.screenshot({ path: "/tmp/spine-ui-editor.png" });
-    await window.getByRole("tab", { name: "Sources" }).click();
-    await window.getByRole("combobox", { name: "Choose a change to inspect" }).click();
-    await window.screenshot({ path: "/tmp/spine-choice-changes-open.png" });
-    await window.getByRole("option").first().click();
-    await expect(window.getByLabel("Change details")).toContainText("Missing ${required} column");
-    await window.screenshot({ path: "/tmp/spine-ui-sources.png" });
-    await window.getByRole("tab", { name: "Sources" }).focus();
-    await window.keyboard.press("ArrowRight");
-    await expect(window.getByRole("tab", { name: "Preview" })).toHaveAttribute(
-      "data-state",
-      "active",
-    );
-    await window.getByRole("button", { name: "Refresh preview" }).click();
-    await expect(window.getByLabel("Release notes preview")).toContainText(
-      "CSV imports now check for a header row and explain which column is missing.",
-    );
-    const expectedMarkdown = `# CSV import improvements\n\n## Changes\n\n- CSV imports now check for a header row and explain which column is missing.\n  - Evidence: <code>&quot;import.ts&quot;</code> in commit <code>${target}</code>, compared with parent <code>${base}</code>\n`;
-    await window.screenshot({ path: "/tmp/spine-ui-preview.png", fullPage: true });
-    await window.getByRole("button", { name: "Approve release notes" }).click();
-    await app.evaluate(({ dialog }) => {
-      dialog.showSaveDialog = () => Promise.resolve({ canceled: true, filePath: "" });
-    });
-    await window.getByRole("button", { name: "Export release notes" }).click();
-    await expect(window.locator(".notice-banner")).toHaveText(
-      "Export cancelled; no file was written.",
-    );
-    expect(await readFile(exportPath, "utf8").catch(() => null)).toBeNull();
-    await app.evaluate(({ dialog }, selected) => {
-      dialog.showSaveDialog = () => Promise.resolve({ canceled: false, filePath: selected });
-    }, repository);
-    await window.getByRole("button", { name: "Export release notes" }).click();
-    await expect(window.locator(".notice-banner")).toContainText("Read the current draft");
-    expect(await readFile(exportPath, "utf8").catch(() => null)).toBeNull();
-    await window.reload();
-    await window.getByRole("tab", { name: "Preview" }).click();
-    await expect(window.getByRole("button", { name: "Export release notes" })).toBeEnabled();
-    await app.evaluate(({ dialog }, selected) => {
-      dialog.showSaveDialog = () => Promise.resolve({ canceled: false, filePath: selected });
-    }, exportPath);
-    await window.getByRole("button", { name: "Export release notes" }).click();
-    await expect
-      .poll(async () => readFile(exportPath, "utf8").catch(() => null))
-      .toBe(expectedMarkdown);
-    await window.getByRole("button", { name: "Export release notes" }).click();
-    await expect(window.locator(".notice-banner")).toHaveText("Approved Markdown exported.");
-    expect(await readFile(exportPath, "utf8")).toBe(expectedMarkdown);
-    await window.getByRole("tab", { name: "Activity" }).click();
-    await window.getByRole("combobox", { name: "View" }).click();
-    await window.screenshot({ path: "/tmp/spine-choice-activity-open.png" });
-    await window.keyboard.press("Escape");
-    await choose(window, "View", "Writing");
-    await window.getByRole("button", { name: "Load activity" }).click();
-    await expect(window.getByRole("region", { name: "Activity" })).toContainText(
-      "Writing response",
-    );
-    await expect(window.getByRole("region", { name: "Activity" })).toContainText(
-      "Proposed 1 section with 1 entry.",
-    );
-    await expect(window.getByRole("region", { name: "Activity" })).not.toContainText('"sections"');
-    await window.screenshot({ path: "/tmp/spine-ui-activity.png" });
-    expect(
-      await window.evaluate(() => {
-        const rail = document.querySelector(".identity-sidebar")?.getBoundingClientRect();
-        const shell = document.querySelector(".app-shell")?.getBoundingClientRect();
-        return rail !== undefined && shell !== undefined && rail.bottom >= shell.bottom - 1;
-      }),
-    ).toBe(true);
-    await app.evaluate(({ BrowserWindow }) => {
-      BrowserWindow.getAllWindows()[0]?.webContents.setZoomFactor(2);
-    });
-    await window.evaluate(() => {
-      globalThis.scrollTo(0, 0);
-    });
-    expect(
-      await window.evaluate(
-        () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
-      ),
-    ).toBe(true);
-    await window.screenshot({ path: "/tmp/spine-ui-zoom200.png" });
-    await app.evaluate(({ BrowserWindow }) => {
-      BrowserWindow.getAllWindows()[0]?.webContents.setZoomFactor(1);
-    });
-    await window.setViewportSize({ width: 640, height: 480 });
-    await window.evaluate(() => {
-      globalThis.scrollTo(0, 0);
-    });
-    expect(
-      await window.evaluate(
-        () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
-      ),
-    ).toBe(true);
-    await window.screenshot({ path: "/tmp/spine-ui-narrow.png" });
-  } finally {
-    await app.close();
-    rmSync(repository, { recursive: true, force: true });
-  }
+  expect(JSON.parse(output)).toEqual({ staged: true, attempts: 2, exported: true });
 });

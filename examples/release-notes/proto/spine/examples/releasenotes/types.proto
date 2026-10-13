@@ -159,40 +159,46 @@ message ReleaseEvidenceReference {
   string path = 3 [(required) = true];
 }
 
-// One editable release note with explicit evidence.
+// One evidence-backed release note in a model proposal.
 message ReleaseNoteEntry {
-  // Editor-visible claim.
+  // Claim converted once to initial Markdown.
   string text = 1 [(required) = true];
 
   // Evidence supporting this claim.
   repeated ReleaseEvidenceReference evidence = 2 [(validate) = true];
 }
 
-// One editable document section.
+// One section in a model proposal.
 message ReleaseNotesSection {
-  // Editor-visible section heading.
+  // Heading converted once to initial Markdown.
   string heading = 1 [(required) = true];
 
   // Structured claims under this heading.
   repeated ReleaseNoteEntry entries = 2 [(validate) = true];
 }
 
-// Structured release notes; Markdown is rendered from these entries.
+// Structured model proposal converted once to initial editable Markdown.
 message ReleaseNotesDocument {
-  // Orders document sections for rendering into approved Markdown.
+  // Orders model-proposed sections for one-time initial Markdown rendering.
   repeated ReleaseNotesSection sections = 1 [(validate) = true];
 }
 
-// Exact approved bytes and their content digest.
-message ReleaseApproval {
-  // Entity Version reviewed by the editor.
-  spine.core.Version reviewed_version = 1 [(required) = true, (validate) = true];
+// Exact editable UTF-8 Markdown, including the empty document.
+message ReleaseMarkdownContent {
+  // Editor bytes without normalization or structured-note conversion.
+  bytes utf8 = 1;
+}
 
-  // SHA-256 of the approved Markdown bytes.
+// Immutable bytes from one authoritative export preparation.
+message ReleaseExportSnapshot {
+  // Entity Version from which the bytes were taken.
+  spine.core.Version source_version = 1 [(required) = true, (validate) = true];
+
+  // SHA-256 of the Markdown bytes.
   string digest = 2 [(required) = true];
 
-  // Immutable UTF-8 Markdown bytes approved by the editor.
-  bytes markdown = 3 [(required) = true];
+  // Exact UTF-8 Markdown bytes for the native file writer.
+  bytes markdown = 3;
 }
 
 // Session-retained generation identity preventing duplicate model work.

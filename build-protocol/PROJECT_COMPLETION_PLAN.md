@@ -18,13 +18,47 @@ Current work: [Signal-driven Agent entities](planning/agent-entities.md),
 on `agent-entities`, based on official master `658da1cdd`. Anthropic model
 support is included in the first snapshot. PR #18 now includes implementation of the
 human-approved [Release Notes Studio desktop example](planning/release-notes-studio.md).
+On 12 October the human approved a new dashboard/wizard/Markdown-editor design.
+The redesigned implementation received three review-and-fix rounds, but live use
+found additional defects. Actual ChatGPT sign-in and model selection now work.
+A native generation retry confirmed that the example's artificial32KiB response
+ceiling interrupted a successful HTTP200 provider stream. The checkpoint removes
+that ceiling and permits absent model/invocation bounds through runtime and Proto
+validation. Five affected suites255tests pass, including complete Agent generation
+and staging; the example builds/packages successfully. Native use on 13 October confirmed real ChatGPT generation, Markdown editing,
+Preview, export, dashboard reopening, sign-out and native close in the checkpoint.
+The latest reviewed source was then built and packaged; sign-in and real
+GPT-6-Luna generation succeeded there too. Reusable subscription-session code now
+lives in the adapter. Focused checks passed 257 adapter/authentication tests and
+270 optional-limit, MCP, replay and history tests, plus 85 review-correction tests.
+Protobuf lint and generated-output checks pass. Final security review identified
+quadratic MCP response processing and missed synchronous cancellation; both were
+corrected, 222 focused tests passed and scoped independent re-review is clean.
+The human rejected the oversized UI. The desktop-scale correction now passes
+native checks at 1200x820 and 720x720; model dropdowns, generation, editing and
+Preview work. The final smaller package is open for human review. Framework
+versus example responsibilities have been reported. The human also reported slow
+model selection. The selected value now updates immediately while registration
+finishes; rapid changes prepare only the latest queued choice. Focused checks,
+independent review and the packaged native check pass. The app remains open for
+human review. The final full report passes 6,273 tests with branch coverage90.07%
+and all other coverage thresholds satisfied. Additional behavior tests cover
+model/session failures, recorded-response validation, history and Studio
+recovery. Test synchronization and selection-helper review findings are fixed
+and independently accepted. Cheap gates, both dependency audits,21 archive
+consumers and offline publication trials pass. The task record distinguishes
+the completed test report from a post-run shell-wrapper error.
+Remaining work: feature-branch push and exact-head CI observation. The live
+model-call and UI-inspection blockers are resolved.
+Current evidence and acceptance criteria are in the Agent task record.
 The ChatGPT subscription adapter checkpoint is implemented, reviewed, and pushed
 (D-0132). Desktop sign-in and protected credentials are implemented and reviewed (D-0133);
 production history/execution reads are implemented and reviewed for domain integration
 (D-0134). Append-only deployment registration and accepted-signal model selection
 are implemented and reviewed as domain-integration prerequisites (D-0135). The first version uses existing in-memory storage; persistent domain
 storage is deferred. Desktop UI polish and three fresh independent review-and-fix
-rounds are complete. Final local release qualification passes: 6,222 tests,
+rounds for the earlier UI are complete. Before the redesign, local release
+qualification passed: 6,222 tests,
 all coverage thresholds, both dependency audits, all 21 external package
 consumers and offline publication trials, and six Electron checks. PR #18
 records the branch's Build/Security results. Live ChatGPT subscription interaction

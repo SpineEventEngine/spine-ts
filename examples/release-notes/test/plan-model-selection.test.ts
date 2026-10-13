@@ -13,6 +13,8 @@
  */
 
 import { ModelRef, type AiScope } from "@spine-event-engine/ai";
+import { VercelAx } from "@spine-event-engine/ai-vercel-ax";
+import type { PlanSessionModelOptions } from "@spine-event-engine/ai-vercel-ax";
 import { backendDefinition, type AiExecutionControl } from "@spine-event-engine/ai/spi/adapter";
 import { expect, test, vi } from "vitest";
 
@@ -33,11 +35,101 @@ const control = (): AiExecutionControl => ({
   callTool: vi.fn(),
 });
 
+const modelRegistration =
+  (
+    subject: () => string,
+    models: (clientId: string) => Promise<readonly { slug: string; displayName: string }[]>,
+    accessToken: (clientId: string) => Promise<string>,
+  ) =>
+  async (options: PlanSessionModelOptions) => {
+    if (!(await models(options.clientId)).some((entry) => entry.slug === options.model))
+      throw new Error("Model is not available to this account.");
+    const selectedSubject = subject();
+    const identity = {
+      provider: "openai-chatgpt-plan",
+      account: `${options.clientId}:${selectedSubject}`,
+      endpoint: "https://api.openai.com/v1",
+      model: options.model,
+    };
+    return VercelAx.chatgptPlanModel({
+      ref: options.ref,
+      ...(options.platformFetch === undefined ? {} : { platformFetch: options.platformFetch }),
+      resolveIdentity: () => identity,
+      authorizeUse: async (scope, _identity, execution) =>
+        subject() === selectedSubject && (await options.authorizeUse(scope, execution)),
+      connect: async (_scope, _identity, execution) => {
+        if (!(await models(options.clientId)).some((entry) => entry.slug === options.model))
+          throw new Error("Model is not available to this account.");
+        if (!(await options.authorizeUse({} as AiScope, execution)))
+          throw new Error("ChatGPT account or model selection changed.");
+        const token = await accessToken(options.clientId);
+        if (
+          !(await options.authorizeUse({} as AiScope, execution)) ||
+          subject() !== selectedSubject
+        )
+          throw new Error("ChatGPT account or model selection changed.");
+        return { accessToken: token, identity };
+      },
+    });
+  };
+
+test("provider HTTP failures log only fixed status metadata", async () => {
+  let transport: typeof fetch | undefined;
+  const original = VercelAx.chatgptPlanModel.bind(VercelAx);
+  const registration = vi.spyOn(VercelAx, "chatgptPlanModel").mockImplementation((options) => {
+    transport = options.platformFetch;
+    return original(options);
+  });
+  const fetcher = vi
+    .spyOn(globalThis, "fetch")
+    .mockResolvedValue(new Response("private provider body", { status: 400 }));
+  const report = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  try {
+    const selector = new PlanModelSelection(
+      {
+        status: () =>
+          Promise.resolve({
+            selectedClientId: "issued-client",
+            planEnabled: true,
+            pendingClientIds: [],
+            accounts: [{ clientId: "issued-client", subject: "subject", planEnabled: true }],
+          }),
+      },
+      {
+        models: () => Promise.resolve([{ slug: "model", displayName: "Model" }]),
+        model: modelRegistration(
+          () => "subject",
+          () => Promise.resolve([{ slug: "model", displayName: "Model" }]),
+          () => Promise.resolve("private token"),
+        ),
+      },
+    );
+    await selector.selectDiscovered("issued-client", "model");
+    if (!transport) throw new Error("Expected the plan transport callback.");
+    await transport("https://api.openai.com/v1/responses");
+    expect(report).toHaveBeenCalledWith(
+      "[Release Notes Studio generation] stage=provider-response code=http-status status=400",
+    );
+    expect(JSON.stringify(report.mock.calls)).not.toContain("private provider body");
+    expect(JSON.stringify(report.mock.calls)).not.toContain("private token");
+  } finally {
+    report.mockRestore();
+    fetcher.mockRestore();
+    registration.mockRestore();
+  }
+});
+
 test("a nonselected or plan-disabled account cannot browse or register a model", async () => {
   let selectedClientId = "other-client";
   let planEnabled = true;
   const models = vi.fn(() => Promise.resolve([{ slug: "model", displayName: "Model" }]));
-  const accessToken = vi.fn(() => Promise.resolve("secret"));
+  const model = vi.fn(
+    modelRegistration(
+      () => "subject",
+      models,
+      () => Promise.resolve("secret"),
+    ),
+  );
   const selector = new PlanModelSelection(
     {
       status: () =>
@@ -48,7 +140,7 @@ test("a nonselected or plan-disabled account cannot browse or register a model",
           accounts: [{ clientId: "issued-client", subject: "subject", planEnabled }],
         }),
     },
-    { models, accessToken },
+    { models, model },
   );
   expect(selector.current()).toBeUndefined();
   expect(await selector.activeBinding()).toBeUndefined();
@@ -57,7 +149,37 @@ test("a nonselected or plan-disabled account cannot browse or register a model",
   planEnabled = false;
   await expect(selector.selectDiscovered("issued-client", "model")).rejects.toThrow("not selected");
   expect(models).not.toHaveBeenCalled();
-  expect(accessToken).not.toHaveBeenCalled();
+  expect(model).not.toHaveBeenCalled();
+  expect(selector.current()).toBeUndefined();
+});
+
+test("selection uses the session registration's single authoritative model check", async () => {
+  const models = vi.fn(() => Promise.resolve([{ slug: "model", displayName: "Model" }]));
+  const selector = new PlanModelSelection(
+    {
+      status: () =>
+        Promise.resolve({
+          selectedClientId: "client",
+          planEnabled: true,
+          pendingClientIds: [],
+          accounts: [{ clientId: "client", subject: "subject", planEnabled: true }],
+        }),
+    },
+    {
+      models,
+      model: modelRegistration(
+        () => "subject",
+        models,
+        () => Promise.resolve("secret"),
+      ),
+    },
+  );
+  await selector.selectDiscovered("client", "model");
+  expect(models).toHaveBeenCalledExactlyOnceWith("client");
+  models.mockResolvedValue([]);
+  await expect(selector.selectDiscovered("client", "unknown")).rejects.toThrow(
+    "Model is not available to this account.",
+  );
   expect(selector.current()).toBeUndefined();
 });
 
@@ -81,7 +203,14 @@ test("a discovered model registration binds the issued client and verified subje
         Promise.resolve(
           modelAvailable ? [{ slug: "account-model", displayName: "Account Model" }] : [],
         ),
-      accessToken,
+      model: modelRegistration(
+        () => subject,
+        () =>
+          Promise.resolve(
+            modelAvailable ? [{ slug: "account-model", displayName: "Account Model" }] : [],
+          ),
+        accessToken,
+      ),
     },
   );
   const ref = ModelRef.of("release-notes-plan", "account-model");
@@ -125,7 +254,7 @@ test("a discovered model registration binds the issued client and verified subje
   subject = "subject-1";
   modelAvailable = false;
   expect(await selector.activeBinding()).toBeUndefined();
-  await expect(binding.connect(scope, identity, control())).rejects.toThrow("changed");
+  await expect(binding.connect(scope, identity, control())).rejects.toThrow("not available");
   expect(accessToken).toHaveBeenCalledOnce();
   modelAvailable = true;
   selectedClientId = undefined;
@@ -168,7 +297,14 @@ test("a delayed account catalog cannot replace the selected account model regist
         }
         return Promise.resolve([{ slug: "model-B", displayName: "Model B" }]);
       },
-      accessToken: () => Promise.resolve("access-secret"),
+      model: modelRegistration(
+        () => (selectedClientId === "client-A" ? "subject-A" : "subject-B"),
+        (clientId) =>
+          clientId === "client-A"
+            ? (markStarted?.(), catalogA)
+            : Promise.resolve([{ slug: "model-B", displayName: "Model B" }]),
+        () => Promise.resolve("access-secret"),
+      ),
     },
   );
   const first = selector.select("client-A", "model-A", ModelRef.of("plan", "A"));
@@ -210,7 +346,18 @@ test("a delayed earlier model choice cannot replace a later choice on the same a
         }
         return Promise.resolve([{ slug: "model-B", displayName: "Model B" }]);
       },
-      accessToken: () => Promise.resolve("access-secret"),
+      model: modelRegistration(
+        () => "subject-A",
+        () => {
+          if (firstCatalog) {
+            firstCatalog = false;
+            markStarted?.();
+            return catalog;
+          }
+          return Promise.resolve([{ slug: "model-B", displayName: "Model B" }]);
+        },
+        () => Promise.resolve("access-secret"),
+      ),
     },
   );
   const first = selector.select("client-A", "model-A", ModelRef.of("plan", "A"));
@@ -248,12 +395,16 @@ test("an account change during catalog refresh cannot yield an active generation
     {
       models: () => {
         catalogCalls++;
-        if (catalogCalls === 2) catalogStarted?.();
-        return catalogCalls === 2
+        if (catalogCalls === 1) catalogStarted?.();
+        return catalogCalls === 1
           ? delayedCatalog
           : Promise.resolve([{ slug: "model", displayName: "Model" }]);
       },
-      accessToken: () => Promise.resolve("access-secret"),
+      model: modelRegistration(
+        () => "subject",
+        () => Promise.resolve([{ slug: "model", displayName: "Model" }]),
+        () => Promise.resolve("access-secret"),
+      ),
     },
   );
   await selector.select("issued-client", "model", ModelRef.of("plan", "model"));
@@ -292,12 +443,22 @@ test("a connection cannot use a credential after its account changes during cata
     {
       models: () => {
         catalogCalls++;
-        if (catalogCalls === 2) catalogStarted?.();
-        return catalogCalls === 2
+        if (catalogCalls === 1) catalogStarted?.();
+        return catalogCalls === 1
           ? delayedCatalog
           : Promise.resolve([{ slug: "model", displayName: "Model" }]);
       },
-      accessToken,
+      model: modelRegistration(
+        () => "subject",
+        () => {
+          catalogCalls++;
+          if (catalogCalls === 2) catalogStarted?.();
+          return catalogCalls === 2
+            ? delayedCatalog
+            : Promise.resolve([{ slug: "model", displayName: "Model" }]);
+        },
+        accessToken,
+      ),
     },
   );
   const registration = await selector.select(
@@ -338,10 +499,14 @@ test("a connection discards a token obtained after account selection changes", a
     },
     {
       models: () => Promise.resolve([{ slug: "model", displayName: "Model" }]),
-      accessToken: () => {
-        tokenStarted?.();
-        return token;
-      },
+      model: modelRegistration(
+        () => "subject",
+        () => Promise.resolve([{ slug: "model", displayName: "Model" }]),
+        () => {
+          tokenStarted?.();
+          return token;
+        },
+      ),
     },
   );
   const registration = await selector.select(

@@ -129,6 +129,20 @@ describe("Agent history native query paging", () => {
     ).rejects.toThrow("first entry exceeds maxBytes");
   });
 
+  it("returns a complete entry larger than 1 MiB when no byte ceiling is supplied", async () => {
+    const large = event("e".repeat(1_050_000), at, false);
+    const record = AgentHistoryRecords.record(scope.stateType, "ticket", large);
+    const page = await AgentHistoryPages.read({ count: 1 }, undefined, () =>
+      Promise.resolve([record]),
+    );
+    expect(page.entries).toHaveLength(1);
+    const entry = page.entries[0];
+    if (!entry) throw new Error("Expected a history entry");
+    expect(entry.item.case).toBe("domainEvent");
+    expect(toBinary(AgentHistoryEntrySchema, entry).length).toBeGreaterThan(1_048_576);
+    expect(page.hasMore).toBe(false);
+  });
+
   it("rejects invalid bounds and missing stored entries", async () => {
     await expect(
       AgentHistoryPages.read({ count: 0, maxBytes: 100 }, undefined, () => Promise.resolve([])),

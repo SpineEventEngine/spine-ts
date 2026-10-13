@@ -177,4 +177,125 @@ describe("bounded Anthropic stream collection", () => {
       collectModelStream(redactedDelta, { prompt: [] }, 1024, undefined, true),
     ).rejects.toMatchObject({ message: "Anthropic reasoning delta metadata invalid" });
   });
+
+  it.each([
+    [
+      "orphan text delta",
+      [{ type: "text-delta", id: "missing", delta: "x" }],
+      "Orphan Anthropic content delta",
+    ],
+    [
+      "reasoning delta on a text block",
+      [
+        { type: "text-start", id: "block" },
+        { type: "reasoning-delta", id: "block", delta: "x" },
+      ],
+      "Orphan Anthropic content delta",
+    ],
+    [
+      "text end on a reasoning block",
+      [
+        { type: "reasoning-start", id: "block" },
+        { type: "text-end", id: "block" },
+      ],
+      "Orphan Anthropic content end",
+    ],
+    [
+      "orphan tool input",
+      [{ type: "tool-input-delta", id: "missing", delta: "{}" }],
+      "Orphan Anthropic tool input",
+    ],
+    [
+      "duplicate tool-input end",
+      [
+        { type: "tool-input-start", id: "call", toolName: "tool_0" },
+        { type: "tool-input-end", id: "call" },
+        { type: "tool-input-end", id: "call" },
+      ],
+      "Orphan Anthropic tool input",
+    ],
+    [
+      "tool call before its input closes",
+      [
+        { type: "tool-input-start", id: "call", toolName: "tool_0" },
+        { type: "tool-call", toolCallId: "call", toolName: "tool_0", input: "{}" },
+      ],
+      "Anthropic tool content changed",
+    ],
+    [
+      "empty redacted reasoning",
+      [
+        {
+          type: "reasoning-start",
+          id: "block",
+          providerMetadata: { anthropic: { redactedData: "" } },
+        },
+        { type: "reasoning-end", id: "block" },
+      ],
+      "Anthropic redacted thinking missing",
+    ],
+    [
+      "reasoning end on a text block",
+      [
+        { type: "text-start", id: "block" },
+        { type: "reasoning-end", id: "block" },
+      ],
+      "Orphan Anthropic content end",
+    ],
+    [
+      "changed tool name after the input closes",
+      [
+        { type: "tool-input-start", id: "call", toolName: "tool_0" },
+        { type: "tool-input-end", id: "call" },
+        { type: "tool-call", toolCallId: "call", toolName: "other", input: "{}" },
+      ],
+      "Anthropic tool content changed",
+    ],
+    [
+      "non-string redacted content",
+      [
+        {
+          type: "reasoning-start",
+          id: "block",
+          providerMetadata: { anthropic: { redactedData: 1 } },
+        },
+      ],
+      "Anthropic reasoning metadata invalid",
+    ],
+    [
+      "non-string reasoning signature",
+      [
+        { type: "reasoning-start", id: "block" },
+        {
+          type: "reasoning-delta",
+          id: "block",
+          delta: "thinking",
+          providerMetadata: { anthropic: { signature: 1 } },
+        },
+      ],
+      "Anthropic signature metadata invalid",
+    ],
+  ] as const)("rejects %s without admitting a partial proposal", async (_case, parts, reason) => {
+    const result = collectModelStream(modelWith(parts), { prompt: [] }, undefined, undefined, true);
+    await expect(result).rejects.toMatchObject({ message: reason });
+  });
+
+  it("accepts a completed Anthropic tool call when the SDK supplies its final input at end", async () => {
+    const result = await collectModelStream(
+      modelWith([
+        { type: "tool-input-start", id: "call", toolName: "tool_0" },
+        { type: "tool-input-end", id: "call" },
+        { type: "tool-call", toolCallId: "call", toolName: "tool_0", input: '{"ticket":"T"}' },
+        finish,
+      ]),
+      { prompt: [] },
+      undefined,
+      undefined,
+      true,
+    );
+    expect(result.toolCalls).toEqual([{ id: "call", name: "tool_0", input: '{"ticket":"T"}' }]);
+    expect(result.anthropicContent).toEqual([
+      { type: "tool-call", call: { id: "call", name: "tool_0", input: '{"ticket":"T"}' } },
+    ]);
+  });
 });

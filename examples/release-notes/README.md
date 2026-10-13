@@ -1,14 +1,14 @@
 # Release Notes Studio
 
-Turn a local Git comparison into release notes that a maintainer can check,
-edit, approve, and export. An Agent drafts entries and can inspect committed
-changes through three read-only MCP tools. Each entry cites its supporting
-commit, parent, and file; the maintainer decides whether the explanation is right.
+Turn a local Git comparison into editable Markdown release notes. The Agent proposes
+structured claims with committed Git evidence; the application validates those
+claims and converts an accepted proposal once to clean Markdown. You can then
+edit, preview, copy, and export the exact current document.
 
-The application runs locally. Model inference uses the selected ChatGPT account
-at OpenAI, so selected repository content can leave the machine. Drafts and
-history are kept in memory for the backend session. Export approved Markdown
-before quitting; saved sign-in registrations do not restore drafts.
+The application runs locally. Selected changes are sent to OpenAI when you
+choose to write. Drafts and history stay in memory for the backend session;
+export Markdown before quitting if you want a lasting copy. Stored sign-in
+registrations do not restore drafts.
 
 Read the [Agent tutorial](USER_GUIDE.md) to follow the Commands, Events, model
 configuration, validation, MCP calls, and history APIs behind the application.
@@ -37,62 +37,39 @@ Docker container, or separately installed database is required.
 
 ## Prepare a release
 
-1. Choose **Continue with ChatGPT** and complete sign-in in the system browser.
-   Select an account with plan permission, then choose a writing model. In a
-   small window, expand **Account and model** to reach these controls. Signing
-   in alone does not grant plan inference permission.
-2. Enter the earlier commit, branch, or tag in **From**, and the later one in
-   **To**, then choose the local repository. The earlier commit must be in the
-   later commit's history. Changes you have not committed are excluded.
-3. Enter a release title and audience, then choose **Open release draft**.
-   After opening a draft, **Change repository or commits** expands the setup
-   controls. **Session drafts** switches between drafts in the running app.
-4. Add an optional instruction, such as “Explain changes that require library
-   users to update their code,” then choose **Write a draft**. The app uses the
-   selected account and model and does not switch them while writing.
-5. In **Write**, edit the entries and check the source files beside each entry. Use **Sources** to
-   inspect committed changes. A matching citation proves that a change belongs
-   to the comparison; it does not prove the explanation is correct. Exported
-   citations name the file, commit, and parent commit so the evidence can be
-   located in the local repository without a public hosting URL.
-6. Choose **Save edits**, or ask for another draft with more specific instructions.
-   Switching tabs keeps unsaved edits. An older suggestion cannot replace an edit
-   that the application has already accepted.
-7. Open **Preview**, choose **Refresh preview**, and review the formatted notes.
-   Save unsaved edits first. Links and images show their destinations without
-   opening or loading them; **Show export text** reveals the exact Markdown.
-   Choose **Approve release notes**, then **Export release notes** to save the
-   approved Markdown through the native file dialog. Cancelling does not save
-   a file. The macOS dialog asks before replacing an existing file. If saving
-   fails, check the destination and refresh the draft before trying again.
-8. In **Activity**, use **View** to choose **Everything**, **Writing**,
-   **Progress**, or **Draft changes**. Choose **Load activity**, then
-   **Earlier activity** to continue. Entries are summaries of recorded writing
-   and source lookups, with the newest first; internal records are not displayed.
-9. Export before choosing **Quit**. Reloading the window keeps the running
-   session. Reopening after quitting starts with empty drafts and activity.
+1. The app first shows a sign-in dialog. Choose **Sign in with ChatGPT** and
+   finish in the system browser. After restarting, choose a stored usable
+   account in the dialog. The dialog offers one primary recovery action if
+   sign-in or connection fails, plus **Use another account** when needed.
+2. On **Your releases**, choose **New release**. In **Changes**, choose a local
+   Git project, then real local **From** and **To** revisions. The earlier
+   commit must be in the later commit's history. Uncommitted changes are
+   excluded. Enter a **Release** name, check the commit and file counts, then
+   choose **Next**.
+3. In **Writing style**, choose **Customers** or **Developers**, a **Plain** or
+   **Friendly** tone, optional **Notes**, and a model advertised for the selected
+   account. **Write** sends the selected changes to OpenAI. The writing screen shows
+   progress and offers **Cancel**; cancellation preserves any prior Markdown
+   and prevents a late proposal from replacing it.
+4. When writing succeeds, the result opens in a Markdown editor. Edit any text, including headings,
+   code blocks, and whitespace. Changes autosave in order; **Saved for this
+   session** appears only after the trusted service acknowledges the bytes.
+   **Preview** displays Markdown without executing HTML, opening links, or
+   loading remote images. **Copy Markdown** copies the current editor text.
+5. Choose **Export** to save the current exact UTF-8 Markdown through the
+   native file dialog. The app flushes pending edits and checks the current
+   Version before writing. Canceling the dialog does not save a file. If the
+   result is uncertain after a write, inspect the selected destination before
+   exporting again.
+6. **Dashboard** returns to your in-memory releases. Reopen a card to continue
+   editing its project-labelled document and release. **Sign out** is always in the top bar;
+   pending edits are saved, and active writing is stopped before the account is
+   cleared. Closing or quitting ends the draft session, so export first.
 
-Refresh, removal, and account actions use icons. Hover over an icon to see its
-action; each control also has an accessible name for screen readers. Menus support
-arrow keys and typing to find an option.
-
-If submission remains unconfirmed, **Retry saved draft** repeats the
-saved Command with its original instruction, account, model, and comparison.
-It does not use newly edited inputs. The app does not repost automatically, and
-the Aggregate's retained receipt prevents an accepted generation from starting
-again.
-
-If the draft changes before its generation Command is handled, the app can
-receive a rejection for that generation. It shows the rejection and allows you
-to generate again from the current draft; it does not repeat the rejected
-Command. A timeout without a confirmed outcome stays unconfirmed. Reloading the
-window preserves a rejection already observed by the running backend.
-
-While generation is active or unconfirmed, **Quit** or closing the window offers **Wait**
-or **Stop and quit**. Wait keeps the session open. Stopping closes the Bounded
-Context before the window, but the provider may already have performed work and
-charged plan usage. If the app stops after writing an export but before showing
-success, the file may already exist. Reopening never repeats an export automatically.
+A draft-generation submission whose acknowledgement is uncertain retains its
+original draft and generation identifiers for retry. An accepted generation
+cannot silently restart with changed inputs. The Aggregate discards proposals
+that no longer match the pending generation or that arrive after cancellation.
 
 ## Account and model selection
 
@@ -104,30 +81,35 @@ selected account's model catalog instead of assuming a universal model list.
 Tokens are encrypted with Electron `safeStorage` and remain in the trusted
 process. They are not passed to the renderer, stored in domain messages or Agent
 history, or included in exports. Refresh is tied to the same issued registration
-and verified account. **View plan usage** opens the account's ChatGPT usage settings.
+and verified account.
 
-If an initial grant fails with `invalid_grant`, retry using the retained issued
-client registration. Reconnection uses fresh browser authorization secrets.
+If an initial grant fails with `invalid_grant`, the next dialog sign-in retries
+using the retained issued client registration and fresh browser authorization
+secrets. A fresh account action always starts a separate registration.
 Sign-out attempts remote refresh-token revocation and clears local credentials;
 it reports when remote revocation could not be confirmed. The installation ID
 and issued client mapping remain available for a later reconnection.
+
+The trusted process reports a fixed authentication stage, category, and
+allowlisted code to its terminal when sign-in fails. These diagnostics contain
+no credentials, callback URL, account identifier, or provider prose.
 
 The adapter uses the official Responses endpoint with ChatGPT plan permission.
 There is no API-key fallback. See the [authentication and adapter explanation](USER_GUIDE.md#6-connect-an-authenticated-model)
 for how the application connects sign-in to the Agent API.
 
-## Git scope and limits
+## Git scope
 
 The app reads committed changes only. A selected subdirectory resolves to its
 working-tree repository root; bare repositories are unsupported. The accepted
 comparison contains full commit IDs, so moving a branch afterward cannot change
 that generation's input.
 
-The catalog allows up to 200 commits, 2,000 net changes, and 2,000 per-parent
-evidence entries, with a 200 KB bound on aggregate Git output and retained catalog
-data. Git admission also has a ten-second deadline. If the range exceeds a bound,
-select a narrower range. Binary, missing, or oversized detail is reported as
-incomplete rather than silently truncated.
+The catalog retains the selected committed range without an application count,
+byte, or time ceiling. Caller cancellation and an explicitly supplied deadline
+still stop work. Binary or missing detail is reported as incomplete rather than
+silently truncated. Listing results are complete by default; a caller can request
+a page size and continue with `nextPageToken`.
 
 The MCP worker exposes only `list_release_changes`, `read_change_patch`, and
 `read_release_file` for accepted evidence. It cannot edit code, fetch arbitrary

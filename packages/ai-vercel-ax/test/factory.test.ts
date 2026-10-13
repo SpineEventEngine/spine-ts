@@ -34,6 +34,11 @@ import {
   DecisionResponseSchema,
   GenerationResponseSchema,
   AnthropicAssistantContentSchema,
+  OpenAiOutputItemSchema,
+  OpenAiReasoningItemSchema,
+  OpenAiMessageItemSchema,
+  OpenAiMessagePartSchema,
+  OpenAiMessageItem_Phase,
   ToolResponseSchema,
 } from "@spine-event-engine/proto/agent";
 import {
@@ -60,6 +65,11 @@ const identity = {
 };
 
 const scope = {} as Parameters<ReturnType<typeof backendDefinition>["resolveIdentity"]>[0];
+
+const recordedMaxTokens = (promptJson: string): number => {
+  const parsed = JSON.parse(promptJson) as { provider: { maxTokens: number } };
+  return parsed.provider.maxTokens;
+};
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -118,13 +128,17 @@ const executionDefinition = <I extends MessageSchema, O extends MessageSchema>(
 
 function generationFixture(
   streams: readonly (readonly LanguageModelV3StreamPart[])[],
-  maxRequests = streams.length,
+  maxRequests: number | null = streams.length,
   withTool = false,
   provider: "openai" | "anthropic" = "openai",
   modelId = "claude-sonnet-4-5",
   outputMode: "native-schema" | "prompt-and-validate" = "native-schema",
   chatgptPlan = false,
   maxOutputTokens: number | null = 100,
+  inputCeiling: number | null = 2000,
+  anthropicOutputTokenCapacity?: number,
+  materializedAnthropicMaxTokens?: number,
+  withoutTransportBounds = false,
 ) {
   let scopedFetch!: typeof fetch;
   let nextStream = 0;
@@ -141,7 +155,12 @@ function generationFixture(
           `https://provider.example/v1/${provider === "anthropic" ? "messages" : "responses"}`,
           {
             method: "POST",
-            body: "{}",
+            body:
+              provider === "anthropic"
+                ? JSON.stringify({
+                    max_tokens: materializedAnthropicMaxTokens ?? options.maxOutputTokens,
+                  })
+                : "{}",
           },
         )
       ).text();
@@ -168,7 +187,11 @@ function generationFixture(
     authorizeUse: () => true,
     connect: (_scope: typeof scope, _expected: typeof identity, runtime: VercelConnectControl) => {
       scopedFetch = runtime.fetch;
-      return { model, identity: selectedIdentity };
+      return {
+        model,
+        identity: selectedIdentity,
+        ...(anthropicOutputTokenCapacity === undefined ? {} : { anthropicOutputTokenCapacity }),
+      };
     },
   };
   const registration = chatgptPlan
@@ -185,11 +208,11 @@ function generationFixture(
       outputMode,
       ...(withTool ? { tools: [{ server: "support", tool: "lookup" }] } : {}),
       limits: {
-        modelRequests: maxRequests,
-        toolCalls: withTool ? 1 : 0,
-        deadlineMs: 900,
-        maxInputBytes: 2000,
-        maxOutputBytes: 2000,
+        ...(maxRequests === null ? {} : { modelRequests: maxRequests }),
+        ...(maxRequests === null ? {} : { toolCalls: withTool ? 1 : 0 }),
+        ...(withoutTransportBounds ? {} : { deadlineMs: 900 }),
+        ...(inputCeiling === null ? {} : { maxInputBytes: inputCeiling }),
+        ...(withoutTransportBounds ? {} : { maxOutputBytes: 2000 }),
         ...(maxOutputTokens === null ? {} : { maxOutputTokens }),
       },
     }).definition,
@@ -198,9 +221,8 @@ function generationFixture(
   vi.mocked(runtime.beginAttempt).mockImplementation(() =>
     Promise.resolve({
       id: `attempt-${String(vi.mocked(runtime.beginAttempt).mock.calls.length)}`,
-      maxInputBytes: 2000,
-      maxOutputBytes: 2000,
-      deadlineEpochMs: 1000,
+      ...(inputCeiling === null ? {} : { maxInputBytes: inputCeiling }),
+      ...(withoutTransportBounds ? {} : { maxOutputBytes: 2000, deadlineEpochMs: 1000 }),
       signal: runtime.signal,
     }),
   );
@@ -467,6 +489,29 @@ function decisionFixture(model: VercelDecisionModel) {
 }
 
 describe("Vercel connection registration", () => {
+  it("cancels a connection aborted synchronously by a nonsettling callback", async () => {
+    const controller = new AbortController();
+    const network = vi.fn<typeof fetch>();
+    const registration = VercelAx.model({
+      ref: ModelRef.of("draft-support-reply", "r1"),
+      capabilities: VercelAx.capabilities.openAIResponses(),
+      platformFetch: network,
+      resolveIdentity: () => identity,
+      authorizeUse: () => true,
+      connect: () => {
+        controller.abort();
+        return new Promise(() => undefined);
+      },
+    });
+    const { deadlineEpochMs, ...base } = control();
+    expect(deadlineEpochMs).toBeDefined();
+    const runtime = { ...base, signal: controller.signal };
+    await expect(backendDefinition(registration).connect(scope, identity, runtime)).rejects.toThrow(
+      "Connection cancelled",
+    );
+    expect(network).not.toHaveBeenCalled();
+  }, 1_000);
+
   it("requires the dedicated ChatGPT credential constructor", () => {
     const network = vi.fn<typeof fetch>();
     const callback = vi.fn(() => ({
@@ -1289,6 +1334,104 @@ describe("Vercel connection registration", () => {
     });
     await expect(tampered.run()).rejects.toThrow("namespace");
     expect(tampered.network).not.toHaveBeenCalled();
+    for (const [name, corrupt, reason] of [
+      [
+        "duplicate provider item ID",
+        (content: NonNullable<typeof restored.openaiContent>) => {
+          const original = content.items[0];
+          if (!original) throw new Error("Expected saved function item");
+          content.items.push(
+            create(OpenAiOutputItemSchema, {
+              itemId: original.itemId,
+              content: {
+                case: "reasoning",
+                value: create(OpenAiReasoningItemSchema, { encryptedContent: "encrypted" }),
+              },
+            }),
+          );
+        },
+        "Saved Responses item ID invalid",
+      ],
+      [
+        "reasoning without encrypted continuation",
+        (content: NonNullable<typeof restored.openaiContent>) => {
+          content.items.unshift(
+            create(OpenAiOutputItemSchema, {
+              itemId: "reasoning-1",
+              content: {
+                case: "reasoning",
+                value: create(OpenAiReasoningItemSchema, { summary: ["visible summary"] }),
+              },
+            }),
+          );
+        },
+        "Saved Responses reasoning incomplete",
+      ],
+      [
+        "incomplete tool proposal",
+        (content: NonNullable<typeof restored.openaiContent>) => {
+          content.complete = false;
+        },
+        "Responses receipt incomplete",
+      ],
+      [
+        "missing saved function call",
+        (content: NonNullable<typeof restored.openaiContent>) => {
+          const item = content.items[0];
+          if (item?.content.case !== "functionCall")
+            throw new Error("Expected saved function item");
+          item.content.value.call = undefined;
+        },
+        "Responses call missing",
+      ],
+      [
+        "saved message not reflected in output",
+        (content: NonNullable<typeof restored.openaiContent>) => {
+          content.items.push(
+            create(OpenAiOutputItemSchema, {
+              itemId: "unrecorded-message",
+              content: {
+                case: "message",
+                value: create(OpenAiMessageItemSchema, {
+                  phase: OpenAiMessageItem_Phase.FINAL_ANSWER,
+                  parts: [
+                    create(OpenAiMessagePartSchema, {
+                      content: { case: "outputText", value: "unrecorded" },
+                    }),
+                  ],
+                }),
+              },
+            }),
+          );
+        },
+        "Responses projection differs from standard fields",
+      ],
+    ] as const) {
+      const corruptReceipt = fromBinary(
+        GenerationResponseSchema,
+        toBinary(GenerationResponseSchema, saved),
+      );
+      if (!corruptReceipt.openaiContent) throw new Error("Expected saved Responses content");
+      corrupt(corruptReceipt.openaiContent);
+      const rejected = generationFixture(
+        [],
+        2,
+        true,
+        "openai",
+        "test-model",
+        "prompt-and-validate",
+        true,
+        null,
+      );
+      vi.mocked(rejected.runtime.beginAttempt).mockResolvedValueOnce({
+        kind: "replay",
+        id: `tampered-${name}`,
+        response: corruptReceipt,
+      });
+      await expect(rejected.run()).rejects.toThrow(reason);
+      expect(rejected.network).not.toHaveBeenCalled();
+      expect(rejected.runtime.callTool).not.toHaveBeenCalled();
+    }
   });
   it("registers the pinned Anthropic Messages route as a generation provider", () => {
     const capabilities = VercelAx.capabilities.anthropicMessages();
@@ -1446,7 +1589,7 @@ describe("Vercel connection registration", () => {
     expect(JSON.parse(attempt.content.promptJson)).toMatchObject({
       provider: {
         profile: "anthropic-messages-v1",
-        lowering: "anthropic-4.0.72-v2",
+        lowering: "anthropic-4.0.72-v3",
         outputMode: "prompt-and-validate",
         providerOptions: null,
       },
@@ -1495,7 +1638,7 @@ describe("Vercel connection registration", () => {
       expect(JSON.parse(request.content.promptJson)).toMatchObject({
         provider: {
           profile: "anthropic-messages-v1",
-          lowering: "anthropic-4.0.72-v2",
+          lowering: "anthropic-4.0.72-v3",
           outputMode: "native-schema",
           providerOptions: { anthropic: { structuredOutputMode: "outputFormat" } },
         },
@@ -1752,9 +1895,46 @@ describe("Vercel connection registration", () => {
     const request = vi.mocked(fixture.runtime.beginAttempt).mock.calls[0]?.[0];
     if (request?.kind !== "generation") throw new Error("Expected generation request");
     expect(JSON.parse(request.content.promptJson)).toMatchObject({
-      provider: { profile: "anthropic-messages-v1", lowering: "anthropic-4.0.72-v2" },
+      provider: { profile: "anthropic-messages-v1", lowering: "anthropic-4.0.72-v3" },
     });
   });
+
+  it.each([
+    ["missing typed content", undefined, "Saved Anthropic content missing"],
+    [
+      "unsigned thinking",
+      create(AnthropicAssistantContentSchema, {
+        blocks: [{ content: { case: "thinking", value: { text: "reasoning" } } }],
+      }),
+      "Complete Anthropic thinking requires a signature",
+    ],
+    [
+      "empty redacted reasoning",
+      create(AnthropicAssistantContentSchema, {
+        blocks: [{ content: { case: "redactedThinking", value: {} } }],
+      }),
+      "Complete Anthropic redacted thinking requires data",
+    ],
+  ] as const)(
+    "rejects %s in a saved Anthropic tool turn before dispatch",
+    async (_case, content, reason) => {
+      const fixture = generationFixture([], 2, true, "anthropic");
+      vi.mocked(fixture.runtime.beginAttempt).mockResolvedValueOnce({
+        kind: "replay",
+        id: "tampered-anthropic-tool",
+        response: create(GenerationResponseSchema, {
+          outcome: AiOutcome.TOOL_REQUESTED,
+          toolCalls: [
+            { providerCallId: "saved-call", toolName: "tool_0", argumentsJson: '{"ticket":"T-1"}' },
+          ],
+          ...(content === undefined ? {} : { anthropicContent: content }),
+        }),
+      });
+      await expect(fixture.run()).rejects.toThrow(reason);
+      expect(fixture.network).not.toHaveBeenCalled();
+      expect(fixture.runtime.callTool).not.toHaveBeenCalled();
+    },
+  );
 
   it("rebuilds a serialized signed Anthropic tool turn before the next provider request", async () => {
     const fixture = generationFixture(
@@ -2356,7 +2536,46 @@ describe("Vercel connection registration", () => {
     expect(started.content.digest?.value).not.toBe(original.content.digest?.value);
   });
 
-  it("rejects an oversized discovered tool output schema before provider dispatch", async () => {
+  it("prepares valid tool metadata above the former catalog byte cutoffs", async () => {
+    const fixture = generationFixture(
+      [
+        [
+          { type: "text-delta", id: "t", delta: '{"replyText":"Done"}' },
+          { type: "finish", finishReason: { unified: "stop", raw: "stop" }, usage: sdkUsage(1, 1) },
+        ],
+      ],
+      1,
+      true,
+      "openai",
+      "claude-sonnet-4-5",
+      "native-schema",
+      false,
+      100,
+      null,
+    );
+    const inputSchemaJson = JSON.stringify({
+      description: "s".repeat(17_000),
+      type: "object",
+    });
+    const outputSchemaJson = JSON.stringify({
+      description: "o".repeat(17_000),
+      type: "object",
+    });
+    await fixture.run([
+      {
+        ...advertisedLookup,
+        description: "d".repeat(5_000),
+        inputSchemaJson,
+        outputSchemaJson,
+      },
+    ]);
+    expect(fixture.providerCalls).toHaveLength(1);
+    const tool = fixture.providerCalls[0]?.tools?.[0];
+    if (tool?.type !== "function") throw new Error("Expected function tool");
+    expect(tool.description).toHaveLength(5_000);
+  });
+
+  it("rejects malformed discovered tool output schema before provider dispatch", async () => {
     const fixture = generationFixture([], 1, true);
     const catalog = [{ ...advertisedLookup, outputSchemaJson: "x".repeat(16_385) }];
     expect(await fixture.run(catalog)).toMatchObject({
@@ -2381,10 +2600,6 @@ describe("Vercel connection registration", () => {
   it.each([
     { label: "server mapping", catalog: { ...advertisedLookup, server: "other" } },
     { label: "tool mapping", catalog: { ...advertisedLookup, tool: "other" } },
-    {
-      label: "oversized description",
-      catalog: { ...advertisedLookup, description: "x".repeat(4_097) },
-    },
     {
       label: "oversized schema",
       catalog: { ...advertisedLookup, inputSchemaJson: "x".repeat(16_385) },
@@ -2852,6 +3067,273 @@ describe("Vercel connection registration", () => {
     },
   );
 
+  it("continues through more than three corrections when no model-request ceiling is configured", async () => {
+    const invalid: LanguageModelV3StreamPart[] = [
+      { type: "text-delta", id: "t", delta: "{}" },
+      { type: "finish", finishReason: { unified: "stop", raw: "stop" }, usage: sdkUsage(2, 1) },
+    ];
+    const valid: LanguageModelV3StreamPart[] = [
+      { type: "text-delta", id: "t", delta: '{"replyText":"Done"}' },
+      { type: "finish", finishReason: { unified: "stop", raw: "stop" }, usage: sdkUsage(3, 2) },
+    ];
+    const fixture = generationFixture([invalid, invalid, invalid, invalid, valid], null);
+    vi.mocked(fixture.runtime.admitGeneration)
+      .mockReturnValueOnce({
+        ok: false,
+        issues: [{ code: "INVALID_OUTPUT", path: "replyText", message: "Required reply" }],
+      })
+      .mockReturnValueOnce({
+        ok: false,
+        issues: [{ code: "INVALID_OUTPUT", path: "replyText", message: "Required reply" }],
+      })
+      .mockReturnValueOnce({
+        ok: false,
+        issues: [{ code: "INVALID_OUTPUT", path: "replyText", message: "Required reply" }],
+      })
+      .mockReturnValueOnce({
+        ok: false,
+        issues: [{ code: "INVALID_OUTPUT", path: "replyText", message: "Required reply" }],
+      })
+      .mockReturnValue({
+        ok: true,
+        value: create(ProposedSupportReplySchema, { replyText: "Done" }),
+      });
+    await expect(fixture.run()).resolves.toMatchObject({ ok: true });
+    expect(fixture.network).toHaveBeenCalledTimes(5);
+    expect(fixture.runtime.finishAttempt).toHaveBeenCalledTimes(5);
+  });
+
+  it("continues through more than 25 tool steps when no request or tool-call ceiling is configured", async () => {
+    const proposals: LanguageModelV3StreamPart[][] = Array.from({ length: 26 }, (_, index) => [
+      {
+        type: "tool-call",
+        toolCallId: `provider-${String(index)}`,
+        toolName: "tool_0",
+        input: '{"ticket":"T-1"}',
+      },
+      {
+        type: "finish",
+        finishReason: { unified: "tool-calls", raw: "tool-calls" },
+        usage: sdkUsage(2, 1),
+      },
+    ]);
+    const final: LanguageModelV3StreamPart[] = [
+      { type: "text-delta", id: "t", delta: '{"replyText":"Done"}' },
+      { type: "finish", finishReason: { unified: "stop", raw: "stop" }, usage: sdkUsage(3, 2) },
+    ];
+    const fixture = generationFixture(
+      [...proposals, final],
+      null,
+      true,
+      "openai",
+      "claude-sonnet-4-5",
+      "native-schema",
+      false,
+      100,
+      null,
+    );
+    vi.mocked(fixture.runtime.callTool).mockImplementation(({ providerCallId }) =>
+      Promise.resolve(
+        create(ToolResponseSchema, {
+          call: create(AiToolCallIdSchema, { value: providerCallId }),
+          outcome: AiOutcome.ADMITTED,
+          text: ["Found"],
+        }),
+      ),
+    );
+    vi.mocked(fixture.runtime.admitGeneration).mockReturnValue({
+      ok: true,
+      value: create(ProposedSupportReplySchema, { replyText: "Done" }),
+    });
+    await expect(fixture.run()).resolves.toMatchObject({ ok: true });
+    expect(fixture.network).toHaveBeenCalledTimes(27);
+    expect(fixture.runtime.callTool).toHaveBeenCalledTimes(26);
+  });
+
+  it("rejects Anthropic generation without an application ceiling or model capacity before dispatch", async () => {
+    const fixture = generationFixture(
+      [],
+      1,
+      false,
+      "anthropic",
+      "claude-future-unknown",
+      "prompt-and-validate",
+      false,
+      null,
+    );
+    await expect(fixture.run()).resolves.toMatchObject({
+      ok: false,
+      failure: { code: "UNSUPPORTED_CAPABILITY" },
+    });
+    expect(fixture.network).not.toHaveBeenCalled();
+    expect(fixture.runtime.beginAttempt).not.toHaveBeenCalled();
+  });
+
+  it("admits a large provider response when output and deadline bounds are omitted", async () => {
+    const replyText = "x".repeat(4_000);
+    const fixture = generationFixture(
+      [
+        [
+          { type: "text-delta", id: "t", delta: JSON.stringify({ replyText }) },
+          { type: "finish", finishReason: { unified: "stop", raw: "stop" }, usage: unknownUsage },
+        ],
+      ],
+      null,
+      false,
+      "openai",
+      "claude-sonnet-4-5",
+      "native-schema",
+      false,
+      null,
+      null,
+      undefined,
+      undefined,
+      true,
+    );
+    vi.mocked(fixture.runtime.admitGeneration).mockReturnValue({
+      ok: true,
+      value: create(ProposedSupportReplySchema, { replyText }),
+    });
+    await expect(fixture.run()).resolves.toMatchObject({ ok: true });
+    const attempt = vi.mocked(fixture.runtime.beginAttempt).mock.calls[0]?.[0];
+    if (attempt?.kind !== "generation") throw new Error("Expected generation attempt.");
+    const ticket: unknown = await vi.mocked(fixture.runtime.beginAttempt).mock.results[0]?.value;
+    expect(ticket).not.toHaveProperty("maxOutputBytes");
+    expect(ticket).not.toHaveProperty("deadlineEpochMs");
+    const completion = vi.mocked(fixture.runtime.finishAttempt).mock.calls[0]?.[0];
+    if (!completion?.response || !("rawOutput" in completion.response))
+      throw new Error("Expected a generation response.");
+    expect(completion.response.rawOutput.length).toBeGreaterThan(2_000);
+  });
+
+  it("uses a model-bound Anthropic capacity when no application token ceiling is configured", async () => {
+    const stream: LanguageModelV3StreamPart[] = [
+      { type: "text-start", id: "t" },
+      { type: "text-delta", id: "t", delta: '{"replyText":"Done"}' },
+      { type: "text-end", id: "t" },
+      { type: "finish", finishReason: { unified: "stop", raw: "end_turn" }, usage: sdkUsage(3, 2) },
+    ];
+    const fixture = generationFixture(
+      [stream],
+      1,
+      false,
+      "anthropic",
+      "claude-sonnet-4-5",
+      "prompt-and-validate",
+      false,
+      null,
+      2000,
+      64000,
+    );
+    vi.mocked(fixture.runtime.admitGeneration).mockReturnValue({
+      ok: true,
+      value: create(ProposedSupportReplySchema, { replyText: "Done" }),
+    });
+    await expect(fixture.run()).resolves.toMatchObject({ ok: true });
+    expect(fixture.providerCalls[0]?.maxOutputTokens).toBe(64000);
+    const attempt = vi.mocked(fixture.runtime.beginAttempt).mock.calls[0]?.[0];
+    if (attempt?.kind !== "generation") throw new Error("Expected generation request.");
+    expect(recordedMaxTokens(attempt.content.promptJson)).toBe(64000);
+  });
+
+  it("records a changed Anthropic capacity in the durable request used for replay comparison", async () => {
+    const first = generationFixture(
+      [],
+      1,
+      false,
+      "anthropic",
+      "claude-sonnet-4-5",
+      "prompt-and-validate",
+      false,
+      null,
+      2000,
+      100,
+    );
+    const changed = generationFixture(
+      [],
+      1,
+      false,
+      "anthropic",
+      "claude-sonnet-4-5",
+      "prompt-and-validate",
+      false,
+      null,
+      2000,
+      200,
+    );
+    await first.run();
+    await changed.run();
+    const firstAttempt = vi.mocked(first.runtime.beginAttempt).mock.calls[0]?.[0];
+    const changedAttempt = vi.mocked(changed.runtime.beginAttempt).mock.calls[0]?.[0];
+    if (firstAttempt?.kind !== "generation" || changedAttempt?.kind !== "generation")
+      throw new Error("Expected durable generation requests.");
+    expect(recordedMaxTokens(firstAttempt.content.promptJson)).toBe(100);
+    expect(recordedMaxTokens(changedAttempt.content.promptJson)).toBe(200);
+    expect(changedAttempt.content.promptJson).not.toBe(firstAttempt.content.promptJson);
+  });
+
+  it("rejects an application Anthropic token ceiling above the selected model capacity", async () => {
+    const fixture = generationFixture(
+      [],
+      1,
+      false,
+      "anthropic",
+      "claude-sonnet-4-5",
+      "prompt-and-validate",
+      false,
+      101,
+      2000,
+      100,
+    );
+    await expect(fixture.run()).resolves.toMatchObject({
+      ok: false,
+      failure: { code: "UNSUPPORTED_CAPABILITY" },
+    });
+    expect(fixture.network).not.toHaveBeenCalled();
+  });
+
+  it("blocks an altered Anthropic max_tokens value before the physical fetch", async () => {
+    const fixture = generationFixture(
+      [],
+      1,
+      false,
+      "anthropic",
+      "claude-sonnet-4-5",
+      "prompt-and-validate",
+      false,
+      100,
+      2000,
+      100,
+      99,
+    );
+    await expect(fixture.run()).resolves.toMatchObject({ ok: false });
+    expect(fixture.runtime.beginAttempt).toHaveBeenCalledTimes(1);
+    expect(fixture.network).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { provider: "openai" as const, capacity: 100, reason: "requires Anthropic Messages" },
+    { provider: "anthropic" as const, capacity: 0, reason: "positive safe integer" },
+  ])(
+    "rejects invalid model capacity binding for $provider",
+    async ({ provider, capacity, reason }) => {
+      const fixture = generationFixture(
+        [],
+        1,
+        false,
+        provider,
+        "claude-sonnet-4-5",
+        "prompt-and-validate",
+        false,
+        100,
+        2000,
+        capacity,
+      );
+      await expect(fixture.run()).rejects.toThrow(reason);
+      expect(fixture.network).not.toHaveBeenCalled();
+    },
+  );
+
   it.each(["admitted", "invalid"] as const)(
     "keeps provider usage absent on %s generation output",
     async (outcome) => {
@@ -3016,7 +3498,7 @@ describe("Vercel connection registration", () => {
       deadlineEpochMs: 1000,
       signal: fixture.runtime.signal,
     });
-    expect(await fixture.run()).toMatchObject({ ok: false, failure: { code: "INVALID_OUTPUT" } });
+    expect(await fixture.run()).toMatchObject({ ok: false, failure: { code: "BUDGET_EXCEEDED" } });
     expect(fixture.runtime.admitGeneration).not.toHaveBeenCalled();
     expect(fixture.runtime.finishAttempt).toHaveBeenCalledTimes(1);
   });

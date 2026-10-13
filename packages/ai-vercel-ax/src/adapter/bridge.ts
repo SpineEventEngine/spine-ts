@@ -108,7 +108,7 @@ export interface AxRequestControl {
   /**
    * Maximum physical requests, including corrections and tool continuations.
    */
-  readonly maxRequests: number;
+  readonly maxRequests?: number;
 
   /**
    * Records an attempt before dispatch; an unknown outcome still consumes it.
@@ -169,7 +169,10 @@ export const AxVercelBridge = {
    * @returns An Ax service for one bounded generation operation.
    */
   create(model: LanguageModel, control: AxRequestControl): AxAIService {
-    if (!Number.isSafeInteger(control.maxRequests) || control.maxRequests < 1) {
+    if (
+      control.maxRequests !== undefined &&
+      (!Number.isSafeInteger(control.maxRequests) || control.maxRequests < 1)
+    ) {
       throw new Error("maxRequests must be a positive safe integer");
     }
     let attempts = 0;
@@ -183,7 +186,8 @@ export const AxVercelBridge = {
       chat: async (request: Readonly<AxChatRequest>, options?: { abortSignal?: AbortSignal }) => {
         if (options?.abortSignal?.aborted) throw new Error("Request aborted");
         const prepared = AxVercelBridge.prepare(request, control.onAssistant);
-        if (attempts >= control.maxRequests) throw new Error("Request budget exhausted");
+        if (control.maxRequests !== undefined && attempts >= control.maxRequests)
+          throw new Error("Request budget exhausted");
         attempts += 1;
         await control.onAttempt?.(attempts);
         if (options?.abortSignal?.aborted) throw new Error("Request aborted");

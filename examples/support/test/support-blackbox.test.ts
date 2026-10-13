@@ -50,19 +50,6 @@ const conversation = create(ConversationIdSchema, { value: "SUP-47-draft-1" });
 function registry(backend: AiTestBackend): AiRegistry {
   return AiRegistry.create({
     defaultModels: { generation: backend.registration.ref },
-    invocationLimits: {
-      operations: 1,
-      modelRequests: 2,
-      toolCalls: 0,
-      recordedReads: 1,
-      deadlineMs: 30_000,
-      totalInputBytes: 32_000,
-      totalOutputBytes: 16_000,
-      // Two 8 KiB responses retain raw, typed, and admitted copies plus audit rows.
-      maxRecoveryBytes: 96_000,
-    },
-    concurrentOperations: 1,
-    queuedOperations: 0,
   }).register(backend.registration);
 }
 
@@ -146,12 +133,12 @@ describe("warehouse support draft through BlackBox", () => {
     }
   });
 
-  it("records malformed output as a failure without publishing a draft", async () => {
+  it("records a refusal after malformed output without publishing a draft", async () => {
     const backend = AiTestBackend.create({
       ref: ModelRef.of("support-scripted", "v1"),
       kind: "generation",
     });
-    backend.forModel(draftSupportReply).respondWithText("not JSON").respondWithText("not JSON");
+    backend.forModel(draftSupportReply).respondWithText("not JSON").refuse();
     const { box, scope } = await started(backend);
     try {
       const failed = await box.eventually(
@@ -199,7 +186,7 @@ describe("warehouse support draft through BlackBox", () => {
       .forModel(draftSupportReply)
       .respondWith(previousReply)
       .respondWithText("not JSON")
-      .respondWithText("not JSON");
+      .refuse();
     const { box, scope } = await started(backend);
     try {
       await box.eventually(

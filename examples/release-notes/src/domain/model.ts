@@ -42,11 +42,11 @@ export const ReleaseDocumentValidation = {
    */
   entry(entry: ReleaseNoteEntry, path: string, listed: ReadonlySet<string>): AiValidationIssue[] {
     const issues: AiValidationIssue[] = [];
-    if (!entry.text.trim() || entry.text.length > 2_000)
+    if (!entry.text.trim())
       issues.push({
         code: "TEXT",
         path: `${path}.text`,
-        message: "Use a bounded, nonblank claim.",
+        message: "Use a nonblank claim.",
       });
     if (entry.evidence.length === 0)
       issues.push({
@@ -67,6 +67,30 @@ export const ReleaseDocumentValidation = {
   },
 
   /**
+   * Checks a proposed section and its claims against the accepted catalog.
+   *
+   * @param section Proposed section.
+   * @param index Position in the document.
+   * @param listed Exact accepted evidence references.
+   * @returns Safe local validation issues.
+   */
+  section(
+    section: ReleaseNotesDocument["sections"][number],
+    index: number,
+    listed: ReadonlySet<string>,
+  ): AiValidationIssue[] {
+    const path = `sections[${String(index)}]`;
+    const issues: AiValidationIssue[] = [];
+    if (!section.heading.trim())
+      issues.push({ code: "HEADING", path: `${path}.heading`, message: "Use a nonblank heading." });
+    if (section.entries.length === 0)
+      issues.push({ code: "ENTRIES", path: `${path}.entries`, message: "Use at least one entry." });
+    for (const [entryIndex, entry] of section.entries.entries())
+      issues.push(...this.entry(entry, `${path}.entries[${String(entryIndex)}]`, listed));
+    return issues;
+  },
+
+  /**
    * Checks structured claims without Git I/O or provider-dependent facts.
    *
    * @param value Candidate document after Protobuf validation.
@@ -83,27 +107,10 @@ export const ReleaseDocumentValidation = {
       ) ?? [],
     );
     const issues: AiValidationIssue[] = [];
-    if (value.sections.length === 0 || value.sections.length > 8)
-      issues.push({ code: "SECTIONS", path: "sections", message: "Use one to eight sections." });
-    for (const [sectionIndex, section] of value.sections.entries()) {
-      const path = `sections[${String(sectionIndex)}]`;
-      if (!section.heading.trim() || section.heading.length > 120)
-        issues.push({ code: "HEADING", path: `${path}.heading`, message: "Use a short heading." });
-      if (section.entries.length === 0 || section.entries.length > 40)
-        issues.push({
-          code: "ENTRIES",
-          path: `${path}.entries`,
-          message: "Use one to forty entries.",
-        });
-      for (const [entryIndex, entry] of section.entries.entries())
-        issues.push(
-          ...ReleaseDocumentValidation.entry(
-            entry,
-            `${path}.entries[${String(entryIndex)}]`,
-            listed,
-          ),
-        );
-    }
+    if (value.sections.length === 0)
+      issues.push({ code: "SECTIONS", path: "sections", message: "Use at least one section." });
+    for (const [sectionIndex, section] of value.sections.entries())
+      issues.push(...ReleaseDocumentValidation.section(section, sectionIndex, listed));
     return issues;
   },
 } as const;
@@ -133,13 +140,6 @@ export const draftReleaseNotes: AiCapability<
     { server: "release-git", tool: "read_change_patch" },
     { server: "release-git", tool: "read_release_file" },
   ],
-  limits: {
-    modelRequests: 3,
-    toolCalls: 6,
-    deadlineMs: 120_000,
-    maxInputBytes: 256_000,
-    maxOutputBytes: 32_000,
-  },
   validation: {
     version: "1",
     check: ReleaseDocumentValidation.check,

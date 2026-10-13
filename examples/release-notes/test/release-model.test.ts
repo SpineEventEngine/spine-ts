@@ -29,7 +29,7 @@ import {
 import { ReleaseDocumentValidation } from "../src/domain/model.js";
 import { ReleaseMarkdown } from "../src/domain/markdown.js";
 
-it("renders full immutable evidence references without activating path Markdown", () => {
+it("renders clean initial Markdown while keeping evidence in the validated proposal", () => {
   const commit = "b".repeat(40);
   const parent = "a".repeat(40);
   const path = "docs/[launch](javascript:alert(1))<&>\"'x\nnote.md";
@@ -55,13 +55,11 @@ it("renders full immutable evidence references without activating path Markdown"
   const markdown = new TextDecoder().decode(
     ReleaseMarkdown.render(create(ReleaseTitleSchema, { value: "October release" }), document),
   );
-  expect(markdown).toContain(
-    `in commit <code>${commit}</code>, compared with parent <code>${parent}</code>`,
-  );
-  expect(markdown).toContain(
-    "<code>&quot;docs/[launch](javascript:alert(1))&lt;&amp;&gt;\\&quot;&#39;x\\nnote.md&quot;</code>",
-  );
-  expect(markdown).not.toContain('"docs/[launch](javascript:alert(1))');
+  expect(markdown).toContain("- Documented the launch.");
+  expect(markdown).not.toContain(commit);
+  expect(markdown).not.toContain(parent);
+  expect(markdown).not.toContain(path);
+  expect(markdown).not.toContain("javascript:");
 });
 
 it("requires every proposed claim to cite exact accepted catalog evidence", () => {
@@ -112,7 +110,7 @@ it("requires every proposed claim to cite exact accepted catalog evidence", () =
   );
 });
 
-it("rejects empty and oversized document structure before a proposal can be staged", () => {
+it("rejects empty document structure without imposing a section count ceiling", () => {
   const input = create(ReleaseGenerationRequestedSchema);
   expect(ReleaseDocumentValidation.check(create(ReleaseNotesDocumentSchema), input)).toEqual([
     expect.objectContaining({ code: "SECTIONS", path: "sections" }),
@@ -129,12 +127,12 @@ it("rejects empty and oversized document structure before a proposal can be stag
   candidate.sections = Array.from({ length: 9 }, () =>
     create(ReleaseNotesSectionSchema, { heading: "Changes" }),
   );
-  expect(ReleaseDocumentValidation.check(candidate, input)).toEqual(
-    expect.arrayContaining([expect.objectContaining({ code: "SECTIONS" })]),
-  );
+  expect(
+    ReleaseDocumentValidation.check(candidate, input).some((issue) => issue.code === "SECTIONS"),
+  ).toBe(false);
 });
 
-it("rejects a plausible citation when its parent differs and bounds claim text", () => {
+it("rejects a plausible citation when its parent differs while allowing long claim text", () => {
   const commit = create(GitCommitIdSchema, { value: "b".repeat(40) });
   const parent = create(GitCommitIdSchema, { value: "a".repeat(40) });
   const input = create(ReleaseGenerationRequestedSchema, {
@@ -163,16 +161,18 @@ it("rejects a plausible citation when its parent differs and bounds claim text",
   });
   expect(ReleaseDocumentValidation.check(candidate, input)).toEqual(
     expect.arrayContaining([
-      expect.objectContaining({ code: "TEXT", path: "sections[0].entries[0].text" }),
       expect.objectContaining({
         code: "UNLISTED_EVIDENCE",
         path: "sections[0].entries[0].evidence[0]",
       }),
     ]),
   );
+  expect(
+    ReleaseDocumentValidation.check(candidate, input).some((issue) => issue.code === "TEXT"),
+  ).toBe(false);
 });
 
-it("refuses blank claims, oversized headings, and sections with too many claims", () => {
+it("refuses blank claims while allowing long headings and many claims", () => {
   const input = create(ReleaseGenerationRequestedSchema, {
     catalog: create(ReleaseEvidenceCatalogSchema),
   });
@@ -192,8 +192,6 @@ it("refuses blank claims, oversized headings, and sections with too many claims"
   const issues = ReleaseDocumentValidation.check(candidate, input);
   expect(issues).toEqual(
     expect.arrayContaining([
-      expect.objectContaining({ code: "HEADING", path: "sections[0].heading" }),
-      expect.objectContaining({ code: "ENTRIES", path: "sections[0].entries" }),
       expect.objectContaining({ code: "TEXT", path: "sections[0].entries[0].text" }),
       expect.objectContaining({
         code: "MISSING_EVIDENCE",
@@ -202,4 +200,5 @@ it("refuses blank claims, oversized headings, and sections with too many claims"
     ]),
   );
   expect(issues.filter((issue) => issue.code === "TEXT")).toHaveLength(41);
+  expect(issues.some((issue) => issue.code === "HEADING" || issue.code === "ENTRIES")).toBe(false);
 });

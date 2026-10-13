@@ -774,8 +774,8 @@ persistent provider when records must survive process termination.
 
 All methods return newest entries first. A request supplies positive `pageSize`
 and an optional opaque cursor; `nextCursor` continues toward older entries.
-There is no fixed 100-item ceiling. A 1 MiB serialized page bound can shorten a
-page; an individual record larger than that bound fails explicitly. Ordering
+There is no fixed 100-item or page-byte ceiling. Reads made during a handler count
+toward any configured invocation limits for recorded reads and recovery data. Ordering
 uses the full Spine `Time` timestamp, category and existing record ID. There is
 no repository-managed history counter. Cursors cannot be transferred across
 Agents, tenants, categories or conversations.

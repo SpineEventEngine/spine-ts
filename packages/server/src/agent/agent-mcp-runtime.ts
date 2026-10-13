@@ -56,6 +56,22 @@ interface SelectedServer {
  */
 class SafeMcpError extends Error {}
 
+const toolDispatchReasons = new Map([
+  ["Agent tool proposal was concurrently journaled.", "concurrent-proposal"],
+  ["Agent tool call ID is unknown.", "unknown-call"],
+  ["Agent tool already completed.", "already-completed"],
+  ["Agent tool completion does not match a pending intent.", "completion-mismatch"],
+  ["Agent invocation tool-call budget is exhausted.", "tool-count-budget"],
+  ["Agent invocation input byte budget is exhausted.", "input-byte-budget"],
+  ["Agent invocation output byte credit is exhausted.", "output-byte-budget"],
+  ["Agent MCP journal exceeds invocation recovery bytes.", "recovery-byte-budget"],
+  ["Agent MCP head exceeds provider execution head bytes.", "head-byte-budget"],
+  ["Agent MCP journal exceeds provider execution record bytes.", "record-byte-budget"],
+  ["Agent MCP conversation history exceeds provider history bytes.", "history-byte-budget"],
+  ["Agent MCP mutation exceeds provider transaction payload bytes.", "transaction-byte-budget"],
+  ["MCP call already active", "ticket-collision"],
+]);
+
 /**
  * Executes one selected MCP catalog and its calls under the shared Agent journal.
  */
@@ -112,7 +128,10 @@ export class AgentMcpRuntime {
     const session = this.sessions.get(invocation.server);
     if (!this.isAllowed(invocation) || !policy || !session)
       return this.rejected("UNSUPPORTED_CAPABILITY");
-    if (Buffer.byteLength(invocation.argumentsJson, "utf8") > policy.maxArgumentBytes)
+    if (
+      policy.maxArgumentBytes !== undefined &&
+      Buffer.byteLength(invocation.argumentsJson, "utf8") > policy.maxArgumentBytes
+    )
       return this.rejected("INVALID_INPUT");
     let argumentsObject: Readonly<Record<string, AiJson>>;
     try {
@@ -181,12 +200,17 @@ export class AgentMcpRuntime {
     const settled = Promise.allSettled(
       sessions.map((session) => Promise.resolve().then(() => session.close())),
     );
-    const deadline = Math.min(
-      this.host.deadlineEpochMs,
-      Time.currentTimeMillis() + this.hookTimeout(),
-    );
+    const timeoutMs = this.hookTimeout();
+    const timeoutDeadline =
+      timeoutMs === undefined ? undefined : Time.currentTimeMillis() + timeoutMs;
+    const deadline =
+      this.host.deadlineEpochMs === undefined
+        ? timeoutDeadline
+        : timeoutDeadline === undefined
+          ? this.host.deadlineEpochMs
+          : Math.min(this.host.deadlineEpochMs, timeoutDeadline);
     const child = new AbortController();
-    const stop = schedule(deadline, child);
+    const stop = deadline === undefined ? () => undefined : schedule(deadline, child);
     const abort = abortWait(child.signal);
     let closed: Awaited<typeof settled>;
     try {
@@ -343,7 +367,7 @@ export class AgentMcpRuntime {
   private async checkConnectionIdentity(
     server: McpServerDefinition,
     session: AiMcpProtocolSession,
-    timeout: number,
+    timeout: number | undefined,
   ): Promise<void> {
     if (
       session.identity.serverId !== server.id ||
@@ -388,8 +412,8 @@ export class AgentMcpRuntime {
    * Reads the finite callback bound from application registration.
    * @returns Callback timeout in milliseconds.
    */
-  private hookTimeout(): number {
-    return registryOptions(this.host.registry).hookTimeoutMs ?? 5_000;
+  private hookTimeout(): number | undefined {
+    return registryOptions(this.host.registry).hookTimeoutMs;
   }
 
   /**
@@ -401,7 +425,9 @@ export class AgentMcpRuntime {
   private protocol(server: string, control: AiControl): AiMcpProtocolControl {
     return {
       signal: control.signal,
-      deadlineEpochMs: this.host.deadlineEpochMs,
+      ...(this.host.deadlineEpochMs === undefined
+        ? {}
+        : { deadlineEpochMs: this.host.deadlineEpochMs }),
       nowEpochMs: () => Time.currentTimeMillis(),
       hasAuthority: () => !control.signal.aborted && !this.closed.signal.aborted,
       reserveMessage: (request) => this.host.reserveMessage(server, request),
@@ -449,12 +475,23 @@ export class AgentMcpRuntime {
       argumentsJson: call.argumentsJson,
       effect: policy.effect === "write" ? ToolEffect.WRITE : ToolEffect.READ,
     };
-    const intent = await this.host.journalToolIntent(call, request);
-    if (intent.kind !== "new") return intent.response;
-    await this.host.markToolDispatched(intent.callId);
-    const response = await this.perform(call, session, policy, intent.callId);
-    await this.host.finishTool(intent.callId, response, this.history(response));
-    return response;
+    let stage = "intent";
+    try {
+      const intent = await this.host.journalToolIntent(call, request);
+      if (intent.kind !== "new") return intent.response;
+      stage = "mark";
+      await this.host.markToolDispatched(intent.callId);
+      stage = "perform";
+      const response = await this.perform(call, session, policy, intent.callId);
+      stage = "finish";
+      await this.host.finishTool(intent.callId, response, this.history(response));
+      return response;
+    } catch (error) {
+      console.error(`[Release Notes Studio generation] stage=mcp-dispatch code=${stage}`);
+      const reason = error instanceof Error ? toolDispatchReasons.get(error.message) : undefined;
+      console.error(`[Release Notes Studio generation] stage=mcp-reason code=${reason ?? "other"}`);
+      throw error;
+    }
   }
 
   /**
@@ -477,8 +514,12 @@ export class AgentMcpRuntime {
           session.call(call.tool, call.argumentsJson, {
             toolCallId: callId,
             signal: control.signal,
-            deadlineEpochMs: control.deadlineEpochMs,
-            maxResultBytes: policy.maxResultBytes,
+            ...(control.deadlineEpochMs === undefined
+              ? {}
+              : { deadlineEpochMs: control.deadlineEpochMs }),
+            ...(policy.maxResultBytes === undefined
+              ? {}
+              : { maxResultBytes: policy.maxResultBytes }),
           }),
         policy.timeoutMs,
       );
@@ -564,17 +605,23 @@ export class AgentMcpRuntime {
    */
   private async bounded<T>(
     run: (control: AiControl) => T | Promise<T>,
-    limitMs: number,
+    limitMs: number | undefined,
     onLate?: (value: T) => Promise<void>,
   ): Promise<T> {
     const now = Time.currentTimeMillis();
-    const deadline = Math.min(this.host.deadlineEpochMs, now + limitMs);
-    if (this.host.signal.aborted || this.closed.signal.aborted || deadline <= now)
+    const deadline = effectiveDeadline(this.host.deadlineEpochMs, limitMs, now);
+    if (
+      this.host.signal.aborted ||
+      this.closed.signal.aborted ||
+      (deadline !== undefined && deadline <= now)
+    )
       throw new SafeMcpError("MCP operation deadline or cancellation");
     const child = new AbortController();
     const signal = AbortSignal.any([this.host.signal, this.closed.signal, child.signal]);
-    const stop = schedule(deadline, child);
-    const running = Promise.resolve().then(() => run({ signal, deadlineEpochMs: deadline }));
+    const stop = deadline === undefined ? () => undefined : schedule(deadline, child);
+    const running = Promise.resolve().then(() =>
+      run({ signal, ...(deadline === undefined ? {} : { deadlineEpochMs: deadline }) }),
+    );
     const abort = abortWait(signal);
     try {
       return await Promise.race([running, abort.promise]);
@@ -587,6 +634,26 @@ export class AgentMcpRuntime {
     }
   }
 }
+
+/**
+ * Chooses the earliest explicitly configured host or local deadline.
+ * @param hostDeadline Host operation deadline, if configured.
+ * @param limitMs Explicit local callback limit, if configured.
+ * @param now Current domain time in epoch milliseconds.
+ * @returns Effective deadline or undefined when neither exists.
+ */
+const effectiveDeadline = (
+  hostDeadline: number | undefined,
+  limitMs: number | undefined,
+  now: number,
+): number | undefined => {
+  const local = limitMs === undefined ? undefined : now + limitMs;
+  return hostDeadline === undefined
+    ? local
+    : local === undefined
+      ? hostDeadline
+      : Math.min(hostDeadline, local);
+};
 
 /**
  * Calculates SHA-256 of the configured transport endpoint without resolved credentials.

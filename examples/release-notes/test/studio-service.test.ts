@@ -29,6 +29,7 @@ import { BoundedContext } from "@spine-event-engine/server";
 
 import {
   EditReleaseNotesSchema,
+  OpenReleaseDraftSchema,
   PrepareReleaseNotesExportSchema,
   RequestReleaseGenerationSchema,
   type RequestReleaseGeneration,
@@ -37,9 +38,9 @@ import { ReleaseGenerationInputsConflictSchema } from "../generated/spine/exampl
 import {
   ReleaseDraftIdSchema,
   ReleaseInstructionSchema,
-  ReleaseNotesDocumentSchema,
 } from "../generated/spine/examples/releasenotes/types_pb.js";
 import { ReleaseStudio } from "../dist/src/trusted/studio-service.js";
+import { GitReleaseComparison } from "../dist/src/trusted/git-release.js";
 import { PlanModelSelection } from "../src/trusted/plan-model-selection.js";
 import { StudioAccountGate } from "../src/trusted/studio-account-gate.js";
 import { StudioWindowClose } from "../src/trusted/studio-window-close.js";
@@ -114,7 +115,7 @@ it("opens a draft through the public in-process Client with one pinned Git compa
   const target = git("rev-parse", "HEAD");
   const plan = new PlanModelSelection(
     { status: () => Promise.resolve({ accounts: [], pendingClientIds: [], planEnabled: false }) },
-    { models: () => Promise.resolve([]), accessToken: () => Promise.reject(new Error("No plan")) },
+    { models: () => Promise.resolve([]), model: () => Promise.reject(new Error("No plan")) },
   );
   let catalogUnavailable = true;
   const studio = await ReleaseStudio.start({
@@ -143,7 +144,166 @@ it("opens a draft through the public in-process Client with one pinned Git compa
     expect(draft.comparison.selectionId).toBe(selected.selectionId);
     expect(draft.version.number).toBeGreaterThan(0);
     expect(draft.version.timestamp?.seconds).toBeTypeOf("bigint");
+    expect(draft.lastEditedAt).toBeTruthy();
     expect((await studio.readDraft(draft.id)).version).toEqual(draft.version);
+    expect((await studio.readDraft(draft.id)).lastEditedAt).toBe(draft.lastEditedAt);
+    const retried = await studio.openDraft(
+      selected.selectionId,
+      "October release",
+      "SDK users",
+      draft.id,
+    );
+    expect(retried.version).toEqual(draft.version);
+    expect(studio.session().drafts.filter((id) => id === draft.id)).toHaveLength(1);
+    for (const [selectionId, title, audience] of [
+      [selected.selectionId, "Changed title", "SDK users"],
+      [selected.selectionId, "October release", "Changed audience"],
+    ] as const) {
+      await expect(studio.openDraft(selectionId, title, audience, draft.id)).rejects.toThrow(
+        "identity conflicts",
+      );
+    }
+    const concurrentProbe = Client.usingTransport(
+      createRouterTransport((router) => {
+        void router;
+      }),
+    );
+    const concurrentPrototype = Object.getPrototypeOf(concurrentProbe.asGuest()) as {
+      post: (...args: unknown[]) => Promise<{ kind: string }>;
+    };
+    const postBeforeConcurrency = concurrentPrototype.post;
+    const entered = Promise.withResolvers<undefined>();
+    const releasePost = Promise.withResolvers<undefined>();
+    let sameDraftPosts = 0;
+    concurrentPrototype.post = async function (this: unknown, ...args: unknown[]) {
+      if ((args[0] as { typeName?: string }).typeName === OpenReleaseDraftSchema.typeName) {
+        sameDraftPosts++;
+        if (sameDraftPosts === 1) {
+          entered.resolve(undefined);
+          await releasePost.promise;
+        } else {
+          return { kind: "rejected" };
+        }
+      }
+      return Reflect.apply(postBeforeConcurrency, this, args);
+    };
+    try {
+      const first = studio.openDraft(selected.selectionId, "Concurrent", "SDK users", "same-id");
+      await entered.promise;
+      const second = studio.openDraft(selected.selectionId, "Concurrent", "SDK users", "same-id");
+      await expect(
+        studio.openDraft(selected.selectionId, "Different", "SDK users", "same-id"),
+      ).rejects.toThrow("identity conflicts");
+      await new Promise((done) => setImmediate(done));
+      releasePost.resolve(undefined);
+      const [initial, retriedConcurrent] = await Promise.all([first, second]);
+      expect(retriedConcurrent.version).toEqual(initial.version);
+      expect(studio.session().drafts).toContain("same-id");
+      expect(sameDraftPosts).toBe(1);
+    } finally {
+      releasePost.resolve(undefined);
+      concurrentPrototype.post = postBeforeConcurrency;
+      await concurrentProbe.close();
+    }
+    const abandoned = await studio.compare(directory, base, target);
+    const latest = await studio.compare(directory, base, target);
+    await expect(studio.evidencePatch(abandoned.selectionId, 0)).rejects.toThrow("unavailable");
+    expect((await studio.evidencePatch(selected.selectionId, 0)).patch).toContain("+After");
+    expect((await studio.evidencePatch(latest.selectionId, 0)).patch).toContain("+After");
+    const firstProject = await studio.selectProject(directory);
+    const activeProject = await studio.selectProject(directory);
+    await expect(studio.compareProject(firstProject.handle, base, target)).rejects.toThrow(
+      "unavailable",
+    );
+    expect((await studio.compareProject(activeProject.handle, base, target)).changes).toHaveLength(
+      1,
+    );
+    const actualOpen = GitReleaseComparison.open.bind(GitReleaseComparison);
+    const releaseSlow = Promise.withResolvers<undefined>();
+    let holdFirst = true;
+    const delayedOpen = vi
+      .spyOn(GitReleaseComparison, "open")
+      .mockImplementation(async (input, control) => {
+        if (holdFirst) {
+          holdFirst = false;
+          await releaseSlow.promise;
+        }
+        return actualOpen(input, control);
+      });
+    try {
+      const slow = studio.compare(directory, base, target);
+      const newest = await studio.compare(directory, base, target);
+      releaseSlow.resolve(undefined);
+      const stale = await slow;
+      await expect(studio.evidencePatch(stale.selectionId, 0)).rejects.toThrow("unavailable");
+      expect((await studio.evidencePatch(newest.selectionId, 0)).patch).toContain("+After");
+      expect((await studio.evidencePatch(selected.selectionId, 0)).patch).toContain("+After");
+    } finally {
+      releaseSlow.resolve(undefined);
+      delayedOpen.mockRestore();
+    }
+    const probe = Client.usingTransport(
+      createRouterTransport((router) => {
+        void router;
+      }),
+    );
+    const prototype = Object.getPrototypeOf(probe.asGuest()) as {
+      post: (...args: unknown[]) => Promise<{ kind: string }>;
+    };
+    const originalPost = prototype.post;
+    let lost = true;
+    let rejectNext = false;
+    const posted: unknown[] = [];
+    const retryEntered = Promise.withResolvers<undefined>();
+    const releaseRetry = Promise.withResolvers<undefined>();
+    let recoveredPosts = 0;
+    prototype.post = async function (this: unknown, ...args: unknown[]) {
+      if ((args[0] as { typeName?: string }).typeName === OpenReleaseDraftSchema.typeName) {
+        posted.push(structuredClone(args[1]));
+        if (lost) {
+          lost = false;
+          throw new Error("Fixture lost draft admission before dispatch.");
+        }
+        if ((args[1] as { id?: { value?: string } }).id?.value === "recovered") {
+          recoveredPosts++;
+          if (recoveredPosts === 1) {
+            retryEntered.resolve(undefined);
+            await releaseRetry.promise;
+          } else {
+            return { kind: "rejected" };
+          }
+        }
+        if (rejectNext) return { kind: "rejected" };
+      }
+      return Reflect.apply(originalPost, this, args);
+    };
+    try {
+      await expect(
+        studio.openDraft(selected.selectionId, "Recovered", "Users", "recovered"),
+      ).rejects.toThrow("before dispatch");
+      expect(studio.session().drafts).toContain(draft.id);
+      expect(studio.session().drafts).toContain("recovered");
+      const firstRecovery = studio.readDraft("recovered");
+      await retryEntered.promise;
+      const secondRecovery = studio.readDraft("recovered");
+      await new Promise((done) => setImmediate(done));
+      releaseRetry.resolve(undefined);
+      const [firstRecovered, secondRecovered] = await Promise.all([firstRecovery, secondRecovery]);
+      expect(firstRecovered.title).toBe("Recovered");
+      expect(secondRecovered.version).toEqual(firstRecovered.version);
+      expect(recoveredPosts).toBe(1);
+      expect(studio.session().drafts).toContain("recovered");
+      expect(posted[1]).toEqual(posted[0]);
+      rejectNext = true;
+      await expect(
+        studio.openDraft(selected.selectionId, "Rejected", "Users", "rejected"),
+      ).rejects.toThrow("not accepted");
+      expect(studio.session().drafts).not.toContain("rejected");
+    } finally {
+      releaseRetry.resolve(undefined);
+      prototype.post = originalPost;
+      await probe.close();
+    }
     for (const category of ["all", "conversation", "system", "domain"] as const) {
       expect(await studio.history(draft.id, category, 20)).toEqual({ items: [] });
     }
@@ -160,7 +320,7 @@ it("opens a draft through the public in-process Client with one pinned Git compa
     await expect(studio.readDraft("prior-session-draft")).rejects.toThrow("unavailable");
     await expect(studio.preview("prior-session-draft")).rejects.toThrow("unavailable");
     await expect(
-      studio.approve("prior-session-draft", draft.version, new TextEncoder().encode("review")),
+      studio.edit("prior-session-draft", draft.version, new TextEncoder().encode("review")),
     ).rejects.toThrow("unavailable");
     await expect(studio.prepareExport("prior-session-draft", draft.version)).rejects.toThrow(
       "unavailable",
@@ -178,11 +338,9 @@ it("opens a draft through the public in-process Client with one pinned Git compa
     await expect(studio.openDraft("missing-comparison", "October", "Users")).rejects.toThrow(
       "comparison is unavailable",
     );
-    await expect(studio.openDraft(selected.selectionId, " ", "Users")).rejects.toThrow(
-      "bounded and nonblank",
-    );
+    await expect(studio.openDraft(selected.selectionId, " ", "Users")).rejects.toThrow("nonblank");
     await expect(studio.openDraft(selected.selectionId, "Release", " ")).rejects.toThrow(
-      "bounded and nonblank",
+      "nonblank",
     );
     await expect(studio.evidencePatch(selected.selectionId, -1)).rejects.toThrow(
       "evidence is unavailable",
@@ -193,12 +351,14 @@ it("opens a draft through the public in-process Client with one pinned Git compa
     await expect(studio.evidencePatch("missing-comparison", 0)).rejects.toThrow(
       "evidence is unavailable",
     );
-    await expect(studio.edit("missing-draft", draft.version, draft.document)).rejects.toThrow(
-      "draft is unavailable",
+    await expect(studio.edit("missing-draft", draft.version, draft.markdown)).rejects.toThrow(
+      "Markdown is unavailable",
     );
-    await expect(
-      studio.approve(draft.id, draft.version, new Uint8Array(1_000_001)),
-    ).rejects.toThrow("Approval is unavailable");
+    const largeDraft = await studio.openDraft(selected.selectionId, "Large release", "SDK users");
+    const largeMarkdown = new Uint8Array(1_000_001).fill(65);
+    expect((await studio.edit(largeDraft.id, largeDraft.version, largeMarkdown)).markdown).toEqual(
+      largeMarkdown,
+    );
     await expect(studio.requestGeneration(draft.id, "Explain the change")).rejects.toThrow(
       "Account model catalog is unavailable.",
     );
@@ -288,6 +448,12 @@ it("binds an accepted generation to its model and committed Git evidence through
   try {
     const selected = await studio.compare(directory, base, target);
     const draft = await studio.openDraft(selected.selectionId, "October release", "SDK users");
+    const previousMarkdown = "# Café 🐈\n\nExisting release notes.\n";
+    const editedBeforeGeneration = await studio.edit(
+      draft.id,
+      draft.version,
+      new TextEncoder().encode(previousMarkdown),
+    );
     const generation = await studio.requestGeneration(draft.id, "Explain the change");
     expect(generation).toBeTruthy();
     let staged = await studio.readDraft(draft.id);
@@ -296,8 +462,14 @@ it("binds an accepted generation to its model and committed Git evidence through
       staged = await studio.readDraft(draft.id);
     }
     expect(staged.generationStatus).toBe("staged");
-    expect(staged.document.sections[0]?.entries[0]?.evidence[0]?.path).toBe("notes.txt");
+    expect((await studio.cancelGeneration(draft.id, generation)).generationStatus).toBe("staged");
+    expect(new TextDecoder().decode(staged.markdown)).toContain("Changed release file.");
     expect(bodies).toHaveLength(2);
+    expect(JSON.stringify(bodies[0])).toContain("currentMarkdownText");
+    expect(JSON.stringify(bodies[0])).toContain("Café 🐈");
+    expect(JSON.stringify(bodies[0])).not.toContain(
+      Buffer.from(previousMarkdown).toString("base64"),
+    );
     expect(await studio.generationPhase(generation)).toBe("completed");
     expect((await studio.history(draft.id, "all", 20)).items.length).toBeGreaterThan(0);
     expect((await studio.history(draft.id, "conversation", 20)).items.length).toBeGreaterThan(0);
@@ -328,15 +500,12 @@ it("binds an accepted generation to its model and committed Git evidence through
     await accountAction;
     expect(bodies).toHaveLength(2);
     const preview = await studio.preview(draft.id);
-    expect(new TextDecoder().decode(preview.markdown)).toContain(
-      "Evidence: <code>&quot;notes.txt&quot;</code> in commit",
-    );
-    const approved = await studio.approve(draft.id, preview.version, preview.markdown);
-    expect(approved.approvalDigest).toBe(preview.digest);
-    expect(await studio.prepareExport(draft.id, approved.version)).toEqual(preview.markdown);
-    await expect(studio.edit(draft.id, preview.version, staged.document)).rejects.toThrow(
-      "displayed draft Version is stale",
-    );
+    expect(new TextDecoder().decode(preview.markdown)).toContain("Changed release file.");
+    expect(await studio.prepareExport(draft.id, preview.version)).toEqual(preview.markdown);
+    expect((await studio.readDraft(draft.id)).lastEditedAt).toBe(staged.lastEditedAt);
+    await expect(
+      studio.edit(draft.id, editedBeforeGeneration.version, new TextEncoder().encode("old")),
+    ).rejects.toThrow("displayed draft Version is stale");
     const guest = Client.usingTransport(
       createRouterTransport((router) => {
         void router;
@@ -348,6 +517,42 @@ it("binds an accepted generation to its model and committed Git evidence through
     };
     const originalPost = prototype.post;
     const originalCreateSubscription = prototype.createSubscription;
+    const deliveryHeld = Promise.withResolvers<undefined>();
+    const releaseDelivery = Promise.withResolvers<undefined>();
+    prototype.createSubscription = async function (this: unknown, ...args) {
+      const subscription = await Reflect.apply(originalCreateSubscription, this, args);
+      const updates = subscription.updates;
+      Object.defineProperty(subscription, "updates", {
+        get: () => ({
+          [Symbol.asyncIterator]: () => {
+            const iterator = updates[Symbol.asyncIterator]();
+            return {
+              next: async () => {
+                const delivered = await iterator.next();
+                deliveryHeld.resolve(undefined);
+                await releaseDelivery.promise;
+                return delivered;
+              },
+            };
+          },
+        }),
+      });
+      return subscription;
+    };
+    try {
+      const current = await studio.preview(draft.id);
+      const delayedExport = studio.prepareExport(draft.id, current.version).then(
+        (markdown) => ({ markdown }),
+        (error: unknown) => ({ error }),
+      );
+      await deliveryHeld.promise;
+      await new Promise<void>((done) => setTimeout(done, 5_100));
+      releaseDelivery.resolve(undefined);
+      expect(await delayedExport).toEqual({ markdown: current.markdown });
+    } finally {
+      releaseDelivery.resolve(undefined);
+      prototype.createSubscription = originalCreateSubscription;
+    }
     let cancelledExportSubscription = 0;
     prototype.createSubscription = async function (this: unknown, ...args) {
       const subscription = await Reflect.apply(originalCreateSubscription, this, args);
@@ -381,7 +586,7 @@ it("binds an accepted generation to its model and committed Git evidence through
             create(EditReleaseNotesSchema, {
               id: create(ReleaseDraftIdSchema, { value: draft.id }),
               expectedVersion: displayed.version,
-              document: create(ReleaseNotesDocumentSchema, { sections: [] }),
+              markdown: { utf8: new TextEncoder().encode("changed during export") },
             }),
           ]);
           expect(edited.kind).toBe("ok");
@@ -393,8 +598,8 @@ it("binds an accepted generation to its model and committed Git evidence through
       );
       expect(cancelledExportSubscription).toBe(2);
       await expect
-        .poll(async () => (await studio.readDraft(draft.id)).approvalDigest)
-        .toBeUndefined();
+        .poll(async () => new TextDecoder().decode((await studio.readDraft(draft.id)).markdown))
+        .toBe("changed during export");
     } finally {
       prototype.post = originalPost;
       prototype.createSubscription = originalCreateSubscription;
@@ -415,7 +620,7 @@ it("binds an accepted generation to its model and committed Git evidence through
         const edit = create(EditReleaseNotesSchema, {
           id: attempted.id,
           expectedVersion: attempted.expectedVersion,
-          document: create(ReleaseNotesDocumentSchema, { sections: [] }),
+          markdown: { utf8: new TextEncoder().encode("changed before generation") },
         });
         const accepted = await Reflect.apply(originalPost, this, [EditReleaseNotesSchema, edit]);
         expect(accepted.kind).toBe("ok");
@@ -429,9 +634,12 @@ it("binds an accepted generation to its model and committed Git evidence through
       return Reflect.apply(originalPost, this, args);
     };
     try {
-      await expect(studio.requestGeneration(draft.id, "Stale after edit")).rejects.toThrow(
-        "acceptance is unconfirmed",
+      const previousGeneration = studio.session().generations[draft.id];
+      const pendingRejection = studio.requestGeneration(draft.id, "Stale after edit").then(
+        () => undefined,
+        (error: unknown) => error,
       );
+      await expect.poll(() => studio.session().generations[draft.id]).not.toBe(previousGeneration);
       const rejected = studio.session().generations[draft.id];
       expect(rejected).toBeTruthy();
       expect(await studio.generationObservation(rejected ?? "")).toMatchObject({
@@ -440,6 +648,10 @@ it("binds an accepted generation to its model and committed Git evidence through
       });
       expect(await studio.selectionLocked()).toBe(true);
       delayedRejection.release();
+      const rejection = await pendingRejection;
+      expect(rejection).toBeInstanceOf(Error);
+      if (!(rejection instanceof Error)) throw new Error("Expected a rejection error");
+      expect(rejection.message).toContain("inputs changed");
       await expect.poll(() => delayedRejection.seen().length).toBe(1);
       expect((await studio.generationObservation(rejected ?? "")).rejection).toBe(
         "inputs-conflict",
@@ -487,6 +699,10 @@ it("binds an accepted generation to its model and committed Git evidence through
       expect((await studio.generationObservation(rejected ?? "")).rejection).toBe(
         "inputs-conflict",
       );
+      expect(await studio.repeatGeneration(fresh)).toBe(fresh);
+      expect((await studio.cancelGeneration(draft.id, fresh)).generationStatus).toBe("canceled");
+      expect(await studio.repeatGeneration(fresh)).toBe(fresh);
+      expect((await studio.readDraft(draft.id)).generationStatus).toBe("canceled");
       releaseFresh.resolve(undefined);
     } finally {
       prototype.post = originalPost;
@@ -498,7 +714,7 @@ it("binds an accepted generation to its model and committed Git evidence through
     server.close();
     rmSync(directory, { recursive: true, force: true });
   }
-}, 12_000);
+}, 20_000);
 
 it.each(["second creation", "second activation"])(
   "closes subscriptions, client, and Bounded Context after %s fails",
@@ -750,6 +966,9 @@ it("retains uncertain accepted admission and locks account switching without a d
     expect(await studio.allowsReconnect("client")).toBe(true);
     expect(await studio.allowsReconnect("different-client")).toBe(false);
     await expect(StudioAccountGate.requireUnlocked(studio, "sign-in", null)).rejects.toThrow(
+      "Wait",
+    );
+    await expect(StudioAccountGate.requireUnlocked(studio, "add-account", null)).rejects.toThrow(
       "Wait",
     );
     await expect(

@@ -25,33 +25,34 @@ import type { ActorContext, MessageId, TenantId } from "@spine-event-engine/prot
 import type { AiModel } from "./model.js";
 
 /**
- * Bounds one capability, including all corrections and tool continuations.
+ * Optional application ceilings for one capability, including corrections and tool continuations.
+ * An absent field does not impose that ceiling.
  */
 export interface AiLimits {
   /**
    * Maximum physical provider requests.
    */
-  readonly modelRequests: number;
+  readonly modelRequests?: number;
 
   /**
    * Maximum external tool calls.
    */
-  readonly toolCalls: number;
+  readonly toolCalls?: number;
 
   /**
    * Maximum elapsed milliseconds.
    */
-  readonly deadlineMs: number;
+  readonly deadlineMs?: number;
 
   /**
    * Maximum bytes in one materialized request.
    */
-  readonly maxInputBytes: number;
+  readonly maxInputBytes?: number;
 
   /**
    * Maximum received response bytes.
    */
-  readonly maxOutputBytes: number;
+  readonly maxOutputBytes?: number;
 
   /**
    * Optional generation-only ceiling when the selected deployment can enforce it.
@@ -60,48 +61,49 @@ export interface AiLimits {
 }
 
 /**
- * Bounds all matching handlers for one accepted signal.
+ * Optional application ceilings shared by handlers for one accepted signal.
+ * An absent field does not impose that ceiling.
  */
 export interface AiInvocationLimits {
   /**
    * Maximum model operations for one accepted signal.
    */
-  readonly operations: number;
+  readonly operations?: number;
 
   /**
    * Maximum physical provider requests across one accepted signal.
    */
-  readonly modelRequests: number;
+  readonly modelRequests?: number;
 
   /**
    * Maximum external tool calls across one accepted signal.
    */
-  readonly toolCalls: number;
+  readonly toolCalls?: number;
 
   /**
    * Maximum recorded history reads for one accepted signal.
    */
-  readonly recordedReads: number;
+  readonly recordedReads?: number;
 
   /**
    * Maximum elapsed time in milliseconds.
    */
-  readonly deadlineMs: number;
+  readonly deadlineMs?: number;
 
   /**
    * Maximum cumulative input bytes for one accepted signal.
    */
-  readonly totalInputBytes: number;
+  readonly totalInputBytes?: number;
 
   /**
    * Maximum cumulative output bytes for one accepted signal.
    */
-  readonly totalOutputBytes: number;
+  readonly totalOutputBytes?: number;
 
   /**
    * Maximum bytes retained for replay after interruption.
    */
-  readonly maxRecoveryBytes: number;
+  readonly maxRecoveryBytes?: number;
 }
 
 /**
@@ -167,9 +169,9 @@ export interface AiModelBase<I extends MessageSchema, O extends MessageSchema> {
   readonly output: O;
 
   /**
-   * Fixed bounds for this capability.
+   * Optional application bounds for this capability.
    */
-  readonly limits: AiLimits;
+  readonly limits?: AiLimits;
 
   /**
    * Versioned pure application validation rule.
@@ -505,7 +507,7 @@ export interface AiControl {
   /**
    * Absolute deadline in Unix milliseconds.
    */
-  readonly deadlineEpochMs: number;
+  readonly deadlineEpochMs?: number;
 }
 
 /**
@@ -586,20 +588,20 @@ export interface AiRegistryOptions {
   /**
    * Bounds shared by all handlers for one accepted signal.
    */
-  readonly invocationLimits: AiInvocationLimits;
+  readonly invocationLimits?: AiInvocationLimits;
 
   /**
    * Maximum concurrent Agent signal executions sharing this registry object.
    * A slot covers the handlers and completion, including saved-output delivery.
    * This limit applies within one process.
    */
-  readonly concurrentOperations: number;
+  readonly concurrentOperations?: number;
 
   /**
    * Maximum additional Agent executions waiting in memory for a slot.
    * Further accepted signals remain in durable storage until capacity is available.
    */
-  readonly queuedOperations: number;
+  readonly queuedOperations?: number;
 
   /**
    * Maximum duration allowed for an application callback.
@@ -680,19 +682,19 @@ export interface McpToolPolicy {
   readonly effect: "read" | "write";
 
   /**
-   * Maximum time allowed for one tool call.
+   * Optional application maximum time for one tool call.
    */
-  readonly timeoutMs: number;
+  readonly timeoutMs?: number;
 
   /**
-   * Maximum encoded tool argument bytes.
+   * Optional application maximum encoded tool argument bytes.
    */
-  readonly maxArgumentBytes: number;
+  readonly maxArgumentBytes?: number;
 
   /**
-   * Maximum received tool result bytes.
+   * Optional application maximum received tool result bytes.
    */
-  readonly maxResultBytes: number;
+  readonly maxResultBytes?: number;
 
   /**
    * Checks application permission for one tool call.

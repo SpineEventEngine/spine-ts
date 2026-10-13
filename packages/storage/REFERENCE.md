@@ -33,11 +33,12 @@ order is occurrence seconds and nanoseconds descending, then conversation,
 System, domain, then unsigned UTF-8 record ID ascending. `AgentHistoryKeys`
 derives a sortable index value from that order; it is not a record identity.
 
-Provider reads use an optional complete ordering-key boundary and positive
-count and byte limits. The byte limit counts the sum of serialized
+Provider reads require a positive count and accept an optional complete
+ordering-key boundary and positive byte limit. Omitting the byte limit adds no
+provider-contract default. A configured byte limit counts the sum of serialized
 `AgentHistoryEntry` wrapper lengths, excluding provider framing. A page reports
-whether older entries remain; if the first entry exceeds the byte limit, the
-read rejects. Limits never remove stored entries. Identical repeated appends
+whether older entries remain; if the first entry exceeds a configured byte
+limit, the read rejects. Limits never remove stored entries. Identical repeated appends
 are accepted, while different content with the same category and record ID
 is rejected. `AgentHistoryConformance` runs reusable view, order, paging,
 scope, and retention checks for adapter implementations. The memory provider

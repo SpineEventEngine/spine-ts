@@ -37,6 +37,72 @@ afterEach(async () => {
 });
 
 describe("bounded MCP protocol", () => {
+  it("joins a fragmented stdio response only after its newline arrives", async () => {
+    const signal = new AbortController().signal;
+    const delivered = Promise.withResolvers<unknown>();
+    const transport = new BoundedMcpStdioTransport(
+      process.execPath,
+      [fileURLToPath(new URL("./fixtures/mcp-stdio-server.mjs", import.meta.url))],
+      undefined,
+      { MCP_FRAGMENT_OUTPUT: "1" },
+      {
+        signal,
+        nowEpochMs: Date.now,
+        hasAuthority: () => true,
+        reserveMessage: () => Promise.resolve({ id: "fragmented", signal }),
+        onReceived: vi.fn(),
+        finishMessage: vi.fn(() => Promise.resolve()),
+      },
+    );
+    transport.onmessage = delivered.resolve;
+    await transport.start();
+    const joined = vi.spyOn(Buffer, "concat");
+    try {
+      transport.setCallTicket("fragmented-call");
+      await transport.send({ jsonrpc: "2.0", id: 1, method: "tools/call" });
+      await delivered.promise;
+      const responseJoins = joined.mock.calls.filter(([parts]) =>
+        parts.some((part) => Buffer.from(part).toString("utf8").startsWith('{"jsonrpc"')),
+      );
+      expect(responseJoins).toHaveLength(1);
+    } finally {
+      joined.mockRestore();
+      await transport.close();
+    }
+  }, 3_000);
+
+  it("receives setup JSON above the former 64 KiB cap when no ceiling is configured", async () => {
+    const signal = new AbortController().signal;
+    const payload = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      result: { description: "x".repeat(70_000) },
+    });
+    const onReceived = vi.fn();
+    const finishMessage = vi.fn(() => Promise.resolve());
+    const transport = new BoundedMcpHttpTransport(
+      "https://fixture.example/mcp",
+      {},
+      {
+        signal,
+        nowEpochMs: Date.now,
+        hasAuthority: () => true,
+        reserveMessage: () => Promise.resolve({ id: "large-setup", signal }),
+        onReceived,
+        finishMessage,
+      },
+      () =>
+        Promise.resolve(new Response(payload, { headers: { "content-type": "application/json" } })),
+    );
+    const delivered = vi.fn();
+    transport.onmessage = delivered;
+    await transport.start();
+    await transport.send({ jsonrpc: "2.0", id: 1, method: "initialize" });
+    expect(delivered).toHaveBeenCalledOnce();
+    expect(onReceived).toHaveBeenCalledWith("large-setup", Buffer.byteLength(payload));
+    expect(finishMessage).toHaveBeenCalledWith("large-setup", Buffer.byteLength(payload));
+    await transport.close();
+  });
   it("preflights stdio call intent and cancellation before writing", async () => {
     const sessionSignal = new AbortController().signal;
     const cancelled = new AbortController();
@@ -1010,6 +1076,66 @@ describe("bounded MCP protocol", () => {
     );
   });
 
+  it("runs simultaneous calls to one stdio session in journal order", async () => {
+    const controller = new AbortController();
+    let sequence = 0;
+    const control: AiMcpProtocolControl = {
+      signal: controller.signal,
+      deadlineEpochMs: Date.now() + 5_000,
+      nowEpochMs: Date.now,
+      hasAuthority: () => true,
+      reserveMessage: ({ maxOutputBytes }) =>
+        Promise.resolve({
+          id: String(++sequence),
+          signal: controller.signal,
+          deadlineEpochMs: Date.now() + 5_000,
+          ...(maxOutputBytes === undefined ? {} : { maxOutputBytes }),
+        }),
+      onReceived: () => undefined,
+      finishMessage: () => Promise.resolve(),
+    };
+    const session = await createMcpProtocolFactory().connect({
+      server: {
+        id: "support",
+        revision: "1",
+        transport: {
+          kind: "stdio",
+          executable: process.execPath,
+          args: [fileURLToPath(new URL("./fixtures/mcp-stdio-server.mjs", import.meta.url))],
+        },
+        authorizeConnect: () => true,
+        tools: {
+          lookup: {
+            effect: "read",
+            timeoutMs: 1_000,
+            maxArgumentBytes: 1_024,
+            maxResultBytes: 4_096,
+            authorize: () => true,
+          },
+        },
+      },
+      scope: {} as never,
+      resolved: { environment: { MCP_DELAY_MS: "50" } },
+      control,
+    });
+    try {
+      await session.discover(["lookup"]);
+      const options = (toolCallId: string) => ({
+        toolCallId,
+        signal: controller.signal,
+        deadlineEpochMs: Date.now() + 5_000,
+        maxResultBytes: 4_096,
+      });
+      const results = await Promise.all([
+        session.call("lookup", '{"ticket":"T-1"}', options("first")),
+        session.call("lookup", '{"ticket":"T-2"}', options("second")),
+      ]);
+      expect(results.map((result) => result.isError)).toEqual([false, false]);
+    } finally {
+      await session.close();
+    }
+  });
+
   it("waits for and escalates termination of a stdio child ignoring SIGTERM", async () => {
     const controller = new AbortController();
     const control: AiMcpProtocolControl = {
@@ -1356,9 +1482,15 @@ describe("bounded MCP protocol", () => {
     let schemaOverride: unknown;
     let outputSchemaOverride: unknown;
     let discoveryCredit = 8_192;
+    let pagedListingCount = 0;
     let listingMode:
-      "normal" | "repeat-name" | "repeat-cursor" | "many" | "long-description" | "partial-failure" =
-      "normal";
+      | "normal"
+      | "repeat-name"
+      | "repeat-cursor"
+      | "many"
+      | "long-description"
+      | "partial-failure"
+      | "pages" = "normal";
     const server = createServer((request, response) => {
       void (async () => {
         const chunks: Uint8Array[] = [];
@@ -1383,62 +1515,67 @@ describe("bounded MCP protocol", () => {
             }),
           );
         } else if (message.method === "tools/list") {
+          if (listingMode === "pages") pagedListingCount += 1;
           response.end(
             JSON.stringify({
               jsonrpc: "2.0",
               id: responseId,
               result: {
                 tools:
-                  listingMode === "partial-failure"
-                    ? [
-                        { name: "lookup", inputSchema: { type: "object" } },
-                        {
-                          name: "unsafe",
-                          inputSchema: { type: "object", "x-mcp-header": "Authorization" },
-                        },
-                      ]
-                    : listingMode === "many"
-                      ? Array.from({ length: 65 }, (_, index) => ({
-                          name: `tool-${String(index)}`,
-                          inputSchema: { type: "object" },
-                        }))
-                      : ["repeat-name", "repeat-cursor"].includes(listingMode) &&
-                          "params" in message &&
-                          message.params?.cursor
-                        ? listingMode === "repeat-name"
-                          ? [
+                  listingMode === "pages" && pagedListingCount < 9
+                    ? []
+                    : listingMode === "partial-failure"
+                      ? [
+                          { name: "lookup", inputSchema: { type: "object" } },
+                          {
+                            name: "unsafe",
+                            inputSchema: { type: "object", "x-mcp-header": "Authorization" },
+                          },
+                        ]
+                      : listingMode === "many"
+                        ? Array.from({ length: 65 }, (_, index) => ({
+                            name: `tool-${String(index)}`,
+                            inputSchema: { type: "object" },
+                          }))
+                        : ["repeat-name", "repeat-cursor"].includes(listingMode) &&
+                            "params" in message &&
+                            message.params?.cursor
+                          ? listingMode === "repeat-name"
+                            ? [
+                                {
+                                  name: "lookup",
+                                  description: "Lookup a ticket",
+                                  inputSchema: { type: "object" },
+                                },
+                              ]
+                            : []
+                          : [
                               {
                                 name: "lookup",
-                                description: "Lookup a ticket",
-                                inputSchema: { type: "object" },
-                              },
-                            ]
-                          : []
-                        : [
-                            {
-                              name: "lookup",
-                              description:
-                                listingMode === "long-description"
-                                  ? "x".repeat(4_097)
-                                  : "Lookup a ticket",
-                              inputSchema: schemaOverride ?? {
-                                type: "object",
-                                properties: {
-                                  ticket: unsafeHeaderSchema
-                                    ? { type: "string", "x-mcp-header": "Authorization" }
-                                    : { type: "string" },
+                                description:
+                                  listingMode === "long-description"
+                                    ? "x".repeat(4_097)
+                                    : "Lookup a ticket",
+                                inputSchema: schemaOverride ?? {
+                                  type: "object",
+                                  properties: {
+                                    ticket: unsafeHeaderSchema
+                                      ? { type: "string", "x-mcp-header": "Authorization" }
+                                      : { type: "string" },
+                                  },
+                                  required: ["ticket"],
+                                  additionalProperties: false,
                                 },
-                                required: ["ticket"],
-                                additionalProperties: false,
+                                ...(outputSchemaOverride === undefined
+                                  ? {}
+                                  : { outputSchema: outputSchemaOverride }),
                               },
-                              ...(outputSchemaOverride === undefined
-                                ? {}
-                                : { outputSchema: outputSchemaOverride }),
-                            },
-                          ],
-                ...(["repeat-name", "repeat-cursor"].includes(listingMode)
-                  ? { nextCursor: "same" }
-                  : {}),
+                            ],
+                ...(listingMode === "pages" && pagedListingCount < 9
+                  ? { nextCursor: `page-${String(pagedListingCount)}` }
+                  : ["repeat-name", "repeat-cursor"].includes(listingMode)
+                    ? { nextCursor: "same" }
+                    : {}),
               },
             }),
           );
@@ -1549,7 +1686,7 @@ describe("bounded MCP protocol", () => {
     }).toThrow("not JSON");
     expect(() => {
       session.validateArguments("lookup", "x".repeat(16_385));
-    }).toThrow("local limit");
+    }).toThrow("not JSON");
     expect(() => {
       session.validateArguments("lookup", '{"ticket":7}');
     }).toThrow("accepted schema");
@@ -1565,8 +1702,6 @@ describe("bounded MCP protocol", () => {
       session.call("lookup", '{"ticket":"T-1"}', {
         toolCallId: "call-1",
         signal: new AbortController().signal,
-        deadlineEpochMs: Date.now() + 5_000,
-        maxResultBytes: 4_096,
       }),
     ).resolves.toEqual({ content: [{ kind: "text", text: "Ticket found" }], isError: false });
     expect(methods.filter((method) => method === "tools/call")).toHaveLength(1);
@@ -1731,17 +1866,13 @@ describe("bounded MCP protocol", () => {
     });
     discoveryCredit = 32_768;
     outputSchemaOverride = { type: "object", description: "x".repeat(16_385) };
-    await expect(session.discover(["lookup"])).rejects.toMatchObject({
-      code: "UNSUPPORTED_CAPABILITY",
-    });
+    await expect(session.discover(["lookup"])).resolves.toHaveLength(1);
     discoveryCredit = 8_192;
     let nestedOutput: unknown = { type: "string" };
     for (let depth = 0; depth < 14; depth += 1)
       nestedOutput = { type: "object", properties: { next: nestedOutput } };
     outputSchemaOverride = nestedOutput;
-    await expect(session.discover(["lookup"])).rejects.toMatchObject({
-      code: "UNSUPPORTED_CAPABILITY",
-    });
+    await expect(session.discover(["lookup"])).resolves.toHaveLength(1);
     outputSchemaOverride = undefined;
     await session.discover(["lookup"]);
     await expect(
@@ -1778,11 +1909,13 @@ describe("bounded MCP protocol", () => {
     listingMode = "repeat-cursor";
     await expect(session.discover([])).rejects.toMatchObject({ code: "UNSUPPORTED_CAPABILITY" });
     listingMode = "many";
-    await expect(session.discover([])).rejects.toMatchObject({ code: "UNSUPPORTED_CAPABILITY" });
+    await expect(session.discover([])).resolves.toEqual([]);
+    listingMode = "pages";
+    pagedListingCount = 0;
+    await expect(session.discover(["lookup"])).resolves.toHaveLength(1);
+    expect(pagedListingCount).toBe(9);
     listingMode = "long-description";
-    await expect(session.discover(["lookup"])).rejects.toMatchObject({
-      code: "UNSUPPORTED_CAPABILITY",
-    });
+    await expect(session.discover(["lookup"])).resolves.toHaveLength(1);
     listingMode = "partial-failure";
     await expect(session.discover(["lookup", "unsafe"])).rejects.toMatchObject({
       code: "UNSUPPORTED_CAPABILITY",

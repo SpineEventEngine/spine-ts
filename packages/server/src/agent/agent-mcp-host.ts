@@ -101,7 +101,7 @@ export interface AgentMcpHost {
   /**
    * Original absolute operation deadline.
    */
-  readonly deadlineEpochMs: number;
+  readonly deadlineEpochMs?: number;
 
   /**
    * Persists full shared input/output credit before an MCP physical send.

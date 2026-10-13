@@ -1112,7 +1112,14 @@ const expectedAiRuntimeExports = [
   "selectDeployment",
 ];
 const expectedVercelAxExports = [
+  "ChatgptPlanCredentialStore",
   "ChatgptPlanModelOptions",
+  "ChatgptPlanRegistration",
+  "ChatgptPlanSession",
+  "ChatgptPlanSessionOptions",
+  "ConnectedAccount",
+  "PendingAuthorization",
+  "PlanSessionModelOptions",
   "VercelAx",
   "VercelConnectControl",
   "VercelConnection",

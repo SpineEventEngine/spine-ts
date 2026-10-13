@@ -14,7 +14,7 @@
 
 import { clone, create, equals, toBinary } from "@bufbuild/protobuf";
 import { createHash } from "node:crypto";
-import type { AiRegistry } from "@spine-event-engine/ai";
+import type { AiFailure, AiRegistry } from "@spine-event-engine/ai";
 import { VersionSchema } from "@spine-event-engine/proto";
 import {
   Agent,
@@ -30,7 +30,7 @@ import {
 import type { StorageFactory } from "@spine-event-engine/storage";
 
 import {
-  type ApproveReleaseNotes,
+  type CancelReleaseGeneration,
   type ChangeReleaseInputs,
   RequestReleaseGenerationSchema,
   type EditReleaseNotes,
@@ -43,7 +43,8 @@ import {
   ReleaseGenerationStatusChangedSchema as GenerationStatusSchema,
   ReleaseGenerationFailedSchema,
   ReleaseNotesProposedSchema,
-  ReleaseNotesApprovedSchema,
+  ReleaseGenerationCanceledSchema,
+  ReleaseGenerationCancelIgnoredSchema as CancelIgnoredSchema,
   ReleaseNotesExportPreparedSchema as ExportPreparedSchema,
   ReleaseDraftOpenedSchema,
   ReleaseGenerationAlreadyRequestedSchema as GenerationAcknowledgedSchema,
@@ -55,7 +56,8 @@ import {
   type ReleaseInputsChanged,
   type ReleaseGenerationFailed,
   type ReleaseGenerationStatusChanged,
-  type ReleaseNotesApproved,
+  type ReleaseGenerationCanceled,
+  type ReleaseGenerationCancelIgnored,
   type ReleaseNotesExportPrepared,
   type ReleaseGenerationAlreadyRequested,
   type ReleaseGenerationRequested,
@@ -70,8 +72,8 @@ import {
   ReleaseGenerationInputsConflict,
   ReleaseExportUnavailable,
   ReleaseInputsConflict,
-  StaleReleaseApproval,
   StaleReleaseEdit,
+  InvalidReleaseMarkdown,
 } from "../../generated/spine/examples/releasenotes/rejections.js";
 import {
   ReleaseDraftStateSchema,
@@ -79,13 +81,28 @@ import {
   ReleaseNotesAgentStateSchema as AgentStateSchema,
 } from "../../generated/spine/examples/releasenotes/states_pb.js";
 import {
-  ReleaseApprovalSchema,
+  ReleaseExportSnapshotSchema,
   ReleaseGenerationReceiptSchema,
-  ReleaseNotesDocumentSchema,
+  ReleaseMarkdownContentSchema,
   type ReleaseDraftId,
 } from "../../generated/spine/examples/releasenotes/types_pb.js";
 import { ReleaseMarkdown } from "./markdown.js";
 import { draftReleaseNotes } from "./model.js";
+
+const safeGenerationFailureCodes = new Set<AiFailure["code"]>([
+  "INVALID_INPUT",
+  "UNSUPPORTED_CAPABILITY",
+  "AUTHENTICATION_REQUIRED",
+  "RATE_LIMITED",
+  "UNAVAILABLE",
+  "REFUSED",
+  "INVALID_OUTPUT",
+  "BUDGET_EXCEEDED",
+  "TOOL_FAILED",
+  "TOOL_OUTCOME_UNKNOWN",
+  "CANCELLED",
+  "DEADLINE_EXCEEDED",
+]);
 
 /**
  * Retains an editor's current release draft and accepted generation identities.
@@ -109,7 +126,7 @@ export class ReleaseDraft extends Aggregate<ReleaseDraftId, typeof ReleaseDraftS
       title: command.title,
       comparison: command.comparison,
       audience: command.audience,
-      document: create(ReleaseNotesDocumentSchema),
+      markdown: create(ReleaseMarkdownContentSchema),
     })));
     return create(ReleaseDraftOpenedSchema, {
       id: this.id,
@@ -136,19 +153,18 @@ export class ReleaseDraft extends Aggregate<ReleaseDraftId, typeof ReleaseDraftS
     const comparisonChanged = command.comparison?.base?.value !== this.state.comparison?.base?.value ||
       command.comparison?.target?.value !== this.state.comparison?.target?.value ||
       command.comparison?.policy !== this.state.comparison?.policy;
-    const document = comparisonChanged ? create(ReleaseNotesDocumentSchema) : this.state.document;
+    const markdown = comparisonChanged ? create(ReleaseMarkdownContentSchema) : this.state.markdown;
     this.update((state) => {
       state.comparison = command.comparison;
       state.audience = command.audience;
-      state.document = document;
-      state.approval = undefined;
+      state.markdown = markdown;
       state.pendingGeneration = undefined;
       state.pendingInputVersion = undefined;
       state.generationStatus = "inputs-changed";
     });
     return create(ReleaseInputsChangedSchema, {
       id: this.id, comparison: command.comparison,
-      audience: command.audience, document,
+      audience: command.audience, markdown,
     });
   }
 
@@ -213,7 +229,9 @@ export class ReleaseDraft extends Aggregate<ReleaseDraftId, typeof ReleaseDraftS
       catalog: command.catalog,
       audience: this.state.audience,
       instruction: command.instruction,
-      currentDocument: this.state.document,
+      currentMarkdownText: new TextDecoder("utf-8", { fatal: true }).decode(
+        this.state.markdown?.utf8,
+      ),
       conversation: command.conversation,
       selection: command.selection,
       inputDigest,
@@ -224,76 +242,75 @@ export class ReleaseDraft extends Aggregate<ReleaseDraftId, typeof ReleaseDraftS
   // prettier-ignore
 
   /**
-   * Replaces structured notes and invalidates any outstanding proposal.
+   * Replaces exact Markdown and invalidates any outstanding proposal.
    *
    * @param command Editor replacement based on the displayed Entity Version.
-   * @returns Authoritative edited-document event.
+   * @returns Authoritative edited-Markdown event.
    */
   @Assign
-  @Throws(StaleReleaseEdit)
+  @Throws(StaleReleaseEdit, InvalidReleaseMarkdown)
   edit(command: EditReleaseNotes): ReleaseNotesEdited {
     if (!command.expectedVersion || !equals(VersionSchema, command.expectedVersion, this.version) ||
-        command.document === undefined)
+        command.markdown === undefined)
       throw StaleReleaseEdit.create({ id: this.id });
+    try {
+      new TextDecoder("utf-8", { fatal: true }).decode(command.markdown.utf8);
+    } catch {
+      throw InvalidReleaseMarkdown.create({ id: this.id });
+    }
     this.update((state) => {
-      state.document = command.document;
-      state.approval = undefined;
+      state.markdown = command.markdown;
       state.pendingGeneration = undefined;
       state.pendingInputVersion = undefined;
       state.generationStatus = "edited";
     });
-    return create(ReleaseNotesEditedSchema, { id: this.id, document: command.document });
+    return create(ReleaseNotesEditedSchema, { id: this.id, markdown: command.markdown });
   }
 
   // prettier-ignore
 
   /**
-   * Records the exact Markdown rendered from the current structured draft.
+   * Stops only the matching pending generation without changing Markdown.
    *
-   * @param command Displayed Entity Version, digest, and Markdown bytes.
-   * @returns Immutable approved snapshot.
+   * @param command Exact generation selected for cancellation.
+   * @returns Authoritative cancellation or no change for an older generation.
    */
   @Assign
-  @Throws(StaleReleaseApproval)
-  approve(command: ApproveReleaseNotes): ReleaseNotesApproved {
-    const title = this.state.title;
-    const document = this.state.document;
-    if (!command.expectedVersion || !equals(VersionSchema, command.expectedVersion, this.version) || !title || !document)
-      throw StaleReleaseApproval.create({ id: this.id });
-    const expected = ReleaseMarkdown.render(title, document);
-    if (!ReleaseMarkdown.matches(command.markdown, expected) || command.digest !== ReleaseMarkdown.digest(expected))
-      throw StaleReleaseApproval.create({ id: this.id });
-    const approval = create(ReleaseApprovalSchema, {
-      reviewedVersion: clone(VersionSchema, this.version), digest: command.digest, markdown: expected,
-    });
+  cancelGeneration(command: CancelReleaseGeneration): ReleaseGenerationCanceled | ReleaseGenerationCancelIgnored {
+    if (command.generation?.value !== this.state.pendingGeneration?.value)
+      return create(CancelIgnoredSchema, { id: this.id, generation: command.generation });
     this.update((state) => {
-      state.approval = approval;
       state.pendingGeneration = undefined;
       state.pendingInputVersion = undefined;
+      state.generationStatus = "canceled";
     });
-    return create(ReleaseNotesApprovedSchema, { id: this.id, approval });
+    return create(ReleaseGenerationCanceledSchema, { id: this.id, generation: command.generation });
   }
 
   // prettier-ignore
 
   /**
-   * Prepares only a currently approved immutable Markdown snapshot.
+   * Prepares the exact current Markdown as an immutable export snapshot.
    *
-   * @param command Current approved Entity Version.
+   * @param command Current Entity Version.
    * @returns Correlated snapshot for a trusted local export.
    */
   @Assign
   @Throws(ReleaseExportUnavailable)
   prepareExport(command: PrepareReleaseNotesExport): ReleaseNotesExportPrepared {
-    const approval = this.state.approval;
-    const title = this.state.title;
-    const document = this.state.document;
-    if (!approval || !title || !document ||
-        !command.expectedVersion || !equals(VersionSchema, command.expectedVersion, this.version) ||
-        !ReleaseMarkdown.matches(approval.markdown, ReleaseMarkdown.render(title, document)) ||
-        approval.digest !== ReleaseMarkdown.digest(approval.markdown))
+    const markdown = this.state.markdown;
+    if (!markdown || !command.expectedVersion ||
+        !equals(VersionSchema, command.expectedVersion, this.version))
       throw ReleaseExportUnavailable.create({ id: this.id });
-    return create(ExportPreparedSchema, { id: this.id, approval });
+    const bytes = new Uint8Array(markdown.utf8);
+    return create(ExportPreparedSchema, {
+      id: this.id,
+      snapshot: create(ReleaseExportSnapshotSchema, {
+        sourceVersion: clone(VersionSchema, this.version),
+        digest: ReleaseMarkdown.digest(bytes),
+        markdown: bytes,
+      }),
+    });
   }
 
   // prettier-ignore
@@ -306,20 +323,22 @@ export class ReleaseDraft extends Aggregate<ReleaseDraftId, typeof ReleaseDraftS
    */
   @React onProposed(event: ReleaseNotesProposed): ReleaseNotesStaged | ReleaseProposalDiscarded {
     if (event.generation?.value !== this.state.pendingGeneration?.value ||
-        !event.inputVersion || !this.state.pendingInputVersion ||
+        !event.inputVersion || !this.state.pendingInputVersion || !this.state.title || !event.document ||
         !equals(VersionSchema, event.inputVersion, this.state.pendingInputVersion))
       return create(ReleaseProposalDiscardedSchema, {
         id: this.id, generation: event.generation,
       });
+    const markdown = create(ReleaseMarkdownContentSchema, {
+      utf8: ReleaseMarkdown.render(this.state.title, event.document),
+    });
     this.update((state) => {
-      state.document = event.document;
-      state.approval = undefined;
+      state.markdown = markdown;
       state.pendingGeneration = undefined;
       state.pendingInputVersion = undefined;
       state.generationStatus = "staged";
     });
     return create(ReleaseNotesStagedSchema, {
-      id: this.id, generation: event.generation, document: event.document,
+      id: this.id, generation: event.generation, markdown,
     });
   }
 
@@ -372,11 +391,15 @@ export class ReleaseNotesAgent extends Agent<ReleaseDraftId, typeof AgentStateSc
       state.conversation = event.conversation;
       state.generation = event.generation;
     });
-    if (!result.ok) return create(ReleaseGenerationFailedSchema, {
-      id: this.id, generation: event.generation,
-      inputVersion: event.inputVersion, reason: result.failure.code,
-      operation: result.operationId,
-    });
+    if (!result.ok) {
+      const code = safeGenerationFailureCodes.has(result.failure.code) ? result.failure.code : "other";
+      console.error(`[Release Notes Studio generation] stage=invoke code=${code}`);
+      return create(ReleaseGenerationFailedSchema, {
+        id: this.id, generation: event.generation,
+        inputVersion: event.inputVersion, reason: result.failure.code,
+        operation: result.operationId,
+      });
+    }
     return create(ReleaseNotesProposedSchema, {
       id: this.id, generation: event.generation,
       inputVersion: event.inputVersion, document: result.value,
@@ -406,7 +429,7 @@ export class ReleaseDraftProjection extends Projection<
           title: event.title,
           comparison: event.comparison,
           audience: event.audience,
-          document: create(ReleaseNotesDocumentSchema),
+          markdown: create(ReleaseMarkdownContentSchema),
         }),
       ),
     );
@@ -427,14 +450,13 @@ export class ReleaseDraftProjection extends Projection<
   /**
    * Applies an authoritative comparison or audience change.
    *
-   * @param event Accepted replacement inputs and resulting document.
+   * @param event Accepted replacement inputs and resulting Markdown.
    */
   @Subscribe onInputsChanged(event: ReleaseInputsChanged): void {
     this.update((state) => {
       state.comparison = event.comparison;
       state.audience = event.audience;
-      state.document = event.document;
-      state.approval = undefined;
+      state.markdown = event.markdown;
       state.generationStatus = "inputs-changed";
     });
   }
@@ -446,8 +468,7 @@ export class ReleaseDraftProjection extends Projection<
    */
   @Subscribe onEdited(event: ReleaseNotesEdited): void {
     this.update((state) => {
-      state.document = event.document;
-      state.approval = undefined;
+      state.markdown = event.markdown;
       state.generationStatus = "edited";
     });
   }
@@ -459,8 +480,7 @@ export class ReleaseDraftProjection extends Projection<
    */
   @Subscribe onStaged(event: ReleaseNotesStaged): void {
     this.update((state) => {
-      state.document = event.document;
-      state.approval = undefined;
+      state.markdown = event.markdown;
       state.generationStatus = "staged";
       state.generation = event.generation;
     });
@@ -479,13 +499,14 @@ export class ReleaseDraftProjection extends Projection<
   }
 
   /**
-   * Exposes the authoritative approved snapshot.
+   * Updates cancellation of the exact pending generation into the draft view.
    *
-   * @param event Exact committed approved snapshot.
+   * @param event Authoritative cancellation.
    */
-  @Subscribe onApproved(event: ReleaseNotesApproved): void {
+  @Subscribe onCanceled(event: ReleaseGenerationCanceled): void {
     this.update((state) => {
-      state.approval = event.approval;
+      state.generation = event.generation;
+      state.generationStatus = "canceled";
     });
   }
 }

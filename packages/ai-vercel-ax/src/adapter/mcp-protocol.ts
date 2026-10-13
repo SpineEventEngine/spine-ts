@@ -28,10 +28,6 @@ import { BoundedMcpStdioTransport } from "./mcp-stdio-transport.js";
 import { scheduleBoundedDeadline } from "./deadline.js";
 import type { AiMcpProtocolControl } from "@spine-event-engine/ai/spi/adapter";
 
-const maximumPages = 8;
-const maximumTools = 64;
-const maximumDescriptionBytes = 4_096;
-const maximumSchemaBytes = 16_384;
 const supportedSchemaKeys = new Set([
   "type",
   "properties",
@@ -113,6 +109,8 @@ export const createMcpProtocolFactory = (): AiMcpProtocolFactory => ({ connect: 
 class VercelMcpSession implements AiMcpProtocolSession {
   readonly identity;
 
+  private callTail: Promise<void> = Promise.resolve();
+
   private validators = new Map<string, ValidateFunction>();
 
   private outputValidators = new Map<string, ValidateFunction>();
@@ -153,7 +151,7 @@ class VercelMcpSession implements AiMcpProtocolSession {
     const cursors = new Set<string>();
     const ajv = new Ajv({ allErrors: false, strict: true, validateSchema: true });
     let cursor: string | undefined;
-    for (let page = 0; page < maximumPages; page += 1) {
+    for (;;) {
       const listing = await this.client.listTools({ params: cursor ? { cursor } : undefined });
       cursor = this.acceptPage(
         listing,
@@ -172,7 +170,6 @@ class VercelMcpSession implements AiMcpProtocolSession {
       if (cursors.has(cursor)) throw new AiMcpSetupFailure("UNSUPPORTED_CAPABILITY");
       cursors.add(cursor);
     }
-    throw new AiMcpSetupFailure("UNSUPPORTED_CAPABILITY");
   }
 
   /**
@@ -197,8 +194,6 @@ class VercelMcpSession implements AiMcpProtocolSession {
     result: AiMcpToolDefinition[],
   ): string | undefined {
     try {
-      if (listing.tools.length + seen.size > maximumTools)
-        throw new Error("MCP discovery exceeds tool limit");
       collectTools(listing.tools, allowed, seen, ajv, inputs, outputs, result);
       return listing.nextCursor;
     } catch {
@@ -214,8 +209,6 @@ class VercelMcpSession implements AiMcpProtocolSession {
   validateArguments(name: string, canonicalJson: string): void {
     const validate = this.validators.get(name);
     if (!validate) throw new Error("MCP tool was not advertised");
-    if (Buffer.byteLength(canonicalJson) > maximumSchemaBytes)
-      throw new Error("MCP arguments exceed local limit");
     let value: unknown;
     try {
       value = JSON.parse(canonicalJson);
@@ -232,26 +225,51 @@ class VercelMcpSession implements AiMcpProtocolSession {
    * @param options Runtime call identity, cancellation and result limit.
    * @returns Bounded text or structured JSON result.
    */
-  async call(
+  call(
     name: string,
     canonicalJson: string,
     options: {
       toolCallId: string;
       signal: AbortSignal;
-      deadlineEpochMs: number;
-      maxResultBytes: number;
+      deadlineEpochMs?: number;
+      maxResultBytes?: number;
     },
   ): Promise<AiMcpToolResult> {
     this.validateArguments(name, canonicalJson);
     const args = JSON.parse(canonicalJson) as Record<string, unknown>;
-    const deadline = new AbortController();
-    const stopDeadline = scheduleBoundedDeadline(
-      options.deadlineEpochMs,
-      this.control.nowEpochMs,
-      () => {
-        deadline.abort();
-      },
+    const result = this.callTail.then(() => this.callOne(name, args, options));
+    this.callTail = result.then(
+      () => undefined,
+      () => undefined,
     );
+    return result;
+  }
+
+  /**
+   * Calls one tool at a time through this session's single ticketed transport.
+   *
+   * @param name Advertised MCP tool name.
+   * @param args Validated tool argument object.
+   * @param options Durable ticket, cancellation, and optional explicit bounds.
+   * @returns Validated MCP tool result.
+   */
+  private async callOne(
+    name: string,
+    args: Record<string, unknown>,
+    options: {
+      toolCallId: string;
+      signal: AbortSignal;
+      deadlineEpochMs?: number;
+      maxResultBytes?: number;
+    },
+  ): Promise<AiMcpToolResult> {
+    const deadline = new AbortController();
+    const stopDeadline =
+      options.deadlineEpochMs === undefined
+        ? () => undefined
+        : scheduleBoundedDeadline(options.deadlineEpochMs, this.control.nowEpochMs, () => {
+            deadline.abort();
+          });
     const signal = AbortSignal.any([options.signal, deadline.signal]);
     this.transport.setCallTicket(options.toolCallId, options.maxResultBytes);
     try {
@@ -331,13 +349,10 @@ const acceptTool = (
   validator: ValidateFunction;
   outputValidator?: ValidateFunction;
 } => {
-  if (Buffer.byteLength(description) > maximumDescriptionBytes)
-    throw new Error("MCP tool description exceeds limit");
   const normalized = withoutKnownDialect(schema);
   const schemaJson = JSON.stringify(canonicalJsonValue(normalized));
-  if (!schemaJson || Buffer.byteLength(schemaJson) > maximumSchemaBytes)
-    throw new Error("MCP tool schema exceeds limit");
-  assertSchemaSubset(normalized, 0);
+  if (!schemaJson) throw new Error("MCP tool schema invalid");
+  assertSchemaSubset(normalized);
   const validator = ajv.compile(normalized as Record<string, unknown>);
   const output = compileOutputSchema(outputSchema, ajv);
   return {
@@ -366,8 +381,8 @@ const compileOutputSchema = (
   try {
     const normalized = withoutKnownDialect(schema);
     const json = JSON.stringify(canonicalJsonValue(normalized));
-    if (!json || Buffer.byteLength(json) > maximumSchemaBytes) throw new Error("schema size");
-    assertSchemaSubset(normalized, 0);
+    if (!json) throw new Error("schema invalid");
+    assertSchemaSubset(normalized);
     if ((normalized as Record<string, unknown>).type !== "object") throw new Error("schema root");
     return { json, validator: ajv.compile(normalized as Record<string, unknown>) };
   } catch {
@@ -424,8 +439,7 @@ export const canonicalJsonValue = (value: unknown): unknown => {
 /**
  * Rejects remote references, extension headers and unbounded validator features.
  */
-const assertSchemaSubset = (value: unknown, depth: number): void => {
-  if (depth > 12) throw new Error("MCP schema nesting exceeds limit");
+const assertSchemaSubset = (value: unknown): void => {
   if (typeof value !== "object" || value === null || Array.isArray(value))
     throw new Error("MCP schema must be an object");
   for (const [key, part] of Object.entries(value as Record<string, unknown>)) {
@@ -433,17 +447,17 @@ const assertSchemaSubset = (value: unknown, depth: number): void => {
     if (key === "properties") {
       if (typeof part !== "object" || part === null || Array.isArray(part))
         throw new Error("MCP schema properties invalid");
-      for (const nested of Object.values(part)) assertSchemaSubset(nested, depth + 1);
+      for (const nested of Object.values(part)) assertSchemaSubset(nested);
     }
     if (key === "items" || (key === "additionalProperties" && typeof part === "object"))
-      assertSchemaSubset(part, depth + 1);
+      assertSchemaSubset(part);
   }
 };
 
 /**
  * Converts supported MCP text and structured JSON without binary/resource output.
  */
-const convertResult = (result: unknown, maxBytes: number): AiMcpToolResult => {
+const convertResult = (result: unknown, maxBytes?: number): AiMcpToolResult => {
   if (typeof result !== "object" || result === null) throw new Error("MCP result invalid");
   const value = result as Record<string, unknown>;
   if (!Array.isArray(value.content)) throw new Error("MCP result content unsupported");
@@ -459,7 +473,7 @@ const convertResult = (result: unknown, maxBytes: number): AiMcpToolResult => {
     if (!json) throw new Error("MCP structured result unsupported");
     content.push({ kind: "json", json });
   }
-  if (Buffer.byteLength(JSON.stringify(content)) > maxBytes)
+  if (maxBytes !== undefined && Buffer.byteLength(JSON.stringify(content)) > maxBytes)
     throw new Error("MCP result exceeds byte limit");
   return Object.freeze({ content: Object.freeze(content), isError: value.isError === true });
 };

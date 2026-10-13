@@ -16,8 +16,6 @@ import { validateJSONRPCMessage, type JSONRPCMessage, type MCPTransport } from "
 import type { AiMcpProtocolControl, AiMcpMessageTicket } from "@spine-event-engine/ai/spi/adapter";
 import { scheduleBoundedDeadline } from "./deadline.js";
 
-const maximumSetupBytes = 65_536;
-
 /**
  * Restricts every SDK HTTP send to one durable reservation and bounded response.
  */
@@ -50,7 +48,7 @@ export class BoundedMcpHttpTransport implements MCPTransport {
 
   private readonly active = new Set<AbortController>();
 
-  private callTicket: { readonly id: string; readonly maxOutputBytes: number } | undefined;
+  private callTicket: { readonly id: string; readonly maxOutputBytes?: number } | undefined;
 
   /**
    * Creates a connection to an application-selected exact URL.
@@ -80,9 +78,9 @@ export class BoundedMcpHttpTransport implements MCPTransport {
    * @param id Runtime tool-call identity.
    * @param maxOutputBytes Reserved decoded result limit.
    */
-  setCallTicket(id: string, maxOutputBytes: number): void {
+  setCallTicket(id: string, maxOutputBytes?: number): void {
     if (this.callTicket) throw new Error("MCP call already active");
-    this.callTicket = { id, maxOutputBytes };
+    this.callTicket = { id, ...(maxOutputBytes === undefined ? {} : { maxOutputBytes }) };
   }
 
   /**
@@ -121,7 +119,9 @@ export class BoundedMcpHttpTransport implements MCPTransport {
       phase: method === "tools/call" ? "call" : "setup",
       method,
       inputBytes: Buffer.byteLength(body),
-      maxOutputBytes: callTicket?.maxOutputBytes ?? maximumSetupBytes,
+      ...(callTicket?.maxOutputBytes === undefined
+        ? {}
+        : { maxOutputBytes: callTicket.maxOutputBytes }),
       ...(method === "tools/call" && callTicket ? { toolCallId: callTicket.id } : {}),
     });
     await this.sendReserved(body, ticket, signal, "id" in message ? message.id : undefined);
@@ -194,11 +194,10 @@ export class BoundedMcpHttpTransport implements MCPTransport {
     for (const source of [this.control.signal, ticket.signal, signal])
       source?.addEventListener("abort", cancel, { once: true });
     if ([this.control.signal, ticket.signal, signal].some((source) => source?.aborted)) cancel();
-    const stopDeadline = scheduleBoundedDeadline(
-      ticket.deadlineEpochMs,
-      this.control.nowEpochMs,
-      cancel,
-    );
+    const stopDeadline =
+      ticket.deadlineEpochMs === undefined
+        ? () => undefined
+        : scheduleBoundedDeadline(ticket.deadlineEpochMs, this.control.nowEpochMs, cancel);
     return {
       abort,
       cancelled,
@@ -261,7 +260,7 @@ export class BoundedMcpHttpTransport implements MCPTransport {
     cancelled: Promise<never>,
   ): Promise<Response> {
     this.assertActive();
-    if (this.control.nowEpochMs() >= ticket.deadlineEpochMs || abort.signal.aborted)
+    if (abort.signal.aborted || this.deadlinePassed(ticket))
       throw new Error("MCP deadline or cancellation");
     const pending = this.platformFetch(this.url, {
       method: "POST",
@@ -286,6 +285,17 @@ export class BoundedMcpHttpTransport implements MCPTransport {
       throw new Error("MCP redirect rejected");
     }
     return response;
+  }
+
+  /**
+   * Checks the caller-configured deadline before a physical MCP send.
+   * @param ticket Durable message ticket.
+   * @returns Whether the deadline has passed.
+   */
+  private deadlinePassed(ticket: AiMcpMessageTicket): boolean {
+    return (
+      ticket.deadlineEpochMs !== undefined && this.control.nowEpochMs() >= ticket.deadlineEpochMs
+    );
   }
 
   /**
@@ -317,7 +327,10 @@ export class BoundedMcpHttpTransport implements MCPTransport {
   private assertActive(): void {
     if (this.closed || this.control.signal.aborted || !this.control.hasAuthority())
       throw new Error("MCP connection cancelled");
-    if (this.control.nowEpochMs() >= this.control.deadlineEpochMs)
+    if (
+      this.control.deadlineEpochMs !== undefined &&
+      this.control.nowEpochMs() >= this.control.deadlineEpochMs
+    )
       throw new Error("MCP connection deadline exceeded");
   }
 
@@ -409,7 +422,8 @@ const countBoundedChunk = (
   const total = prior + value.byteLength;
   onProgress(total);
   control.onReceived(ticket.id, value.byteLength);
-  if (total > ticket.maxOutputBytes) throw new Error("MCP response exceeds byte limit");
+  if (ticket.maxOutputBytes !== undefined && total > ticket.maxOutputBytes)
+    throw new Error("MCP response exceeds byte limit");
   return total;
 };
 
