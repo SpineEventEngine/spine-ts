@@ -1,0 +1,31 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+stderr | packages/server/test/server/node-coordinator.test.ts > NodeCoordinator > aborts a stalled native stream when merged updates exceed the existing bound
+finish child { aborted: false, active: true, logical: false, has: true }
+retain child 1
+
+----------------x--------------------
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/test/server/node-coordinator.test.ts > NodeCoordinator > aborts a stalled native stream when merged updates exceed the existing bound
+Error: backend child cleanup remains incomplete.
+ ❯ BackendMembershipKernel.#closeOnce packages/deployment/src/internal/backend-membership-kernel.ts:1221:13
+ ❯ NodeCoordinator.#closeOnce packages/server/src/server/node-coordinator.ts:576:7
+    574|       await Promise.all([this.#unaryKernel.close(), this.#subscription…
+    575|     } catch {
+    576|       await this.#subscriptionKernel.close();
+       |       ^
+    577|     } finally {
+    578|       await NodeCoordinatorValues.closeNetwork(this.#server, this.#ses…
+ ❯ packages/server/test/server/node-coordinator.test.ts:78:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 36 skipped (37)
+   Start at  22:02:20
+   Duration  567ms (transform 251ms, setup 0ms, import 410ms, tests 56ms, environment 0ms)
+

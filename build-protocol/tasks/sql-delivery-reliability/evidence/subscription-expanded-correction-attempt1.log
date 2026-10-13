@@ -1,0 +1,168 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+·········x····stderr | packages/server/test/services/spine-services.test.ts > SpineServices > returns error statuses for dispatcher failures
+{"severity":"ERROR","timestamp":"2026-10-13T21:07:07.714Z","message":"Command post failed.","contextName":"Tasks","commandId":"command-fails","commandType":"type.googleapis.com/example.validation_refusal.CreateReviewProject","operation":"command.post","errorName":"Error"}
+
+···························stderr | packages/server/test/services/spine-services.test.ts > SpineServices > wraps non-Error dispatcher failures in sanitized Spine command errors
+{"severity":"ERROR","timestamp":"2026-10-13T21:07:07.866Z","message":"Command post failed.","contextName":"Tasks","commandId":"command-string-failure","commandType":"type.googleapis.com/example.validation_refusal.CreateReviewProject","operation":"command.post"}
+
+······················xx·························(node:73729) PromiseRejectionHandledWarning: Promise rejection was handled asynchronously (rejection id: 39)
+(Use `node --trace-warnings ...` to show where the warning was created)
+········x·······························
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/auth/test/native-relay.test.ts > NativeSubscriptionCreator > uses shared descriptors and preserves supplied abort signals
+Error: Backend child update does not match its subscription.
+ ❯ NativeSubscriptionCreator.activate packages/auth/src/native/index.ts:333:15
+    331|         !equals(TopicSchema, updateTopic, topic)
+    332|       )
+    333|         throw new Error("Backend child update does not match its subsc…
+       |               ^
+    334|       await request.updates({
+    335|         kind: "subscription-update",
+ ❯ packages/auth/test/native-relay.test.ts:226:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  packages/server/test/services/spine-services.test.ts > SpineServices > contains transition validation failures with an OK Ack
+AssertionError: expected 'error' to be 'ok' // Object.is equality
+
+Expected: "ok"
+Received: "error"
+
+ ❯ packages/server/test/services/spine-services.test.ts:1848:37
+    1846|     );
+    1847|
+    1848|     expect(ack.status?.status.case).toBe("ok");
+       |                                     ^
+    1849|   });
+    1850|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  packages/server/test/services/spine-services.test.ts > SpineServices > contains rollback transition validation failures with an OK Ack
+AssertionError: expected 'error' to be 'ok' // Object.is equality
+
+Expected: "ok"
+Received: "error"
+
+ ❯ packages/server/test/services/spine-services.test.ts:1861:37
+    1859|     );
+    1860|
+    1861|     expect(ack.status?.status.case).toBe("ok");
+       |                                     ^
+    1862|   });
+    1863|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  packages/server/test/services/spine-services.test.ts > SpineServices > keeps returned subscription mutation from changing activation tenant or topic
+AssertionError: expected { …(4) } to deeply equal { …(4) }
+
+- Expected
++ Received
+
+@@ -9,56 +9,22 @@
+      "language": 0,
+      "tenantId": {
+        "$typeName": "spine.core.TenantId",
+        "kind": {
+          "case": "value",
+-         "value": "tenant-b",
++         "value": "tenant-a",
+        },
+      },
+    },
+    "id": {
+      "$typeName": "spine.client.TopicId",
+-     "value": "t-filtered",
++     "value": "t-1",
+    },
+    "target": {
+      "$typeName": "spine.client.Target",
+      "criterion": {
+-       "case": "filters",
+-       "value": {
+-         "$typeName": "spine.client.TargetFilters",
+-         "filter": [
+-           {
+-             "$typeName": "spine.client.CompositeFilter",
+-             "compositeFilter": [],
+-             "filter": [
+-               {
+-                 "$typeName": "spine.client.Filter",
+-                 "fieldPath": {
+-                   "$typeName": "spine.base.FieldPath",
+-                   "fieldName": [
+-                     "name",
+-                   ],
+-                 },
+-                 "operator": 1,
+-                 "value": {
+-                   "$typeName": "google.protobuf.Any",
+-                   "typeUrl": "type.googleapis.com/google.protobuf.StringValue",
+-                   "value": Uint8Array [
+-                     10,
+-                     5,
+-                     78,
+-                     101,
+-                     118,
+-                     101,
+-                     114,
+-                   ],
+-                 },
+-               },
+-             ],
+-             "operator": 1,
+-           },
+-         ],
+-       },
++       "case": "includeAll",
++       "value": true,
+      },
+      "type": "type.googleapis.com/entity_metadata.ProjectOverviewState",
+    },
+  }
+
+ ❯ expectActivationAcknowledgement packages/server/test/services/spine-services.test.ts:5527:54
+    5525|   expect(acknowledgement.done).toBe(false);
+    5526|   expect(acknowledgement.value?.subscription?.id).toEqual(expected.id);
+    5527|   expect(acknowledgement.value?.subscription?.topic).toEqual(expected.…
+       |                                                      ^
+    5528|   expect(acknowledgement.value?.response?.status?.status.case).toBe("o…
+    5529|   expect(acknowledgement.value?.update.case).toBeUndefined();
+ ❯ nextBusinessUpdate packages/server/test/services/spine-services.test.ts:5536:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+⎯⎯⎯⎯⎯⎯ Unhandled Errors ⎯⎯⎯⎯⎯⎯
+
+Vitest caught 1 unhandled error during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+AssertionError: expected { …(4) } to deeply equal { …(4) }
+ ❯ expectActivationAcknowledgement packages/server/test/services/spine-services.test.ts:5527:54
+    5525|   expect(acknowledgement.done).toBe(false);
+    5526|   expect(acknowledgement.value?.subscription?.id).toEqual(expected.id);
+    5527|   expect(acknowledgement.value?.subscription?.topic).toEqual(expected.…
+       |                                                      ^
+    5528|   expect(acknowledgement.value?.response?.status?.status.case).toBe("o…
+    5529|   expect(acknowledgement.value?.update.case).toBeUndefined();
+ ❯ nextBusinessUpdate packages/server/test/services/spine-services.test.ts:5536:3
+
+This error originated in "packages/server/test/services/spine-services.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The latest test that might've caused the error is "keeps returned subscription mutation from changing activation tenant or topic". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+
+
+ Test Files  2 failed (2)
+      Tests  4 failed | 126 passed (130)
+     Errors  1 error
+   Start at  22:07:06
+   Duration  2.21s (transform 663ms, setup 0ms, import 1.08s, tests 1.43s, environment 0ms)
+

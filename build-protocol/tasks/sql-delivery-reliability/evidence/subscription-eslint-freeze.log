@@ -1,0 +1,12 @@
+
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/test/services/spine-services.test.ts
+   132:8   error  'ProjectState' is defined but never used              @typescript-eslint/no-unused-vars
+   201:11  error  Unsafe assignment of an error typed value             @typescript-eslint/no-unsafe-assignment
+   217:11  error  Unsafe assignment of an error typed value             @typescript-eslint/no-unsafe-assignment
+  5577:33  error  Unsafe member access .subscription on an `any` value  @typescript-eslint/no-unsafe-member-access
+  5578:33  error  Unsafe member access .subscription on an `any` value  @typescript-eslint/no-unsafe-member-access
+  5579:33  error  Unsafe member access .response on an `any` value      @typescript-eslint/no-unsafe-member-access
+  5580:33  error  Unsafe member access .update on an `any` value        @typescript-eslint/no-unsafe-member-access
+
+✖ 7 problems (7 errors, 0 warnings)
+

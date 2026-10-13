@@ -290,9 +290,13 @@ export interface SubscriptionBindings {
  */
 export class InMemorySubscriptionBindings implements SubscriptionBindings {
   readonly #bindings = new Map<string, Binding>();
+
   readonly #nextId: () => string;
+
   readonly #disposeCallback: OnSubscriptionDefinition;
+
   #closed = false;
+
   readonly #limits: Required<SubscriptionGatewayLimits>;
 
   /**
@@ -458,6 +462,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
       return { kind: "closed" };
     });
   }
+
   #owned(input: {
     readonly id: string;
     readonly context: ActorContext;
@@ -473,6 +478,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
       ? Promise.resolve(binding)
       : Promise.resolve(undefined);
   }
+
   #precheck(input: {
     readonly id: string;
     readonly context: ActorContext;
@@ -490,6 +496,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
     }
     return "owned";
   }
+
   #expire(id: string, binding: Binding): void {
     if (binding.expiring || this.#bindings.get(id) !== binding) return;
     binding.expiring = true;
@@ -497,11 +504,13 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
     // spine-log-boundary: auth.subscription_expiry_cleanup
     void this.#disposeAfterWork(id, binding).catch(() => undefined);
   }
+
   #dispose(id: string, binding: Binding): void {
     binding.definition.fill(0);
     binding.state = "closed";
     this.#bindings.delete(id);
   }
+
   async #runEffect(binding: Binding, callback: OnSubscriptionDefinition): Promise<void> {
     const effect = this.#startEffect(binding, callback);
     await SubscriptionGatewayValues.withTimeout(
@@ -510,6 +519,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
       binding.controller,
     );
   }
+
   async #runActiveEffect(binding: Binding, callback: OnSubscriptionDefinition): Promise<void> {
     let observeAbort = () => undefined;
     const aborted = new Promise<"aborted">((resolve) => {
@@ -528,6 +538,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
     }
     throw new Error("subscription operation aborted");
   }
+
   #startEffect(binding: Binding, callback: OnSubscriptionDefinition): Promise<void> {
     const definition = SubscriptionGatewayValues.copyPublic({
       kind: "public-subscription",
@@ -552,6 +563,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
     void settled.then(() => definition.bytes.fill(0));
     return effect;
   }
+
   #disposeAfterWork(id: string, binding: Binding): Promise<void> {
     const cleanup = binding.tail
       .then(() => binding.effectTail)
@@ -562,6 +574,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
     void cleanup.catch(() => undefined);
     return cleanup;
   }
+
   #waitForShutdown(cleanup: Promise<void>): Promise<void> {
     return SubscriptionGatewayValues.withTimeout(
       cleanup,
@@ -569,6 +582,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
       new AbortController(),
     );
   }
+
   async #disposeWithCallback(id: string, binding: Binding): Promise<void> {
     if (this.#bindings.get(id) !== binding) return;
     const definition = SubscriptionGatewayValues.copyPublic({
@@ -587,6 +601,15 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
       definition.bytes.fill(0);
     }
   }
+
+  /**
+   * Serializes a logical binding operation behind its current tail.
+   *
+   * @typeParam T The operation result.
+   * @param id The logical subscription identifier.
+   * @param operation The operation to serialize.
+   * @returns The operation result after preceding work settles.
+   */
   async #coordinate<T>(id: string, operation: () => Promise<T>): Promise<T> {
     const binding = this.#bindings.get(id);
     if (binding === undefined) return operation();
@@ -670,7 +693,9 @@ export interface SubscriptionCreator {
   ): Promise<BackendSubscriptionEnvelope>;
 
   /**
-   * Activates a backend subscription.
+   * Activates a backend subscription and validates relayed updates.
+   * A custom creator checks every forwarded update's subscription ID and Topic
+   * against the Subscription accepted by its backend. The envelope remains opaque.
    * @param request Supplies the copied private backend envelope and update sink.
    * @param signal Cancels the backend operation.
    * @returns Completes after activation ends.
@@ -862,9 +887,18 @@ export type SubscriptionGatewayResult =
  */
 export class SubscriptionGateway {
   readonly #options: SubscriptionGatewayOptions;
+
   readonly #limits: Required<SubscriptionGatewayLimits>;
+
   readonly #expiryTimers = new Set<unknown>();
+
   readonly #publicPendingTimers = new Map<string, unknown>();
+
+  readonly #cancellations = new Map<
+    string,
+    { context: ActorContext; promise: Promise<SubscriptionGatewayResult> }[]
+  >();
+
   #closed = false;
 
   /**
@@ -924,6 +958,7 @@ export class SubscriptionGateway {
     );
     this.#expiryTimers.add(timer);
   }
+
   async #handleOperation(request: SubscriptionGatewayRequest): Promise<SubscriptionGatewayResult> {
     const kind = SubscriptionGatewayValues.operationFor(request);
     if (kind === undefined) return SubscriptionGatewayValues.rejected("unknown-operation");
@@ -940,6 +975,7 @@ export class SubscriptionGateway {
     if ("kind" in prepared) return prepared;
     return this.#perform(prepared, request.updates, request.signal);
   }
+
   async #prepareSecurity(
     kind: SubscriptionOperation,
     request: SubscriptionGatewayRequest,
@@ -965,6 +1001,7 @@ export class SubscriptionGateway {
       return SubscriptionGatewayValues.rejected("forbidden");
     return this.#resolveTrusted(kind, request, source, session);
   }
+
   async #resolveTrusted(
     kind: SubscriptionOperation,
     request: SubscriptionGatewayRequest,
@@ -1003,10 +1040,12 @@ export class SubscriptionGateway {
       nowMs,
     };
   }
+
   #nowMs(): number | undefined {
     const now = this.#options.clock.now();
     return SubscriptionGatewayValues.timestampMs(now.seconds, now.nanos);
   }
+
   async #perform(
     prepared: PreparedOperation,
     updates: SubscriptionUpdateSink | undefined,
@@ -1028,6 +1067,7 @@ export class SubscriptionGateway {
         )
       : this.#cancel(id, context, nowMs);
   }
+
   async #activate(
     id: string,
     context: ActorContext,
@@ -1105,12 +1145,34 @@ export class SubscriptionGateway {
     if (cleanupFailure !== undefined) throw cleanupFailure;
     return outcome;
   }
-  async #cancel(
+
+  #cancel(id: string, context: ActorContext, nowMs: number): Promise<SubscriptionGatewayResult> {
+    const active = this.#cancellations.get(id) ?? [];
+    const matching = active.find((entry) =>
+      SubscriptionGatewayValues.contextsEqual(entry.context, context),
+    );
+    if (matching !== undefined) return matching.promise;
+    const promise = this.#cancelOnce(id, context, nowMs);
+    const entry = { context: clone(ActorContextSchema, context), promise };
+    active.push(entry);
+    this.#cancellations.set(id, active);
+    void promise
+      .finally(() => {
+        const current = this.#cancellations.get(id);
+        if (current === undefined) return;
+        const remaining = current.filter((candidate) => candidate !== entry);
+        if (remaining.length === 0) this.#cancellations.delete(id);
+        else this.#cancellations.set(id, remaining);
+      })
+      .catch(() => undefined);
+    return promise;
+  }
+
+  async #cancelOnce(
     id: string,
     context: ActorContext,
     nowMs: number,
   ): Promise<SubscriptionGatewayResult> {
-    this.#clearPublicPending(id);
     try {
       const result = await this.#options.bindings.cancel({
         id,
@@ -1118,15 +1180,16 @@ export class SubscriptionGateway {
         nowMs,
         onDefinition: (definition, effectSignal) => this.#forwardCancel(definition, effectSignal),
       });
-      return result.kind === "denied"
-        ? SubscriptionGatewayValues.rejected("denied")
-        : { kind: "cancelled" };
+      if (result.kind === "denied") return SubscriptionGatewayValues.rejected("denied");
+      this.#clearPublicPending(id);
+      return { kind: "cancelled" };
     } catch (error) {
       if (error instanceof Error && error.message === "binding-busy")
         return SubscriptionGatewayValues.rejected("binding-busy");
       throw error;
     }
   }
+
   async #subscribe(
     bytes: Uint8Array,
     context: ActorContext,
@@ -1171,6 +1234,7 @@ export class SubscriptionGateway {
       throw error;
     }
   }
+
   #schedulePublicPending(id: string, context: ActorContext): void {
     this.#clearPublicPending(id);
     const timer = setTimeout(() => {
@@ -1188,15 +1252,18 @@ export class SubscriptionGateway {
     }, SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS);
     this.#publicPendingTimers.set(id, timer);
   }
+
   #retryPublicPending(id: string, context: ActorContext): void {
     if (!this.#closed && !this.#publicPendingTimers.has(id))
       this.#schedulePublicPending(id, context);
   }
+
   #clearPublicPending(id: string): void {
     const timer = this.#publicPendingTimers.get(id);
     if (timer !== undefined) clearTimeout(timer);
     this.#publicPendingTimers.delete(id);
   }
+
   async #receiveBackend(wire: PublicSubscriptionWire, controller: AbortController): Promise<void> {
     return SubscriptionGatewayValues.withTimeout(
       this.#options.creator.subscribe(
@@ -1208,6 +1275,7 @@ export class SubscriptionGateway {
       controller,
     );
   }
+
   async #compensateDefinition(
     wire: PublicSubscriptionWire,
     controller: AbortController,
@@ -1218,6 +1286,7 @@ export class SubscriptionGateway {
       signal,
     );
   }
+
   async #forwardActivate(
     definition: PublicSubscriptionWire,
     updates: SubscriptionUpdateSink,
@@ -1248,6 +1317,7 @@ export class SubscriptionGateway {
       privateWire.bytes.fill(0);
     }
   }
+
   async #forwardCancel(
     definition: PublicSubscriptionWire,
     signal: SubscriptionAbortSignal,
@@ -1266,13 +1336,35 @@ export class SubscriptionGateway {
  */
 const SubscriptionGatewayValues = Object.freeze({
   publicPrincipal: Object.freeze({ id: "spine-gateway-public" }),
+
+  /**
+   * Stops delivery of an update from a closed or rejected stream.
+   *
+   * @param update The update being delivered.
+   * @returns Completion after discarding the update.
+   */
   discardUpdate(update: SubscriptionUpdateWire): Promise<void> {
     update.bytes.fill(0);
     return Promise.resolve();
   },
+
+  /**
+   * Copies the public subscription wire bytes.
+   *
+   * @param wire Serialized public subscription bytes.
+   * @returns Copied public subscription bytes.
+   */
   copyPublic(wire: PublicSubscriptionWire): PublicSubscriptionWire {
     return { kind: wire.kind, bytes: wire.bytes.slice() };
   },
+
+  /**
+   * Builds a successful subscription response.
+   *
+   * @param id The logical subscription identifier.
+   * @param topicBytes Serialized subscription Topic.
+   * @returns A successful subscription response.
+   */
   subscribed(id: string, topicBytes: Uint8Array): SubscriptionGatewayResult {
     return {
       kind: "subscribed",
@@ -1280,6 +1372,7 @@ const SubscriptionGatewayValues = Object.freeze({
         kind: "public-subscription",
         bytes: toBinary(
           SubscriptionSchema,
+
           create(SubscriptionSchema, {
             id: { value: id },
             topic: fromBinary(TopicSchema, topicBytes),
@@ -1288,6 +1381,16 @@ const SubscriptionGatewayValues = Object.freeze({
       },
     };
   },
+
+  /**
+   * Decodes and validates a typed incoming request.
+   *
+   * @param kind Expected request kind.
+   * @param bytes Serialized subscription request bytes.
+   * @param transport Safe request transport metadata.
+   * @returns The decoded request when its kind matches.
+   */
+
   decode(
     kind: "subscribe" | "activate" | "cancel",
     bytes: Uint8Array,
@@ -1296,6 +1399,13 @@ const SubscriptionGatewayValues = Object.freeze({
     const result = IncomingRequests.decode({ kind, value: bytes.slice(), transport });
     return result?.kind === kind ? result : undefined;
   },
+
+  /**
+   * Builds actor context from resolved credentials.
+   *
+   * @param context The authenticated or RPC context.
+   * @returns The trusted actor context.
+   */
   trustedContext(context: Awaited<ReturnType<ContextResolver["resolve"]>>): ActorContext {
     return create(ActorContextSchema, {
       actor: context.actor,
@@ -1305,11 +1415,28 @@ const SubscriptionGatewayValues = Object.freeze({
       ...(context.language === undefined ? {} : { language: context.language }),
     });
   },
+
+  /**
+   * Checks whether requested context matches trusted context.
+   *
+   * @param requested Context supplied by the caller.
+   * @param trusted Context resolved by authentication.
+   * @returns Whether requested context matches authentication.
+   */
   matches(requested: ActorContext, trusted: ActorContext): boolean {
     return SubscriptionGatewayValues.contextsEqual(requested, trusted);
   },
+
+  /**
+   * Compares authenticated actor and tenant identities.
+   *
+   * @param left First context to compare.
+   * @param right Second context to compare.
+   * @returns Whether the actor and tenant identities match.
+   */
   contextsEqual(left: ActorContext, right: ActorContext): boolean {
     if (left.actor?.value !== right.actor?.value) return false;
+
     if (left.tenantId === undefined || right.tenantId === undefined)
       return left.tenantId === right.tenantId;
     const first = toBinary(TenantIdSchema, left.tenantId);
@@ -1318,6 +1445,14 @@ const SubscriptionGatewayValues = Object.freeze({
       first.byteLength === second.byteLength && first.every((byte, index) => byte === second[index])
     );
   },
+
+  /**
+   * Transforms subscription context with authenticated values.
+   *
+   * @param incoming Decoded subscription request.
+   * @param context The authenticated or RPC context.
+   * @returns Serialized subscription with trusted context.
+   */
   rewrite(
     incoming: Extract<IncomingRequest, { readonly kind: "subscribe" | "activate" | "cancel" }>,
     context: ActorContext,
@@ -1328,6 +1463,7 @@ const SubscriptionGatewayValues = Object.freeze({
       return toBinary(TopicSchema, topic);
     }
     const subscription = clone(SubscriptionSchema, incoming.subscription);
+
     const topic =
       subscription.topic === undefined
         ? create(TopicSchema)
@@ -1336,6 +1472,13 @@ const SubscriptionGatewayValues = Object.freeze({
     subscription.topic = topic;
     return toBinary(SubscriptionSchema, subscription);
   },
+
+  /**
+   * Determines the subscription operation for a request.
+   *
+   * @param request The admitted or incoming request.
+   * @returns The recognized subscription operation, if any.
+   */
   operationFor(
     request: SubscriptionGatewayRequest,
   ): "subscribe" | "activate" | "cancel" | undefined {
@@ -1347,6 +1490,13 @@ const SubscriptionGatewayValues = Object.freeze({
     if (request.method === "Cancel" && request.wire.kind === "public-subscription") return "cancel";
     return undefined;
   },
+
+  /**
+   * Copies safe transport metadata from the request.
+   *
+   * @param request The admitted or incoming request.
+   * @returns Copied safe transport context.
+   */
   snapshotTransport(request: SubscriptionGatewayRequest): TransportRequestContext {
     return Object.freeze({
       service: request.service,
@@ -1358,6 +1508,7 @@ const SubscriptionGatewayValues = Object.freeze({
       ...(request.transport.correlationId === undefined
         ? {}
         : { correlationId: request.transport.correlationId }),
+
       ...(request.transport.peerAddress === undefined
         ? {}
         : { peerAddress: request.transport.peerAddress }),
@@ -1366,11 +1517,26 @@ const SubscriptionGatewayValues = Object.freeze({
         : { userAgent: request.transport.userAgent }),
     });
   },
+
+  /**
+   * Builds a rejected gateway result.
+   *
+   * @param reason The original failure reason.
+   * @returns The rejected gateway result.
+   */
   rejected(
     reason: Extract<SubscriptionGatewayResult, { readonly kind: "rejected" }>["reason"],
   ): SubscriptionGatewayResult {
     return { kind: "rejected", reason };
   },
+
+  /**
+   * Converts a Protobuf timestamp to safe milliseconds.
+   *
+   * @param seconds Whole timestamp seconds.
+   * @param nanos Timestamp nanoseconds.
+   * @returns Safe milliseconds, or undefined for invalid input.
+   */
   timestampMs(seconds: bigint, nanos: number): number | undefined {
     const value = Number(seconds);
     if (
@@ -1383,6 +1549,13 @@ const SubscriptionGatewayValues = Object.freeze({
     const result = value * 1_000 + Math.floor(nanos / 1_000_000);
     return Number.isSafeInteger(result) ? result : undefined;
   },
+
+  /**
+   * Validates and fills gateway subscription limits.
+   *
+   * @param input Caller-supplied limits.
+   * @returns Validated gateway limits.
+   */
   limits(input: SubscriptionGatewayLimits | undefined): Required<SubscriptionGatewayLimits> {
     const value = { ...defaultLimits, ...input };
     for (const limit of Object.values(value))
@@ -1390,6 +1563,14 @@ const SubscriptionGatewayValues = Object.freeze({
         throw new Error("subscription limits must be positive safe integers");
     return value;
   },
+
+  /**
+   * Copies a bounded gateway request for admission.
+   *
+   * @param request The admitted or incoming request.
+   * @param limit Configured admission bounds.
+   * @returns The copied request, or undefined when too large.
+   */
   admit(
     request: SubscriptionGatewayRequest,
     limit: Required<SubscriptionGatewayLimits>,
@@ -1399,6 +1580,7 @@ const SubscriptionGatewayValues = Object.freeze({
       service: request.service,
       method: request.method,
       wire: { kind: request.wire.kind, bytes: request.wire.bytes.slice() },
+
       ...(request.credential === undefined
         ? {}
         : { credential: { kind: request.credential.kind, value: request.credential.value } }),
@@ -1407,6 +1589,16 @@ const SubscriptionGatewayValues = Object.freeze({
       ...(request.signal === undefined ? {} : { signal: request.signal }),
     };
   },
+
+  /**
+   * Waits for one subscription operation within its finite timeout.
+   *
+   * @typeParam T The operation result.
+   * @param effect The in-flight operation.
+   * @param milliseconds Maximum duration in milliseconds.
+   * @param controller Controller used to cancel the operation.
+   * @returns The operation result before timeout.
+   */
   async withTimeout<T>(
     effect: Promise<T>,
     milliseconds: number,

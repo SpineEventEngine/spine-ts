@@ -19,7 +19,7 @@ import * as http from "node:http";
 
 import { create, type Message } from "@bufbuild/protobuf";
 import { createClient } from "@connectrpc/connect";
-import { createConnectTransport } from "@connectrpc/connect-node";
+import { connectNodeAdapter, createConnectTransport } from "@connectrpc/connect-node";
 import { createGrpcWebTransport } from "@connectrpc/connect-web";
 import {
   InMemorySubscriptionBindings,
@@ -34,6 +34,8 @@ import {
   ActorContextSchema,
   CommandContextSchema,
   CommandSchema,
+  ResponseSchema,
+  StatusSchema,
   TenantIdSchema,
   UserIdSchema,
 } from "@spine-event-engine/proto";
@@ -42,6 +44,9 @@ import {
   QuerySchema,
   QueryService,
   SubscriptionService,
+  SubscriptionIdSchema,
+  SubscriptionSchema,
+  SubscriptionUpdateSchema,
   TopicSchema,
 } from "@spine-event-engine/proto/client";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
@@ -1045,13 +1050,19 @@ describe("Server", () => {
         create(TopicSchema, { context: create(ActorContextSchema, { actor }) }),
         { headers },
       );
-      await subscriptions.activate(subscription, { headers })[Symbol.asyncIterator]().next();
+      // This raw path probe returns an empty backend stream; the protocol ACK is covered below.
+      await subscriptions
+        .activate(subscription, { headers })
+        [Symbol.asyncIterator]()
+        .next()
+        .catch(() => undefined);
       await subscriptions.cancel(subscription, { headers });
       expect(paths).toEqual([
         "/spine.client.CommandService/Post",
         "/spine.client.QueryService/Read",
         "/spine.client.SubscriptionService/Subscribe",
         "/spine.client.SubscriptionService/Activate",
+        "/spine.client.SubscriptionService/Cancel",
       ]);
     } finally {
       await server.close();
@@ -1062,6 +1073,114 @@ describe("Server", () => {
       );
     }
   });
+
+  it.each(["connect", "grpc-web"] as const)(
+    "forwards one logical idle activation ACK over %s and cancels its native child",
+    async (protocol) => {
+      let childActivations = 0;
+      let childCancellations = 0;
+      const backend = http2.createServer(
+        connectNodeAdapter({
+          routes: (router) =>
+            router.service(SubscriptionService, {
+              subscribe: (topic) =>
+                create(SubscriptionSchema, {
+                  id: create(SubscriptionIdSchema, { value: `native-${protocol}` }),
+                  topic,
+                }),
+              activate: async function* (subscription, context) {
+                childActivations++;
+                yield create(SubscriptionUpdateSchema, {
+                  subscription,
+                  response: create(ResponseSchema, {
+                    status: create(StatusSchema, { status: { case: "ok", value: {} } }),
+                  }),
+                });
+                await new Promise<void>((resolve) => {
+                  if (context.signal.aborted) resolve();
+                  else
+                    context.signal.addEventListener(
+                      "abort",
+                      () => {
+                        resolve();
+                      },
+                      { once: true },
+                    );
+                });
+              },
+              cancel: () => {
+                childCancellations++;
+                return create(ResponseSchema);
+              },
+            }),
+        }),
+      );
+      await new Promise<void>((resolve) => backend.listen(0, "127.0.0.1", resolve));
+      const address = backend.address();
+      if (address === null || typeof address === "string")
+        throw new Error("backend address missing");
+      const actor = create(UserIdSchema, { value: "ada" });
+      const server = await openStandalone({
+        port: 0,
+        ...browserGateway(),
+        backend: { baseUrl: `http://127.0.0.1:${address.port.toString()}` },
+        bindings: inMemoryBindings(),
+        sessions: {
+          resolve: () =>
+            Promise.resolve({
+              principal: { id: "ada" },
+              expiresAt: create(TimestampSchema, { seconds: 100n }),
+            }),
+        },
+        authorize: () => Promise.resolve(true),
+        contexts: {
+          resolve: () => Promise.resolve({ actor, timestamp: create(TimestampSchema) }),
+          resolveContext: () => Promise.resolve({ actor, timestamp: create(TimestampSchema) }),
+        },
+      });
+      const transport =
+        protocol === "connect"
+          ? createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" })
+          : createGrpcWebTransport({ baseUrl: server.baseUrl });
+      const client = createClient(SubscriptionService, transport);
+      const headers = { origin: "http://127.0.0.1:5173", authorization: "Bearer token" };
+      const controller = new AbortController();
+      let stage = "subscribe";
+      try {
+        const subscription = await client.subscribe(
+          create(TopicSchema, { context: create(ActorContextSchema, { actor }) }),
+          { headers },
+        );
+        stage = "activate";
+        const iterator = client
+          .activate(subscription, { headers, signal: controller.signal })
+          [Symbol.asyncIterator]();
+        const first = await iterator.next();
+        expect(first.done).toBe(false);
+        const acknowledgement = first.value as
+          import("@spine-event-engine/proto/client").SubscriptionUpdate | undefined;
+        expect(acknowledgement?.subscription?.id?.value).toBe(subscription.id?.value);
+        expect(acknowledgement?.response?.status?.status.case).toBe("ok");
+        expect(acknowledgement?.update.case).toBeUndefined();
+        expect(childActivations).toBe(1);
+        stage = "cancel";
+        await client.cancel(subscription, { headers });
+        controller.abort();
+        await iterator.return?.();
+        await expect.poll(() => childCancellations).toBe(1);
+      } catch (error) {
+        throw new Error(`${protocol} ${stage} failed`, { cause: error });
+      } finally {
+        controller.abort();
+        await server.close();
+        await new Promise<void>((resolve) =>
+          backend.close(() => {
+            resolve();
+          }),
+        );
+      }
+    },
+  );
 
   it("dispatches one exact standalone auth callback without an Origin", async () => {
     const server = await openCombined(new Server(), {

@@ -1,0 +1,3 @@
+$ node scripts/check-tsdoc.mjs
+missing-returns: packages/client-web/src/client/client.ts :: TopicSubscription.method@1208(updates,subscription,generation)
+[ELIFECYCLE] Command failed with exit code 1.

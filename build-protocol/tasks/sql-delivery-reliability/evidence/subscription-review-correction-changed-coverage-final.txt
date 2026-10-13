@@ -1,0 +1,8 @@
+packages/auth/src/gateway/dynamic-unary-forwarder.ts: changed executable lines 13/14; changed branch arms 2/2; uncovered lines [145]; uncovered branch lines []
+packages/auth/src/native/index.ts: changed executable lines 0/4; changed branch arms 0/6; uncovered lines [325, 326, 327, 333]; uncovered branch lines [327, 328]
+packages/auth/src/subscriptions/index.ts: changed executable lines 0/20; changed branch arms 0/10; uncovered lines [897, 1150, 1151, 1152, 1154, 1155, 1156, 1157, 1158, 1159, 1161, 1162, 1163, 1164, 1165, 1167, 1168, 1183, 1184, 1185]; uncovered branch lines [1150, 1154, 1162, 1164, 1183]
+packages/client-web/src/client/client.ts: changed executable lines 88/93; changed branch arms 59/69; uncovered lines [1078, 1079, 1133, 1237, 1352]; uncovered branch lines [1016, 1077, 1104, 1132, 1135, 1236, 1351, 1357, 1383, 1532]
+packages/deployment/src/internal/backend-membership-kernel.ts: changed executable lines 134/142; changed branch arms 109/125; uncovered lines [582, 783, 784, 785, 1021, 1022, 1057, 1058]; uncovered branch lines [465, 557, 579, 581, 707, 785, 928, 998, 1020, 1024, 1025, 1035, 1056, 1070, 1090]
+packages/server/src/server/node-coordinator.ts: changed executable lines 29/29; changed branch arms 12/12; uncovered lines []; uncovered branch lines []
+packages/server/src/services/spine-services.ts: changed executable lines 0/18; changed branch arms 0/12; uncovered lines [495, 499, 525, 526, 528, 538, 539, 540, 543, 549, 550, 551, 552, 553, 555, 556, 558, 563]; uncovered branch lines [538, 539, 543, 544]
+TOTAL: changed executable lines 264/320; changed branch arms 182/236

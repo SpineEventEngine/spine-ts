@@ -158,12 +158,13 @@ describe("SubscriptionUpdateRelay", () => {
 describe("NativeSubscriptionCreator", () => {
   it("uses shared descriptors and preserves supplied abort signals", async () => {
     const calls: { method: string; signal: AbortSignal | undefined }[] = [];
+    let mismatchedChild = false;
     const transport = {
       unary: (method: { name: string; parent: unknown }, signal: AbortSignal | undefined) => {
         calls.push({ method: method.name, signal });
         const message =
           method.name === "Subscribe"
-            ? create(SubscriptionSchema, { id: { value: "one" } })
+            ? create(SubscriptionSchema, { id: { value: "one" }, topic: create(TopicSchema) })
             : method.name === "Post"
               ? create(AckSchema)
               : method.name === "Read"
@@ -188,7 +189,12 @@ describe("NativeSubscriptionCreator", () => {
           trailer: new Headers(),
           message: (async function* () {
             await Promise.resolve();
-            yield create(SubscriptionUpdateSchema);
+            yield create(SubscriptionUpdateSchema, {
+              subscription: create(SubscriptionSchema, {
+                id: { value: mismatchedChild ? "other" : "one" },
+                topic: create(TopicSchema),
+              }),
+            });
           })(),
         });
       },
@@ -215,7 +221,10 @@ describe("NativeSubscriptionCreator", () => {
     const backend = await native.subscribe(wire, signal);
     expect(backend).toEqual({
       kind: "backend-subscription-envelope",
-      bytes: toBinary(SubscriptionSchema, create(SubscriptionSchema, { id: { value: "one" } })),
+      bytes: toBinary(
+        SubscriptionSchema,
+        create(SubscriptionSchema, { id: { value: "one" }, topic: create(TopicSchema) }),
+      ),
     });
     const updates: Uint8Array[] = [];
     await native.activate(
@@ -228,12 +237,23 @@ describe("NativeSubscriptionCreator", () => {
       },
       signal,
     );
+    mismatchedChild = true;
+    await expect(
+      native.activate(
+        {
+          wire: backend,
+          updates: () => Promise.reject(new Error("invalid child update reached the public sink")),
+        },
+        signal,
+      ),
+    ).rejects.toThrow("Backend child update does not match its subscription.");
     await native.cancel({ wire }, signal);
     await native.dispose(backend, signal);
     expect(calls.map((call) => call.method)).toEqual([
       "Post",
       "Read",
       "Subscribe",
+      "Activate",
       "Activate",
       "Cancel",
       "Cancel",

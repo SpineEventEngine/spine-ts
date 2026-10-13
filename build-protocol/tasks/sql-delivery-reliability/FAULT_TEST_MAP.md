@@ -1,5 +1,7 @@
 # SQL and publication fault-test reuse map
 
+The initial reuse-map sections below describe the starting snapshot before implementation; their line numbers and old transaction/test claims are historical investigation guidance, not current framework status. Storage and delivery changes are recorded in IMPLEMENTATION.md and ACCEPTANCE.md. Later sections in this file identify remaining route gaps and subsequent live evidence.
+
 ## Assignment evidence
 
 This is the orchestrator-dispatched mechanical test-analysis function, explicitly configured as **gpt-6-luna / medium**. Runtime introspection is unavailable; no runtime model metadata is exposed. Read-only source analysis only. No scripts, builds, tests, or runtime files were changed.
@@ -31,3 +33,74 @@ This is the orchestrator-dispatched mechanical test-analysis function, explicitl
 ## Keep versus replace
 
 Keep storage-driver unit failures for fast deterministic SQL classification; keep live MySQL trigger patterns and Project domain fixture construction; keep valid EventBus stored-replay tests and DeliveryMonitor retry policy tests as focused contracts. Replace or explicitly narrow tests whose names/claims imply that all Entity family writes are atomic (`mysql-integration.test.ts`, `postgres-entity-commit.test.ts`, and relevant server routing tests at `repository-routing.test.ts:9703,9767`) when the accepted behavior is an observable prefix and retryable follow-up. Do not use test doubles as evidence of the real SQL acknowledgement or publication behavior.
+
+## Remaining publication route acceptance
+
+The new focused retry cases primarily prove Aggregate committed outputs and
+explicit repair. Add actual failure/count assertions for Process Manager and
+reactor outputs, externally posted Events, and System Events. First establish
+which supported path stores the Event before dispatch and which admission result
+it exposes; do not infer that every route has an Entity save. For Entity outputs,
+record existence alone cannot prove the complete save. For a route with a completed
+standalone append, document its actual committed boundary and supported Event-only
+recovery. Reconcile any overly narrow wording that treats all saved Events as
+Entity outputs with the implemented and tested scope, without adding discovery,
+receipts, an outbox, or cross-record coordination. This is a pending verification
+question, not a confirmed runtime finding or an approved new persistence contract.
+
+### Corrected storage-path inspection
+
+Read-only scanning function: explicit `gpt-6-luna` / `medium`; runtime metadata
+unavailable. Parent rejected the initial inference that Entity delivery Events
+use a separate record family. All providers open the shared `eventStoreRecordSpec`
+for `EntityCommitInput.events` in the same domain storage context:
+PostgreSQL `postgres/entity-commit.ts` `openEvents`, MySQL
+`mysql/storage-factory.ts` Entity commit construction, memory
+`memory/in-memory-entity-commit.ts` `openCommit`, and Datastore
+`datastore/entity-history.ts` commit preparation. Aggregate and reactor saved
+Events are therefore accessible to domain exact-ID repair. Live restart evidence
+must still establish that path from a real successful Command.
+
+Process Manager output (`repository.ts` `publishEvent`) and external intake use
+the domain EventBus `acceptThenAppend` path: admission first, immutable append,
+then recipient delivery. Raw publication currently has no three-attempt stored
+publication loop. Test the actual after-append failure outcome and exact-ID repair
+instead of inferring the Aggregate retry policy applies there.
+
+System Events use a distinct `${domainName}_System` storage context and System
+bus; storage is enabled only by `persistSystemEvents()`. `republishEvents` selects
+the domain store and domain bus. No System repair path is established by this
+API. Cover both configured persistence and forgetting behavior explicitly;
+decide any necessary scoped correction from a regression, without claiming a
+System recovery contract from the domain repair tests.
+
+### Process Manager append-before-publication gap to reproduce
+
+Parent source inspection after the map distinguishes a failure before domain
+EventStore append from the after-append probe. In `repository.ts`,
+`ProcessManagerExecutionSupport.#commitProcessManagerRecord` passes current state,
+optional state history and optional diagnostic Events to `loaded.commits.commit`,
+but omits `EntityCommitInput.events`. Both Command assignment
+`#commitAndPublish` and Event reaction `#executeEntity` subsequently schedule raw
+`publisher.publishEvent`. A failed domain append can therefore follow a
+successful Process Manager state save without a corresponding shared saved
+Event for exact-ID repair. Optional Entity diagnostic history is a different
+family and is not the domain repair store.
+
+Reproduce this precise boundary with generated Process Manager fixtures, actual
+handler entry counts, Event IDs, and current/history/shared-Event state. A likely
+bounded correction is to pass the produced Events through the existing
+independent Entity commit delivery-Event field before current state, separately
+from input diagnostic Events, then use truthful finite stored publication. This
+is not approval for a new coordinator, outbox or persistence contract. The
+existing Aggregate pattern supplies the candidate behavior; implementation and
+focused review must establish it. Do not count a swallowed append failure as
+successful publication or claim repair of a record that was never saved.
+
+## Live external Event after-append repair evidence
+
+The parent public-API probe `evidence/external-event-repair.mjs` passed all four dedicated SQL servers (`external-event-repair-attempt2.log`). The external Event is stored before a direct dispatcher fails, then a fresh context and provider repair its known ID with unchanged bytes. Two dispatcher-entry records recur on replay, including the previously successful recipient. This fixture bypasses repository Inbox deduplication intentionally and proves no stronger guarantee. It does not cross an OS restart, post a Command, cover ProcessManager pre-append failure, or establish System-context repair. Module hashes, PID, server versions and exact IDs are retained. The first path-resolution failure occurred before DB use.
+
+## Saved-publication retry spacing gap
+
+Parent spec/source check found a remaining concrete requirement: FIRST_SPINE_TS_DELIVERY_TASK.md's live-recovery direction explicitly requires a delay between finite stored-Event failures. SignalPublisher.#dispatchStored currently loops immediately after a rejected attempt. The three-attempt bound is correct but does not satisfy retry spacing. In the next publication route slice, add a finite cancellable delay between failed attempts (not after success or final exhaustion), test actual spacing, cancellation during the delay and timer cleanup, and document the supported policy. Reuse normal timer/lifecycle conventions; do not add persistent retry state or claim a restart-surviving schedule. This is independent of the active subscription correction.

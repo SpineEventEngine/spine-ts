@@ -15,10 +15,14 @@
 import { describe, expect, it } from "vitest";
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { ApplicationNode } from "@spine-event-engine/deployment";
+import { AnyMessages } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   EventIdSchema,
   EventSchema,
+  EventContextSchema,
+  ResponseSchema,
+  StatusSchema,
   TenantIdSchema,
 } from "@spine-event-engine/proto";
 import {
@@ -32,6 +36,11 @@ import {
   DynamicSubscriptionCreator,
   DynamicUnaryForwarder,
 } from "../src/index.js";
+import { TaskCreatedSchema } from "../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
+import {
+  TaskIdSchema,
+  TaskListIdSchema,
+} from "../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
 
 describe("DynamicSubscriptionCreator", () => {
   it("keeps native children inactive until the public activation request", async () => {
@@ -69,9 +78,7 @@ describe("DynamicSubscriptionCreator", () => {
             }),
           activate: async (request, signal) => {
             received.set(node.id, { kind: request.wire.kind, bytes: request.wire.bytes.slice() });
-            if (node.id === "a") {
-              await request.updates({ kind: "subscription-update", bytes: new Uint8Array([7]) });
-            }
+            await request.updates(activationAck());
             await new Promise<void>((resolve) => {
               signal.addEventListener(
                 "abort",
@@ -170,7 +177,7 @@ describe("DynamicSubscriptionCreator", () => {
           ...client(node.id, []),
           activate: async (request, signal) => {
             entered.resolve(undefined);
-            await request.updates({ kind: "subscription-update", bytes: new Uint8Array([1]) });
+            await request.updates(activationAck());
             await new Promise<void>((resolve) => {
               signal.addEventListener(
                 "abort",
@@ -256,8 +263,19 @@ describe("DynamicSubscriptionCreator", () => {
     await owner.reconcile([node]);
     await creator.subscribe(wire, new AbortController().signal);
     const controller = new AbortController();
-    const activation = creator.activate({ wire, updates: noUpdates }, controller.signal);
-    await Promise.resolve();
+    const acknowledged = deferred();
+    const activation = creator.activate(
+      {
+        wire,
+        updates: () => {
+          acknowledged.resolve(undefined);
+          return Promise.resolve();
+        },
+      },
+      controller.signal,
+    );
+    await acknowledged.promise;
+    await new Promise<void>((resolve) => setImmediate(resolve));
     await owner.reconcile([]);
     await owner.reconcile([node]);
 
@@ -269,14 +287,16 @@ describe("DynamicSubscriptionCreator", () => {
   it("replaces a child after an unexpected activation completion", async () => {
     const firstActivation = deferred();
     const firstFinished = deferred();
+    const acknowledged = deferred();
     const starts: string[] = [];
     let activations = 0;
     const owner = new DynamicUnaryForwarder({
       create: (node) =>
         Promise.resolve({
           ...client(node.id, starts),
-          activate: async (_request, signal) => {
+          activate: async (request, signal) => {
             activations++;
+            await request.updates(activationAck());
             if (activations === 1) {
               await firstActivation.promise;
               firstFinished.resolve(undefined);
@@ -301,8 +321,17 @@ describe("DynamicSubscriptionCreator", () => {
     await owner.reconcile([node]);
     await creator.subscribe(wire, new AbortController().signal);
     const controller = new AbortController();
-    const activation = creator.activate({ wire, updates: noUpdates }, controller.signal);
-    await Promise.resolve();
+    const activation = creator.activate(
+      {
+        wire,
+        updates: () => {
+          acknowledged.resolve(undefined);
+          return Promise.resolve();
+        },
+      },
+      controller.signal,
+    );
+    await acknowledged.promise;
     expect(activations).toBe(1);
 
     firstActivation.resolve(undefined);
@@ -882,7 +911,8 @@ describe("DynamicSubscriptionCreator", () => {
       create: (node) =>
         Promise.resolve({
           ...client(node.id, []),
-          activate: async (_request, signal) => {
+          activate: async (request, signal) => {
+            await request.updates(activationAck());
             await new Promise<void>((resolve) => {
               signal.addEventListener(
                 "abort",
@@ -907,8 +937,18 @@ describe("DynamicSubscriptionCreator", () => {
     await owner.reconcile([node]);
     await creator.subscribe(wire, new AbortController().signal);
     const controller = new AbortController();
-    const activation = creator.activate({ wire, updates: noUpdates }, controller.signal);
-    await Promise.resolve();
+    const acknowledged = deferred();
+    const activation = creator.activate(
+      {
+        wire,
+        updates: () => {
+          acknowledged.resolve(undefined);
+          return Promise.resolve();
+        },
+      },
+      controller.signal,
+    );
+    await acknowledged.promise;
     await owner.reconcile([]);
 
     expect(activationAborted).toBe(true);
@@ -937,8 +977,19 @@ describe("DynamicSubscriptionCreator", () => {
     await owner.reconcile([node]);
     await creator.subscribe(wire, new AbortController().signal);
     const controller = new AbortController();
-    const activation = creator.activate({ wire, updates: noUpdates }, controller.signal);
-    await Promise.resolve();
+    const acknowledged = deferred();
+    const activation = creator.activate(
+      {
+        wire,
+        updates: () => {
+          acknowledged.resolve(undefined);
+          return Promise.resolve();
+        },
+      },
+      controller.signal,
+    );
+    await acknowledged.promise;
+    await new Promise<void>((resolve) => setImmediate(resolve));
     await owner.reconcile([]);
     await owner.reconcile([]);
 
@@ -954,8 +1005,9 @@ describe("DynamicSubscriptionCreator", () => {
       create: (node) =>
         Promise.resolve({
           ...client(node.id, []),
-          activate: async (_request, signal) => {
+          activate: async (request, signal) => {
             entered.resolve(undefined);
+            await request.updates(activationAck());
             await new Promise<void>((resolve) => {
               signal.addEventListener(
                 "abort",
@@ -1068,6 +1120,8 @@ describe("DynamicSubscriptionCreator", () => {
     const firstLayer: Uint8Array[] = [];
     const secondLayer: Uint8Array[] = [];
     const relayed: Uint8Array[] = [];
+    const delivered = deferred();
+    const taskId = create(TaskIdSchema, { value: "task-1" });
     const update = toBinary(
       SubscriptionUpdateSchema,
       create(SubscriptionUpdateSchema, {
@@ -1078,7 +1132,17 @@ describe("DynamicSubscriptionCreator", () => {
             event: [
               create(EventSchema, {
                 id: create(EventIdSchema, { value: "event-1" }),
-                message: { typeUrl: "type.example/Event", value: new Uint8Array([7, 8]) },
+                context: create(EventContextSchema, {
+                  producerId: AnyMessages.pack(TaskIdSchema, taskId),
+                }),
+                message: AnyMessages.pack(
+                  TaskCreatedSchema,
+                  create(TaskCreatedSchema, {
+                    id: taskId,
+                    title: "Task 1",
+                    taskListId: create(TaskListIdSchema, { value: "list-1" }),
+                  }),
+                ),
               }),
             ],
           },
@@ -1097,8 +1161,23 @@ describe("DynamicSubscriptionCreator", () => {
               bytes: wire.bytes.slice(),
             });
           },
-          activate: (request) =>
-            request.updates({ kind: "subscription-update", bytes: update.slice() }),
+          activate: async (request, signal) => {
+            await request.updates(activationAck("logical/a/b"));
+            await request.updates({ kind: "subscription-update", bytes: update.slice() });
+            await new Promise<void>((resolve) => {
+              if (signal.aborted) {
+                resolve();
+                return;
+              }
+              signal.addEventListener(
+                "abort",
+                () => {
+                  resolve();
+                },
+                { once: true },
+              );
+            });
+          },
           cancel: () => Promise.resolve(),
           dispose: () => Promise.resolve(),
         }),
@@ -1150,11 +1229,12 @@ describe("DynamicSubscriptionCreator", () => {
       { kind: "public-subscription", bytes: publicDefinition },
       (wire) => {
         relayed.push(wire.bytes.slice());
+        if (relayed.length === 2) delivered.resolve(undefined);
         return Promise.resolve();
       },
       controller.signal,
     );
-    await Promise.resolve();
+    await delivered.promise;
     controller.abort();
     await activation;
 
@@ -1170,7 +1250,14 @@ describe("DynamicSubscriptionCreator", () => {
       id: { value: "logical/a/b" },
       topic: fromBinary(SubscriptionSchema, publicDefinition).topic,
     });
-    expect(relayed).toEqual([update]);
+    expect(relayed).toHaveLength(2);
+    const logicalAck = relayed[0];
+    if (logicalAck === undefined) throw new Error("expected one logical ACK");
+    expect(fromBinary(SubscriptionUpdateSchema, logicalAck)).toMatchObject({
+      subscription: { id: { value: "logical" } },
+      response: { status: { status: { case: "ok" } } },
+    });
+    expect(relayed[1]).toEqual(update);
     await outer.close();
     await inner.close();
   });
@@ -1205,8 +1292,9 @@ function client(id: string, starts: string[]): DynamicUnaryClient {
         kind: "backend-subscription-envelope" as const,
         bytes: new Uint8Array([1]),
       }),
-    activate: async (_request, signal) => {
+    activate: async (request, signal) => {
       starts.push(id);
+      await request.updates(activationAck());
       await new Promise<void>((resolve) => {
         signal.addEventListener(
           "abort",
@@ -1219,6 +1307,21 @@ function client(id: string, starts: string[]): DynamicUnaryClient {
     },
     cancel: () => Promise.resolve(),
     dispose: () => Promise.resolve(),
+  };
+}
+
+function activationAck(id = "board") {
+  return {
+    kind: "subscription-update" as const,
+    bytes: toBinary(
+      SubscriptionUpdateSchema,
+      create(SubscriptionUpdateSchema, {
+        subscription: create(SubscriptionSchema, { id: { value: id }, topic: create(TopicSchema) }),
+        response: create(ResponseSchema, {
+          status: create(StatusSchema, { status: { case: "ok", value: {} } }),
+        }),
+      }),
+    ),
   };
 }
 

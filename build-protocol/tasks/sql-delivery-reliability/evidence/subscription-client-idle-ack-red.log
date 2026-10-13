@@ -1,0 +1,32 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+----------------------------------------------x------------------------------
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/client-web/test/client.test.ts > Client > waits for a validated idle subscription ACK before activation and connected
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ packages/client-web/test/client.test.ts:2238:25
+    2236|       await streamStarted.promise;
+    2237|       await Promise.resolve();
+    2238|       expect(activated).toBe(false);
+       |                         ^
+    2239|       await expect(lifecycle.next()).resolves.toMatchObject({ value: {…
+    2240|       releaseAck.resolve(undefined);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 76 skipped (77)
+   Start at  21:20:57
+   Duration  463ms (transform 212ms, setup 0ms, import 323ms, tests 38ms, environment 0ms)
+

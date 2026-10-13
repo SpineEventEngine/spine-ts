@@ -1,0 +1,35 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+-------------------x------------------------
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/deployment/test/membership-kernel.test.ts > BackendMembershipKernel > waits for every child ACK before forwarding one logical activation ACK
+AssertionError: expected [ 'ack:a' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "ack:a",
++   "ack:b",
++ ]
+
+ ❯ packages/deployment/test/membership-kernel.test.ts:308:25
+    306|     try {
+    307|       await vi.waitFor(() => expect(entered.size).toBe(2));
+    308|       expect(delivered).toEqual([]);
+       |                         ^
+    309|       secondAck.resolve(undefined);
+    310|       await vi.waitFor(() => expect(delivered).toHaveLength(1));
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 43 skipped (44)
+   Start at  21:29:23
+   Duration  1.21s (transform 30ms, setup 0ms, import 38ms, tests 1.07s, environment 0ms)
+

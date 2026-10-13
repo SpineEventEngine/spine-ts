@@ -1,0 +1,16 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+····stderr | packages/server/test/services/spine-services.test.ts > SpineServices > returns error statuses for dispatcher failures
+{"severity":"ERROR","timestamp":"2026-10-13T21:12:02.179Z","message":"Command post failed.","contextName":"Tasks","commandId":"command-fails","commandType":"type.googleapis.com/example.validation_refusal.CreateReviewProject","operation":"command.post","errorName":"Error"}
+
+···························stderr | packages/server/test/services/spine-services.test.ts > SpineServices > wraps non-Error dispatcher failures in sanitized Spine command errors
+{"severity":"ERROR","timestamp":"2026-10-13T21:12:02.331Z","message":"Command post failed.","contextName":"Tasks","commandId":"command-string-failure","commandType":"type.googleapis.com/example.validation_refusal.CreateReviewProject","operation":"command.post"}
+
+·························································································
+
+ Test Files  1 passed (1)
+      Tests  120 passed (120)
+   Start at  22:12:00
+   Duration  2.53s (transform 748ms, setup 0ms, import 1.05s, tests 1.35s, environment 0ms)
+

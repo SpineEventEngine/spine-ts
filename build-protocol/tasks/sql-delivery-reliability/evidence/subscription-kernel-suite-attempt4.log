@@ -1,0 +1,35 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/deployment/test/membership-kernel.test.ts (46 tests | 1 failed) 495ms
+     × rejects a child failure before readiness and cleans up every installed child 7ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/deployment/test/membership-kernel.test.ts > BackendMembershipKernel > rejects a child failure before readiness and cleans up every installed child
+AssertionError: expected [ 'a' ] to deeply equal [ 'a', 'b' ]
+
+- Expected
++ Received
+
+  [
+    "a",
+-   "b",
+  ]
+
+ ❯ packages/deployment/test/membership-kernel.test.ts:339:30
+    337|     }, new AbortController().signal)).rejects.toThrow("child attachmen…
+    338|     expect(delivered).toEqual([]);
+    339|     expect(disposals.sort()).toEqual(["a", "b"]);
+       |                              ^
+    340|     await owner.close();
+    341|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 45 passed (46)
+   Start at  21:40:54
+   Duration  636ms (transform 33ms, setup 0ms, import 41ms, tests 495ms, environment 0ms)
+

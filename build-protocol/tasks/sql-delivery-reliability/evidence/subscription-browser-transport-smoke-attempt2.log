@@ -1,0 +1,45 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+(node:1033) TimeoutOverflowWarning: 4102444800000 does not fit into a 32-bit signed integer.
+Timeout duration was set to 1.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1033) TimeoutOverflowWarning: 4102444800000 does not fit into a 32-bit signed integer.
+Timeout duration was set to 1.
+(node:1033) TimeoutOverflowWarning: 4102444800000 does not fit into a 32-bit signed integer.
+Timeout duration was set to 1.
+(node:1033) TimeoutOverflowWarning: 4102444800000 does not fit into a 32-bit signed integer.
+Timeout duration was set to 1.
+ ❯ packages/server/test/server/server.test.ts (152 tests | 2 failed | 150 skipped) 49ms
+     × forwards one logical idle activation ACK over connect and cancels its native child 32ms
+     × forwards one logical idle activation ACK over grpc-web and cancels its native child 16ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/test/server/server.test.ts > Server > forwards one logical idle activation ACK over connect and cancels its native child
+ConnectError: [permission_denied] gateway rejected denied
+ ❯ errorFromJson node_modules/.pnpm/@connectrpc+connect@2.1.2_@bufbuild+protobuf@2.12.1/node_modules/@connectrpc/connect/dist/esm/protocol-connect/error-json.js:54:19
+ ❯ endStreamFromJson node_modules/.pnpm/@connectrpc+connect@2.1.2_@bufbuild+protobuf@2.12.1/node_modules/@connectrpc/connect/dist/esm/protocol-connect/end-stream.js:64:11
+ ❯ Object.parse node_modules/.pnpm/@connectrpc+connect@2.1.2_@bufbuild+protobuf@2.12.1/node_modules/@connectrpc/connect/dist/esm/protocol-connect/end-stream.js:118:24
+ ❯ node_modules/.pnpm/@connectrpc+connect@2.1.2_@bufbuild+protobuf@2.12.1/node_modules/@connectrpc/connect/dist/esm/protocol/async-iterable.js:397:75
+ ❯ resume node_modules/.pnpm/@connectrpc+connect@2.1.2_@bufbuild+protobuf@2.12.1/node_modules/@connectrpc/connect/dist/esm/protocol/async-iterable.js:28:44
+ ❯ fulfill node_modules/.pnpm/@connectrpc+connect@2.1.2_@bufbuild+protobuf@2.12.1/node_modules/@connectrpc/connect/dist/esm/protocol/async-iterable.js:30:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  packages/server/test/server/server.test.ts > Server > forwards one logical idle activation ACK over grpc-web and cancels its native child
+ConnectError: [permission_denied] gateway rejected denied
+ ❯ findTrailerError node_modules/.pnpm/@connectrpc+connect@2.1.2_@bufbuild+protobuf@2.12.1/node_modules/@connectrpc/connect/dist/esm/protocol-grpc/trailer-status.js:101:20
+ ❯ validateTrailer node_modules/.pnpm/@connectrpc+connect@2.1.2_@bufbuild+protobuf@2.12.1/node_modules/@connectrpc/connect/dist/esm/protocol-grpc/validate-trailer.js:31:17
+ ❯ parseResponseBody_1 node_modules/.pnpm/@connectrpc+connect-web@2.1.2_@bufbuild+protobuf@2.12.1_@connectrpc+connect@2.1.2_@bufbuild+protobuf@2.12.1_/node_modules/@connectrpc/connect-web/dist/esm/grpc-web-transport.js:162:29
+ ❯ resume node_modules/.pnpm/@connectrpc+connect-web@2.1.2_@bufbuild+protobuf@2.12.1_@connectrpc+connect@2.1.2_@bufbuild+protobuf@2.12.1_/node_modules/@connectrpc/connect-web/dist/esm/grpc-web-transport.js:21:44
+ ❯ fulfill node_modules/.pnpm/@connectrpc+connect-web@2.1.2_@bufbuild+protobuf@2.12.1_@connectrpc+connect@2.1.2_@bufbuild+protobuf@2.12.1_/node_modules/@connectrpc/connect-web/dist/esm/grpc-web-transport.js:23:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 150 skipped (152)
+   Start at  21:43:44
+   Duration  1.09s (transform 688ms, setup 0ms, import 938ms, tests 49ms, environment 0ms)
+

@@ -1,0 +1,15 @@
+$ node scripts/check-cleanup-rules.mjs
+Cleanup enforcement failed: lines longer than 120 characters
+  - packages/server/test/server/server.test.ts:1153 (121)
+Cleanup enforcement failed: modified production/example callables exceed 35 physical lines
+  - packages/auth/src/gateway/dynamic-unary-forwarder.ts:92-153 constructor
+  - packages/client-web/src/client/client.ts:1026-1096 #activateOwned
+  - packages/client-web/src/client/client.ts:1263-1343 #recover
+  - packages/deployment/src/internal/backend-membership-kernel.ts:333-371 subscribe
+  - packages/deployment/src/internal/backend-membership-kernel.ts:414-490 activate
+  - packages/deployment/src/internal/backend-membership-kernel.ts:701-745 #startChild
+  - packages/deployment/src/internal/backend-membership-kernel.ts:747-799 #activateChild
+  - packages/server/src/server/node-coordinator.ts:686-730 unaryKernelOptions
+  - packages/server/src/server/node-coordinator.ts:739-818 client
+  - packages/server/src/services/spine-services.ts:489-552 #activate
+[ELIFECYCLE] Command failed with exit code 1.

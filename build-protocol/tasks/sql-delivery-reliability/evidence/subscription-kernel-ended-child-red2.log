@@ -1,0 +1,33 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/deployment/test/membership-kernel.test.ts (47 tests | 1 failed | 46 skipped) 1009ms
+     × disposes an unexpectedly ended ready child before its replacement activates 1008ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/deployment/test/membership-kernel.test.ts > BackendMembershipKernel > disposes an unexpectedly ended ready child before its replacement activates
+AssertionError: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ packages/deployment/test/membership-kernel.test.ts:394:48
+    392|     }, controller.signal);
+    393|     try {
+    394|       await vi.waitFor(() => expect(disposals).toBe(1));
+       |                                                ^
+    395|       await owner.reconcile([{ id: "a" }]);
+    396|       await vi.waitFor(() => expect(activations).toBe(2));
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 46 skipped (47)
+   Start at  21:47:14
+   Duration  1.15s (transform 34ms, setup 0ms, import 43ms, tests 1.01s, environment 0ms)
+

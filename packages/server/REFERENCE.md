@@ -730,6 +730,13 @@ Coordinator does not enter application intake and does not retry the selected
 call on a sibling child. Subscription fan-out follows current READY members;
 later and replacement members attach the retained subscription before managed
 admission.
+Each native child sends a response-only successful activation ACK after its
+listener attaches. The Coordinator waits for every required child ACK before
+emitting one ACK with the logical public subscription ID and Topic; a child
+failure before readiness cancels admitted siblings. Business updates do not
+serve as readiness signals, and later joining children do not emit another
+logical ACK. An ACK confirms attachment, not durable replay or delivery of
+future updates.
 
 `ServerOptions` is native-only: it configures contexts, resources, services,
 and the native listener. It has no `browser` option and the root package does

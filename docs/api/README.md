@@ -133,9 +133,13 @@ recover a real disconnect, duplicate, or possible gap, not normal termination.
 
 `ClientRequest.post()` and `send()` cover commands and raw `QueryResponse`
 queries. Commands are never retried. `createSubscription()` returns an inactive
-handle; `activate()` begins remote work, and `cancel()` is terminal and makes
-at most one bounded remote cancellation attempt per accepted wire; reconnects
-can therefore clean multiple wires. Each remote cancellation is bounded to
+handle; `activate()` waits for a matching response-only successful ACK after
+attachment, including when no business update follows. An error, malformed
+response, or business update before that ACK fails activation. `connected`
+means attachment was acknowledged, not that every future update is delivered.
+`cancel()` immediately stops local delivery and coalesces concurrent remote
+cleanup. A failed remote Cancel remains retryable from the same handle; a
+successful Cancel is terminal and idempotent. Each remote attempt is bounded to
 1,000 ms. `updates` and `lifecycle` are separate bounded single-consumer
 streams, with no cross-stream order guarantee. Defaults are 64 update
 deliveries, 1,048,576 update bytes, 32 lifecycle notices, five retries after

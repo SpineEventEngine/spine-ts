@@ -1,0 +1,6 @@
+
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/sql-command-diagnostics.mjs
+  146:18  error  'Buffer' is not defined  no-undef
+
+✖ 1 problem (1 error, 0 warnings)
+

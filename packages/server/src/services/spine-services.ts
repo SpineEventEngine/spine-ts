@@ -492,47 +492,14 @@ export class SpineServices {
       return;
     }
 
-    let record: SubscriptionRecord | undefined;
-    await this.#serializeActivation(id, async () => {
-      const local = this.#subscriptions.get(id);
-      record = local ?? (await this.#findSubscription(id));
-      if (record === undefined) return;
-      if (record.delivery.active) {
-        record = undefined;
-        return;
-      }
-
-      const activation = await this.#subscriptionRegistry(record.route.context)?.activate(
-        create(SubscriptionIdSchema, { value: id }),
-      );
-      if (
-        activation === undefined ||
-        activation.kind === "missing" ||
-        activation.kind === "expired" ||
-        record.delivery.closed
-      ) {
-        record = undefined;
-        return;
-      }
-
-      try {
-        this.#subscriptions.set(id, record);
-        await this.#activateRecord(record);
-      } catch (error) {
-        try {
-          await this.#removeSubscription(id);
-        } catch (cleanupError) {
-          throw new AggregateError(
-            [error, cleanupError],
-            "Subscription activation and cleanup failed.",
-          );
-        }
-        throw error;
-      }
-    });
+    const record = await this.#activationRecord(id);
     if (record === undefined) return;
 
     try {
+      yield create(SubscriptionUpdateSchema, {
+        subscription: clone(SubscriptionSchema, record.subscription),
+        response: ServiceValues.okResponse(),
+      });
       for (;;) {
         const update = await record.delivery.next();
         if (update === undefined) {
@@ -544,6 +511,56 @@ export class SpineServices {
       if (!record.delivery.closed) {
         await this.#removeSubscription(id);
       }
+    }
+  }
+
+  /**
+   * Serializes one native activation and returns its attached record.
+   *
+   * @param id The logical subscription identifier.
+   * @returns The attached record, or undefined when admission fails.
+   */
+  async #activationRecord(id: string): Promise<SubscriptionRecord | undefined> {
+    let attached: SubscriptionRecord | undefined;
+    await this.#serializeActivation(id, async () => {
+      attached = await this.#startActivationRecord(id);
+    });
+    return attached;
+  }
+
+  /**
+   * Validates and attaches one retained subscription before acknowledging readiness.
+   *
+   * @param id The logical subscription identifier.
+   * @returns The attached record, or undefined when unavailable.
+   */
+  async #startActivationRecord(id: string): Promise<SubscriptionRecord | undefined> {
+    const record = this.#subscriptions.get(id) ?? (await this.#findSubscription(id));
+    if (record === undefined || record.delivery.active) return undefined;
+    const activation = await this.#subscriptionRegistry(record.route.context)?.activate(
+      create(SubscriptionIdSchema, { value: id }),
+    );
+    if (
+      activation === undefined ||
+      activation.kind === "missing" ||
+      activation.kind === "expired" ||
+      record.delivery.closed
+    )
+      return undefined;
+    try {
+      this.#subscriptions.set(id, record);
+      await this.#activateRecord(record);
+      return record;
+    } catch (error) {
+      try {
+        await this.#removeSubscription(id);
+      } catch (cleanupError) {
+        throw new AggregateError(
+          [error, cleanupError],
+          "Subscription activation and cleanup failed.",
+        );
+      }
+      throw error;
     }
   }
 

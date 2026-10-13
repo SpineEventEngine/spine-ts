@@ -1,0 +1,37 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/server/test/services/native-subscription-integration.test.ts (5 tests | 2 failed) 49ms
+     × delivers a Projection commit through the registered event handler 16ms
+     × delivers a Process Manager event commit through the registered event handler 2ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/test/services/native-subscription-integration.test.ts > native service subscriptions > delivers a Projection commit through the registered event handler
+ FAIL  packages/server/test/services/native-subscription-integration.test.ts > native service subscriptions > delivers a Process Manager event commit through the registered event handler
+Error: Repository event routing requires an ID compatible with the Entity state.
+ ❯ Object.readPrimitiveRouteId packages/server/src/repository/repository.ts:7849:13
+    7847|     const id = RepositoryRoutes.readCompatiblePrimitiveId(value, targe…
+    7848|     if (id === undefined) {
+    7849|       throw new Error(
+       |             ^
+    7850|         `Repository ${signalKind} routing requires an ID compatible wi…
+    7851|       );
+ ❯ Object.readRouteId packages/server/src/repository/repository.ts:7789:31
+ ❯ Object.readEventEntityId packages/server/src/repository/repository.ts:7695:29
+ ❯ Object.routeEvent packages/server/src/repository/repository.ts:7251:29
+ ❯ Object.routeEvent packages/server/src/repository/repository.ts:7088:24
+ ❯ packages/server/src/repository/repository.ts:819:21
+ ❯ Object.call packages/server/src/repository/repository.ts:1820:20
+ ❯ Repository.routeEvent packages/server/src/repository/repository.ts:818:35
+ ❯ Object.accept packages/server/src/repository/repository.ts:9608:46
+ ❯ EventBus.#accept packages/server/src/bus/event-bus.ts:496:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  2 failed | 4 passed (6)
+   Start at  21:41:54
+   Duration  1.06s (transform 544ms, setup 0ms, import 791ms, tests 51ms, environment 0ms)
+

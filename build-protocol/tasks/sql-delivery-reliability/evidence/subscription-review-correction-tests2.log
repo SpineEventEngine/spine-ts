@@ -1,0 +1,72 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+······························································x·································x·································································································································
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/auth/test/dynamic-subscription-creator.test.ts > DynamicSubscriptionCreator > retains an active definition while no nodes exist and resumes it after recovery
+AssertionError: expected [ 'a' ] to deeply equal [ 'a', 'a' ]
+
+- Expected
++ Received
+
+  [
+    "a",
+-   "a",
+  ]
+
+ ❯ packages/auth/test/dynamic-subscription-creator.test.ts:271:20
+    269|     await owner.reconcile([node]);
+    270|
+    271|     expect(starts).toEqual(["a", "a"]);
+       |                    ^
+    272|     controller.abort();
+    273|     await activation;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  packages/auth/test/dynamic-subscription-creator.test.ts > DynamicSubscriptionCreator > retries failed cleanup on the next membership reconciliation
+Error: backend membership is unavailable.
+ ❯ BackendMembershipKernel.#finishReadinessReconcile packages/deployment/src/internal/backend-membership-kernel.ts:707:39
+    705|         this.#failReadiness(
+    706|           readiness,
+    707|           failure ?? state.failure ?? new Error("backend membership is…
+       |                                       ^
+    708|         );
+    709|         continue;
+ ❯ BackendMembershipKernel.#run packages/deployment/src/internal/backend-membership-kernel.ts:683:35
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+⎯⎯⎯⎯⎯⎯ Unhandled Errors ⎯⎯⎯⎯⎯⎯
+
+Vitest caught 1 unhandled error during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+Error: backend membership is unavailable.
+ ❯ BackendMembershipKernel.#awaitReadiness packages/deployment/src/internal/backend-membership-kernel.ts:582:13
+    580|     readiness.expected = new Set(this.#nodes.map((member) => this.#opt…
+    581|     if ([...readiness.expected].some((key) => !state.children.has(key)…
+    582|       throw new Error("backend membership is unavailable.");
+       |             ^
+    583|     this.#emitReady(state, readiness);
+    584|     await Promise.race([readiness.gate.promise, BackendMembershipKerne…
+ ❯ BackendMembershipKernel.#waitActivation packages/deployment/src/internal/backend-membership-kernel.ts:535:60
+ ❯ processTicksAndRejections node:internal/process/task_queues:104:5
+ ❯ BackendMembershipKernel.activate packages/deployment/src/internal/backend-membership-kernel.ts:449:7
+
+This error originated in "packages/auth/test/dynamic-subscription-creator.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The latest test that might've caused the error is "cancels every active native child before logical activation ends". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+
+
+ Test Files  1 failed | 3 passed (4)
+      Tests  2 failed | 224 passed (226)
+     Errors  1 error
+   Start at  22:27:14
+   Duration  1.79s (transform 1.15s, setup 0ms, import 1.74s, tests 3.82s, environment 0ms)
+

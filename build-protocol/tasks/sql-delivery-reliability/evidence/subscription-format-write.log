@@ -1,0 +1,18 @@
+docs/api/README.md 131ms (unchanged)
+packages/auth/REFERENCE.md 12ms (unchanged)
+packages/auth/src/gateway/dynamic-unary-forwarder.ts 17ms (unchanged)
+packages/auth/src/native/index.ts 25ms
+packages/auth/src/subscriptions/index.ts 41ms
+packages/auth/test/dynamic-subscription-creator.test.ts 45ms
+packages/auth/test/subscriptions/index.test.ts 59ms (unchanged)
+packages/client-web/REFERENCE.md 9ms (unchanged)
+packages/client-web/src/client/client.ts 44ms
+packages/client-web/test/client.test.ts 97ms
+packages/deployment/src/internal/backend-membership-kernel.ts 22ms
+packages/deployment/test/membership-kernel.test.ts 32ms
+packages/server/REFERENCE.md 66ms (unchanged)
+packages/server/src/server/node-coordinator.ts 18ms
+packages/server/src/services/spine-services.ts 43ms (unchanged)
+packages/server/test/server/node-coordinator.test.ts 31ms
+packages/server/test/server/server.test.ts 75ms
+packages/server/test/services/native-subscription-integration.test.ts 11ms (unchanged)

@@ -1126,7 +1126,7 @@ describe("SubscriptionGateway", () => {
     expect(fixture.calls).toEqual(["subscribe", "cancel"]);
   });
 
-  it("rejects a second queued operation while an effect and one queued operation exist", async () => {
+  it("coalesces simultaneous authenticated Cancels before the bounded operation queue", async () => {
     let release: (() => void) | undefined;
     const held = new Promise<void>((resolve) => {
       release = resolve;
@@ -1137,13 +1137,45 @@ describe("SubscriptionGateway", () => {
     const activating = subscriptionGateway.handle(request("Activate", wire));
     await new Promise((resolve) => setTimeout(resolve, 0));
     const queued = subscriptionGateway.handle(request("Cancel", wire));
-    await expect(subscriptionGateway.handle(request("Cancel", wire))).resolves.toEqual({
-      kind: "rejected",
-      reason: "binding-busy",
-    });
+    const duplicate = subscriptionGateway.handle(request("Cancel", wire));
     defined(release, "expected release")();
     await activating;
-    await queued;
+    await expect(queued).resolves.toEqual({ kind: "cancelled" });
+    await expect(duplicate).resolves.toEqual({ kind: "cancelled" });
+    expect(fixture.calls.filter((call) => call === "cancel")).toHaveLength(1);
+  });
+
+  it("does not join a foreign actor's Cancel to a pending authenticated cleanup", async () => {
+    let release: (() => void) | undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fixture = setup({
+      cancel: () => {
+        return held;
+      },
+    });
+    const subscriptionGateway = gateway(fixture);
+    const wire = await subscribe(subscriptionGateway);
+    const id = fromBinary(SubscriptionSchema, wire).id?.value;
+    if (id === undefined) throw new Error("Expected a subscription ID.");
+    const authorized = subscriptionGateway.handle(request("Cancel", wire));
+    await vi.waitFor(() => {
+      expect(fixture.calls).toContain("cancel");
+    });
+
+    fixture.options.contexts.resolve = () =>
+      Promise.resolve({
+        actor: user("owner-b"),
+        tenant: tenant("tenant-a"),
+        timestamp: create(TimestampSchema, { seconds: 10n }),
+      });
+    const foreign = subscriptionGateway.handle(request("Cancel", subscriptionWire(id, "owner-b")));
+    defined(release, "expected cancellation release")();
+
+    await expect(authorized).resolves.toEqual({ kind: "cancelled" });
+    await expect(foreign).resolves.toEqual({ kind: "rejected", reason: "denied" });
+    expect(fixture.calls.filter((call) => call === "cancel")).toHaveLength(1);
   });
 
   it("retains failed cancellation cleanup for a retry and then clears it", async () => {

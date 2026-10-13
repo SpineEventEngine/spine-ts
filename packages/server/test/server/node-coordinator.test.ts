@@ -25,11 +25,16 @@ import {
   type DynamicUnaryClient,
 } from "@spine-event-engine/auth";
 import { ApplicationNode } from "@spine-event-engine/deployment";
+import { AnyMessages } from "@spine-event-engine/core";
 import { SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS } from "@spine-event-engine/core/spi/subscription-lifecycle";
 import {
   ActorContextSchema,
   AckSchema,
   CommandIdSchema,
+  EventContextSchema,
+  EventIdSchema,
+  EventSchema,
+  ResponseSchema,
   StatusSchema,
   TenantIdSchema,
 } from "@spine-event-engine/proto";
@@ -38,6 +43,7 @@ import {
   CommandService,
   QueryService,
   QueryResponseSchema,
+  EventUpdatesSchema,
   SubscriptionIdSchema,
   SubscriptionSchema,
   SubscriptionService,
@@ -57,6 +63,11 @@ import {
   type ReadyMemberSource,
 } from "../../src/server/node-coordinator.js";
 import { DurableSubscriptionBindings } from "../../src/browser/durable-subscription-bindings.js";
+import { TaskCreatedSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
+import {
+  TaskIdSchema,
+  TaskListIdSchema,
+} from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
 
 type RecordSpec<I, R> = StorageRecordSpec<I, R extends Message ? R : Message>;
 
@@ -64,7 +75,16 @@ describe("NodeCoordinator", () => {
   const closeables: (() => Promise<void>)[] = [];
 
   afterEach(async () => {
-    await Promise.all(closeables.splice(0).map((closeable) => closeable()));
+    const failures: unknown[] = [];
+    for (const closeable of closeables.splice(0).reverse()) {
+      try {
+        await closeable();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length > 0)
+      throw new AggregateError(failures, "Coordinator fixture cleanup failed.");
   });
 
   it("forwards each generated command call once to ready replicas in round-robin order", async () => {
@@ -228,10 +248,13 @@ describe("NodeCoordinator", () => {
       const subscription = await client.subscribe(create(TopicSchema));
       await vi.advanceTimersByTimeAsync(SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS - 1);
       const controller = new AbortController();
-      const pending = client
+      const updates = client
         .activate(subscription, { signal: controller.signal })
-        [Symbol.asyncIterator]()
-        .next();
+        [Symbol.asyncIterator]();
+      await expect(updates.next()).resolves.toMatchObject({
+        value: { response: { status: { status: { case: "ok" } } } },
+      });
+      const pending = updates.next();
       await expect.poll(() => replica.activations()).toBe(1);
 
       await vi.advanceTimersByTimeAsync(SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS * 2);
@@ -379,6 +402,27 @@ describe("NodeCoordinator", () => {
     await coordinator.close();
   });
 
+  it("rejects a native child ACK with a different subscription ID before logical readiness", async () => {
+    const replica = await backend("invalid-child-ack", { mismatchedActivationAck: true });
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+    });
+    closeables.push(() => coordinator.close());
+    const client = createClient(
+      SubscriptionService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    );
+    const subscription = await client.subscribe(create(TopicSchema));
+    const updates = client.activate(subscription)[Symbol.asyncIterator]();
+
+    await expect(updates.next()).rejects.toMatchObject({ code: Code.Internal });
+    await vi.waitFor(() => {
+      expect(replica.cancellations()).toBe(1);
+    });
+  });
+
   it("cancels active native streams when the public subscription stream aborts", async () => {
     const replica = await backend("cancel-activation", { holdActivation: true });
     closeables.push(replica.close);
@@ -397,6 +441,9 @@ describe("NodeCoordinator", () => {
       .activate(subscription, { signal: controller.signal })
       [Symbol.asyncIterator]();
 
+    await expect(updates.next()).resolves.toMatchObject({
+      value: { response: { status: { status: { case: "ok" } } } },
+    });
     const pending = updates.next();
     await expect.poll(() => replica.activations()).toBe(1);
     controller.abort();
@@ -437,14 +484,14 @@ describe("NodeCoordinator", () => {
       createGrpcTransport({ baseUrl: coordinator.baseUrl }),
     );
     const subscription = await client.subscribe(create(TopicSchema));
-    const pending = client
-      .activate(subscription)
-      [Symbol.asyncIterator]()
-      .next()
-      .then(
-        () => undefined,
-        (error: unknown) => error,
-      );
+    const updates = client.activate(subscription)[Symbol.asyncIterator]();
+    await expect(updates.next()).resolves.toMatchObject({
+      value: { response: { status: { status: { case: "ok" } } } },
+    });
+    const pending = updates.next().then(
+      () => undefined,
+      (error: unknown) => error,
+    );
     await vi.waitFor(() => {
       expect(replica.activations()).toBe(1);
     });
@@ -473,12 +520,45 @@ describe("NodeCoordinator", () => {
     const iterator = createClient(SubscriptionService, transport)
       .activate(subscription)
       [Symbol.asyncIterator]();
+    await expect(iterator.next()).resolves.toMatchObject({
+      value: { response: { status: { status: { case: "ok" } } } },
+    });
     const pending = iterator.next();
     await expect.poll(() => replica.activations()).toBe(1);
 
     await createClient(SubscriptionService, transport).cancel(subscription);
     await expect(pending).resolves.toMatchObject({ done: true });
     await expect.poll(() => replica.activationAborts()).toBe(1);
+  });
+
+  it("releases a queued update producer when the public stream aborts after ACK", async () => {
+    const replica = await backend("queued-return", {
+      updates: 1,
+      holdActivation: true,
+      observeActivationAbort: true,
+    });
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+    });
+    closeables.push(() => coordinator.close());
+    const client = createClient(
+      SubscriptionService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    );
+    const subscription = await client.subscribe(create(TopicSchema));
+    const controller = new AbortController();
+    const iterator = client
+      .activate(subscription, { signal: controller.signal })
+      [Symbol.asyncIterator]();
+    await expect(iterator.next()).resolves.toMatchObject({
+      value: { response: { status: { status: { case: "ok" } } } },
+    });
+    controller.abort();
+    await expect(iterator.next()).rejects.toMatchObject({ code: Code.Canceled });
+    await expect.poll(() => replica.cancellations()).toBe(1);
+    await expect.poll(() => replica.activationAborts()).toBeGreaterThan(0);
   });
 
   it("requires a new Subscribe after an aborted native activation removes its definition", async () => {
@@ -499,10 +579,13 @@ describe("NodeCoordinator", () => {
     );
     const subscription = await client.subscribe(create(TopicSchema));
     const firstAbort = new AbortController();
-    const first = client
+    const firstUpdates = client
       .activate(subscription, { signal: firstAbort.signal })
-      [Symbol.asyncIterator]()
-      .next();
+      [Symbol.asyncIterator]();
+    await expect(firstUpdates.next()).resolves.toMatchObject({
+      value: { response: { status: { status: { case: "ok" } } } },
+    });
+    const first = firstUpdates.next();
     await expect.poll(() => replica.activations()).toBe(1);
     firstAbort.abort();
     await expect(first).rejects.toMatchObject({ code: Code.Canceled });
@@ -510,6 +593,9 @@ describe("NodeCoordinator", () => {
     release.resolve(undefined);
     const replacement = await client.subscribe(create(TopicSchema));
     const second = client.activate(replacement)[Symbol.asyncIterator]();
+    await expect(second.next()).resolves.toMatchObject({
+      value: { response: { status: { status: { case: "ok" } } } },
+    });
     await expect.poll(() => replica.activations()).toBe(2);
     await second.return?.();
   });
@@ -1023,6 +1109,7 @@ async function backend(
   options: {
     readonly post?: (context: HandlerContext) => Promise<never> | MessageShape<typeof AckSchema>;
     readonly updates?: number;
+    readonly mismatchedActivationAck?: boolean;
     readonly holdActivation?: boolean;
     readonly ignoreActivationAbort?: boolean;
     readonly releaseActivation?: Promise<void>;
@@ -1082,11 +1169,37 @@ async function backend(
                 },
                 { once: true },
               );
+            yield create(SubscriptionUpdateSchema, {
+              subscription: options.mismatchedActivationAck
+                ? create(SubscriptionSchema, {
+                    id: create(SubscriptionIdSchema, { value: `${name}-foreign` }),
+                    topic: subscription.topic,
+                  })
+                : subscription,
+              response: create(ResponseSchema, {
+                status: create(StatusSchema, { status: { case: "ok", value: {} } }),
+              }),
+            });
             for (let update = 0; update < (options.updates ?? 0); update += 1)
-              yield create(SubscriptionUpdateSchema, { subscription });
+              yield create(SubscriptionUpdateSchema, {
+                subscription,
+                response: create(ResponseSchema, {
+                  status: create(StatusSchema, { status: { case: "ok", value: {} } }),
+                }),
+                update: {
+                  case: "eventUpdates",
+                  value: create(EventUpdatesSchema, {
+                    event: [coordinatorEvent(subscription.id?.value ?? name, update)],
+                  }),
+                },
+              });
             if (options.ignoreActivationAbort) await new Promise<void>(() => undefined);
             if (options.holdActivation)
               await new Promise<void>((resolve) => {
+                if (context.signal.aborted) {
+                  resolve();
+                  return;
+                }
                 context.signal.addEventListener(
                   "abort",
                   () => {
@@ -1131,6 +1244,22 @@ async function backend(
     activationAborts: () => value.activationAborts,
     close,
   };
+}
+
+function coordinatorEvent(target: string, index: number) {
+  const id = create(TaskIdSchema, { value: `${target}-${index.toString()}` });
+  return create(EventSchema, {
+    id: create(EventIdSchema, { value: `event-${target}-${index.toString()}` }),
+    context: create(EventContextSchema, { producerId: AnyMessages.pack(TaskIdSchema, id) }),
+    message: AnyMessages.pack(
+      TaskCreatedSchema,
+      create(TaskCreatedSchema, {
+        id,
+        title: `Task ${index.toString()}`,
+        taskListId: create(TaskListIdSchema, { value: `list-${target}` }),
+      }),
+    ),
+  });
 }
 
 function deferred<Value>(): {

@@ -39,15 +39,45 @@ absolute paths under this checkout's `packages/*/dist` for server, storage,
 proto, client, and delivery packages. Record the resolved paths and SHA-256
 hashes of each imported entry artifact in run evidence.
 
-Test-only handler counts should be durable fixture state: add a small
-`reaction_count` to the Planning and Staffing test states and increment it in
-each corresponding Event reaction. This lets SQL state independently prove
-that each distinct recipient processed the expected Event exactly once,
-including after worker restarts. The command handler count is separate and
-must prove retries never re-run `CreateProject`. Use separate Protobuf IDs for
-each recipient and preserve the same original Event ID and bytes on retry.
+Count actual handler entries separately from final business state. Record each
+Command/Event/recipient/PID entry through the test control channel with parent
+acknowledgement, or a process-local synchronously appended fixture log retained
+after worker death. A durable reaction counter in fixture state can supplement
+these records, but cannot establish absence of duplicate execution: concurrent
+read/modify/write could overwrite increments. Do not add Protobuf counter fields
+solely to replace execution evidence. Keep Command and recipient counts separate
+to establish that Event-only retries never rerun `CreateProject`. Use separate
+Protobuf IDs for each recipient and preserve the original Event ID and bytes on
+retry. Crash-gap redelivery remains at-least-once and must report actual counts.
+
+The public handler arguments contain the decoded domain message and optional
+CommandContext/EventContext, not the current envelope ID. Do not invent that
+field or add a framework instrumentation API. At the actual handler entry,
+record the unique Project domain correlation, receiver ID/method, PID and
+relevant message/context data. Join these entries to the submitted Command
+ledger and original saved Event ledger; assert that every join is unambiguous
+before reporting per-envelope counts. The existing Node-safe
+`delivery-client/test-fixtures/managed-project-context.mjs` shows handler and
+metadata construction, but lacks the required multiple recipients. Extract the
+chosen Project workflow fixture without Vitest imports. Persist the IPC entry
+before acknowledging any gate that permits a destructive worker kill, or use
+a synchronous per-process append retained by the parent. Buffered child stdout
+alone is insufficient evidence across SIGKILL.
 
 ## Process launcher and evidence seams
+
+Before the broader existing process suites or final release profile run, remove
+confirmed fixed real coordinator listeners from the applicable test fixtures:
+`server/test/server/managed-server-application-parent.mjs` (50052),
+`managed-server-application-start-parent.mjs` (50053), the live parent/cohort
+cases in `managed-server-application.test.ts` (50051), and
+`delivery-client/test-fixtures/managed-remote-delivery-application.mjs` (50053).
+Use supported `port: 0` and their existing actual-endpoint reporting. Do not
+mechanically rewrite every matching number: child-only fixture invocations
+already receive port zero from `ManagedServerValues.child`, and mocked child
+tests do not bind these constants. The release profile's serial workers only
+serialize this run, not another agent's processes. The corrected read-only
+inventory was checked against actual fork environment and parent/child paths.
 
 Build a bounded `.mjs` worker host and Vitest adapter using Node `fork` or
 `spawn`, following lifecycle patterns from
@@ -211,3 +241,20 @@ a hard delivery deadline. Example 8/8 acceptance uses its existing supported
 storage mode; SQL matrix coverage is separate. Do not add build/persistence
 subsystems merely to match a proposed test harness. Bounded test-driver fault
 injection/SQL observation is permitted; runtime source transforms are not a fix.
+
+## Confirmed fixture build integration
+
+Read-only inspection confirms packages/server-blackbox-tests has spine-proto.json
+for the selected Project schemas and package exports from generated .js paths to
+dist/generated .js. It has no tsconfig.json or root project reference, and the
+workflow classes/handler registry remain inline in the Vitest test. Add the normal
+package composite TypeScript project (rootDir '.', outDir 'dist', generated plus
+a Vitest-free fixtures/project-workflow.ts), required workspace dependency
+references, and root tsconfig reference. Add a fixture package export. Extract
+domain classes/registry while retaining Vitest assertions in the test. This uses
+the existing generation/build graph; Node type stripping is not a substitute for
+the absent generated .js siblings/dist export targets. Model IPC child handling
+on packages/delivery-client/test-fixtures/managed-remote-delivery-application.mjs.
+
+The human clarified that no production apps exist: no legacy compatibility or
+application data migration is required. Correct the scoped contracts directly.

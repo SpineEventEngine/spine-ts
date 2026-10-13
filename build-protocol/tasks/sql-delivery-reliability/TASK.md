@@ -4,7 +4,7 @@ Status: active. Risk: high (persistence, concurrency, delivery and subscription 
 Baseline: freshly fetched official origin/master, 658da1cdddcb8fd40f9205b1c200abc3a58dd62e.
 Branch: sql-delivery-subscription-reliability.
 Worktree: /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts.
-Estimate: 10–18 hours including implementation, real database/process/transport acceptance, focused review, corrections, release verification and pushes.
+Initial estimate: 10–18 hours including implementation, real database/process/transport acceptance, focused review, corrections, release verification and pushes.
 
 ## Human-Imposed Requirements Ledger
 
@@ -13,6 +13,7 @@ The complete binding request is this chat and FIRST_SPINE_TS_DELIVERY_TASK.md in
 - All edits, installations, generated outputs, tests and records stay in this new worktree. Never touch other checkouts, processes, databases or uncommitted changes. Use unique service names/ports.
 - Official origin only; no codex/ branches, master writes, PR creation/merge, published-history rewrites or remote deletion. Immediately push every commit. Include a version-only common unused workspace version commit with exact message Bump version -> <version>; pins/lockfile separately.
 - Diagnose failures first. Preserve original internal causes and useful correlated diagnostics, with safe public errors.
+- There are no production applications. Legacy support and existing-application data migration are not required; implement corrected scoped contracts directly, with no old-server readiness fallback or migration machinery.
 - Correct scalar-list filtering consistently across memory/PostgreSQL/MySQL/MariaDB while preserving actual array-valued fields, parameters, ordering, pagination and tenancy.
 - Independent storage operations: remove extra transactions/cross-record locks on primitives, batches, immutable append and Entity saves. Do not recreate atomic multi-record semantics through a coordinator or outbox. Document partial writes and retries.
 - Conditional mutations remain atomic; competing processes cannot both acquire a shard. Identical immutable retries succeed; conflicting payloads fail.

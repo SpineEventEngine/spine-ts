@@ -1,0 +1,71 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+stderr | packages/server/test/services/spine-services.test.ts > SpineServices > reports transition validation failures in the command Ack
+TRANSITION_DEBUG Error: Handler "assignTask" returned undeclared message "spine.core.Event".
+    at Object.requireDeclaredOutputs (/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/src/repository/repository.ts:6360:15)
+    at AggregateCommandExecution.#invokeAssignee (/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/src/repository/repository.ts:2534:26)
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at AggregateCommandExecution.#runAssignee (/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/src/repository/repository.ts:2415:18)
+    at Object.replayAggregateCommand (/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/src/repository/repository.ts:8854:12)
+    at LocalEntityInbox.#replay (/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/src/context/entity-inbox.ts:515:22)
+    at LocalEntityInbox.#replayAndFollowUp (/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/src/context/entity-inbox.ts:391:7)
+    at DeliveryDrain.#dispatch (/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/src/delivery/delivery.ts:670:5)
+    at DeliveryDrain.#deliver (/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/src/delivery/delivery.ts:575:7)
+    at DeliveryDrain.#processPage (/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/src/delivery/delivery.ts:485:13)
+
+stderr | packages/server/test/services/spine-services.test.ts > SpineServices > reports rollback transition validation failures in the command Ack
+TRANSITION_DEBUG Error: Handler "assignTask" returned undeclared message "spine.core.Event".
+    at Object.requireDeclaredOutputs (/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/src/repository/repository.ts:6360:15)
+    at AggregateCommandExecution.#invokeAssignee (/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/src/repository/repository.ts:2534:26)
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at AggregateCommandExecution.#runAssignee (/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/src/repository/repository.ts:2415:18)
+    at Object.replayAggregateCommand (/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/src/repository/repository.ts:8854:12)
+    at LocalEntityInbox.#replay (/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/src/context/entity-inbox.ts:515:22)
+    at LocalEntityInbox.#replayAndFollowUp (/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/src/context/entity-inbox.ts:391:7)
+    at DeliveryDrain.#dispatch (/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/src/delivery/delivery.ts:670:5)
+    at DeliveryDrain.#deliver (/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/src/delivery/delivery.ts:575:7)
+    at DeliveryDrain.#processPage (/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/src/delivery/delivery.ts:485:13)
+
+-----------------------------------------------------xx-----------------------------------------------------------------
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/test/services/spine-services.test.ts > SpineServices > reports transition validation failures in the command Ack
+AssertionError: expected 'COMMAND_POST_ERROR' to be 'COMMAND_STATE_TRANSITION_VALIDATION_F…' // Object.is equality
+
+Expected: "COMMAND_STATE_TRANSITION_VALIDATION_FAILED"
+Received: "COMMAND_POST_ERROR"
+
+ ❯ packages/server/test/services/spine-services.test.ts:1849:43
+    1847|
+    1848|     expect(ack.status?.status.case).toBe("error");
+    1849|     expect(errorType(ack.status?.status)).toBe("COMMAND_STATE_TRANSITI…
+       |                                           ^
+    1850|     expect(validationDetails(ack.status?.status)?.constraintViolation.…
+    1851|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  packages/server/test/services/spine-services.test.ts > SpineServices > reports rollback transition validation failures in the command Ack
+AssertionError: expected 'COMMAND_POST_ERROR' to be 'COMMAND_STATE_TRANSITION_VALIDATION_F…' // Object.is equality
+
+Expected: "COMMAND_STATE_TRANSITION_VALIDATION_FAILED"
+Received: "COMMAND_POST_ERROR"
+
+ ❯ packages/server/test/services/spine-services.test.ts:1864:43
+    1862|
+    1863|     expect(ack.status?.status.case).toBe("error");
+    1864|     expect(errorType(ack.status?.status)).toBe("COMMAND_STATE_TRANSITI…
+       |                                           ^
+    1865|     expect(validationDetails(ack.status?.status)?.constraintViolation.…
+    1866|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 118 skipped (120)
+   Start at  22:08:16
+   Duration  881ms (transform 537ms, setup 0ms, import 744ms, tests 32ms, environment 0ms)
+

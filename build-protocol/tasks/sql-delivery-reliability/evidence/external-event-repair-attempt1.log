@@ -1,0 +1,16 @@
+node:internal/fs/promises:640
+  return new FileHandle(await PromisePrototypeThen(
+                        ^
+
+Error: ENOENT: no such file or directory, open '/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/proto/dist/index.js'
+    at async open (node:internal/fs/promises:640:25)
+    at async readFile (node:internal/fs/promises:1290:14)
+    at async load (file:///Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/external-event-repair.mjs:28:17)
+    at async file:///Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/external-event-repair.mjs:38:3 {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/proto/dist/index.js'
+}
+
+Node.js v24.18.0

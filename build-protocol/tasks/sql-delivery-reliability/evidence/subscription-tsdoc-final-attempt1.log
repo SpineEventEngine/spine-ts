@@ -1,0 +1,12 @@
+$ node scripts/check-tsdoc.mjs
+callable-summary: packages/auth/src/gateway/dynamic-unary-forwarder.ts :: DynamicUnaryForwarder.memberClient(client)
+callable-summary: packages/client-web/src/client/client.ts :: TopicSubscription.method@1343(original,recoveryError,generation)
+callable-summary: packages/server/src/server/node-coordinator.ts :: activateChild
+callable-summary: packages/server/src/server/node-coordinator.ts :: activateChild@844(transport,member,members,child,updates,signal)
+callable-summary: packages/server/src/server/node-coordinator.ts :: activationAckOptions
+callable-summary: packages/server/src/server/node-coordinator.ts :: activationAckOptions@716(members)
+callable-summary: packages/server/src/server/node-coordinator.ts :: forward
+callable-summary: packages/server/src/server/node-coordinator.ts :: forward@805(transport,request)
+missing-returns: packages/client-web/src/client/client.ts :: TopicSubscription.method@1094(error,generation)
+missing-returns: packages/client-web/src/client/client.ts :: TopicSubscription.method@1343(original,recoveryError,generation)
+[ELIFECYCLE] Command failed with exit code 1.
