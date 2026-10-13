@@ -1,0 +1,138 @@
+{
+  "assignment": {
+    "function": "orchestrator-dispatched mechanical verification",
+    "configuredModel": "gpt-6-luna",
+    "configuredReasoning": "low",
+    "runtimeProfileIntrospection": "unavailable",
+    "method": "read-only artifact inspection; no test/process/database/runtime imports"
+  },
+  "run": {
+    "runId": "8cfa18b18f9e40958bc5855b50b962c7",
+    "provider": "postgres16",
+    "processes": 8,
+    "mode": "shared-memory",
+    "totalCommands": 80,
+    "burst": 16,
+    "repeat": 2,
+    "database": "sqlrel_matrix_8cfa18b18f9e40958bc5855b50b962c7",
+    "failure": {
+      "file": "packages/server-blackbox-tests/test-fixtures/project-process-smoke.mjs",
+      "line": 202,
+      "message": "Project states did not converge in every process.",
+      "lastSnapshotsContent": "undefined\n",
+      "sourceInterpretation": "The driver assigns snapshots only after worker 0 reports every Project state complete. The literal undefined artifact means this condition was not met within the 90-second loop; other worker state views were consequently not collected."
+    }
+  },
+  "acceptedCommands": {
+    "submitted": 80,
+    "admissions": 80,
+    "allAcknowledgmentsOk": true,
+    "distinctProjectNumbers": 80,
+    "projectNumberRange": [1, 80],
+    "commandIdsUnique": true,
+    "commandAdmissionIdSetMismatchCount": 0,
+    "entryJoinKey": "accepted Project number via entry correlation suffix; entries do not carry the Command UUID"
+  },
+  "entries": {
+    "total": 302,
+    "recipientIdBase64NonemptyCanonical": true,
+    "duplicateMethodProjectCorrelations": 0,
+    "projectsWithExactlyFiveEntries": 31,
+    "missingPortfolioAndProjectionNumbers": [8, 16, 24, 26, 34, 35, 36, 37, 38, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80],
+    "methodTypeCounts": [
+      {
+        "method": "create",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+        "count": 80,
+        "uniqueEncodedRecipientIds": 80,
+        "missingProjectNumbers": 0,
+        "duplicates": 0,
+        "firstEntryUtc": "2026-10-13T23:22:51.200Z",
+        "lastEntryUtc": "2026-10-13T23:22:52.641Z"
+      },
+      {
+        "method": "planning",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+        "count": 80,
+        "uniqueEncodedRecipientIds": 80,
+        "missingProjectNumbers": 0,
+        "duplicates": 0,
+        "firstEntryUtc": "2026-10-13T23:22:51.628Z",
+        "lastEntryUtc": "2026-10-13T23:22:53.012Z"
+      },
+      {
+        "method": "staffing",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+        "count": 80,
+        "uniqueEncodedRecipientIds": 80,
+        "missingProjectNumbers": 0,
+        "duplicates": 0,
+        "firstEntryUtc": "2026-10-13T23:22:51.695Z",
+        "lastEntryUtc": "2026-10-13T23:22:52.994Z"
+      },
+      {
+        "method": "portfolio",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+        "count": 31,
+        "uniqueEncodedRecipientIds": 31,
+        "missingProjectNumbers": 49,
+        "duplicates": 0,
+        "firstEntryUtc": "2026-10-13T23:22:51.374Z",
+        "lastEntryUtc": "2026-10-13T23:22:53.303Z"
+      },
+      {
+        "method": "projection",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+        "count": 31,
+        "uniqueEncodedRecipientIds": 31,
+        "missingProjectNumbers": 49,
+        "duplicates": 0,
+        "firstEntryUtc": "2026-10-13T23:22:51.525Z",
+        "lastEntryUtc": "2026-10-13T23:22:53.321Z"
+      }
+    ],
+    "pidCounts": {
+      "66486": 35,
+      "66488": 28,
+      "66489": 25,
+      "66490": 34,
+      "66491": 32,
+      "66492": 28,
+      "66493": 32,
+      "66494": 88
+    },
+    "pidEntryTimeUtc": {
+      "66486": ["2026-10-13T23:22:51.200Z", "2026-10-13T23:22:52.867Z"],
+      "66488": ["2026-10-13T23:22:51.212Z", "2026-10-13T23:22:52.658Z"],
+      "66489": ["2026-10-13T23:22:51.223Z", "2026-10-13T23:22:52.550Z"],
+      "66490": ["2026-10-13T23:22:51.712Z", "2026-10-13T23:22:53.012Z"],
+      "66491": ["2026-10-13T23:22:51.326Z", "2026-10-13T23:22:52.774Z"],
+      "66492": ["2026-10-13T23:22:51.228Z", "2026-10-13T23:22:52.602Z"],
+      "66493": ["2026-10-13T23:22:51.206Z", "2026-10-13T23:22:52.758Z"],
+      "66494": ["2026-10-13T23:22:51.217Z", "2026-10-13T23:22:53.321Z"]
+    },
+    "allPortfolioAndProjectionEntriesFromPid": 66494
+  },
+  "artifacts": {
+    "runDirectory": "build-protocol/tasks/sql-delivery-reliability/evidence/matrix-runs/8cfa18b18f9e40958bc5855b50b962c7",
+    "resultJson": "not written",
+    "eventsJson": "not written",
+    "lastSnapshotsFile": "literal undefined plus newline; 10 bytes",
+    "workerStdoutStderrLogs": "none in this run directory",
+    "outerVitestLog": "build-protocol/tasks/sql-delivery-reliability/evidence/baseline-matrix-53b72c17-3c08-4732-acab-4783465c0cf2/postgres16-p8-shared-memory-2.log",
+    "cleanup": {
+      "databaseDropped": true,
+      "appWorkers": [66486, 66488, 66489, 66490, 66491, 66492, 66493, 66494],
+      "appWorkerExitCodes": [0, 0, 0, 0, 0, 0, 0, 0],
+      "deliveryPid": 66483,
+      "deliveryExitCode": 0,
+      "errors": []
+    }
+  },
+  "limitations": [
+    "The fixture failed before collecting a state snapshot from worker 0 or any other worker.",
+    "The fixture's typed recipient-ID equality assertions occur after the convergence assertion and did not execute; this triage only checked recorded type URLs and Base64 shape/canonical form, without decoding IDs.",
+    "The entry log has no Command UUID; accepted commands are joined to entries by Project number correlation.",
+    "Missing handler-entry records and incomplete state inspection do not establish permanent event loss, database final state, or a specific storage/Delivery cause."
+  ]
+}

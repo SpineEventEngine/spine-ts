@@ -281,3 +281,43 @@ report promptly. No runtime patches or timeout relaxation. Estimated0.5–1hour
 wall time; no controlled-fault/crash/transport acceptance is implied. Runtime
 metadata unavailable. Parent may commit/push frozen harness/records while this
 read-only code consumption runs, with no source/dist change.
+
+
+Harness/evidence checkpoint888a6a063 was committed and immediately pushed to
+origin/sql-delivery-subscription-reliability. Staged diff whitespace check passed;
+managed runtime/tests remained unstaged. Completed raw log whitespace was
+normalized without changing non-whitespace evidence. Full matrix session is
+evidence/baseline-matrix-53b72c17-3c08-4732-acab-4783465c0cf2, runner session21507.
+Initial11/80 cases pass: all PostgreSQL16 two-process modes plus the first
+8-process database-only case. This is current partial progress, not acceptance.
+Dist remains reserved; implementer continues managed source-only work.
+
+
+Baseline matrix stopped at case17/80:16 cases passed, PostgreSQL16 ×8app
+processes ×shared-memory Delivery ×80/burst16 repeat2 failed convergence within
+90seconds;63 cases remain unrun. Exact run8cfa18b18f9e40958bc5855b50b962c7
+retains all accepted Command/handler ledgers. Cleanup confirms database dropped,
+all8app workers and Delivery worker exited0, no errors. No manual cleanup or
+blind retry. Failure snapshots contain literal undefined because the driver
+only assigns them after success: confirmed diagnostic gap, not evidence of
+permanent Command loss. Existing mechanical_matrix function explicitly retains
+gpt-6-luna/low for bounded artifact-only reconciliation and writes fresh triage
+evidence; both dispatch fields were explicit originally, runtime introspection
+unavailable. Same Sol/medium implementer receives diagnostic correction and
+adapter misleading forced-cleanup wording. Dist reservation released after
+runner termination and verified resource cleanup, permitting managed build/test
+work; no matrix process remains. Progress68percent,6–9hours remains provisional.
+
+
+Scripts-first failed-run triage confirms80 accepted Commands and80 create,
+planning and staffing entries each, but only31 portfolio and31 projection
+entries, no duplicate method/correlation. The same49 Projects lack both
+projection handlers; all observed projection entries came from one worker.
+This establishes incomplete observed processing by the90second bound, not
+permanent loss. Existing performance/reliability reviewer is dispatched for
+bounded read-only source diagnosis, explicitly gpt-6-sol/medium, after these
+mechanical artifacts. Scope: shared Delivery projection admission/drain/routing
+paths and smallest testable failure hypothesis; no edits/tests/subagents, no
+architecture redesign. Existing implementer continues shutdown and evidence
+fixes while diagnosis runs. Runtime introspection unavailable; explicit dispatch
+profile will be checked on acceptance.

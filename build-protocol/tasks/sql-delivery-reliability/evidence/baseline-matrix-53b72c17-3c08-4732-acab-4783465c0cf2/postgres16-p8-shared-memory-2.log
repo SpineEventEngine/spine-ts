@@ -1,0 +1,58 @@
+startedAt=2026-10-13T23:22:48.844Z
+endedAt=2026-10-13T23:24:22.611Z
+pnpmPid=66451
+exit=1/null
+timedOut=false
+timeoutSignal=none
+timeoutEscalated=false
+--- stdout ---
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/server-blackbox-tests/test/project-process-matrix.integration.test.ts (2 tests | 1 failed) 92789ms
+   × selected Project workflow process topology completes with durable cleanup 92222ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  00:22:49
+   Duration  92.93s (transform 16ms, setup 0ms, import 22ms, tests 92.79s, environment 0ms)
+
+[ELIFECYCLE] Command failed with exit code 1.
+
+--- stderr ---
+$ pnpm exec vitest --root ../.. --config vitest.infrastructure.config.ts run packages/server-blackbox-tests/test/project-process-matrix.integration.test.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server-blackbox-tests/test/project-process-matrix.integration.test.ts > selected Project workflow process topology completes with durable cleanup
+Error: Process matrix driver exited 1/null; cleanup unknown after forced termination.
+stdout:
+MATRIX_RESOURCE {"runId":"8cfa18b18f9e40958bc5855b50b962c7","database":"sqlrel_matrix_8cfa18b18f9e40958bc5855b50b962c7","evidencePath":"/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/matrix-runs/8cfa18b18f9e40958bc5855b50b962c7"}
+
+stderr:
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Project states did not converge in every process.
+    at file:///Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server-blackbox-tests/test-fixtures/project-process-smoke.mjs:202:10 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: undefined,
+  expected: true,
+  operator: '==',
+  diff: 'simple'
+}
+
+Node.js v24.18.0
+
+ ❯ runIsolatedDriver packages/server-blackbox-tests/test/project-process-matrix.integration.test.ts:104:13
+    102|       const outcome = `Process matrix driver exited ${String(exit.code…
+    103|       const timing = deadline.expired ? " after timeout" : "";
+    104|       throw new Error(
+       |             ^
+    105|         `${outcome}${timing}; cleanup unknown after forced termination…
+    106|       );
+ ❯ packages/server-blackbox-tests/test/project-process-matrix.integration.test.ts:181:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
