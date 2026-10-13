@@ -1,0 +1,40 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/storage-mysql/test/mysql-record-storage.test.ts (45 tests | 1 failed | 44 skipped) 6ms
+     × guards a semantically equivalent stored encoding with its exact raw bytes 5ms
+ ❯ packages/storage-postgres/test/postgres-record-storage.test.ts (55 tests | 1 failed | 54 skipped) 7ms
+     × guards a semantically equivalent stored encoding with its exact raw bytes 6ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/storage-mysql/test/mysql-record-storage.test.ts > MysqlRecordStorage > guards a semantically equivalent stored encoding with its exact raw bytes
+AssertionError: the given combination of arguments (undefined and string) is invalid for this assertion. You can use an array, a map, an object, a set, a string, or a weakset instead of a string
+ ❯ packages/storage-mysql/test/mysql-record-storage.test.ts:1113:25
+    1111|
+    1112|     const update = calls.find(({ sql }) => sql.startsWith("UPDATE"));
+    1113|     expect(update?.sql).toContain("WHERE ID=? AND bytes=?");
+       |                         ^
+    1114|     expect(update?.values).toContain(raw);
+    1115|     expect(calls.map(({ sql }) => sql)).not.toContain("BEGIN");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  packages/storage-postgres/test/postgres-record-storage.test.ts > Postgres record storage > guards a semantically equivalent stored encoding with its exact raw bytes
+AssertionError: the given combination of arguments (undefined and string) is invalid for this assertion. You can use an array, a map, an object, a set, a string, or a weakset instead of a string
+ ❯ packages/storage-postgres/test/postgres-record-storage.test.ts:633:25
+    631|
+    632|     const update = driver.calls.find(({ sql }) => sql.startsWith("UPDA…
+    633|     expect(update?.sql).toContain('"ID" = $1 AND "bytes" =');
+       |                         ^
+    634|     expect(update?.values).toContain(raw);
+    635|     expect(driver.calls.map(({ sql }) => sql)).not.toContain("BEGIN");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  2 failed | 98 skipped (100)
+   Start at  17:59:38
+   Duration  586ms (transform 604ms, setup 0ms, import 884ms, tests 13ms, environment 0ms)
+

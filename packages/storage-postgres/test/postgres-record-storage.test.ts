@@ -302,8 +302,10 @@ describe("Postgres record storage", () => {
     ).toThrow(/no configured database/i);
   });
 
-  it("writes a batch in source order inside one PostgreSQL transaction", async () => {
+  it("writes a batch in source order without a cross-record transaction", async () => {
     const storage = await recordStorage();
+    await (storage as unknown as { prepare(): Promise<void> }).prepare();
+    driver.calls.length = 0;
 
     await storage.writeAll([
       create(StringValueSchema, { value: "first" }),
@@ -311,56 +313,31 @@ describe("Postgres record storage", () => {
     ]);
 
     const statements = driver.calls.map(({ sql }) => sql);
-    const begin = statements.lastIndexOf("BEGIN");
-    const commit = statements.lastIndexOf("COMMIT");
     const writes = driver.calls.filter(({ sql }) => sql.startsWith("INSERT INTO"));
-    expect(begin).toBeGreaterThan(-1);
-    expect(commit).toBeGreaterThan(begin);
+    expect(statements).not.toContain("BEGIN");
+    expect(statements).not.toContain("COMMIT");
     expect(writes.map(({ values }) => values?.[0])).toEqual(["first", "second"]);
   });
 
-  it.each(["40001", "40P01"] as const)(
-    "retries the complete writeAll transaction once on a fresh client for %s",
-    async (code) => {
-      const storage = await recordStorage();
-      await (storage as unknown as { prepare(): Promise<void> }).prepare();
-      vi.clearAllMocks();
-      driver.calls.length = 0;
-      let failed = false;
-      driver.query.mockImplementation((sql, values) => {
-        driver.recordCall(sql, values);
-        if (sql === "BEGIN" && !failed) {
-          failed = true;
-          return Promise.reject(Object.assign(new Error("retry"), { code }));
-        }
-        return Promise.resolve({ rowCount: 1, rows: [] });
-      });
-
-      await storage.writeAll([create(StringValueSchema, { value: "one" })]);
-
-      expect(driver.connect).toHaveBeenCalledTimes(2);
-      expect(driver.calls.map(({ sql }) => sql)).toEqual(
-        expect.arrayContaining(["ROLLBACK", "COMMIT"]),
-      );
-    },
-  );
-
-  it("stops writeAll after its one retry", async () => {
+  it("keeps the completed batch prefix when a later record fails", async () => {
     const storage = await recordStorage();
     await (storage as unknown as { prepare(): Promise<void> }).prepare();
-    vi.clearAllMocks();
+    driver.calls.length = 0;
     driver.query.mockImplementation((sql, values) => {
       driver.recordCall(sql, values);
-      if (sql === "BEGIN")
-        return Promise.reject(Object.assign(new Error("retry"), { code: "40001" }));
+      if (sql.startsWith("INSERT INTO") && values?.[0] === "second")
+        return Promise.reject(new Error("later write failed"));
       return Promise.resolve({ rowCount: 1, rows: [] });
     });
 
-    await expect(storage.writeAll([create(StringValueSchema, { value: "one" })])).rejects.toThrow(
-      /record operation failed/i,
-    );
-
-    expect(driver.connect).toHaveBeenCalledTimes(2);
+    await expect(
+      storage.writeAll([
+        create(StringValueSchema, { value: "first" }),
+        create(StringValueSchema, { value: "second" }),
+      ]),
+    ).rejects.toThrow(/record operation failed/i);
+    expect(driver.calls.filter(({ sql }) => sql.startsWith("INSERT INTO"))).toHaveLength(2);
+    expect(driver.calls.map(({ sql }) => sql)).not.toContain("ROLLBACK");
   });
 
   it("sanitizes a record-driver failure and releases its operation client", async () => {
@@ -379,22 +356,6 @@ describe("Postgres record storage", () => {
     );
 
     expect(driver.release).toHaveBeenCalledOnce();
-  });
-
-  it("discards a transaction client when the operation and rollback both fail", async () => {
-    const storage = await recordStorage();
-    await (storage as unknown as { prepare(): Promise<void> }).prepare();
-    driver.query.mockImplementation((sql, values) => {
-      driver.recordCall(sql, values);
-      if (sql === "BEGIN") return Promise.reject(new Error("secret operation"));
-      if (sql === "ROLLBACK") return Promise.reject(new Error("secret rollback"));
-      return Promise.resolve({ rowCount: 1, rows: [] });
-    });
-
-    await expect(storage.write(create(StringValueSchema, { value: "one" }))).rejects.toThrow(
-      "record operation failed",
-    );
-    expect(driver.release).toHaveBeenCalledWith(expect.any(Error));
   });
 
   it("reads one stored record and reports whether deletion changed a row", async () => {
@@ -501,7 +462,30 @@ describe("Postgres record storage", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("accepts an immutable insert when a conflicting row disappears before inspection", async () => {
+  it("retries an immutable insert when a conflicting row disappears before inspection", async () => {
+    const storage = await recordStorage();
+    await (storage as unknown as { prepare(): Promise<void> }).prepare();
+    let inserts = 0;
+    driver.query.mockImplementation((sql, values) => {
+      driver.recordCall(sql, values);
+      if (sql.startsWith("INSERT INTO")) {
+        inserts += 1;
+        return Promise.resolve({ rowCount: inserts === 1 ? 0 : 1, rows: [] });
+      }
+      if (sql.startsWith('SELECT "bytes"')) return Promise.resolve({ rows: [] });
+      return Promise.resolve({ rowCount: 1, rows: [] });
+    });
+
+    await expect(
+      (
+        storage as unknown as { writeImmutable(record: ReturnType<typeof create>): Promise<void> }
+      ).writeImmutable(create(StringValueSchema, { value: "one" })),
+    ).resolves.toBeUndefined();
+
+    expect(inserts).toBe(2);
+  });
+
+  it("bounds immutable insert contention when every collision disappears", async () => {
     const storage = await recordStorage();
     await (storage as unknown as { prepare(): Promise<void> }).prepare();
     let inserts = 0;
@@ -516,61 +500,11 @@ describe("Postgres record storage", () => {
     });
 
     await expect(
-      (
-        storage as unknown as { writeImmutable(record: ReturnType<typeof create>): Promise<void> }
-      ).writeImmutable(create(StringValueSchema, { value: "one" })),
-    ).resolves.toBeUndefined();
-
-    expect(inserts).toBe(1);
-  });
-
-  it.each(["40001", "40P01"] as const)(
-    "retries compare-and-set once with a fresh client for %s",
-    async (code) => {
-      const storage = await recordStorage();
-      await (storage as unknown as { prepare(): Promise<void> }).prepare();
-      vi.clearAllMocks();
-      driver.calls.length = 0;
-      let failed = false;
-      driver.query.mockImplementation((sql, values) => {
-        driver.recordCall(sql, values);
-        if (sql === "BEGIN" && !failed) {
-          failed = true;
-          return Promise.reject(Object.assign(new Error("transaction failure"), { code }));
-        }
-        return Promise.resolve({ rowCount: 1, rows: [] });
-      });
-
-      await expect(
-        storage.compareAndSet("one", undefined, create(StringValueSchema, { value: "one" })),
-      ).resolves.toBe(true);
-
-      expect(driver.connect).toHaveBeenCalledTimes(2);
-      expect(driver.calls.map(({ sql }) => sql)).toEqual(
-        expect.arrayContaining(["BEGIN", "ROLLBACK", "BEGIN", "COMMIT"]),
-      );
-    },
-  );
-
-  it("stops after the single permitted retry and releases both CAS clients", async () => {
-    const storage = await recordStorage();
-    await (storage as unknown as { prepare(): Promise<void> }).prepare();
-    vi.clearAllMocks();
-    driver.calls.length = 0;
-    driver.query.mockImplementation((sql, values) => {
-      driver.recordCall(sql, values);
-      if (sql === "BEGIN")
-        return Promise.reject(Object.assign(new Error("serialization failure"), { code: "40001" }));
-      return Promise.resolve({ rowCount: 1, rows: [] });
-    });
-
-    await expect(
-      storage.compareAndSet("one", undefined, create(StringValueSchema, { value: "one" })),
-    ).rejects.toThrow("record operation failed");
-
-    expect(driver.connect).toHaveBeenCalledTimes(2);
-    expect(driver.calls.filter(({ sql }) => sql === "ROLLBACK")).toHaveLength(2);
-    expect(driver.release).toHaveBeenCalledTimes(2);
+      (storage as unknown as { writeImmutable(record: StringValue): Promise<void> }).writeImmutable(
+        create(StringValueSchema, { value: "one" }),
+      ),
+    ).rejects.toThrow(/contention exceeded/i);
+    expect(inserts).toBe(3);
   });
 
   it("deletes the matching current row through compare-and-set", async () => {
@@ -589,6 +523,123 @@ describe("Postgres record storage", () => {
     expect(driver.calls.some(({ sql }) => sql.startsWith("DELETE"))).toBe(true);
   });
 
+  it("guards a semantically equivalent stored encoding with its exact raw bytes", async () => {
+    const storage = await recordStorage();
+    await (storage as unknown as { prepare(): Promise<void> }).prepare();
+    driver.calls.length = 0;
+    const raw = Uint8Array.of(10, 1, 97, 10, 1, 97);
+    driver.query.mockImplementation((sql, values) => {
+      driver.recordCall(sql, values);
+      if (sql.startsWith('SELECT "bytes"')) return Promise.resolve({ rows: [{ bytes: raw }] });
+      return Promise.resolve({ rowCount: 1, rows: [] });
+    });
+
+    await expect(
+      storage.compareAndSet(
+        "slot",
+        create(StringValueSchema, { value: "a" }),
+        create(StringValueSchema, { value: "b" }),
+      ),
+    ).resolves.toBe(true);
+
+    const update = driver.calls.find(({ sql }) => sql.startsWith("UPDATE"));
+    expect(update?.sql).toContain('"ID" = $1 AND "bytes" =');
+    expect(Array.from(update?.values?.[1] as Uint8Array)).toEqual([...raw]);
+    expect(driver.calls.map(({ sql }) => sql)).not.toContain("BEGIN");
+    expect(driver.calls.some(({ sql }) => sql.includes("pg_advisory"))).toBe(false);
+  });
+
+  it("rereads after a guard miss and rejects a changed expected record", async () => {
+    const storage = await recordStorage();
+    await (storage as unknown as { prepare(): Promise<void> }).prepare();
+    let reads = 0;
+    const bytesOf = (value: string) =>
+      toBinary(StringValueSchema, create(StringValueSchema, { value }));
+    driver.query.mockImplementation((sql, values) => {
+      driver.recordCall(sql, values);
+      if (sql.startsWith('SELECT "bytes"'))
+        return Promise.resolve({ rows: [{ bytes: bytesOf(reads++ === 0 ? "first" : "rival") }] });
+      if (sql.startsWith("UPDATE")) return Promise.resolve({ rowCount: 0, rows: [] });
+      return Promise.resolve({ rowCount: 1, rows: [] });
+    });
+
+    await expect(
+      storage.compareAndSet(
+        "slot",
+        create(StringValueSchema, { value: "first" }),
+        create(StringValueSchema, { value: "next" }),
+      ),
+    ).resolves.toBe(false);
+    expect(reads).toBe(2);
+    expect(driver.calls.filter(({ sql }) => sql.startsWith("UPDATE"))).toHaveLength(1);
+  });
+
+  it("bounds repeated guard misses and accepts a same-value no-op", async () => {
+    const storage = await recordStorage();
+    await (storage as unknown as { prepare(): Promise<void> }).prepare();
+    driver.calls.length = 0;
+    const current = create(StringValueSchema, { value: "first" });
+    driver.query.mockImplementation((sql, values) => {
+      driver.recordCall(sql, values);
+      if (sql.startsWith('SELECT "bytes"'))
+        return Promise.resolve({ rows: [{ bytes: toBinary(StringValueSchema, current) }] });
+      if (sql.startsWith("UPDATE")) return Promise.resolve({ rowCount: 0, rows: [] });
+      return Promise.resolve({ rowCount: 1, rows: [] });
+    });
+
+    await expect(storage.compareAndSet("slot", current, current)).resolves.toBe(true);
+    expect(driver.calls.some(({ sql }) => sql.startsWith("UPDATE"))).toBe(false);
+    await expect(
+      storage.compareAndSet("slot", current, create(StringValueSchema, { value: "next" })),
+    ).rejects.toThrow(/contention exceeded/i);
+    expect(driver.calls.filter(({ sql }) => sql.startsWith("UPDATE"))).toHaveLength(3);
+  });
+
+  it("treats an absent delete as a no-op and rereads an insert collision", async () => {
+    const storage = await recordStorage();
+    await (storage as unknown as { prepare(): Promise<void> }).prepare();
+    let reads = 0;
+    const rival = create(StringValueSchema, { value: "rival" });
+    driver.query.mockImplementation((sql, values) => {
+      driver.recordCall(sql, values);
+      if (sql.startsWith('SELECT "bytes"'))
+        return Promise.resolve({
+          rows: reads++ < 2 ? [] : [{ bytes: toBinary(StringValueSchema, rival) }],
+        });
+      if (sql.startsWith("INSERT INTO")) return Promise.resolve({ rowCount: 0, rows: [] });
+      return Promise.resolve({ rowCount: 1, rows: [] });
+    });
+
+    await expect(storage.compareAndSet("slot", undefined, undefined)).resolves.toBe(true);
+    await expect(
+      storage.compareAndSet("slot", undefined, create(StringValueSchema, { value: "next" })),
+    ).resolves.toBe(false);
+    expect(driver.calls.filter(({ sql }) => sql.startsWith("INSERT INTO"))).toHaveLength(1);
+  });
+
+  it("rereads a conditional delete miss before reporting a changed expected record", async () => {
+    const storage = await recordStorage();
+    await (storage as unknown as { prepare(): Promise<void> }).prepare();
+    let reads = 0;
+    driver.query.mockImplementation((sql, values) => {
+      driver.recordCall(sql, values);
+      if (sql.startsWith('SELECT "bytes"')) {
+        const value = reads++ === 0 ? "first" : "rival";
+        return Promise.resolve({
+          rows: [{ bytes: toBinary(StringValueSchema, create(StringValueSchema, { value })) }],
+        });
+      }
+      if (sql.startsWith("DELETE")) return Promise.resolve({ rowCount: 0, rows: [] });
+      return Promise.resolve({ rowCount: 1, rows: [] });
+    });
+
+    await expect(
+      storage.compareAndSet("slot", create(StringValueSchema, { value: "first" }), undefined),
+    ).resolves.toBe(false);
+    expect(reads).toBe(2);
+    expect(driver.calls.filter(({ sql }) => sql.startsWith("DELETE"))).toHaveLength(1);
+  });
+
   it("writes a compare-and-set replacement at the caller-selected slot", async () => {
     const storage = await recordStorage();
     await (storage as unknown as { prepare(): Promise<void> }).prepare();
@@ -600,27 +651,6 @@ describe("Postgres record storage", () => {
 
     const write = driver.calls.find(({ sql }) => sql.startsWith("INSERT INTO"));
     expect(write?.values?.[0]).toBe("slot");
-  });
-
-  it("does not retry a non-transactional compare-and-set error", async () => {
-    const storage = await recordStorage();
-    await (storage as unknown as { prepare(): Promise<void> }).prepare();
-    vi.clearAllMocks();
-    driver.calls.length = 0;
-    driver.query.mockImplementation((sql, values) => {
-      driver.recordCall(sql, values);
-      if (sql === "BEGIN")
-        return Promise.reject(Object.assign(new Error("constraint"), { code: "23505" }));
-      return Promise.resolve({ rowCount: 1, rows: [] });
-    });
-
-    await expect(
-      storage.compareAndSet("one", undefined, create(StringValueSchema, { value: "one" })),
-    ).rejects.toThrow("record operation failed");
-
-    expect(driver.connect).toHaveBeenCalledTimes(1);
-    expect(driver.calls.map(({ sql }) => sql)).toEqual(["BEGIN", "ROLLBACK"]);
-    expect(driver.release).toHaveBeenCalledTimes(1);
   });
 
   it("returns false without mutation when compare-and-set finds a different payload", async () => {
@@ -644,88 +674,6 @@ describe("Postgres record storage", () => {
 
     expect(driver.calls.some(({ sql }) => sql.startsWith("INSERT INTO"))).toBe(false);
     expect(driver.calls.map(({ sql }) => sql)).toEqual(expect.arrayContaining(["BEGIN", "COMMIT"]));
-  });
-
-  it("derives distinct transaction advisory keys for distinct storage IDs", async () => {
-    const storage = await recordStorage();
-    await (storage as unknown as { prepare(): Promise<void> }).prepare();
-    driver.calls.length = 0;
-
-    await storage.compareAndSet("one", undefined, create(StringValueSchema, { value: "one" }));
-    await storage.compareAndSet("two", undefined, create(StringValueSchema, { value: "two" }));
-
-    const keys = driver.calls
-      .filter(({ sql }) => sql === "SELECT pg_advisory_xact_lock($1)")
-      .map(({ values }) => values?.[0]);
-    expect(keys).toHaveLength(2);
-    expect(keys[0]).not.toEqual(keys[1]);
-  });
-
-  it("serializes an expected-absent compare-and-set ahead of a normal write", async () => {
-    const storage = await recordStorage();
-    await (storage as unknown as { prepare(): Promise<void> }).prepare();
-    const scheduler = lockedQueries();
-    driver.connect.mockImplementationOnce(() => Promise.resolve(scheduler.client("cas")));
-    driver.connect.mockImplementationOnce(() => Promise.resolve(scheduler.client("write")));
-
-    const cas = storage.compareAndSet(
-      "slot",
-      undefined,
-      create(StringValueSchema, { value: "cas" }),
-    );
-    await scheduler.casLocked;
-    const write = storage.write(create(StringValueSchema, { value: "slot" }));
-    await scheduler.mutationReached;
-    scheduler.releaseCas();
-
-    await expect(cas).resolves.toBe(true);
-    await expect(write).resolves.toBeUndefined();
-    expect(scheduler.writes).toEqual(["cas", "write"]);
-  });
-
-  it("serializes an expected-absent compare-and-set ahead of an immutable write", async () => {
-    const storage = await recordStorage();
-    await (storage as unknown as { prepare(): Promise<void> }).prepare();
-    const scheduler = lockedQueries();
-    driver.connect.mockImplementationOnce(() => Promise.resolve(scheduler.client("cas")));
-    driver.connect.mockImplementationOnce(() => Promise.resolve(scheduler.client("immutable")));
-
-    const cas = storage.compareAndSet(
-      "slot",
-      undefined,
-      create(StringValueSchema, { value: "slot" }),
-    );
-    await scheduler.casLocked;
-    const immutable = (
-      storage as unknown as { writeImmutable(record: StringValue): Promise<void> }
-    ).writeImmutable(create(StringValueSchema, { value: "slot" }));
-    await scheduler.mutationReached;
-    scheduler.releaseCas();
-
-    await expect(cas).resolves.toBe(true);
-    await expect(immutable).resolves.toBeUndefined();
-    expect(scheduler.writes).toEqual(["cas", "immutable"]);
-  });
-
-  it("locks each writeAll slot once in stable order without reordering writes", async () => {
-    const storage = await recordStorage();
-    await (storage as unknown as { prepare(): Promise<void> }).prepare();
-    driver.calls.length = 0;
-
-    await storage.writeAll([
-      create(StringValueSchema, { value: "two" }),
-      create(StringValueSchema, { value: "one" }),
-      create(StringValueSchema, { value: "two" }),
-    ]);
-
-    const locks = driver.calls
-      .filter(({ sql }) => sql === "SELECT pg_advisory_xact_lock($1)")
-      .map(({ values }) => values?.[0] as bigint);
-    const writes = driver.calls
-      .filter(({ sql }) => sql.startsWith("INSERT INTO"))
-      .map(({ values }) => values?.[0]);
-    expect(locks).toEqual([...new Set(locks)].sort((left, right) => (left < right ? -1 : 1)));
-    expect(writes).toEqual(["two", "one", "two"]);
   });
 
   it("pushes normalized ID selection into one numbered PostgreSQL statement", async () => {
@@ -1162,119 +1110,4 @@ function valueColumns(): readonly RecordColumn<StringValue, string>[] {
 
 function tenantId(value: string) {
   return create(TenantIdSchema, { kind: { case: "value", value } });
-}
-
-function lockedQueries() {
-  const writes: string[] = [];
-  const held = new Map<bigint, string>();
-  const clientLocks = new Map<string, Set<bigint>>();
-  const waiters = new Map<bigint, (() => void)[]>();
-  let releaseCas: (value?: void | PromiseLike<void>) => void = () => undefined;
-  let signalCasLocked: (value?: void | PromiseLike<void>) => void = () => undefined;
-  let signalMutationReached: (value?: void | PromiseLike<void>) => void = () => undefined;
-  const casLocked = new Promise<void>((resolve) => {
-    signalCasLocked = resolve;
-  });
-  const casReleased = new Promise<void>((resolve) => {
-    releaseCas = resolve;
-  });
-  const mutationReached = new Promise<void>((resolve) => {
-    signalMutationReached = resolve;
-  });
-  const client = (name: string) => {
-    const query = vi.fn<Query>((sql, parameters) =>
-      lockedQuery(
-        name,
-        sql,
-        parameters,
-        writes,
-        held,
-        clientLocks,
-        waiters,
-        signalMutationReached,
-        async () => {
-          if (name !== "cas") return;
-          signalCasLocked();
-          await casReleased;
-        },
-      ),
-    );
-    return { query, release: vi.fn() };
-  };
-  return { casLocked, client, mutationReached, releaseCas, writes };
-}
-
-async function lockedQuery(
-  client: string,
-  sql: string,
-  parameters: readonly unknown[] | undefined,
-  writes: string[],
-  held: Map<bigint, string>,
-  clientLocks: Map<string, Set<bigint>>,
-  waiters: Map<bigint, (() => void)[]>,
-  mutationReached: () => void,
-  onCasLock: () => Promise<void>,
-): Promise<QueryResult> {
-  if (client !== "cas" && (sql === "SELECT pg_advisory_xact_lock($1)" || sql.startsWith("INSERT")))
-    mutationReached();
-  if (sql === "SELECT pg_advisory_xact_lock($1)") {
-    const key = parameters?.[0] as bigint;
-    await lock(client, key, held, clientLocks, waiters);
-    await onCasLock();
-  } else if (sql.startsWith('SELECT "bytes"')) {
-    return { rows: [] };
-  } else if (sql.startsWith("INSERT INTO")) {
-    writes.push(client);
-  } else if (sql === "COMMIT" || sql === "ROLLBACK")
-    releaseLocks(client, held, clientLocks, waiters);
-  return { rowCount: 1, rows: [] };
-}
-
-function lock(
-  client: string,
-  key: bigint,
-  held: Map<bigint, string>,
-  clientLocks: Map<string, Set<bigint>>,
-  waiters: Map<bigint, (() => void)[]>,
-): Promise<void> {
-  if (held.get(key) === undefined) {
-    takeLock(client, key, held, clientLocks);
-    return Promise.resolve();
-  }
-  return new Promise((resolve) => {
-    const queued = waiters.get(key) ?? [];
-    queued.push(() => {
-      takeLock(client, key, held, clientLocks);
-      resolve();
-    });
-    waiters.set(key, queued);
-  });
-}
-
-function takeLock(
-  client: string,
-  key: bigint,
-  held: Map<bigint, string>,
-  clientLocks: Map<string, Set<bigint>>,
-): void {
-  held.set(key, client);
-  let locks = clientLocks.get(client);
-  if (locks === undefined) {
-    locks = new Set();
-    clientLocks.set(client, locks);
-  }
-  locks.add(key);
-}
-
-function releaseLocks(
-  client: string,
-  held: Map<bigint, string>,
-  clientLocks: Map<string, Set<bigint>>,
-  waiters: Map<bigint, (() => void)[]>,
-): void {
-  for (const key of clientLocks.get(client) ?? []) {
-    held.delete(key);
-    waiters.get(key)?.shift()?.();
-  }
-  clientLocks.delete(client);
 }

@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { create, fromBinary, type Message, ScalarType } from "@bufbuild/protobuf";
+import { create, fromBinary, toBinary, type Message, ScalarType } from "@bufbuild/protobuf";
 import { StringValueSchema, TimestampSchema, type StringValue } from "@bufbuild/protobuf/wkt";
 import {
   EventIdSchema,
@@ -221,8 +221,15 @@ describe("PostgreSQL live storage acceptance", () => {
     const scope = context("cas");
     const records = factory.createRecordStorage(scope, stringSpec(), group("cas"));
     const other = second.createRecordStorage(scope, stringSpec(), group("cas"));
+    const pool = new Pool({ connectionString: url });
     try {
       await records.write(value("before"));
+      const encoded = Buffer.from(toBinary(StringValueSchema, value("before")));
+      const table = (records as unknown as { tableName: string }).tableName;
+      await pool.query(`UPDATE ${quoted(table)} SET "bytes"=$1 WHERE "ID"=$2`, [
+        Buffer.concat([encoded, encoded]),
+        "before",
+      ]);
       const results = await Promise.all([
         records.compareAndSet("before", value("before"), value("first")),
         other.compareAndSet("before", value("before"), value("second")),
@@ -236,6 +243,60 @@ describe("PostgreSQL live storage acceptance", () => {
       records.close();
       other.close();
       second.close();
+      await pool.end();
+    }
+  });
+
+  it("retains an Event batch prefix after a later SQL constraint failure", async () => {
+    const spec = new RecordSpec<string, Event>({
+      recordType: EventSchema,
+      idKind: "string",
+      extractId: (event) => event.id?.value ?? "",
+    });
+    const records = factory.createRecordStorage(
+      context("partial_events"),
+      spec,
+      group("partial_events"),
+    );
+    const pool = new Pool({ connectionString: url });
+    const event = (id: string, member = id) =>
+      create(EventSchema, {
+        id: create(EventIdSchema, { value: id }),
+        message: AnyMessages.pack(
+          ProjectCreatedSchema,
+          create(ProjectCreatedSchema, { memberId: [member] }),
+        ),
+      });
+    try {
+      await records.write(event("seed"));
+      const table = (records as unknown as { tableName: string }).tableName;
+      const schema = (await pool.query<{ schema: string }>("SELECT current_schema() AS schema"))
+        .rows[0]?.schema;
+      if (schema === undefined) throw new Error("Expected the active PostgreSQL schema.");
+      await pool.query(
+        `ALTER TABLE ${quoted(schema)}.${quoted(table)} ADD CONSTRAINT "reject_second" CHECK ("ID" <> 'second')`,
+      );
+      await expect(records.writeAll([event("first"), event("second")])).rejects.toThrow();
+      await expect(records.read("first")).resolves.toEqual(event("first"));
+      await expect(records.read("second")).resolves.toBeUndefined();
+      const immutable = records as unknown as { writeImmutable(record: Event): Promise<void> };
+      await expect(immutable.writeImmutable(event("first"))).resolves.toBeUndefined();
+      await expect(immutable.writeImmutable(event("first", "conflict"))).rejects.toThrow(
+        /collides/i,
+      );
+      await expect(records.read("first")).resolves.toEqual(event("first"));
+      const contenders = [event("race", "left"), event("race", "right")];
+      const results = await Promise.allSettled(
+        contenders.map((candidate) => immutable.writeImmutable(candidate)),
+      );
+      expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+      const winner = await records.read("race");
+      expect(contenders.map((candidate) => toBinary(EventSchema, candidate))).toContainEqual(
+        winner === undefined ? undefined : toBinary(EventSchema, winner),
+      );
+    } finally {
+      records.close();
+      await pool.end();
     }
   });
 

@@ -1,0 +1,53 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/storage-mysql/test/mysql-record-storage.test.ts (44 tests | 1 failed | 43 skipped) 7ms
+     × keeps a completed batch prefix without beginning a transaction 6ms
+ ❯ packages/storage-postgres/test/postgres-record-storage.test.ts (54 tests | 2 failed | 52 skipped) 8ms
+     × writes a batch in source order without a cross-record transaction 6ms
+     × keeps the completed batch prefix when a later record fails 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/storage-mysql/test/mysql-record-storage.test.ts > MysqlRecordStorage > keeps a completed batch prefix without beginning a transaction
+AssertionError: expected [ …(9) ] to not include 'BEGIN'
+ ❯ packages/storage-mysql/test/mysql-record-storage.test.ts:1095:45
+    1093|     ).rejects.toThrow(/record operation failed/i);
+    1094|     expect(calls.filter(({ sql }) => sql.startsWith("INSERT INTO"))).t…
+    1095|     expect(calls.map(({ sql }) => sql)).not.toContain("BEGIN");
+       |                                             ^
+    1096|     expect(calls.map(({ sql }) => sql)).not.toContain("ROLLBACK");
+    1097|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  packages/storage-postgres/test/postgres-record-storage.test.ts > Postgres record storage > writes a batch in source order without a cross-record transaction
+AssertionError: expected [ …(15) ] to not include 'BEGIN'
+ ❯ packages/storage-postgres/test/postgres-record-storage.test.ts:315:28
+    313|     const statements = driver.calls.map(({ sql }) => sql);
+    314|     const writes = driver.calls.filter(({ sql }) => sql.startsWith("IN…
+    315|     expect(statements).not.toContain("BEGIN");
+       |                            ^
+    316|     expect(statements).not.toContain("COMMIT");
+    317|     expect(writes.map(({ values }) => values?.[0])).toEqual(["first", …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  packages/storage-postgres/test/postgres-record-storage.test.ts > Postgres record storage > keeps the completed batch prefix when a later record fails
+AssertionError: expected [ 'BEGIN', …(5) ] to not include 'ROLLBACK'
+ ❯ packages/storage-postgres/test/postgres-record-storage.test.ts:338:52
+    336|     ).rejects.toThrow(/record operation failed/i);
+    337|     expect(driver.calls.filter(({ sql }) => sql.startsWith("INSERT INT…
+    338|     expect(driver.calls.map(({ sql }) => sql)).not.toContain("ROLLBACK…
+       |                                                    ^
+    339|   });
+    340|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  3 failed | 95 skipped (98)
+   Start at  17:58:16
+   Duration  567ms (transform 567ms, setup 0ms, import 851ms, tests 15ms, environment 0ms)
+

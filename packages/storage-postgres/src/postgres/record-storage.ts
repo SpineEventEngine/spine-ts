@@ -34,7 +34,6 @@ import { PostgresColumnMapping } from "./column-mapping.js";
 import {
   PostgresStorageDataError,
   PostgresStorageOperationError,
-  PostgresTransactionErrors,
   PostgresClientDisposal,
   PostgresRollbackErrors,
 } from "./errors.js";
@@ -193,7 +192,7 @@ export interface PostgresRecordExecutor<I, R extends Message> {
  */
 export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
   /**
-   * Reports that compare-and-set uses PostgreSQL transaction coordination.
+   * Reports that compare-and-set uses a conditional SQL mutation.
    */
   override readonly atomicCompareAndSet = true;
 
@@ -292,13 +291,11 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    * @returns A promise that resolves when the payload is stored or confirmed.
    */
   async writeImmutable(record: R): Promise<void> {
-    const id = this.recordSpec.idValueIn(record);
-    await this.transaction(async (client) => {
-      await this.lockSlot(client, id);
-      await this.appendImmutableOn(client, record, true);
-    }).catch((error: unknown) => {
-      throw operationError(error);
-    });
+    await this.using((client) => this.appendImmutableOn(client, record, true)).catch(
+      (error: unknown) => {
+        throw operationError(error);
+      },
+    );
   }
 
   /**
@@ -320,7 +317,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    * @returns Whether a stored record was deleted.
    */
   protected async deleteRecord(id: I): Promise<boolean> {
-    return this.transaction(async (client) => this.deleteOn(client, id)).catch((error: unknown) => {
+    return this.using(async (client) => this.deleteOn(client, id, true)).catch((error: unknown) => {
       throw operationError(error);
     });
   }
@@ -373,9 +370,9 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
   }
 
   /**
-   * Compares and atomically applies one mutation with bounded retry.
+   * Compares and conditionally mutates one row with a raw-byte SQL guard.
    *
-   * @param id Identifies the record guarded by the transaction advisory lock.
+   * @param id Identifies the record slot.
    * @param expected Specifies the current materialized record required to write.
    * @param next Specifies the replacement record, or absence for deletion.
    * @returns Whether the current stored payload matched the expected payload.
@@ -385,39 +382,23 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     expected: Materialized<I, R> | undefined,
     next: Materialized<I, R> | undefined,
   ): Promise<boolean> {
-    for (let attempt = 0; attempt !== 2; attempt += 1) {
-      try {
-        return await this.casOnce(id, expected, next);
-      } catch (error) {
-        if (attempt === 0 && retryable(error)) continue;
-        throw operationError(error);
-      }
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const result = await this.using((client) => this.casOnce(client, id, expected, next));
+      if (result !== undefined) return result;
     }
-    throw new PostgresStorageOperationError("PostgreSQL record operation failed.");
+    throw new PostgresStorageOperationError(
+      "PostgreSQL record compare-and-set contention exceeded.",
+    );
   }
 
   /**
-   * Writes all supplied materialized records in source order and one transaction.
+   * Writes all supplied materialized records independently in source order.
    *
    * @param records Provides the materialized records to write.
-   * @returns A promise that resolves after the transaction commits.
+   * @returns A promise that resolves after all writes complete.
    */
   protected async writeAllRecords(records: readonly Materialized<I, R>[]): Promise<void> {
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      try {
-        await this.transaction(async (client) => {
-          await this.lockSlots(
-            client,
-            records.map((record) => this.recordSpec.idValueIn(record.record)),
-          );
-          for (const record of records) await this.writeOn(client, record.record, undefined, true);
-        });
-        return;
-      } catch (error) {
-        if (attempt === 0 && PostgresTransactionErrors.retryable(error)) continue;
-        throw operationError(error);
-      }
-    }
+    for (const record of records) await this.writeRecord(record);
   }
 
   /**
@@ -427,7 +408,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    * @returns A promise that resolves after PostgreSQL applies the upsert.
    */
   protected writeRecord(record: Materialized<I, R>): Promise<void> {
-    return this.transaction((client) => this.writeOn(client, record.record)).catch(
+    return this.using((client) => this.writeOn(client, record.record, undefined, true)).catch(
       (error: unknown) => {
         throw operationError(error);
       },
@@ -435,26 +416,84 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
   }
 
   /**
-   * Applies one compare-and-set attempt inside a transaction.
+   * Applies one compare-and-set attempt using a conditional statement.
    *
+   * @param client Provides the operation client.
    * @param id Identifies the guarded record.
    * @param expected Supplies the required current materialization.
    * @param next Supplies the replacement or requests deletion when absent.
-   * @returns Whether the current record matched the expected record.
+   * @returns Whether the current record matched, or undefined after a guard miss.
    */
   private async casOnce(
+    client: PoolClient,
     id: I,
     expected: Materialized<I, R> | undefined,
     next: Materialized<I, R> | undefined,
-  ): Promise<boolean> {
-    return this.transaction(async (client) => {
-      await this.lockSlot(client, id);
-      const current = await this.readOn(client, id, true);
-      if (!this.same(current, expected?.record)) return false;
-      if (next === undefined) await this.deleteOn(client, id, true);
-      else await this.writeOn(client, next.record, id, true);
-      return true;
-    });
+  ): Promise<boolean | undefined> {
+    const raw = await this.rawOn(client, id);
+    const current = raw === undefined ? undefined : this.decode(raw);
+    if (!this.same(current, expected?.record)) return false;
+    if (next === undefined) {
+      if (raw === undefined) return true;
+      const deleted = await client.query(
+        `DELETE FROM ${this.qualified()} WHERE "ID" = $1 AND "bytes" = $2`,
+        [this.id(id), raw],
+      );
+      return deleted.rowCount === 1 ? true : undefined;
+    }
+    if (this.same(current, next.record)) return true;
+    if (raw === undefined) {
+      const inserted = await client.query(
+        `${this.insertSql()} ON CONFLICT ("ID") DO NOTHING`,
+        this.values(next.record, id),
+      );
+      return inserted.rowCount === 1 ? true : undefined;
+    }
+    const changed = await client.query(this.casUpdateSql(), [
+      this.id(id),
+      raw,
+      ...this.values(next.record, id).slice(1),
+    ]);
+    return changed.rowCount === 1 ? true : undefined;
+  }
+
+  /**
+   * Reads the exact bytes used as a conditional-mutation guard.
+   * @param client Provides the operation client.
+   * @param id Identifies the row.
+   * @returns Stored bytes, if present.
+   */
+  private async rawOn(client: PoolClient, id: I): Promise<Uint8Array | undefined> {
+    const result = await client.query<Row>(
+      `SELECT "bytes" FROM ${this.qualified()} WHERE "ID" = $1`,
+      [this.id(id)],
+    );
+    return result.rows[0] === undefined ? undefined : bytes(result.rows[0].bytes);
+  }
+
+  /**
+   * Decodes one stored record with the provider's data-error boundary.
+   * @param raw Supplies exact stored bytes.
+   * @returns Decoded Protobuf record.
+   */
+  private decode(raw: Uint8Array): R {
+    try {
+      return fromBinary(this.recordSpec.recordType, raw);
+    } catch (error) {
+      throw new PostgresStorageDataError("Stored PostgreSQL record data is invalid.", {
+        cause: error,
+      });
+    }
+  }
+
+  /**
+   * Builds a conditional update that changes bytes and materialized columns together.
+   * @returns Parameterized update SQL.
+   */
+  private casUpdateSql(): string {
+    const names = ["bytes", ...this.recordSpec.columns.map(({ name }) => name)];
+    const assignments = names.map((name, index) => `${quote(name)} = $${String(index + 3)}`);
+    return `UPDATE ${this.qualified()} SET ${assignments.join(", ")} WHERE "ID" = $1 AND "bytes" = $2`;
   }
 
   /**
@@ -569,19 +608,6 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
   }
 
   /**
-   * Acquires record-slot locks in stable order to avoid deadlocks.
-   *
-   * @param client Provides the active transaction client.
-   * @param ids Identify the record slots.
-   * @returns A promise that resolves after every lock is acquired.
-   */
-  private async lockSlots(client: PoolClient, ids: readonly I[]): Promise<void> {
-    const keys = [...new Set(ids.map((id) => this.casKey(id)))];
-    keys.sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
-    for (const key of keys) await client.query("SELECT pg_advisory_xact_lock($1)", [key]);
-  }
-
-  /**
    * Writes one record on a caller-managed client.
    *
    * @param client Provides the active transaction client.
@@ -624,11 +650,15 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
   private async appendImmutableOn(client: PoolClient, record: R, locked = false): Promise<void> {
     const id = this.recordSpec.idValueIn(record);
     if (!locked) await this.lockSlot(client, id);
-    const inserted = await client.query(this.immutableSql(), this.values(record));
-    if (inserted.rowCount === 1) return;
-    const existing = await this.readOn(client, id);
-    if (existing === undefined || this.same(existing, record)) return;
-    throw new PostgresStorageOperationError("PostgreSQL immutable record collides.");
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const inserted = await client.query(this.immutableSql(), this.values(record));
+      if (inserted.rowCount === 1) return;
+      const existing = await this.readOn(client, id);
+      if (existing === undefined) continue;
+      if (this.same(existing, record)) return;
+      throw new PostgresStorageOperationError("PostgreSQL immutable record collides.");
+    }
+    throw new PostgresStorageOperationError("PostgreSQL immutable record contention exceeded.");
   }
 
   /**
@@ -1252,16 +1282,6 @@ function operator(value: string): string {
       throw new PostgresStorageOperationError("PostgreSQL query operator is invalid.");
     })()
   );
-}
-
-/**
- * Reports whether a failed transaction may be attempted once more.
- *
- * @param error Supplies the failure.
- * @returns Whether PostgreSQL classified it as retryable.
- */
-function retryable(error: unknown): boolean {
-  return PostgresTransactionErrors.retryable(error);
 }
 
 /**

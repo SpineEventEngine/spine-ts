@@ -13,6 +13,7 @@
  */
 
 import { create, fromBinary, ScalarType, toBinary } from "@bufbuild/protobuf";
+import { randomUUID } from "node:crypto";
 import {
   AnySchema,
   StringValueSchema,
@@ -493,7 +494,7 @@ live("MySQL-family record layout", () => {
   it("atomically compares records from two handles on the configured engine", async () => {
     if (url === undefined) throw new Error("SPINE_TS_MYSQL_URL is required.");
     const context = {
-      name: `t0134_cas_${String(Date.now())}`,
+      name: `t0134_cas_${randomUUID().replaceAll("-", "")}`,
       multitenant: false,
     } as const;
     const spec = new RecordSpec<string, StringValue>({
@@ -508,7 +509,7 @@ live("MySQL-family record layout", () => {
         ),
       ],
     });
-    const group = new StorageGroup(`t0134_cas_${String(Date.now())}`);
+    const group = new StorageGroup(context.name);
     const first = factory.createRecordStorage(context, spec, group);
     const second = factory.createRecordStorage(context, spec, group);
     const pool = createPool(url);
@@ -516,8 +517,18 @@ live("MySQL-family record layout", () => {
     try {
       const initial = create(StringValueSchema, { value: "present:initial" });
       await first.write(initial);
-      const table = mysqlRecordTableName(spec);
+      const table = mysqlRecordTableName(spec, group);
+      if (engine === "MYISAM")
+        await pool.query(
+          `ALTER TABLE \`${table}\` MODIFY COLUMN \`ID\` ` +
+            "VARCHAR(512) CHARACTER SET latin1 COLLATE latin1_bin NOT NULL",
+        );
       await pool.query(`ALTER TABLE \`${table}\` ENGINE=${engine}`);
+      const encoded = Buffer.from(toBinary(StringValueSchema, initial));
+      await pool.execute(`UPDATE \`${table}\` SET bytes=? WHERE ID=?`, [
+        Buffer.concat([encoded, encoded]),
+        "present",
+      ]);
       const present = await Promise.all([
         first.compareAndSet(
           "present",
@@ -547,6 +558,72 @@ live("MySQL-family record layout", () => {
     } finally {
       first.close();
       second.close();
+      await pool.end();
+    }
+  });
+
+  it("retains an Event batch prefix after a later SQL constraint failure", async () => {
+    if (url === undefined) throw new Error("SPINE_TS_MYSQL_URL is required.");
+    const spec = new RecordSpec<string, Event>({
+      recordType: EventSchema,
+      idKind: "string",
+      extractId: (event) => event.id?.value ?? "",
+    });
+    const context = {
+      name: `partial_events_${randomUUID().replaceAll("-", "")}`,
+      multitenant: false,
+    } as const;
+    const group = new StorageGroup(context.name);
+    const records = factory.createRecordStorage(context, spec, group);
+    const pool = createPool(url);
+    const event = (id: string, member = id) =>
+      create(EventSchema, {
+        id: create(EventIdSchema, { value: id }),
+        message: AnyMessages.pack(
+          ProjectCreatedSchema,
+          create(ProjectCreatedSchema, { memberId: [member] }),
+        ),
+      });
+    try {
+      await records.write(event("seed"));
+      const table = mysqlRecordTableName(spec, group);
+      const engine = process.env.SPINE_TS_MYSQL_ENGINE?.toUpperCase() ?? "INNODB";
+      if (engine === "MYISAM")
+        await pool.query(
+          `ALTER TABLE \`${table}\` MODIFY COLUMN \`ID\` ` +
+            "VARCHAR(512) CHARACTER SET latin1 COLLATE latin1_bin NOT NULL",
+        );
+      await pool.query(`ALTER TABLE \`${table}\` ENGINE=${engine}`);
+      const check = `reject_${randomUUID().replaceAll("-", "")}`;
+      await pool.query(
+        `ALTER TABLE \`${table}\` ADD CONSTRAINT \`${check}\` CHECK (ID <> 'second')`,
+      );
+      await expect(records.writeAll([event("first"), event("second")])).rejects.toThrow();
+      const first = await records.read("first");
+      expect(first === undefined ? undefined : toBinary(EventSchema, first)).toEqual(
+        toBinary(EventSchema, event("first")),
+      );
+      await expect(records.read("second")).resolves.toBeUndefined();
+      const immutable = records as unknown as { writeImmutable(record: Event): Promise<void> };
+      await expect(immutable.writeImmutable(event("first"))).resolves.toBeUndefined();
+      await expect(immutable.writeImmutable(event("first", "conflict"))).rejects.toThrow(
+        /collides/i,
+      );
+      const retained = await records.read("first");
+      expect(retained === undefined ? undefined : toBinary(EventSchema, retained)).toEqual(
+        toBinary(EventSchema, event("first")),
+      );
+      const contenders = [event("race", "left"), event("race", "right")];
+      const results = await Promise.allSettled(
+        contenders.map((candidate) => immutable.writeImmutable(candidate)),
+      );
+      expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+      const winner = await records.read("race");
+      expect(contenders.map((candidate) => toBinary(EventSchema, candidate))).toContainEqual(
+        winner === undefined ? undefined : toBinary(EventSchema, winner),
+      );
+    } finally {
+      records.close();
       await pool.end();
     }
   });
