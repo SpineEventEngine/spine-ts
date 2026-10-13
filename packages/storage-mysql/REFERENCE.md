@@ -62,17 +62,19 @@ complete generated `TenantId` on each operation and routes it to its configured
 database. Bounded Context names are diagnostic only and never partition rows,
 tables, locks, or queries.
 
-Each Entity source and history family has an independent table. Errors do not
-include connection URLs, credentials, or provider details.
+Each Entity source and history family has an independent table. Top-level
+provider error messages and public responses omit connection URLs,
+credentials, and driver details. The original driver failure remains available
+as the internal `cause`; do not expose it in public responses or unfiltered
+logs.
 
 ## Records and queries
 
-CRUD operations use normal statements. Payload-based compare-and-set uses an
-InnoDB transaction or a keyed `GET_LOCK` on MyISAM and Aria. On InnoDB,
-`writeAll` encodes the input first, applies entries in input order, and commits
-all rows or none. On MyISAM and Aria, `writeAll` has deterministic input-order
-semantics but is not transactional; a failed Entity prefix requires an
-identical retry. Repeated storage slots in a batch leave the last entry as the
+CRUD operations use normal statements. Payload-based compare-and-set uses
+atomic conditional statements for one storage slot on InnoDB, MyISAM, and Aria.
+`writeAll` encodes input first and writes entries in input order; a later failure
+leaves completed rows in place on every engine. Repeated storage slots in a
+batch leave the last completed entry as the
 stored value. IDs are declared as generated message IDs or the supported
 primitive `string`, `int32`, and `int64` kinds. Primitive IDs use native MySQL
 values; message IDs use their reversible stringifier, compact Proto JSON by
@@ -121,17 +123,18 @@ acquired.
 ## Entity history seam
 
 The provider/framework Entity handle returns current records plus immutable
-state and event history. It is not a remote application history API. State append and retention for one entity use a MySQL server lock;
-this coordination applies to one MySQL server only. Trim and truncate use
+state and event history. It is not a remote application history API. State and
+diagnostic append use immutable per-record insertion. Trim and truncate use
 fixed-size chunks. A failed chunk can leave earlier chunks durable, so callers
 retry maintenance. Current-record and history actions are separate calls, not
 one cross-storage transaction.
 
-The internal atomic Entity commit port writes current state, configured history,
-and framework delivery events. InnoDB uses one connection transaction;
-nontransactional engines use a deterministic immutable-history prefix and may
-require an identical retry after a storage failure. Standalone history
-operations remain separate.
+The internal Entity commit port writes state history, diagnostic Events,
+framework delivery Events, then current state as independent records. A failure
+can leave a completed prefix on every engine. One classified deadlock retry
+replays captured input with unchanged versions and Event IDs. Standalone
+history operations remain separate; a delivery Event alone does not prove the
+current-state write completed.
 
 `MysqlStorageSchemaError` reports incompatible layouts,
 `MysqlStorageDataError` reports stored bytes that cannot be decoded, and

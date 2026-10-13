@@ -25,9 +25,16 @@ import {
   EntityRecordSchema,
   type EntityRecord,
 } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
-import { ColumnTypes, RecordColumn, RecordSpec, StorageGroup } from "@spine-event-engine/storage";
+import {
+  ColumnTypes,
+  EventStore,
+  RecordColumn,
+  RecordSpec,
+  StorageGroup,
+} from "@spine-event-engine/storage";
 import {
   EntityCommitStorageFactories,
+  eventHistorySpec,
   type EntityStorageInput,
 } from "@spine-event-engine/storage/provider";
 import {
@@ -37,6 +44,12 @@ import {
   TypeRegistry,
 } from "@spine-event-engine/core";
 import { ProjectCreatedSchema } from "../../core/test-fixtures/generated/project_events_pb.js";
+import {
+  TaskIdSchema,
+  TaskListIdSchema,
+} from "../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
+import { TaskCreatedSchema } from "../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
+import { TaskSchema } from "../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -69,6 +82,51 @@ describe("PostgreSQL live storage acceptance", () => {
 
   afterAll(() => {
     factory.close();
+  });
+
+  it("keeps an immutable EventStore prefix and admits the same complete Events on retry", async () => {
+    const scope = context("event_retry");
+    const first = new EventStore(scope, factory);
+    const second = new EventStore(scope, factory);
+    const firstEvent = event(`${run}-first`, "task-1");
+    const secondEvent = event(`${run}-second`, "task-2");
+    if (firstEvent.id === undefined || secondEvent.id === undefined)
+      throw new Error("Expected Event IDs.");
+    const records = [firstEvent, secondEvent];
+    const query = { ids: [firstEvent.id, secondEvent.id] };
+    try {
+      await first.append(firstEvent);
+      if (process.env.SPINE_TS_TRACE_MARKERS === "1") {
+        const marker = new Pool({ connectionString: url });
+        try {
+          await marker.query("SELECT 'spine_trace_begin_immutable_append' AS marker");
+        } finally {
+          await marker.end();
+        }
+      }
+      await expect(second.appendAll(records)).resolves.toBeUndefined();
+      await expect(first.read(query)).resolves.toEqual(records);
+      const identical = await Promise.allSettled([
+        first.append(secondEvent),
+        second.append(secondEvent),
+      ]);
+      expect(identical.every(({ status }) => status === "fulfilled")).toBe(true);
+      await expect(second.append(event(`${run}-second`, "other-task"))).rejects.toThrow(
+        /unique event IDs/,
+      );
+      await expect(first.read(query)).resolves.toEqual(records);
+      if (process.env.SPINE_TS_TRACE_MARKERS === "1") {
+        const marker = new Pool({ connectionString: url });
+        try {
+          await marker.query("SELECT 'spine_trace_end_immutable_append' AS marker");
+        } finally {
+          await marker.end();
+        }
+      }
+    } finally {
+      first.close();
+      second.close();
+    }
   });
 
   it("creates catalog-compatible tables and performs CRUD, query, and compare-and-set", async () => {
@@ -336,7 +394,7 @@ describe("PostgreSQL live storage acceptance", () => {
     }
   });
 
-  it("commits Entity state and event histories atomically and maintains them in bounded pages", async () => {
+  it("writes Entity state and event histories and maintains them in bounded pages", async () => {
     const scope = context("entity");
     const input = entityInput(scope);
     const id = entityId("history");
@@ -364,6 +422,53 @@ describe("PostgreSQL live storage acceptance", () => {
     } finally {
       commits.close();
       entity.close();
+    }
+  });
+
+  it("retains Entity state history when a later diagnostic insert fails", async () => {
+    const scope = context("entity_partial");
+    const input = entityInput(scope);
+    const entity = entityStorage(factory, input);
+    const commits = EntityCommitStorageFactories.create(factory, input);
+    const events = new EventStore(scope, factory);
+    const layout = eventHistorySpec(TaskSchema);
+    const diagnosticRecords = factory.createRecordStorage(scope, layout.spec, layout.group);
+    const pool = new Pool({ connectionString: url });
+    const mutation = entityMutation(scope, input, "partial");
+    const diagnostic = mutation.diagnostics[0];
+    const constraint = `reject_partial_${run}`;
+    let target: string | undefined;
+    if (diagnostic === undefined) throw new Error("Expected a diagnostic Event.");
+    try {
+      await diagnosticRecords.write(event("seed-diagnostic", "seed"));
+      const table = (diagnosticRecords as unknown as { tableName: string }).tableName;
+      const schema = (await pool.query<{ schema: string }>("SELECT current_schema() AS schema"))
+        .rows[0]?.schema;
+      if (schema === undefined) throw new Error("Expected the active PostgreSQL schema.");
+      target = `${quoted(schema)}.${quoted(table)}`;
+      await pool.query(
+        `ALTER TABLE ${target} DROP CONSTRAINT IF EXISTS "reject_partial_diagnostic"`,
+      );
+      const rejectedBytes = Buffer.from(toBinary(EventSchema, diagnostic)).toString("hex");
+      await pool.query(
+        `ALTER TABLE ${target} ` +
+          `ADD CONSTRAINT ${quoted(constraint)} CHECK ("bytes" <> decode('${rejectedBytes}', 'hex'))`,
+      );
+      await expect(commits.commit(mutation)).rejects.toThrow();
+      await expect(entity.states.backward("partial", 1)).resolves.toEqual(mutation.states);
+      await expect(entity.events.backward("partial", 1)).resolves.toEqual([]);
+      await expect(entity.current.read("partial")).resolves.toBeUndefined();
+      await expect(
+        events.read({ ids: [create(EventIdSchema, { value: "partial-delivery" })] }),
+      ).resolves.toEqual([]);
+    } finally {
+      if (target !== undefined)
+        await pool.query(`ALTER TABLE ${target} DROP CONSTRAINT IF EXISTS ${quoted(constraint)}`);
+      diagnosticRecords.close();
+      events.close();
+      commits.close();
+      entity.close();
+      await pool.end();
     }
   });
 
@@ -440,7 +545,15 @@ function entityId(name: string): string {
 
 function postgresBuilder() {
   const stringifiers = new StringifierRegistry();
-  stringifiers.setTypeRegistry(new TypeRegistry([StringValueSchema]));
+  stringifiers.setTypeRegistry(
+    new TypeRegistry([
+      StringValueSchema,
+      TaskIdSchema,
+      TaskListIdSchema,
+      TaskSchema,
+      TaskCreatedSchema,
+    ]),
+  );
   return PostgresStorageFactory.newBuilder().setStringifierRegistry(stringifiers);
 }
 
@@ -472,30 +585,30 @@ function entityInput(
   context: SingleContext,
   stateHistory = true,
   eventHistory = true,
-): EntityStorageInput<string, StringValue> {
+): EntityStorageInput<string, ReturnType<typeof task>> {
   return {
     context,
     id: {
       clone: (id) => id,
       key: (id) => id,
-      pack: (id) => Identifiers.pack(StringValueSchema, value(id)),
+      pack: (id) => Identifiers.pack(TaskIdSchema, create(TaskIdSchema, { value: id })),
       unpack: (packed) =>
-        packed.typeUrl.endsWith(`/${StringValueSchema.typeName}`)
-          ? fromBinary(StringValueSchema, packed.value).value
+        packed.typeUrl.endsWith(`/${TaskIdSchema.typeName}`)
+          ? fromBinary(TaskIdSchema, packed.value).value
           : undefined,
     },
     columns: [],
     recordSpec: new RecordSpec({
-      sourceType: StringValueSchema,
+      sourceType: TaskSchema,
       recordType: EntityRecordSchema,
       idKind: "string",
       extractId: (record) => {
         if (record.entityId === undefined) throw new Error("Entity record ID is required.");
-        return fromBinary(StringValueSchema, record.entityId.value).value;
+        return fromBinary(TaskIdSchema, record.entityId.value).value;
       },
     }),
-    sourceType: StringValueSchema,
-    stateSchema: StringValueSchema,
+    sourceType: TaskSchema,
+    stateSchema: TaskSchema,
     stateHistory,
     eventHistory,
   };
@@ -503,8 +616,8 @@ function entityInput(
 
 function current(id: string, state: string, version: number): EntityRecord {
   return create(EntityRecordSchema, {
-    entityId: Identifiers.pack(StringValueSchema, value(id)),
-    state: Identifiers.pack(StringValueSchema, value(state)),
+    entityId: Identifiers.pack(TaskIdSchema, create(TaskIdSchema, { value: id })),
+    state: Identifiers.pack(TaskSchema, task(state, id)),
     lifecycleFlags: { archived: false, deleted: false },
     version: create(VersionSchema, {
       number: version,
@@ -515,7 +628,7 @@ function current(id: string, state: string, version: number): EntityRecord {
 
 function entityMutation(
   context: SingleContext,
-  entity: EntityStorageInput<string, StringValue>,
+  entity: EntityStorageInput<string, ReturnType<typeof task>>,
   id: string,
 ) {
   return {
@@ -533,12 +646,28 @@ function event(id: string, entityId: string) {
   return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     context: {
-      producerId: Identifiers.pack(StringValueSchema, value(entityId)),
+      producerId: Identifiers.pack(TaskIdSchema, create(TaskIdSchema, { value: entityId })),
       version: create(VersionSchema, {
         number: 1,
         timestamp: create(TimestampSchema, { seconds: 1n }),
       }),
     },
+    message: AnyMessages.pack(
+      TaskCreatedSchema,
+      create(TaskCreatedSchema, {
+        id: create(TaskIdSchema, { value: entityId }),
+        title: "Created",
+        taskListId: create(TaskListIdSchema, { value: "list-1" }),
+      }),
+    ),
+  });
+}
+
+function task(title: string, id: string) {
+  return create(TaskSchema, {
+    id: create(TaskIdSchema, { value: id }),
+    title,
+    taskListId: create(TaskListIdSchema, { value: "list-1" }),
   });
 }
 

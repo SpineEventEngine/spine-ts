@@ -23,9 +23,9 @@ promise gap-free notifications; it does not redefine normal successive updates
 as a disconnect. Normalized provider plans are capability-gated execution
 contracts: MySQL pushes every admitted filter, order, and bound into contained,
 parameterized SQL instead of fetching a storage group for Node filtering.
-Delivered Inbox rows are removed in bounded cleanup pages through an atomic
-current-ownership-plus-exact-delete provider operation after their optional
-`keepUntil` deduplication protection ends.
+Delivered Inbox rows are removed in bounded cleanup pages by direct ID deletion
+after eligibility and optional `keepUntil` deduplication protection are checked.
+A completed deletion is not rolled back if a lease or deadline later changes.
 `keepUntil` is not a retention setting: Wave 12 adds no second retention
 configuration, timer, or scheduler.
 
@@ -41,9 +41,9 @@ implemented in this order:
    reactors, command-producing methods, and related dispatch endpoints.
 3. `BoundedContext`, assembly, and registration.
 4. Entity kinds, repositories, signal routing, and aggregate storage. Aggregates
-   load latest persisted state and mutate inside transactions; events are a
+   load latest persisted state and mutate during framework handling; events are a
    traceability journal, not aggregate replay input.
-5. Delivery, `Inbox`, signal endpoints, and transactions during event
+5. Delivery, `Inbox`, signal endpoints, and persistence during event
    dispatch.
 6. `Stand` and entity-updated system events.
 7. Real gRPC `CommandService`, `QueryService`, and `SubscriptionService`
@@ -95,14 +95,18 @@ Entity versions manually.
 An Entity save replaces the relevant current record without comparing it with
 an expected previous storage value. There is no Entity optimistic-conflict
 result. This does not remove automatic version advancement, immutable history
-or event collision checks, database transaction retries, or Inbox/shard
+or event collision checks, bounded database persistence retries, or Inbox/shard
 conditional updates.
 
-In-memory commits prepare only the affected Entity and associated records;
-they must not clone whole current-state, history or Event Store collections.
-Memory and transactional databases apply their supported all-or-nothing writes.
-MyISAM and Aria retain their documented ordered partial-write and identical
-storage-retry behavior; a lock is not a rollback-capable transaction.
+An Entity save captures its prepared input once, then writes state history,
+diagnostic history, delivery Events, and current state in order as independent
+records. A failure can leave a completed prefix on every provider. An automatic
+transient retry reuses the captured bytes, versions, and Event IDs; it never
+reruns the handler. Immutable writes accept an identical retry and reject a
+conflicting value. Event presence alone does not prove that current state was
+written. Separate saves have no whole-sequence serialization guarantee, so
+current-state writes can interleave. In-memory commits prepare only the
+affected Entity and associated records; they do not clone whole collections.
 
 Inbox delivery continues forward through a complete scan before restarting a
 scan that delivered messages. It skips cleanup attempts for unexpired delivered
@@ -176,16 +180,16 @@ blocking requirements for all framework and example work.
   actual returned message against the invoked handler's declared schemas and
   preserves return order. Absent optional results are not dispatched.
 - `@Subscribe` handlers must declare an explicit `void` or `Promise<void>` return type.
-- Aggregates update state directly in framework-controlled transactions;
+- Aggregates update state directly during framework-controlled handling;
   they are not event-sourced, matching current Spine JVM behavior.
 - Validate required nonempty results and every returned message before
   committing Entity changes or publishing outputs. Subscriber results must be
   exactly `undefined` at runtime, even though their declaration is `void`.
   Reject `null` results and entries; use `undefined` for absence. A valid
   no-output reaction still commits legitimate state and lifecycle changes.
-- End-user application code must not start, commit, roll back, or otherwise
-  control framework entity transactions. Entity transactions are opened,
-  validated, committed, and rolled back by the framework runtime.
+- End-user application code must not control framework Entity persistence.
+  The framework validates prepared results and performs the ordered writes;
+  it may leave a completed prefix after a persistence failure.
 - End-user application code must not create framework-internal `Event` envelopes
   or internal `EventId` values. The framework wraps returned domain event
   messages and generates internal event IDs.

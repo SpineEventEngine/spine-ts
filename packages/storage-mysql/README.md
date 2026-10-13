@@ -14,7 +14,7 @@ For database requirements, query limits, lifecycle, and error details, see
 ## 💡 Why use it?
 
 - ✅ Stores Spine records durably in a MySQL database.
-- ✅ Manages a bounded `mysql2` connection pool; InnoDB writes are transactional.
+- ✅ Manages a bounded `mysql2` connection pool and atomic single-record conditions.
 - ✅ Supports declared-column filters, sorting, offsets, limits, and
   continuations.
 - ✅ Keeps adapter tables private behind the common `RecordStorage` API.
@@ -114,10 +114,10 @@ pnpm typecheck:build
 ## ✨ Supported records and queries
 
 The adapter performs record CRUD, payload-based compare-and-set, named-column
-queries, sort order, offsets, limits, and keyset continuations. InnoDB makes
-`writeAll` and Entity commits transactional. MyISAM and Aria instead use
-deterministic ordered writes with immutable-prefix retry semantics; a failed
-write may require an identical retry. It supports primitive and structured
+queries, sort order, offsets, limits, and keyset continuations. Batches and
+Entity commits use independent ordered records on InnoDB, MyISAM, and Aria.
+A failed operation can leave its completed prefix; an identical Entity retry
+reuses prepared versions and Event IDs. It supports primitive and structured
 storage IDs. Declared columns support strings, booleans, integral Protobuf
 numbers, enums, bytes, messages, `Timestamp`, and `Version`. Spine JVM JDBC
 does not support `float` or `double` record columns, so this adapter rejects

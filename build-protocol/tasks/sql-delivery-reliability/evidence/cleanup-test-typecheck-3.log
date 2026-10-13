@@ -1,0 +1,18 @@
+packages/server/test/services/spine-services.test.ts(843,41): error TS2493: Tuple type '[]' of length '0' has no element at index '0'.
+packages/server/test/services/spine-services.test.ts(844,41): error TS2493: Tuple type '[]' of length '0' has no element at index '0'.
+packages/storage-mysql/test/mysql-record-storage.test.ts(1204,23): error TS2379: Argument of type '{ sql: string; values: readonly unknown[] | undefined; }' is not assignable to parameter of type '{ sql: string; values?: readonly unknown[]; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'values' are incompatible.
+    Type 'readonly unknown[] | undefined' is not assignable to type 'readonly unknown[]'.
+      Type 'undefined' is not assignable to type 'readonly unknown[]'.
+packages/storage-mysql/test/mysql-record-storage.test.ts(1228,23): error TS2379: Argument of type '{ sql: string; values: readonly unknown[] | undefined; }' is not assignable to parameter of type '{ sql: string; values?: readonly unknown[]; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'values' are incompatible.
+    Type 'readonly unknown[] | undefined' is not assignable to type 'readonly unknown[]'.
+      Type 'undefined' is not assignable to type 'readonly unknown[]'.
+packages/storage-mysql/test/mysql-record-storage.test.ts(1250,20): error TS2379: Argument of type '{ sql: string; values: readonly unknown[] | undefined; }' is not assignable to parameter of type '{ sql: string; values?: readonly unknown[]; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'values' are incompatible.
+    Type 'readonly unknown[] | undefined' is not assignable to type 'readonly unknown[]'.
+      Type 'undefined' is not assignable to type 'readonly unknown[]'.
+packages/storage-mysql/test/mysql-record-storage.test.ts(1282,20): error TS2379: Argument of type '{ sql: string; values: readonly unknown[] | undefined; }' is not assignable to parameter of type '{ sql: string; values?: readonly unknown[]; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'values' are incompatible.
+    Type 'readonly unknown[] | undefined' is not assignable to type 'readonly unknown[]'.
+      Type 'undefined' is not assignable to type 'readonly unknown[]'.

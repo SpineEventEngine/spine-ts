@@ -12,10 +12,11 @@
  * the License.
  */
 
+import { randomUUID } from "node:crypto";
 import { create } from "@bufbuild/protobuf";
-import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
-import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
+import { ShardIndexSchema, WorkerIdSchema } from "@spine-event-engine/proto/delivery";
+import { TaskListIdSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
 import { Datastore } from "@google-cloud/datastore";
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
@@ -24,10 +25,14 @@ import { createConnection, type RowDataPacket } from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { Inbox } from "../../src/delivery/inbox.js";
+import { Delivery } from "../../src/delivery/delivery.js";
 import { InboxStorage } from "../../src/delivery/inbox-storage.js";
 import { InboxRecords, inboxRecordSpec } from "../../src/delivery/inbox-records.js";
+import {
+  ShardedWorkRegistry,
+  shardSessionRecordSpec,
+} from "../../src/delivery/sharded-work-registry.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
-import { ShardedWorkRegistry } from "../../src/delivery/sharded-work-registry.js";
 import { createMessage } from "./inbox-message-fixture.js";
 import { providerEnabled } from "./inbox-provider-selection.js";
 
@@ -36,6 +41,7 @@ const postgresqlUrl = process.env.SPINE_TS_POSTGRESQL_URL;
 const datastoreHost = process.env.DATASTORE_EMULATOR_HOST;
 const datastoreProject = process.env.DATASTORE_PROJECT_ID ?? "spine-wave12";
 const inboxProvider = process.env.SPINE_TS_INBOX_PROVIDER;
+const mysqlEngine = process.env.SPINE_TS_MYSQL_ENGINE?.toUpperCase();
 
 describe.skipIf(!providerEnabled(inboxProvider, "mysql", mysqlUrl !== undefined))(
   "MySQL Inbox cleanup",
@@ -46,7 +52,7 @@ describe.skipIf(!providerEnabled(inboxProvider, "mysql", mysqlUrl !== undefined)
     beforeAll(async () => {
       if (mysqlUrl === undefined) throw new Error("SPINE_TS_MYSQL_URL is required.");
       const stringifiers = new StringifierRegistry();
-      stringifiers.setTypeRegistry(new TypeRegistry([StringValueSchema]));
+      stringifiers.setTypeRegistry(new TypeRegistry([TaskListIdSchema]));
       factory = await MysqlStorageFactory.newBuilder()
         .setOptions({ url: mysqlUrl })
         .setStringifierRegistry(stringifiers)
@@ -61,23 +67,137 @@ describe.skipIf(!providerEnabled(inboxProvider, "mysql", mysqlUrl !== undefined)
       secondFactory.close();
     });
 
-    it("deletes only the exact delivered snapshot under the current leased session", async () => {
+    it("deletes eligible delivered IDs directly", async () => {
       const context = {
-        name: `t0191_mysql_${String(Date.now())}`,
+        name: `t0191_mysql_${randomUUID()}`,
         multitenant: false,
       } as const;
       await expect(removeExact(factory, context)).resolves.toBeUndefined();
     });
 
-    it("preserves a physically present row for a stale owner across independently opened factories", async () => {
+    it("shares direct ID deletion across independently opened factories", async () => {
       const context = {
-        name: `t0191_mysql_two_owner_${String(Date.now())}`,
+        name: `t0191_mysql_two_factory_${randomUUID()}`,
         multitenant: false,
       } as const;
       await expect(
         removeAcrossFactories(factory, secondFactory, context, () => mysqlCount(factory, context)),
       ).resolves.toBeUndefined();
     });
+
+    it.skipIf(mysqlEngine !== "MYISAM" && mysqlEngine !== "ARIA")(
+      "deletes Inbox rows and updates shard sessions on physical nontransactional tables",
+      async () => {
+        if (mysqlUrl === undefined) throw new Error("SPINE_TS_MYSQL_URL is required.");
+        if (mysqlEngine === undefined) throw new Error("Expected a selected MySQL engine.");
+        const context = {
+          name: `t0191_mysql_physical_${randomUUID()}`,
+          multitenant: false,
+        } as const;
+        const inboxStorage = factory.createRecordStorage(context, inboxRecordSpec);
+        const inboxId = InboxRecords.write(createMessage(`${context.name}-init`, "init", 1n)).id;
+        if (inboxId === undefined) throw new Error("Expected an Inbox ID.");
+        await inboxStorage.read(inboxId);
+        const inboxTable = (inboxStorage as unknown as { tableName: string }).tableName;
+        inboxStorage.close();
+        const sessionStorage = factory.createRecordStorage(context, shardSessionRecordSpec);
+        await sessionStorage.read(create(ShardIndexSchema, { index: 0, ofTotal: 1 }));
+        const sessionTable = (sessionStorage as unknown as { tableName: string }).tableName;
+        sessionStorage.close();
+        const connection = await createConnection(mysqlUrl);
+        const originals = new Map<string, { engine: string; charset: string; collation: string }>();
+        try {
+          for (const table of [inboxTable, sessionTable]) {
+            const [original] = await connection.query<(RowDataPacket & { engine: string })[]>(
+              "SELECT ENGINE AS engine FROM information_schema.tables " +
+                "WHERE table_schema = DATABASE() AND table_name = ?",
+              [table],
+            );
+            const prior = original[0]?.engine.toUpperCase();
+            if (prior === undefined || !["INNODB", "MYISAM", "ARIA"].includes(prior))
+              throw new Error("Expected a supported physical table engine.");
+            const [columns] = await connection.query<
+              (RowDataPacket & { charset: string; collation: string })[]
+            >(
+              "SELECT CHARACTER_SET_NAME AS charset, COLLATION_NAME AS collation " +
+                "FROM information_schema.columns WHERE table_schema = DATABASE() " +
+                "AND table_name = ? AND column_name = 'ID'",
+              [table],
+            );
+            const charset = columns[0]?.charset;
+            const collation = columns[0]?.collation;
+            if (
+              charset === undefined ||
+              collation === undefined ||
+              !/^[a-z0-9_]+$/i.test(charset) ||
+              !/^[a-z0-9_]+$/i.test(collation)
+            )
+              throw new Error("Expected a supported ID column collation.");
+            originals.set(table, { engine: prior, charset, collation });
+            await connection.query(
+              `ALTER TABLE \`${table}\` MODIFY \`ID\` VARCHAR(512) ` +
+                `CHARACTER SET latin1 COLLATE latin1_bin NOT NULL, ENGINE=${mysqlEngine}`,
+            );
+            const [rows] = await connection.query<(RowDataPacket & { engine: string })[]>(
+              "SELECT ENGINE AS engine FROM information_schema.tables " +
+                "WHERE table_schema = DATABASE() AND table_name = ?",
+              [table],
+            );
+            expect(rows[0]?.engine.toUpperCase()).toBe(mysqlEngine);
+          }
+          await removeExact(factory, context);
+          const registry = new ShardedWorkRegistry({ context, storageFactory: factory });
+          const shard = ShardIndex.single();
+          const worker = create(WorkerIdSchema, { nodeId: { value: "node-1" }, value: "worker-1" });
+          const session = await registry.pickUp(shard, worker);
+          expect(session).toBeDefined();
+          if (session === undefined) throw new Error("Expected a shard session.");
+          await expect(registry.release(session)).resolves.toBe(true);
+
+          const inbox = open(factory, context);
+          const expired = createMessage(
+            `${context.name}-expired`,
+            "expired",
+            3n,
+            new Date("2026-07-01T00:00:00.000Z"),
+          );
+          const pending = createMessage(
+            `${context.name}-pending`,
+            "pending",
+            4n,
+            new Date("2026-07-01T01:00:00.000Z"),
+          );
+          await inbox.storage.write(expired);
+          await inbox.markDelivered(expired);
+          await inbox.storage.write(pending);
+          const seen: string[] = [];
+          const delivery = new Delivery({
+            context,
+            storageFactory: factory,
+            pageSize: 1,
+            inbox,
+            workRegistry: registry,
+          });
+          await expect(
+            delivery.drain(shard, {
+              onMessage: (row) => {
+                seen.push(row.id.value);
+              },
+            }),
+          ).resolves.toMatchObject({ status: "DRAINED", delivered: 1 });
+          expect(seen).toEqual([pending.id.value]);
+          await expect(inbox.readMessage(expired.id)).resolves.toBeUndefined();
+        } finally {
+          for (const [table, original] of originals)
+            await connection.query(
+              `ALTER TABLE \`${table}\` MODIFY \`ID\` VARCHAR(512) ` +
+                `CHARACTER SET ${original.charset} COLLATE ${original.collation} ` +
+                `NOT NULL, ENGINE=${original.engine}`,
+            );
+          await connection.end();
+        }
+      },
+    );
   },
 );
 
@@ -90,7 +210,7 @@ describe.skipIf(!providerEnabled(inboxProvider, "postgresql", postgresqlUrl !== 
     beforeAll(async () => {
       if (postgresqlUrl === undefined) throw new Error("SPINE_TS_POSTGRESQL_URL is required.");
       const stringifiers = new StringifierRegistry();
-      stringifiers.setTypeRegistry(new TypeRegistry([StringValueSchema]));
+      stringifiers.setTypeRegistry(new TypeRegistry([TaskListIdSchema]));
       factory = await PostgresStorageFactory.newBuilder()
         .setOptions({ url: postgresqlUrl })
         .setStringifierRegistry(stringifiers)
@@ -105,17 +225,17 @@ describe.skipIf(!providerEnabled(inboxProvider, "postgresql", postgresqlUrl !== 
       secondFactory.close();
     });
 
-    it("deletes only the exact delivered snapshot under the current leased session", async () => {
+    it("deletes eligible delivered IDs directly", async () => {
       const context = {
-        name: `t0230_postgresql_${String(Date.now())}`,
+        name: `t0230_postgresql_${randomUUID()}`,
         multitenant: false,
       } as const;
       await expect(removeExact(factory, context)).resolves.toBeUndefined();
     });
 
-    it("preserves a stale delivered row across independently opened factories", async () => {
+    it("shares direct ID deletion across independently opened factories", async () => {
       const context = {
-        name: `t0230_postgresql_two_factory_${String(Date.now())}`,
+        name: `t0230_postgresql_two_factory_${randomUUID()}`,
         multitenant: false,
       } as const;
       await expect(removeAcrossFactories(factory, secondFactory, context)).resolves.toBeUndefined();
@@ -126,15 +246,15 @@ describe.skipIf(!providerEnabled(inboxProvider, "postgresql", postgresqlUrl !== 
 describe.skipIf(!providerEnabled(inboxProvider, "datastore", datastoreHost !== undefined))(
   "Datastore Inbox cleanup",
   () => {
-    it("deletes only the exact delivered snapshot under the current leased session", async () => {
+    it("deletes eligible delivered IDs directly", async () => {
       const stringifiers = new StringifierRegistry();
-      stringifiers.setTypeRegistry(new TypeRegistry([StringValueSchema]));
+      stringifiers.setTypeRegistry(new TypeRegistry([TaskListIdSchema]));
       const factory = DatastoreStorageFactory.newBuilder()
         .setClient(new Datastore({ projectId: datastoreProject }))
         .setStringifierRegistry(stringifiers)
         .build();
       const context = {
-        name: `t0191_datastore_${String(Date.now())}`,
+        name: `t0191_datastore_${randomUUID()}`,
         multitenant: false,
       } as const;
       try {
@@ -144,9 +264,9 @@ describe.skipIf(!providerEnabled(inboxProvider, "datastore", datastoreHost !== u
       }
     });
 
-    it("preserves a physically present row for a stale owner across independently opened factories", async () => {
+    it("shares direct ID deletion across independently opened factories", async () => {
       const stringifiers = new StringifierRegistry();
-      stringifiers.setTypeRegistry(new TypeRegistry([StringValueSchema]));
+      stringifiers.setTypeRegistry(new TypeRegistry([TaskListIdSchema]));
       const firstFactory = DatastoreStorageFactory.newBuilder()
         .setClient(new Datastore({ projectId: datastoreProject }))
         .setStringifierRegistry(stringifiers)
@@ -156,7 +276,7 @@ describe.skipIf(!providerEnabled(inboxProvider, "datastore", datastoreHost !== u
         .setStringifierRegistry(stringifiers)
         .build();
       const context = {
-        name: `t0191_datastore_two_owner_${String(Date.now())}`,
+        name: `t0191_datastore_two_factory_${randomUUID()}`,
         multitenant: false,
       } as const;
       try {
@@ -177,60 +297,30 @@ async function removeExact(
   factory: Parameters<typeof open>[0],
   context: { readonly name: string; readonly multitenant: false },
 ): Promise<void> {
-  let now = Date.now() + 7_200_000;
+  const now = Date.now() + 7_200_000;
   const inbox = open(factory, context, () => new Date(now));
-  const registry = new ShardedWorkRegistry({
-    context,
-    storageFactory: factory,
-    leaseMs: 1_000,
-    now: () => new Date(now),
-  });
-  const worker = (node: string) =>
-    create(WorkerIdSchema, { nodeId: { value: node }, value: "worker" });
-  const seed = `${context.name}-${String(Date.now())}`;
-  const session = await registry.pickUp(ShardIndex.single(), worker("current"));
-  if (session === undefined) throw new Error("Expected current provider session.");
-  const message = createMessage(`${seed}-provider`, "exact", 1n);
+  const seed = `${context.name}-${randomUUID()}`;
+  const message = createMessage(`${seed}-delivered`, "direct", 1n);
   await inbox.storage.write(message);
   const delivered = await inbox.markDelivered(message);
   if (delivered === undefined) throw new Error("Expected delivered provider row.");
-  await expect(inbox.removeDelivered(delivered, session)).resolves.toBe(true);
-  await expect(inbox.readMessage(message.id)).resolves.toBeUndefined();
-
-  const stale = createMessage(`${seed}-stale`, "stale", 2n);
-  await inbox.storage.write(stale);
-  const staleDelivered = await inbox.markDelivered(stale);
-  if (staleDelivered === undefined) throw new Error("Expected stale delivered row.");
-  now += 1_000;
-  const replacement = await registry.pickUp(ShardIndex.single(), worker("replacement"));
-  expect(replacement).toBeDefined();
-  await expect(inbox.removeDelivered(staleDelivered, session)).resolves.toBe(false);
-  await expect(inbox.readMessage(stale.id)).resolves.toMatchObject({ status: "DELIVERED" });
-
-  const expired = createMessage(`${seed}-expired`, "expired", 3n);
-  await inbox.storage.write(expired);
-  const expiredDelivered = await inbox.markDelivered(expired);
-  if (expiredDelivered === undefined || replacement === undefined)
-    throw new Error("Expected expired row and replacement session.");
-  now += 1_001;
-  await expect(inbox.removeDelivered(expiredDelivered, replacement)).resolves.toBe(false);
-  await expect(inbox.readMessage(expired.id)).resolves.toMatchObject({ status: "DELIVERED" });
-
-  const current = await registry.pickUp(ShardIndex.single(), worker("current-again"));
-  if (current === undefined) throw new Error("Expected renewed provider session.");
-
-  const replaced = createMessage(`${seed}-replaced`, "replaced", 4n);
-  await inbox.storage.write(replaced);
-  const replacedDelivered = await inbox.markDelivered(replaced);
-  if (replacedDelivered === undefined) throw new Error("Expected replaced delivered row.");
   await expect(
-    inbox.removeDelivered(
-      { ...replacedDelivered, version: replacedDelivered.version + 1n },
-      current,
-    ),
-  ).resolves.toBe(false);
-  await expect(inbox.readMessage(replaced.id)).resolves.toMatchObject({ status: "DELIVERED" });
-  await registry.release(current);
+    inbox.removeDelivered({ ...delivered, version: delivered.version + 1n }),
+  ).resolves.toBe(true);
+  await expect(inbox.readMessage(message.id)).resolves.toBeUndefined();
+  await expect(inbox.removeDelivered(delivered)).resolves.toBe(false);
+
+  const protectedMessage = {
+    ...createMessage(`${seed}-protected`, "protected", 2n),
+    keepUntil: new Date(now + 1),
+  };
+  await inbox.storage.write(protectedMessage);
+  const protectedDelivered = await inbox.markDelivered(protectedMessage);
+  if (protectedDelivered === undefined) throw new Error("Expected protected provider row.");
+  await expect(inbox.removeDelivered(protectedDelivered)).resolves.toBe(false);
+  await expect(inbox.readMessage(protectedMessage.id)).resolves.toMatchObject({
+    status: "DELIVERED",
+  });
 }
 
 async function removeAcrossFactories(
@@ -239,40 +329,17 @@ async function removeAcrossFactories(
   context: { readonly name: string; readonly multitenant: false },
   count?: (message: Parameters<Inbox["removeDelivered"]>[0]) => Promise<number>,
 ): Promise<void> {
-  let now = Date.now() + 7_200_000;
-  const firstInbox = open(firstFactory, context, () => new Date(now));
-  const secondInbox = open(secondFactory, context, () => new Date(now));
-  const firstRegistry = new ShardedWorkRegistry({
-    context,
-    storageFactory: firstFactory,
-    leaseMs: 1_000,
-    now: () => new Date(now),
-  });
-  const secondRegistry = new ShardedWorkRegistry({
-    context,
-    storageFactory: secondFactory,
-    leaseMs: 1_000,
-    now: () => new Date(now),
-  });
-  const worker = (node: string) =>
-    create(WorkerIdSchema, { nodeId: { value: node }, value: "two-owner" });
-  const first = await firstRegistry.pickUp(ShardIndex.single(), worker("first"));
-  if (first === undefined) throw new Error("Expected first provider session.");
-  const message = createMessage(`${context.name}-row`, "two-owner", 1n);
+  const firstInbox = open(firstFactory, context);
+  const secondInbox = open(secondFactory, context);
+  const message = createMessage(`${context.name}-row`, "shared", 1n);
   await firstInbox.storage.write(message);
   const delivered = await firstInbox.markDelivered(message);
   if (delivered === undefined) throw new Error("Expected delivered provider row.");
-
-  now += 1_000;
-  const second = await secondRegistry.pickUp(ShardIndex.single(), worker("second"));
-  if (second === undefined) throw new Error("Expected replacement provider session.");
-  await expect(firstInbox.removeDelivered(delivered, first)).resolves.toBe(false);
   if (count !== undefined) await expect(count(delivered)).resolves.toBe(1);
-  await expect(secondInbox.readMessage(message.id)).resolves.toMatchObject({ status: "DELIVERED" });
-  await expect(secondInbox.removeDelivered(delivered, second)).resolves.toBe(true);
+  await expect(secondInbox.removeDelivered(delivered)).resolves.toBe(true);
   if (count !== undefined) await expect(count(delivered)).resolves.toBe(0);
-  await expect(secondInbox.readMessage(message.id)).resolves.toBeUndefined();
-  await secondRegistry.release(second);
+  await expect(firstInbox.readMessage(message.id)).resolves.toBeUndefined();
+  await expect(firstInbox.removeDelivered(delivered)).resolves.toBe(false);
 }
 
 async function mysqlCount(

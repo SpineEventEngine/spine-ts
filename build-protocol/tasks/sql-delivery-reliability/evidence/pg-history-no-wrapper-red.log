@@ -1,0 +1,26 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/storage-postgres/test/postgres-entity-history.test.ts (29 tests | 1 failed | 28 skipped) 8ms
+     × appends and reads history without a transaction or advisory lock 8ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/storage-postgres/test/postgres-entity-history.test.ts > PostgreSQL Entity history > appends and reads history without a transaction or advisory lock
+AssertionError: expected [ 'BEGIN', …(33) ] to not include 'BEGIN'
+ ❯ packages/storage-postgres/test/postgres-entity-history.test.ts:388:66
+    386|     await events.backward("task", 1);
+    387|
+    388|     expect(driver.calls.slice(before).map(({ sql }) => sql)).not.toCon…
+       |                                                                  ^
+    389|     expect(driver.calls.slice(before).some(({ sql }) => sql.includes("…
+    390|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 28 skipped (29)
+   Start at  19:11:04
+   Duration  570ms (transform 297ms, setup 0ms, import 438ms, tests 8ms, environment 0ms)
+

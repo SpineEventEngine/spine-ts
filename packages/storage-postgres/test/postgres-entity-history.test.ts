@@ -13,12 +13,7 @@
  */
 
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import {
-  AnySchema,
-  StringValueSchema,
-  TimestampSchema,
-  type StringValue,
-} from "@bufbuild/protobuf/wkt";
+import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Identifiers, StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
 import { EventSchema, type Event } from "@spine-event-engine/proto";
 import {
@@ -28,6 +23,16 @@ import {
 import { RecordSpec } from "@spine-event-engine/storage";
 import type { EntityStorageInput } from "@spine-event-engine/storage/provider";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  TaskIdSchema,
+  TaskListIdSchema,
+  type TaskId,
+} from "../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
+import { TaskCreatedSchema } from "../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
+import {
+  TaskSchema,
+  type Task,
+} from "../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 
 import { entityStorage } from "./postgres-entity-seam.js";
 
@@ -73,7 +78,7 @@ const driver = vi.hoisted(() => {
     }
     if (sql.includes("schemata")) return Promise.resolve({ rowCount: 1, rows: [] });
     if (sql.includes("columns WHERE")) {
-      if (values[1] === "google_protobuf_stringvalue")
+      if (values[1] === "spine_examples_todo_task")
         return Promise.resolve({
           rows: [
             {
@@ -345,10 +350,10 @@ describe("PostgreSQL Entity history", () => {
 
     const entity = (
       factory as unknown as {
-        createEntityStorage(input: EntityStorageInput<string, StringValue>): {
+        createEntityStorage(input: EntityStorageInput<TaskId, Task>): {
           readonly current: unknown;
-          readonly states: { backward(id: string, depth: number): Promise<readonly unknown[]> };
-          readonly events: { backward(id: string, depth: number): Promise<readonly unknown[]> };
+          readonly states: { backward(id: TaskId, depth: number): Promise<readonly unknown[]> };
+          readonly events: { backward(id: TaskId, depth: number): Promise<readonly unknown[]> };
           isOpen(): boolean;
         };
       }
@@ -356,15 +361,15 @@ describe("PostgreSQL Entity history", () => {
 
     expect(entity.current).toBeDefined();
     expect(entity.isOpen()).toBe(true);
-    await expect(entity.states.backward("task", 1)).resolves.toEqual([]);
-    await expect(entity.events.backward("task", 1)).resolves.toEqual([]);
+    await expect(entity.states.backward(taskId("task"), 1)).resolves.toEqual([]);
+    await expect(entity.events.backward(taskId("task"), 1)).resolves.toEqual([]);
   });
 
   it("enables the state-history port when the Entity input requests history", async () => {
     const factory = await postgresFactory();
     const entity = (
       factory as unknown as {
-        createEntityStorage(input: EntityStorageInput<string, StringValue>): {
+        createEntityStorage(input: EntityStorageInput<TaskId, Task>): {
           readonly states: { append(record: EntityRecord): Promise<void> };
         };
       }
@@ -373,24 +378,61 @@ describe("PostgreSQL Entity history", () => {
     await expect(entity.states.append(stateRecord("task", "one", 1))).resolves.toBeUndefined();
   });
 
+  it("appends and reads history without a transaction or advisory lock", async () => {
+    const factory = await postgresFactory();
+    const states = entityStorage(factory, entityInput(true)).states;
+    const events = entityStorage(factory, entityInput(false, true)).events;
+    await states.backward(taskId("task"), 1);
+    await events.backward(taskId("task"), 1);
+    const before = driver.calls.length;
+
+    await states.append(stateRecord("task", "one", 1));
+    await events.append(eventRecord("event-1", "task", 1));
+    await states.backward(taskId("task"), 1);
+    await states.stateAt(taskId("task"), create(TimestampSchema, { seconds: 1n }));
+    await events.backward(taskId("task"), 1);
+
+    expect(driver.calls.slice(before).map(({ sql }) => sql)).not.toContain("BEGIN");
+    expect(driver.calls.slice(before).some(({ sql }) => sql.includes("pg_advisory"))).toBe(false);
+  });
+
+  it("trims and truncates bounded history pages without a session lock or transaction", async () => {
+    const factory = await postgresFactory();
+    const states = entityStorage(factory, entityInput(true)).states;
+    const events = entityStorage(factory, entityInput(false, true)).events;
+    await states.backward(taskId("task"), 1);
+    await events.backward(taskId("task"), 1);
+    const before = driver.calls.length;
+
+    await states.trim(taskId("task"), 1);
+    await states.truncate(create(TimestampSchema, { seconds: 5n }));
+    await events.truncate(create(TimestampSchema, { seconds: 5n }));
+
+    const calls = driver.calls.slice(before).map(({ sql }) => sql);
+    expect(calls.some((sql) => sql.includes("pg_advisory"))).toBe(false);
+    expect(calls).not.toContain("BEGIN");
+    expect(calls).not.toContain("COMMIT");
+    expect(calls.some((sql) => sql.startsWith("DELETE"))).toBe(true);
+  });
+
   it("reads state at a timestamp and bounds state and event history continuations", async () => {
     const factory = await postgresFactory();
     const states = entityStorage(factory, entityInput(true)).states;
     const events = entityStorage(factory, entityInput(false, true)).events;
-    const state = create(StringValueSchema, { value: "at-five" });
+    const state = task("task", "at-five");
     const before = driver.calls.length;
     driver.setHistoryRecords([
       { bytes: toBinary(EntityRecordSchema, stateRecord("task", "at-five", 1)) },
     ]);
     await expect(
-      states.stateAt("task", create(TimestampSchema, { seconds: 5n, nanos: 4 })),
+      states.stateAt(taskId("task"), create(TimestampSchema, { seconds: 5n, nanos: 4 })),
     ).resolves.toEqual(state);
     driver.setHistoryRecords([]);
     await expect(
-      states.stateAt("task", create(TimestampSchema, { seconds: 6n })),
+      states.stateAt(taskId("task"), create(TimestampSchema, { seconds: 6n })),
     ).resolves.toBeUndefined();
-    await states.backward("task", 2, 9n);
-    await events.backward("task", 3, 10n);
+    await states.backward(taskId("task"), 2, 9n);
+    await events.backward(taskId("task"), 3, 10n);
 
     const calls = driver.calls.slice(before);
     expect(
@@ -409,7 +451,7 @@ describe("PostgreSQL Entity history", () => {
     const at = create(TimestampSchema, { seconds: 5n });
     driver.setHistoryRecords([{ bytes: toBinary(EntityRecordSchema, create(EntityRecordSchema)) }]);
 
-    await expect(states.stateAt("task", at)).resolves.toBeUndefined();
+    await expect(states.stateAt(taskId("task"), at)).resolves.toBeUndefined();
 
     driver.setHistoryRecords([
       {
@@ -417,14 +459,14 @@ describe("PostgreSQL Entity history", () => {
           EntityRecordSchema,
           create(EntityRecordSchema, {
             state: {
-              typeUrl: "type.googleapis.com/google.protobuf.StringValue",
+              typeUrl: `type.spine.io/${TaskSchema.typeName}`,
               value: Uint8Array.of(255),
             },
           }),
         ),
       },
     ]);
-    await expect(states.stateAt("task", at)).rejects.toThrow(
+    await expect(states.stateAt(taskId("task"), at)).rejects.toThrow(
       /stored PostgreSQL state data is invalid/i,
     );
     driver.setHistoryRecords([]);
@@ -434,13 +476,15 @@ describe("PostgreSQL Entity history", () => {
     const factory = await postgresFactory();
     const current = entityStorage(factory, entityInput()).current;
     const record = stateRecord("task", "current", 2);
-    driver.setHistoryRecords([{ ID: "task", bytes: toBinary(EntityRecordSchema, record) }]);
+    driver.setHistoryRecords([
+      { ID: '{"value":"task"}', bytes: toBinary(EntityRecordSchema, record) },
+    ]);
 
     await expect(current.write(record)).resolves.toBeUndefined();
-    await expect(current.read("task")).resolves.toEqual(record);
+    await expect(current.read(taskId("task"))).resolves.toEqual(record);
     await expect(current.query({})).resolves.toEqual([
       {
-        id: "task",
+        id: taskId("task"),
         record,
         columns: new Map(),
       },
@@ -454,13 +498,17 @@ describe("PostgreSQL Entity history", () => {
     const states = entityStorage(factory, entityInput(true)).states;
     const events = entityStorage(factory, entityInput(false, true)).events;
 
-    await expect(states.backward("task", 0)).rejects.toThrow(/positive finite integer/i);
-    await expect(events.backward("task", Number.NaN)).rejects.toThrow(/positive finite integer/i);
-    await expect(states.backward("task", Number.POSITIVE_INFINITY)).rejects.toThrow(
+    await expect(states.backward(taskId("task"), 0)).rejects.toThrow(/positive finite integer/i);
+    await expect(events.backward(taskId("task"), Number.NaN)).rejects.toThrow(
       /positive finite integer/i,
     );
-    await expect(states.trim("task", -1)).rejects.toThrow(/non-negative safe integer/i);
-    await expect(states.trim("task", Number.NaN)).rejects.toThrow(/non-negative safe integer/i);
+    await expect(states.backward(taskId("task"), Number.POSITIVE_INFINITY)).rejects.toThrow(
+      /positive finite integer/i,
+    );
+    await expect(states.trim(taskId("task"), -1)).rejects.toThrow(/non-negative safe integer/i);
+    await expect(states.trim(taskId("task"), Number.NaN)).rejects.toThrow(
+      /non-negative safe integer/i,
+    );
   });
 
   it("does not open a deletion page when history has no pre-cutoff high-water record", async () => {
@@ -484,8 +532,12 @@ describe("PostgreSQL Entity history", () => {
     entity.close();
     entity.close();
 
-    await expect(entity.states.backward("task", 1)).rejects.toThrow(/state history is closed/i);
-    await expect(entity.events.backward("task", 1)).rejects.toThrow(/event history is closed/i);
+    await expect(entity.states.backward(taskId("task"), 1)).rejects.toThrow(
+      /state history is closed/i,
+    );
+    await expect(entity.events.backward(taskId("task"), 1)).rejects.toThrow(
+      /event history is closed/i,
+    );
     await expect(entity.events.append(eventRecord("closed", "task", 1))).rejects.toThrow(
       /event history is closed/i,
     );
@@ -495,7 +547,7 @@ describe("PostgreSQL Entity history", () => {
     const factory = await postgresFactory();
     const entity = entityStorage(factory, entityInput(true));
 
-    await expect(entity.states.trim("task", 0)).resolves.toBeUndefined();
+    await expect(entity.states.trim(taskId("task"), 0)).resolves.toBeUndefined();
 
     expect(driver.calls.filter(({ sql }) => trimPage(sql)).map(({ sql }) => sql)).toEqual([
       expect.stringContaining('("version", "created", "ID") <= ($2, $3, $4)'),
@@ -514,7 +566,7 @@ describe("PostgreSQL Entity history", () => {
     const entity = entityStorage(factory, entityInput(true));
     const before = driver.calls.length;
 
-    await entity.states.trim("task", 0);
+    await entity.states.trim(taskId("task"), 0);
 
     const calls = driver.calls.slice(before).filter(({ sql }) => trimPage(sql));
     expect(calls).toHaveLength(2);
@@ -538,7 +590,7 @@ describe("PostgreSQL Entity history", () => {
     const before = driver.calls.length;
 
     try {
-      await states.trim("task", keep);
+      await states.trim(taskId("task"), keep);
       expect(
         driver
           .stateRows()
@@ -566,101 +618,6 @@ describe("PostgreSQL Entity history", () => {
     }
   });
 
-  it("discards the trim client and reports a sanitized error when advisory unlock is false", async () => {
-    const factory = await postgresFactory();
-    const entity = entityStorage(factory, entityInput(true));
-    const releases = driver.release.mock.calls.length;
-    driver.failUnlock(false);
-
-    await expect(entity.states.trim("task", 0)).rejects.toThrow(/history cleanup failed/i);
-
-    expect(driver.release.mock.calls.length).toBeGreaterThan(releases);
-    expect(driver.release.mock.calls.at(-1)?.[0]).toBeInstanceOf(Error);
-  });
-
-  it("accepts PostgreSQL's named shared advisory unlock result", async () => {
-    const factory = await postgresFactory();
-    const entity = entityStorage(factory, entityInput(true));
-
-    await expect(entity.states.trim("task", 0)).resolves.toBeUndefined();
-  });
-
-  it("releases successful state trim Entity and family locks in reverse order", async () => {
-    const factory = await postgresFactory();
-    const entity = entityStorage(factory, entityInput(true));
-    const before = driver.calls.length;
-
-    await expect(entity.states.trim("task", 0)).resolves.toBeUndefined();
-
-    const locks = driver.calls
-      .slice(before)
-      .filter(
-        ({ sql }) =>
-          sql === "SELECT pg_advisory_unlock($1)" || sql === "SELECT pg_advisory_unlock_shared($1)",
-      )
-      .map(({ sql }) => sql);
-    expect(locks).toEqual([
-      "SELECT pg_advisory_unlock($1)",
-      "SELECT pg_advisory_unlock_shared($1)",
-    ]);
-  });
-
-  it("releases the acquired family lock and discards the client after Entity lock acquisition fails", async () => {
-    const factory = await postgresFactory();
-    const entity = entityStorage(factory, entityInput(true));
-    const before = driver.calls.length;
-    const releases = driver.release.mock.calls.length;
-    driver.failLock("SELECT pg_advisory_lock($1)", new Error("postgres password and SQL"));
-    driver.failUnlock(false);
-
-    await expect(entity.states.trim("task", 0)).rejects.toThrow(/record operation failed/i);
-
-    const calls = driver.calls.slice(before);
-    expect(calls.map(({ sql }) => sql)).toEqual(
-      expect.arrayContaining([
-        "SELECT pg_advisory_lock_shared($1)",
-        "SELECT pg_advisory_lock($1)",
-        "SELECT pg_advisory_unlock_shared($1)",
-      ]),
-    );
-    expect(driver.release.mock.calls.length).toBeGreaterThan(releases);
-    expect(driver.release.mock.calls.at(-1)?.[0]).toBeInstanceOf(Error);
-  });
-
-  it.each(["states", "events"] as const)(
-    "discards the %s truncate client when advisory unlock rejects",
-    async (history) => {
-      const factory = await postgresFactory();
-      const entity = entityStorage(
-        factory,
-        entityInput(history === "states", history === "events"),
-      );
-      const releases = driver.release.mock.calls.length;
-      driver.failUnlock(new Error("postgres password and SQL"));
-
-      await expect(
-        entity[history].truncate(create(TimestampSchema, { seconds: 5n })),
-      ).rejects.toThrow(/history cleanup failed/i);
-
-      expect(driver.release.mock.calls.length).toBeGreaterThan(releases);
-      expect(driver.release.mock.calls.at(-1)?.[0]).toBeInstanceOf(Error);
-    },
-  );
-
-  it("preserves an earlier trim failure while discarding after unlock failure", async () => {
-    const factory = await postgresFactory();
-    const entity = entityStorage(factory, entityInput(true));
-    const releases = driver.release.mock.calls.length;
-    driver.setDeleteHook(() => Promise.reject(new Error("earlier operation failure")));
-    driver.failUnlock(false);
-
-    await expect(entity.states.trim("task", 0)).rejects.toThrow(/record operation failed/i);
-
-    expect(driver.release.mock.calls.length).toBeGreaterThan(releases);
-    expect(driver.release.mock.calls.at(-1)?.[0]).toBeInstanceOf(Error);
-    driver.setDeleteHook(undefined);
-  });
-
   it("freezes a high-water key before bounded state-history truncation", async () => {
     const factory = await postgresFactory();
     const entity = entityStorage(factory, entityInput(true));
@@ -680,107 +637,46 @@ describe("PostgreSQL Entity history", () => {
     ).toBe(true);
   });
 
-  it("waits to append an event until another factory finishes global truncation", async () => {
-    let finishDelete: (() => void) | undefined;
-    driver.keyPages.splice(0);
-    driver.keyPages.push(
-      Array.from({ length: 128 }, (_, index) => `event-${String(index)}`),
-      [],
-    );
-    driver.setDeleteHook(
-      () =>
-        new Promise((resolve) => {
-          finishDelete = () => {
-            resolve({ rowCount: 128, rows: [] });
-          };
-        }),
-    );
-    const first = await postgresFactory();
-    const second = await postgresFactory();
-    const before = driver.calls.length;
-    const truncating = entityStorage(first, entityInput(false, true)).events.truncate(
-      create(TimestampSchema, { seconds: 5n }),
-    );
-    await vi.waitFor(() => {
-      expect(finishDelete).toBeDefined();
-    });
-    const appending = entityStorage(second, entityInput(false, true)).events.append(
-      eventRecord("event-2", "task", 2),
-    );
-
-    await vi.waitFor(() => {
-      expect(
-        driver.calls.slice(before).some(({ sql }) => sql.includes("pg_advisory_xact_lock_shared")),
-      ).toBe(true);
-    });
-    expect(driver.calls.slice(before).some(({ sql }) => sql.startsWith("INSERT"))).toBe(false);
-
-    finishDelete?.();
-    await Promise.all([truncating, appending]);
-
-    const calls = driver.calls.slice(before);
-    const unlock = calls.findIndex(({ sql }) => sql.includes("pg_advisory_unlock($1)"));
-    expect(calls.findIndex(({ sql }) => sql.startsWith("INSERT"))).toBeGreaterThan(unlock);
-    expect(calls.filter(({ sql }) => sql.startsWith('SELECT "ID"'))).toHaveLength(2);
-    driver.setDeleteHook(undefined);
-  });
-
-  it("holds the state family and Entity locks while another factory trims", async () => {
-    let finishDelete: (() => void) | undefined;
-    driver.setDeleteHook(
-      () =>
-        new Promise((resolve) => {
-          finishDelete = () => {
-            resolve({ rowCount: 1, rows: [] });
-          };
-        }),
-    );
-    const first = await postgresFactory();
-    const second = await postgresFactory();
-    const before = driver.calls.length;
-    const trimming = entityStorage(first, entityInput(true)).states.trim("task", 0);
-    await vi.waitFor(() => {
-      expect(finishDelete).toBeDefined();
-    });
-    const appending = entityStorage(second, entityInput(true)).states.append(
-      stateRecord("task", "two", 2),
-    );
-
-    await vi.waitFor(() => {
-      expect(
-        driver.calls.slice(before).some(({ sql }) => sql.includes("pg_advisory_xact_lock_shared")),
-      ).toBe(true);
-    });
-    const calls = driver.calls.slice(before);
-    const trimClient = calls.find(
-      ({ sql }) => sql === "SELECT pg_advisory_lock_shared($1)",
-    )?.client;
-    const appendClient = calls.find(
-      ({ sql }) => sql === "SELECT pg_advisory_xact_lock_shared($1)",
-    )?.client;
-    const trimFamily = calls.findIndex(
-      ({ client, sql }) => client === trimClient && sql === "SELECT pg_advisory_lock_shared($1)",
-    );
-    const trimEntity = calls.findIndex(
-      ({ client, sql }) => client === trimClient && sql === "SELECT pg_advisory_lock($1)",
-    );
-    const appendFamily = calls.findIndex(
-      ({ client, sql }) =>
-        client === appendClient && sql === "SELECT pg_advisory_xact_lock_shared($1)",
-    );
-    const appendEntity = calls.findIndex(
-      ({ client, sql }) => client === appendClient && sql === "SELECT pg_advisory_xact_lock($1)",
-    );
-    expect(trimFamily).toBeGreaterThanOrEqual(0);
-    expect(trimEntity).toBeGreaterThan(trimFamily);
-    expect(appendFamily).toBeGreaterThanOrEqual(0);
-    expect(appendEntity).toBeGreaterThan(appendFamily);
-    expect(driver.calls.slice(before).some(({ sql }) => sql.startsWith("INSERT"))).toBe(false);
-
-    finishDelete?.();
-    await Promise.all([trimming, appending]);
-    driver.setDeleteHook(undefined);
-  });
+  it.each(["states", "events"] as const)(
+    "allows a %s append while another factory deletes a bounded history page",
+    async (history) => {
+      let finishDelete: (() => void) | undefined;
+      driver.setDeleteHook(
+        () =>
+          new Promise((resolve) => {
+            finishDelete = () => {
+              resolve({ rowCount: 1, rows: [] });
+            };
+          }),
+      );
+      const first = await postgresFactory();
+      const second = await postgresFactory();
+      const before = driver.calls.length;
+      const deleting =
+        history === "states"
+          ? entityStorage(first, entityInput(true)).states.trim(taskId("task"), 0)
+          : entityStorage(first, entityInput(false, true)).events.truncate(
+              create(TimestampSchema, { seconds: 5n }),
+            );
+      await vi.waitFor(() => {
+        expect(finishDelete).toBeDefined();
+      });
+      try {
+        const appending =
+          history === "states"
+            ? entityStorage(second, entityInput(true)).states.append(stateRecord("task", "two", 2))
+            : entityStorage(second, entityInput(false, true)).events.append(
+                eventRecord("event-2", "task", 2),
+              );
+        await expect(appending).resolves.toBeUndefined();
+        expect(driver.calls.slice(before).some(({ sql }) => sql.startsWith("INSERT"))).toBe(true);
+      } finally {
+        finishDelete?.();
+        await deleting;
+        driver.setDeleteHook(undefined);
+      }
+    },
+  );
 
   it("enables immutable diagnostic event history through the factory handle", async () => {
     const factory = await postgresFactory();
@@ -840,7 +736,7 @@ describe("PostgreSQL Entity history", () => {
     const factory = await postgresFactory();
     const entity = entityStorage(factory, entityInput(true));
     const before = driver.calls.length;
-    const trimming = entity.states.trim("task", 0);
+    const trimming = entity.states.trim(taskId("task"), 0);
     await vi.waitFor(() => {
       expect(settle).toBeDefined();
     });
@@ -854,60 +750,67 @@ describe("PostgreSQL Entity history", () => {
     driver.setDeleteHook(undefined);
   });
 
-  it("rolls back a failed trim page and retries its keys without skipping", async () => {
+  it("retains earlier page effects and retries a failed trim page without skipping", async () => {
     const failure = new Error("delete failed");
     driver.keyPages.splice(0);
     driver.keyPages.push(["retry-key"]);
     driver.setDeleteHook(() => Promise.reject(failure));
     const factory = await postgresFactory();
     const entity = entityStorage(factory, entityInput(true));
-    await entity.states.backward("task", 1);
+    await entity.states.backward(taskId("task"), 1);
     const before = driver.calls.length;
     const releases = driver.release.mock.calls.length;
 
-    await expect(entity.states.trim("task", 0)).rejects.toThrow(
+    await expect(entity.states.trim(taskId("task"), 0)).rejects.toThrow(
       "PostgreSQL record operation failed.",
     );
 
-    expect(driver.calls.slice(before).some(({ sql }) => sql === "ROLLBACK")).toBe(true);
-    expect(driver.calls.slice(before).some(({ sql }) => sql.includes("pg_advisory_unlock"))).toBe(
-      true,
-    );
+    expect(driver.calls.slice(before).some(({ sql }) => sql === "ROLLBACK")).toBe(false);
+    expect(driver.calls.slice(before).some(({ sql }) => sql.includes("pg_advisory"))).toBe(false);
     expect(driver.release.mock.calls.length).toBe(releases + 1);
     driver.setDeleteHook(undefined);
     driver.keyPages.push(["retry-key"]);
-    await entity.states.trim("task", 0);
+    await entity.states.trim(taskId("task"), 0);
     expect(driver.calls.slice(before).filter(({ sql }) => sql.startsWith("DELETE"))).toHaveLength(
       2,
     );
   });
 });
 
-function entityInput(
-  stateHistory = false,
-  eventHistory = false,
-): EntityStorageInput<string, StringValue> {
-  const unpack = (id: NonNullable<EntityRecord["entityId"]>): string | undefined =>
-    id.typeUrl.endsWith(`/${StringValueSchema.typeName}`)
-      ? fromBinary(StringValueSchema, id.value).value
+function taskId(value: string): TaskId {
+  return create(TaskIdSchema, { value });
+}
+
+function task(id: string, title: string): Task {
+  return create(TaskSchema, { id: taskId(id), title });
+}
+
+function entityInput(stateHistory = false, eventHistory = false): EntityStorageInput<TaskId, Task> {
+  const unpack = (id: NonNullable<EntityRecord["entityId"]>): TaskId | undefined =>
+    id.typeUrl.endsWith(`/${TaskIdSchema.typeName}`)
+      ? fromBinary(TaskIdSchema, id.value)
       : undefined;
   return {
     context: { name: "Tasks", multitenant: false },
     id: {
-      clone: (id) => id,
-      key: (id) => id,
-      pack: (id) => Identifiers.pack(StringValueSchema, create(StringValueSchema, { value: id })),
+      clone: (id) => create(TaskIdSchema, { value: id.value }),
+      key: (id) => id.value,
+      pack: (id) => Identifiers.pack(TaskIdSchema, id),
       unpack,
     },
     columns: [],
     recordSpec: new RecordSpec({
-      sourceType: StringValueSchema,
+      sourceType: TaskSchema,
       recordType: EntityRecordSchema,
-      idKind: "string",
-      extractId: (record) => unpack(record.entityId ?? create(AnySchema)) ?? "",
+      idSchema: TaskIdSchema,
+      extractId: (record) => {
+        const id = unpack(record.entityId ?? create(AnySchema));
+        if (id === undefined) throw new Error("Expected a TaskId in the Entity record.");
+        return id;
+      },
     }),
-    sourceType: StringValueSchema,
-    stateSchema: StringValueSchema,
+    sourceType: TaskSchema,
+    stateSchema: TaskSchema,
     stateHistory,
     eventHistory,
   };
@@ -915,26 +818,31 @@ function entityInput(
 
 function stateRecord(id: string, value: string, version: number): EntityRecord {
   return create(EntityRecordSchema, {
-    entityId: packed(id),
-    state: packed(value),
+    entityId: Identifiers.pack(TaskIdSchema, taskId(id)),
+    state: Identifiers.pack(TaskSchema, task(id, value)),
     version: { number: version },
   });
 }
 
-function packed(value: string) {
-  return Identifiers.pack(StringValueSchema, create(StringValueSchema, { value }));
-}
-
 function eventRecord(id: string, entityId: string, version: number): Event {
+  const payload = create(TaskCreatedSchema, {
+    id: taskId(entityId),
+    taskListId: create(TaskListIdSchema, { value: "list-1" }),
+    title: "Created",
+  });
   return create(EventSchema, {
     id: { value: id },
-    context: { producerId: packed(entityId), version: { number: version } },
+    message: Identifiers.pack(TaskCreatedSchema, payload),
+    context: {
+      producerId: Identifiers.pack(TaskIdSchema, taskId(entityId)),
+      version: { number: version },
+    },
   });
 }
 
 function postgresFactory() {
   const stringifiers = new StringifierRegistry();
-  stringifiers.setTypeRegistry(new TypeRegistry([StringValueSchema]));
+  stringifiers.setTypeRegistry(new TypeRegistry([TaskIdSchema, TaskSchema, TaskCreatedSchema]));
   return PostgresStorageFactory.newBuilder()
     .setOptions({ url: "postgresql://db.example/spine", schema: "spine" })
     .setStringifierRegistry(stringifiers)

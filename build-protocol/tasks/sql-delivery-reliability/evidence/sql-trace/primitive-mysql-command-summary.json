@@ -1,0 +1,62 @@
+[
+  {
+    "database": "mysql84",
+    "operation": "record-read",
+    "exitCode": 0
+  },
+  {
+    "database": "mysql84",
+    "operation": "record-write",
+    "exitCode": 0
+  },
+  {
+    "database": "mysql84",
+    "operation": "record-delete",
+    "exitCode": 0
+  },
+  {
+    "database": "mysql84",
+    "operation": "record-query",
+    "exitCode": 0
+  },
+  {
+    "database": "mysql84",
+    "operation": "record-batch",
+    "exitCode": 0
+  },
+  {
+    "database": "mysql84",
+    "operation": "record-cas",
+    "exitCode": 0
+  },
+  {
+    "database": "mariadb114",
+    "operation": "record-read",
+    "exitCode": 0
+  },
+  {
+    "database": "mariadb114",
+    "operation": "record-write",
+    "exitCode": 0
+  },
+  {
+    "database": "mariadb114",
+    "operation": "record-delete",
+    "exitCode": 0
+  },
+  {
+    "database": "mariadb114",
+    "operation": "record-query",
+    "exitCode": 0
+  },
+  {
+    "database": "mariadb114",
+    "operation": "record-batch",
+    "exitCode": 0
+  },
+  {
+    "database": "mariadb114",
+    "operation": "record-cas",
+    "exitCode": 0
+  }
+]

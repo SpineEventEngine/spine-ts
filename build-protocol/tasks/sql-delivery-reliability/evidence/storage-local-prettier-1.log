@@ -1,0 +1,10 @@
+Checking formatting...
+[warn] packages/storage/test/event/event-store.test.ts
+[warn] packages/storage-postgres/test/postgres-entity-history.test.ts
+[warn] packages/storage-postgres/test/postgresql-integration.test.ts
+[warn] packages/storage-mysql/test/mysql-integration.test.ts
+[warn] packages/server/test/delivery/inbox-provider-cleanup.test.ts
+[warn] packages/server/test/delivery/delivery-worker.test.ts
+[warn] packages/storage-postgres/src/postgres/entity-history.ts
+[warn] packages/storage-postgres/src/postgres/record-storage.ts
+[warn] Code style issues found in 8 files. Run Prettier with --write to fix.

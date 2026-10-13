@@ -1,0 +1,27 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/storage-postgres/test/postgresql-integration.test.ts (11 tests | 1 failed | 10 skipped) 44ms
+     × retains Entity state history when a later diagnostic insert fails 19ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/storage-postgres/test/postgresql-integration.test.ts > PostgreSQL live storage acceptance > retains Entity state history when a later diagnostic insert fails
+error: constraint "reject_partial_diagnostic" for relation "spine_examples_todo_task_event" already exists
+ ❯ node_modules/.pnpm/pg-pool@3.14.0_pg@8.23.0/node_modules/pg-pool/index.js:45:11
+ ❯ packages/storage-postgres/test/postgresql-integration.test.ts:393:7
+    391|       if (schema === undefined) throw new Error("Expected the active P…
+    392|       const rejectedBytes = Buffer.from(toBinary(EventSchema, diagnost…
+    393|       await pool.query(
+       |       ^
+    394|         `ALTER TABLE ${quoted(schema)}.${quoted(table)} ` +
+    395|           `ADD CONSTRAINT "reject_partial_diagnostic" CHECK ("bytes" <…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 10 skipped (11)
+   Start at  18:34:55
+   Duration  481ms (transform 219ms, setup 0ms, import 334ms, tests 44ms, environment 0ms)
+

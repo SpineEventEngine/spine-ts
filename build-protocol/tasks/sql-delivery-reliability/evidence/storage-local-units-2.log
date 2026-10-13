@@ -1,0 +1,36 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/server/test/delivery/delivery-worker.test.ts (46 tests | 1 failed) 45ms
+     × stops when a refused cleanup deletion is followed by lost ownership 5ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > stops when a refused cleanup deletion is followed by lost ownership
+AssertionError: expected { status: 'DRAINED', …(5) } to match object { status: 'STOPPED' }
+(5 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "status": "STOPPED",
++   "status": "DRAINED",
+  }
+
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:652:72
+    650|     });
+    651|
+    652|     await expect(delivery.drain(shard, { onMessage: () => undefined })…
+       |                                                                        ^
+    653|       status: "STOPPED",
+    654|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 3 passed (4)
+      Tests  1 failed | 146 passed (147)
+   Start at  19:25:36
+   Duration  1.23s (transform 1.77s, setup 0ms, import 2.49s, tests 258ms, environment 0ms)
+

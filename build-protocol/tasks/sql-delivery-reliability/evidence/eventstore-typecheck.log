@@ -1,0 +1,6 @@
+packages/storage/src/index.ts(17,8): error TS2305: Module '"./event/event-store.js"' has no exported member 'EventRollback'.
+packages/storage/dist/index.d.ts(1,27): error TS2305: Module '"./event/event-store.js"' has no exported member 'EventRollback'.
+packages/storage/dist/index.d.ts(1,27): error TS2305: Module '"./event/event-store.js"' has no exported member 'EventRollback'.
+packages/storage/dist/index.d.ts(1,27): error TS2305: Module '"./event/event-store.js"' has no exported member 'EventRollback'.
+packages/storage/dist/index.d.ts(1,27): error TS2305: Module '"./event/event-store.js"' has no exported member 'EventRollback'.
+packages/storage/dist/index.d.ts(1,27): error TS2305: Module '"./event/event-store.js"' has no exported member 'EventRollback'.

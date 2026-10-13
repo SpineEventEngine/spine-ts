@@ -1,0 +1,14 @@
+file:///Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage-mysql/dist/mysql/table-resolver.js:59
+            throw new Error(`MySQL table name is invalid: ${readable}`);
+                  ^
+
+Error: MySQL table name is invalid: sql_trace_2ed7eefb-9207-4ced-ac33-17b12fce503c_StringValue
+    at MysqlTableResolver.resolve (file:///Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage-mysql/dist/mysql/table-resolver.js:59:19)
+    at MysqlStorageFactory.createMysqlRecordStorage (file:///Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage-mysql/dist/mysql/storage-factory.js:140:38)
+    at MysqlStorageFactory.onCreateRecordStorage (file:///Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage-mysql/dist/mysql/storage-factory.js:126:21)
+    at MysqlStorageFactory.createRecordStorage (file:///Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage/dist/storage/storage-factory.js:46:21)
+    at file:///Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/sql-trace/primitive-operations.mjs:71:25
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+Node.js v24.18.0
+Trace capture restored: /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/sql-trace/runs/mysql84-record-read-2026-10-13T182736384Z.json

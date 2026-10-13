@@ -1,0 +1,46 @@
+examples/message-board/app/src/deployment-config.ts(200,30): error TS2322: Type 'RemoteDelivery' is not assignable to type 'ServerEnvironmentDelivery'.
+  The types of 'inbox.removeDuplicate' are incompatible between these types.
+    Type '(message: InboxMessage, session: DeliveryWorkSession, options?: DeliveryOperationOptions | undefined) => Promise<...>' is not assignable to type '(message: InboxMessage, options?: DeliveryOperationOptions | undefined) => Promise<boolean>'.
+      Types of parameters 'session' and 'options' are incompatible.
+        Type 'DeliveryOperationOptions | undefined' is not assignable to type 'DeliveryWorkSession'.
+          Type 'undefined' is not assignable to type 'DeliveryWorkSession'.
+packages/delivery-client/dist/remote/adapters.d.ts(68,5): error TS2416: Property 'removeDelivered' in type 'RemoteInbox' is not assignable to the same property in base type 'DeliveryInbox'.
+  Type '(message: InboxMessage, session: DeliveryWorkSession, options?: DeliveryOperationOptions | undefined) => Promise<...>' is not assignable to type '(message: InboxMessage, options?: DeliveryOperationOptions | undefined) => Promise<boolean>'.
+    Types of parameters 'session' and 'options' are incompatible.
+      Type 'DeliveryOperationOptions | undefined' is not assignable to type 'DeliveryWorkSession'.
+        Type 'undefined' is not assignable to type 'DeliveryWorkSession'.
+packages/delivery-client/dist/remote/adapters.d.ts(80,5): error TS2416: Property 'removeDuplicate' in type 'RemoteInbox' is not assignable to the same property in base type 'DeliveryInbox'.
+  Type '(message: InboxMessage, session: DeliveryWorkSession, options?: DeliveryOperationOptions | undefined) => Promise<...>' is not assignable to type '(message: InboxMessage, options?: DeliveryOperationOptions | undefined) => Promise<boolean>'.
+    Types of parameters 'session' and 'options' are incompatible.
+      Type 'DeliveryOperationOptions | undefined' is not assignable to type 'DeliveryWorkSession'.
+        Type 'undefined' is not assignable to type 'DeliveryWorkSession'.
+packages/delivery-client/dist/remote/remote-delivery.d.ts(45,9): error TS2416: Property 'inbox' in type 'RemoteDelivery' is not assignable to the same property in base type 'ServerEnvironmentDelivery'.
+  Type 'RemoteInbox' is not assignable to type 'DeliveryInbox'.
+    Types of property 'removeDuplicate' are incompatible.
+      Type '(message: InboxMessage, session: DeliveryWorkSession, options?: DeliveryOperationOptions | undefined) => Promise<...>' is not assignable to type '(message: InboxMessage, options?: DeliveryOperationOptions | undefined) => Promise<boolean>'.
+        Types of parameters 'session' and 'options' are incompatible.
+          Type 'DeliveryOperationOptions | undefined' is not assignable to type 'DeliveryWorkSession'.
+            Type 'undefined' is not assignable to type 'DeliveryWorkSession'.
+packages/delivery-client/test/remote-inbox-direct.test.ts(253,42): error TS2353: Object literal may only specify known properties, and 'kind' does not exist in type 'DeliveryOperationOptions'.
+packages/delivery-client/test/remote-inbox-direct.test.ts(266,42): error TS2353: Object literal may only specify known properties, and 'kind' does not exist in type 'DeliveryOperationOptions'.
+packages/delivery-client/test/remote-inbox-direct.test.ts(270,9): error TS2353: Object literal may only specify known properties, and 'kind' does not exist in type 'DeliveryOperationOptions'.
+packages/server/test/services/spine-services.test.ts(843,41): error TS2493: Tuple type '[]' of length '0' has no element at index '0'.
+packages/server/test/services/spine-services.test.ts(844,41): error TS2493: Tuple type '[]' of length '0' has no element at index '0'.
+packages/storage-mysql/test/mysql-factory-commit-mocked.test.ts(152,19): error TS2698: Spread types may only be created from object types.
+packages/storage-mysql/test/mysql-record-storage.test.ts(1204,23): error TS2379: Argument of type '{ sql: string; values: readonly unknown[] | undefined; }' is not assignable to parameter of type '{ sql: string; values?: readonly unknown[]; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'values' are incompatible.
+    Type 'readonly unknown[] | undefined' is not assignable to type 'readonly unknown[]'.
+      Type 'undefined' is not assignable to type 'readonly unknown[]'.
+packages/storage-mysql/test/mysql-record-storage.test.ts(1228,23): error TS2379: Argument of type '{ sql: string; values: readonly unknown[] | undefined; }' is not assignable to parameter of type '{ sql: string; values?: readonly unknown[]; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'values' are incompatible.
+    Type 'readonly unknown[] | undefined' is not assignable to type 'readonly unknown[]'.
+      Type 'undefined' is not assignable to type 'readonly unknown[]'.
+packages/storage-mysql/test/mysql-record-storage.test.ts(1250,20): error TS2379: Argument of type '{ sql: string; values: readonly unknown[] | undefined; }' is not assignable to parameter of type '{ sql: string; values?: readonly unknown[]; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'values' are incompatible.
+    Type 'readonly unknown[] | undefined' is not assignable to type 'readonly unknown[]'.
+      Type 'undefined' is not assignable to type 'readonly unknown[]'.
+packages/storage-mysql/test/mysql-record-storage.test.ts(1282,20): error TS2379: Argument of type '{ sql: string; values: readonly unknown[] | undefined; }' is not assignable to parameter of type '{ sql: string; values?: readonly unknown[]; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'values' are incompatible.
+    Type 'readonly unknown[] | undefined' is not assignable to type 'readonly unknown[]'.
+      Type 'undefined' is not assignable to type 'readonly unknown[]'.
+packages/storage-postgres/test/postgres-entity-commit.test.ts(230,51): error TS2532: Object is possibly 'undefined'.

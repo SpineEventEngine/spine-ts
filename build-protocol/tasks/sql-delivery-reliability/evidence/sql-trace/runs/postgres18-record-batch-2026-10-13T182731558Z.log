@@ -1,0 +1,30 @@
+2026-10-13T18:27:31.800752255Z 2026-10-13 18:27:31.800 UTC [701] LOG:  statement: SELECT current_schema() AS schema
+2026-10-13T18:27:31.802325297Z 2026-10-13 18:27:31.802 UTC [701] LOG:  execute <unnamed>: SELECT 1 FROM information_schema.schemata WHERE schema_name = $1
+2026-10-13T18:27:31.802332714Z 2026-10-13 18:27:31.802 UTC [701] DETAIL:  Parameters: $1 = 'public'
+2026-10-13T18:27:31.805359380Z 2026-10-13 18:27:31.805 UTC [701] LOG:  execute <unnamed>: SELECT 1 FROM information_schema.columns WHERE table_schema = $1 AND LOWER(column_name) IN ('_scope', '_revision') LIMIT 1
+2026-10-13T18:27:31.805367839Z 2026-10-13 18:27:31.805 UTC [701] DETAIL:  Parameters: $1 = 'public'
+2026-10-13T18:27:31.812523672Z 2026-10-13 18:27:31.812 UTC [701] LOG:  statement: BEGIN
+2026-10-13T18:27:31.813192589Z 2026-10-13 18:27:31.813 UTC [701] LOG:  execute <unnamed>: SELECT pg_advisory_xact_lock($1)
+2026-10-13T18:27:31.813198297Z 2026-10-13 18:27:31.813 UTC [701] DETAIL:  Parameters: $1 = '-75141182706218194'
+2026-10-13T18:27:31.813736630Z 2026-10-13 18:27:31.813 UTC [701] LOG:  statement: CREATE TABLE IF NOT EXISTS "public"."sql_trace_ff28bb15-55d2-403b-9b4f-cc02863b84eb_StringValue" ("ID" VARCHAR(512) NOT NULL, "bytes" BYTEA NOT NULL, "value" TEXT, PRIMARY KEY ("ID"))
+2026-10-13T18:27:31.816645422Z 2026-10-13 18:27:31.816 UTC [701] LOG:  execute <unnamed>: SELECT column_name, data_type, character_maximum_length, is_nullable, column_default FROM information_schema.columns WHERE table_schema=$1 AND table_name=$2 ORDER BY ordinal_position
+2026-10-13T18:27:31.816653380Z 2026-10-13 18:27:31.816 UTC [701] DETAIL:  Parameters: $1 = 'public', $2 = 'sql_trace_ff28bb15-55d2-403b-9b4f-cc02863b84eb_StringValue'
+2026-10-13T18:27:31.819518880Z 2026-10-13 18:27:31.819 UTC [701] LOG:  execute <unnamed>: SELECT kcu.column_name, kcu.ordinal_position FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu USING (constraint_catalog, constraint_schema, constraint_name) WHERE tc.table_schema=$1 AND tc.table_name=$2 AND tc.constraint_type = 'PRIMARY KEY' ORDER BY kcu.ordinal_position
+2026-10-13T18:27:31.819526380Z 2026-10-13 18:27:31.819 UTC [701] DETAIL:  Parameters: $1 = 'public', $2 = 'sql_trace_ff28bb15-55d2-403b-9b4f-cc02863b84eb_StringValue'
+2026-10-13T18:27:31.822682922Z 2026-10-13 18:27:31.822 UTC [701] LOG:  execute <unnamed>: SELECT tc.constraint_name, kcu.column_name, kcu.ordinal_position FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu USING (constraint_catalog, constraint_schema, constraint_name) WHERE tc.table_schema=$1 AND tc.table_name=$2 AND tc.constraint_type = 'UNIQUE' ORDER BY tc.constraint_name, kcu.ordinal_position
+2026-10-13T18:27:31.822691172Z 2026-10-13 18:27:31.822 UTC [701] DETAIL:  Parameters: $1 = 'public', $2 = 'sql_trace_ff28bb15-55d2-403b-9b4f-cc02863b84eb_StringValue'
+2026-10-13T18:27:31.824231672Z 2026-10-13 18:27:31.824 UTC [701] LOG:  statement: COMMIT
+2026-10-13T18:27:31.826015422Z 2026-10-13 18:27:31.825 UTC [701] LOG:  execute <unnamed>: INSERT INTO "public"."sql_trace_ff28bb15-55d2-403b-9b4f-cc02863b84eb_StringValue" ("ID", "bytes", "value") VALUES ($1, $2, $3) ON CONFLICT ("ID") DO UPDATE SET "bytes"=EXCLUDED."bytes", "value"=EXCLUDED."value"
+2026-10-13T18:27:31.826022839Z 2026-10-13 18:27:31.825 UTC [701] DETAIL:  Parameters: $1 = 'a', $2 = '\x0a09613a696e697469616c', $3 = 'a:initial'
+2026-10-13T18:27:31.826915797Z 2026-10-13 18:27:31.826 UTC [701] LOG:  execute <unnamed>: SELECT "bytes" FROM "public"."sql_trace_ff28bb15-55d2-403b-9b4f-cc02863b84eb_StringValue" WHERE "ID" = $1
+2026-10-13T18:27:31.826924464Z 2026-10-13 18:27:31.826 UTC [701] DETAIL:  Parameters: $1 = 'a'
+2026-10-13T18:27:31.827452589Z 2026-10-13 18:27:31.827 UTC [702] LOG:  statement: SELECT 'spine_trace_begin_record_batch' AS marker
+2026-10-13T18:27:31.828173964Z 2026-10-13 18:27:31.828 UTC [701] LOG:  execute <unnamed>: INSERT INTO "public"."sql_trace_ff28bb15-55d2-403b-9b4f-cc02863b84eb_StringValue" ("ID", "bytes", "value") VALUES ($1, $2, $3) ON CONFLICT ("ID") DO UPDATE SET "bytes"=EXCLUDED."bytes", "value"=EXCLUDED."value"
+2026-10-13T18:27:31.828183714Z 2026-10-13 18:27:31.828 UTC [701] DETAIL:  Parameters: $1 = 'b', $2 = '\x0a07623a6669727374', $3 = 'b:first'
+2026-10-13T18:27:31.829009214Z 2026-10-13 18:27:31.828 UTC [701] LOG:  execute <unnamed>: INSERT INTO "public"."sql_trace_ff28bb15-55d2-403b-9b4f-cc02863b84eb_StringValue" ("ID", "bytes", "value") VALUES ($1, $2, $3) ON CONFLICT ("ID") DO UPDATE SET "bytes"=EXCLUDED."bytes", "value"=EXCLUDED."value"
+2026-10-13T18:27:31.829023839Z 2026-10-13 18:27:31.828 UTC [701] DETAIL:  Parameters: $1 = 'c', $2 = '\x0a08633a7365636f6e64', $3 = 'c:second'
+2026-10-13T18:27:31.829561005Z 2026-10-13 18:27:31.829 UTC [702] LOG:  statement: SELECT 'spine_trace_end_record_batch' AS marker
+2026-10-13T18:27:31.830012589Z 2026-10-13 18:27:31.829 UTC [701] LOG:  execute <unnamed>: SELECT "bytes" FROM "public"."sql_trace_ff28bb15-55d2-403b-9b4f-cc02863b84eb_StringValue" WHERE "ID" = $1
+2026-10-13T18:27:31.830015714Z 2026-10-13 18:27:31.829 UTC [701] DETAIL:  Parameters: $1 = 'b'
+2026-10-13T18:27:31.831351297Z 2026-10-13 18:27:31.831 UTC [701] LOG:  execute <unnamed>: SELECT "bytes" FROM "public"."sql_trace_ff28bb15-55d2-403b-9b4f-cc02863b84eb_StringValue" WHERE "ID" = $1
+2026-10-13T18:27:31.831356839Z 2026-10-13 18:27:31.831 UTC [701] DETAIL:  Parameters: $1 = 'c'

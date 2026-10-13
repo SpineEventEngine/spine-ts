@@ -1,0 +1,30 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/storage-datastore/test/datastore/entity-history.test.ts (25 tests | 1 failed) 138ms
+     × returns declared current-record columns with query results 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/storage-datastore/test/datastore/entity-history.test.ts > Datastore generated Entity records > returns declared current-record columns with query results
+AssertionError: expected 'type.spine.examples.todo/spine.exampl…' to be 'type.googleapis.com/spine.examples.to…' // Object.is equality
+
+Expected: "type.googleapis.com/spine.examples.todo.Task"
+Received: "type.spine.examples.todo/spine.examples.todo.Task"
+
+ ❯ packages/storage-datastore/test/datastore/entity-history.test.ts:279:51
+    277|
+    278|     expect(entries).toHaveLength(1);
+    279|     expect(entries[0]?.columns.get("state_type")).toBe(
+       |                                                   ^
+    280|       `type.googleapis.com/${TaskSchema.typeName}`,
+    281|     );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 24 passed (25)
+   Start at  18:52:15
+   Duration  795ms (transform 258ms, setup 0ms, import 545ms, tests 138ms, environment 0ms)
+

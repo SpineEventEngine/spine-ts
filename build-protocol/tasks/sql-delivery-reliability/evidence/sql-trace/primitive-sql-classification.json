@@ -1,0 +1,254 @@
+[
+  {
+    "engine": "postgres16",
+    "operation": "record-read",
+    "metadata": "runs/postgres16-record-read-2026-10-13T182652208Z.json",
+    "statementCount": 1,
+    "forbiddenStatements": 0,
+    "statements": [
+      "SELECT \"bytes\" FROM \"public\".\"sql_trace_7ef7fad6-a705-4746-8b29-455d937fcf96_StringValue\" WHERE \"ID\" = $1"
+    ]
+  },
+  {
+    "engine": "postgres16",
+    "operation": "record-write",
+    "metadata": "runs/postgres16-record-write-2026-10-13T182709596Z.json",
+    "statementCount": 1,
+    "forbiddenStatements": 0,
+    "statements": [
+      "INSERT INTO \"public\".\"sql_trace_6dd1a137-b5b2-4842-8b16-9e93547768cd_StringValue\" (\"ID\", \"bytes\", \"value\") VALUES ($1, $2, $3) ON CONFLICT (\"ID\") DO UPDATE SET \"bytes\"=EXCLUDED.\"bytes\", \"value\"=EXCLUDED.\"value\""
+    ]
+  },
+  {
+    "engine": "postgres16",
+    "operation": "record-delete",
+    "metadata": "runs/postgres16-record-delete-2026-10-13T182712154Z.json",
+    "statementCount": 1,
+    "forbiddenStatements": 0,
+    "statements": [
+      "DELETE FROM \"public\".\"sql_trace_2c04e7c4-ad2f-4f90-89e8-81bbebf63b1a_StringValue\" WHERE \"ID\" = $1"
+    ]
+  },
+  {
+    "engine": "postgres16",
+    "operation": "record-query",
+    "metadata": "runs/postgres16-record-query-2026-10-13T182714676Z.json",
+    "statementCount": 1,
+    "forbiddenStatements": 0,
+    "statements": [
+      "SELECT \"ID\", \"bytes\" FROM \"public\".\"sql_trace_867c1481-6768-445b-a630-b342008f2a6a_StringValue\" WHERE \"value\" IS NOT DISTINCT FROM $1 ORDER BY \"value\" ASC NULLS FIRST, \"ID\" ASC LIMIT $2"
+    ]
+  },
+  {
+    "engine": "postgres16",
+    "operation": "record-batch",
+    "metadata": "runs/postgres16-record-batch-2026-10-13T182717094Z.json",
+    "statementCount": 2,
+    "forbiddenStatements": 0,
+    "statements": [
+      "INSERT INTO \"public\".\"sql_trace_eafd753c-cdd8-4a8e-9ec3-ecb1314da965_StringValue\" (\"ID\", \"bytes\", \"value\") VALUES ($1, $2, $3) ON CONFLICT (\"ID\") DO UPDATE SET \"bytes\"=EXCLUDED.\"bytes\", \"value\"=EXCLUDED.\"value\"",
+      "INSERT INTO \"public\".\"sql_trace_eafd753c-cdd8-4a8e-9ec3-ecb1314da965_StringValue\" (\"ID\", \"bytes\", \"value\") VALUES ($1, $2, $3) ON CONFLICT (\"ID\") DO UPDATE SET \"bytes\"=EXCLUDED.\"bytes\", \"value\"=EXCLUDED.\"value\""
+    ]
+  },
+  {
+    "engine": "postgres16",
+    "operation": "record-cas",
+    "metadata": "runs/postgres16-record-cas-2026-10-13T182719509Z.json",
+    "statementCount": 3,
+    "forbiddenStatements": 0,
+    "statements": [
+      "SELECT \"bytes\" FROM \"public\".\"sql_trace_134f0641-74d6-4c81-b696-6a8667704184_StringValue\" WHERE \"ID\" = $1",
+      "UPDATE \"public\".\"sql_trace_134f0641-74d6-4c81-b696-6a8667704184_StringValue\" SET \"bytes\" = $3, \"value\" = $4 WHERE \"ID\" = $1 AND \"bytes\" = $2",
+      "SELECT \"bytes\" FROM \"public\".\"sql_trace_134f0641-74d6-4c81-b696-6a8667704184_StringValue\" WHERE \"ID\" = $1"
+    ]
+  },
+  {
+    "engine": "postgres18",
+    "operation": "record-read",
+    "metadata": "runs/postgres18-record-read-2026-10-13T182721911Z.json",
+    "statementCount": 1,
+    "forbiddenStatements": 0,
+    "statements": [
+      "SELECT \"bytes\" FROM \"public\".\"sql_trace_03d2f3cb-ae78-4f4c-a6cc-eac5a2bfcdd4_StringValue\" WHERE \"ID\" = $1"
+    ]
+  },
+  {
+    "engine": "postgres18",
+    "operation": "record-write",
+    "metadata": "runs/postgres18-record-write-2026-10-13T182724341Z.json",
+    "statementCount": 1,
+    "forbiddenStatements": 0,
+    "statements": [
+      "INSERT INTO \"public\".\"sql_trace_400d0832-5423-48d0-8cc7-f9baeaf65917_StringValue\" (\"ID\", \"bytes\", \"value\") VALUES ($1, $2, $3) ON CONFLICT (\"ID\") DO UPDATE SET \"bytes\"=EXCLUDED.\"bytes\", \"value\"=EXCLUDED.\"value\""
+    ]
+  },
+  {
+    "engine": "postgres18",
+    "operation": "record-delete",
+    "metadata": "runs/postgres18-record-delete-2026-10-13T182726771Z.json",
+    "statementCount": 1,
+    "forbiddenStatements": 0,
+    "statements": [
+      "DELETE FROM \"public\".\"sql_trace_9e8d2d02-cd7e-4181-84c1-07ffb6b7ebae_StringValue\" WHERE \"ID\" = $1"
+    ]
+  },
+  {
+    "engine": "postgres18",
+    "operation": "record-query",
+    "metadata": "runs/postgres18-record-query-2026-10-13T182729171Z.json",
+    "statementCount": 1,
+    "forbiddenStatements": 0,
+    "statements": [
+      "SELECT \"ID\", \"bytes\" FROM \"public\".\"sql_trace_463124f3-50fd-4e0d-ba9b-9499bd9e0779_StringValue\" WHERE \"value\" IS NOT DISTINCT FROM $1 ORDER BY \"value\" ASC NULLS FIRST, \"ID\" ASC LIMIT $2"
+    ]
+  },
+  {
+    "engine": "postgres18",
+    "operation": "record-batch",
+    "metadata": "runs/postgres18-record-batch-2026-10-13T182731558Z.json",
+    "statementCount": 2,
+    "forbiddenStatements": 0,
+    "statements": [
+      "INSERT INTO \"public\".\"sql_trace_ff28bb15-55d2-403b-9b4f-cc02863b84eb_StringValue\" (\"ID\", \"bytes\", \"value\") VALUES ($1, $2, $3) ON CONFLICT (\"ID\") DO UPDATE SET \"bytes\"=EXCLUDED.\"bytes\", \"value\"=EXCLUDED.\"value\"",
+      "INSERT INTO \"public\".\"sql_trace_ff28bb15-55d2-403b-9b4f-cc02863b84eb_StringValue\" (\"ID\", \"bytes\", \"value\") VALUES ($1, $2, $3) ON CONFLICT (\"ID\") DO UPDATE SET \"bytes\"=EXCLUDED.\"bytes\", \"value\"=EXCLUDED.\"value\""
+    ]
+  },
+  {
+    "engine": "postgres18",
+    "operation": "record-cas",
+    "metadata": "runs/postgres18-record-cas-2026-10-13T182733967Z.json",
+    "statementCount": 3,
+    "forbiddenStatements": 0,
+    "statements": [
+      "SELECT \"bytes\" FROM \"public\".\"sql_trace_3d8dce51-8622-48fd-9d3d-cc236b2603f2_StringValue\" WHERE \"ID\" = $1",
+      "UPDATE \"public\".\"sql_trace_3d8dce51-8622-48fd-9d3d-cc236b2603f2_StringValue\" SET \"bytes\" = $3, \"value\" = $4 WHERE \"ID\" = $1 AND \"bytes\" = $2",
+      "SELECT \"bytes\" FROM \"public\".\"sql_trace_3d8dce51-8622-48fd-9d3d-cc236b2603f2_StringValue\" WHERE \"ID\" = $1"
+    ]
+  },
+  {
+    "engine": "mysql84",
+    "operation": "record-read",
+    "metadata": "runs/mysql84-record-read-2026-10-13T182807811Z.json",
+    "statementCount": 1,
+    "forbiddenStatements": 0,
+    "statements": [
+      "SELECT bytes FROM `sql_trace_f2ac0d6987b74cecbb553cf00fdba912_StringValue` WHERE ID='a'"
+    ]
+  },
+  {
+    "engine": "mysql84",
+    "operation": "record-write",
+    "metadata": "runs/mysql84-record-write-2026-10-13T182810194Z.json",
+    "statementCount": 1,
+    "forbiddenStatements": 0,
+    "statements": [
+      "INSERT INTO `sql_trace_10645b10cc3f414089515a99f65c4744_StringValue` (`ID`, `bytes`, `value`) VALUES ('a', '\\n\ta:updated', 'a:updated') ON DUPLICATE KEY UPDATE bytes=VALUES(bytes), `value`=VALUES(`value`)"
+    ]
+  },
+  {
+    "engine": "mysql84",
+    "operation": "record-delete",
+    "metadata": "runs/mysql84-record-delete-2026-10-13T182812589Z.json",
+    "statementCount": 1,
+    "forbiddenStatements": 0,
+    "statements": [
+      "DELETE FROM `sql_trace_15e37d9d7d94453ca3195f02884633c7_StringValue` WHERE ID='a'"
+    ]
+  },
+  {
+    "engine": "mysql84",
+    "operation": "record-query",
+    "metadata": "runs/mysql84-record-query-2026-10-13T182814957Z.json",
+    "statementCount": 1,
+    "forbiddenStatements": 0,
+    "statements": [
+      "SELECT ID, bytes FROM `sql_trace_fd7477aacd8d4178bd6f93c83fb0b5bc_StringValue` WHERE `value` <=> 'a:initial' ORDER BY `value` ASC, ID ASC LIMIT 1"
+    ]
+  },
+  {
+    "engine": "mysql84",
+    "operation": "record-batch",
+    "metadata": "runs/mysql84-record-batch-2026-10-13T182817353Z.json",
+    "statementCount": 2,
+    "forbiddenStatements": 0,
+    "statements": [
+      "INSERT INTO `sql_trace_bfbe218879664bc9901a9411a083dfb6_StringValue` (`ID`, `bytes`, `value`) VALUES ('b', '\\n\u0007b:first', 'b:first') ON DUPLICATE KEY UPDATE bytes=VALUES(bytes), `value`=VALUES(`value`)",
+      "INSERT INTO `sql_trace_bfbe218879664bc9901a9411a083dfb6_StringValue` (`ID`, `bytes`, `value`) VALUES ('c', '\\n\bc:second', 'c:second') ON DUPLICATE KEY UPDATE bytes=VALUES(bytes), `value`=VALUES(`value`)"
+    ]
+  },
+  {
+    "engine": "mysql84",
+    "operation": "record-cas",
+    "metadata": "runs/mysql84-record-cas-2026-10-13T182819750Z.json",
+    "statementCount": 3,
+    "forbiddenStatements": 0,
+    "statements": [
+      "SELECT bytes FROM `sql_trace_3d5587fb9d2f43fc946f046431d143d6_StringValue` WHERE ID='a'",
+      "UPDATE `sql_trace_3d5587fb9d2f43fc946f046431d143d6_StringValue` SET `bytes`='\\n\ta:updated', `value`='a:updated' WHERE ID='a' AND bytes='\\n\ta:initial'",
+      "SELECT bytes FROM `sql_trace_3d5587fb9d2f43fc946f046431d143d6_StringValue` WHERE ID='a'"
+    ]
+  },
+  {
+    "engine": "mariadb114",
+    "operation": "record-read",
+    "metadata": "runs/mariadb114-record-read-2026-10-13T182822186Z.json",
+    "statementCount": 1,
+    "forbiddenStatements": 0,
+    "statements": [
+      "SELECT bytes FROM `sql_trace_28f2bdfd2443482f8964599d696cbe04_StringValue` WHERE ID='a'"
+    ]
+  },
+  {
+    "engine": "mariadb114",
+    "operation": "record-write",
+    "metadata": "runs/mariadb114-record-write-2026-10-13T182824584Z.json",
+    "statementCount": 1,
+    "forbiddenStatements": 0,
+    "statements": [
+      "INSERT INTO `sql_trace_382171d0191047bfa6f4db149b069b2f_StringValue` (`ID`, `bytes`, `value`) VALUES ('a', '\\n\ta:updated', 'a:updated') ON DUPLICATE KEY UPDATE bytes=VALUES(bytes), `value`=VALUES(`value`)"
+    ]
+  },
+  {
+    "engine": "mariadb114",
+    "operation": "record-delete",
+    "metadata": "runs/mariadb114-record-delete-2026-10-13T182826993Z.json",
+    "statementCount": 1,
+    "forbiddenStatements": 0,
+    "statements": [
+      "DELETE FROM `sql_trace_f7d4dad53884422398df4240bc4d4b41_StringValue` WHERE ID='a'"
+    ]
+  },
+  {
+    "engine": "mariadb114",
+    "operation": "record-query",
+    "metadata": "runs/mariadb114-record-query-2026-10-13T182829413Z.json",
+    "statementCount": 1,
+    "forbiddenStatements": 0,
+    "statements": [
+      "SELECT ID, bytes FROM `sql_trace_80d3a47f7aea4c178ec3bd285ba2b245_StringValue` WHERE `value` <=> 'a:initial' ORDER BY `value` ASC, ID ASC LIMIT 1"
+    ]
+  },
+  {
+    "engine": "mariadb114",
+    "operation": "record-batch",
+    "metadata": "runs/mariadb114-record-batch-2026-10-13T182831807Z.json",
+    "statementCount": 2,
+    "forbiddenStatements": 0,
+    "statements": [
+      "INSERT INTO `sql_trace_e33097afad67495aa2de14824d82d37b_StringValue` (`ID`, `bytes`, `value`) VALUES ('b', '\\n\u0007b:first', 'b:first') ON DUPLICATE KEY UPDATE bytes=VALUES(bytes), `value`=VALUES(`value`)",
+      "INSERT INTO `sql_trace_e33097afad67495aa2de14824d82d37b_StringValue` (`ID`, `bytes`, `value`) VALUES ('c', '\\n\bc:second', 'c:second') ON DUPLICATE KEY UPDATE bytes=VALUES(bytes), `value`=VALUES(`value`)"
+    ]
+  },
+  {
+    "engine": "mariadb114",
+    "operation": "record-cas",
+    "metadata": "runs/mariadb114-record-cas-2026-10-13T182834224Z.json",
+    "statementCount": 3,
+    "forbiddenStatements": 0,
+    "statements": [
+      "SELECT bytes FROM `sql_trace_2c880b44a8124e6b99bf0a37411a6df1_StringValue` WHERE ID='a'",
+      "UPDATE `sql_trace_2c880b44a8124e6b99bf0a37411a6df1_StringValue` SET `bytes`='\\n\ta:updated', `value`='a:updated' WHERE ID='a' AND bytes='\\n\ta:initial'",
+      "SELECT bytes FROM `sql_trace_2c880b44a8124e6b99bf0a37411a6df1_StringValue` WHERE ID='a'"
+    ]
+  }
+]

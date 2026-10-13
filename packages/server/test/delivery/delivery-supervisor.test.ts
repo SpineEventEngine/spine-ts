@@ -1196,12 +1196,8 @@ class AdmissionInbox implements DeliveryInbox {
     return this.#delegate.markDelivered(message, options);
   }
 
-  removeDuplicate(
-    message: InboxMessage,
-    session: DeliveryWorkSession,
-    options?: DeliveryOperationOptions,
-  ): Promise<boolean> {
-    return this.#delegate.removeDuplicate(message, session, options);
+  removeDuplicate(message: InboxMessage, options?: DeliveryOperationOptions): Promise<boolean> {
+    return this.#delegate.removeDuplicate(message, options);
   }
 }
 

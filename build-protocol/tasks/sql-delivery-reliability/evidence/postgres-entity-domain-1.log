@@ -1,0 +1,27 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/storage-postgres/test/postgres-entity-commit.test.ts (13 tests | 1 failed) 5016ms
+     × lets started work release before the factory drain completes 5004ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/storage-postgres/test/postgres-entity-commit.test.ts > PostgreSQL Entity commit > lets started work release before the factory drain completes
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ packages/storage-postgres/test/postgres-entity-commit.test.ts:445:3
+    443|   });
+    444|
+    445|   it("lets started work release before the factory drain completes", a…
+       |   ^
+    446|     const factory = await postgresFactory();
+    447|     const entity = entityInput();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 12 passed (13)
+   Start at  18:31:37
+   Duration  5.46s (transform 230ms, setup 0ms, import 342ms, tests 5.02s, environment 0ms)
+

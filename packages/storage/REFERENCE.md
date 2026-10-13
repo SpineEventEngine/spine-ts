@@ -16,7 +16,7 @@ types, and entity history interfaces.
 Storage-adapter implementers import the complete provider-only contract set from
 `@spine-event-engine/storage/provider`: Event Store record access, Entity
 history and Entity commit contracts, query values, tenant boundaries/catalogs,
-and delivery-cleanup handles. The storage root intentionally does not export
+and record access. The storage root intentionally does not export
 these provider seams; application code uses its root storage contracts instead.
 
 ## Record storage
@@ -109,6 +109,16 @@ history stores generated `EventId`/`Event` rows in that same state-type-named
 group. The framework Event Store is a separate, ungrouped `EventId`/`Event`
 record family.
 
+`EventStore.append()` and `appendAll()` store immutable complete Events. An
+identical Event ID and envelope is a successful retry without rewriting; a
+conflicting envelope is rejected. Batch append validates the supplied IDs and
+tenant before writing, then leaves any completed prefix when a later write
+fails. Retrying the same input continues with those IDs. `accept()` and
+`acceptThenAppend()` are strict new-admission operations: an existing ID is
+rejected even when its Event is identical. `acceptThenAppend()` checks absence,
+runs its callback, then inserts with an atomic absent-slot condition. Competing
+callbacks may both run, but at most one Event is inserted and dispatched.
+
 History ports are lazy. When a history is disabled, the in-memory provider does
 not open or allocate its grouped records. Current Entity loading always uses
 the current record, never retained history. Event history is diagnostic data,
@@ -121,8 +131,10 @@ errors reject. There is no Entity conflict result. This changes the published
 `storage/provider` types for custom adapters; application APIs and persisted
 record layouts are unchanged.
 
-The in-memory provider prepares only the affected records before applying them
-together. Saving one Entity does not copy other Entities or whole history/Event
-Store collections. Automatic Entity versions, immutable-record checks and
-unrelated Inbox conditional updates remain. Other providers document their
-transaction and partial-write guarantees separately.
+Every provider captures the prepared input before I/O and writes state history,
+diagnostic Events, delivery Events, then current state as independent records.
+A later failure leaves completed writes in place; an identical retry reuses
+versions and Event IDs without rerunning the handler. The presence of a delivery
+Event alone does not prove the entire Entity save completed. Concurrent saves
+may interleave, including current-state writes. Automatic Entity versions,
+single-record atomic compare-and-set, and immutable-record checks remain.

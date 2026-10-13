@@ -840,8 +840,9 @@ describe("SpineServices", () => {
     await post(createProjectionCommand("command-custom-error"));
 
     expect(withMetadata).toHaveBeenCalledOnce();
-    expect(withMetadata.mock.calls[0]?.[0]).not.toHaveProperty("errorName");
-    expect(withMetadata.mock.calls[0]?.[0]).not.toHaveProperty("errorCode");
+    const facts = withMetadata.mock.calls as unknown as readonly [Record<string, unknown>][];
+    expect(facts[0]?.[0]).not.toHaveProperty("errorName");
+    expect(facts[0]?.[0]).not.toHaveProperty("errorCode");
   });
 
   it("returns Spine statuses for empty contexts and malformed read criteria", async () => {

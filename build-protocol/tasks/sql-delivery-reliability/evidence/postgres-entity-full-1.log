@@ -1,0 +1,114 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/storage-postgres/test/postgres-entity-commit.test.ts (16 tests | 6 failed) 5024ms
+     × prepares the current table before acquiring one transaction client 4ms
+     × retries a serialization failure once with a fresh transaction client 1ms
+     × prepares state history before acquiring its one operation client 1ms
+     × uses the same family and Entity advisory keys as state history 3ms
+     × rolls back every transaction boundary without publishing a partial commit 1ms
+     × lets started work release before the factory drain completes 5006ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/storage-postgres/test/postgres-entity-commit.test.ts > PostgreSQL Entity commit > prepares the current table before acquiring one transaction client
+AssertionError: expected "vi.fn()" to be called 3 times, but got 4 times
+ ❯ packages/storage-postgres/test/postgres-entity-commit.test.ts:213:28
+    211|     ).resolves.toBeUndefined();
+    212|
+    213|     expect(driver.connect).toHaveBeenCalledTimes(before + 2);
+       |                            ^
+    214|     expect(driver.query.mock.calls.map(([sql]) => sql)).toContain(
+    215|       'SELECT "bytes" FROM "spine"."google_protobuf_stringvalue" WHERE…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  packages/storage-postgres/test/postgres-entity-commit.test.ts > PostgreSQL Entity commit > retries a serialization failure once with a fresh transaction client
+AssertionError: expected "vi.fn()" to be called 4 times, but got 5 times
+ ❯ packages/storage-postgres/test/postgres-entity-commit.test.ts:230:28
+    228|     ).resolves.toBeUndefined();
+    229|
+    230|     expect(driver.connect).toHaveBeenCalledTimes(before + 3);
+       |                            ^
+    231|     expect(driver.query.mock.calls.filter(([sql]) => sql === "ROLLBACK…
+    232|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  packages/storage-postgres/test/postgres-entity-commit.test.ts > PostgreSQL Entity commit > prepares state history before acquiring its one operation client
+AssertionError: expected "vi.fn()" to be called 4 times, but got 6 times
+ ❯ packages/storage-postgres/test/postgres-entity-commit.test.ts:265:28
+    263|     ).resolves.toBeUndefined();
+    264|
+    265|     expect(driver.connect).toHaveBeenCalledTimes(before + 3);
+       |                            ^
+    266|   });
+    267|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  packages/storage-postgres/test/postgres-entity-commit.test.ts > PostgreSQL Entity commit > uses the same family and Entity advisory keys as state history
+AssertionError: expected [ -8257595466640898519n, …(1) ] to deeply equal ArrayContaining{…}
+
+- Expected
++ Received
+
+- ArrayContaining [
++ [
++   -8257595466640898519n,
+    6054172987634991892n,
+-   4736257812760221135n,
+-   1766466804872435032n,
+-   355897957088332733n,
+  ]
+
+ ❯ packages/storage-postgres/test/postgres-entity-commit.test.ts:290:24
+    288|       .filter(([sql]) => sql.includes("pg_advisory_xact_lock"))
+    289|       .map(([, values]) => values?.[0]);
+    290|     expect(commitKeys).toEqual(expect.arrayContaining(historyKeys));
+       |                        ^
+    291|   });
+    292|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  packages/storage-postgres/test/postgres-entity-commit.test.ts > PostgreSQL Entity commit > rolls back every transaction boundary without publishing a partial commit
+AssertionError: promise resolved "undefined" instead of rejecting
+
+- Expected:
+Error {
+  "message": "rejected promise",
+}
+
++ Received:
+undefined
+
+ ❯ packages/storage-postgres/test/postgres-entity-commit.test.ts:395:41
+    393|       driver.fail(candidate.sql, new Error(candidate.name), candidate.…
+    394|
+    395|       await expect(commit.commit(input)).rejects.toThrow();
+       |                                         ^
+    396|
+    397|       expect(driver.query.mock.calls.map(([sql]) => sql)).toContain("R…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  packages/storage-postgres/test/postgres-entity-commit.test.ts > PostgreSQL Entity commit > lets started work release before the factory drain completes
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ packages/storage-postgres/test/postgres-entity-commit.test.ts:507:3
+    505|   });
+    506|
+    507|   it("lets started work release before the factory drain completes", a…
+       |   ^
+    508|     const factory = await postgresFactory();
+    509|     const entity = entityInput();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  6 failed | 10 passed (16)
+   Start at  18:26:54
+   Duration  5.53s (transform 261ms, setup 0ms, import 387ms, tests 5.02s, environment 0ms)
+

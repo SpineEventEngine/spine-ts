@@ -1,0 +1,34 @@
+
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/test/delivery/inbox-provider-cleanup.test.ts
+   91:25  error  Forbidden non-null assertion                                      @typescript-eslint/no-non-null-assertion
+   99:51  error  Forbidden non-null assertion                                      @typescript-eslint/no-non-null-assertion
+  133:62  error  Invalid type "string | undefined" of template literal expression  @typescript-eslint/restrict-template-expressions
+
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage-mysql/test/mysql-integration.test.ts
+  113:50  error  Forbidden non-null assertion  @typescript-eslint/no-non-null-assertion
+  115:26  error  Forbidden non-null assertion  @typescript-eslint/no-non-null-assertion
+  117:35  error  Forbidden non-null assertion  @typescript-eslint/no-non-null-assertion
+  125:22  error  Forbidden non-null assertion  @typescript-eslint/no-non-null-assertion
+  126:23  error  Forbidden non-null assertion  @typescript-eslint/no-non-null-assertion
+  135:35  error  Forbidden non-null assertion  @typescript-eslint/no-non-null-assertion
+
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage-postgres/src/postgres/record-storage.ts
+  76:41  error  'I' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage-postgres/test/postgres-entity-history.test.ts
+  633:34  error  Returning a void expression from an arrow function shorthand is forbidden. Please add braces to the arrow function  @typescript-eslint/no-confusing-void-expression
+  644:30  error  Returning a void expression from an arrow function shorthand is forbidden. Please add braces to the arrow function  @typescript-eslint/no-confusing-void-expression
+
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage-postgres/test/postgresql-integration.test.ts
+   92:50  error  Forbidden non-null assertion  @typescript-eslint/no-non-null-assertion
+   94:26  error  Forbidden non-null assertion  @typescript-eslint/no-non-null-assertion
+  103:22  error  Forbidden non-null assertion  @typescript-eslint/no-non-null-assertion
+  104:23  error  Forbidden non-null assertion  @typescript-eslint/no-non-null-assertion
+
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage/test/event/event-store.test.ts
+  286:16  error  Unsafe member access .value on an `any` value  @typescript-eslint/no-unsafe-member-access
+  314:16  error  Unsafe member access .value on an `any` value  @typescript-eslint/no-unsafe-member-access
+
+✖ 18 problems (18 errors, 0 warnings)
+  2 errors and 0 warnings potentially fixable with the `--fix` option.
+

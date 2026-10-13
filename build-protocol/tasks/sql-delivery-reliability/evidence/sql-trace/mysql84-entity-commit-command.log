@@ -1,0 +1,124 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
++ actual - expected
+... Skipped lines
+
+  {
+    '$typeName': 'spine.server.entity.EntityRecord',
+    entityId: {
+      '$typeName': 'google.protobuf.Any',
+      typeUrl: 'type.spine.examples.todo/spine.examples.todo.TaskId',
++     value: Buffer(39) [Uint8Array] [
+-     value: Uint8Array(39) [
+        10,
+        37,
+        99,
+        100,
+        97,
+...
+      typeUrl: 'type.spine.examples.todo/spine.examples.todo.Task',
++     value: Buffer(90) [Uint8Array] [
+-     value: Uint8Array(90) [
+        10,
+        39,
+        10,
+        37,
+        99,
+
+    at file:///Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/sql-trace/entity-operations.mjs:173:12
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5) {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: {
+    '$typeName': 'spine.server.entity.EntityRecord',
+    entityId: {
+      '$typeName': 'google.protobuf.Any',
+      typeUrl: 'type.spine.examples.todo/spine.examples.todo.TaskId',
+      value: Buffer(39) [Uint8Array] [
+         10,  37,  99, 100,  97, 49, 49,  99,  55,
+        102,  99,  57, 100,  53, 52, 55,  53,  52,
+         57,  49,  97, 101, 102, 50, 57, 101,  98,
+        100, 101,  55,  53,  53, 50, 98,  95, 116,
+         97, 115, 107
+      ]
+    },
+    state: {
+      '$typeName': 'google.protobuf.Any',
+      typeUrl: 'type.spine.examples.todo/spine.examples.todo.Task',
+      value: Buffer(90) [Uint8Array] [
+         10,  39,  10,  37,  99, 100,  97,  49, 49,  99,  55, 102,
+         99,  57, 100,  53,  52,  55,  53,  52, 57,  49,  97, 101,
+        102,  50,  57, 101,  98, 100, 101,  55, 53,  53,  50,  98,
+         95, 116,  97, 115, 107,  18,   6,  84, 97, 115, 107,  32,
+         50,  34,  39,  10,  37,  99, 100,  97, 49,  49,  99,  55,
+        102,  99,  57, 100,  53,  52,  55,  53, 52,  57,  49,  97,
+        101, 102,  50,  57, 101,  98, 100, 101, 55,  53,  53,  50,
+         98,  95, 108, 105, 115, 116
+      ]
+    },
+    version: {
+      '$typeName': 'spine.core.Version',
+      number: 2,
+      timestamp: {
+        '$typeName': 'google.protobuf.Timestamp',
+        seconds: 2n,
+        nanos: 0
+      }
+    },
+    lifecycleFlags: {
+      '$typeName': 'spine.server.entity.LifecycleFlags',
+      archived: false,
+      deleted: false
+    }
+  },
+  expected: {
+    '$typeName': 'spine.server.entity.EntityRecord',
+    entityId: {
+      '$typeName': 'google.protobuf.Any',
+      typeUrl: 'type.spine.examples.todo/spine.examples.todo.TaskId',
+      value: Uint8Array(39) [
+         10,  37,  99, 100,  97, 49, 49,  99,  55,
+        102,  99,  57, 100,  53, 52, 55,  53,  52,
+         57,  49,  97, 101, 102, 50, 57, 101,  98,
+        100, 101,  55,  53,  53, 50, 98,  95, 116,
+         97, 115, 107
+      ]
+    },
+    state: {
+      '$typeName': 'google.protobuf.Any',
+      typeUrl: 'type.spine.examples.todo/spine.examples.todo.Task',
+      value: Uint8Array(90) [
+         10,  39,  10,  37,  99, 100,  97,  49, 49,  99,  55, 102,
+         99,  57, 100,  53,  52,  55,  53,  52, 57,  49,  97, 101,
+        102,  50,  57, 101,  98, 100, 101,  55, 53,  53,  50,  98,
+         95, 116,  97, 115, 107,  18,   6,  84, 97, 115, 107,  32,
+         50,  34,  39,  10,  37,  99, 100,  97, 49,  49,  99,  55,
+        102,  99,  57, 100,  53,  52,  55,  53, 52,  57,  49,  97,
+        101, 102,  50,  57, 101,  98, 100, 101, 55,  53,  53,  50,
+         98,  95, 108, 105, 115, 116
+      ]
+    },
+    version: {
+      '$typeName': 'spine.core.Version',
+      number: 2,
+      timestamp: {
+        '$typeName': 'google.protobuf.Timestamp',
+        seconds: 2n,
+        nanos: 0
+      }
+    },
+    lifecycleFlags: {
+      '$typeName': 'spine.server.entity.LifecycleFlags',
+      archived: false,
+      deleted: false
+    }
+  },
+  operator: 'deepStrictEqual',
+  diff: 'simple'
+}
+
+Node.js v24.18.0
+Trace capture restored: /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/sql-trace/runs/mysql84-entity-commit-2026-10-13T183740992Z.json

@@ -1,0 +1,78 @@
+{
+  "checkedAt": "2026-10-13T17:55:44.230Z",
+  "checks": [
+    {
+      "engine": "postgres16",
+      "remainingLogStatementOverrides": [],
+      "restored": true
+    },
+    {
+      "engine": "postgres18",
+      "remainingLogStatementOverrides": [],
+      "restored": true
+    },
+    {
+      "engine": "mysql84",
+      "general_log": 0,
+      "log_output": "FILE",
+      "restored": true
+    },
+    {
+      "engine": "mariadb114",
+      "general_log": 0,
+      "log_output": "FILE",
+      "restored": true
+    }
+  ],
+  "runs": [
+    {
+      "file": "mariadb114-wrapper-failure-2026-10-13T175102598Z.json",
+      "exitCode": 7,
+      "loggingRestored": true,
+      "elapsedMs": 2104,
+      "failures": []
+    },
+    {
+      "file": "mysql84-wrapper-success-2026-10-13T175019128Z.json",
+      "exitCode": 0,
+      "loggingRestored": true,
+      "elapsedMs": 2110,
+      "failures": []
+    },
+    {
+      "file": "mysql84-wrapper-success-fixed-2026-10-13T175102412Z.json",
+      "exitCode": 0,
+      "loggingRestored": true,
+      "elapsedMs": 2106,
+      "failures": []
+    },
+    {
+      "file": "mysql84-wrapper-timeout-fixed-2026-10-13T175353621Z.json",
+      "exitCode": 128,
+      "loggingRestored": true,
+      "elapsedMs": 92006,
+      "failures": []
+    },
+    {
+      "file": "postgres16-wrapper-failure-2026-10-13T175102407Z.json",
+      "exitCode": 7,
+      "loggingRestored": true,
+      "elapsedMs": 2090,
+      "failures": []
+    },
+    {
+      "file": "postgres16-wrapper-success-2026-10-13T175017992Z.json",
+      "exitCode": 0,
+      "loggingRestored": true,
+      "elapsedMs": 2097,
+      "failures": []
+    },
+    {
+      "file": "postgres18-wrapper-timeout-fixed-2026-10-13T175353390Z.json",
+      "exitCode": 128,
+      "loggingRestored": true,
+      "elapsedMs": 92005,
+      "failures": []
+    }
+  ]
+}

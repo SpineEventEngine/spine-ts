@@ -243,36 +243,24 @@ describe("RemoteInbox direct behavior", () => {
     );
   });
 
-  it("removes an exact pending duplicate without acknowledging it", async () => {
+  it("removes a pending duplicate by ID without acknowledging it", async () => {
     const client = new Client();
     const inbox = new RemoteInbox(client as never);
     const duplicate = domainMessage("duplicate");
-    client.findOne.mockResolvedValueOnce(duplicate);
 
-    await expect(
-      inbox.removeDuplicate(duplicate, { kind: "EXCLUSIVE", shard: duplicate.shard }),
-    ).resolves.toBe(true);
+    await expect(inbox.removeDuplicate(duplicate)).resolves.toBe(true);
     expect(client.removeOne).toHaveBeenCalledWith(duplicate, undefined);
+    expect(client.findOne).not.toHaveBeenCalled();
     expect(client.writeOne).not.toHaveBeenCalled();
   });
 
-  it("does not remove a changed row or a row outside the current shard session", async () => {
+  it("sends one removal by ID without reading a mutable row", async () => {
     const client = new Client();
     const inbox = new RemoteInbox(client as never);
     const duplicate = domainMessage("duplicate");
-    client.findOne.mockResolvedValueOnce({ ...duplicate, version: duplicate.version + 1n });
-
-    await expect(
-      inbox.removeDuplicate(duplicate, { kind: "EXCLUSIVE", shard: duplicate.shard }),
-    ).resolves.toBe(false);
-    await expect(
-      inbox.removeDuplicate(duplicate, {
-        kind: "EXCLUSIVE",
-        shard: new ShardIndex(0, duplicate.shard.ofTotal + 1),
-      }),
-    ).resolves.toBe(false);
-    expect(client.removeOne).not.toHaveBeenCalled();
-    expect(client.findOne).toHaveBeenCalledTimes(1);
+    await expect(inbox.removeDuplicate(duplicate)).resolves.toBe(true);
+    expect(client.removeOne).toHaveBeenCalledOnce();
+    expect(client.findOne).not.toHaveBeenCalled();
   });
 
   it("retains delivered rows until their finite expiration", async () => {
@@ -285,16 +273,11 @@ describe("RemoteInbox direct behavior", () => {
     };
     const expired = { ...retained, keepUntil: new Date(Date.now() - 1) };
 
-    await expect(inbox.removeDelivered(retained, {} as never)).resolves.toBe(false);
-    client.findOne.mockResolvedValueOnce(expired);
-    await expect(
-      inbox.removeDelivered(expired, { kind: "EXCLUSIVE", shard: expired.shard } as never),
-    ).resolves.toBe(true);
+    await expect(inbox.removeDelivered(retained)).resolves.toBe(false);
+    await expect(inbox.removeDelivered(expired)).resolves.toBe(true);
     expect(client.removeOne).toHaveBeenCalledWith(expired, undefined);
 
-    await expect(
-      inbox.removeDelivered(expired, { kind: "LEASED", shard: expired.shard } as never),
-    ).resolves.toBe(false);
+    await expect(inbox.removeDelivered(expired)).resolves.toBe(true);
   });
 
   it("rejects malformed shard observations before they can change remote ownership", () => {

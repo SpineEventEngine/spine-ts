@@ -13,7 +13,7 @@
  */
 
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { Int32ValueSchema, StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
+import { AnySchema } from "@bufbuild/protobuf/wkt";
 import { Identifiers, StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
 import { EventSchema, type Event } from "@spine-event-engine/proto";
 import {
@@ -23,12 +23,19 @@ import {
 import { RecordSpec } from "@spine-event-engine/storage";
 import {
   EntityCommitStorageFactories,
-  type EntityCommitInput,
   type EntityStorageInput,
 } from "@spine-event-engine/storage/provider";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
-import { entityStorage } from "./postgres-entity-seam.js";
+import {
+  TaskIdSchema,
+  TaskListIdSchema,
+} from "../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
+import {
+  TaskCreatedSchema,
+  TaskRenamedSchema,
+} from "../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
+import { TaskListSchema } from "../../../examples/todo/generated/spine/examples/todo/task_list_pb.js";
+import { TaskSchema } from "../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 
 const driver = vi.hoisted(() => {
   let commitFailure: Error | undefined;
@@ -73,7 +80,7 @@ const driver = vi.hoisted(() => {
       return Promise.resolve({ rows: [] });
     }
     if (sql.startsWith('SELECT "bytes"')) {
-      const bytes = sql.includes('"google_protobuf_stringvalue"') ? current : immutable;
+      const bytes = sql.includes('"spine_examples_todo_task"') ? current : immutable;
       return Promise.resolve({ rows: bytes === undefined ? [] : [{ bytes }] });
     }
     if (sql === "COMMIT" && commitFailure !== undefined) {
@@ -93,7 +100,7 @@ const driver = vi.hoisted(() => {
       const bytes = values[1] as Uint8Array;
       const write = () => {
         durableWrites += 1;
-        if (sql.includes('"google_protobuf_stringvalue"')) current = bytes;
+        if (sql.includes('"spine_examples_todo_task"')) current = bytes;
         else immutable = bytes;
       };
       if (transaction) pending.push(write);
@@ -200,35 +207,33 @@ describe("PostgreSQL Entity commit", () => {
     expect(driver.connect).toHaveBeenCalledTimes(connections);
   });
 
-  it("prepares the current table before acquiring one transaction client", async () => {
+  it("writes current state without a locked read", async () => {
     const factory = await postgresFactory();
     const entity = entityInput();
     const commit = EntityCommitStorageFactories.create(factory, entity);
-    const before = driver.connect.mock.calls.length;
-
     await expect(
       commit.commit({ context: entity.context, entity, entityId: "task", next: record("task") }),
     ).resolves.toBeUndefined();
 
-    expect(driver.connect).toHaveBeenCalledTimes(before + 2);
-    expect(driver.query.mock.calls.map(([sql]) => sql)).toContain(
-      'SELECT "bytes" FROM "spine"."google_protobuf_stringvalue" WHERE "ID" = $1 FOR UPDATE',
-    );
+    expect(driver.query.mock.calls.some(([sql]) => sql.includes("FOR UPDATE"))).toBe(false);
   });
 
-  it("retries a serialization failure once with a fresh transaction client", async () => {
+  it("persists captured Entity bytes when the caller mutates input during I/O", async () => {
     const factory = await postgresFactory();
     const entity = entityInput();
     const commit = EntityCommitStorageFactories.create(factory, entity);
-    const before = driver.connect.mock.calls.length;
-    driver.failCommit(Object.assign(new Error("serialization"), { code: "40001" }));
+    const next = record("task", "prepared");
+    driver.block('SELECT "bytes"');
 
-    await expect(
-      commit.commit({ context: entity.context, entity, entityId: "task", next: record("task") }),
-    ).resolves.toBeUndefined();
+    const pending = commit.commit({ context: entity.context, entity, entityId: "task", next });
+    await driver.waitUntilBlocked();
+    next.state = record("task", "mutated").state;
+    driver.unblock();
+    await expect(pending).resolves.toBeUndefined();
 
-    expect(driver.connect).toHaveBeenCalledTimes(before + 3);
-    expect(driver.query.mock.calls.filter(([sql]) => sql === "ROLLBACK")).toHaveLength(1);
+    const insert = driver.query.mock.calls.findLast(([sql]) => sql.startsWith("INSERT"));
+    const stored = fromBinary(EntityRecordSchema, insert?.[1]?.[1] as Uint8Array);
+    expect(stored.state).toEqual(record("task", "prepared").state);
   });
 
   it("closes idempotently and rejects a later commit before client acquisition", async () => {
@@ -246,12 +251,10 @@ describe("PostgreSQL Entity commit", () => {
     expect(driver.connect).toHaveBeenCalledTimes(connections);
   });
 
-  it("prepares state history before acquiring its one operation client", async () => {
+  it("prepares and writes state history independently of current state", async () => {
     const factory = await postgresFactory();
     const entity = entityInput(true);
     const commit = EntityCommitStorageFactories.create(factory, entity);
-    const before = driver.connect.mock.calls.length;
-
     await expect(
       commit.commit({
         context: entity.context,
@@ -262,39 +265,15 @@ describe("PostgreSQL Entity commit", () => {
       }),
     ).resolves.toBeUndefined();
 
-    expect(driver.connect).toHaveBeenCalledTimes(before + 3);
+    expect(driver.durableWrites()).toBe(2);
   });
 
-  it("uses the same family and Entity advisory keys as state history", async () => {
-    const factory = await postgresFactory();
-    const entity = entityInput(true);
-    const history = entityStorage(factory, entity);
-    await history.states.append(record("task"));
-    const historyKeys = driver.query.mock.calls
-      .filter(([sql]) => sql.includes("pg_advisory_xact_lock"))
-      .map(([, values]) => values?.[0]);
-    driver.query.mockClear();
-    const commit = EntityCommitStorageFactories.create(factory, entity);
-
-    await commit.commit({
-      context: entity.context,
-      entity,
-      entityId: "task",
-      next: record("task"),
-      states: [record("task")],
-    });
-
-    const commitKeys = driver.query.mock.calls
-      .filter(([sql]) => sql.includes("pg_advisory_xact_lock"))
-      .map(([, values]) => values?.[0]);
-    expect(commitKeys).toEqual(expect.arrayContaining(historyKeys));
-  });
-
-  it("rolls back and releases after an Entity lock failure", async () => {
+  it("releases the client after a current-record write failure", async () => {
     const factory = await postgresFactory();
     const entity = entityInput();
     const commit = EntityCommitStorageFactories.create(factory, entity);
-    driver.fail("pg_advisory_xact_lock($1)", new Error("lock failed"));
+    const rollbackCount = driver.query.mock.calls.filter(([sql]) => sql === "ROLLBACK").length;
+    driver.fail("INSERT INTO", new Error("write failed"));
 
     const failure = commit.commit({
       context: entity.context,
@@ -302,14 +281,16 @@ describe("PostgreSQL Entity commit", () => {
       entityId: "task",
       next: record("task"),
     });
-    await expect(failure).rejects.toThrow("PostgreSQL storage operation failed.");
-    await expect(failure).rejects.not.toThrow("lock failed");
+    await expect(failure).rejects.toThrow("PostgreSQL record operation failed.");
+    await expect(failure).rejects.not.toThrow("write failed");
 
-    expect(driver.query.mock.calls.map(([sql]) => sql)).toContain("ROLLBACK");
-    expect(driver.release).toHaveBeenCalledTimes(2);
+    expect(driver.query.mock.calls.filter(([sql]) => sql === "ROLLBACK")).toHaveLength(
+      rollbackCount,
+    );
+    expect(driver.release).toHaveBeenCalledTimes(driver.connect.mock.calls.length);
   });
 
-  it("replaces a locked current record", async () => {
+  it("replaces a current record", async () => {
     const factory = await postgresFactory();
     const entity = entityInput();
     const commit = EntityCommitStorageFactories.create(factory, entity);
@@ -340,7 +321,7 @@ describe("PostgreSQL Entity commit", () => {
     await expect(
       commit.commit({
         context: entity.context,
-        entity: { ...entity, stateSchema: Int32ValueSchema },
+        entity: { ...entity, stateSchema: TaskListSchema },
         entityId: "task",
         next: record("task"),
       }),
@@ -383,23 +364,6 @@ describe("PostgreSQL Entity commit", () => {
     expect(driver.connect).toHaveBeenCalledTimes(connections);
   });
 
-  it("rolls back every transaction boundary without publishing a partial commit", async () => {
-    const cases = transactionFailures();
-    for (const candidate of cases) {
-      driver.reset();
-      const factory = await postgresFactory();
-      const input = candidate.input();
-      const commit = EntityCommitStorageFactories.create(factory, input.entity);
-      driver.fail(candidate.sql, new Error(candidate.name), candidate.after);
-
-      await expect(commit.commit(input)).rejects.toThrow();
-
-      expect(driver.query.mock.calls.map(([sql]) => sql)).toContain("ROLLBACK");
-      expect(driver.durableWrites()).toBe(0);
-      factory.close();
-    }
-  });
-
   it("writes all families only after immutable preflight succeeds", async () => {
     const factory = await postgresFactory();
     const entity = entityInput(true, true);
@@ -420,6 +384,51 @@ describe("PostgreSQL Entity commit", () => {
     expect(driver.durableWrites()).toBe(4);
     expect(driver.query.mock.calls.filter(([sql]) => sql.includes("DO NOTHING"))).toHaveLength(3);
     factory.close();
+  });
+
+  it("retains state history when a later diagnostic append fails", async () => {
+    const factory = await postgresFactory();
+    const entity = entityInput(true, true);
+    const commit = EntityCommitStorageFactories.create(factory, entity);
+    driver.fail("DO NOTHING", new Error("diagnostic insert failed"), 2);
+
+    await expect(
+      commit.commit({
+        context: entity.context,
+        entity,
+        entityId: "task",
+        next: record("task"),
+        states: [record("task")],
+        diagnostics: [event("diagnostic")],
+      }),
+    ).rejects.toThrow();
+
+    expect(driver.durableWrites()).toBe(1);
+    expect(driver.query.mock.calls.map(([sql]) => sql)).not.toContain("ROLLBACK");
+    factory.close();
+  });
+
+  it("replays captured records once after a deadlock without changing Event IDs", async () => {
+    const factory = await postgresFactory();
+    const entity = entityInput();
+    const commit = EntityCommitStorageFactories.create(factory, entity);
+    const delivery = event("stable-delivery");
+    const deadlock = Object.assign(new Error("driver deadlock detail"), { code: "40P01" });
+    driver.fail("DO NOTHING", deadlock);
+
+    await expect(
+      commit.commit({
+        context: entity.context,
+        entity,
+        entityId: "task",
+        next: record("task"),
+        events: [delivery],
+      }),
+    ).resolves.toBeUndefined();
+
+    const attempts = driver.query.mock.calls.filter(([sql]) => sql.includes("DO NOTHING"));
+    expect(attempts).toHaveLength(2);
+    expect(attempts[0]?.[1]).toEqual(attempts[1]?.[1]);
   });
 
   it("accepts byte-identical immutable replay and rejects a divergent collision", async () => {
@@ -486,7 +495,7 @@ describe("PostgreSQL Entity commit", () => {
     const factory = await postgresFactory();
     const entity = entityInput();
     const commit = EntityCommitStorageFactories.create(factory, entity);
-    driver.block("FOR UPDATE");
+    driver.block('INSERT INTO "spine"."spine_examples_todo_task"');
     const inFlight = commit.commit({
       context: entity.context,
       entity,
@@ -510,105 +519,59 @@ describe("PostgreSQL Entity commit", () => {
   });
 });
 
-function transactionFailures() {
-  return [
-    transactionFailure("state family lock", "pg_advisory_xact_lock_shared", stateCommit),
-    transactionFailure("diagnostic family lock", "pg_advisory_xact_lock_shared", diagnosticCommit),
-    transactionFailure("Entity lock", "pg_advisory_xact_lock($1)", currentCommit),
-    transactionFailure("locked current read", "FOR UPDATE", currentCommit),
-    transactionFailure("state preflight", 'SELECT "bytes"', stateCommit, 2),
-    transactionFailure("diagnostic preflight", 'SELECT "bytes"', diagnosticCommit, 2),
-    transactionFailure("delivery preflight", 'SELECT "bytes"', deliveryCommit, 2),
-    transactionFailure("state append", "DO NOTHING", stateCommit),
-    transactionFailure("diagnostic append", "DO NOTHING", diagnosticCommit),
-    transactionFailure("delivery append", "DO NOTHING", deliveryCommit),
-    transactionFailure("current write", "DO UPDATE", currentCommit),
-    transactionFailure("commit", "COMMIT", currentCommit),
-  ];
-}
-
-function transactionFailure(
-  name: string,
-  sql: string,
-  input: () => EntityCommitInput<string, StringValue>,
-  after = 1,
-) {
-  return { name, sql, input, after };
-}
-
-function currentCommit(): EntityCommitInput<string, StringValue> {
-  const entity = entityInput();
-  return { context: entity.context, entity, entityId: "task", next: record("task") };
-}
-
-function stateCommit(): EntityCommitInput<string, StringValue> {
-  const entity = entityInput(true);
-  return {
-    context: entity.context,
-    entity,
-    entityId: "task",
-    next: record("task"),
-    states: [record("task")],
-  };
-}
-
-function diagnosticCommit(): EntityCommitInput<string, StringValue> {
-  const entity = entityInput(false, true);
-  return {
-    context: entity.context,
-    entity,
-    entityId: "task",
-    next: record("task"),
-    diagnostics: [event("diagnostic")],
-  };
-}
-
-function deliveryCommit(): EntityCommitInput<string, StringValue> {
-  const entity = entityInput();
-  return {
-    context: entity.context,
-    entity,
-    entityId: "task",
-    next: record("task"),
-    events: [event("delivery")],
-  };
-}
-
 function entityInput(
   stateHistory = false,
   eventHistory = false,
-): EntityStorageInput<string, StringValue> {
+): EntityStorageInput<string, ReturnType<typeof task>> {
   return {
     context: { name: "Tasks", multitenant: false },
     id: {
       clone: (id) => id,
       key: (id) => id,
-      pack: (id) => Identifiers.pack(StringValueSchema, create(StringValueSchema, { value: id })),
+      pack: (id) => Identifiers.pack(TaskIdSchema, create(TaskIdSchema, { value: id })),
       unpack: (packed) =>
-        packed.typeUrl.endsWith(`/${StringValueSchema.typeName}`)
-          ? fromBinary(StringValueSchema, packed.value).value
+        packed.typeUrl.endsWith(`/${TaskIdSchema.typeName}`)
+          ? fromBinary(TaskIdSchema, packed.value).value
           : undefined,
     },
     columns: [],
     recordSpec: new RecordSpec({
-      sourceType: StringValueSchema,
+      sourceType: TaskSchema,
       recordType: EntityRecordSchema,
       idKind: "string",
       extractId: () => "",
     }),
-    sourceType: StringValueSchema,
-    stateSchema: StringValueSchema,
+    sourceType: TaskSchema,
+    stateSchema: TaskSchema,
     stateHistory,
     eventHistory,
   };
 }
 
 function event(id: string, alternate = false): Event {
+  const taskId = create(TaskIdSchema, { value: "task" });
+  const message = alternate
+    ? create(AnySchema, {
+        typeUrl: `type.spine.io/${TaskRenamedSchema.typeName}`,
+        value: toBinary(
+          TaskRenamedSchema,
+          create(TaskRenamedSchema, { id: taskId, title: "Changed" }),
+        ),
+      })
+    : create(AnySchema, {
+        typeUrl: `type.spine.io/${TaskCreatedSchema.typeName}`,
+        value: toBinary(
+          TaskCreatedSchema,
+          create(TaskCreatedSchema, {
+            id: taskId,
+            title: "Created",
+            taskListId: create(TaskListIdSchema, { value: "list-1" }),
+          }),
+        ),
+      });
   return create(EventSchema, {
     id: { value: id },
-    ...(alternate
-      ? { message: { typeUrl: "type.spine.test/Changed", value: Uint8Array.of(1) } }
-      : {}),
+    message,
   });
 }
 
@@ -678,18 +641,22 @@ function columns(sql: string) {
 
 function record(id: string, state?: string): EntityRecord {
   return create(EntityRecordSchema, {
-    entityId: Identifiers.pack(StringValueSchema, create(StringValueSchema, { value: id })),
-    ...(state === undefined
-      ? {}
-      : {
-          state: Identifiers.pack(StringValueSchema, create(StringValueSchema, { value: state })),
-        }),
+    entityId: Identifiers.pack(TaskIdSchema, create(TaskIdSchema, { value: id })),
+    state: Identifiers.pack(TaskSchema, task(state ?? id, id)),
+  });
+}
+
+function task(title: string, id = "task") {
+  return create(TaskSchema, {
+    id: create(TaskIdSchema, { value: id }),
+    title,
+    taskListId: create(TaskListIdSchema, { value: "list-1" }),
   });
 }
 
 function postgresFactory() {
   const stringifiers = new StringifierRegistry();
-  stringifiers.setTypeRegistry(new TypeRegistry([StringValueSchema]));
+  stringifiers.setTypeRegistry(new TypeRegistry([TaskIdSchema, TaskSchema]));
   return PostgresStorageFactory.newBuilder()
     .setOptions({ url: "postgresql://db.example/spine", schema: "spine" })
     .setStringifierRegistry(stringifiers)

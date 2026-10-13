@@ -1,0 +1,21 @@
+{
+  "operation": "delivered-cleanup",
+  "engine": "postgres18",
+  "serverVersion": "PostgreSQL 18.6 (Debian 18.6-1.pgdg13+2) on aarch64-unknown-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+  "containerName": "spine-sqlrel-8327eaa2-pg18",
+  "containerId": "50841829b2409499e6800f39dd8b11ba6de516ec7eec85145d10ace270f95ea0",
+  "image": "postgres@sha256:86c951e05bf56c93d95d397747fb8820ac76cc3bedb78f43abd83eedbe3666ae",
+  "startedAt": "2026-10-13T18:42:33.421Z",
+  "endedAt": "2026-10-13T18:42:35.674Z",
+  "command": [
+    "node",
+    "build-protocol/tasks/sql-delivery-reliability/evidence/sql-trace/inbox-operations.mjs",
+    "delivered-cleanup"
+  ],
+  "exitCode": 0,
+  "interruptedSignal": null,
+  "rawLog": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/sql-trace/runs/postgres18-delivered-cleanup-2026-10-13T184233367Z.log",
+  "loggingRestored": true,
+  "restoreErrors": [],
+  "failures": []
+}

@@ -1,0 +1,6 @@
+$ node scripts/check-cleanup-rules.mjs
+Cleanup enforcement failed: lines longer than 120 characters
+  - packages/storage/src/memory/in-memory-entity-commit.ts:132 (187)
+Cleanup enforcement failed: modified production/example callables exceed 35 physical lines
+  - packages/storage/src/memory/in-memory-entity-commit.ts:130-166 openCommit
+[ELIFECYCLE] Command failed with exit code 1.

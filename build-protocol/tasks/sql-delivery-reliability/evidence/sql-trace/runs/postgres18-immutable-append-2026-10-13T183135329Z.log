@@ -1,0 +1,115 @@
+2026-10-13T18:31:36.325326007Z 2026-10-13 18:31:36.325 UTC [728] LOG:  statement: SHOW server_version_num
+2026-10-13T18:31:36.325386382Z 2026-10-13 18:31:36.325 UTC [727] LOG:  statement: SHOW server_version_num
+2026-10-13T18:31:36.325392466Z 2026-10-13 18:31:36.325 UTC [729] LOG:  statement: SHOW server_version_num
+2026-10-13T18:31:36.333566049Z 2026-10-13 18:31:36.333 UTC [730] LOG:  statement: SELECT current_schema() AS schema
+2026-10-13T18:31:36.335067591Z 2026-10-13 18:31:36.334 UTC [730] LOG:  execute <unnamed>: SELECT 1 FROM information_schema.schemata WHERE schema_name = $1
+2026-10-13T18:31:36.335105049Z 2026-10-13 18:31:36.334 UTC [730] DETAIL:  Parameters: $1 = 'public'
+2026-10-13T18:31:36.339806716Z 2026-10-13 18:31:36.339 UTC [730] LOG:  execute <unnamed>: SELECT 1 FROM information_schema.columns WHERE table_schema = $1 AND LOWER(column_name) IN ('_scope', '_revision') LIMIT 1
+2026-10-13T18:31:36.339820549Z 2026-10-13 18:31:36.339 UTC [730] DETAIL:  Parameters: $1 = 'public'
+2026-10-13T18:31:36.343725299Z 2026-10-13 18:31:36.343 UTC [730] LOG:  statement: BEGIN
+2026-10-13T18:31:36.344409257Z 2026-10-13 18:31:36.344 UTC [730] LOG:  execute <unnamed>: SELECT pg_advisory_xact_lock($1)
+2026-10-13T18:31:36.344413716Z 2026-10-13 18:31:36.344 UTC [730] DETAIL:  Parameters: $1 = '-2430518511220427240'
+2026-10-13T18:31:36.344848591Z 2026-10-13 18:31:36.344 UTC [730] LOG:  statement: CREATE TABLE IF NOT EXISTS "public"."spine_core_event" ("ID" VARCHAR(512) NOT NULL, "bytes" BYTEA NOT NULL, "created" BIGINT, "type" TEXT, PRIMARY KEY ("ID"))
+2026-10-13T18:31:36.347338632Z 2026-10-13 18:31:36.347 UTC [730] LOG:  execute <unnamed>: SELECT column_name, data_type, character_maximum_length, is_nullable, column_default FROM information_schema.columns WHERE table_schema=$1 AND table_name=$2 ORDER BY ordinal_position
+2026-10-13T18:31:36.347364716Z 2026-10-13 18:31:36.347 UTC [730] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_core_event'
+2026-10-13T18:31:36.350476966Z 2026-10-13 18:31:36.350 UTC [730] LOG:  execute <unnamed>: SELECT kcu.column_name, kcu.ordinal_position FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu USING (constraint_catalog, constraint_schema, constraint_name) WHERE tc.table_schema=$1 AND tc.table_name=$2 AND tc.constraint_type = 'PRIMARY KEY' ORDER BY kcu.ordinal_position
+2026-10-13T18:31:36.350488841Z 2026-10-13 18:31:36.350 UTC [730] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_core_event'
+2026-10-13T18:31:36.354613341Z 2026-10-13 18:31:36.354 UTC [730] LOG:  execute <unnamed>: SELECT tc.constraint_name, kcu.column_name, kcu.ordinal_position FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu USING (constraint_catalog, constraint_schema, constraint_name) WHERE tc.table_schema=$1 AND tc.table_name=$2 AND tc.constraint_type = 'UNIQUE' ORDER BY tc.constraint_name, kcu.ordinal_position
+2026-10-13T18:31:36.354620132Z 2026-10-13 18:31:36.354 UTC [730] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_core_event'
+2026-10-13T18:31:36.356449882Z 2026-10-13 18:31:36.356 UTC [730] LOG:  statement: COMMIT
+2026-10-13T18:31:36.357479257Z 2026-10-13 18:31:36.357 UTC [730] LOG:  execute <unnamed>: SELECT "bytes" FROM "public"."spine_core_event" WHERE "ID" = $1
+2026-10-13T18:31:36.357485132Z 2026-10-13 18:31:36.357 UTC [730] DETAIL:  Parameters: $1 = '{"value":"1791916296310_99375-first"}'
+2026-10-13T18:31:36.358323966Z 2026-10-13 18:31:36.358 UTC [730] LOG:  execute <unnamed>: INSERT INTO "public"."spine_core_event" ("ID", "bytes", "created", "type") VALUES ($1, $2, $3, $4) ON CONFLICT ("ID") DO NOTHING
+2026-10-13T18:31:36.358330507Z 2026-10-13 18:31:36.358 UTC [730] DETAIL:  Parameters: $1 = '{"value":"1791916296310_99375-first"}', $2 = '\x0a1b0a19313739313931363239363331305f39393337352d666972737412590a38747970652e7370696e652e6578616d706c65732e746f646f2f7370696e652e6578616d706c65732e746f646f2e5461736b43726561746564121d0a080a067461736b2d311207437265617465641a080a066c6973742d311a491a3f0a33747970652e7370696e652e6578616d706c65732e746f646f2f7370696e652e6578616d706c65732e746f646f2e5461736b496412080a067461736b2d312206080112020801', $3 = '0', $4 = 'type.spine.examples.todo/spine.examples.todo.TaskCreated'
+2026-10-13T18:31:36.362360549Z 2026-10-13 18:31:36.362 UTC [731] LOG:  statement: SELECT 'spine_trace_begin_immutable_append' AS marker
+2026-10-13T18:31:36.363465674Z 2026-10-13 18:31:36.363 UTC [730] LOG:  statement: BEGIN
+2026-10-13T18:31:36.363978424Z 2026-10-13 18:31:36.363 UTC [730] LOG:  execute <unnamed>: SELECT pg_advisory_xact_lock($1)
+2026-10-13T18:31:36.363981382Z 2026-10-13 18:31:36.363 UTC [730] DETAIL:  Parameters: $1 = '-2430518511220427240'
+2026-10-13T18:31:36.364252007Z 2026-10-13 18:31:36.364 UTC [730] LOG:  statement: CREATE TABLE IF NOT EXISTS "public"."spine_core_event" ("ID" VARCHAR(512) NOT NULL, "bytes" BYTEA NOT NULL, "created" BIGINT, "type" TEXT, PRIMARY KEY ("ID"))
+2026-10-13T18:31:36.365478841Z 2026-10-13 18:31:36.365 UTC [730] LOG:  execute <unnamed>: SELECT column_name, data_type, character_maximum_length, is_nullable, column_default FROM information_schema.columns WHERE table_schema=$1 AND table_name=$2 ORDER BY ordinal_position
+2026-10-13T18:31:36.365482757Z 2026-10-13 18:31:36.365 UTC [730] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_core_event'
+2026-10-13T18:31:36.367045799Z 2026-10-13 18:31:36.366 UTC [730] LOG:  execute <unnamed>: SELECT kcu.column_name, kcu.ordinal_position FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu USING (constraint_catalog, constraint_schema, constraint_name) WHERE tc.table_schema=$1 AND tc.table_name=$2 AND tc.constraint_type = 'PRIMARY KEY' ORDER BY kcu.ordinal_position
+2026-10-13T18:31:36.367050382Z 2026-10-13 18:31:36.366 UTC [730] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_core_event'
+2026-10-13T18:31:36.369555299Z 2026-10-13 18:31:36.369 UTC [730] LOG:  execute <unnamed>: SELECT tc.constraint_name, kcu.column_name, kcu.ordinal_position FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu USING (constraint_catalog, constraint_schema, constraint_name) WHERE tc.table_schema=$1 AND tc.table_name=$2 AND tc.constraint_type = 'UNIQUE' ORDER BY tc.constraint_name, kcu.ordinal_position
+2026-10-13T18:31:36.369570507Z 2026-10-13 18:31:36.369 UTC [730] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_core_event'
+2026-10-13T18:31:36.370943091Z 2026-10-13 18:31:36.370 UTC [730] LOG:  statement: COMMIT
+2026-10-13T18:31:36.371370591Z 2026-10-13 18:31:36.371 UTC [730] LOG:  execute <unnamed>: SELECT "bytes" FROM "public"."spine_core_event" WHERE "ID" = $1
+2026-10-13T18:31:36.371373757Z 2026-10-13 18:31:36.371 UTC [730] DETAIL:  Parameters: $1 = '{"value":"1791916296310_99375-first"}'
+2026-10-13T18:31:36.372145257Z 2026-10-13 18:31:36.372 UTC [730] LOG:  execute <unnamed>: SELECT "bytes" FROM "public"."spine_core_event" WHERE "ID" = $1
+2026-10-13T18:31:36.372149174Z 2026-10-13 18:31:36.372 UTC [730] DETAIL:  Parameters: $1 = '{"value":"1791916296310_99375-first"}'
+2026-10-13T18:31:36.372757841Z 2026-10-13 18:31:36.372 UTC [730] LOG:  execute <unnamed>: SELECT "bytes" FROM "public"."spine_core_event" WHERE "ID" = $1
+2026-10-13T18:31:36.372764174Z 2026-10-13 18:31:36.372 UTC [730] DETAIL:  Parameters: $1 = '{"value":"1791916296310_99375-second"}'
+2026-10-13T18:31:36.373167799Z 2026-10-13 18:31:36.373 UTC [730] LOG:  execute <unnamed>: INSERT INTO "public"."spine_core_event" ("ID", "bytes", "created", "type") VALUES ($1, $2, $3, $4) ON CONFLICT ("ID") DO NOTHING
+2026-10-13T18:31:36.373170549Z 2026-10-13 18:31:36.373 UTC [730] DETAIL:  Parameters: $1 = '{"value":"1791916296310_99375-second"}', $2 = '\x0a1c0a1a313739313931363239363331305f39393337352d7365636f6e6412590a38747970652e7370696e652e6578616d706c65732e746f646f2f7370696e652e6578616d706c65732e746f646f2e5461736b43726561746564121d0a080a067461736b2d321207437265617465641a080a066c6973742d311a491a3f0a33747970652e7370696e652e6578616d706c65732e746f646f2f7370696e652e6578616d706c65732e746f646f2e5461736b496412080a067461736b2d322206080112020801', $3 = '0', $4 = 'type.spine.examples.todo/spine.examples.todo.TaskCreated'
+2026-10-13T18:31:36.374009007Z 2026-10-13 18:31:36.373 UTC [730] LOG:  statement: BEGIN
+2026-10-13T18:31:36.374309591Z 2026-10-13 18:31:36.374 UTC [730] LOG:  execute <unnamed>: SELECT pg_advisory_xact_lock($1)
+2026-10-13T18:31:36.374311841Z 2026-10-13 18:31:36.374 UTC [730] DETAIL:  Parameters: $1 = '-2430518511220427240'
+2026-10-13T18:31:36.374554049Z 2026-10-13 18:31:36.374 UTC [730] LOG:  statement: CREATE TABLE IF NOT EXISTS "public"."spine_core_event" ("ID" VARCHAR(512) NOT NULL, "bytes" BYTEA NOT NULL, "created" BIGINT, "type" TEXT, PRIMARY KEY ("ID"))
+2026-10-13T18:31:36.375746466Z 2026-10-13 18:31:36.375 UTC [730] LOG:  execute <unnamed>: SELECT column_name, data_type, character_maximum_length, is_nullable, column_default FROM information_schema.columns WHERE table_schema=$1 AND table_name=$2 ORDER BY ordinal_position
+2026-10-13T18:31:36.375750633Z 2026-10-13 18:31:36.375 UTC [730] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_core_event'
+2026-10-13T18:31:36.377344591Z 2026-10-13 18:31:36.377 UTC [730] LOG:  execute <unnamed>: SELECT kcu.column_name, kcu.ordinal_position FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu USING (constraint_catalog, constraint_schema, constraint_name) WHERE tc.table_schema=$1 AND tc.table_name=$2 AND tc.constraint_type = 'PRIMARY KEY' ORDER BY kcu.ordinal_position
+2026-10-13T18:31:36.377348674Z 2026-10-13 18:31:36.377 UTC [730] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_core_event'
+2026-10-13T18:31:36.379837591Z 2026-10-13 18:31:36.379 UTC [730] LOG:  execute <unnamed>: SELECT tc.constraint_name, kcu.column_name, kcu.ordinal_position FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu USING (constraint_catalog, constraint_schema, constraint_name) WHERE tc.table_schema=$1 AND tc.table_name=$2 AND tc.constraint_type = 'UNIQUE' ORDER BY tc.constraint_name, kcu.ordinal_position
+2026-10-13T18:31:36.379842008Z 2026-10-13 18:31:36.379 UTC [730] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_core_event'
+2026-10-13T18:31:36.381126008Z 2026-10-13 18:31:36.381 UTC [730] LOG:  statement: COMMIT
+2026-10-13T18:31:36.381557383Z 2026-10-13 18:31:36.381 UTC [730] LOG:  execute <unnamed>: SELECT "ID", "bytes" FROM "public"."spine_core_event" WHERE "ID" IN ($1, $2) ORDER BY "ID" ASC
+2026-10-13T18:31:36.381560424Z 2026-10-13 18:31:36.381 UTC [730] DETAIL:  Parameters: $1 = '{"value":"1791916296310_99375-first"}', $2 = '{"value":"1791916296310_99375-second"}'
+2026-10-13T18:31:36.383838924Z 2026-10-13 18:31:36.383 UTC [730] LOG:  statement: BEGIN
+2026-10-13T18:31:36.384152174Z 2026-10-13 18:31:36.384 UTC [730] LOG:  execute <unnamed>: SELECT pg_advisory_xact_lock($1)
+2026-10-13T18:31:36.384154966Z 2026-10-13 18:31:36.384 UTC [730] DETAIL:  Parameters: $1 = '-2430518511220427240'
+2026-10-13T18:31:36.384467133Z 2026-10-13 18:31:36.384 UTC [730] LOG:  statement: CREATE TABLE IF NOT EXISTS "public"."spine_core_event" ("ID" VARCHAR(512) NOT NULL, "bytes" BYTEA NOT NULL, "created" BIGINT, "type" TEXT, PRIMARY KEY ("ID"))
+2026-10-13T18:31:36.385726799Z 2026-10-13 18:31:36.385 UTC [730] LOG:  execute <unnamed>: SELECT column_name, data_type, character_maximum_length, is_nullable, column_default FROM information_schema.columns WHERE table_schema=$1 AND table_name=$2 ORDER BY ordinal_position
+2026-10-13T18:31:36.385731466Z 2026-10-13 18:31:36.385 UTC [730] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_core_event'
+2026-10-13T18:31:36.387148758Z 2026-10-13 18:31:36.387 UTC [732] LOG:  statement: BEGIN
+2026-10-13T18:31:36.387613549Z 2026-10-13 18:31:36.387 UTC [730] LOG:  execute <unnamed>: SELECT kcu.column_name, kcu.ordinal_position FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu USING (constraint_catalog, constraint_schema, constraint_name) WHERE tc.table_schema=$1 AND tc.table_name=$2 AND tc.constraint_type = 'PRIMARY KEY' ORDER BY kcu.ordinal_position
+2026-10-13T18:31:36.387623091Z 2026-10-13 18:31:36.387 UTC [730] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_core_event'
+2026-10-13T18:31:36.387623924Z 2026-10-13 18:31:36.387 UTC [732] LOG:  execute <unnamed>: SELECT pg_advisory_xact_lock($1)
+2026-10-13T18:31:36.387624633Z 2026-10-13 18:31:36.387 UTC [732] DETAIL:  Parameters: $1 = '-2430518511220427240'
+2026-10-13T18:31:36.390330841Z 2026-10-13 18:31:36.390 UTC [730] LOG:  execute <unnamed>: SELECT tc.constraint_name, kcu.column_name, kcu.ordinal_position FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu USING (constraint_catalog, constraint_schema, constraint_name) WHERE tc.table_schema=$1 AND tc.table_name=$2 AND tc.constraint_type = 'UNIQUE' ORDER BY tc.constraint_name, kcu.ordinal_position
+2026-10-13T18:31:36.390343633Z 2026-10-13 18:31:36.390 UTC [730] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_core_event'
+2026-10-13T18:31:36.391812383Z 2026-10-13 18:31:36.391 UTC [730] LOG:  statement: COMMIT
+2026-10-13T18:31:36.392446049Z 2026-10-13 18:31:36.392 UTC [730] LOG:  execute <unnamed>: SELECT "bytes" FROM "public"."spine_core_event" WHERE "ID" = $1
+2026-10-13T18:31:36.392451049Z 2026-10-13 18:31:36.392 UTC [730] DETAIL:  Parameters: $1 = '{"value":"1791916296310_99375-second"}'
+2026-10-13T18:31:36.392454341Z 2026-10-13 18:31:36.392 UTC [732] LOG:  statement: CREATE TABLE IF NOT EXISTS "public"."spine_core_event" ("ID" VARCHAR(512) NOT NULL, "bytes" BYTEA NOT NULL, "created" BIGINT, "type" TEXT, PRIMARY KEY ("ID"))
+2026-10-13T18:31:36.392911633Z 2026-10-13 18:31:36.392 UTC [730] LOG:  execute <unnamed>: SELECT "bytes" FROM "public"."spine_core_event" WHERE "ID" = $1
+2026-10-13T18:31:36.392914633Z 2026-10-13 18:31:36.392 UTC [730] DETAIL:  Parameters: $1 = '{"value":"1791916296310_99375-second"}'
+2026-10-13T18:31:36.395742758Z 2026-10-13 18:31:36.395 UTC [732] LOG:  execute <unnamed>: SELECT column_name, data_type, character_maximum_length, is_nullable, column_default FROM information_schema.columns WHERE table_schema=$1 AND table_name=$2 ORDER BY ordinal_position
+2026-10-13T18:31:36.395755049Z 2026-10-13 18:31:36.395 UTC [732] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_core_event'
+2026-10-13T18:31:36.398248758Z 2026-10-13 18:31:36.398 UTC [732] LOG:  execute <unnamed>: SELECT kcu.column_name, kcu.ordinal_position FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu USING (constraint_catalog, constraint_schema, constraint_name) WHERE tc.table_schema=$1 AND tc.table_name=$2 AND tc.constraint_type = 'PRIMARY KEY' ORDER BY kcu.ordinal_position
+2026-10-13T18:31:36.398256966Z 2026-10-13 18:31:36.398 UTC [732] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_core_event'
+2026-10-13T18:31:36.400907299Z 2026-10-13 18:31:36.400 UTC [732] LOG:  execute <unnamed>: SELECT tc.constraint_name, kcu.column_name, kcu.ordinal_position FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu USING (constraint_catalog, constraint_schema, constraint_name) WHERE tc.table_schema=$1 AND tc.table_name=$2 AND tc.constraint_type = 'UNIQUE' ORDER BY tc.constraint_name, kcu.ordinal_position
+2026-10-13T18:31:36.400914716Z 2026-10-13 18:31:36.400 UTC [732] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_core_event'
+2026-10-13T18:31:36.402321258Z 2026-10-13 18:31:36.402 UTC [732] LOG:  statement: COMMIT
+2026-10-13T18:31:36.402814674Z 2026-10-13 18:31:36.402 UTC [732] LOG:  execute <unnamed>: SELECT "bytes" FROM "public"."spine_core_event" WHERE "ID" = $1
+2026-10-13T18:31:36.402821049Z 2026-10-13 18:31:36.402 UTC [732] DETAIL:  Parameters: $1 = '{"value":"1791916296310_99375-second"}'
+2026-10-13T18:31:36.403269924Z 2026-10-13 18:31:36.403 UTC [732] LOG:  execute <unnamed>: SELECT "bytes" FROM "public"."spine_core_event" WHERE "ID" = $1
+2026-10-13T18:31:36.403273799Z 2026-10-13 18:31:36.403 UTC [732] DETAIL:  Parameters: $1 = '{"value":"1791916296310_99375-second"}'
+2026-10-13T18:31:36.404368758Z 2026-10-13 18:31:36.404 UTC [732] LOG:  statement: BEGIN
+2026-10-13T18:31:36.404772549Z 2026-10-13 18:31:36.404 UTC [732] LOG:  execute <unnamed>: SELECT pg_advisory_xact_lock($1)
+2026-10-13T18:31:36.404775716Z 2026-10-13 18:31:36.404 UTC [732] DETAIL:  Parameters: $1 = '-2430518511220427240'
+2026-10-13T18:31:36.405086133Z 2026-10-13 18:31:36.405 UTC [732] LOG:  statement: CREATE TABLE IF NOT EXISTS "public"."spine_core_event" ("ID" VARCHAR(512) NOT NULL, "bytes" BYTEA NOT NULL, "created" BIGINT, "type" TEXT, PRIMARY KEY ("ID"))
+2026-10-13T18:31:36.406267633Z 2026-10-13 18:31:36.406 UTC [732] LOG:  execute <unnamed>: SELECT column_name, data_type, character_maximum_length, is_nullable, column_default FROM information_schema.columns WHERE table_schema=$1 AND table_name=$2 ORDER BY ordinal_position
+2026-10-13T18:31:36.406276299Z 2026-10-13 18:31:36.406 UTC [732] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_core_event'
+2026-10-13T18:31:36.407919466Z 2026-10-13 18:31:36.407 UTC [732] LOG:  execute <unnamed>: SELECT kcu.column_name, kcu.ordinal_position FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu USING (constraint_catalog, constraint_schema, constraint_name) WHERE tc.table_schema=$1 AND tc.table_name=$2 AND tc.constraint_type = 'PRIMARY KEY' ORDER BY kcu.ordinal_position
+2026-10-13T18:31:36.407924758Z 2026-10-13 18:31:36.407 UTC [732] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_core_event'
+2026-10-13T18:31:36.410325383Z 2026-10-13 18:31:36.410 UTC [732] LOG:  execute <unnamed>: SELECT tc.constraint_name, kcu.column_name, kcu.ordinal_position FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu USING (constraint_catalog, constraint_schema, constraint_name) WHERE tc.table_schema=$1 AND tc.table_name=$2 AND tc.constraint_type = 'UNIQUE' ORDER BY tc.constraint_name, kcu.ordinal_position
+2026-10-13T18:31:36.410330466Z 2026-10-13 18:31:36.410 UTC [732] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_core_event'
+2026-10-13T18:31:36.411667258Z 2026-10-13 18:31:36.411 UTC [732] LOG:  statement: COMMIT
+2026-10-13T18:31:36.412118674Z 2026-10-13 18:31:36.412 UTC [732] LOG:  execute <unnamed>: SELECT "bytes" FROM "public"."spine_core_event" WHERE "ID" = $1
+2026-10-13T18:31:36.412121383Z 2026-10-13 18:31:36.412 UTC [732] DETAIL:  Parameters: $1 = '{"value":"1791916296310_99375-second"}'
+2026-10-13T18:31:36.412618383Z 2026-10-13 18:31:36.412 UTC [732] LOG:  execute <unnamed>: SELECT "bytes" FROM "public"."spine_core_event" WHERE "ID" = $1
+2026-10-13T18:31:36.412623258Z 2026-10-13 18:31:36.412 UTC [732] DETAIL:  Parameters: $1 = '{"value":"1791916296310_99375-second"}'
+2026-10-13T18:31:36.413535633Z 2026-10-13 18:31:36.413 UTC [732] LOG:  statement: BEGIN
+2026-10-13T18:31:36.413877508Z 2026-10-13 18:31:36.413 UTC [732] LOG:  execute <unnamed>: SELECT pg_advisory_xact_lock($1)
+2026-10-13T18:31:36.413882883Z 2026-10-13 18:31:36.413 UTC [732] DETAIL:  Parameters: $1 = '-2430518511220427240'
+2026-10-13T18:31:36.414212091Z 2026-10-13 18:31:36.414 UTC [732] LOG:  statement: CREATE TABLE IF NOT EXISTS "public"."spine_core_event" ("ID" VARCHAR(512) NOT NULL, "bytes" BYTEA NOT NULL, "created" BIGINT, "type" TEXT, PRIMARY KEY ("ID"))
+2026-10-13T18:31:36.415585799Z 2026-10-13 18:31:36.415 UTC [732] LOG:  execute <unnamed>: SELECT column_name, data_type, character_maximum_length, is_nullable, column_default FROM information_schema.columns WHERE table_schema=$1 AND table_name=$2 ORDER BY ordinal_position
+2026-10-13T18:31:36.415593883Z 2026-10-13 18:31:36.415 UTC [732] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_core_event'
+2026-10-13T18:31:36.417148508Z 2026-10-13 18:31:36.417 UTC [732] LOG:  execute <unnamed>: SELECT kcu.column_name, kcu.ordinal_position FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu USING (constraint_catalog, constraint_schema, constraint_name) WHERE tc.table_schema=$1 AND tc.table_name=$2 AND tc.constraint_type = 'PRIMARY KEY' ORDER BY kcu.ordinal_position
+2026-10-13T18:31:36.417152466Z 2026-10-13 18:31:36.417 UTC [732] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_core_event'
+2026-10-13T18:31:36.419643591Z 2026-10-13 18:31:36.419 UTC [732] LOG:  execute <unnamed>: SELECT tc.constraint_name, kcu.column_name, kcu.ordinal_position FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu USING (constraint_catalog, constraint_schema, constraint_name) WHERE tc.table_schema=$1 AND tc.table_name=$2 AND tc.constraint_type = 'UNIQUE' ORDER BY tc.constraint_name, kcu.ordinal_position
+2026-10-13T18:31:36.419652133Z 2026-10-13 18:31:36.419 UTC [732] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_core_event'
+2026-10-13T18:31:36.421040133Z 2026-10-13 18:31:36.420 UTC [732] LOG:  statement: COMMIT
+2026-10-13T18:31:36.421534508Z 2026-10-13 18:31:36.421 UTC [732] LOG:  execute <unnamed>: SELECT "ID", "bytes" FROM "public"."spine_core_event" WHERE "ID" IN ($1, $2) ORDER BY "ID" ASC
+2026-10-13T18:31:36.421537674Z 2026-10-13 18:31:36.421 UTC [732] DETAIL:  Parameters: $1 = '{"value":"1791916296310_99375-first"}', $2 = '{"value":"1791916296310_99375-second"}'
+2026-10-13T18:31:36.426409258Z 2026-10-13 18:31:36.426 UTC [733] LOG:  statement: SELECT 'spine_trace_end_immutable_append' AS marker

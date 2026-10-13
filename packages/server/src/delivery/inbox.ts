@@ -18,7 +18,7 @@ import { clone, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, StringValueSchema, type Any, type Timestamp } from "@bufbuild/protobuf/wkt";
 
 import type { InboxStorage } from "./inbox-storage.js";
-import type { DeliveryOperationOptions, DeliveryWorkSession } from "./delivery-ports.js";
+import type { DeliveryOperationOptions } from "./delivery-ports.js";
 import type { ShardIndex } from "./shard-index.js";
 
 /**
@@ -115,36 +115,25 @@ export class Inbox {
   }
 
   /**
-   * Removes one exact pending duplicate while its shard session remains current.
+   * Removes one pending duplicate by ID before cancellation or deadline.
    *
-   * @param message Supplies the pending duplicate snapshot.
-   * @param session Supplies the session that holds the message shard.
+   * @param message Supplies the pending duplicate ID.
    * @param options Propagates cancellation and a delivery deadline.
-   * @returns Whether storage atomically removed the exact pending snapshot.
+   * @returns Whether direct ID deletion removed a row.
    */
-  removeDuplicate(
-    message: InboxMessage,
-    session: DeliveryWorkSession,
-    options?: DeliveryOperationOptions,
-  ): Promise<boolean> {
-    return this.storage.removeDuplicate(message, session, options);
+  removeDuplicate(message: InboxMessage, options?: DeliveryOperationOptions): Promise<boolean> {
+    return this.storage.removeDuplicate(message, options);
   }
 
   /**
-   * Removes one delivered message only when direct provider cleanup can prove
-   * current ownership and the exact durable snapshot in one atomic operation.
+   * Removes one eligible delivered message directly by ID.
    *
-   * @param message Supplies the exact delivered snapshot to remove.
-   * @param session Supplies the leased session that owns the message shard.
+   * @param message Supplies the delivered ID and cleanup eligibility.
    * @param options Propagates cancellation and a delivery deadline.
-   * @returns Whether the provider atomically removed the exact durable row.
+   * @returns Whether direct ID deletion removed a row.
    */
-  removeDelivered(
-    message: InboxMessage,
-    session: DeliveryWorkSession,
-    options?: DeliveryOperationOptions,
-  ): Promise<boolean> {
-    return this.storage.removeDelivered(message, session, options);
+  removeDelivered(message: InboxMessage, options?: DeliveryOperationOptions): Promise<boolean> {
+    return this.storage.removeDelivered(message, options);
   }
 
   #inputObject(value: unknown, label: string): Record<string, unknown> {

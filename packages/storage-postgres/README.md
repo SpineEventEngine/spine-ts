@@ -60,8 +60,8 @@ tenant or database targets are rejected during construction.
 ## Lifecycle and operations
 
 Tables are initialized lazily and checked against the expected PostgreSQL
-layout. Each acquired client is released and each transaction is completed or
-rolled back. Call `factory.close()` when the application stops; it is
+layout. Each acquired client is released; history maintenance applies deletion
+pages independently. Call `factory.close()` when the application stops; it is
 idempotent and drains live handles and pools. A closed factory cannot create new
 handles.
 

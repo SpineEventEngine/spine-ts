@@ -1,0 +1,129 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/storage-mysql/test/mysql-integration.test.ts (15 tests | 1 failed | 14 skipped) 51ms
+     × keeps an immutable EventStore prefix and admits identical Events on retry 34ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/storage-mysql/test/mysql-integration.test.ts > MySQL-family record layout > keeps an immutable EventStore prefix and admits identical Events on retry
+AssertionError: expected [ { …(4) }, { …(4) } ] to deeply equal [ { …(4) }, { …(4) } ]
+
+- Expected
++ Received
+
+@@ -11,30 +11,34 @@
+          "case": undefined,
+        },
+        "producerId": {
+          "$typeName": "google.protobuf.Any",
+          "typeUrl": "type.spine.examples.todo/spine.examples.todo.TaskId",
+-         "value": Uint8Array [
++         "value": {
++           "data": [
+              10,
+              6,
+              116,
+              97,
+              115,
+              107,
+              45,
+              49,
+            ],
++           "type": "Buffer",
++         },
+        },
+      },
+      "id": {
+        "$typeName": "spine.core.EventId",
+        "value": "f48b28a3-a679-45a6-81b4-7b591fcddfad-first",
+      },
+      "message": {
+        "$typeName": "google.protobuf.Any",
+        "typeUrl": "type.spine.examples.todo/spine.examples.todo.TaskCreated",
+-       "value": Uint8Array [
++       "value": {
++         "data": [
+            10,
+            8,
+            10,
+            6,
+            116,
+@@ -61,10 +65,12 @@
+            115,
+            116,
+            45,
+            49,
+          ],
++         "type": "Buffer",
++       },
+      },
+    },
+    {
+      "$typeName": "spine.core.Event",
+      "context": {
+@@ -77,30 +83,34 @@
+          "case": undefined,
+        },
+        "producerId": {
+          "$typeName": "google.protobuf.Any",
+          "typeUrl": "type.spine.examples.todo/spine.examples.todo.TaskId",
+-         "value": Uint8Array [
++         "value": {
++           "data": [
+              10,
+              6,
+              116,
+              97,
+              115,
+              107,
+              45,
+              50,
+            ],
++           "type": "Buffer",
++         },
+        },
+      },
+      "id": {
+        "$typeName": "spine.core.EventId",
+        "value": "f48b28a3-a679-45a6-81b4-7b591fcddfad-second",
+      },
+      "message": {
+        "$typeName": "google.protobuf.Any",
+        "typeUrl": "type.spine.examples.todo/spine.examples.todo.TaskCreated",
+-       "value": Uint8Array [
++       "value": {
++         "data": [
+            10,
+            8,
+            10,
+            6,
+            116,
+@@ -127,8 +137,10 @@
+            115,
+            116,
+            45,
+            49,
+          ],
++         "type": "Buffer",
++       },
+      },
+    },
+  ]
+
+ ❯ packages/storage-mysql/test/mysql-integration.test.ts:117:38
+    115|       await first.append(records[0]!);
+    116|       await expect(second.appendAll(records)).resolves.toBeUndefined();
+    117|       await expect(first.read(query)).resolves.toEqual(records);
+       |                                      ^
+    118|       const identical = await Promise.allSettled([
+    119|         first.append(records[1]!),
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 14 skipped (15)
+   Start at  19:17:48
+   Duration  633ms (transform 301ms, setup 0ms, import 466ms, tests 51ms, environment 0ms)
+

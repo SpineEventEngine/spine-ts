@@ -20,17 +20,30 @@ import {
   TimestampSchema,
 } from "@bufbuild/protobuf/wkt";
 import { AnyMessages, Identifiers } from "@spine-event-engine/core";
-import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
 
 import { Inbox, InboxTargets } from "../../src/delivery/inbox.js";
 import { InboxStorage } from "../../src/delivery/inbox-storage.js";
 import { InboxMessageError, ShardIndex } from "../../src/index.js";
-import { ShardedWorkRegistry } from "../../src/delivery/sharded-work-registry.js";
 import { createMessage } from "./inbox-message-fixture.js";
 
 describe("Inbox", () => {
+  it("deletes an eligible delivered ID without a session or exact row snapshot", async () => {
+    const inbox = new Inbox(
+      new InboxStorage({
+        context: { name: "DirectDeleteById", multitenant: false },
+        storageFactory: new InMemoryStorageFactory(),
+      }),
+    );
+    const pending = createMessage("direct", "direct-signal", 1n);
+    await inbox.storage.write(pending);
+    const delivered = required(await inbox.markDelivered(pending), "delivered");
+    await expect(
+      inbox.removeDelivered({ ...delivered, version: delivered.version + 1n }),
+    ).resolves.toBe(true);
+    await expect(inbox.readMessage(pending.id)).resolves.toBeUndefined();
+  });
   it("preserves microsecond receipt precision across write and reads", async () => {
     const inbox = new Inbox(
       new InboxStorage({
@@ -53,12 +66,10 @@ describe("Inbox", () => {
     expect(direct?.whenReceived.nanos).toBe(234_001_000);
   });
 
-  it("matches precise Timestamp snapshots for acknowledgement and exact removals", async () => {
+  it("matches precise Timestamp snapshots for acknowledgement and ID removals", async () => {
     const factory = new InMemoryStorageFactory();
     const context = { name: "PreciseSnapshotMutations", multitenant: false } as const;
     const inbox = new Inbox(new InboxStorage({ context, storageFactory: factory }));
-    const registry = new ShardedWorkRegistry({ context, storageFactory: factory });
-    const shard = ShardIndex.single();
     const deliveredInput = {
       ...createMessage("delivered", "delivered-signal", 1n),
       whenReceived: create(TimestampSchema, { seconds: 1n, nanos: 234_001_000 }),
@@ -71,197 +82,116 @@ describe("Inbox", () => {
     await inbox.storage.write(duplicateInput);
     const delivered = await inbox.markDelivered(deliveredInput);
     expect(delivered?.whenReceived.nanos).toBe(234_001_000);
-    const session = required(
-      await registry.pickUp(
-        shard,
-        create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" }),
-      ),
-      "session",
+    await expect(inbox.removeDelivered({ ...deliveredInput, status: "DELIVERED" })).resolves.toBe(
+      true,
     );
-    await expect(
-      inbox.removeDelivered({ ...deliveredInput, status: "DELIVERED" }, session),
-    ).resolves.toBe(true);
-    await expect(inbox.removeDuplicate(duplicateInput, session)).resolves.toBe(true);
+    await expect(inbox.removeDuplicate(duplicateInput)).resolves.toBe(true);
   });
 
-  it("forwards duplicate-removal cancellation to direct storage", async () => {
-    const factory = new InMemoryStorageFactory();
-    const context = { name: "T0227-duplicate", multitenant: false } as const;
+  it("checks cancellation before deleting a pending duplicate ID", async () => {
     const inbox = new Inbox(
       new InboxStorage({
-        context,
-        storageFactory: factory,
+        context: { name: "DuplicateCancellation", multitenant: false },
+        storageFactory: new InMemoryStorageFactory(),
       }),
     );
-    const registry = new ShardedWorkRegistry({ context, storageFactory: factory });
     const message = createMessage("cancelled", "signal", 1n);
-    const session = await registry.pickUp(
-      message.shard,
-      create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" }),
-    );
+    await inbox.storage.write(message);
     const controller = new AbortController();
-    await inbox.storage.write(message);
     controller.abort();
-
-    await expect(
-      inbox.removeDuplicate(message, required(session, "session"), { signal: controller.signal }),
-    ).resolves.toBe(false);
-    await expect(inbox.readMessage(message.id)).resolves.toMatchObject({ status: "TO_DELIVER" });
-  });
-
-  it("removes an eligible exact delivered snapshot only while its shard session is current", async () => {
-    const factory = new InMemoryStorageFactory();
-    const context = { name: "T0191", multitenant: false } as const;
-    const inbox = new Inbox(new InboxStorage({ context, storageFactory: factory }));
-    const registry = new ShardedWorkRegistry({ context, storageFactory: factory });
-    const message = createMessage("eligible", "signal", 1n);
-    const session = await registry.pickUp(
-      ShardIndex.single(),
-      create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" }),
+    await expect(inbox.removeDuplicate(message, { signal: controller.signal })).resolves.toBe(
+      false,
     );
-
-    expect(session).toBeDefined();
-    await inbox.storage.write(message);
-    const delivered = await inbox.markDelivered(message);
-    expect(delivered).toMatchObject({ status: "DELIVERED" });
-    await expect(
-      inbox.removeDelivered(required(delivered, "delivered"), required(session, "session")),
-    ).resolves.toBe(true);
+    await expect(inbox.readMessage(message.id)).resolves.toMatchObject({ status: "TO_DELIVER" });
+    await expect(inbox.removeDuplicate(message)).resolves.toBe(true);
     await expect(inbox.readMessage(message.id)).resolves.toBeUndefined();
   });
 
-  it("removes only unprotected delivered snapshots at the expiry boundary and is idempotent", async () => {
+  it("deletes only eligible delivered IDs and reports an absent ID", async () => {
     const now = new Date(2_000);
-    const factory = new InMemoryStorageFactory();
-    const context = { name: "T0191-eligibility", multitenant: false } as const;
-    const inbox = new Inbox(new InboxStorage({ context, storageFactory: factory, now: () => now }));
-    const registry = new ShardedWorkRegistry({ context, storageFactory: factory, now: () => now });
-    const session = await registry.pickUp(
-      ShardIndex.single(),
-      create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" }),
+    const inbox = new Inbox(
+      new InboxStorage({
+        context: { name: "DeliveredEligibility", multitenant: false },
+        storageFactory: new InMemoryStorageFactory(),
+        now: () => now,
+      }),
     );
-    const rows = [
-      createMessage("absent", "absent", 1n),
-      { ...createMessage("expired", "expired", 2n), keepUntil: new Date(2_000) },
-      { ...createMessage("protected", "protected", 3n), keepUntil: new Date(2_001) },
-    ];
-    for (const row of rows) {
-      await inbox.storage.write(row);
-      await inbox.markDelivered(row);
-    }
-
-    const delivered = await Promise.all(rows.map((row) => inbox.readMessage(row.id)));
-    await expect(
-      inbox.removeDelivered(required(delivered[0], "absent"), required(session, "session")),
-    ).resolves.toBe(true);
-    await expect(
-      inbox.removeDelivered(required(delivered[1], "expired"), required(session, "session")),
-    ).resolves.toBe(true);
-    await expect(
-      inbox.removeDelivered(required(delivered[2], "protected"), required(session, "session")),
-    ).resolves.toBe(false);
-    await expect(
-      inbox.removeDelivered(required(delivered[0], "absent"), required(session, "session")),
-    ).resolves.toBe(false);
-    await expect(inbox.readMessage(required(rows[2], "protected").id)).resolves.toMatchObject({
+    const pending = createMessage("pending", "pending", 1n);
+    const expired = { ...createMessage("expired", "expired", 2n), keepUntil: new Date(2_000) };
+    const protectedRow = {
+      ...createMessage("protected", "protected", 3n),
+      keepUntil: new Date(2_001),
+    };
+    for (const row of [pending, expired, protectedRow]) await inbox.storage.write(row);
+    const expiredDelivered = required(await inbox.markDelivered(expired), "expired");
+    const protectedDelivered = required(await inbox.markDelivered(protectedRow), "protected");
+    await expect(inbox.removeDelivered(pending)).resolves.toBe(false);
+    await expect(inbox.removeDelivered(protectedDelivered)).resolves.toBe(false);
+    await expect(inbox.removeDelivered(expiredDelivered)).resolves.toBe(true);
+    await expect(inbox.removeDelivered(expiredDelivered)).resolves.toBe(false);
+    await expect(inbox.readMessage(pending.id)).resolves.toMatchObject({ status: "TO_DELIVER" });
+    await expect(inbox.readMessage(protectedRow.id)).resolves.toMatchObject({
       status: "DELIVERED",
     });
   });
 
-  it("does not remove an eligible delivered snapshot after cancellation or expired preflight", async () => {
-    const factory = new InMemoryStorageFactory();
-    const context = { name: "T0191-cancelled", multitenant: false } as const;
-    const inbox = new Inbox(new InboxStorage({ context, storageFactory: factory }));
-    const registry = new ShardedWorkRegistry({ context, storageFactory: factory });
-    const session = await registry.pickUp(
-      ShardIndex.single(),
-      create(WorkerIdSchema, { nodeId: { value: "node" }, value: "cancelled" }),
+  it("deletes an eligible ID without serializing unrelated signal data", async () => {
+    const inbox = new Inbox(
+      new InboxStorage({
+        context: { name: "DirectCleanupPayload", multitenant: false },
+        storageFactory: new InMemoryStorageFactory(),
+      }),
     );
-    const message = createMessage("cancelled", "target", 1n);
-    await inbox.storage.write(message);
-    const delivered = await inbox.markDelivered(message);
+    const pending = createMessage("direct-id", "signal", 1n);
+    await inbox.storage.write(pending);
+    const delivered = required(await inbox.markDelivered(pending), "direct-id");
+    const idOnly = {
+      ...delivered,
+      signal: undefined as unknown as NonNullable<typeof delivered.signal>,
+    };
+
+    await expect(inbox.removeDelivered(idOnly)).resolves.toBe(true);
+    await expect(inbox.readMessage(pending.id)).resolves.toBeUndefined();
+  });
+
+  it("checks cancellation and deadline before deleting a delivered ID", async () => {
+    const inbox = new Inbox(
+      new InboxStorage({
+        context: { name: "DeliveredCancellation", multitenant: false },
+        storageFactory: new InMemoryStorageFactory(),
+      }),
+    );
+    const pending = createMessage("delivered", "signal", 1n);
+    await inbox.storage.write(pending);
+    const delivered = required(await inbox.markDelivered(pending), "delivered");
     const controller = new AbortController();
     controller.abort();
-
-    await expect(
-      inbox.removeDelivered(required(delivered, "delivered"), required(session, "session"), {
-        signal: controller.signal,
-      }),
-    ).resolves.toBe(false);
-    await expect(inbox.readMessage(message.id)).resolves.toMatchObject({ status: "DELIVERED" });
-    await expect(
-      inbox.removeDelivered(required(delivered, "delivered"), required(session, "session"), {
-        timeoutMs: 0,
-      }),
-    ).resolves.toBe(false);
-    await expect(inbox.readMessage(message.id)).resolves.toMatchObject({ status: "DELIVERED" });
+    await expect(inbox.removeDelivered(delivered, { signal: controller.signal })).resolves.toBe(
+      false,
+    );
+    await expect(inbox.removeDelivered(delivered, { timeoutMs: 0 })).resolves.toBe(false);
     for (const timeoutMs of [-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
-      await expect(
-        inbox.removeDelivered(required(delivered, "delivered"), required(session, "session"), {
-          timeoutMs,
-        }),
-      ).resolves.toBe(false);
+      await expect(inbox.removeDelivered(delivered, { timeoutMs })).resolves.toBe(false);
     }
-    await expect(inbox.readMessage(message.id)).resolves.toMatchObject({ status: "DELIVERED" });
+    await expect(inbox.readMessage(pending.id)).resolves.toMatchObject({ status: "DELIVERED" });
   });
 
-  it("never removes a pending or replaced snapshot", async () => {
-    const factory = new InMemoryStorageFactory();
-    const context = { name: "T0191-exact", multitenant: false } as const;
-    const inbox = new Inbox(new InboxStorage({ context, storageFactory: factory }));
-    const registry = new ShardedWorkRegistry({ context, storageFactory: factory });
-    const session = await registry.pickUp(
-      ShardIndex.single(),
-      create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" }),
-    );
-    const pending = createMessage("pending", "pending", 1n);
-    const delivered = createMessage("replaced", "replaced", 1n);
-    await inbox.storage.write(pending);
-    await inbox.storage.write(delivered);
-    const snapshot = await inbox.markDelivered(delivered);
-
-    await expect(inbox.removeDelivered(pending, required(session, "session"))).resolves.toBe(false);
-    await expect(
-      inbox.removeDelivered(
-        { ...required(snapshot, "snapshot"), version: 2n },
-        required(session, "session"),
-      ),
-    ).resolves.toBe(false);
-    await expect(inbox.readMessage(pending.id)).resolves.toMatchObject({ status: "TO_DELIVER" });
-    await expect(inbox.readMessage(delivered.id)).resolves.toMatchObject({ status: "DELIVERED" });
-  });
-
-  it("cannot delete after ownership transfers at the former validate-delete gap", async () => {
-    let now = 1_000;
-    const factory = new InMemoryStorageFactory();
-    const context = { name: "T0191-transfer", multitenant: false } as const;
+  it("retains a delivered row when the deadline expires while opening deletion storage", async () => {
+    let clockReads = 0;
     const inbox = new Inbox(
-      new InboxStorage({ context, storageFactory: factory, now: () => new Date(now) }),
+      new InboxStorage({
+        context: { name: "DeadlineBeforeDelete", multitenant: false },
+        storageFactory: new InMemoryStorageFactory(),
+        now: () => new Date(clockReads++ < 2 ? 0 : 10),
+      }),
     );
-    const registry = new ShardedWorkRegistry({
-      context,
-      storageFactory: factory,
-      leaseMs: 1_000,
-      now: () => new Date(now),
-    });
-    const first = await registry.pickUp(
-      ShardIndex.single(),
-      create(WorkerIdSchema, { nodeId: { value: "first" }, value: "worker" }),
-    );
-    const message = createMessage("transfer", "transfer", 1n);
-    await inbox.storage.write(message);
-    const delivered = await inbox.markDelivered(message);
+    const pending = createMessage("deadline", "deadline-signal", 1n);
+    await inbox.storage.write(pending);
+    const delivered = required(await inbox.markDelivered(pending), "delivered");
 
-    now = 2_000;
-    const second = await registry.pickUp(
-      ShardIndex.single(),
-      create(WorkerIdSchema, { nodeId: { value: "second" }, value: "worker" }),
-    );
-    expect(second).toBeDefined();
-    await expect(
-      inbox.removeDelivered(required(delivered, "delivered"), required(first, "first")),
-    ).resolves.toBe(false);
-    await expect(inbox.readMessage(message.id)).resolves.toMatchObject({ status: "DELIVERED" });
+    await expect(inbox.removeDelivered(delivered, { timeoutMs: 10 })).resolves.toBe(false);
+    expect(clockReads).toBe(3);
+    await expect(inbox.readMessage(pending.id)).resolves.toMatchObject({ status: "DELIVERED" });
   });
 
   it("receives, orders, reads, and marks a direct generated row delivered", async () => {

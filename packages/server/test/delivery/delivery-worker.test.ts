@@ -524,26 +524,38 @@ describe("Delivery direct worker", () => {
     expect(removals).toBe(1);
   });
 
-  it("stops cleanup when cancellation or ownership loss occurs and leaves the row for retry", async () => {
+  it("keeps a completed cleanup deletion when cancellation stops later work", async () => {
     const shard = ShardIndex.single();
     const delivered = { ...message("delivered", "target", shard), status: "DELIVERED" as const };
+    const pending = message("pending", "other-target", shard);
+    const rows = [delivered, pending];
     const controller = new AbortController();
     let removals = 0;
+    let dispatched = 0;
     const delivery = createDelivery({
-      read: async () => [delivered],
-      remove: async () => {
+      pageSize: 1,
+      read: async (options) => {
+        const cursor = options?.after?.messageId;
+        return rows.filter((row) => cursor === undefined || row.id.value > cursor).slice(0, 1);
+      },
+      remove: async (row) => {
         removals += 1;
+        remove(rows, row);
         controller.abort();
         return true;
       },
     });
     await expect(
       delivery.drain(shard, {
-        onMessage: () => undefined,
+        onMessage: () => {
+          dispatched += 1;
+        },
         operation: { signal: controller.signal },
       }),
     ).resolves.toMatchObject({ status: "STOPPED", delivered: 0 });
     expect(removals).toBe(1);
+    expect(dispatched).toBe(0);
+    expect(rows).toEqual([pending]);
   });
 
   it("leaves a delivered row retryable when cancellation arrives before cleanup deletion", async () => {
@@ -623,13 +635,17 @@ describe("Delivery direct worker", () => {
     expect(removed).toEqual(["eligible"]);
   });
 
-  it("stops when a refused cleanup deletion is followed by lost ownership", async () => {
+  it("retains a delivered row when cleanup refuses deletion without a post-delete lease check", async () => {
     const shard = ShardIndex.single();
     const delivered = { ...message("delivered", "target", shard), status: "DELIVERED" as const };
     let validations = 0;
+    let removals = 0;
     const delivery = createDelivery({
       read: async () => [delivered],
-      remove: async () => false,
+      remove: async () => {
+        removals += 1;
+        return false;
+      },
       registry: {
         pickUp: async () => session(shard),
         renew: async () => (validations++ < 2 ? session(shard) : undefined),
@@ -638,8 +654,10 @@ describe("Delivery direct worker", () => {
     });
 
     await expect(delivery.drain(shard, { onMessage: () => undefined })).resolves.toMatchObject({
-      status: "STOPPED",
+      status: "DRAINED",
     });
+    expect(removals).toBe(1);
+    expect(validations).toBe(2);
   });
 
   it("omits cleanup for custom Inbox ports and forwards operation deadlines to cleanup reads", async () => {

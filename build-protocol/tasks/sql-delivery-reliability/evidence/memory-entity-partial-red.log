@@ -1,0 +1,100 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/storage/test/entity/in-memory-entity-commit.test.ts (25 tests | 2 failed | 23 skipped) 13ms
+     × makes current state, both histories, and delivery events visible as one commit 9ms
+     × retains a completed state-history prefix when a later diagnostic write fails 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/storage/test/entity/in-memory-entity-commit.test.ts > MemoryEntityCommitStorage > makes current state, both histories, and delivery events visible as one commit
+AssertionError: promise rejected "Error: Entity commit requires unique deli…" instead of resolving
+ ❯ packages/storage/test/entity/in-memory-entity-commit.test.ts:450:6
+    448|         events: [delivery],
+    449|       }),
+    450|     ).resolves.toBeUndefined();
+       |      ^
+    451|     events.close();
+    452|     commits.close();
+
+Caused by: Error: Entity commit requires unique delivery-event IDs.
+ ❯ MemoryEntityCommitStorage.#writeStage packages/storage/src/memory/in-memory-entity-commit.ts:286:13
+ ❯ MemoryEntityCommitStorage.#commit packages/storage/src/memory/in-memory-entity-commit.ts:147:18
+ ❯ packages/storage/src/memory/in-memory-entity-commit.ts:122:71
+ ❯ KeyedSerialQueue.run packages/storage/src/memory/in-memory-entity-history.ts:1110:20
+ ❯ work packages/storage/src/memory/in-memory-entity-commit.ts:122:29
+ ❯ MemoryEntityCommitStorage.commit packages/storage/src/memory/in-memory-entity-commit.ts:123:12
+ ❯ packages/storage/test/entity/in-memory-entity-commit.test.ts:441:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  packages/storage/test/entity/in-memory-entity-commit.test.ts > MemoryEntityCommitStorage > retains a completed state-history prefix when a later diagnostic write fails
+AssertionError: expected [] to deeply equal [ { …(5) } ]
+
+- Expected
++ Received
+
+- [
+-   {
+-     "$typeName": "spine.server.entity.EntityRecord",
+-     "entityId": {
+-       "$typeName": "google.protobuf.Any",
+-       "typeUrl": "type.spine.io/google.protobuf.StringValue",
+-       "value": Uint8Array [
+-         10,
+-         4,
+-         116,
+-         97,
+-         115,
+-         107,
+-       ],
+-     },
+-     "lifecycleFlags": {
+-       "$typeName": "spine.server.entity.LifecycleFlags",
+-       "archived": false,
+-       "deleted": false,
+-     },
+-     "state": {
+-       "$typeName": "google.protobuf.Any",
+-       "typeUrl": "type.spine.io/google.protobuf.StringValue",
+-       "value": Uint8Array [
+-         10,
+-         7,
+-         112,
+-         97,
+-         114,
+-         116,
+-         105,
+-         97,
+-         108,
+-       ],
+-     },
+-     "version": {
+-       "$typeName": "spine.core.Version",
+-       "number": 1,
+-       "timestamp": {
+-         "$typeName": "google.protobuf.Timestamp",
+-         "nanos": 0,
+-         "seconds": 1n,
+-       },
+-     },
+-   },
+- ]
++ []
+
+ ❯ packages/storage/test/entity/in-memory-entity-commit.test.ts:503:53
+    501|
+    502|     await expect(entity.current.read("task")).resolves.toBeUndefined();
+    503|     await expect(entity.states.backward("task", 10)).resolves.toEqual(…
+       |                                                     ^
+    504|     await expect(entity.events.backward("task", 10)).resolves.toEqual(…
+    505|     commits.close();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 23 skipped (25)
+   Start at  18:22:34
+   Duration  372ms (transform 166ms, setup 0ms, import 250ms, tests 13ms, environment 0ms)
+

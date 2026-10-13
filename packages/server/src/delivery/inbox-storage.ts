@@ -21,9 +21,7 @@ import type {
   InboxMessageId as WireInboxMessageId,
 } from "@spine-event-engine/proto/delivery";
 import { InboxMessageIdSchema } from "@spine-event-engine/proto/delivery";
-import { ShardIndexSchema, ShardSessionRecordSchema } from "@spine-event-engine/proto/delivery";
 import type { RecordStorage, StorageContext, StorageFactory } from "@spine-event-engine/storage";
-import { DeliveryCleanupStorageFactories } from "@spine-event-engine/storage/provider";
 
 import {
   InboxMessageError,
@@ -35,8 +33,6 @@ import {
 } from "./inbox.js";
 import { InboxRecords, inboxRecordSpec } from "./inbox-records.js";
 import { ShardIndex } from "./shard-index.js";
-import { shardSessionRecordSpec } from "./sharded-work-registry.js";
-import type { DeliveryWorkSession } from "./delivery-ports.js";
 
 const defaultReadLimit = 100;
 const maxReadLimit = 1_000;
@@ -190,16 +186,14 @@ export class InboxStorage {
   }
 
   /**
-   * Removes one eligible delivered row when the leased session remains current.
+   * Removes one eligible delivered row by ID before cancellation or deadline.
    *
-   * @param message Supplies the exact delivered snapshot to remove.
-   * @param session Supplies the leased session that owns the message shard.
+   * @param message Supplies the delivered ID and cleanup eligibility.
    * @param options Propagates cancellation and a delivery deadline.
-   * @returns Whether the provider atomically removed the exact durable row.
+   * @returns Whether direct ID deletion removed a row.
    */
   async removeDelivered(
     message: InboxMessage,
-    session: DeliveryWorkSession,
     options?: import("./delivery-ports.js").DeliveryOperationOptions,
   ): Promise<boolean> {
     if (
@@ -207,40 +201,37 @@ export class InboxStorage {
       (message.keepUntil !== undefined && message.keepUntil.getTime() > Values.now(this.#now))
     )
       return false;
-    return this.#remove(message, session, options);
+    return this.#remove(message, options);
   }
 
   /**
-   * Removes one exact pending duplicate while its leased session remains current.
+   * Removes one pending duplicate by ID before cancellation or deadline.
    *
-   * @param message Supplies the expected pending snapshot.
-   * @param session Supplies the session that holds the message shard.
+   * @param message Supplies the pending duplicate ID.
    * @param options Propagates cancellation and a delivery deadline.
-   * @returns Whether the provider atomically removed the exact pending snapshot.
+   * @returns Whether direct ID deletion removed a row.
    */
   async removeDuplicate(
     message: InboxMessage,
-    session: DeliveryWorkSession,
     options?: import("./delivery-ports.js").DeliveryOperationOptions,
   ): Promise<boolean> {
     if (message.status !== "TO_DELIVER") return false;
-    return this.#remove(message, session, options);
+    return this.#remove(message, options);
   }
 
   async #remove(
     message: InboxMessage,
-    session: DeliveryWorkSession,
     options?: import("./delivery-ports.js").DeliveryOperationOptions,
   ): Promise<boolean> {
     const isActive = this.#activeOperation(options);
-    if (
-      isActive === undefined ||
-      !isActive() ||
-      session.kind !== "LEASED" ||
-      !this.#matchesSession(message, session)
-    )
-      return false;
-    return this.#removeCurrent(message, session, options, isActive);
+    if (isActive?.() !== true) return false;
+    const storage = this.#storage();
+    try {
+      if (!isActive()) return false;
+      return await storage.delete(Values.id(message.id));
+    } finally {
+      storage.close();
+    }
   }
 
   #activeOperation(
@@ -255,38 +246,6 @@ export class InboxStorage {
       options?.timeoutMs === undefined ? undefined : Values.now(this.#now) + options.timeoutMs;
     return () =>
       !options?.signal?.aborted && (deadline === undefined || Values.now(this.#now) < deadline);
-  }
-
-  #matchesSession(message: InboxMessage, session: DeliveryWorkSession): boolean {
-    return session.kind === "LEASED" && session.shard.key() === message.shard.key();
-  }
-
-  async #removeCurrent(
-    message: InboxMessage,
-    session: Extract<DeliveryWorkSession, { readonly kind: "LEASED" }>,
-    options: import("./delivery-ports.js").DeliveryOperationOptions | undefined,
-    isActive: () => boolean,
-  ): Promise<boolean> {
-    const expected = InboxRecords.write(message);
-    const cleanup = DeliveryCleanupStorageFactories.create(this.#storageFactory);
-    try {
-      return await cleanup.remove({
-        context: Values.context(this.#context),
-        ...(options === undefined ? {} : { operation: { ...options, isActive } }),
-        inbox: { spec: inboxRecordSpec, id: Values.wireId(expected), expected },
-        session: {
-          spec: shardSessionRecordSpec,
-          id: create(ShardIndexSchema, {
-            index: session.shard.index,
-            ofTotal: session.shard.ofTotal,
-          }),
-          expected: Values.session(session),
-          isCurrent: (current) => Values.sessionCurrent(current, session, Values.now(this.#now)),
-        },
-      });
-    } finally {
-      cleanup.close();
-    }
   }
 
   #storage(): RecordStorage<WireInboxMessageId, WireInboxMessage> {
@@ -541,41 +500,5 @@ const Values = Object.freeze({
           tenantId: clone(TenantIdSchema, context.tenantId),
         }
       : { name: `${context.name}.delivery.inbox`, multitenant: false };
-  },
-
-  /**
-   * Converts a shard session to its stored Protobuf record.
-   *
-   * @param value Supplies the shard session.
-   * @returns The stored shard-session record.
-   */
-  session(value: import("./sharded-work-registry.js").ShardSession) {
-    return create(ShardSessionRecordSchema, {
-      index: { index: value.shard.index, ofTotal: value.shard.ofTotal },
-      whenLastPicked: Values.timestamp(value.pickedUpAt.getTime()),
-      worker: value.worker,
-    });
-  },
-
-  /**
-   * Checks whether a stored session matches the expected live session.
-   *
-   * @param value Supplies the stored session record.
-   * @param expected Supplies the expected shard session.
-   * @param now Supplies the current time in milliseconds.
-   * @returns Whether the shard, worker, and expiry match.
-   */
-  sessionCurrent(
-    value: import("@spine-event-engine/proto/delivery").ShardSessionRecord,
-    expected: import("./sharded-work-registry.js").ShardSession,
-    now: number,
-  ): boolean {
-    return (
-      value.index?.index === expected.shard.index &&
-      value.index.ofTotal === expected.shard.ofTotal &&
-      value.worker?.nodeId?.value === expected.worker?.nodeId?.value &&
-      value.worker?.value === expected.worker?.value &&
-      expected.expiresAt.getTime() > now
-    );
   },
 });

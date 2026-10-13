@@ -1,0 +1,10 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 11 skipped (12)
+   Start at  19:31:35
+   Duration  563ms (transform 222ms, setup 0ms, import 346ms, tests 116ms, environment 0ms)
+
+Trace capture restored: /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/sql-trace/runs/postgres18-immutable-append-2026-10-13T183135329Z.json

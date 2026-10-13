@@ -6028,7 +6028,7 @@ task. Agent work remains a separate task.
 See [the Time task](planning/spine-time-task.md) and
 [its status](planning/spine-time-worklog.md).
 
-## D-0125: Independent SQL Operations And Direct Delivery Cleanup
+## D-0129: Independent SQL Operations And Direct Delivery Cleanup
 
 Date: 2026-10-13. Status: accepted human direction; implementation in progress.
 

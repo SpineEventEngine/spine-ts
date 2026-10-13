@@ -37,8 +37,9 @@ a provider string or infer shared filter/sort-name validation.
 `useEntityStorage(...)` replaces the complete coherent Entity handle, including
 its commit capability. Custom providers receive the storage context, record or
 Entity contract, and caller-supplied client, but not the built-in converter or
-stringifier registry; they must provide equivalent tenant, ID, and column mapping. The
-built-in Entity provider does not mix custom record creators into one transaction.
+stringifier registry; they must provide equivalent tenant, ID, and column mapping.
+The built-in Entity provider writes its record families independently; custom
+record creators do not join a combined Entity transaction.
 
 ## Physical layout
 
@@ -109,14 +110,15 @@ This is deliberately the overlap, not MySQL parity: nested or disjunctive
 predicates and provider-illegal inequality/order shapes reject before provider
 access. Normalized plans have no offset; `RecordQuery.offset` is separate.
 
-The provider Entity commit writes the supplied current record, enabled histories,
-and delivery events in one Datastore transaction. It does not compare current
-state with an expected previous record. The operation rejects more than 25
-entity groups, 500 mutations, or its conservative transaction-size limit before
-opening the transaction. Success resolves without a value. Identical immutable
-retries remain accepted; divergent immutable content fails. Associated records
-are still completed when the current record already matches the supplied value.
-Only ABORTED provider failures retry, for at most three attempts.
+The provider Entity commit writes state history, diagnostic Events, delivery
+Events, and current state as independent records in that order. A later failure
+can leave the completed prefix. It does not compare current state with an
+expected previous record. Success resolves without a value. Identical
+immutable retries remain accepted; divergent immutable content fails. A
+captured prepared input is retried once after an `ABORTED` provider failure,
+with the same record bytes, versions, and Event IDs; the application handler
+does not run again. Event presence alone does not prove the current record was
+written. Separate saves can interleave, including current-state writes.
 
 History reads use stable finite keyset pages. State history provides backward,
 state-at-time, trim, and truncate behavior; event history provides backward and

@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { clone, create, ScalarType } from "@bufbuild/protobuf";
+import { clone, create, equals, ScalarType } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import type { Event, EventId, TenantId } from "@spine-event-engine/proto";
 import { EventIdSchema, EventSchema, TenantIdSchema } from "@spine-event-engine/proto";
@@ -29,13 +29,25 @@ import { TenantBoundary } from "../internal/tenancy.js";
 /**
  * Framework event store backed by record storage.
  *
- * Snapshots input events before queued work, rejects missing, blank, and
- * duplicate IDs in one batch, and rejects IDs already stored for the same
- * captured storage context.
+ * Snapshots input Events and rejects missing, blank, or repeated IDs within a
+ * batch. Immutable append accepts identical complete stored Events and leaves
+ * completed prefixes when a later insert fails. Admission methods reject every
+ * existing ID, including an identical Event.
  */
 export class EventStore {
+  /**
+   * Selected Event Store context.
+   */
   readonly #context: EventStoreContext;
+
+  /**
+   * Opens Event record-family handles.
+   */
   readonly #factory: StorageFactory;
+
+  /**
+   * Whether this Event Store accepts operations.
+   */
   #open = true;
 
   /**
@@ -66,7 +78,8 @@ export class EventStore {
   }
 
   /**
-   * Validates that one generated Spine event can be appended without storing it.
+   * Validates strict new admission without storing an Event. An identical
+   * existing Event still rejects; this precheck does not reserve its ID.
    *
    * @param event Supplies the event to validate.
    * @returns Completes when the event is accepted.
@@ -79,8 +92,9 @@ export class EventStore {
   }
 
   /**
-   * Accepts one event, runs caller acceptance, and appends using one captured
-   * storage context.
+   * Checks strict new admission, runs caller acceptance, then atomically inserts
+   * under one captured context. Competing callbacks may both run, but only one
+   * absent-slot insertion can succeed.
    *
    * @param event Supplies the event to accept.
    * @param onAccepted Runs after uniqueness validation and before append.
@@ -97,7 +111,8 @@ export class EventStore {
   }
 
   /**
-   * Writes one generated Spine event, rejecting missing, blank, or duplicate IDs.
+   * Writes one complete Event, accepting an identical immutable retry without
+   * overwriting it. A conflicting Event at the same ID rejects.
    *
    * @param event Supplies the event to append.
    * @returns Completes when the event is appended.
@@ -105,11 +120,12 @@ export class EventStore {
   async append(event: Event): Promise<void> {
     const record = clone(EventSchema, event);
 
-    await this.appendUnique([record], EventContexts.snapshotForEvent(this.#context, record));
+    await this.appendImmutable([record], EventContexts.snapshotForEvent(this.#context, record));
   }
 
   /**
-   * Writes generated Spine events in order, rejecting missing, blank, or duplicate IDs.
+   * Writes generated Events in order, accepting identical immutable retries.
+   * A later failure retains the completed prefix for retry with the same IDs.
    *
    * @param events Supplies the events to append.
    * @returns Completes when the events are appended.
@@ -118,34 +134,8 @@ export class EventStore {
     const records = [...events].map((event) => clone(EventSchema, event));
 
     if (records.length > 0) {
-      await this.appendUnique(records, EventContexts.batch(this.#context, records));
+      await this.appendImmutable(records, EventContexts.batch(this.#context, records));
     }
-  }
-
-  /**
-   * Writes generated Spine events and returns a one-shot rollback token.
-   *
-   * @param events Supplies the events to append.
-   * @returns Resolves to the rollback token for this append.
-   */
-  async appendAllWithRollback(events: Iterable<Event>): Promise<EventRollback> {
-    const records = [...events].map((event) => clone(EventSchema, event));
-    const ids = records.map((record) => EventIds.require(record));
-    const context = records.length === 0 ? undefined : EventContexts.batch(this.#context, records);
-
-    if (context !== undefined) {
-      await this.appendUnique(records, context);
-    }
-    let used = false;
-    return Object.freeze({
-      rollback: async () => {
-        if (used) {
-          throw new Error("Event rollback token has already been used.");
-        }
-        used = true;
-        if (context !== undefined) await this.deleteIds(ids, context);
-      },
-    });
   }
 
   /**
@@ -167,50 +157,66 @@ export class EventStore {
     }
   }
 
+  /**
+   * Writes strictly new Events after caller acceptance.
+   *
+   * @param records Supplies validated Event snapshots.
+   * @param context Selects their storage boundary.
+   * @returns Completion after every strict insertion.
+   */
   private async appendUnique(records: readonly Event[], context: StorageContext): Promise<void> {
     this.requireOpen();
     const ids = records.map((record) => EventIds.require(record));
     EventIds.rejectDuplicates(ids);
 
-    await eventStoreAccess.withLock(this.#factory, context, async () => {
-      const storage = this.#factory.createRecordStorage(context, eventStoreRecordSpec);
-      try {
-        await EventIds.insertUnique(storage, records);
-      } finally {
-        storage.close();
-      }
-    });
+    const storage = this.#factory.createRecordStorage(context, eventStoreRecordSpec);
+    try {
+      await EventIds.insertUnique(storage, records);
+    } finally {
+      storage.close();
+    }
   }
 
-  private async deleteIds(ids: readonly EventId[], context: StorageContext): Promise<void> {
+  /**
+   * Writes captured immutable Events, accepting identical stored retries.
+   *
+   * @param records Supplies ordered Event snapshots.
+   * @param context Selects their single storage boundary.
+   * @returns Completion after every immutable Event is confirmed.
+   */
+  private async appendImmutable(records: readonly Event[], context: StorageContext): Promise<void> {
     this.requireOpen();
-
-    await eventStoreAccess.withLock(this.#factory, context, async () => {
-      const storage = this.#factory.createRecordStorage(context, eventStoreRecordSpec);
-      try {
-        for (const id of ids) {
-          await storage.delete(id);
-        }
-      } finally {
-        storage.close();
-      }
-    });
+    EventIds.rejectDuplicates(records.map((record) => EventIds.require(record)));
+    const storage = this.#factory.createRecordStorage(context, eventStoreRecordSpec);
+    try {
+      await EventIds.insertImmutable(storage, records);
+    } finally {
+      storage.close();
+    }
   }
 
+  /**
+   * Checks strict admission without writing an Event.
+   *
+   * @param ids Supplies IDs that must be absent.
+   * @param context Selects the storage boundary.
+   * @returns Completion when no ID is stored.
+   */
   private async checkUnique(ids: readonly EventId[], context: StorageContext): Promise<void> {
     this.requireOpen();
     EventIds.rejectDuplicates(ids);
 
-    await eventStoreAccess.withLock(this.#factory, context, async () => {
-      const storage = this.#factory.createRecordStorage(context, eventStoreRecordSpec);
-      try {
-        await EventIds.rejectStored(storage, ids);
-      } finally {
-        storage.close();
-      }
-    });
+    const storage = this.#factory.createRecordStorage(context, eventStoreRecordSpec);
+    try {
+      await EventIds.rejectStored(storage, ids);
+    } finally {
+      storage.close();
+    }
   }
 
+  /**
+   * Rejects operations after this Event Store closes.
+   */
   private requireOpen(): void {
     if (!this.#open) throw new Error("EventStore is closed.");
   }
@@ -265,93 +271,16 @@ export type EventStoreContext =
 export type OnEventAccepted = (event: Event) => Promise<void> | void;
 
 /**
- * One-shot rollback token scoped to one successful event-store append.
- */
-export interface EventRollback {
-  // prettier-ignore
-
-  /**
-   * Deletes the events appended by the operation that created this token.
-   * @returns Completes when the events are deleted.
-   */
-  rollback(): Promise<void>;
-}
-
-const EventStoreLocks = Object.freeze({
-  queues: new WeakMap<StorageFactory, Map<string | symbol, Promise<void>>>(),
-
-  async withLock<T>(
-    factory: StorageFactory,
-    context: StorageContext,
-    work: () => Promise<T>,
-  ): Promise<T> {
-    const queues = this.queueMap(factory);
-    const key = EventContexts.key(context);
-    const previous = queues.get(key) ?? Promise.resolve();
-    const next = previous.then(work, work);
-    const stored = next.then(
-      () => undefined,
-      () => undefined,
-    );
-
-    queues.set(key, stored);
-    try {
-      return await next;
-    } finally {
-      if (queues.get(key) === stored) {
-        queues.delete(key);
-      }
-    }
-  },
-
-  queueMap(factory: StorageFactory): Map<string | symbol, Promise<void>> {
-    let queues = this.queues.get(factory);
-    if (queues === undefined) {
-      queues = new Map();
-      this.queues.set(factory, queues);
-    }
-    return queues;
-  },
-});
-
-/**
- * Provider-only coordination access for the Event Store context lock.
- * @internal
- */
-export const eventStoreAccess: {
-  readonly withLock: <T>(
-    factory: StorageFactory,
-    context: StorageContext,
-    work: () => Promise<T>,
-  ) => Promise<T>;
-} = Object.freeze({
-  // prettier-ignore
-
-  /**
-   * Runs work under the same factory/context lock used by direct Event Store appends.
-   *
-   * @param factory The factory that owns the Event Store records.
-   * @param context The Event Store context to serialize.
-   * @param work The operation to run while holding the lock.
-   * @returns The operation result.
-   */
-  withLock<T>(
-    factory: StorageFactory,
-    context: StorageContext,
-    work: () => Promise<T>,
-  ): Promise<T> {
-    return EventStoreLocks.withLock(factory, context, work);
-  },
-});
-
-/**
  * Validates event IDs before record-store operations.
  */
 const EventIds = {
   // prettier-ignore
 
   /**
-   * Requires an event to have a non-blank ID.
+   * Validates that an Event has a non-blank ID.
+   *
+   * @param event Supplies the Event envelope.
+   * @returns Its validated ID.
    */
   require(event: Event): EventId {
     if (event.id === undefined) throw new Error("EventStore requires event.id.");
@@ -363,6 +292,10 @@ const EventIds = {
 
   /**
    * Rejects IDs that already exist in storage.
+   *
+   * @param storage Reads existing Events.
+   * @param ids Supplies IDs that must be absent.
+   * @returns Completion when no ID exists.
    */
   async rejectStored(
     storage: RecordStorage<EventId, Event>,
@@ -374,7 +307,11 @@ const EventIds = {
   },
 
   /**
-   * Atomically inserts each event ID and rolls back this batch on collision.
+   * Writes each strictly new Event, retaining a completed prefix on failure.
+   *
+   * @param storage Supplies atomic record insertion.
+   * @param records Supplies accepted Event snapshots.
+   * @returns Completion after every new Event is stored.
    */
   async insertUnique(
     storage: RecordStorage<EventId, Event>,
@@ -383,35 +320,46 @@ const EventIds = {
     if (!storage.atomicCompareAndSet) {
       throw new Error("EventStore requires atomic record compare-and-set.");
     }
-    const inserted: { readonly id: EventId; readonly record: Event }[] = [];
-    try {
-      for (const record of records) {
-        const id = EventIds.require(record);
-        if (!(await storage.compareAndSet(id, undefined, record))) {
-          throw new Error("EventStore requires unique event IDs.");
+    for (const record of records) {
+      const id = EventIds.require(record);
+      if (!(await storage.compareAndSet(id, undefined, record))) {
+        throw new Error("EventStore requires unique event IDs.");
+      }
+    }
+  },
+
+  /**
+   * Writes immutable Events or confirms complete equality at the same ID.
+   *
+   * @param storage Supplies atomic single-record insertion and reads.
+   * @param records Supplies ordered Event snapshots.
+   * @returns Completion after each Event is present unchanged.
+   */
+  async insertImmutable(
+    storage: RecordStorage<EventId, Event>,
+    records: readonly Event[],
+  ): Promise<void> {
+    if (!storage.atomicCompareAndSet)
+      throw new Error("EventStore requires atomic record compare-and-set.");
+    for (const record of records) {
+      const id = EventIds.require(record);
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        if (await storage.compareAndSet(id, undefined, record)) break;
+        const stored = await storage.read(id);
+        if (stored !== undefined) {
+          if (!equals(EventSchema, stored, record))
+            throw new Error("EventStore requires unique event IDs.");
+          break;
         }
-        inserted.push({ id, record });
+        if (attempt === 1) throw new Error("EventStore immutable insert could not confirm its ID.");
       }
-    } catch (error) {
-      const failures: unknown[] = [];
-      for (const { id, record } of inserted.reverse()) {
-        try {
-          if (!(await storage.compareAndSet(id, record, undefined))) {
-            failures.push(new Error("EventStore append rollback lost its stored event."));
-          }
-        } catch (rollbackError) {
-          failures.push(rollbackError);
-        }
-      }
-      if (failures.length > 0) {
-        throw new AggregateError([error, ...failures], "EventStore append rollback failed.");
-      }
-      throw error;
     }
   },
 
   /**
    * Rejects repeated IDs within one append operation.
+   *
+   * @param ids Supplies the IDs in the operation.
    */
   rejectDuplicates(ids: readonly EventId[]): void {
     const seen = new Set<string>();
@@ -423,13 +371,16 @@ const EventIds = {
 };
 
 /**
- * Captures tenant-aware event-store contexts and their lock keys.
+ * Captures tenant-aware event-store contexts.
  */
 const EventContexts = {
   // prettier-ignore
 
   /**
    * Captures one storage context.
+   *
+   * @param context Supplies context and optional default tenant.
+   * @returns An immutable context snapshot.
    */
   base(context: EventStoreContext): EventStoreContext {
     return context.multitenant
@@ -443,6 +394,12 @@ const EventContexts = {
       : Object.freeze({ name: context.name, multitenant: false });
   },
 
+  /**
+   * Returns a complete storage context for a read.
+   *
+   * @param context Supplies an explicit default tenant when required.
+   * @returns A complete tenant-scoped storage context.
+   */
   snapshot(context: EventStoreContext): StorageContext {
     if (!context.multitenant) return Object.freeze({ name: context.name, multitenant: false });
     if (context.tenantId === undefined)
@@ -458,6 +415,10 @@ const EventContexts = {
 
   /**
    * Captures one context using an event envelope tenant when present.
+   *
+   * @param context Supplies the Event Store default boundary.
+   * @param event Supplies an optional envelope tenant.
+   * @returns The Event's complete storage context.
    */
   snapshotForEvent(context: EventStoreContext, event: Event): StorageContext {
     if (!context.multitenant) return EventContexts.snapshot(context);
@@ -471,6 +432,13 @@ const EventContexts = {
     });
   },
 
+  /**
+   * Returns one tenant boundary for every Event in a batch.
+   *
+   * @param context Supplies the Event Store default boundary.
+   * @param events Supplies the complete Event batch.
+   * @returns Their shared storage context.
+   */
   batch(context: EventStoreContext, events: readonly Event[]): StorageContext {
     const first = events[0];
     if (first === undefined) throw new Error("EventStore batch requires at least one event.");
@@ -485,6 +453,9 @@ const EventContexts = {
 
   /**
    * Reads an explicit tenant from an event envelope.
+   *
+   * @param event Supplies the envelope origin.
+   * @returns Its tenant when present.
    */
   readEventTenant(event: Event): TenantId | undefined {
     switch (event.context?.origin.case) {
@@ -499,16 +470,12 @@ const EventContexts = {
 
   /**
    * Converts a typed tenant ID to its storage-scope value.
+   *
+   * @param tenantId Supplies the optional tenant ID.
+   * @returns An independent tenant ID when present.
    */
   tenantValue(tenantId: TenantId | undefined): TenantId | undefined {
     return tenantId === undefined ? undefined : clone(TenantIdSchema, tenantId);
-  },
-
-  /**
-   * Creates a deterministic key for a context-scoped append lock.
-   */
-  key(context: StorageContext): string | symbol {
-    return TenantBoundary.of(context).key;
   },
 };
 

@@ -1,0 +1,38 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/server/test/delivery/inbox-provider-cleanup.test.ts (6 tests | 6 skipped) 6ms
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/test/delivery/inbox-provider-cleanup.test.ts > PostgreSQL Inbox cleanup
+Error: Unable to connect to PostgreSQL.
+ ❯ PostgresStorageFactory.connect packages/storage-postgres/src/postgres/storage-factory.ts:490:13
+ ❯ packages/server/test/delivery/inbox-provider-cleanup.test.ts:90:17
+     88|       const stringifiers = new StringifierRegistry();
+     89|       stringifiers.setTypeRegistry(new TypeRegistry([StringValueSchema…
+     90|       factory = await PostgresStorageFactory.newBuilder()
+       |                 ^
+     91|         .setOptions({ url: postgresqlUrl })
+     92|         .setStringifierRegistry(stringifiers)
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  packages/server/test/delivery/inbox-provider-cleanup.test.ts > PostgreSQL Inbox cleanup
+TypeError: Cannot read properties of undefined (reading 'close')
+ ❯ packages/server/test/delivery/inbox-provider-cleanup.test.ts:100:15
+     98|     });
+     99|     afterAll(() => {
+    100|       factory.close();
+       |               ^
+    101|       secondFactory.close();
+    102|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  6 skipped (6)
+   Start at  18:48:45
+   Duration  884ms (transform 363ms, setup 0ms, import 752ms, tests 6ms, environment 0ms)
+

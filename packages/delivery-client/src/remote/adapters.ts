@@ -197,57 +197,38 @@ export class RemoteInbox implements DeliveryInbox {
   }
 
   /**
-   * Removes an expired delivered row while its exclusive shard session remains current.
-   *
-   * The remote API exposes a read followed by a removal call, not an atomic
-   * compare-and-delete operation. Another writer may therefore change the row
-   * between the equality check and removal.
+   * Removes an eligible delivered row by ID through the remote delivery server.
    *
    * @param message Supplies the delivered snapshot.
-   * @param session Supplies the matching exclusive shard session.
    * @param options Bounds remote reads and removal.
-   * @returns Whether the snapshot matched when read and the removal request completed.
+   * @returns Whether the removal request completed.
    */
   async removeDelivered(
     message: InboxMessage,
-    session: DeliveryWorkSession,
     options?: DeliveryOperationOptions,
   ): Promise<boolean> {
-    if (session.kind !== this.sessionKind || session.shard.key() !== message.shard.key())
-      return false;
     if (
       message.status !== "DELIVERED" ||
       (message.keepUntil !== undefined && message.keepUntil.getTime() > Time.currentTimeMillis())
     )
       return false;
-    const current = await this.client.findOne(message.id, options);
-    if (current === undefined || !RemoteValues.sameMessage(current, message)) return false;
-    await this.client.removeOne(current, options);
+    await this.client.removeOne(message, options);
     return true;
   }
 
   /**
-   * Removes one exact pending duplicate while its exclusive shard session remains current.
-   *
-   * Remote removal reads and compares before a separate removal request, so it
-   * cannot provide the direct provider's atomic compare-and-delete guarantee.
+   * Removes one pending duplicate by ID through the remote delivery server.
    *
    * @param message Supplies the pending duplicate snapshot.
-   * @param session Supplies the matching exclusive shard session.
    * @param options Bounds remote reads and removal.
-   * @returns Whether the snapshot matched when read and the removal request completed.
+   * @returns Whether the removal request completed.
    */
   async removeDuplicate(
     message: InboxMessage,
-    session: DeliveryWorkSession,
     options?: DeliveryOperationOptions,
   ): Promise<boolean> {
-    if (session.kind !== this.sessionKind || session.shard.key() !== message.shard.key())
-      return false;
     if (message.status !== "TO_DELIVER") return false;
-    const current = await this.client.findOne(message.id, options);
-    if (current === undefined || !RemoteValues.sameMessage(current, message)) return false;
-    await this.client.removeOne(current, options);
+    await this.client.removeOne(message, options);
     return true;
   }
 }

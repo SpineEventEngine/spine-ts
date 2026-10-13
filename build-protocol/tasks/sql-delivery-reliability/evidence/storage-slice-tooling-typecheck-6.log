@@ -1,0 +1,17 @@
+packages/server/test/delivery/inbox.test.ts(150,40): error TS2379: Argument of type '{ signal: Any | undefined; id: InboxMessageId; inboxId: InboxId; signalId: string; label: DeliveryLabel; ... 4 more ...; keepUntil?: Date; }' is not assignable to parameter of type 'InboxMessage' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'signal' are incompatible.
+    Type 'Any | undefined' is not assignable to type 'Any'.
+      Type 'undefined' is not assignable to type 'Any'.
+        Type 'undefined' is not assignable to type 'Message<"google.protobuf.Any">'.
+packages/storage/test/event/event-store.test.ts(261,40): error TS2552: Cannot find name 'EventId'. Did you mean 'Event'?
+packages/storage/test/event/event-store.test.ts(261,49): error TS2344: Type 'Event' does not satisfy the constraint 'Message'.
+  Property '$typeName' is missing in type 'Event' but required in type 'Message'.
+packages/storage/test/event/event-store.test.ts(264,71): error TS2552: Cannot find name 'EventId'. Did you mean 'Event'?
+packages/storage/test/event/event-store.test.ts(264,80): error TS2344: Type 'Event' does not satisfy the constraint 'Message'.
+  Property '$typeName' is missing in type 'Event' but required in type 'Message'.
+packages/storage/test/event/event-store.test.ts(314,40): error TS2552: Cannot find name 'EventId'. Did you mean 'Event'?
+packages/storage/test/event/event-store.test.ts(314,49): error TS2344: Type 'Event' does not satisfy the constraint 'Message'.
+  Property '$typeName' is missing in type 'Event' but required in type 'Message'.
+packages/storage/test/event/event-store.test.ts(317,65): error TS2552: Cannot find name 'EventId'. Did you mean 'Event'?
+packages/storage/test/event/event-store.test.ts(317,74): error TS2344: Type 'Event' does not satisfy the constraint 'Message'.
+  Property '$typeName' is missing in type 'Event' but required in type 'Message'.

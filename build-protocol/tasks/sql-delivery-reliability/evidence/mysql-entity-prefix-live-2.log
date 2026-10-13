@@ -1,0 +1,44 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/storage-mysql/test/mysql-integration.test.ts (14 tests | 1 failed | 13 skipped) 67ms
+     × retains the exact immutable Entity prefix at each injected boundary 49ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/storage-mysql/test/mysql-integration.test.ts > MySQL-family record layout > retains the exact immutable Entity prefix at each injected boundary
+Error: MySQL storage identifier is invalid.
+ ❯ mysqlError packages/storage-mysql/src/mysql/errors.ts:48:7
+     46|     error instanceof MysqlStorageOperationError
+     47|     ? (error as E)
+     48|     : new type(message, { cause: error });
+       |       ^
+     49| }
+     50|
+ ❯ MysqlRecordStorage.validateId packages/storage-mysql/src/mysql/record-storage.ts:1235:13
+ ❯ MysqlRecordStorage.write packages/storage-mysql/src/mysql/record-storage.ts:191:10
+ ❯ States.append packages/storage-mysql/src/mysql/entity-history.ts:297:25
+ ❯ MysqlEntityCommitStorage.apply packages/storage-mysql/src/mysql/storage-factory.ts:869:66
+ ❯ MysqlEntityCommitStorage.commit packages/storage-mysql/src/mysql/storage-factory.ts:842:18
+ ❯ packages/storage-mysql/test/mysql-integration.test.ts:342:7
+
+Caused by: Error: cannot encode message google.protobuf.Any to JSON: "type.spine.io/spine.examples.todo.TaskId" is not in the type registry
+ ❯ anyToJson node_modules/.pnpm/@bufbuild+protobuf@2.12.1/node_modules/@bufbuild/protobuf/dist/esm/to-json.js:284:15
+ ❯ tryWktToJson node_modules/.pnpm/@bufbuild+protobuf@2.12.1/node_modules/@bufbuild/protobuf/dist/esm/to-json.js:249:20
+ ❯ reflectToJson node_modules/.pnpm/@bufbuild+protobuf@2.12.1/node_modules/@bufbuild/protobuf/dist/esm/to-json.js:66:21
+ ❯ fieldToJson node_modules/.pnpm/@bufbuild+protobuf@2.12.1/node_modules/@bufbuild/protobuf/dist/esm/to-json.js:112:20
+ ❯ reflectToJson node_modules/.pnpm/@bufbuild+protobuf@2.12.1/node_modules/@bufbuild/protobuf/dist/esm/to-json.js:80:27
+ ❯ toJson node_modules/.pnpm/@bufbuild+protobuf@2.12.1/node_modules/@bufbuild/protobuf/dist/esm/to-json.js:40:12
+ ❯ toJsonString node_modules/.pnpm/@bufbuild+protobuf@2.12.1/node_modules/@bufbuild/protobuf/dist/esm/to-json.js:47:23
+ ❯ Object.toString packages/core/src/index.ts:1079:23
+ ❯ MysqlIdColumn.value packages/storage-mysql/src/mysql/id-column.ts:54:73
+ ❯ MysqlRecordStorage.idKey packages/storage-mysql/src/mysql/record-storage.ts:1221:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 13 skipped (14)
+   Start at  18:32:39
+   Duration  633ms (transform 267ms, setup 0ms, import 447ms, tests 67ms, environment 0ms)
+

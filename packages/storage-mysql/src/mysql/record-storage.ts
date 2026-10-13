@@ -88,8 +88,6 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
 
   #ready: Promise<void> | undefined;
 
-  #bound: import("mysql2/promise").PoolConnection | undefined;
-
   readonly #idColumn: MysqlIdColumn<I>;
 
   readonly #columnMapping: ColumnMapping<unknown>;
@@ -104,7 +102,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
   }
 
   /**
-   * Prepares the table before a coordinator transaction begins.
+   * Prepares and inspects the table before record operations.
    *
    * @returns Resolves after table creation and inspection complete.
    */
@@ -256,40 +254,6 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     await this.using(async (connection) => {
       await this.immutableAbsent(connection, id, record);
     });
-  }
-
-  /**
-   * Binds nested storage calls to a coordinator-owned connection.
-   *
-   * @param connection Provides the coordinator-owned connection.
-   * @param work Performs the bound storage work.
-   * @typeParam T The bound work's result type.
-   * @returns Returns the work result.
-   */
-  async withConnection<T>(
-    connection: import("mysql2/promise").PoolConnection,
-    work: () => Promise<T>,
-  ): Promise<T> {
-    if (this.#bound !== undefined) {
-      return work();
-    }
-    this.#bound = connection;
-    try {
-      await this.ready(connection);
-      return await work();
-    } finally {
-      this.#bound = undefined;
-    }
-  }
-
-  /**
-   * Reads one record with the coordinator transaction's row/gap lock.
-   *
-   * @param id Identifies the record.
-   * @returns Resolves to the stored record when present.
-   */
-  async readLocked(id: I): Promise<R | undefined> {
-    return this.using((connection) => this.readOn(connection, id, true));
   }
 
   /**
@@ -468,7 +432,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
   }
 
   /**
-   * Executes work with the coordinator-bound connection or a temporary connection.
+   * Executes one record operation with an acquired connection.
    *
    * @param work Performs the database operation.
    * @typeParam T The database operation result type.
@@ -477,10 +441,6 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
   private async using<T>(
     work: (connection: import("mysql2/promise").PoolConnection) => Promise<T>,
   ): Promise<T> {
-    const bound = this.#bound;
-    if (bound !== undefined) {
-      return work(bound);
-    }
     const connection = await this.lifecycle.acquire();
     try {
       await this.ready(connection);
@@ -628,16 +588,14 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
    *
    * @param connection Provides the connection used for reading.
    * @param id Identifies the record.
-   * @param lock Requests a row or gap lock when supported.
    * @returns Resolves to the stored record when present.
    */
   private async readOn(
     connection: import("mysql2/promise").PoolConnection,
     id: I,
-    lock = false,
   ): Promise<R | undefined> {
     const [rows] = await connection.execute<PayloadRow[]>(
-      `SELECT bytes FROM \`${this.table.tableName}\` WHERE ID=?${lock ? " FOR UPDATE" : ""}`,
+      `SELECT bytes FROM \`${this.table.tableName}\` WHERE ID=?`,
       [this.idKey(id)] as never,
     );
     if (rows[0] === undefined) return undefined;

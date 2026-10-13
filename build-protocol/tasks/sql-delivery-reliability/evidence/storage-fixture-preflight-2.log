@@ -1,0 +1,26 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/storage-postgres/test/postgres-entity-commit.test.ts (15 tests | 1 failed) 17ms
+     × releases the client after a current-record write failure 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/storage-postgres/test/postgres-entity-commit.test.ts > PostgreSQL Entity commit > releases the client after a current-record write failure
+AssertionError: expected "vi.fn()" to be called 2 times, but got 4 times
+ ❯ packages/storage-postgres/test/postgres-entity-commit.test.ts:283:28
+    281|
+    282|     expect(driver.query.mock.calls.filter(([sql]) => sql === "ROLLBACK…
+    283|     expect(driver.release).toHaveBeenCalledTimes(2);
+       |                            ^
+    284|   });
+    285|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 4 passed (5)
+      Tests  1 failed | 79 passed (80)
+   Start at  18:58:43
+   Duration  1.33s (transform 2.20s, setup 0ms, import 3.38s, tests 408ms, environment 0ms)
+

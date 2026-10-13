@@ -13,7 +13,6 @@
  */
 
 import { fromBinary, ScalarType, toBinary, type Message } from "@bufbuild/protobuf";
-import { createHash } from "node:crypto";
 import { StringifierRegistry } from "@spine-event-engine/core";
 import {
   ColumnMappings,
@@ -35,7 +34,6 @@ import {
   PostgresStorageDataError,
   PostgresStorageOperationError,
   PostgresClientDisposal,
-  PostgresRollbackErrors,
 } from "./errors.js";
 import { PostgresIdColumn } from "./id-column.js";
 import type { PostgresParameter } from "./parameter.js";
@@ -70,26 +68,16 @@ export interface PostgresRecordLifecycle {
  * Performs package-local bounded operations for one PostgreSQL record family.
  *
  * This capability deliberately stays outside the package root: Entity history
- * uses it to keep its SQL and transaction scope on the PostgreSQL provider.
+ * uses it to keep its SQL on the PostgreSQL provider.
  *
- * @typeParam I The storage identifier type.
  * @typeParam R The stored Protobuf record type.
  */
-export interface PostgresRecordExecutor<I, R extends Message> {
+export interface PostgresRecordExecutor<R extends Message> {
   /**
    * Prepares the backing table before acquiring an operation client.
    * @returns A promise that resolves when the table is compatible.
    */
   prepare(): Promise<void>;
-
-  /**
-   * Returns one PostgreSQL transaction with rollback and client release.
-   *
-   * @typeParam T The value returned by the transaction work.
-   * @param work Performs work with the transaction client.
-   * @returns The work result.
-   */
-  transaction<T>(work: (client: PoolClient) => Promise<T>): Promise<T>;
 
   /**
    * Returns bounded work on one acquired PostgreSQL client.
@@ -101,49 +89,8 @@ export interface PostgresRecordExecutor<I, R extends Message> {
   using<T>(work: (client: PoolClient) => Promise<T>): Promise<T>;
 
   /**
-   * Reads one record on a caller-managed client.
-   * @param client Provides the transaction client.
-   * @param id Identifies the stored record.
-   * @param lock Requests a row lock when present.
-   * @returns The decoded record, when present.
-   */
-  read(client: PoolClient, id: I, lock?: "for-update"): Promise<R | undefined>;
-
-  /**
-   * Checks that an immutable record is absent or byte-identical.
-   * @param client Provides the transaction client.
-   * @param record Provides the immutable record to inspect.
-   * @returns A promise that rejects for a conflicting payload.
-   */
-  assertImmutable(client: PoolClient, record: R): Promise<void>;
-
-  /**
-   * Stores an immutable record on a caller-managed transaction client.
-   * @param client Provides the transaction client.
-   * @param record Provides the record to store.
-   * @returns A promise that resolves after storage or identity confirmation.
-   */
-  appendImmutable(client: PoolClient, record: R): Promise<void>;
-
-  /**
-   * Writes one mutable record on a caller-managed transaction client.
-   * @param client Provides the transaction client.
-   * @param record Provides the record to write.
-   * @returns A promise that resolves after the upsert.
-   */
-  write(client: PoolClient, record: R): Promise<void>;
-
-  /**
-   * Deletes one record on a caller-managed transaction client.
-   * @param client Provides the transaction client.
-   * @param id Identifies the stored record.
-   * @returns Whether PostgreSQL deleted the record.
-   */
-  delete(client: PoolClient, id: I): Promise<boolean>;
-
-  /**
    * Decodes records returned by one bounded PostgreSQL statement.
-   * @param client Provides the transaction client.
+   * @param client Provides the acquired client.
    * @param sql Supplies bounded provider SQL.
    * @param values Supplies bound SQL values.
    * @returns Decoded records.
@@ -167,21 +114,6 @@ export interface PostgresRecordExecutor<I, R extends Message> {
    * @returns The validated table identifier.
    */
   table(): string;
-
-  /**
-   * Returns a hash for one provider-private advisory-lock identity.
-   * @param domain Separates lock kinds.
-   * @param identity Identifies the locked resource.
-   * @returns A signed PostgreSQL advisory key.
-   */
-  lock(domain: string, ...identity: readonly string[]): bigint;
-
-  /**
-   * Returns the same record-mutation lock used by compare-and-set.
-   * @param id Identifies the guarded record.
-   * @returns A signed PostgreSQL advisory key.
-   */
-  lockRecord(id: I): bigint;
 }
 
 /**
@@ -243,7 +175,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
   }
 
   /**
-   * Prepares this table before an external coordinator transaction.
+   * Prepares this table before a record operation.
    *
    * @returns A promise that resolves after compatible initialization.
    */
@@ -257,21 +189,13 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    * @internal
    * @returns PostgreSQL-only history execution capabilities.
    */
-  historyExecutor(): PostgresRecordExecutor<I, R> {
+  historyExecutor(): PostgresRecordExecutor<R> {
     return {
       prepare: () => this.prepare(),
-      transaction: (work) => this.transaction(work),
       using: (work) => this.using(work),
-      read: (client, id, lock) => this.readOn(client, id, lock === "for-update"),
-      assertImmutable: (client, record) => this.assertImmutableOn(client, record),
-      appendImmutable: (client, record) => this.appendImmutableOn(client, record),
-      write: (client, record) => this.writeOn(client, record),
-      delete: (client, id) => this.deleteOn(client, id),
       query: (client, sql, values) => this.historyEntries(client, sql, values),
       column: (name, value) => this.historyColumn(name, value),
       table: () => this.qualified(),
-      lock: (domain, ...identity) => this.historyKey(domain, identity),
-      lockRecord: (id) => this.casKey(id),
     };
   }
 
@@ -291,11 +215,9 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    * @returns A promise that resolves when the payload is stored or confirmed.
    */
   async writeImmutable(record: R): Promise<void> {
-    await this.using((client) => this.appendImmutableOn(client, record, true)).catch(
-      (error: unknown) => {
-        throw operationError(error);
-      },
-    );
+    await this.using((client) => this.appendImmutableOn(client, record)).catch((error: unknown) => {
+      throw operationError(error);
+    });
   }
 
   /**
@@ -317,7 +239,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    * @returns Whether a stored record was deleted.
    */
   protected async deleteRecord(id: I): Promise<boolean> {
-    return this.using(async (client) => this.deleteOn(client, id, true)).catch((error: unknown) => {
+    return this.using(async (client) => this.deleteOn(client, id)).catch((error: unknown) => {
       throw operationError(error);
     });
   }
@@ -408,11 +330,9 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    * @returns A promise that resolves after PostgreSQL applies the upsert.
    */
   protected writeRecord(record: Materialized<I, R>): Promise<void> {
-    return this.using((client) => this.writeOn(client, record.record, undefined, true)).catch(
-      (error: unknown) => {
-        throw operationError(error);
-      },
-    );
+    return this.using((client) => this.writeOn(client, record.record)).catch((error: unknown) => {
+      throw operationError(error);
+    });
   }
 
   /**
@@ -497,34 +417,6 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
   }
 
   /**
-   * Executes work in one transaction and always releases its client.
-   *
-   * @typeParam T The value returned by the transaction work.
-   * @param work Performs the transaction work.
-   * @returns The value returned by the work after a successful commit.
-   */
-  private async transaction<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
-    await this.prepare();
-    const client = await this.lifecycle.acquire();
-    let discard: Error | undefined;
-    try {
-      await client.query("BEGIN");
-      const result = await work(client);
-      await client.query("COMMIT");
-      return result;
-    } catch (error) {
-      try {
-        await client.query("ROLLBACK");
-      } catch {
-        discard = PostgresRollbackErrors.discard(error);
-      }
-      throw error;
-    } finally {
-      client.release(discard);
-    }
-  }
-
-  /**
    * Executes work with one prepared and automatically released client.
    *
    * @typeParam T The value returned by the client work.
@@ -542,7 +434,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
       throw operationError(error);
     } finally {
       client.release(
-        discard ? new Error("PostgreSQL client discarded after lock cleanup failure.") : undefined,
+        discard ? new Error("PostgreSQL client discarded after provider failure.") : undefined,
       );
     }
   }
@@ -552,12 +444,11 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    *
    * @param client Provides the active client.
    * @param id Identifies the record.
-   * @param lock Whether to lock the selected row for update.
    * @returns The decoded record, when present.
    */
-  private async readOn(client: PoolClient, id: I, lock = false): Promise<R | undefined> {
+  private async readOn(client: PoolClient, id: I): Promise<R | undefined> {
     const result = await client.query<Row>(
-      `SELECT "bytes" FROM ${this.qualified()} WHERE "ID" = $1${lock ? " FOR UPDATE" : ""}`,
+      `SELECT "bytes" FROM ${this.qualified()} WHERE "ID" = $1`,
       [this.id(id)],
     );
     if (result.rows[0] === undefined) return undefined;
@@ -595,61 +486,37 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
   }
 
   /**
-   * Acquires the transaction lock for one record slot.
-   *
-   * @param client Provides the active transaction client.
-   * @param id Identifies the record slot.
-   * @returns A promise that resolves after lock acquisition.
-   */
-  private lockSlot(client: PoolClient, id: I): Promise<void> {
-    return client
-      .query("SELECT pg_advisory_xact_lock($1)", [this.casKey(id)])
-      .then(() => undefined);
-  }
-
-  /**
    * Writes one record on a caller-managed client.
    *
-   * @param client Provides the active transaction client.
+   * @param client Provides the acquired client.
    * @param record Supplies the record to write.
-   * @param id Identifies the record.
-   * @param locked Whether the caller already holds the record lock.
    * @returns A promise that resolves after the upsert.
    */
-  private async writeOn(
-    client: PoolClient,
-    record: R,
-    id = this.recordSpec.idValueIn(record),
-    locked = false,
-  ): Promise<void> {
-    if (!locked) await this.lockSlot(client, id);
+  private async writeOn(client: PoolClient, record: R): Promise<void> {
+    const id = this.recordSpec.idValueIn(record);
     await client.query(this.upsertSql(), this.values(record, id));
   }
 
   /**
    * Deletes one record on a caller-managed client.
    *
-   * @param client Provides the active transaction client.
+   * @param client Provides the acquired client.
    * @param id Identifies the record.
-   * @param locked Whether the caller already holds the record lock.
    * @returns Whether PostgreSQL deleted a row.
    */
-  private async deleteOn(client: PoolClient, id: I, locked = false): Promise<boolean> {
-    if (!locked) await this.lockSlot(client, id);
+  private async deleteOn(client: PoolClient, id: I): Promise<boolean> {
     return (await client.query(this.deleteSql(), [this.id(id)])).rowCount === 1;
   }
 
   /**
    * Stores an immutable record or confirms an identical existing record.
    *
-   * @param client Provides the active transaction client.
+   * @param client Provides the acquired client.
    * @param record Supplies the immutable record.
-   * @param locked Whether the caller already holds the record lock.
    * @returns A promise that resolves after insertion or identity confirmation.
    */
-  private async appendImmutableOn(client: PoolClient, record: R, locked = false): Promise<void> {
+  private async appendImmutableOn(client: PoolClient, record: R): Promise<void> {
     const id = this.recordSpec.idValueIn(record);
-    if (!locked) await this.lockSlot(client, id);
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const inserted = await client.query(this.immutableSql(), this.values(record));
       if (inserted.rowCount === 1) return;
@@ -659,19 +526,6 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
       throw new PostgresStorageOperationError("PostgreSQL immutable record collides.");
     }
     throw new PostgresStorageOperationError("PostgreSQL immutable record contention exceeded.");
-  }
-
-  /**
-   * Checks that an immutable record is absent or byte-identical.
-   *
-   * @param client Provides the active client.
-   * @param record Supplies the immutable record.
-   * @returns A promise that rejects for a conflicting stored payload.
-   */
-  private async assertImmutableOn(client: PoolClient, record: R): Promise<void> {
-    const existing = await this.readOn(client, this.recordSpec.idValueIn(record));
-    if (existing === undefined || this.same(existing, record)) return;
-    throw new PostgresStorageOperationError("PostgreSQL immutable record collides.");
   }
 
   /**
@@ -709,25 +563,6 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     if (column === undefined)
       throw new PostgresStorageOperationError(`PostgreSQL history column is not declared: ${name}`);
     return ColumnMappings.value(this.#columns, column.type, value);
-  }
-
-  /**
-   * Calculates a stable advisory-lock key within the selected database and schema.
-   *
-   * @param domain Separates lock purposes.
-   * @param identity Identifies the protected resource.
-   * @returns A signed PostgreSQL advisory-lock key.
-   */
-  private historyKey(domain: string, identity: readonly string[]): bigint {
-    return createHash("sha256")
-      .update(`spine-postgres-${domain}\0`)
-      .update(this.lifecycle.databaseName)
-      .update("\0")
-      .update(this.lifecycle.schema)
-      .update("\0")
-      .update(identity.join("\0"))
-      .digest()
-      .readBigInt64BE();
   }
 
   /**
@@ -1166,16 +1001,6 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    */
   private offsetSql(bind: Binds, offset: number): string {
     return ` LIMIT ${bind.add(9_223_372_036_854_775_807n)} OFFSET ${bind.add(offset)}`;
-  }
-
-  /**
-   * Calculates the advisory key for one record mutation.
-   *
-   * @param id Identifies the record.
-   * @returns The signed advisory-lock key.
-   */
-  private casKey(id: I): bigint {
-    return this.historyKey("record-mutation", [this.table.tableName, String(this.id(id))]);
   }
 }
 

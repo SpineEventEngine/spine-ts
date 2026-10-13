@@ -1,0 +1,3 @@
+$ node scripts/check-tsdoc.mjs
+stale-param: packages/storage-postgres/src/postgres/record-storage.ts :: PostgresRecordStorage.writeOn(client,record)(id)
+[ELIFECYCLE] Command failed with exit code 1.

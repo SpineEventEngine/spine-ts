@@ -1,0 +1,33 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/storage/test/entity/in-memory-entity-commit.test.ts (26 tests | 1 failed) 31ms
+     × reports when a storage factory has not registered atomic commits 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/storage/test/entity/in-memory-entity-commit.test.ts > MemoryEntityCommitStorage > reports when a storage factory has not registered atomic commits
+AssertionError: expected [Function] to throw error matching /does not provide the required atomic …/ but got 'StorageFactory does not provide the r…'
+
+- Expected:
+/does not provide the required atomic Entity commit storage/
+
++ Received:
+"StorageFactory does not provide the required Entity commit storage."
+
+ ❯ packages/storage/test/entity/in-memory-entity-commit.test.ts:943:7
+    941|     expect(() =>
+    942|       EntityCommitStorageFactories.create(new UnregisteredStorageFacto…
+    943|     ).toThrow(/does not provide the required atomic Entity commit stor…
+       |       ^
+    944|   });
+    945| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 25 passed (26)
+   Start at  19:03:15
+   Duration  462ms (transform 202ms, setup 0ms, import 306ms, tests 31ms, environment 0ms)
+

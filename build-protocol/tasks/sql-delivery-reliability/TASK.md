@@ -37,7 +37,7 @@ The complete binding request is this chat and FIRST_SPINE_TS_DELIVERY_TASK.md in
 
 ## Skill applicability
 
-Session catalog inspected. Read using-git-worktrees, test-driven-development and verification-before-completion; these govern isolation, regression-first behavior changes and fresh evidence. Repository expected-skill manifest read. Project protocol supplies planning/review records and existing roles. Other skills applied only for concrete needs. Explicit user task overrides historical transaction/cleanup records and skill fallback instructions. Desktop tool supports explicit required model/reasoning profiles; no boost selected.
+Session catalog inspected. Read using-git-worktrees, test-driven-development, verification-before-completion, systematic-debugging and requesting-code-review; these govern isolation, regression-first behavior changes, fresh evidence and concern-specific review. Repository expected-skill manifest read. Project protocol supplies planning/review records and existing roles, overriding the generic skill's reviewer role suggestion. Other skills applied only for concrete needs. Explicit user task overrides historical transaction/cleanup records and skill fallback instructions. Desktop tool supports explicit required model/reasoning profiles; no boost selected.
 
 ## Dispatch ledger
 

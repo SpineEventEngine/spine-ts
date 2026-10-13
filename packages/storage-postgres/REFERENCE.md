@@ -42,7 +42,7 @@ altered. Missing, extra, or incompatible columns, defaults, nullability,
 primary keys, or unique constraints reject with `PostgresStorageSchemaError`.
 
 The adapter uses `$1` parameters, `IS NOT DISTINCT FROM`, PostgreSQL upsert,
-transaction advisory locks, and a bounded normalized query plan. It preserves
+independent bounded history maintenance pages, and a normalized query plan. It preserves
 the common 1,000-bind plan budget and 10,000-row default with one
 overflow lookahead row. The database collation controls text ordering; the
 provider does not invent a JavaScript-compatible collation.
@@ -64,9 +64,11 @@ and collisions before DDL, DML, or catalog inspection.
 
 `factory.close()` is idempotent, closes registered handles, prevents new handle
 creation, and drains pools. Record and Entity handles can close independently.
-Acquired clients are released in `finally` blocks and transactions are always
-committed or rolled back before release. Errors do not include URLs,
-credentials, SQL text, or driver internals.
+Acquired clients are released in `finally` blocks. History maintenance applies
+each deletion page independently. Top-level provider error messages and public
+responses omit URLs, credentials, SQL text, and driver details. The original
+driver failure remains available as the internal `cause`; do not expose it in
+public responses or unfiltered logs.
 
 Custom table creation may use `useOperationFactory(factory)` with the exported
 `PostgresTableSpec`, `PostgresCreateOperation`, and

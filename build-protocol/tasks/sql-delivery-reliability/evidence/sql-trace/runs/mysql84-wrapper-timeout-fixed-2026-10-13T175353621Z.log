@@ -1,0 +1,3 @@
+{"event_time":"2026-10-13T17:53:53.830858Z","user_host":"[root] @  [172.17.0.1]","thread_id":86,"server_id":1,"command_type":"Connect","argument":"root@172.17.0.1 on spine_test using TCP/IP"}
+{"event_time":"2026-10-13T17:53:53.832644Z","user_host":"root[root] @  [172.17.0.1]","thread_id":86,"server_id":1,"command_type":"Query","argument":"SELECT 'sqlrel_trace_wrapper_probe' AS marker"}
+{"event_time":"2026-10-13T17:53:53.834269Z","user_host":"root[root] @  [172.17.0.1]","thread_id":86,"server_id":1,"command_type":"Quit","argument":""}

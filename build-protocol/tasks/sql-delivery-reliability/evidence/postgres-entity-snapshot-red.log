@@ -1,0 +1,54 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/storage-postgres/test/postgres-entity-commit.test.ts (14 tests | 1 failed | 13 skipped) 9ms
+     × persists captured Entity bytes when the caller mutates input during I/O 8ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/storage-postgres/test/postgres-entity-commit.test.ts > PostgreSQL Entity commit > persists captured Entity bytes when the caller mutates input during I/O
+AssertionError: expected { …(3) } to deeply equal { …(3) }
+
+- Expected
++ Received
+
+@@ -9,17 +9,16 @@
+      116,
+      97,
+      115,
+      107,
+      18,
+-     8,
+-     112,
+-     114,
+-     101,
+-     112,
++     7,
++     109,
++     117,
++     116,
+      97,
+-     114,
++     116,
+      101,
+      100,
+      34,
+      8,
+      10,
+
+ ❯ packages/storage-postgres/test/postgres-entity-commit.test.ts:231:26
+    229|     const insert = driver.query.mock.calls.findLast(([sql]) => sql.sta…
+    230|     const stored = fromBinary(EntityRecordSchema, insert?.[1][1] as Ui…
+    231|     expect(stored.state).toEqual(record("task", "prepared").state);
+       |                          ^
+    232|   });
+    233|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 13 skipped (14)
+   Start at  18:37:13
+   Duration  546ms (transform 279ms, setup 0ms, import 418ms, tests 9ms, environment 0ms)
+

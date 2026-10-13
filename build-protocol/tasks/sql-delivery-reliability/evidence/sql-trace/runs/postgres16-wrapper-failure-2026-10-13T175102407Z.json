@@ -1,0 +1,21 @@
+{
+  "operation": "wrapper-failure",
+  "engine": "postgres16",
+  "serverVersion": "PostgreSQL 16.15 (Debian 16.15-1.pgdg13+2) on aarch64-unknown-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+  "containerName": "spine-sqlrel-8327eaa2-pg16",
+  "containerId": "c95a7bcdb86b279a700cad9379d3cee4b7dc960da5b1d0306f6614107a645ed7",
+  "image": "postgres:16.15@sha256:a3b7f434b2dc57ce85a67e171163eb8ab1a1ebcb39d27484661f26b1dfbe30d6",
+  "startedAt": "2026-10-13T17:51:02.481Z",
+  "endedAt": "2026-10-13T17:51:04.571Z",
+  "command": [
+    "node",
+    "build-protocol/tasks/sql-delivery-reliability/evidence/sql-trace/probe.mjs",
+    "failure"
+  ],
+  "exitCode": 7,
+  "interruptedSignal": null,
+  "rawLog": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/sql-trace/runs/postgres16-wrapper-failure-2026-10-13T175102407Z.log",
+  "loggingRestored": true,
+  "restoreErrors": [],
+  "failures": []
+}

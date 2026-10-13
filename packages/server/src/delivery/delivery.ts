@@ -550,13 +550,7 @@ class DeliveryDrain {
    */
   async #removeDuplicate(message: InboxMessage, target: string): Promise<boolean> {
     try {
-      if (
-        !(await this.input.inbox.removeDuplicate(
-          message,
-          this.#current,
-          this.input.options.operation,
-        ))
-      )
+      if (!(await this.input.inbox.removeDuplicate(message, this.input.options.operation)))
         throw new Error("Inbox duplicate was not removed.");
       this.#removedInPage.add(message);
       this.input.options.onDuplicateRemoved?.(message);
@@ -702,13 +696,7 @@ class DeliveryDrain {
     if (this.input.inbox.removeDelivered === undefined) return false;
     if (this.input.options.operation?.signal?.aborted || !(await this.#validate()))
       return undefined;
-    const removed = await this.input.inbox.removeDelivered(
-      message,
-      this.#current,
-      this.input.options.operation,
-    );
-    if (this.input.options.operation?.signal?.aborted || (!removed && !(await this.#validate())))
-      return undefined;
+    const removed = await this.input.inbox.removeDelivered(message, this.input.options.operation);
     return removed;
   }
 

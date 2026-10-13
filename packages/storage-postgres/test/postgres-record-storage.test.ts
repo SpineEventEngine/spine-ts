@@ -358,6 +358,22 @@ describe("Postgres record storage", () => {
     expect(driver.release).toHaveBeenCalledOnce();
   });
 
+  it("discards a client marked unusable after a record operation fails", async () => {
+    const storage = await recordStorage();
+    await (storage as unknown as { prepare(): Promise<void> }).prepare();
+    vi.clearAllMocks();
+    const failure = new Error("broken PostgreSQL client with private detail");
+    PostgresClientDisposal.mark(failure);
+    driver.query.mockRejectedValueOnce(failure);
+
+    await expect(storage.write(create(StringValueSchema, { value: "one" }))).rejects.toThrow(
+      "record operation failed",
+    );
+
+    expect(driver.release).toHaveBeenCalledWith(expect.any(Error));
+    expect((driver.release.mock.calls[0] as unknown[])[0]).not.toBe(failure);
+  });
+
   it("reads one stored record and reports whether deletion changed a row", async () => {
     const storage = await recordStorage();
     await (storage as unknown as { prepare(): Promise<void> }).prepare();

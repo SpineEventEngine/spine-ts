@@ -1114,33 +1114,6 @@ describe("MysqlRecordStorage", () => {
     expect(insert?.values).toEqual(expect.arrayContaining([true, 1, 1n, raw, 7]));
   });
 
-  it("uses the bound connection for nested work and rejects a stale compare-and-set", async () => {
-    const calls: { sql: string; values?: readonly unknown[] }[] = [];
-    const encoded = toBinary(StringValueSchema, create(StringValueSchema, { value: "actual" }));
-    const connection = readyConnection(calls, {
-      select: () => [{ bytes: encoded }],
-    });
-    let acquired = 0;
-    const storage = stringStorage(connection, () => acquired++);
-
-    await storage.withConnection(connection as never, () =>
-      storage.withConnection(connection as never, () =>
-        storage.write(create(StringValueSchema, { value: "one" })),
-      ),
-    );
-    await expect(
-      storage.compareAndSet(
-        "actual",
-        create(StringValueSchema, { value: "expected" }),
-        create(StringValueSchema, { value: "next" }),
-      ),
-    ).resolves.toBe(false);
-
-    expect(acquired).toBe(1);
-    expect(calls.map((call) => call.sql)).not.toContain("ROLLBACK");
-    expect(calls.map((call) => call.sql)).not.toContain("COMMIT");
-  });
-
   it("keeps a completed batch prefix without beginning a transaction", async () => {
     const calls: { sql: string; values?: readonly unknown[] }[] = [];
     const connection = readyConnection(calls);
@@ -1201,7 +1174,8 @@ describe("MysqlRecordStorage", () => {
     const originalExecute = connection.execute;
     connection.execute = (sql: string, values?: readonly unknown[]) =>
       sql.startsWith("UPDATE")
-        ? (calls.push({ sql, values }), Promise.resolve([{ affectedRows: 0 }, []] as never))
+        ? (calls.push({ sql, ...(values === undefined ? {} : { values }) }),
+          Promise.resolve([{ affectedRows: 0 }, []] as never))
         : originalExecute(sql, values);
     const storage = stringStorage(connection);
 
@@ -1225,7 +1199,8 @@ describe("MysqlRecordStorage", () => {
     const originalExecute = connection.execute;
     connection.execute = (sql: string, values?: readonly unknown[]) =>
       sql.startsWith("UPDATE")
-        ? (calls.push({ sql, values }), Promise.resolve([{ affectedRows: 0 }, []] as never))
+        ? (calls.push({ sql, ...(values === undefined ? {} : { values }) }),
+          Promise.resolve([{ affectedRows: 0 }, []] as never))
         : originalExecute(sql, values);
     const storage = stringStorage(connection);
 
@@ -1247,7 +1222,7 @@ describe("MysqlRecordStorage", () => {
     const originalExecute = connection.execute;
     connection.execute = (sql: string, values?: readonly unknown[]) => {
       if (sql.startsWith("INSERT INTO")) {
-        calls.push({ sql, values });
+        calls.push({ sql, ...(values === undefined ? {} : { values }) });
         return Promise.reject(
           Object.assign(new Error("duplicate"), {
             code: "ER_DUP_ENTRY",
@@ -1279,7 +1254,7 @@ describe("MysqlRecordStorage", () => {
     const originalExecute = connection.execute;
     connection.execute = (sql: string, values?: readonly unknown[]) => {
       if (sql.startsWith("DELETE")) {
-        calls.push({ sql, values });
+        calls.push({ sql, ...(values === undefined ? {} : { values }) });
         return Promise.resolve([{ affectedRows: 0 }, []] as never);
       }
       return originalExecute(sql, values);
