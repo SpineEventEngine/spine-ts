@@ -7561,3 +7561,11 @@ Native pre-extraction package passed immediate choice/preparation checks. Final
 renderer extraction passed focused tests and independent review; no visual
 behavior change. Mac locked on final app inspection, so leave the running app
 and its session untouched. Source ready for feature-branch commit/push.
+
+Post-push CI for6c9233fc9 failed formatting of agent-optional-bounds.test.ts;
+both dependency audits passed. Micro correction: format this test, run complete
+format gate with all new files now tracked, inspect whitespace-only diff and
+push. Existing formatter enumerates tracked files, so the formerly untracked
+test escaped the earlier full format check. Stage or explicitly include new
+files before future tracked-file preflights. No runtime behavior change; prior
+behavioral and specialist reviews remain current. Estimate0.1h plus CI waiting.

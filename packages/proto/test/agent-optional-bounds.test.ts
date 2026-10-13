@@ -24,10 +24,7 @@ describe("Agent invocation bound presence", () => {
     );
     const explicitZero = fromBinary(
       AgentInvocationBoundsSchema,
-      toBinary(
-        AgentInvocationBoundsSchema,
-        create(AgentInvocationBoundsSchema, { toolCalls: 0n }),
-      ),
+      toBinary(AgentInvocationBoundsSchema, create(AgentInvocationBoundsSchema, { toolCalls: 0n })),
     );
     expect(absent.toolCalls).toBeUndefined();
     expect(explicitZero.toolCalls).toBe(0n);
