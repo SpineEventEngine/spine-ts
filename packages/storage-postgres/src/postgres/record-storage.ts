@@ -1264,5 +1264,5 @@ function retryable(error: unknown): boolean {
 function operationError(error: unknown): PostgresStorageOperationError {
   return error instanceof PostgresStorageOperationError || error instanceof PostgresStorageDataError
     ? error
-    : new PostgresStorageOperationError("PostgreSQL record operation failed.");
+    : new PostgresStorageOperationError("PostgreSQL record operation failed.", { cause: error });
 }

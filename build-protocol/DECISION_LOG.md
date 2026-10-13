@@ -6027,3 +6027,39 @@ task. Agent work remains a separate task.
 
 See [the Time task](planning/spine-time-task.md) and
 [its status](planning/spine-time-worklog.md).
+
+## D-0125: Independent SQL Operations And Direct Delivery Cleanup
+
+Date: 2026-10-13. Status: accepted human direction; implementation in progress.
+
+The framework author supersedes the cross-record database transaction promises
+in D-0114, D-0123 and the historical atomic Entity-save briefs for this task.
+Ordinary primitive operations, batches, immutable append and Entity saving use
+independent storage operations. Do not restore all-or-nothing persistence with
+another coordinator or outbox. Each atomic conditional mutation still protects
+its condition; competing shard claims must have one winner. Immutable retries
+with identical values succeed and conflicting values are rejected.
+
+Entity/history/Event records may be partially written. State/Event visibility,
+write order, retry behavior and failure outcomes must be documented and tested.
+A saved Event does not prove its publication or successful Entity save.
+
+Cleanup checks eligibility and deletes records by ID. Cancellation prevents
+subsequent work; completed deletions remain completed. Remove exact-snapshot,
+post-delete lease/deadline checks, rollback and cross-record cleanup machinery.
+
+Infrastructure processing failures remain visible and pending or explicitly
+terminal; they must not be silently marked successful. Successful processing
+followed by acknowledgement failure is a distinct case. Failed publication is
+retried from the original saved Event without re-executing a successful Command.
+Finite live retries and explicit known-ID repair do not promise automatic
+discovery of interrupted publications or exactly-once recipient processing.
+No blind historical replay or new durable persistence contract is authorized.
+
+The default recovery scan becomes ten seconds, independently of stale-session
+and server-processing timers. Shared Delivery is recommended for multiprocess
+applications, with the explicit local-example exceptions in the task ledger.
+The supplied in-memory Delivery server remains non-durable; SQL business-state
+storage does not persist its Inbox.
+
+Implementation and acceptance: [task ledger](tasks/sql-delivery-reliability/TASK.md).

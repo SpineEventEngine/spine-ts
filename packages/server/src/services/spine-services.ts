@@ -106,7 +106,7 @@ import { TransitionValidationError } from "../repository/command-errors.js";
 import { type StandReadResult, type StandUpdate } from "../stand/stand.js";
 import { QueryReader } from "./query-reader.js";
 import { RegisteredTargets } from "./registered-targets.js";
-import { emitServerWarning } from "../server/server-log.js";
+import { emitServerError, emitServerWarning } from "../server/server-log.js";
 import { managedChildSubscriptionAccess } from "../server/managed-child-subscription.js";
 import {
   InMemorySubscriptionRegistry,
@@ -288,36 +288,15 @@ export class SpineServices {
     const messageId =
       command.id && AnyMessages.pack(CommandIdSchema, command.id, { validate: false });
     const typeUrl = command.message?.typeUrl;
-
-    if (typeUrl === undefined || typeUrl.length === 0) {
-      return create(AckSchema, {
+    if (typeUrl === undefined || typeUrl.length === 0)
+      return ServiceValues.commandErrorAck(
         messageId,
-        status: ServiceValues.errorStatus("INVALID_COMMAND", "Command message type is required."),
-      });
-    }
-
-    const route = this.#commandRoutes.get(typeUrl);
-    if (route === undefined) {
-      return create(AckSchema, {
-        messageId,
-        status: ServiceValues.errorStatus(
-          "UNSUPPORTED_COMMAND",
-          "No bounded context accepted the command.",
-        ),
-      });
-    }
-
-    const tenantError = ServiceValues.tenantMismatch(
-      route.context.isMultitenant,
-      ServiceValues.commandTenant(command),
-      "command",
-    );
-    if (tenantError !== undefined) {
-      return create(AckSchema, {
-        messageId,
-        status: ServiceValues.errorStatus(tenantError.type, tenantError.message),
-      });
-    }
+        "INVALID_COMMAND",
+        "Command message type is required.",
+      );
+    const admission = this.#commandAdmission(command, messageId, typeUrl);
+    if ("ack" in admission) return admission.ack;
+    const { route } = admission;
 
     try {
       await route.context.commandBus().post(command);
@@ -327,12 +306,71 @@ export class SpineServices {
       });
     } catch (error) {
       const postError = ServiceValues.commandPostError(error);
-
+      this.#logCommandPostFailure(route, command, error);
       return create(AckSchema, {
         messageId,
         status: ServiceValues.errorStatus(postError.type, postError.message, postError.details),
       });
     }
+  }
+
+  /**
+   * Checks route and tenant admission before command dispatch.
+   *
+   * @param command The public Command request.
+   * @param messageId The packed Command ID returned in the Ack.
+   * @param typeUrl The validated Command message type.
+   * @returns A selected route or a stable rejection Ack.
+   */
+  #commandAdmission(
+    command: Command,
+    messageId: Any | undefined,
+    typeUrl: string,
+  ): { route: CommandRoute } | { ack: Ack } {
+    const route = this.#commandRoutes.get(typeUrl);
+    if (route === undefined) {
+      return {
+        ack: ServiceValues.commandErrorAck(
+          messageId,
+          "UNSUPPORTED_COMMAND",
+          "No bounded context accepted the command.",
+        ),
+      };
+    }
+
+    const tenantError = ServiceValues.tenantMismatch(
+      route.context.isMultitenant,
+      ServiceValues.commandTenant(command),
+      "command",
+    );
+    if (tenantError !== undefined) {
+      return {
+        ack: ServiceValues.commandErrorAck(messageId, tenantError.type, tenantError.message),
+      };
+    }
+    return { route };
+  }
+
+  /**
+   * Records one failed command post with safe correlation fields.
+   *
+   * @param route The selected bounded context and command type.
+   * @param command The failed Command envelope.
+   * @param error The internal failure, retained for diagnostic classification only.
+   */
+  #logCommandPostFailure(route: CommandRoute, command: Command, error: unknown): void {
+    if (error instanceof TransitionValidationError || error instanceof CommandValidationError)
+      return;
+    const logger = serviceLoggers.get(this);
+    if (logger === undefined) return;
+    emitServerError(logger, "Command post failed.", {
+      contextName: route.context.name.value,
+      commandId: command.id?.uuid,
+      commandType: route.typeUrl,
+      operation: "command.post",
+      errorName: InternalErrorFacts.name(error),
+      errorCode: InternalErrorFacts.code(error),
+    });
   }
 
   /**
@@ -2093,6 +2131,64 @@ function commandPostError(error: unknown): ContractError {
   };
 }
 
+const recognizedSqlErrorCodes = new Set([
+  "40001",
+  "40P01",
+  "42703",
+  "42P01",
+  "23503",
+  "23505",
+  "P0001",
+  "08006",
+  "ER_BAD_FIELD_ERROR",
+  "ER_LOCK_DEADLOCK",
+  "ER_LOCK_WAIT_TIMEOUT",
+  "ER_SIGNAL_EXCEPTION",
+]);
+
+const InternalErrorFacts = Object.freeze({
+  /**
+   * Reads a recognized SQL code from an internal failure chain.
+   *
+   * @param error The internal failure.
+   * @returns A recognized code, if present.
+   */
+  code(error: unknown): string | undefined {
+    const seen = new Set<object>();
+    let current = error;
+    for (let depth = 0; depth < 8 && typeof current === "object" && current !== null; depth++) {
+      if (seen.has(current)) break;
+      seen.add(current);
+      try {
+        const code: unknown = Reflect.get(current, "code");
+        if (typeof code === "string" && recognizedSqlErrorCodes.has(code)) return code;
+        current = Reflect.get(current, "cause");
+      } catch {
+        return undefined;
+      }
+    }
+    return undefined;
+  },
+
+  /**
+   * Reads a safe error class name without trusting a rejection's accessors.
+   *
+   * @param error The internal failure.
+   * @returns A known error name, if present.
+   */
+  name(error: unknown): string | undefined {
+    try {
+      if (!(error instanceof Error)) return undefined;
+      const name = error.name;
+      return ["Error", "TypeError", "RangeError", "AggregateError"].includes(name)
+        ? name
+        : undefined;
+    } catch {
+      return undefined;
+    }
+  },
+});
+
 function tenantOptions(tenantId: TenantId | undefined): { readonly tenantId?: TenantId } {
   return tenantId === undefined ? {} : { tenantId: clone(TenantIdSchema, tenantId) };
 }
@@ -2307,6 +2403,18 @@ const ServiceValues = Object.freeze({
   },
 
   commandPostError,
+
+  /**
+   * Builds a stable Command rejection acknowledgement.
+   *
+   * @param messageId The packed Command ID, if supplied.
+   * @param type The public error code.
+   * @param message The public error message.
+   * @returns A sanitized Ack.
+   */
+  commandErrorAck(messageId: Any | undefined, type: string, message: string): Ack {
+    return create(AckSchema, { messageId, status: errorStatus(type, message) });
+  },
   commandTenant,
   createEntityUpdate,
   createEventUpdate,

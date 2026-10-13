@@ -14,7 +14,7 @@
 
 import { Code, ConnectError, createClient } from "@connectrpc/connect";
 import { compressionGzip, createGrpcTransport } from "@connectrpc/connect-node";
-import { clone, create, type Message } from "@bufbuild/protobuf";
+import { clone, create, toBinary, type Message } from "@bufbuild/protobuf";
 import {
   BoolValueSchema,
   BytesValueSchema,
@@ -36,6 +36,7 @@ import {
 } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
+  AckSchema,
   CommandSchema,
   CommandContextSchema,
   CommandIdSchema,
@@ -737,6 +738,110 @@ describe("SpineServices", () => {
     } finally {
       await server.close();
     }
+  });
+
+  it("logs one correlated command failure while keeping the serialized acknowledgement safe", async () => {
+    const driver = Object.assign(new Error("secret SQL, password and payload"), {
+      code: "ER_LOCK_DEADLOCK",
+    });
+    const failure = new Error("Command storage failed.", { cause: driver });
+    const dispatcher: CommandDispatcher = {
+      messageSchemas: () => [CreateReviewProjectSchema],
+      dispatch: () => Promise.reject(failure),
+    };
+    const context = BoundedContext.singleTenant("Tasks").addCommandDispatcher(dispatcher).build();
+    const error = vi.fn();
+    const withMetadata = vi.fn(() => ({ error }));
+    const services = new SpineServices({ contexts: [context] });
+    spineServicesAccess.installLogger(services, { withMetadata } as unknown as ILogLayer);
+    let post: ((command: ReturnType<typeof createProjectionCommand>) => Promise<Ack>) | undefined;
+    services.register({
+      service(schema: unknown, implementation: unknown) {
+        if (schema === CommandService) post = (implementation as { post: typeof post }).post;
+        return this;
+      },
+    } as never);
+    if (post === undefined) throw new Error("CommandService was not registered.");
+
+    const ack = await post(createProjectionCommand("command-diagnostic"));
+    const wire = Buffer.from(toBinary(AckSchema, ack)).toString("utf8");
+
+    expect(ack.status?.status.case).toBe("error");
+    expect(errorMessage(ack.status?.status)).toBe("Command post failed.");
+    expect(wire).not.toContain("secret SQL");
+    expect(wire).not.toContain("password");
+    expect(error).toHaveBeenCalledOnce();
+    expect(withMetadata).toHaveBeenCalledWith({
+      contextName: "Tasks",
+      commandId: "command-diagnostic",
+      commandType: TypeUrls.derive(CreateReviewProjectSchema),
+      operation: "command.post",
+      errorName: "Error",
+      errorCode: "ER_LOCK_DEADLOCK",
+    });
+  });
+
+  it("keeps a safe command status when an error has an unreadable diagnostic code", async () => {
+    const failure = new Error("secret driver text");
+    Object.defineProperty(failure, "code", {
+      get() {
+        throw new Error("diagnostic getter failed");
+      },
+    });
+    const context = BoundedContext.singleTenant("Tasks")
+      .addCommandDispatcher({
+        messageSchemas: () => [CreateReviewProjectSchema],
+        dispatch: () => Promise.reject(failure),
+      })
+      .build();
+    const error = vi.fn();
+    const services = new SpineServices({ contexts: [context] });
+    spineServicesAccess.installLogger(services, {
+      withMetadata: () => ({ error }),
+    } as unknown as ILogLayer);
+    let post: ((command: ReturnType<typeof createProjectionCommand>) => Promise<Ack>) | undefined;
+    services.register({
+      service(schema: unknown, implementation: unknown) {
+        if (schema === CommandService) post = (implementation as { post: typeof post }).post;
+        return this;
+      },
+    } as never);
+    if (post === undefined) throw new Error("CommandService was not registered.");
+
+    const ack = await post(createProjectionCommand("command-unreadable-code"));
+
+    expect(errorMessage(ack.status?.status)).toBe("Command post failed.");
+    expect(error).toHaveBeenCalledOnce();
+  });
+
+  it("omits untrusted custom error names and codes from command diagnostics", async () => {
+    const failure = Object.assign(new Error("secret SQL"), {
+      name: "CustomerPayload",
+      code: "CUSTOMER_PAYLOAD",
+    });
+    const context = BoundedContext.singleTenant("Tasks")
+      .addCommandDispatcher({
+        messageSchemas: () => [CreateReviewProjectSchema],
+        dispatch: () => Promise.reject(failure),
+      })
+      .build();
+    const withMetadata = vi.fn(() => ({ error: vi.fn() }));
+    const services = new SpineServices({ contexts: [context] });
+    spineServicesAccess.installLogger(services, { withMetadata } as unknown as ILogLayer);
+    let post: ((command: ReturnType<typeof createProjectionCommand>) => Promise<Ack>) | undefined;
+    services.register({
+      service(schema: unknown, implementation: unknown) {
+        if (schema === CommandService) post = (implementation as { post: typeof post }).post;
+        return this;
+      },
+    } as never);
+    if (post === undefined) throw new Error("CommandService was not registered.");
+
+    await post(createProjectionCommand("command-custom-error"));
+
+    expect(withMetadata).toHaveBeenCalledOnce();
+    expect(withMetadata.mock.calls[0]?.[0]).not.toHaveProperty("errorName");
+    expect(withMetadata.mock.calls[0]?.[0]).not.toHaveProperty("errorCode");
   });
 
   it("returns Spine statuses for empty contexts and malformed read criteria", async () => {

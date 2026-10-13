@@ -1,5 +1,17 @@
 # Spine TS Project Completion Plan
 
+## Active SQL Delivery And Subscription Task
+
+The author has authorized [SQL delivery and subscription reliability](tasks/sql-delivery-reliability/TASK.md)
+on `sql-delivery-subscription-reliability` from freshly fetched official master
+`658da1cdddcb8fd40f9205b1c200abc3a58dd62e`. This high-risk task covers STS-01–04
+and DEL-01–05, including independent SQL operations, direct cleanup, concurrent
+Command reliability, saved-Event repair, subscription lifecycle, recovery timers
+and accurate multiprocess examples. D-0125 records the human direction that
+supersedes historical cross-record transaction and rollback cleanup guarantees.
+Implementation, live verification and review remain in progress. No PR is
+authorized. Earlier completion records below describe their historical tasks.
+
 ## Current Repository Workflow
 
 `https://github.com/SpineEventEngine/spine-ts` is the sole development
