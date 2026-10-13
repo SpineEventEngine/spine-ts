@@ -13,15 +13,11 @@
  */
 
 import { createSign, generateKeyPairSync } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 
 import { CredentialStore } from "../src/trusted/credential-store.js";
 import { VercelAx } from "@spine-event-engine/ai-vercel-ax";
 
-const directories: string[] = [];
 const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const jwk = {
   ...publicKey.export({ format: "jwk" }),
@@ -30,11 +26,8 @@ const jwk = {
   use: "sig",
 };
 
-afterEach(async () => {
+afterEach(() => {
   vi.useRealTimers();
-  await Promise.all(
-    directories.splice(0).map(async (directory) => rm(directory, { recursive: true, force: true })),
-  );
 });
 
 function signedIdToken(
@@ -75,14 +68,7 @@ async function fixture(
   modelReply?: () => Promise<Response>,
   onRevoke?: (signal?: AbortSignal) => Promise<void>,
 ) {
-  const directory = await mkdtemp(join(tmpdir(), "release-notes-siwc-"));
-  directories.push(directory);
-  const cipher = {
-    encrypt: (value: string) => Buffer.from(Buffer.from(value).toString("base64url")),
-    decrypt: (value: Uint8Array) =>
-      Buffer.from(Buffer.from(value).toString(), "base64url").toString(),
-  };
-  const store = new CredentialStore(directory, cipher);
+  const store = new CredentialStore();
   let requests = 0;
   let codeGrants = 0;
   let refreshChanges: Record<string, unknown> = {};
@@ -198,17 +184,6 @@ async function fixture(
     setNonce: (value: string) => {
       pendingNonce = value;
     },
-    reopen: () => {
-      const saved = new CredentialStore(directory, cipher);
-      return {
-        store: saved,
-        session: VercelAx.chatgptPlanSession({
-          agentName: "Release Notes Studio",
-          credentials: saved,
-          platformFetch: fetcher,
-        }),
-      };
-    },
   };
 }
 
@@ -227,12 +202,12 @@ test("new registration validates a signed ID token and retains issued client ide
   expect((await store.registration("issued-client"))?.refreshToken).toBe("refresh-secret");
 });
 
-test("a failed encrypted clear keeps old plan tokens fenced until removal succeeds", async () => {
+test("a failed in-session clear keeps old plan tokens fenced until removal succeeds", async () => {
   const { session, store, pending, callback } = await fixture();
   await session.complete(pending, callback);
   const clear = store.clearTokens.bind(store);
-  store.clearTokens = () => Promise.reject(new Error("disk rename failed"));
-  await expect(session.signOut("issued-client")).rejects.toThrow("disk rename failed");
+  store.clearTokens = () => Promise.reject(new Error("credential clear failed"));
+  await expect(session.signOut("issued-client")).rejects.toThrow("credential clear failed");
   expect((await store.registration("issued-client"))?.accessToken).toBe("access-secret");
   await expect(session.accessToken("issued-client")).rejects.toThrow("sign-out");
   store.clearTokens = clear;
@@ -240,8 +215,8 @@ test("a failed encrypted clear keeps old plan tokens fenced until removal succee
   expect((await store.registration("issued-client"))?.accessToken).toBeUndefined();
 });
 
-test("invalid_grant resumes with the issued client and fresh browser secrets", async () => {
-  const { session, store, pending, callback, setNonce, reopen } = await fixture(
+test("invalid_grant retries within the same app session with fresh browser secrets", async () => {
+  const { session, store, pending, callback, setNonce } = await fixture(
     {},
     privateKey,
     undefined,
@@ -253,9 +228,7 @@ test("invalid_grant resumes with the issued client and fresh browser secrets", a
   );
   await expect(session.complete(pending, callback)).rejects.toThrow();
   expect(await store.pendingClientIds()).toEqual(["issued-client"]);
-  const restarted = reopen();
-  expect(await restarted.store.pendingClientIds()).toEqual(["issued-client"]);
-  const retry = await restarted.session.begin(
+  const retry = await session.begin(
     new URL(pending.authorizationUrl).searchParams.get("redirect_uri") ?? "",
     "issued-client",
   );
@@ -271,9 +244,9 @@ test("invalid_grant resumes with the issued client and fresh browser secrets", a
   retryCallback.searchParams.set("code", "fresh-code");
   retryCallback.searchParams.set("state", retryParameters.get("state") ?? "");
   retryCallback.searchParams.set("client_id", "issued-client");
-  await expect(restarted.session.complete(retry, retryCallback)).resolves.toMatchObject({
+  await expect(session.complete(retry, retryCallback)).resolves.toMatchObject({
     clientId: "issued-client",
     subject: "subject-1",
   });
-  expect(await restarted.store.pendingClientIds()).toEqual([]);
+  expect(await store.pendingClientIds()).toEqual([]);
 });

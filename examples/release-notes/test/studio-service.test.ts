@@ -368,7 +368,7 @@ it("opens a draft through the public in-process Client with one pinned Git compa
     expect((await studio.readDraft(draft.id)).version).toEqual(draft.version);
     const started = Promise.withResolvers<undefined>();
     const releaseMutation = Promise.withResolvers<undefined>();
-    const mutation = StudioAccountGate.run(studio, "select-model", null, async () => {
+    const mutation = StudioAccountGate.run(studio, "select-model", async () => {
       started.resolve(undefined);
       await releaseMutation.promise;
     });
@@ -490,7 +490,7 @@ it("binds an accepted generation to its model and committed Git evidence through
     }
     const accountStarted = Promise.withResolvers<undefined>();
     const releaseAccount = Promise.withResolvers<undefined>();
-    const accountAction = StudioAccountGate.run(studio, "select-model", null, async () => {
+    const accountAction = StudioAccountGate.run(studio, "select-model", async () => {
       accountStarted.resolve(undefined);
       await releaseAccount.promise;
     });
@@ -675,8 +675,6 @@ it("binds an accepted generation to its model and committed Git evidence through
       expect(fresh).not.toBe(rejected);
       expect((await studio.generationObservation(fresh)).receipt).toBe(true);
       await freshStarted.promise;
-      expect(await studio.allowsReconnect("client")).toBe(true);
-      expect(await studio.allowsReconnect("other-client")).toBe(false);
       if (!postThroughService || !staleCommand || !freshCommand)
         throw new Error("Public Client did not capture both generation Commands.");
       const oldOutcome = await postThroughService(staleCommand);
@@ -963,32 +961,12 @@ it("retains uncertain accepted admission and locks account switching without a d
     if (!generation) throw new Error("Original generation was not retained.");
     expect(studio.session().generations[first.id]).toBe(generation);
     expect(await studio.selectionLocked()).toBe(true);
-    expect(await studio.allowsReconnect("client")).toBe(true);
-    expect(await studio.allowsReconnect("different-client")).toBe(false);
-    await expect(StudioAccountGate.requireUnlocked(studio, "sign-in", null)).rejects.toThrow(
-      "Wait",
-    );
-    await expect(StudioAccountGate.requireUnlocked(studio, "add-account", null)).rejects.toThrow(
-      "Wait",
-    );
-    await expect(
-      StudioAccountGate.requireUnlocked(studio, "reconnect", "different-client"),
-    ).rejects.toThrow("Wait");
-    await expect(StudioAccountGate.requireUnlocked(studio, "select-model", null)).rejects.toThrow(
-      "Wait",
-    );
-    await expect(StudioAccountGate.requireUnlocked(studio, "sign-out", null)).rejects.toThrow(
-      "Wait",
-    );
-    await expect(
-      StudioAccountGate.requireUnlocked(studio, "reconnect", "client"),
-    ).resolves.toBeUndefined();
-    await expect(
-      StudioAccountGate.run(studio, "reconnect", "client", () => Promise.resolve("renewed")),
-    ).resolves.toBe("renewed");
+    await expect(StudioAccountGate.requireUnlocked(studio, "sign-in")).rejects.toThrow("Wait");
+    await expect(StudioAccountGate.requireUnlocked(studio, "select-model")).rejects.toThrow("Wait");
+    await expect(StudioAccountGate.requireUnlocked(studio, "sign-out")).rejects.toThrow("Wait");
     let changedAccount = false;
     await expect(
-      StudioAccountGate.run(studio, "reconnect", "different-client", () => {
+      StudioAccountGate.run(studio, "sign-in", () => {
         changedAccount = true;
         return Promise.resolve();
       }),
@@ -1123,11 +1101,9 @@ it("releases account selection after a credential denial is saved for the accept
     );
     expect(terminal).toHaveLength(1);
     expect(await studio.selectionLocked()).toBe(false);
+    await expect(StudioAccountGate.requireUnlocked(studio, "sign-in")).resolves.toBeUndefined();
     await expect(
-      StudioAccountGate.requireUnlocked(studio, "sign-in", null),
-    ).resolves.toBeUndefined();
-    await expect(
-      StudioAccountGate.run(studio, "select-model", null, () =>
+      StudioAccountGate.run(studio, "select-model", () =>
         Promise.reject(new Error("Selection failed.")),
       ),
     ).rejects.toThrow("Selection failed.");

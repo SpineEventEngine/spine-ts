@@ -48,8 +48,18 @@ recovery. Test synchronization and selection-helper review findings are fixed
 and independently accepted. Cheap gates, both dependency audits,21 archive
 consumers and offline publication trials pass. The task record distinguishes
 the completed test report from a post-run shell-wrapper error.
-Remaining work: feature-branch push and exact-head CI observation. The live
-model-call and UI-inspection blockers are resolved.
+Commit `fedbbe8fe` passes both CI verify and trial. The human subsequently
+requires Studio to discard all app session data, including account grants, on
+close. The old credential file has been removed. An example-only correction
+replaces disk credentials with memory, removes saved-account UI, and gives the
+renderer a nonpersistent session. Focused review, build/package and native
+close/reopen checks pass. The next correction explains pending and failed Git
+comparisons beside the wizard fields; the reported base-1x v1.8.0/master range
+fails the existing ancestor requirement. Current native user session stays open
+while this feedback correction is built and reviewed. All40 focused comparison
+tests, scoped mechanical checks and independent lifecycle review pass. The
+converged source is packaged separately to preserve the running app session.
+The live model-call and UI-inspection blockers are resolved.
 Current evidence and acceptance criteria are in the Agent task record.
 The ChatGPT subscription adapter checkpoint is implemented, reviewed, and pushed
 (D-0132). Desktop sign-in and protected credentials are implemented and reviewed (D-0133);

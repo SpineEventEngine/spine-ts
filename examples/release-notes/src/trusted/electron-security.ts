@@ -12,48 +12,6 @@
  * the License.
  */
 
-import type { CredentialCipher } from "./credential-store.js";
-
-interface ElectronSafeStorage {
-  /**
-   * Checks whether OS-backed encryption is available.
-   *
-   * @returns The is encryption available result.
-   */
-  isEncryptionAvailable(): boolean;
-
-  /**
-   * Encodes text with Electron safeStorage.
-   *
-   * @param text The text for this operation.
-   * @returns The encrypt string result.
-   */
-  encryptString(text: string): Buffer;
-
-  /**
-   * Decodes bytes with Electron safeStorage.
-   *
-   * @param bytes The bytes for this operation.
-   * @returns The decrypt string result.
-   */
-  decryptString(bytes: Buffer): string;
-}
-
-/**
- * Creates a cipher backed by Electron protected storage.
- *
- * @param storage The Electron safeStorage adapter.
- * @returns A credential cipher that refuses plaintext fallback.
- */
-export const electronCipher = (storage: ElectronSafeStorage): CredentialCipher => {
-  if (!storage.isEncryptionAvailable())
-    throw new Error("Protected credential storage is unavailable.");
-  return {
-    encrypt: (text) => storage.encryptString(text),
-    decrypt: (bytes) => storage.decryptString(Buffer.from(bytes)),
-  };
-};
-
 interface IpcContext {
   /**
    * The sender id value.
@@ -131,7 +89,6 @@ export const validateIpc = (
   if (
     command === "status" ||
     command === "sign-in" ||
-    command === "add-account" ||
     command === "usage" ||
     command === "current-model"
   ) {
@@ -139,12 +96,7 @@ export const validateIpc = (
     return null;
   }
   if (command === "select-model") return argumentsFor.model(argument);
-  if (
-    command !== "models" &&
-    command !== "sign-out" &&
-    command !== "select-account" &&
-    command !== "reconnect"
-  ) {
+  if (command !== "models" && command !== "sign-out") {
     throw new Error("Unknown IPC command.");
   }
   return argumentsFor.account(argument);

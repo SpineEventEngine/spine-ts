@@ -14,18 +14,7 @@
 
 import { expect, test } from "vitest";
 
-import { electronCipher, validateIpc } from "../src/trusted/electron-security.js";
-
-test("credentials require available OS-backed Electron encryption", () => {
-  const available = {
-    isEncryptionAvailable: () => true,
-    encryptString: (text: string) => Buffer.from(`cipher-${String(text.length)}`),
-    decryptString: (bytes: Buffer) => (bytes.length > 0 ? "secret" : ""),
-  };
-  expect(electronCipher(available).encrypt("secret").toString()).not.toContain("secret");
-  expect(electronCipher(available).decrypt(Buffer.from("cipher-6"))).toBe("secret");
-  expect(() => electronCipher({ ...available, isEncryptionAvailable: () => false })).toThrow();
-});
+import { validateIpc } from "../src/trusted/electron-security.js";
 
 test("IPC rejects an unexpected sender and structured arguments", () => {
   const good = {
@@ -36,8 +25,9 @@ test("IPC rejects an unexpected sender and structured arguments", () => {
   };
   expect(validateIpc(good, "models", "issued-client")).toBe("issued-client");
   expect(validateIpc(good, "current-model", null)).toBeNull();
-  expect(validateIpc(good, "add-account", null)).toBeNull();
-  expect(() => validateIpc(good, "add-account", "issued-client")).toThrow();
+  expect(() => validateIpc(good, "add-account", null)).toThrow("Unknown IPC command");
+  expect(() => validateIpc(good, "reconnect", "issued-client")).toThrow("Unknown IPC command");
+  expect(() => validateIpc(good, "select-account", "issued-client")).toThrow("Unknown IPC command");
   expect(() => validateIpc(good, "status", { token: "secret" })).toThrow("Unexpected IPC argument");
   expect(() => validateIpc({ ...good, senderId: 5 }, "models", "issued-client")).toThrow();
   expect(() =>

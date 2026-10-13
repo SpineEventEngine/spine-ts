@@ -181,21 +181,6 @@ export class DesktopAuth {
   }
 
   /**
-   * Sets a verified account for plan use.
-   *
-   * @param clientId Issued OAuth client identifier.
-   * @returns The select account result.
-   */
-  async selectAccount(clientId: string): Promise<DesktopAuthStatus> {
-    const account = (await this.status()).accounts.find(
-      (candidate) => candidate.clientId === clientId,
-    );
-    if (account === undefined) throw new Error("Unknown account registration.");
-    this.selectedClientId = clientId;
-    return this.status();
-  }
-
-  /**
    * Fetches the account model catalog.
    *
    * @param clientId Issued OAuth client identifier.

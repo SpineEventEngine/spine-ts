@@ -7569,3 +7569,143 @@ push. Existing formatter enumerates tracked files, so the formerly untracked
 test escaped the earlier full format check. Stage or explicitly include new
 files before future tracked-file preflights. No runtime behavior change; prior
 behavioral and specialist reviews remain current. Estimate0.1h plus CI waiting.
+
+Human correction: Release Notes Studio must remember no previous accounts.
+Closing the app discards all app session information, including OAuth client
+registration, host ID, identity and tokens, models, draft/history/session data.
+Explicitly exported files remain. Existing encrypted credential file was
+removed at human request after native app closed and inventory confirmed exit:
+~/Library/Application Support/release-notes-studio/credentials/credentials.bin.
+Do not read/recreate that file. No compatibility/migration persistence needed.
+Standard bounded example-only correction, estimate0.25–0.5h: replace disk store
+with memory storage implementing existing adapter port, remove saved-account
+picker/number labels, remove obsolete encryption code, update affected docs
+and tests, use nonpersistent renderer session. Framework auth selection and
+store injection remain available to other apps. Acceptance: two app/store
+instances share no credentials or host ID; close/reopen shows only fresh sign-in;
+same-launch sign-in retry/refresh/generation/sign-out work; exports unaffected.
+Existing implementer configured explicit gpt-6-sol/medium, no memory/children,
+sole writer for affected example source/tests/docs. Review only relevant
+lifecycle/credential and UI concerns after focused mechanical checks.
+
+Session-only example implementation frozen:45 tests across13 focused files
+pass; tooling/scoped ESLint/cleanup/TSDoc/format/diff pass. Fresh independent
+performance/reliability reviewer explicit gpt-6-sol/medium checks credential
+isolation, same-launch retry/refresh/signout, selected-account authority, and
+shutdown/nonpersistent renderer. Fresh documentation reviewer explicit
+gpt-6-luna/medium checks updated Studio claims. Both no inherited context, no
+memory, no children, read-only. Runtime metadata unavailable; configured
+profiles explicit. Style concern covered by deterministic checks and small
+removals; public TypeScript/API review N/A because shared facade/contracts are
+unchanged. Security concern: no new credential exposure or permission path;
+old disk storage and account routes removed, lifecycle review checks local
+clearing, previous provider-boundary security acceptance remains applicable.
+
+Existing mechanical function explicit gpt-6-luna/low builds Studio while
+read-only reviewers inspect frozen source; package after review convergence.
+Native app is closed, existing credentials.bin absent. Bounded task profile
+verify:task --no-coverage examples/release-notes/test follows convergence once.
+No shared-runtime behavior changed, so repeat global coverage is unnecessary;
+prior6273-test coverage and green fedbbe8fe CI remain baseline.
+
+Fresh lifecycle review clean; docs reviewer found two stale saved-account
+claims (README opening paragraph; USER_GUIDE final responsibility summary).
+Existing explicit Sol/medium writer corrects both. Studio build exit0 from
+existing explicit Luna/low function. Runtime source frozen; final packaging
+after prose correction, then native close/reopen and file-absence check.
+
+Both documentation corrections pass format/audience checks. Packaged native
+app opens with exactly one Sign in with ChatGPT control, no account list or
+numbered labels. Native system-close exits the process (app inventory empty);
+reopening shows fresh sign-in. The deleted credentials.bin remains absent
+after launch/close. App left open for human review. This native check did not
+perform a new browser authorization;45 focused tests cover grant/refresh and
+credential-store lifecycle. Existing mechanical Luna/low task profile running.
+
+Canonical verify:task preflight all passes. Its default-concurrent broad suite
+reported6267 pass/1 skip/4 timeouts (393 files pass/1 skip/3 fail), wall101.76s
+with851.43s aggregate worker time. Timeouts: unchanged Git ref/range cases,
+Datastore microsecond mapping, and Agent alternate preference. No changed
+sign-in case failed. Existing explicit Luna/low function reruns these three
+files with --maxWorkers=1 and unchanged timeouts to distinguish contention
+from behavior failures. No timeout increase or source modification authorized
+by this diagnosis.
+
+Sequential timeout triage:46 pass/1 fail. Git/Datastore timeouts do not recur;
+Agent-capacity committed alternate preference still hits5000ms. Existing
+Sol/medium implementation context receives mechanical log and this isolated
+failure for root-cause diagnosis without changing timeout thresholds. No
+shared-runtime changes may be bundled without confirmed cause. User status
+reported: native app correction complete, remaining test investigation blocks
+push.
+
+Wizard comparison feedback correction (standard example-only slice): native
+inspection shows valid-looking From/To selections with disabled Next and an
+unrelated generic failure below the card. Direct read-only reproduction with
+GitReleaseComparison confirms base-1x v1.8.0/master fails the existing ancestor
+requirement. Preserve this comparison policy; explain it beside the inputs.
+Acceptance: pending comparison has accessible progress; controls stay responsive;
+failure is inline and actionable; retry works; stale completions cannot enable
+Next after selection/navigation changes. Existing implementer role explicitly
+dispatched gpt-6-sol/medium, no inherited context/memory/children; files limited
+to wizard UI, safe IPC messages, and focused tests. Runtime model metadata is
+not exposed; immutable configured profile matches dispatch. Parent retains
+records; current native user session must remain open during build work.
+
+Agent capacity test diagnosis: temporary timings show first completion near
+170ms, second waiting signal starts at the existing five-second completed-sweep
+restart. Unannotated Vitest default deadline raced this expected cadence. The
+implementer used the adjacent tests' 15-second test deadline, with an explanatory
+comment; no production timing/limits changed. Focused file 8/8 passes; scoped
+lint/format/diff pass, diagnostic instrumentation removed. This changes only a
+test runner deadline, not application behavior or a new runtime limit.
+
+Wizard source frozen:36 focused tests, scoped ESLint/Prettier, source/tooling
+TypeScript and diff checks pass. Added loading/status, safe per-command errors,
+non-ancestor explanation, Retry, missing-input hints, stale result/navigation
+and canceled-picker recovery tests. Fresh independent performance/reliability
+reviewer dispatched explicit gpt-6-sol/medium, no inherited history, memory or
+children; bounded to these wizard changes. Existing mechanical function explicit
+gpt-6-luna/low builds/packages to a unique temporary output, preserving running
+native app. Style/docs concerns covered by deterministic checks and concise UI
+copy; no public TypeScript/serialized contract or security boundary changes.
+Additional session-memory tests (desktop-auth, studio-service, Agent capacity)
+pass25/25 with captured exit0 and one worker, no CLI timeout override.
+
+Independent wizard review found one confirmed issue: Dashboard navigation while
+a project picker is pending invalidates the result token and also prevents its
+finally block clearing busy, leaving controls disabled. Existing Sol/medium
+implementation context receives this complete correction batch with deferred
+picker/navigation regression. Isolated build/package succeeds without touching
+running app, but must be refreshed after this correction. Re-review only the
+affected lifecycle concern.
+
+Picker navigation regression fixed;38 focused tests pass including stale success
+and stale failure after navigation. Affected re-review closes that issue but
+finds the new unconditional Dashboard busy reset also unlocks a pending sign-out.
+Existing Sol/medium implementer receives bounded follow-up to distinguish picker
+activity and retain sign-out blocking, with deferred sign-out regression. Current
+source must converge before another package build. Repository-wide formatting
+passes. Last isolated package succeeds but predates this final review finding.
+
+Picker-specific activity now prevents Dashboard from clearing sign-out busy;
+39 scoped tests pass and affected independent re-review is clean. Parent spotted
+a final deterministic guard: failed-comparison Retry must be disabled during
+picker/sign-out busy, otherwise a new comparison can invalidate picker cleanup.
+Same implementation context adds this disabled state and regression; no broader
+contract change or new review lane. Final packaging waits for convergence.
+
+Final Retry guard regression red-to-green.40 focused tests pass, Studio source
+and tooling TypeScript, scoped ESLint/Prettier and diff checks exit0. Independent
+lifecycle findings resolved and re-review clean; final disabled-state guard is
+deterministic with regression and does not reopen unrelated concerns. Existing
+Luna/low mechanical function builds and packages converged source to fresh
+temporary output. Running app and real selections remain unchanged. Ready to
+push reviewed session-only auth and comparison feedback corrections; new CI
+status must be distinguished from earlier green fedbbe8fe.
+
+Converged Studio build and isolated package both exit0. Review app location:
+/var/folders/b7/lgl3q0z57xj72fjjjj_wd9n80000gq/T/spine-release-notes-review-htz9WR/out/Release Notes Studio-darwin-arm64/Release Notes Studio.app.
+Current native app intentionally remains on the previous build to preserve the
+human session; new feedback is verified by focused renderer tests, not claimed
+as live-tested in that still-running old process.

@@ -14,20 +14,12 @@
 
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import {
-  app,
-  BrowserWindow,
-  dialog,
-  ipcMain,
-  safeStorage,
-  shell,
-  type IpcMainInvokeEvent,
-} from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell, type IpcMainInvokeEvent } from "electron";
 
 import { CredentialStore } from "./trusted/credential-store.js";
 import { VercelAx } from "@spine-event-engine/ai-vercel-ax";
 import { DesktopAuth } from "./trusted/desktop-auth.js";
-import { assertIpcSender, electronCipher, validateIpc } from "./trusted/electron-security.js";
+import { assertIpcSender, validateIpc } from "./trusted/electron-security.js";
 import { PlanModelSelection } from "./trusted/plan-model-selection.js";
 import { ReleaseStudio } from "./trusted/studio-service.js";
 import { isStudioIpcCommand, validateStudioIpc } from "./trusted/studio-ipc.js";
@@ -49,10 +41,7 @@ const Runtime = {
    */
   async start(): Promise<void> {
     app.setName("Release Notes Studio");
-    const store = new CredentialStore(
-      join(app.getPath("userData"), "credentials"),
-      electronCipher(safeStorage),
-    );
+    const store = new CredentialStore();
     const session = VercelAx.chatgptPlanSession({
       agentName: "Release Notes Studio",
       credentials: store,
@@ -205,7 +194,7 @@ const Runtime = {
     command: string,
     account: ReturnType<typeof validateIpc>,
   ): Promise<unknown> {
-    return StudioAccountGate.run(studio, command, account, () =>
+    return StudioAccountGate.run(studio, command, () =>
       this.accountAction(auth, plan, command, account),
     );
   },
@@ -233,12 +222,6 @@ const Runtime = {
         return { model: (await plan.activeBinding())?.model ?? "" };
       case "sign-in":
         return await auth.signInOrResume();
-      case "add-account":
-        return await auth.signIn();
-      case "reconnect":
-        return await auth.signIn(clientId);
-      case "select-account":
-        return await auth.selectAccount(clientId);
       case "models":
         return await auth.models(clientId);
       case "select-model":

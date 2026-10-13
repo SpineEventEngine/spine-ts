@@ -24,5 +24,6 @@ test("the app window isolates its renderer and exposes only a preload bridge", (
     nodeIntegration: false,
     webSecurity: true,
     preload: "/app/preload.cjs",
+    partition: "release-notes-session",
   });
 });

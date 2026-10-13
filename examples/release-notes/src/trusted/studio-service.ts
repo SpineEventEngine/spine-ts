@@ -1518,27 +1518,6 @@ export class ReleaseStudio {
   }
 
   /**
-   * Checks renewal against registrations bound to nonterminal generations.
-   *
-   * @param clientId Issued client registration requested for renewal.
-   * @returns Whether reconnect can leave the accepted account binding unchanged.
-   */
-  async allowsReconnect(clientId: string): Promise<boolean> {
-    if (this.selectingGeneration) return false;
-    for (const admission of this.admissions.values()) {
-      if (admission.rejection) continue;
-      const phase = await this.generationPhase(admission.command.generation?.value ?? "");
-      if (
-        phase !== "completed" &&
-        phase !== "terminated" &&
-        admission.command.selection?.registration !== clientId
-      )
-        return false;
-    }
-    return true;
-  }
-
-  /**
    * Reads one newest-first category page from the production Agent history index.
    *
    * @param id Draft identifier issued by this session.

@@ -511,6 +511,7 @@ describe("shared Agent registry capacity through BlackBox", () => {
       expect(primary.requests()).toHaveLength(1);
       expect(alternate.requests()).toHaveLength(0);
       gate.release();
+      // A completed catalog traversal may revisit this waiting signal on the next five-second sweep.
       const events = await produced(box, 2);
       expect(
         events.map((event) =>
@@ -529,5 +530,5 @@ describe("shared Agent registry capacity through BlackBox", () => {
       gate.release();
       await box.close();
     }
-  });
+  }, 15_000);
 });

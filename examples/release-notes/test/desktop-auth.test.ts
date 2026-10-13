@@ -305,12 +305,14 @@ test("closing while authorization begins never opens the browser or selects a la
   expect(await auth.status()).toMatchObject({ planEnabled: false });
 });
 
-test("unknown account actions leave the selected registration and subject label intact", async () => {
+test("a different account cannot replace the verified in-session registration", async () => {
   let signOutCalls = 0;
   const auth = new DesktopAuth(
     {
-      begin: () => Promise.reject(new Error("unused")),
-      complete: () => Promise.reject(new Error("unused")),
+      begin: (redirectUri) =>
+        Promise.resolve({ authorizationUrl: "https://auth.openai.com/authorize", redirectUri }),
+      complete: () =>
+        Promise.resolve({ clientId: "client-a", subject: "subject-a", planEnabled: true }),
       models: () => Promise.resolve([]),
       signOut: () => {
         signOutCalls += 1;
@@ -321,9 +323,14 @@ test("unknown account actions leave the selected registration and subject label 
       pendingClientIds: () => Promise.resolve([]),
     },
     () => Promise.resolve(),
+    () =>
+      Promise.resolve({
+        redirectUri: "http://127.0.0.1/auth/callback",
+        wait: () => Promise.resolve(new URL("http://127.0.0.1/auth/callback?code=code")),
+        close: () => Promise.resolve(),
+      }),
   );
-  expect(await auth.selectAccount("client-a")).toMatchObject({ selectedClientId: "client-a" });
-  await expect(auth.selectAccount("client-b")).rejects.toThrow();
+  expect(await auth.signIn()).toMatchObject({ selectedClientId: "client-a" });
   await expect(auth.signOut("client-b")).rejects.toThrow();
   expect(signOutCalls).toBe(0);
   expect(await auth.status()).toMatchObject({
@@ -384,8 +391,10 @@ test("native close cancels a stalled remote sign-out and preserves local complet
   const started = Promise.withResolvers<AbortSignal>();
   const auth = new DesktopAuth(
     {
-      begin: () => Promise.reject(new Error("unused")),
-      complete: () => Promise.reject(new Error("unused")),
+      begin: (redirectUri) =>
+        Promise.resolve({ authorizationUrl: "https://auth.openai.com/authorize", redirectUri }),
+      complete: () =>
+        Promise.resolve({ clientId: "issued-client", subject: "subject", planEnabled: true }),
       models: () => Promise.resolve([]),
       signOut: (_clientId, signal) => {
         if (!signal) throw new Error("Missing sign-out cancellation signal.");
@@ -405,8 +414,14 @@ test("native close cancels a stalled remote sign-out and preserves local complet
       pendingClientIds: () => Promise.resolve([]),
     },
     () => Promise.resolve(),
+    () =>
+      Promise.resolve({
+        redirectUri: "http://127.0.0.1/auth/callback",
+        wait: () => Promise.resolve(new URL("http://127.0.0.1/auth/callback?code=code")),
+        close: () => Promise.resolve(),
+      }),
   );
-  await auth.selectAccount("issued-client");
+  await auth.signIn();
   const signingOut = auth.signOut("issued-client");
   const signal = await started.promise;
   await auth.close();

@@ -13,32 +13,9 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
-import { join } from "node:path";
 
 /**
- * Encodes trusted-process data with an OS-protected key.
- */
-export interface CredentialCipher {
-  /**
-   * Encodes credential text with OS-backed storage.
-   *
-   * @param value The value for this operation.
-   * @returns The encrypt result.
-   */
-  encrypt(value: string): Uint8Array;
-
-  /**
-   * Decodes credential text with OS-backed storage.
-   *
-   * @param value The value for this operation.
-   * @returns The decrypt result.
-   */
-  decrypt(value: Uint8Array): string;
-}
-
-/**
- * A registration's verified identity and optional renewable session.
+ * A registration's verified identity and renewable grant for this app process.
  */
 export interface SavedRegistration {
   /**
@@ -87,191 +64,92 @@ export interface SavedRegistration {
   expiresAt?: number;
 }
 
-interface SavedCredentials {
-  /**
-   * The host id value.
-   */
-  hostId: string;
-
-  /**
-   * The registrations value.
-   */
-  registrations: SavedRegistration[];
-
-  /**
-   * The pending client ids value.
-   */
-  pendingClientIds?: string[];
-}
+const copyRegistration = (registration: SavedRegistration): SavedRegistration => ({
+  ...registration,
+  ...(registration.scopes === undefined ? {} : { scopes: [...registration.scopes] }),
+});
 
 /**
- * Atomic encrypted storage for local account registrations.
+ * Keeps OAuth grants and the host identifier in this process only.
  */
 export class CredentialStore {
-  /**
-   * The file value.
-   */
-  private readonly file: string;
+  private readonly id = `urn:uuid:${randomUUID()}`;
+
+  private readonly grants = new Map<string, SavedRegistration>();
+
+  private readonly pending = new Set<string>();
 
   /**
-   * The updates value.
-   */
-  private updates: Promise<void> = Promise.resolve();
-
-  /**
-   * Initializes the trusted service.
+   * Returns the identifier used for OAuth registrations in this app process.
    *
-   * @param directory The directory for this operation.
-   * @param cipher The cipher for this operation.
+   * @returns Process-local host identifier.
    */
-  constructor(
-    directory: string,
-    private readonly cipher: CredentialCipher,
-  ) {
-    this.file = join(directory, "credentials.bin");
+  hostId(): Promise<string> {
+    return Promise.resolve(this.id);
   }
 
   /**
-   * Returns the persistent installation identifier.
+   * Lists detached copies of verified registrations.
    *
-   * @returns The host id result.
+   * @returns Current in-memory registrations.
    */
-  async hostId(): Promise<string> {
-    const existing = await this.read();
-    if (existing !== undefined) return existing.hostId;
-    const hostId = `urn:uuid:${randomUUID()}`;
-    await this.update((current) => ({ ...current, hostId }));
-    return (await this.read())?.hostId ?? hostId;
+  registrations(): Promise<readonly SavedRegistration[]> {
+    return Promise.resolve([...this.grants.values()].map(copyRegistration));
   }
 
   /**
-   * Lists the saved account registrations.
-   *
-   * @returns The registrations result.
-   */
-  async registrations(): Promise<readonly SavedRegistration[]> {
-    return (await this.read())?.registrations ?? [];
-  }
-
-  /**
-   * Returns a saved account registration.
+   * Returns a detached copy of one verified registration.
    *
    * @param clientId Issued OAuth client identifier.
-   * @returns The registration result.
+   * @returns Current registration, if present.
    */
-  async registration(clientId: string): Promise<SavedRegistration | undefined> {
-    return (await this.registrations()).find((entry) => entry.clientId === clientId);
+  registration(clientId: string): Promise<SavedRegistration | undefined> {
+    const registration = this.grants.get(clientId);
+    return Promise.resolve(registration === undefined ? undefined : copyRegistration(registration));
   }
 
   /**
-   * Lists issued clients awaiting a verified authorization grant.
+   * Lists issued clients awaiting a grant in this process.
    *
-   * @returns Issued client identifiers retained for browser retry.
+   * @returns Pending issued client identifiers.
    */
-  async pendingClientIds(): Promise<readonly string[]> {
-    return (await this.read())?.pendingClientIds ?? [];
+  pendingClientIds(): Promise<readonly string[]> {
+    return Promise.resolve([...this.pending]);
   }
 
   /**
-   * Stores an account registration.
+   * Stores a verified registration and consumes its pending client ID.
    *
-   * @param registration The registration for this operation.
-   * @returns The save result.
+   * @param registration Verified OAuth identity and grant.
+   * @returns Completion after retaining the grant in this process.
    */
-  async save(registration: SavedRegistration): Promise<void> {
-    await this.update((current) => ({
-      ...current,
-      registrations: [
-        ...current.registrations.filter((entry) => entry.clientId !== registration.clientId),
-        registration,
-      ],
-      pendingClientIds: (current.pendingClientIds ?? []).filter(
-        (id) => id !== registration.clientId,
-      ),
-    }));
+  save(registration: SavedRegistration): Promise<void> {
+    this.grants.clear();
+    this.grants.set(registration.clientId, copyRegistration(registration));
+    this.pending.clear();
+    return Promise.resolve();
   }
 
   /**
-   * Persists an issued client identifier before token exchange.
+   * Records an issued client while this process retries browser authorization.
    *
    * @param clientId Issued OAuth client identifier.
-   * @returns The stage issued client result.
+   * @returns Completion after staging the client in this process.
    */
-  async stageIssuedClient(clientId: string): Promise<void> {
-    await this.update((current) => ({
-      ...current,
-      pendingClientIds: [...new Set([...(current.pendingClientIds ?? []), clientId])],
-    }));
+  stageIssuedClient(clientId: string): Promise<void> {
+    this.pending.add(clientId);
+    return Promise.resolve();
   }
 
   /**
-   * Clears local tokens while retaining the issued client mapping.
+   * Removes all in-session account grants and pending retries after sign-out.
    *
    * @param clientId Issued OAuth client identifier.
-   * @returns The clear tokens result.
+   * @returns Completion after clearing the in-session grant and pending clients.
    */
-  async clearTokens(clientId: string): Promise<void> {
-    await this.update((current) => ({
-      ...current,
-      registrations: current.registrations.map((entry) =>
-        entry.clientId === clientId
-          ? {
-              clientId: entry.clientId,
-              issuer: entry.issuer,
-              subject: entry.subject,
-              ...(entry.email === undefined ? {} : { email: entry.email }),
-            }
-          : entry,
-      ),
-    }));
-  }
-
-  /**
-   * Updates the encrypted credential file atomically.
-   *
-   * @param change The change for this operation.
-   * @returns The update result.
-   */
-  private async update(change: (current: SavedCredentials) => SavedCredentials): Promise<void> {
-    const next = this.updates.then(async () => {
-      const current = (await this.read()) ?? {
-        hostId: `urn:uuid:${randomUUID()}`,
-        registrations: [],
-      };
-      const value = this.cipher.encrypt(JSON.stringify(change(current)));
-      const directory = this.file.slice(0, this.file.lastIndexOf("/"));
-      await mkdir(directory, { recursive: true, mode: 0o700 });
-      const temporary = `${this.file}.${randomUUID()}.tmp`;
-      try {
-        const handle = await open(temporary, "wx", 0o600);
-        try {
-          await handle.writeFile(value);
-          await handle.sync();
-        } finally {
-          await handle.close();
-        }
-        await rename(temporary, this.file);
-      } finally {
-        await rm(temporary, { force: true });
-      }
-    });
-    this.updates = next.catch(() => undefined);
-    await next;
-  }
-
-  /**
-   * Reads the encrypted credential file.
-   *
-   * @returns The read result.
-   */
-  private async read(): Promise<SavedCredentials | undefined> {
-    let bytes: Uint8Array;
-    try {
-      bytes = await readFile(this.file);
-    } catch (error) {
-      if (error instanceof Error && "code" in error && error.code === "ENOENT") return undefined;
-      throw error;
-    }
-    return JSON.parse(this.cipher.decrypt(bytes)) as SavedCredentials;
+  clearTokens(clientId: string): Promise<void> {
+    this.grants.delete(clientId);
+    this.pending.clear();
+    return Promise.resolve();
   }
 }

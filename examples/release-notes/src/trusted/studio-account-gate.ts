@@ -24,29 +24,17 @@ export const StudioAccountGate = {
    * @typeParam Result Result returned by the trusted action.
    * @param studio Live release session used for admission fencing.
    * @param command Fixed validated account action.
-   * @param account Validated account argument.
    * @param action Trusted account or model operation.
    * @returns Action result after the admission fence is released.
    */
   async run<Result>(
-    studio: Pick<ReleaseStudio, "withAccountTransition" | "selectionLocked" | "allowsReconnect">,
+    studio: Pick<ReleaseStudio, "withAccountTransition" | "selectionLocked">,
     command: string,
-    account: unknown,
     action: () => Promise<Result>,
   ): Promise<Result> {
-    if (
-      ![
-        "sign-in",
-        "add-account",
-        "reconnect",
-        "select-account",
-        "select-model",
-        "sign-out",
-      ].includes(command)
-    )
-      return action();
+    if (!["sign-in", "select-model", "sign-out"].includes(command)) return action();
     return studio.withAccountTransition(async () => {
-      await this.requireUnlocked(studio, command, account);
+      await this.requireUnlocked(studio, command);
       return action();
     });
   },
@@ -56,32 +44,14 @@ export const StudioAccountGate = {
    *
    * @param studio Current release session with its accepted generation binding.
    * @param command Fixed validated account action.
-   * @param account Validated account argument, if any.
    * @returns Completion after the action is permitted.
    */
   async requireUnlocked(
-    studio: Pick<ReleaseStudio, "selectionLocked" | "allowsReconnect">,
+    studio: Pick<ReleaseStudio, "selectionLocked">,
     command: string,
-    account: unknown,
   ): Promise<void> {
-    if (
-      ![
-        "sign-in",
-        "add-account",
-        "reconnect",
-        "select-account",
-        "select-model",
-        "sign-out",
-      ].includes(command)
-    )
-      return;
+    if (!["sign-in", "select-model", "sign-out"].includes(command)) return;
     if (!(await studio.selectionLocked())) return;
-    if (
-      command === "reconnect" &&
-      typeof account === "string" &&
-      (await studio.allowsReconnect(account))
-    )
-      return;
     throw new Error("Wait for the active generation or stop it before closing.");
   },
 };

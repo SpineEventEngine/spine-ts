@@ -18,7 +18,7 @@ import { expect, test, vi } from "vitest";
 
 HTMLElement.prototype.scrollIntoView = vi.fn();
 
-test("a gated account and failed staged retry can both start a different account", async () => {
+test("a limited grant can retry sign-in in the same app session without saved-account controls", async () => {
   const noPlan = {
     accounts: [{ clientId: "limited", email: "limited@example.invalid", planEnabled: false }],
     planEnabled: false,
@@ -39,16 +39,12 @@ test("a gated account and failed staged retry can both start a different account
     pendingClientIds: [],
     selectedClientId: "eligible",
   };
-  const addAccount = vi.fn().mockResolvedValueOnce(pending).mockResolvedValueOnce(eligible);
-  const signIn = vi.fn().mockRejectedValue(new Error("private rejected callback"));
+  const signIn = vi.fn().mockResolvedValueOnce(pending).mockResolvedValueOnce(eligible);
   Object.defineProperty(window, "releaseNotes", {
     configurable: true,
     value: {
       status: () => Promise.resolve(noPlan),
       signIn,
-      addAccount,
-      reconnect: () => Promise.resolve(noPlan),
-      selectAccount: () => Promise.resolve(noPlan),
       session: () => Promise.resolve({ drafts: [], generations: {} }),
       models: () => Promise.resolve([{ slug: "demo", displayName: "Demo model" }]),
       currentModel: () => Promise.resolve({ model: "demo" }),
@@ -58,21 +54,18 @@ test("a gated account and failed staged retry can both start a different account
   await act(async () => {
     await import("../src/renderer.js");
   });
-  await screen.findByRole("button", { name: "Reconnect ChatGPT account" });
-  fireEvent.click(screen.getByRole("button", { name: "Use another account" }));
+  const primary = await screen.findByRole("button", { name: "Sign in with ChatGPT" });
+  expect(screen.queryByRole("combobox", { name: "Account" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Use another account" })).toBeNull();
+  fireEvent.click(primary);
   await waitFor(() => {
-    expect(addAccount).toHaveBeenCalledTimes(1);
+    expect(signIn).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: "Continue sign-in" })).toBeTruthy();
   });
-  expect(screen.queryByRole("button", { name: "Use another account" })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Continue sign-in" }));
-  await screen.findByText("The account action could not be completed.");
-  expect(screen.getByRole("button", { name: "Use another account" })).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "Use another account" }));
   await waitFor(() => {
-    expect(addAccount).toHaveBeenCalledTimes(2);
+    expect(signIn).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.getByRole("button", { name: "New release" })).toBeTruthy();
   });
-  expect(signIn).toHaveBeenCalledTimes(1);
 });

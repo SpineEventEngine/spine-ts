@@ -20,11 +20,6 @@ contextBridge.exposeInMainWorld(
     status: () => ipcRenderer.invoke("release-notes:command", "status", null),
     currentModel: () => ipcRenderer.invoke("release-notes:command", "current-model", null),
     signIn: () => ipcRenderer.invoke("release-notes:command", "sign-in", null),
-    addAccount: () => ipcRenderer.invoke("release-notes:command", "add-account", null),
-    reconnect: (clientId: string) =>
-      ipcRenderer.invoke("release-notes:command", "reconnect", clientId),
-    selectAccount: (clientId: string) =>
-      ipcRenderer.invoke("release-notes:command", "select-account", clientId),
     models: (clientId: string) => ipcRenderer.invoke("release-notes:command", "models", clientId),
     selectModel: (clientId: string, model: string) =>
       ipcRenderer.invoke("release-notes:command", "select-model", { clientId, model }),

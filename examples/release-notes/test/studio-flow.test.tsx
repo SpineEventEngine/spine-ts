@@ -192,9 +192,11 @@ test("project selection and comparison failures keep the release wizard recovera
   await waitFor(() => {
     expect(compare).toHaveBeenCalledWith("handle", "v1", "main");
   });
-  await waitFor(() => {
-    expect(notice).toHaveBeenCalledTimes(2);
-  });
+  expect(await screen.findByRole("alert")).toHaveProperty(
+    "textContent",
+    "Could not compare those Git revisions. Try again.Retry",
+  );
+  expect(notice).toHaveBeenCalledTimes(1);
   expect(screen.queryByText("1 commit · 1 file")).toBeNull();
 });
 
@@ -306,6 +308,256 @@ test("Changes chooses a real project/ref pair before showing style", async () =>
   expect(compare).toHaveBeenCalledWith("handle", "v1.0.0", "main");
 });
 
+test("pending Git comparison explains why Next waits while inputs remain editable", async () => {
+  const pending = deferred<typeof comparison>();
+  renderFlow(
+    bridge({
+      session: () => Promise.resolve({ drafts: [], generations: {} }),
+      chooseProject: () =>
+        Promise.resolve({ handle: "handle", name: "portal", refs: ["v1", "main"] }),
+      compareProject: () => pending.promise,
+    }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "New release" }));
+  fireEvent.click(screen.getByText("Choose a Git project"));
+  await screen.findByText("portal");
+  await chooseRevision("From", "v1");
+  await chooseRevision("To", "main");
+  expect(await screen.findByRole("status")).toHaveProperty("textContent", "Comparing Git changes…");
+  expect(screen.getByRole<HTMLButtonElement>("button", { name: /Next/ }).disabled).toBe(true);
+  expect(screen.getByRole<HTMLButtonElement>("combobox", { name: "From" }).disabled).toBe(false);
+  fireEvent.change(screen.getByLabelText("Release"), { target: { value: "Portal 2.4" } });
+  pending.resolve(comparison);
+  await screen.findByText("1 commit · 1 file");
+  expect(screen.getByRole<HTMLButtonElement>("button", { name: /Next/ }).disabled).toBe(false);
+});
+
+test("project chooser announces its pending state", async () => {
+  const chooser = deferred<{ handle: string; name: string; refs: readonly string[] } | null>();
+  renderFlow(
+    bridge({
+      session: () => Promise.resolve({ drafts: [], generations: {} }),
+      chooseProject: () => chooser.promise,
+    }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "New release" }));
+  fireEvent.click(screen.getByText("Choose a Git project"));
+  expect(await screen.findByRole("status")).toHaveProperty("textContent", "Opening Git project…");
+  expect(
+    screen.getByRole<HTMLButtonElement>("button", { name: "Choose a Git project" }).disabled,
+  ).toBe(true);
+  chooser.resolve(null);
+  await waitFor(() => {
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+});
+
+test("leaving a pending picker restores controls without letting its late result clear a new picker", async () => {
+  const first = deferred<{ handle: string; name: string; refs: readonly string[] } | null>();
+  const second = deferred<{ handle: string; name: string; refs: readonly string[] } | null>();
+  const chooseProject = vi
+    .fn()
+    .mockImplementationOnce(() => first.promise)
+    .mockImplementationOnce(() => second.promise);
+  renderFlow(
+    bridge({ session: () => Promise.resolve({ drafts: [], generations: {} }), chooseProject }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "New release" }));
+  fireEvent.click(screen.getByRole("button", { name: "Choose a Git project" }));
+  await screen.findByText("Opening Git project…");
+  fireEvent.click(screen.getByRole("button", { name: "Dashboard" }));
+  expect(screen.getByRole<HTMLButtonElement>("button", { name: "Sign out" }).disabled).toBe(false);
+  fireEvent.click(screen.getByRole("button", { name: "New release" }));
+  fireEvent.click(screen.getByRole("button", { name: "Choose a Git project" }));
+  expect(chooseProject).toHaveBeenCalledTimes(2);
+  first.resolve({ handle: "old", name: "old project", refs: ["v1"] });
+  await waitFor(() => {
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", { name: "Choose a Git project" }).disabled,
+    ).toBe(true);
+  });
+  expect(screen.queryByText("old project")).toBeNull();
+  second.resolve({ handle: "new", name: "new project", refs: ["main"] });
+  await screen.findByText("new project");
+  expect(
+    screen.getByRole<HTMLButtonElement>("button", { name: "Choose a Git project" }).disabled,
+  ).toBe(false);
+});
+
+test("a picker failure after leaving Changes does not interrupt the next wizard", async () => {
+  const first = deferred<{ handle: string; name: string; refs: readonly string[] } | null>();
+  const notice = vi.fn();
+  renderFlow(
+    bridge({
+      session: () => Promise.resolve({ drafts: [], generations: {} }),
+      chooseProject: vi
+        .fn()
+        .mockImplementationOnce(() => first.promise)
+        .mockResolvedValueOnce(null),
+    }),
+    notice,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "New release" }));
+  fireEvent.click(screen.getByRole("button", { name: "Choose a Git project" }));
+  await screen.findByText("Opening Git project…");
+  fireEvent.click(screen.getByRole("button", { name: "Dashboard" }));
+  fireEvent.click(screen.getByRole("button", { name: "New release" }));
+  first.reject(new Error("private old picker failure"));
+  fireEvent.click(screen.getByRole("button", { name: "Choose a Git project" }));
+  await waitFor(() => {
+    expect(screen.queryByText("Opening Git project…")).toBeNull();
+  });
+  expect(notice).not.toHaveBeenCalled();
+});
+
+test("Dashboard cannot release sign-out busy state while sign-out is pending", async () => {
+  const pending = deferred<undefined>();
+  const signOut = vi.fn(() => pending.promise);
+  render(
+    <StudioFlow
+      bridge={bridge({ session: () => Promise.resolve({ drafts: [], generations: {} }) })}
+      models={[{ slug: "demo", displayName: "Demo model" }]}
+      model="demo"
+      selectModel={() => Promise.resolve()}
+      signOut={signOut}
+      onNotice={vi.fn()}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "New release" }));
+  fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+  await waitFor(() => {
+    expect(signOut).toHaveBeenCalledTimes(1);
+  });
+  expect(screen.getByRole("status")).toHaveProperty("textContent", "Signing out…");
+  fireEvent.click(screen.getByRole("button", { name: "Dashboard" }));
+  expect(screen.getByRole("heading", { name: "Choose changes" })).toBeTruthy();
+  expect(screen.getByRole<HTMLButtonElement>("button", { name: "Sign out" }).disabled).toBe(true);
+  pending.resolve(undefined);
+  await screen.findByRole("heading", { name: "Your releases" });
+});
+
+test("a completed comparison remains available through Style and Write", async () => {
+  const pending = deferred<typeof comparison>();
+  const openDraft = vi.fn(() =>
+    Promise.resolve({ ...release("", 1), generationStatus: "pending" }),
+  );
+  renderFlow(
+    bridge({
+      session: () => Promise.resolve({ drafts: [], generations: {} }),
+      chooseProject: () =>
+        Promise.resolve({ handle: "handle", name: "portal", refs: ["v1", "main"] }),
+      compareProject: () => pending.promise,
+      openDraft,
+    }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "New release" }));
+  fireEvent.click(screen.getByText("Choose a Git project"));
+  await screen.findByText("portal");
+  await chooseRevision("From", "v1");
+  await chooseRevision("To", "main");
+  fireEvent.change(screen.getByLabelText("Release"), { target: { value: "Portal 2.4" } });
+  pending.resolve(comparison);
+  await screen.findByText("1 commit · 1 file");
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  await screen.findByRole("heading", { name: "Writing style" });
+  fireEvent.click(screen.getByRole("button", { name: "Write" }));
+  await waitFor(() => {
+    expect(openDraft).toHaveBeenCalledWith(
+      expect.any(String),
+      "selection",
+      "Portal 2.4",
+      "Customers",
+    );
+  });
+});
+
+test("failed comparison explains the block and Retry compares the same revisions", async () => {
+  const first = deferred<typeof comparison>();
+  const retry = deferred<typeof comparison>();
+  const compare = vi
+    .fn()
+    .mockImplementationOnce(() => first.promise)
+    .mockImplementationOnce(() => retry.promise);
+  renderFlow(
+    bridge({
+      session: () => Promise.resolve({ drafts: [], generations: {} }),
+      chooseProject: () =>
+        Promise.resolve({ handle: "handle", name: "portal", refs: ["v1", "main"] }),
+      compareProject: compare,
+    }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "New release" }));
+  fireEvent.click(screen.getByText("Choose a Git project"));
+  await screen.findByText("portal");
+  await chooseRevision("From", "v1");
+  await chooseRevision("To", "main");
+  first.reject(new Error("private Git path"));
+  expect(await screen.findByRole("alert")).toHaveProperty(
+    "textContent",
+    "Could not compare those Git revisions. Try again.Retry",
+  );
+  expect(screen.getByRole<HTMLButtonElement>("button", { name: /Next/ }).disabled).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  expect(compare).toHaveBeenCalledTimes(2);
+  expect(screen.queryByRole("alert")).toBeNull();
+  retry.resolve(comparison);
+  await screen.findByText("1 commit · 1 file");
+});
+
+test("Retry cannot invalidate a pending project picker after comparison failure", async () => {
+  const chooser = deferred<{ handle: string; name: string; refs: readonly string[] } | null>();
+  const chooseProject = vi
+    .fn()
+    .mockResolvedValueOnce({ handle: "handle", name: "portal", refs: ["v1", "main"] })
+    .mockImplementationOnce(() => chooser.promise);
+  const compareProject = vi.fn().mockRejectedValue(new Error("private Git path"));
+  renderFlow(
+    bridge({
+      session: () => Promise.resolve({ drafts: [], generations: {} }),
+      chooseProject,
+      compareProject,
+    }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "New release" }));
+  fireEvent.click(screen.getByRole("button", { name: "Choose a Git project" }));
+  await screen.findByText("portal");
+  await chooseRevision("From", "v1");
+  await chooseRevision("To", "main");
+  await screen.findByRole("alert");
+  fireEvent.click(screen.getByRole("button", { name: "Choose a Git project" }));
+  expect(screen.getByRole<HTMLButtonElement>("button", { name: "Retry" }).disabled).toBe(true);
+  chooser.resolve(null);
+  await waitFor(() => {
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", { name: "Choose a Git project" }).disabled,
+    ).toBe(false);
+  });
+  expect(compareProject).toHaveBeenCalledTimes(1);
+});
+
+test("unrelated Git revisions ask for another range without suggesting an unchanged retry", async () => {
+  renderFlow(
+    bridge({
+      session: () => Promise.resolve({ drafts: [], generations: {} }),
+      chooseProject: () =>
+        Promise.resolve({ handle: "handle", name: "portal", refs: ["v1", "main"] }),
+      compareProject: () =>
+        Promise.reject(new Error("From must be part of To's Git history. Choose another range.")),
+    }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "New release" }));
+  fireEvent.click(screen.getByText("Choose a Git project"));
+  await screen.findByText("portal");
+  await chooseRevision("From", "v1");
+  await chooseRevision("To", "main");
+  expect(await screen.findByRole("alert")).toHaveProperty(
+    "textContent",
+    "From must be part of To's Git history. Choose another range.",
+  );
+  expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+  expect(screen.getByRole<HTMLButtonElement>("combobox", { name: "To" }).disabled).toBe(false);
+});
+
 test("a late older comparison cannot replace counts for the selected refs", async () => {
   const first = deferred<typeof comparison>();
   const second = deferred<typeof comparison>();
@@ -328,6 +580,94 @@ test("a late older comparison cannot replace counts for the selected refs", asyn
   await screen.findByText("3 commits · 2 files");
   first.resolve(comparison);
   expect(screen.queryByText("1 commit · 1 file")).toBeNull();
+});
+
+test("equal revisions invalidate an in-flight comparison and a valid pair compares again", async () => {
+  const stale = deferred<typeof comparison>();
+  const current = deferred<typeof comparison>();
+  const compare = vi
+    .fn()
+    .mockImplementationOnce(() => stale.promise)
+    .mockImplementationOnce(() => current.promise);
+  renderFlow(
+    bridge({
+      session: () => Promise.resolve({ drafts: [], generations: {} }),
+      chooseProject: () =>
+        Promise.resolve({ handle: "handle", name: "portal", refs: ["v1", "main"] }),
+      compareProject: compare,
+    }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "New release" }));
+  fireEvent.click(screen.getByText("Choose a Git project"));
+  await screen.findByText("portal");
+  await chooseRevision("From", "v1");
+  await chooseRevision("To", "main");
+  await screen.findByRole("status");
+  await chooseRevision("To", "v1");
+  expect(await screen.findByText("Choose two different revisions.")).toBeTruthy();
+  stale.resolve(comparison);
+  expect(screen.queryByText("1 commit · 1 file")).toBeNull();
+  await chooseRevision("To", "main");
+  expect(compare).toHaveBeenCalledTimes(2);
+  current.resolve({ ...comparison, changes: [{}, {}] });
+  await screen.findByText("1 commit · 2 files");
+});
+
+test("leaving Changes discards a late result before a new wizard selection", async () => {
+  const stale = deferred<typeof comparison>();
+  const fresh = deferred<typeof comparison>();
+  const compare = vi
+    .fn()
+    .mockImplementationOnce(() => stale.promise)
+    .mockImplementationOnce(() => fresh.promise);
+  renderFlow(
+    bridge({
+      session: () => Promise.resolve({ drafts: [], generations: {} }),
+      chooseProject: () =>
+        Promise.resolve({ handle: "handle", name: "portal", refs: ["v1", "main"] }),
+      compareProject: compare,
+    }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "New release" }));
+  fireEvent.click(screen.getByText("Choose a Git project"));
+  await screen.findByText("portal");
+  await chooseRevision("From", "v1");
+  await chooseRevision("To", "main");
+  await screen.findByRole("status");
+  fireEvent.click(screen.getByRole("button", { name: "Dashboard" }));
+  stale.resolve(comparison);
+  fireEvent.click(screen.getByRole("button", { name: "New release" }));
+  fireEvent.click(screen.getByText("Choose a Git project"));
+  await screen.findByText("portal");
+  await chooseRevision("From", "v1");
+  await chooseRevision("To", "main");
+  expect(compare).toHaveBeenCalledTimes(2);
+  expect(screen.queryByText("1 commit · 1 file")).toBeNull();
+  fresh.resolve(comparison);
+  await screen.findByText("1 commit · 1 file");
+});
+
+test("canceling project selection during comparison still lets the selected range complete", async () => {
+  const pending = deferred<typeof comparison>();
+  renderFlow(
+    bridge({
+      session: () => Promise.resolve({ drafts: [], generations: {} }),
+      chooseProject: vi
+        .fn()
+        .mockResolvedValueOnce({ handle: "handle", name: "portal", refs: ["v1", "main"] })
+        .mockResolvedValueOnce(null),
+      compareProject: () => pending.promise,
+    }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "New release" }));
+  fireEvent.click(screen.getByText("Choose a Git project"));
+  await screen.findByText("portal");
+  await chooseRevision("From", "v1");
+  await chooseRevision("To", "main");
+  await screen.findByRole("status");
+  fireEvent.click(screen.getByRole("button", { name: "Choose a Git project" }));
+  pending.resolve(comparison);
+  await screen.findByText("1 commit · 1 file");
 });
 
 test("a second export after editing uses the post-export Version and exact new bytes", async () => {

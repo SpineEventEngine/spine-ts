@@ -29,6 +29,7 @@ export const windowOptions = (preload: string): BrowserWindowConstructorOptions 
     title: "Release Notes Studio",
     webPreferences: {
       preload,
+      partition: "release-notes-session",
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,

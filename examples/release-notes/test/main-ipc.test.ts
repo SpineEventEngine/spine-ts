@@ -48,7 +48,6 @@ const fixture = vi.hoisted(() => {
     status: vi.fn().mockResolvedValue({ accounts: [], planEnabled: false }),
     signIn: vi.fn().mockResolvedValue({ signedIn: true }),
     signInOrResume: vi.fn().mockResolvedValue({ signedIn: true }),
-    selectAccount: vi.fn().mockResolvedValue({ selected: true }),
     models: vi.fn().mockResolvedValue([{ slug: "account-model" }]),
     signOut: vi.fn().mockResolvedValue({ revoked: true }),
   };
@@ -62,7 +61,6 @@ const fixture = vi.hoisted(() => {
     evidencePatch: vi.fn().mockResolvedValue({ complete: true, patch: "approved diff" }),
     withAccountTransition: vi.fn((action: () => Promise<unknown>) => action()),
     selectionLocked: vi.fn().mockResolvedValue(false),
-    allowsReconnect: vi.fn().mockResolvedValue(false),
     close: vi.fn(),
   };
   return {
@@ -90,11 +88,6 @@ const fixture = vi.hoisted(() => {
 vi.mock("electron", () => ({
   app: fixture.app,
   ipcMain: fixture.ipc,
-  safeStorage: {
-    isEncryptionAvailable: () => true,
-    encryptString: (value: string) => Buffer.from(value),
-    decryptString: (value: Buffer) => value.toString(),
-  },
   shell: { openExternal: fixture.openExternal },
   dialog: { showMessageBox: fixture.showMessageBox },
   BrowserWindow: Object.assign(
@@ -178,13 +171,9 @@ it("registers one validated IPC boundary and rejects forged frames before applic
   expect(fixture.plan.selectDiscovered).toHaveBeenCalledWith("issued-client", "account-model");
   await expect(handler(event, "sign-in", null)).resolves.toEqual({ signedIn: true });
   expect(fixture.auth.signInOrResume).toHaveBeenCalledOnce();
-  await expect(handler(event, "add-account", null)).resolves.toEqual({ signedIn: true });
-  expect(fixture.auth.signIn).toHaveBeenCalledWith();
-  await expect(handler(event, "reconnect", "issued-client")).resolves.toEqual({ signedIn: true });
-  expect(fixture.auth.signIn).toHaveBeenLastCalledWith("issued-client");
-  await expect(handler(event, "select-account", "issued-client")).resolves.toEqual({
-    selected: true,
-  });
+  await expect(handler(event, "add-account", null)).rejects.toThrow();
+  await expect(handler(event, "reconnect", "issued-client")).rejects.toThrow();
+  await expect(handler(event, "select-account", "issued-client")).rejects.toThrow();
   await expect(handler(event, "models", "issued-client")).resolves.toEqual([
     { slug: "account-model" },
   ]);

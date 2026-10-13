@@ -49,7 +49,6 @@ test("keeps the workspace behind sign-in until a usable account is confirmed", a
   const bridge = {
     status: statusRead,
     signIn: signInAction,
-    reconnect: () => Promise.resolve(signedIn),
     signOut: () => Promise.resolve({ status: signedOut, revocationConfirmed: true }),
     models: () => Promise.resolve([{ slug: "gpt-release", displayName: "Release model" }]),
     currentModel: () => Promise.resolve({ model: "gpt-release" }),
@@ -90,7 +89,8 @@ test("keeps the workspace behind sign-in until a usable account is confirmed", a
   });
   expect(screen.queryByRole("button", { name: /Continue sign-in \d/ })).toBeNull();
   expect(screen.queryByRole("button", { name: "Check connection again" })).toBeNull();
-  expect(screen.getByRole("combobox", { name: "Account" })).toBeTruthy();
+  expect(screen.queryByRole("combobox", { name: "Account" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Use another account" })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Continue sign-in" }));
   await waitFor(() => {
     expect(screen.queryByRole("dialog")).toBeNull();

@@ -7,8 +7,8 @@ edit, preview, copy, and export the exact current document.
 
 The application runs locally. Selected changes are sent to OpenAI when you
 choose to write. Drafts and history stay in memory for the backend session;
-export Markdown before quitting if you want a lasting copy. Stored sign-in
-registrations do not restore drafts.
+export Markdown before quitting if you want a lasting copy. Sign in again after
+reopening the app.
 
 Read the [Agent tutorial](USER_GUIDE.md) to follow the Commands, Events, model
 configuration, validation, MCP calls, and history APIs behind the application.
@@ -38,9 +38,9 @@ Docker container, or separately installed database is required.
 ## Prepare a release
 
 1. The app first shows a sign-in dialog. Choose **Sign in with ChatGPT** and
-   finish in the system browser. After restarting, choose a stored usable
-   account in the dialog. The dialog offers one primary recovery action if
-   sign-in or connection fails, plus **Use another account** when needed.
+   finish in the system browser. Sign in again each time you open the app.
+   If authorization fails, the same dialog offers **Continue sign-in** for an
+   issued client in the current app session.
 2. On **Your releases**, choose **New release**. In **Changes**, choose a local
    Git project, then real local **From** and **To** revisions. The earlier
    commit must be in the later commit's history. Uncommitted changes are
@@ -78,17 +78,18 @@ process receives the loopback callback, verifies the signed identity token,
 and checks the granted `chatgpt.tokens.use.direct` permission. It uses the
 selected account's model catalog instead of assuming a universal model list.
 
-Tokens are encrypted with Electron `safeStorage` and remain in the trusted
-process. They are not passed to the renderer, stored in domain messages or Agent
-history, or included in exports. Refresh is tied to the same issued registration
-and verified account.
+OAuth grants, issued client IDs, and the host ID remain only in the trusted
+process's memory. Closing the app discards them. Tokens are not passed to the
+renderer, stored in domain messages or Agent history, or included in exports.
+Refresh is tied to the same issued registration and verified account while the
+app remains open. The renderer uses a nonpersistent Electron session.
+The system browser's own login state is separate from this app.
 
-If an initial grant fails with `invalid_grant`, the next dialog sign-in retries
-using the retained issued client registration and fresh browser authorization
-secrets. A fresh account action always starts a separate registration.
-Sign-out attempts remote refresh-token revocation and clears local credentials;
-it reports when remote revocation could not be confirmed. The installation ID
-and issued client mapping remain available for a later reconnection.
+If an initial grant fails with `invalid_grant`, the next dialog sign-in can retry
+the issued client in that app session with fresh browser authorization secrets.
+Sign-out attempts remote refresh-token revocation and clears the in-session
+registration; it reports when remote revocation could not be confirmed. The
+next sign-in starts a fresh registration.
 
 The trusted process reports a fixed authentication stage, category, and
 allowlisted code to its terminal when sign-in fails. These diagnostics contain

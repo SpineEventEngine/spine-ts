@@ -257,8 +257,8 @@ No parser turns those edits back into a structured proposal. A matching
 `CancelReleaseGeneration` clears only its pending generation and preserves the
 current Markdown. A later proposal for that generation is discarded.
 
-The workspace opens only after a usable ChatGPT sign-in. After restarting,
-choose a stored usable account in the dialog. On **Your releases**, **New
+The workspace opens only after a usable ChatGPT sign-in. Sign in again after
+restarting the app. On **Your releases**, **New
 release** starts the **Changes** → **Style** → **Write** wizard. A native
 project picker returns an opaque handle and real local refs; the trusted
 process resolves the selected comparison. The Changes step shows commit and file
@@ -302,8 +302,9 @@ Sign-in and inference are separate operations:
    PKCE, state, nonce, and its issued application registration.
 2. The trusted process verifies the identity and granted permissions. Signing
    in without ChatGPT plan permission does not enable generation.
-3. Credentials are retained with Electron's protected credential encryption.
-   The renderer receives account labels and availability, not access tokens.
+3. Credentials and the OAuth host ID remain only in trusted-process memory for
+   the current app session. The renderer receives account availability, not
+   access tokens, and uses a nonpersistent Electron session.
 4. A generation binds the selected registration, account, endpoint, and model
    to its accepted Event. Refresh can renew that registration's credentials;
    it cannot silently substitute another account.
@@ -464,15 +465,15 @@ just because its fields resemble one.
 
 ## 10. Understand what lasts
 
-Drafts, Entity state, generation receipts, conversation records, and Event
-history use in-memory storage. Reloading the renderer keeps the backend session.
-Ending the backend process loses that session. Saved sign-in registrations and
-explicitly exported Markdown are separate persisted data.
+Drafts, Entity state, generation receipts, conversation records, Event history,
+OAuth grants, issued client IDs, and the host ID use in-memory storage. Reloading
+the renderer keeps the backend session. Ending the backend process discards it.
+Only Markdown explicitly exported to a chosen file remains available afterward.
 
 The application runs locally, but inference runs at OpenAI. Selected repository
 content can be sent there as model input or a tool result. Save Markdown before quitting
-if you want to keep the edited release notes. Reopening the app does not
-reconstruct drafts from credentials or automatically repeat generation.
+if you want to keep the edited release notes. Reopening the app starts a new
+session and does not reconstruct drafts or automatically repeat generation.
 
 Closing the window during active or unconfirmed generation
 offers **Wait** and
@@ -483,4 +484,4 @@ prove that the provider did no work or consumed no plan usage.
 The reusable Agent behavior is typed invocation, optional configured attempt and tool bounds,
 authorization hooks, recorded interactions, saved execution progress, and indexed
 history. The release workflow—including Git policy, proposal acceptance,
-exact Markdown editing, account selection UI, and file export—is this application's code.
+exact Markdown editing, sign-in flow, and file export—is this application's code.

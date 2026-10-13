@@ -60,7 +60,7 @@ it("keeps non-Error failures private and returns the unchanged result on success
     "We could not confirm this action. Refresh the draft and try again.",
   );
   await expect(
-    StudioIpcErrors.execute("select-account", () =>
+    StudioIpcErrors.execute("sign-out", () =>
       Promise.reject(new Error("Wait for the current account or generation action.")),
     ),
   ).rejects.toThrow("Writing is still in progress. Wait, or quit and stop it.");
@@ -81,4 +81,15 @@ it("reports sign-in failure as an account action without exposing provider detai
       "fallback",
     ),
   ).toBe("ChatGPT sign-in did not finish. Try again.");
+});
+
+it("explains a non-ancestor Git range without exposing other Git failures", async () => {
+  await expect(
+    StudioIpcErrors.execute("compare-project", () =>
+      Promise.reject(new Error("Release base must be an ancestor of the target.")),
+    ),
+  ).rejects.toThrow("From must be part of To's Git history. Choose another range.");
+  await expect(
+    StudioIpcErrors.execute("compare-project", () => Promise.reject(new Error("private Git path"))),
+  ).rejects.toThrow("Could not compare those Git revisions. Try again.");
 });

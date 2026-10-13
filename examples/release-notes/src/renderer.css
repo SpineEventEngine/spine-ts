@@ -243,17 +243,6 @@ button:not(:disabled):hover {
   gap: 16px;
   width: 100%;
 }
-.sign-in-controls .choice-field {
-  width: 100%;
-  color: #65707d;
-  font-size: 13px;
-  text-align: left;
-}
-.sign-in-controls .choice-trigger {
-  min-height: 36px;
-  margin-top: 8px;
-  padding: 8px 11px;
-}
 .sign-in-dialog :focus-visible {
   outline-width: 2px;
   outline-offset: 3px;
@@ -262,13 +251,6 @@ button:not(:disabled):hover {
   width: 100%;
   margin-top: 24px;
 }
-.sign-in-dialog .alternate-account {
-  justify-self: start;
-  margin: 0;
-  color: #1c6759;
-  text-decoration: underline;
-}
-
 .rs-topbar {
   display: flex;
   align-items: center;
@@ -604,6 +586,14 @@ button:not(:disabled):hover {
   margin: 4px 0 0;
   color: #65707d;
   font-size: 13px;
+}
+.rs-comparison-error {
+  margin: 4px 0 0;
+  color: #9c3030;
+  font-size: 13px;
+}
+.rs-comparison-error p {
+  margin: 0 0 8px;
 }
 .rs-segmented-field {
   min-width: 0;

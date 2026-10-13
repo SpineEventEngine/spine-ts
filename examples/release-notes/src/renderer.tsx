@@ -19,7 +19,6 @@ import { ArrowRight, FileText } from "lucide-react";
 import type { DesktopAuthStatus } from "./trusted/desktop-auth.js";
 import { StudioIpcErrors } from "./trusted/studio-ipc-errors.js";
 import { StudioFlow, type StudioFlowBridge } from "./studio-flow.js";
-import { ChoiceSelect } from "./choice-select.js";
 
 interface ModelChoice {
   /**
@@ -57,29 +56,6 @@ interface ReleaseNotesBridge extends StudioFlowBridge {
    * @returns The sign in result.
    */
   signIn(): Promise<DesktopAuthStatus>;
-
-  /**
-   * Starts a separate ChatGPT account registration.
-   *
-   * @returns Renderer-safe account status.
-   */
-  addAccount(): Promise<DesktopAuthStatus>;
-
-  /**
-   * Connects the issued account in the browser.
-   *
-   * @param clientId Issued OAuth client identifier.
-   * @returns The reconnect result.
-   */
-  reconnect(clientId: string): Promise<DesktopAuthStatus>;
-
-  /**
-   * Sets a verified account for plan use.
-   *
-   * @param clientId Issued OAuth client identifier.
-   * @returns The select account result.
-   */
-  selectAccount(clientId: string): Promise<DesktopAuthStatus>;
 
   /**
    * Fetches the account model catalog.
@@ -361,26 +337,6 @@ const useModels = (status: DesktopAuthStatus, onNotice: (value: string) => void)
   return { models, model, modelPending, select };
 };
 
-const AccountPicker = ({
-  status,
-  busy,
-  run,
-}: Pick<ReturnType<typeof useAccount>, "status" | "busy" | "run">) => (
-  <ChoiceSelect
-    label="Account"
-    value={status.selectedClientId ?? ""}
-    disabled={busy}
-    placeholder="Select an account"
-    options={status.accounts.map((account, index) => ({
-      value: account.clientId,
-      label: `${account.email ?? "ChatGPT account"} · ${String(index + 1)}`,
-    }))}
-    onChange={(clientId) => {
-      void run(() => window.releaseNotes.selectAccount(clientId));
-    }}
-  />
-);
-
 const trapSignInFocus = (event: KeyboardEvent<HTMLDivElement>, gate: HTMLDivElement | null) => {
   if (event.target instanceof Element && event.target.closest('[role="listbox"]')) return;
   if (event.key === "Escape") event.preventDefault();
@@ -398,23 +354,17 @@ const trapSignInFocus = (event: KeyboardEvent<HTMLDivElement>, gate: HTMLDivElem
 };
 
 const SignInPrimaryAction = ({ account }: { account: ReturnType<typeof useAccount> }) => {
-  const selected = account.status.selectedClientId;
   const retryStatus = account.statusFailed;
   const label = retryStatus
     ? "Check connection again"
     : account.busy
       ? "Complete sign-in in your browser…"
-      : selected
-        ? "Reconnect ChatGPT account"
-        : account.status.pendingClientIds.length > 0
-          ? "Continue sign-in"
-          : "Sign in with ChatGPT";
+      : account.status.pendingClientIds.length > 0
+        ? "Continue sign-in"
+        : "Sign in with ChatGPT";
   const action = retryStatus
     ? account.refresh
-    : () =>
-        account.run(() =>
-          selected ? window.releaseNotes.reconnect(selected) : window.releaseNotes.signIn(),
-        );
+    : () => account.run(() => window.releaseNotes.signIn());
   return (
     <button className="primary-button" disabled={account.busy} onClick={() => void action()}>
       {label}
@@ -426,18 +376,6 @@ const SignInPrimaryAction = ({ account }: { account: ReturnType<typeof useAccoun
 const SignInControls = ({ account }: { account: ReturnType<typeof useAccount> }) => (
   <div className="sign-in-controls">
     <SignInPrimaryAction account={account} />
-    {!account.statusFailed && account.status.accounts.length > 0 && <AccountPicker {...account} />}
-    {!account.statusFailed &&
-      (Boolean(account.status.selectedClientId) ||
-        (account.status.pendingClientIds.length > 0 && Boolean(account.notice))) && (
-        <button
-          className="text-button alternate-account"
-          disabled={account.busy}
-          onClick={() => void account.run(() => window.releaseNotes.addAccount())}
-        >
-          Use another account
-        </button>
-      )}
   </div>
 );
 
