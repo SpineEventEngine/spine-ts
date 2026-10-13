@@ -1,0 +1,52 @@
+{
+  "runId": "03d85a0d-e8c2-470b-8055-ce659a1a1ace",
+  "scriptPid": 24002,
+  "configuredProfile": "orchestrator-dispatched mechanical function: gpt-6-luna / low",
+  "runtimeProfileIntrospection": "unavailable on this execution surface",
+  "startedAt": "2026-10-13T23:37:06.021Z",
+  "command": "node build-protocol/tasks/sql-delivery-reliability/evidence/run-real-wire-paging-repro.mjs",
+  "scope": "loopback in-memory DeliveryServer and actual DeliveryClient/RemoteInbox wire; no database",
+  "topology": {
+    "host": "127.0.0.1",
+    "port": 0,
+    "messages": 101,
+    "shard": {
+      "index": 0,
+      "ofTotal": 1
+    },
+    "equalTimestamp": true,
+    "readPageSizes": [
+      100,
+      101
+    ],
+    "remoteInboxLimit": 100
+  },
+  "hashes": {
+    "packages/delivery-server/dist/index.js": "b8b79d6f88a3f7f4dd0461062a09dc519e98c84387ae01360b4245acd23b5d08",
+    "packages/delivery-server/dist/server/delivery-server.js": "461958ee5db34594309cecb44c7362e9b449c20a84a0a7b5efd125300fd55409",
+    "packages/delivery-server/dist/server/assembly.js": "429417463f990d1458d8c77528d187fe4c60a640c313cd70f803a9e243593c49",
+    "packages/delivery-client/dist/index.js": "1e69a8d6b4ad6584f804baf8746d9d937b0e173a589cb52fba98735aeac22140",
+    "packages/delivery-client/dist/remote/adapters.js": "c281e9154d52788f48319a4019b3961f7d8a134f63c7ab200a4e4089a75b429f",
+    "packages/delivery-client/dist/client/client.js": "90d8d5b39b05a3a4eb9375c8c1dc5727fb7bea922b3aea88afeb6db60808c3bd",
+    "packages/delivery-client/dist/client/types.js": "34b5081e114554e00d228365908cdb1942f87208c9c1a66cc122b8228e995411",
+    "packages/core/dist/index.js": "64a74877641ebde82dab6e2c69577ba9cf246009adfd76f74173502d0b03b916",
+    "packages/proto/dist/src/index.js": "3b16144d721808f5ed8d458be542064c5323575247cf1b7e6d325b038adaeaa2",
+    "packages/server/dist/index.js": "6bf9c9a8c971afc87de534107af1a935953f89a0607193ed3576e2b3def1909e"
+  },
+  "writes": [],
+  "firstPage100": [],
+  "rawPage101": [],
+  "remoteInboxReads": [],
+  "cleanup": {
+    "clientClose": "synchronous close returned",
+    "serverClose": "completed"
+  },
+  "endpoint": "http://127.0.0.1:52324",
+  "finishedAt": "2026-10-13T23:37:06.032Z",
+  "result": "FAIL",
+  "failure": {
+    "name": "TypeError",
+    "message": "Delivery inbox timestamp is invalid.",
+    "stack": "TypeError: Delivery inbox timestamp is invalid.\n    at Object.timestamp (file:///Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/delivery-client/dist/wire/codec.js:669:19)\n    at Object.snapshot (file:///Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/delivery-client/dist/wire/codec.js:281:72)\n    at Object.receiveMessage (file:///Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/delivery-client/dist/remote/adapters.js:403:46)\n    at RemoteInbox.receive (file:///Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/delivery-client/dist/remote/adapters.js:50:38)\n    at file:///Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/run-real-wire-paging-repro.mjs:102:40\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)"
+  }
+}

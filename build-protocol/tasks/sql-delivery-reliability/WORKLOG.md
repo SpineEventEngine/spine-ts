@@ -321,3 +321,89 @@ paths and smallest testable failure hypothesis; no edits/tests/subagents, no
 architecture redesign. Existing implementer continues shutdown and evidence
 fixes while diagnosis runs. Runtime introspection unavailable; explicit dispatch
 profile will be checked on acceptance.
+
+
+Failed matrix records committed17624ccb6 and immediately pushed to official
+feature branch; staged whitespace check passed. Recorded16passed workloads and
+failed17th remain independently inspectable. Managed source/tests unstaged.
+Follow-up mechanical artifact audit uses same explicitly dispatched
+gpt-6-luna/low function, no runtime/DB/build: decode all302 recorded recipients
+using actual generated schemas and compare exact expected typed IDs; compare
+successful same-topology projection PID distribution to avoid overinterpreting
+one-worker processing. Fresh supplemental evidence only. Original fields remain
+explicit; runtime introspection unavailable.
+
+
+Typed-recipient supplemental audit accepted from same explicit Luna/low
+mechanical function: all302 failed-run recipient type URLs and Protobuf bytes
+match their generated expected domain identifiers. Successful same-topology
+run6643131164ba44d5986242529f74ba76 also routes all80 original projection
+entries through onePID, so worker concentration is not a confirmed defect.
+JSON validation and whitespace check passed; no runtime/build/DB operation.
+Reviewer and implementer informed. Actual runtime introspection unavailable.
+
+
+Bounded performance/reliability source diagnosis accepted with explicit
+Sol/medium profile confirmed. RemoteInbox rejects full timestamp-tied page
+boundaries; timestamp-only server continuation cannot express a tie breaker.
+Existing direct test deliberately expects that error. This conditional behavior
+is confirmed; failed workload cause remains unconfirmed without Inbox evidence.
+Next mechanical function, same explicit Luna/low profile, will reproduce over
+real loopback DeliveryServer/Client/RemoteInbox using101 domain-correct Events,
+port0 and fresh evidence only, no source/build/DB changes. Read twice to record
+repeatability and retained rows, bound resource cleanup. Existing implementer
+finishes managed preflight before any paging runtime change. Public continuation
+contract changes require a bounded architecture decision after this reproduction;
+no legacy or migration obligation is imposed by the human.
+
+
+Paging presents a demonstrated public-contract boundary: bounded timestamp-only
+continuation cannot distinguish arbitrary numbers of equal-time Inbox rows,
+including after cursor deletion. Increasing page size or skipping tied rows
+would retain the correctness gap. Dispatch existing requirements_splitter once
+for this material contract question, explicitly gpt-6-astra/high, read-only
+minimal design and JVM/proto provenance check. Real-wire101row reproduction
+runs independently under Luna/low with dist stable. Architect must preserve
+immutable rows, independent operations, bounded pages and exact cursor order,
+with no legacy/migration support, global timestamp mutation or new persistence
+subsystem. Write task evidence only; return a concrete minimum decision or
+precise unresolved external contract constraint. Runtime metadata unavailable.
+
+
+Managed source-only unit suite now64passed with one real-child case excluded
+because it loads old dist; this is not a65case pass. Existing implementer will
+rebuild and run the full suite/integration/static preflight. The paging probe
+reserved dist during script preparation longer than useful; parent explicitly
+released the reservation and tells mechanical function to wait only for actual
+build completion before starting its short runtime. Future reservations should
+cover execution rather than script preparation. Harness failure snapshots now
+include bounded per-shard Inbox/status and remote shard observations as well as
+structured logs; static checks reported passing, review/freeze still pending.
+
+
+Managed normal composite rebuild completed; full managed unit suite65/65 and
+real managed readiness/external-event integration7/7 pass. Initial infrastructure
+config selected no tests and is retained as failed setup evidence; corrected
+config ran both actual files. Final static/changed-coverage preflight and four
+concern review remain before acceptance. Dist window released.
+
+Real-wire paging experiment5cb2e6f2-aa03-400e-8642-4bbf7f3d7749 confirms
+101 valid domain messages with identical receive time remain stored; raw pages
+of100/101read successfully, RemoteInbox limit100repeatedly throws. Runtime uses
+built modules, but experiment imported generated fixtureTypeScript via a loader.
+Parent requires plain built-generated-JavaScript imports and an exact documented
+plain node command in fresh supplemental reproduction before final acceptance.
+No source patch or DB operation; this remains conditionalpaging evidence, not
+failed-workload cause proof or finished framework regression. Same explicit
+Luna/low function performs this mechanical provenance correction.
+
+
+D-0132 accepted following explicit Astra/high bounded architecture pass. Model
+and reasoning were explicit in dispatch; runtime introspection unavailable.
+Authored sibling InboxReadService avoids altering frozen copied JVM protocols,
+with strict timestamp/version/ID cursor and one finite collection budget. Parent
+omits proposed sticky unsupported-endpoint caching as unnecessary state; classify
+UNIMPLEMENTED non-retryable per read, no fallback. Plain-built-schema wire run
+19e22f16-7d88-4982-acd6-5eab207320b7 confirms repeatedpagingfailure with101
+retained rows and clean teardown. Existing Sol/medium implementer receives
+bounded paging slice after managedpreflightfreeze; no second writer.

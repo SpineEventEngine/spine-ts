@@ -1,0 +1,763 @@
+{
+  "runId": "8d055626-b170-4789-9523-5a163cc419fb",
+  "scriptPid": 24881,
+  "configuredProfile": "orchestrator-dispatched mechanical function: gpt-6-luna / low",
+  "runtimeProfileIntrospection": "unavailable on this execution surface",
+  "startedAt": "2026-10-13T23:37:16.819Z",
+  "command": "node build-protocol/tasks/sql-delivery-reliability/evidence/run-real-wire-paging-repro.mjs",
+  "scope": "loopback in-memory DeliveryServer and actual DeliveryClient/RemoteInbox wire; no database",
+  "topology": {
+    "host": "127.0.0.1",
+    "port": 0,
+    "messages": 101,
+    "shard": {
+      "index": 0,
+      "ofTotal": 1
+    },
+    "equalTimestamp": true,
+    "readPageSizes": [
+      100,
+      101
+    ],
+    "remoteInboxLimit": 100
+  },
+  "hashes": {
+    "packages/delivery-server/dist/index.js": "b8b79d6f88a3f7f4dd0461062a09dc519e98c84387ae01360b4245acd23b5d08",
+    "packages/delivery-server/dist/server/delivery-server.js": "461958ee5db34594309cecb44c7362e9b449c20a84a0a7b5efd125300fd55409",
+    "packages/delivery-server/dist/server/assembly.js": "429417463f990d1458d8c77528d187fe4c60a640c313cd70f803a9e243593c49",
+    "packages/delivery-client/dist/index.js": "1e69a8d6b4ad6584f804baf8746d9d937b0e173a589cb52fba98735aeac22140",
+    "packages/delivery-client/dist/remote/adapters.js": "c281e9154d52788f48319a4019b3961f7d8a134f63c7ab200a4e4089a75b429f",
+    "packages/delivery-client/dist/client/client.js": "90d8d5b39b05a3a4eb9375c8c1dc5727fb7bea922b3aea88afeb6db60808c3bd",
+    "packages/delivery-client/dist/client/types.js": "34b5081e114554e00d228365908cdb1942f87208c9c1a66cc122b8228e995411",
+    "packages/core/dist/index.js": "64a74877641ebde82dab6e2c69577ba9cf246009adfd76f74173502d0b03b916",
+    "packages/proto/dist/src/index.js": "3b16144d721808f5ed8d458be542064c5323575247cf1b7e6d325b038adaeaa2",
+    "packages/server/dist/index.js": "6bf9c9a8c971afc87de534107af1a935953f89a0607193ed3576e2b3def1909e"
+  },
+  "writes": [
+    {
+      "id": "9207f993-b6c2-4703-8f1b-6d868c3f0daa",
+      "signalId": "187441ac-2e94-4dbf-bb31-158931d3e0b2",
+      "version": "1",
+      "eventId": "187441ac-2e94-4dbf-bb31-158931d3e0b2",
+      "projectNumber": 1
+    },
+    {
+      "id": "92f9b8ba-744e-4ff0-b9fc-6eaeba5e6fd4",
+      "signalId": "3a004712-7fcf-4e17-bb21-5a34e7c28aec",
+      "version": "2",
+      "eventId": "3a004712-7fcf-4e17-bb21-5a34e7c28aec",
+      "projectNumber": 2
+    },
+    {
+      "id": "2cedc4a7-8863-4ead-b6ca-b90789bfa37c",
+      "signalId": "7708e93f-82bc-4c5b-b41d-c2698d91155a",
+      "version": "3",
+      "eventId": "7708e93f-82bc-4c5b-b41d-c2698d91155a",
+      "projectNumber": 3
+    },
+    {
+      "id": "5f1ce996-304a-43e6-90f9-a0372b05878c",
+      "signalId": "a932bac6-9c3e-4941-b2ae-5b9c1e64009f",
+      "version": "4",
+      "eventId": "a932bac6-9c3e-4941-b2ae-5b9c1e64009f",
+      "projectNumber": 4
+    },
+    {
+      "id": "1b3681fb-bdb2-4332-ab9e-af17e18012aa",
+      "signalId": "d3bbe4af-f8b6-4f7a-b6c9-6d42f8f05412",
+      "version": "5",
+      "eventId": "d3bbe4af-f8b6-4f7a-b6c9-6d42f8f05412",
+      "projectNumber": 5
+    },
+    {
+      "id": "88a96c3b-2957-4c55-92ed-cc25a3e136c4",
+      "signalId": "48d5b996-2030-4372-893c-3ef63b7516c3",
+      "version": "6",
+      "eventId": "48d5b996-2030-4372-893c-3ef63b7516c3",
+      "projectNumber": 6
+    },
+    {
+      "id": "28e51783-eaf4-4305-b1c5-2e319718ee81",
+      "signalId": "00560201-2930-48a4-a39d-c36944862f91",
+      "version": "7",
+      "eventId": "00560201-2930-48a4-a39d-c36944862f91",
+      "projectNumber": 7
+    },
+    {
+      "id": "6e60562d-186c-4e19-b4da-5e0f6246b712",
+      "signalId": "81562aaf-0e13-4da2-a6bb-b1a7fd590d22",
+      "version": "8",
+      "eventId": "81562aaf-0e13-4da2-a6bb-b1a7fd590d22",
+      "projectNumber": 8
+    },
+    {
+      "id": "c5d84086-5772-45e0-9e63-194759c654cf",
+      "signalId": "2c00fc3d-44c5-4a57-83bf-e9e607e2d0d1",
+      "version": "9",
+      "eventId": "2c00fc3d-44c5-4a57-83bf-e9e607e2d0d1",
+      "projectNumber": 9
+    },
+    {
+      "id": "c451e9ba-82ed-4fe8-a55e-33a938431923",
+      "signalId": "ce242605-635f-4a5b-b94d-ff00cb6dff58",
+      "version": "10",
+      "eventId": "ce242605-635f-4a5b-b94d-ff00cb6dff58",
+      "projectNumber": 10
+    },
+    {
+      "id": "684a327a-bc63-404d-87de-3325ca91bf8e",
+      "signalId": "4b7fe5e5-9047-4c76-bc08-6847c596b96f",
+      "version": "11",
+      "eventId": "4b7fe5e5-9047-4c76-bc08-6847c596b96f",
+      "projectNumber": 11
+    },
+    {
+      "id": "03141b90-b316-4986-a269-90b84bb3d8ea",
+      "signalId": "8ca29018-6acd-4ad5-beea-a953087c5af4",
+      "version": "12",
+      "eventId": "8ca29018-6acd-4ad5-beea-a953087c5af4",
+      "projectNumber": 12
+    },
+    {
+      "id": "70de5af9-2f1a-4fe0-954f-6a221aa135ca",
+      "signalId": "968fb803-46de-4c10-ab38-60b994a63a4d",
+      "version": "13",
+      "eventId": "968fb803-46de-4c10-ab38-60b994a63a4d",
+      "projectNumber": 13
+    },
+    {
+      "id": "2009e4c5-6a9a-4dca-ab7d-c8f196c00275",
+      "signalId": "53c35a44-5d38-4b95-b6ac-05231fd05d1f",
+      "version": "14",
+      "eventId": "53c35a44-5d38-4b95-b6ac-05231fd05d1f",
+      "projectNumber": 14
+    },
+    {
+      "id": "89c17fa5-9ca3-4a20-b53d-f493b4a3d32d",
+      "signalId": "7954c9ef-b959-4cb8-8561-101615aeb6f8",
+      "version": "15",
+      "eventId": "7954c9ef-b959-4cb8-8561-101615aeb6f8",
+      "projectNumber": 15
+    },
+    {
+      "id": "be412f34-d617-4bb1-8087-e3ccc906ec82",
+      "signalId": "9cd64e8e-8c06-446a-b699-3d337b1f4bb9",
+      "version": "16",
+      "eventId": "9cd64e8e-8c06-446a-b699-3d337b1f4bb9",
+      "projectNumber": 16
+    },
+    {
+      "id": "e1d9d91d-21b0-4c97-b6a0-565722072ec7",
+      "signalId": "d911a9e4-d097-48ff-a051-bdbe19e9d42d",
+      "version": "17",
+      "eventId": "d911a9e4-d097-48ff-a051-bdbe19e9d42d",
+      "projectNumber": 17
+    },
+    {
+      "id": "6f34b8ed-b41b-4656-8c70-25e919543d0e",
+      "signalId": "a30b49f4-6b96-4389-8ae7-865f6065bd42",
+      "version": "18",
+      "eventId": "a30b49f4-6b96-4389-8ae7-865f6065bd42",
+      "projectNumber": 18
+    },
+    {
+      "id": "88725618-8ee5-4a4c-9774-7e04061d098f",
+      "signalId": "fbdd4a3a-c443-4341-aee3-651ac38164ee",
+      "version": "19",
+      "eventId": "fbdd4a3a-c443-4341-aee3-651ac38164ee",
+      "projectNumber": 19
+    },
+    {
+      "id": "f0388f4d-f974-4531-8af7-69fcafb7a83d",
+      "signalId": "dfdd5ad3-f2d5-4c47-9e0b-2d8c223a229b",
+      "version": "20",
+      "eventId": "dfdd5ad3-f2d5-4c47-9e0b-2d8c223a229b",
+      "projectNumber": 20
+    },
+    {
+      "id": "8bc11c73-d4c1-4b6e-98ea-d28ea692be3c",
+      "signalId": "1e014fed-7a60-405e-846e-d430ccda931c",
+      "version": "21",
+      "eventId": "1e014fed-7a60-405e-846e-d430ccda931c",
+      "projectNumber": 21
+    },
+    {
+      "id": "ce7dc2b6-fa84-4f9c-8dba-f9d249c84cf1",
+      "signalId": "37025f0f-4c37-420f-9a62-b2bcb7acd889",
+      "version": "22",
+      "eventId": "37025f0f-4c37-420f-9a62-b2bcb7acd889",
+      "projectNumber": 22
+    },
+    {
+      "id": "ce7c6eac-48a0-4422-839c-5e75e0aafcde",
+      "signalId": "4771adf5-979d-4682-bb97-50f95e91092d",
+      "version": "23",
+      "eventId": "4771adf5-979d-4682-bb97-50f95e91092d",
+      "projectNumber": 23
+    },
+    {
+      "id": "7ac4baee-827f-4ea9-bc51-5bc62d5bd353",
+      "signalId": "3f3ba620-2a4e-48b3-a494-ce0d756177c0",
+      "version": "24",
+      "eventId": "3f3ba620-2a4e-48b3-a494-ce0d756177c0",
+      "projectNumber": 24
+    },
+    {
+      "id": "0a61897d-80b5-41b9-9878-18473c4d88d6",
+      "signalId": "bb0ef442-dfff-4c0e-8549-68749badef46",
+      "version": "25",
+      "eventId": "bb0ef442-dfff-4c0e-8549-68749badef46",
+      "projectNumber": 25
+    },
+    {
+      "id": "18f3581d-0556-4d49-8f38-376a8f82c34e",
+      "signalId": "4c7ae521-e4e9-4fe7-b118-4deab4fccfe5",
+      "version": "26",
+      "eventId": "4c7ae521-e4e9-4fe7-b118-4deab4fccfe5",
+      "projectNumber": 26
+    },
+    {
+      "id": "a5d7cdd0-e473-4cf3-a54f-64e9ebb0c4a6",
+      "signalId": "5a5212cb-e6e7-42bb-b5b5-400622e4fc98",
+      "version": "27",
+      "eventId": "5a5212cb-e6e7-42bb-b5b5-400622e4fc98",
+      "projectNumber": 27
+    },
+    {
+      "id": "b407023f-ad10-4c17-a38b-b003d8f4992a",
+      "signalId": "a90d933d-613a-421b-b5b9-f4597e27fad7",
+      "version": "28",
+      "eventId": "a90d933d-613a-421b-b5b9-f4597e27fad7",
+      "projectNumber": 28
+    },
+    {
+      "id": "67ef7da7-9196-4ecf-8d02-aaebca7b26be",
+      "signalId": "3c230795-6c6a-489f-8b30-376077e4ba33",
+      "version": "29",
+      "eventId": "3c230795-6c6a-489f-8b30-376077e4ba33",
+      "projectNumber": 29
+    },
+    {
+      "id": "0e292132-1137-417d-b5f8-345fe18c3640",
+      "signalId": "7ab2abfd-dd86-44fe-aab7-13f23e1f5a7c",
+      "version": "30",
+      "eventId": "7ab2abfd-dd86-44fe-aab7-13f23e1f5a7c",
+      "projectNumber": 30
+    },
+    {
+      "id": "6804a365-3bec-4d36-8099-fa72cd287cf7",
+      "signalId": "0a6faa52-99af-433e-925b-3ae6fa070ce2",
+      "version": "31",
+      "eventId": "0a6faa52-99af-433e-925b-3ae6fa070ce2",
+      "projectNumber": 31
+    },
+    {
+      "id": "ee71ec2d-9220-4886-be60-515675e2ab49",
+      "signalId": "9003ad22-1a16-42c3-80a6-c8c2a4cd23b5",
+      "version": "32",
+      "eventId": "9003ad22-1a16-42c3-80a6-c8c2a4cd23b5",
+      "projectNumber": 32
+    },
+    {
+      "id": "d4434108-c7ba-4bb6-85a0-e758993b8651",
+      "signalId": "818b6b47-3d8f-45fd-aaf8-a3d3ee2589ca",
+      "version": "33",
+      "eventId": "818b6b47-3d8f-45fd-aaf8-a3d3ee2589ca",
+      "projectNumber": 33
+    },
+    {
+      "id": "968b6a1a-f725-4084-b1da-545e19019f39",
+      "signalId": "bdd3156b-7626-4007-8469-15de0120bd96",
+      "version": "34",
+      "eventId": "bdd3156b-7626-4007-8469-15de0120bd96",
+      "projectNumber": 34
+    },
+    {
+      "id": "d07ac070-8150-4a8c-b190-aa30e44479ed",
+      "signalId": "78a953d3-e18d-4c35-be91-48c98d0e5e27",
+      "version": "35",
+      "eventId": "78a953d3-e18d-4c35-be91-48c98d0e5e27",
+      "projectNumber": 35
+    },
+    {
+      "id": "950732d9-c1cd-4e4d-9ae2-ac7fb7d8212e",
+      "signalId": "af3cd026-db1d-4c19-b6e1-e356c5e9929b",
+      "version": "36",
+      "eventId": "af3cd026-db1d-4c19-b6e1-e356c5e9929b",
+      "projectNumber": 36
+    },
+    {
+      "id": "a3d43e15-5611-4041-b1d2-f8d59a618428",
+      "signalId": "1586703b-c400-4759-9fb3-9ecaa5f8e8d9",
+      "version": "37",
+      "eventId": "1586703b-c400-4759-9fb3-9ecaa5f8e8d9",
+      "projectNumber": 37
+    },
+    {
+      "id": "fce57529-ae9c-4068-9633-7aa6d216df00",
+      "signalId": "8802d40d-04b9-4c1d-923b-34a29a8aa5af",
+      "version": "38",
+      "eventId": "8802d40d-04b9-4c1d-923b-34a29a8aa5af",
+      "projectNumber": 38
+    },
+    {
+      "id": "a1a8dfab-e065-4a76-ac19-c55bf1be1865",
+      "signalId": "bc7a3a3d-fc5e-499d-99bc-ceb8fcfd8dbb",
+      "version": "39",
+      "eventId": "bc7a3a3d-fc5e-499d-99bc-ceb8fcfd8dbb",
+      "projectNumber": 39
+    },
+    {
+      "id": "f2340258-ce48-414c-be7a-f8949efb621d",
+      "signalId": "cb812b41-53e6-4599-bc85-8001f1488294",
+      "version": "40",
+      "eventId": "cb812b41-53e6-4599-bc85-8001f1488294",
+      "projectNumber": 40
+    },
+    {
+      "id": "9a9aad12-8d13-4f8e-833b-0c0fd36d3f21",
+      "signalId": "6b1f16fd-1444-469b-9871-2d12a8742aa4",
+      "version": "41",
+      "eventId": "6b1f16fd-1444-469b-9871-2d12a8742aa4",
+      "projectNumber": 41
+    },
+    {
+      "id": "6e8ff999-404a-414a-8125-67d277bc0729",
+      "signalId": "dc307d4f-a243-484c-ac2e-812f43003dce",
+      "version": "42",
+      "eventId": "dc307d4f-a243-484c-ac2e-812f43003dce",
+      "projectNumber": 42
+    },
+    {
+      "id": "cbae7e0f-8027-4bb3-9988-9a3aad2dc18b",
+      "signalId": "3da381c6-cee6-4c3d-ba70-199a8746a017",
+      "version": "43",
+      "eventId": "3da381c6-cee6-4c3d-ba70-199a8746a017",
+      "projectNumber": 43
+    },
+    {
+      "id": "bfd89e0c-143e-46fa-aa1e-b0b85e4b37d1",
+      "signalId": "a723e5b1-2ebf-44f6-a31b-76a64a2eba64",
+      "version": "44",
+      "eventId": "a723e5b1-2ebf-44f6-a31b-76a64a2eba64",
+      "projectNumber": 44
+    },
+    {
+      "id": "98a4d3fd-ebc8-4b6e-8661-1ddb84981803",
+      "signalId": "dfc75c09-67d9-4066-b4b9-6526395d7caf",
+      "version": "45",
+      "eventId": "dfc75c09-67d9-4066-b4b9-6526395d7caf",
+      "projectNumber": 45
+    },
+    {
+      "id": "8f8ef01a-1a71-4ce6-9d17-c7908ef31fff",
+      "signalId": "6e6b1e27-46bc-408e-96ab-6b91486455a0",
+      "version": "46",
+      "eventId": "6e6b1e27-46bc-408e-96ab-6b91486455a0",
+      "projectNumber": 46
+    },
+    {
+      "id": "d1b9a3b2-5826-46d2-89cd-2d467a5051fa",
+      "signalId": "399ac2ac-7d65-42d1-a944-f0a02bce684a",
+      "version": "47",
+      "eventId": "399ac2ac-7d65-42d1-a944-f0a02bce684a",
+      "projectNumber": 47
+    },
+    {
+      "id": "48990599-a3e7-4aa5-bfe7-503433b86d8a",
+      "signalId": "4cf634a6-a90d-4e8c-ae7d-89d1f1ae964d",
+      "version": "48",
+      "eventId": "4cf634a6-a90d-4e8c-ae7d-89d1f1ae964d",
+      "projectNumber": 48
+    },
+    {
+      "id": "f243ded1-f9ed-48be-a473-1a09e63ef1b8",
+      "signalId": "827a3b3e-2bb0-41b3-ab85-3a00c10715e9",
+      "version": "49",
+      "eventId": "827a3b3e-2bb0-41b3-ab85-3a00c10715e9",
+      "projectNumber": 49
+    },
+    {
+      "id": "f2063b28-7cab-4d47-81c8-0a985dc0adbc",
+      "signalId": "f9519d6a-a0d7-4909-bf11-6b672a9957f5",
+      "version": "50",
+      "eventId": "f9519d6a-a0d7-4909-bf11-6b672a9957f5",
+      "projectNumber": 50
+    },
+    {
+      "id": "7112b9a5-e032-475d-9cb6-997ff7d1787c",
+      "signalId": "a3c3f899-687c-4729-aa71-5561cc647ceb",
+      "version": "51",
+      "eventId": "a3c3f899-687c-4729-aa71-5561cc647ceb",
+      "projectNumber": 51
+    },
+    {
+      "id": "dcdbfa4e-4a66-4b50-be39-13b941a33aba",
+      "signalId": "59ffc79a-93f7-462f-83b8-4fa50b9e74c7",
+      "version": "52",
+      "eventId": "59ffc79a-93f7-462f-83b8-4fa50b9e74c7",
+      "projectNumber": 52
+    },
+    {
+      "id": "c4c53176-88a7-4150-ad40-3b7a39d68695",
+      "signalId": "aeb2999f-915c-448f-a694-e54768e82f20",
+      "version": "53",
+      "eventId": "aeb2999f-915c-448f-a694-e54768e82f20",
+      "projectNumber": 53
+    },
+    {
+      "id": "4f958c6f-6d92-4529-9995-3f18cf6cc79a",
+      "signalId": "6980a601-d176-4c24-9da7-e1bb696d8828",
+      "version": "54",
+      "eventId": "6980a601-d176-4c24-9da7-e1bb696d8828",
+      "projectNumber": 54
+    },
+    {
+      "id": "c6330403-18d2-4c7e-96c3-03a90073919d",
+      "signalId": "ee2949e9-9aad-4d0c-ba68-96c7e93c1ae0",
+      "version": "55",
+      "eventId": "ee2949e9-9aad-4d0c-ba68-96c7e93c1ae0",
+      "projectNumber": 55
+    },
+    {
+      "id": "19efd4f7-0db2-4128-95f6-18f63610f5fc",
+      "signalId": "699f23c4-636a-4411-9541-dffae3df25d8",
+      "version": "56",
+      "eventId": "699f23c4-636a-4411-9541-dffae3df25d8",
+      "projectNumber": 56
+    },
+    {
+      "id": "cee59fd6-6390-4dd5-bc05-6f4f7ac91781",
+      "signalId": "f4467942-d225-4197-9b28-3e4ecb1408ad",
+      "version": "57",
+      "eventId": "f4467942-d225-4197-9b28-3e4ecb1408ad",
+      "projectNumber": 57
+    },
+    {
+      "id": "9701569e-a865-4462-abe1-45acb3095015",
+      "signalId": "9d08de9f-5fea-4857-87f9-57ce20d95b6c",
+      "version": "58",
+      "eventId": "9d08de9f-5fea-4857-87f9-57ce20d95b6c",
+      "projectNumber": 58
+    },
+    {
+      "id": "7f4b554e-18c6-4ffe-9082-ba64cb220c1c",
+      "signalId": "49c5f60e-4289-4564-9edf-3fc77e8ec26b",
+      "version": "59",
+      "eventId": "49c5f60e-4289-4564-9edf-3fc77e8ec26b",
+      "projectNumber": 59
+    },
+    {
+      "id": "d31207d7-7427-4989-b785-5441657df96b",
+      "signalId": "1ba66126-3f9d-4112-80e7-6a2317a5cf90",
+      "version": "60",
+      "eventId": "1ba66126-3f9d-4112-80e7-6a2317a5cf90",
+      "projectNumber": 60
+    },
+    {
+      "id": "9f4ba0db-cbb9-464e-86bc-78c216fcae44",
+      "signalId": "6385d513-5fd2-4166-96d6-246edfa87663",
+      "version": "61",
+      "eventId": "6385d513-5fd2-4166-96d6-246edfa87663",
+      "projectNumber": 61
+    },
+    {
+      "id": "b7f9fa1e-c94a-4181-ae66-f3d4be3bd620",
+      "signalId": "bdac8b0f-d6d4-4700-93f6-0ada9ca8715a",
+      "version": "62",
+      "eventId": "bdac8b0f-d6d4-4700-93f6-0ada9ca8715a",
+      "projectNumber": 62
+    },
+    {
+      "id": "076b6446-78ea-4dea-b59e-50457b48cc52",
+      "signalId": "d29d2e8a-05e8-4fc1-ab88-f5683cbf6adc",
+      "version": "63",
+      "eventId": "d29d2e8a-05e8-4fc1-ab88-f5683cbf6adc",
+      "projectNumber": 63
+    },
+    {
+      "id": "06e4e799-d446-4aa2-b186-f9c8a3248a71",
+      "signalId": "d45630d8-a33c-43bc-91f1-e31d5ef38d58",
+      "version": "64",
+      "eventId": "d45630d8-a33c-43bc-91f1-e31d5ef38d58",
+      "projectNumber": 64
+    },
+    {
+      "id": "2c764fef-6ed6-4e10-a7c9-38727c29668f",
+      "signalId": "74bb28b5-4bb0-42f2-9a6a-2674f67ff7be",
+      "version": "65",
+      "eventId": "74bb28b5-4bb0-42f2-9a6a-2674f67ff7be",
+      "projectNumber": 65
+    },
+    {
+      "id": "9044cb4f-cb73-4b2e-9aa0-d2a7f6d51007",
+      "signalId": "93253dd9-78e6-4189-9a5b-35459e411652",
+      "version": "66",
+      "eventId": "93253dd9-78e6-4189-9a5b-35459e411652",
+      "projectNumber": 66
+    },
+    {
+      "id": "c218e751-c116-414d-8ca5-71f1fd2670c2",
+      "signalId": "e9f25ebb-c0fd-4c77-bac7-76f2f29fcd6e",
+      "version": "67",
+      "eventId": "e9f25ebb-c0fd-4c77-bac7-76f2f29fcd6e",
+      "projectNumber": 67
+    },
+    {
+      "id": "521ea7be-a3ef-4da6-a217-43e8187c5642",
+      "signalId": "815b7ac0-57ed-4486-b7ca-0ef3af57e48b",
+      "version": "68",
+      "eventId": "815b7ac0-57ed-4486-b7ca-0ef3af57e48b",
+      "projectNumber": 68
+    },
+    {
+      "id": "a297a71c-7bb7-42c8-8eda-be51b45c3f0f",
+      "signalId": "d6c01807-334f-4f26-921f-03d3f71f3268",
+      "version": "69",
+      "eventId": "d6c01807-334f-4f26-921f-03d3f71f3268",
+      "projectNumber": 69
+    },
+    {
+      "id": "f40bc5a1-1cbf-486d-9ba7-21275e3c236c",
+      "signalId": "ac409436-2009-4f7a-824d-07c59a8fa72a",
+      "version": "70",
+      "eventId": "ac409436-2009-4f7a-824d-07c59a8fa72a",
+      "projectNumber": 70
+    },
+    {
+      "id": "116332f5-3dd3-4336-bce0-0b7dd9154a81",
+      "signalId": "16d5b7bd-0c7d-4132-921a-1de2de774bf2",
+      "version": "71",
+      "eventId": "16d5b7bd-0c7d-4132-921a-1de2de774bf2",
+      "projectNumber": 71
+    },
+    {
+      "id": "4f9acd10-fa00-4df2-b043-2211ce776c35",
+      "signalId": "f5000640-3582-4d72-88b2-d21cb43ff66f",
+      "version": "72",
+      "eventId": "f5000640-3582-4d72-88b2-d21cb43ff66f",
+      "projectNumber": 72
+    },
+    {
+      "id": "1a3efd38-d17f-4166-adf9-2338df3f828b",
+      "signalId": "f4449e49-7162-4caa-bd0e-90b9141614e1",
+      "version": "73",
+      "eventId": "f4449e49-7162-4caa-bd0e-90b9141614e1",
+      "projectNumber": 73
+    },
+    {
+      "id": "8e6bdee2-e26a-452d-8f9f-d64d40f502c3",
+      "signalId": "feda6bec-1fa2-4d10-84ff-21b74495d40c",
+      "version": "74",
+      "eventId": "feda6bec-1fa2-4d10-84ff-21b74495d40c",
+      "projectNumber": 74
+    },
+    {
+      "id": "f85bb47e-aae9-4483-a105-622453c56597",
+      "signalId": "f0582c6d-1613-4c17-8035-65dc9c69eeec",
+      "version": "75",
+      "eventId": "f0582c6d-1613-4c17-8035-65dc9c69eeec",
+      "projectNumber": 75
+    },
+    {
+      "id": "46819d02-dc0b-4f31-bb8c-c1f9350487bb",
+      "signalId": "3596d3fd-924d-448b-84e0-f77b07232516",
+      "version": "76",
+      "eventId": "3596d3fd-924d-448b-84e0-f77b07232516",
+      "projectNumber": 76
+    },
+    {
+      "id": "4cbadf50-c4d6-43c7-8328-09f338c9f734",
+      "signalId": "a92df6fe-0b98-4885-b74f-22dc7c7783f8",
+      "version": "77",
+      "eventId": "a92df6fe-0b98-4885-b74f-22dc7c7783f8",
+      "projectNumber": 77
+    },
+    {
+      "id": "8221f286-3605-41a1-af32-72e643076550",
+      "signalId": "74437a22-52ef-42f4-8fbc-97f6e449da18",
+      "version": "78",
+      "eventId": "74437a22-52ef-42f4-8fbc-97f6e449da18",
+      "projectNumber": 78
+    },
+    {
+      "id": "799804e2-62ce-429e-8267-b8a24fecf971",
+      "signalId": "85b91564-9e30-4792-8ee6-76be5b7d9806",
+      "version": "79",
+      "eventId": "85b91564-9e30-4792-8ee6-76be5b7d9806",
+      "projectNumber": 79
+    },
+    {
+      "id": "657180b0-fe8f-424e-ae98-540dadd8bfce",
+      "signalId": "11205e37-fa55-49f1-b640-d3aeda3cb676",
+      "version": "80",
+      "eventId": "11205e37-fa55-49f1-b640-d3aeda3cb676",
+      "projectNumber": 80
+    },
+    {
+      "id": "828e3a98-73d5-4f0a-88f7-a30a9216a6b1",
+      "signalId": "954577c4-26d4-4312-9dbe-2864d913fc80",
+      "version": "81",
+      "eventId": "954577c4-26d4-4312-9dbe-2864d913fc80",
+      "projectNumber": 81
+    },
+    {
+      "id": "c83d71c8-aa45-4212-a0a7-5037d1514570",
+      "signalId": "80ab1f8f-31d5-4ae4-a10e-c9ad0548bd5e",
+      "version": "82",
+      "eventId": "80ab1f8f-31d5-4ae4-a10e-c9ad0548bd5e",
+      "projectNumber": 82
+    },
+    {
+      "id": "d1c3e208-20da-4174-9a3c-e589d54a4375",
+      "signalId": "736c9a08-c9c4-4e51-80b1-8f139f07bad0",
+      "version": "83",
+      "eventId": "736c9a08-c9c4-4e51-80b1-8f139f07bad0",
+      "projectNumber": 83
+    },
+    {
+      "id": "c644e84c-e20d-4b96-afd4-c1f25b5897a5",
+      "signalId": "d6bb0d01-f07a-4c8e-b843-64d276b67a25",
+      "version": "84",
+      "eventId": "d6bb0d01-f07a-4c8e-b843-64d276b67a25",
+      "projectNumber": 84
+    },
+    {
+      "id": "e1b44727-90e7-437b-8997-24def76efc31",
+      "signalId": "e2a8a598-2596-4d47-a35a-e2b146130ac4",
+      "version": "85",
+      "eventId": "e2a8a598-2596-4d47-a35a-e2b146130ac4",
+      "projectNumber": 85
+    },
+    {
+      "id": "c1f1c81d-ace9-4886-8eb4-7dff3cb48a13",
+      "signalId": "6c3b642e-bdb4-4078-b028-6bbffa287715",
+      "version": "86",
+      "eventId": "6c3b642e-bdb4-4078-b028-6bbffa287715",
+      "projectNumber": 86
+    },
+    {
+      "id": "a7069793-badf-4854-956a-1335a84456fd",
+      "signalId": "9c95a8c5-1d09-438c-a920-eeabad51f01c",
+      "version": "87",
+      "eventId": "9c95a8c5-1d09-438c-a920-eeabad51f01c",
+      "projectNumber": 87
+    },
+    {
+      "id": "403881da-faef-4b7b-bbda-a0faaf3d556f",
+      "signalId": "8f126fba-9c15-477d-90d6-f1be0416215c",
+      "version": "88",
+      "eventId": "8f126fba-9c15-477d-90d6-f1be0416215c",
+      "projectNumber": 88
+    },
+    {
+      "id": "277a70ce-dcfe-4e6d-ab13-257d7cc1cb92",
+      "signalId": "5e643372-916b-48d3-8836-12d11efb2f8e",
+      "version": "89",
+      "eventId": "5e643372-916b-48d3-8836-12d11efb2f8e",
+      "projectNumber": 89
+    },
+    {
+      "id": "b037ac61-bdc2-41bb-bbf0-61a3aa42499d",
+      "signalId": "c52f63a8-ec26-42c5-8ad9-db309a249506",
+      "version": "90",
+      "eventId": "c52f63a8-ec26-42c5-8ad9-db309a249506",
+      "projectNumber": 90
+    },
+    {
+      "id": "43ae7e19-c2a6-408f-b8d3-ea2320c61fa3",
+      "signalId": "f3f2679f-d413-4184-a967-92cbb021ef5c",
+      "version": "91",
+      "eventId": "f3f2679f-d413-4184-a967-92cbb021ef5c",
+      "projectNumber": 91
+    },
+    {
+      "id": "d6e0dfdd-64cf-4805-8cda-2a6e4f5685ba",
+      "signalId": "f5aabc7a-0f2a-4254-8c77-76ed78cb9f9a",
+      "version": "92",
+      "eventId": "f5aabc7a-0f2a-4254-8c77-76ed78cb9f9a",
+      "projectNumber": 92
+    },
+    {
+      "id": "9f0dc4f3-3801-4a7b-b9fb-9a86e91d5f8f",
+      "signalId": "036144f2-2d7c-41b5-815e-fadfb2ae657d",
+      "version": "93",
+      "eventId": "036144f2-2d7c-41b5-815e-fadfb2ae657d",
+      "projectNumber": 93
+    },
+    {
+      "id": "e7fcc25a-609f-4360-9455-0ec09dad94d9",
+      "signalId": "cb13f0b7-acb8-4f08-85bb-a950b652502f",
+      "version": "94",
+      "eventId": "cb13f0b7-acb8-4f08-85bb-a950b652502f",
+      "projectNumber": 94
+    },
+    {
+      "id": "db08b6ea-7bed-4857-9f0f-1bbfa02f359b",
+      "signalId": "d3627357-9ad5-4be6-8017-f9eef0250e39",
+      "version": "95",
+      "eventId": "d3627357-9ad5-4be6-8017-f9eef0250e39",
+      "projectNumber": 95
+    },
+    {
+      "id": "19e59b8d-1d80-4349-907a-36a8ec0d4459",
+      "signalId": "2519760a-6e36-4f08-af8f-68d26285c9af",
+      "version": "96",
+      "eventId": "2519760a-6e36-4f08-af8f-68d26285c9af",
+      "projectNumber": 96
+    },
+    {
+      "id": "387fa046-fc01-4dcf-ac32-010570e4d29b",
+      "signalId": "c6ab7bfc-40ef-4a83-8da3-9e0692d3d81d",
+      "version": "97",
+      "eventId": "c6ab7bfc-40ef-4a83-8da3-9e0692d3d81d",
+      "projectNumber": 97
+    },
+    {
+      "id": "320e0b6a-b167-41ad-a3f1-e7497ecc86bc",
+      "signalId": "dea179be-b2a3-4ebd-80e0-e86988ad2010",
+      "version": "98",
+      "eventId": "dea179be-b2a3-4ebd-80e0-e86988ad2010",
+      "projectNumber": 98
+    },
+    {
+      "id": "31bf636b-770e-4300-95d4-3f7366e68639",
+      "signalId": "25094a15-7ba4-4369-b79f-9ac2bd242c2c",
+      "version": "99",
+      "eventId": "25094a15-7ba4-4369-b79f-9ac2bd242c2c",
+      "projectNumber": 99
+    },
+    {
+      "id": "d31dd988-20d2-4c53-b464-89e160c3b79c",
+      "signalId": "7583779f-2c25-409c-86b1-0777ee54b97e",
+      "version": "100",
+      "eventId": "7583779f-2c25-409c-86b1-0777ee54b97e",
+      "projectNumber": 100
+    },
+    {
+      "id": "146f6364-c6a1-42a1-9133-76943a8cb1cb",
+      "signalId": "182bd8ec-1f41-418b-9668-22974a5a9391",
+      "version": "101",
+      "eventId": "182bd8ec-1f41-418b-9668-22974a5a9391",
+      "projectNumber": 101
+    }
+  ],
+  "firstPage100": [],
+  "rawPage101": [],
+  "remoteInboxReads": [],
+  "cleanup": {
+    "clientClose": "synchronous close returned",
+    "serverClose": "completed"
+  },
+  "endpoint": "http://127.0.0.1:52335",
+  "writeCount": 101,
+  "uniqueMessageIds": 101,
+  "uniqueSignalIds": 101,
+  "finishedAt": "2026-10-13T23:37:16.920Z",
+  "result": "FAIL",
+  "failure": {
+    "name": "TypeError",
+    "message": "message.whenReceived.toISOString is not a function",
+    "stack": "TypeError: message.whenReceived.toISOString is not a function\n    at compact (file:///Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/run-real-wire-paging-repro.mjs:64:38)\n    at Array.map (<anonymous>)\n    at file:///Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/run-real-wire-paging-repro.mjs:120:35\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)"
+  }
+}

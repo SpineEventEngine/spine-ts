@@ -6149,3 +6149,30 @@ new lifecycle subsystem is introduced. JVM orderly/force shutdown is a design
 guardrail, not proof of a matching Node IPC contract or timeout default.
 
 Implementation and acceptance: [managed shutdown analysis](tasks/sql-delivery-reliability/evidence/managed-shutdown-boundary.md).
+
+## D-0132: Exact Remote Inbox Continuation
+
+Date: 2026-10-14. Status: accepted bounded public-contract correction.
+
+Timestamp-only continuation cannot traverse arbitrary equal-time Inbox rows.
+A real-wire reproduction with 101 rows repeatedly rejects a full 100-row page while
+all rows remain stored. Preserve exact copied JVM Protobuf source/descriptor
+provenance and add one authored spine.delivery.InboxReadService.ReadPage RPC.
+Its cursor contains receive timestamp, version and message ID; seek strictly
+after that tuple without loading the cursor record. Use deterministic UTF-8
+ordinal ID ordering, existing 1,000-row and 4 MiB caps, and domain validation.
+
+DeliveryClient.readPage and RemoteInbox require this endpoint with no fallback.
+Keep sinceWhen as a mutually exclusive genuine first-read filter. Filtering
+advances on the final raw row and the whole RemoteInbox read shares one finite
+cancellation/deadline budget. Deleted cursor records and status updates cannot
+prevent continuation. Unsupported RPC is actionable and non-retryable within
+the read; no sticky capability cache or new error hierarchy is needed.
+
+This live read is not a snapshot: concurrent insertions behind the cursor await
+a later fresh scan. No timestamp rewriting, migration, outbox, persistence
+subsystem, cross-record transaction or stronger delivery/durability guarantee.
+The reproduced paging defect is not yet proof of the earlier workload failure's
+cause. Repeat that workload with captured Inbox/state/error evidence.
+
+Detailed contract, JVM/provenance evidence and acceptance: [paging analysis](tasks/sql-delivery-reliability/evidence/remote-paging-boundary.md).
