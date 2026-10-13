@@ -1,0 +1,46 @@
+[
+  {
+    "projects": [
+      {
+        "number": 1,
+        "states": {
+          "project": true,
+          "planning": true,
+          "staffing": true,
+          "portfolio": true,
+          "projection": true
+        }
+      }
+    ],
+    "events": [
+      {
+        "id": "bb5bed70-63e8-486b-bde7-629010df2de8",
+        "typeUrl": "type.spine.server.testing/spine.server.testing.ProjectCreated",
+        "number": 1,
+        "organization": "matrix-49d9087f1f8b4db385e1bbc07746a87a"
+      }
+    ]
+  },
+  {
+    "projects": [
+      {
+        "number": 1,
+        "states": {
+          "project": true,
+          "planning": true,
+          "staffing": true,
+          "portfolio": true,
+          "projection": true
+        }
+      }
+    ],
+    "events": [
+      {
+        "id": "bb5bed70-63e8-486b-bde7-629010df2de8",
+        "typeUrl": "type.spine.server.testing/spine.server.testing.ProjectCreated",
+        "number": 1,
+        "organization": "matrix-49d9087f1f8b4db385e1bbc07746a87a"
+      }
+    ]
+  }
+]

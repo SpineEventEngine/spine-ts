@@ -1,0 +1,3 @@
+$ node scripts/check-tsdoc.mjs
+class-member-spacing: packages/server/src/server/node-coordinator.ts :: member@236
+[ELIFECYCLE] Command failed with exit code 1.

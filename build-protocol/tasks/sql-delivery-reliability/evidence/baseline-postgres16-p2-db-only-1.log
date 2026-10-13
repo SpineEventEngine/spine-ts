@@ -1,0 +1,16 @@
+startedAt=2026-10-13T22:51:43.368Z
+endedAt=2026-10-13T22:51:55.173Z
+exit=0/null
+--- stdout ---
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  23:51:44
+   Duration  11.04s (transform 13ms, setup 0ms, import 19ms, tests 10.92s, environment 0ms)
+
+
+--- stderr ---
+$ pnpm exec vitest --root ../.. --config vitest.infrastructure.config.ts run packages/server-blackbox-tests/test/project-process-matrix.integration.test.ts

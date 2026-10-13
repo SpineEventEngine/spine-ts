@@ -1,0 +1,40 @@
+
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/delivery-client/test/managed-external-events.integration.test.ts
+  104:26  error  Unsafe argument of type `any` assigned to a parameter of type `SubscriptionUpdate`  @typescript-eslint/no-unsafe-argument
+  114:26  error  Unsafe argument of type `any` assigned to a parameter of type `SubscriptionUpdate`  @typescript-eslint/no-unsafe-argument
+  138:26  error  Unsafe argument of type `any` assigned to a parameter of type `SubscriptionUpdate`  @typescript-eslint/no-unsafe-argument
+  149:32  error  Unsafe member access .response on an `any` value                                    @typescript-eslint/no-unsafe-member-access
+  150:32  error  Unsafe member access .update on an `any` value                                      @typescript-eslint/no-unsafe-member-access
+
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/delivery-client/test/managed-remote-delivery-readiness.integration.test.ts
+  105:27  error  Unsafe member access .response on an `any` value                                    @typescript-eslint/no-unsafe-member-access
+  106:27  error  Unsafe member access .update on an `any` value                                      @typescript-eslint/no-unsafe-member-access
+  111:25  error  Unsafe argument of type `any` assigned to a parameter of type `SubscriptionUpdate`  @typescript-eslint/no-unsafe-argument
+  147:25  error  Unsafe argument of type `any` assigned to a parameter of type `SubscriptionUpdate`  @typescript-eslint/no-unsafe-argument
+  187:27  error  Unsafe member access .response on an `any` value                                    @typescript-eslint/no-unsafe-member-access
+  188:27  error  Unsafe member access .update on an `any` value                                      @typescript-eslint/no-unsafe-member-access
+  192:25  error  Unsafe argument of type `any` assigned to a parameter of type `SubscriptionUpdate`  @typescript-eslint/no-unsafe-argument
+  212:25  error  Unsafe argument of type `any` assigned to a parameter of type `SubscriptionUpdate`  @typescript-eslint/no-unsafe-argument
+  223:25  error  Unsafe argument of type `any` assigned to a parameter of type `SubscriptionUpdate`  @typescript-eslint/no-unsafe-argument
+
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server-blackbox-tests/test-fixtures/project-process-smoke.mjs
+  466:7  error  'Buffer' is not defined  no-undef
+
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server-blackbox-tests/test-fixtures/resistant-matrix-driver.mjs
+  15:1  error  'process' is not defined      no-undef
+  16:1  error  'process' is not defined      no-undef
+  17:1  error  'process' is not defined      no-undef
+  18:1  error  'setInterval' is not defined  no-undef
+
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server-blackbox-tests/test/project-process-matrix.integration.test.ts
+   96:34  error  Invalid type "number" of template literal expression  @typescript-eslint/restrict-template-expressions
+  102:22  error  Unnecessary conditional, value is always falsy        @typescript-eslint/no-unnecessary-condition
+  105:9   error  Unnecessary conditional, value is always falsy        @typescript-eslint/no-unnecessary-condition
+
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/src/server/node-coordinator.ts
+  359:19  error  Unsafe argument of type `any` assigned to a parameter of type `Socket`  @typescript-eslint/no-unsafe-argument
+  360:7   error  Unsafe call of an `any` typed value                                     @typescript-eslint/no-unsafe-call
+  360:14  error  Unsafe member access .once on an `any` value                            @typescript-eslint/no-unsafe-member-access
+  360:49  error  Unsafe argument of type `any` assigned to a parameter of type `Socket`  @typescript-eslint/no-unsafe-argument
+
+✖ 26 problems (26 errors, 0 warnings)

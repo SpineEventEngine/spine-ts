@@ -1,0 +1,11 @@
+
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/delivery-client/test/managed-external-events.integration.test.ts
+   94:62  error  This assertion is unnecessary since the receiver accepts the original type of the expression  @typescript-eslint/no-unnecessary-type-assertion
+  134:62  error  This assertion is unnecessary since the receiver accepts the original type of the expression  @typescript-eslint/no-unnecessary-type-assertion
+
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/delivery-client/test/managed-remote-delivery-readiness.integration.test.ts
+  102:61  error  This assertion is unnecessary since the receiver accepts the original type of the expression  @typescript-eslint/no-unnecessary-type-assertion
+  185:61  error  This assertion is unnecessary since the receiver accepts the original type of the expression  @typescript-eslint/no-unnecessary-type-assertion
+
+✖ 4 problems (4 errors, 0 warnings)
+  4 errors and 0 warnings potentially fixable with the `--fix` option.

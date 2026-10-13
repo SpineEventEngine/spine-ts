@@ -42,3 +42,23 @@ Business-state SQL persistence does not persist the simple Delivery server's
 Inbox. Document the measured server-restart loss boundary alongside the shared
 Delivery recommendation. Explain recovery scan, stale-session and server
 processing timeout separately; no ten-second delivery/takeover promise.
+
+## Exact prose checklist
+
+Read-only documentation verification accepted from existing documentation_reviewer /root/publication_documentation_review, original explicit gpt-6-luna/medium retained and both fields restated; runtime metadata unavailable. No builds, edits or execution by reviewer. These are requirements for the example slice, not runtime evidence.
+
+- Orders README around204 already labels learning scope; add explicit local teaching/deployment distinction and a link to Distributed Message Board for shared multi-process Delivery.
+- Projects README around122 gives memory/loopback limits; add teaching label and the same supported deployment link.
+- Todo README13 preserves single-process memory/MySQL/PostgreSQL. Lines76–104 already describe shared launch and separate counts. Add explicit multi-process recommendation, pending Inbox loss on simple Delivery restart despite SQL business state, and separate timing values.
+- Message Board README46 preserves local React/single-process mode. Lines58–68 need recommendation plus supported process/shard variables and verified8/8 command after launcher implementation. Lines237–242 must distinguish Gateway query recovery from loss of pending in-memory Delivery work.
+- Distributed Message Board README39 correctly describes current two-node/two-process/two-shard topology. Lines53–60 already state in-memory/no-HA; add accepted-pending loss on Delivery restart while Datastore business state persists, recommendation, and timer distinction.
+- Message Board deploy/README26 describes required Delivery and Gateway recovery but omits Delivery restart loss/timers. Link one clear canonical explanation rather than duplicating divergent prose.
+- delivery-server/README76 shows processingTimeoutMs30000 as an example while defaults disable it; label this explicitly as an optional override.
+
+Timer prose must distinguish configurable10-second scan,60-second stale-session age and separately configurable server processing timeout (default disabled); none guarantees a delivery/takeover deadline. Do not claim crash verification before actual evidence exists. Database-only multi-process choice remains explicit and discouraged because notifications are local and missed work may wait for recovery. Retain all local exceptions.
+
+Parent managed-launcher source check: server REFERENCE's native/managed hosting
+section still calls the Coordinator port nonzero, although the starting HEAD's
+public options and validator already support zero for an OS-selected port.
+Correct that sentence alongside launch configuration documentation. This is
+stale prose, not a new port contract.

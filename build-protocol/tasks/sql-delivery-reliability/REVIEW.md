@@ -97,3 +97,75 @@ Style clean. Return this batch to the same existing implementer, immutable expli
 Publication correction freeze: existing implementer retains its explicit gpt-6-sol/medium configuration; runtime metadata unavailable. The valid between-read RED timed out, GREEN returns CANCELLED with zero System reads and dispatches; 35 affected tests and final static/build checks pass. Dispatch a targeted existing performance_reliability_reviewer with explicit gpt-6-sol/medium because the previous context is absent from the active surface. Review only cancellation correction and regression, read-only. Parent verifies the three prose corrections directly; no repeated whole wave.
 
 Publication targeted reliability re-review accepted: existing performance_reliability_reviewer explicitly dispatched gpt-6-sol/medium, configured profile confirmed, runtime metadata unavailable. Clean disposition: pre-read guard closes the between-family abort gap, setup guard and finally preserve listener lifecycle. Parent directly verified MySQL grouped naming, captured-ID TSDoc, and finite repair retry prose. All four concerns have converged for this checkpoint. Full process/restart, examples and release acceptance remain pending.
+
+## Process acceptance harness review
+
+The first harness is frozen against ad8491fad and under mechanical baseline matrix execution with exclusive dist/harness reservation. Only changed files under packages/server-blackbox-tests, test-inventory, root TS references, package/lock integration, and port0 test-fixture changes belong to this wave; exclude concurrently edited managed-close runtime/source-local tests from this review. Existing implementer explicit Sol/medium reports focused fixture/adapter and build/static preflight clean. All four canonical concerns receive bounded review: reliability (process lifecycle, isolation, per-ID/handler/Event-byte accounting, failure evidence), style (fixture/helper cohesion), API (private package/build/generated imports and signatures), docs (reproducible command/setup and truthful claim boundaries). Use existing configured roles with explicit gpt-6-sol/medium for first three and gpt-6-luna/medium for documentation; actual runtime metadata unavailable. Capacity allows one reviewer beside parent/implementer/mechanical run; collect full wave before one harness correction batch. Do not edit frozen harness or dist during matrix. A confirmed unsafe cleanup issue may require stopping the current run before continuing, rather than waiting for review completion. Final managed lifecycle/runtime review will follow its correction separately.
+
+First process harness review wave complete. Reliability, API and style confirm their existing explicitly dispatched gpt-6-sol/medium profiles; documentation confirms gpt-6-luna/medium. Actual runtime metadata is unavailable. API is clean. Accepted one batch to the same explicit Sol/medium implementer: bounded TERM-to-KILL/reap even when the driver ignores TERM; request-level IPC send/error/disconnect rejection with listener cleanup; full method/correlation/recipient/Event-byte validation for new Commands after graceful worker recreation; actual domain-correct recipient identifiers at every handler entry. Documentation corrections add exact selector values/build/endpoint setup, distinguish graceful recreation from crash, and separate the first passing workload from its failed outer evidence collector. Parent handles MATRIX_PLAN and status records. Reliability and style receive targeted correction review; deterministic prose is checked directly. Managed-close runtime remains a separate substantive lifecycle correction and needs its own bounded review.
+
+Collector follow-up accepted from the orchestrator mechanical function with its original explicit gpt-6-luna/low configuration, restated in dispatch and confirmed by result. Actual runtime metadata unavailable. Node syntax, targeted format/ESLint/diff and explicit audit pass. Each future matrix execution uses a fresh UUID output directory; the failed original collection remains intact. No additional matrix workloads ran. The first workload must be rerun after recipient-identity corrections and does not count as a final complete-matrix case.
+
+Managed-close review scope must include strict-ACK fixture corrections in remote-readiness and external-events integration tests. Parent source check identified first response-only ACK incorrectly satisfying `done:false` business assertions; expected generated state identity must be decoded after validated readiness. Check bounded teardown of only recorded test child processes and the distinction between expected close cancellation and genuine cleanup failures. These mechanically identified corrections do not reopen the completed subscription wave; the newly changed managed lifecycle gets its relevant concern review after preflight.
+
+Managed pre-review source note sent before freeze: the new child wait for parent
+`finish-close` must remain finite even when the parent stays connected but never
+sends that message; disconnect alone is not the full bound. Parent post-ack
+outcome waiting also needs a finite failure path. Keep existing lifecycle limits
+and report genuine cleanup failure rather than add a public option without a
+contract need. Verify actual server-side error before changing network timers;
+the observed internal trailer came from concurrent kernel disposal, not proof
+that the network grace period was too short.
+
+A bounded requirements_splitter follow-up is required for the demonstrated managed-close deadline ambiguity. Dispatch explicit gpt-6-astra/high, read-only source analysis plus task architecture evidence only; no subagents. The one-second acknowledgement timer cannot become an overall drain timer. Preserve the earlier finite context deadline scope and successful admitted updates, define the smallest bounded stalled-drain/relay/final-phase behavior, and retain explicit failure/at-least-once crash limits. This is one targeted architecture pass, not a repeated full-wave plan.
+
+Managed deadline architecture follow-up accepted: existing requirements_splitter
+explicitly gpt-6-astra/high, configured profile confirmed; runtime metadata
+unavailable. Source and JVM guardrails support one minimal managed budget,
+independent context/IPC timers, truthful force failure, retryable pre-deadline
+relay cleanup, and closed subscription admission. D-0131 and ARCHITECTURE.md
+record the decision; return to existing explicit Sol/medium implementer. Public
+option means all four canonical concern lanes apply to the final managed slice.
+No persistence contract or human blocker is introduced.
+
+Project harness correction preflight received from same explicit Sol/medium
+implementer: watchdog and selected PG16 two-process graceful recreation2/2,
+composite build/tooling/touched ESLint pass; exact typed recipients and both
+recreated-worker snapshots are persisted. Freeze corrected harness only and
+re-review reliability/style substantive corrections. API was clean and unchanged;
+parent verifies deterministic setup/restart prose. Managed lifecycle remains
+unfrozen and excluded. Reuse existing concern roles with explicit Sol/medium
+profiles; new contexts if prior reviewers are not live. Runtime metadata
+unavailable. No full matrix until targeted results converge.
+
+Targeted harness correction reviews accepted: existing reliability and style
+roles explicitly dispatched gpt-6-sol/medium, configured profiles confirmed;
+actual runtime metadata unavailable. Style clean; actual generated recipient
+identifiers resolve its prior finding. Reliability confirms bounded watchdog,
+IPC request settlement, and complete restarted worker Event/entry checks. One
+accepted P2 remains: SIGKILL after CREATE DATABASE bypasses driver finally, but
+resource identity is only emitted after successful cleanup; timeout errors cannot
+identify the leftover UUID database. Persist/report run ID, exact database and
+evidence path before resource creation, retain that identity in parent failure
+diagnostics, and explicitly mark forced cleanup unknown/incomplete. Return this
+one combined final harness correction to the same implementer. No API/style lane
+reopens for deterministic resource-evidence changes; parent checks focused
+failure evidence and cleanup directly, asking reliability only if the fix adds
+substantive lifecycle behavior. Full baseline matrix is still stopped.
+
+Parent audit of corrected smoke609c05db7b59431dae48483df673a870 passes via the
+collector's audit-only mode: typed entry fields/counts, both recreated-worker
+snapshots, original/new Event bytes/hash, exact fresh PIDs, and database/child
+cleanup. Evidence/corrected-harness-audit-609c05db.json is fresh and earlier
+FAIL_FAST records remain intact. This audit launches no runtime or database.
+Collector follow-up profile explicit Luna/low confirmed; runtime unavailable.
+
+Final harness P2 correction accepted by deterministic parent inspection and
+focused evidence: resource.json plus MATRIX_RESOURCE are written before CREATE
+DATABASE, so forced-stop error output retains exact run/database/evidence path.
+Adapter explicitly labels cleanup unknown after forced termination; the resistant
+child test preserves identity and verifies no false cleanup record, then removes
+only its exact temporary fixture directory. Watchdog1/1 and selected adapter2/2
+pass; targeted lint/format/diff pass. This is resource-evidence handling without
+a new lifecycle algorithm, so no specialist lane reopens. All four concerns
+converge for the harness; complete SQL matrix acceptance remains pending.

@@ -1,0 +1,22 @@
+[
+  {
+    "commandId": "4dfe54f6-814f-475b-a303-b5963f9e9c63",
+    "number": 1,
+    "ackStatus": {
+      "case": "ok",
+      "value": {
+        "$typeName": "google.protobuf.Empty"
+      }
+    }
+  },
+  {
+    "commandId": "823501d8-2d10-41b3-9beb-60f032569124",
+    "number": 2,
+    "ackStatus": {
+      "case": "ok",
+      "value": {
+        "$typeName": "google.protobuf.Empty"
+      }
+    }
+  }
+]

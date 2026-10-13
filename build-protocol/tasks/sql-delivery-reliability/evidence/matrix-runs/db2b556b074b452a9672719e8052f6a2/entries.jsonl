@@ -1,0 +1,10 @@
+{"method":"create","receiver":"Project","correlation":"matrix-db2b556b074b452a9672719e8052f6a2:1","pid":19693,"at":1791931580555}
+{"method":"create","receiver":"Project","correlation":"matrix-db2b556b074b452a9672719e8052f6a2:2","pid":19694,"at":1791931580564}
+{"method":"portfolio","receiver":"Portfolio","correlation":"matrix-db2b556b074b452a9672719e8052f6a2:1","pid":19693,"at":1791931580648}
+{"method":"planning","receiver":"ProjectPlanning","correlation":"matrix-db2b556b074b452a9672719e8052f6a2:1","pid":19693,"at":1791931580675}
+{"method":"staffing","receiver":"ProjectStaffing","correlation":"matrix-db2b556b074b452a9672719e8052f6a2:1","pid":19694,"at":1791931580693}
+{"method":"portfolio","receiver":"Portfolio","correlation":"matrix-db2b556b074b452a9672719e8052f6a2:2","pid":19693,"at":1791931580714}
+{"method":"planning","receiver":"ProjectPlanning","correlation":"matrix-db2b556b074b452a9672719e8052f6a2:2","pid":19693,"at":1791931580737}
+{"method":"staffing","receiver":"ProjectStaffing","correlation":"matrix-db2b556b074b452a9672719e8052f6a2:2","pid":19694,"at":1791931580750}
+{"method":"projection","receiver":"ProjectProjection","correlation":"matrix-db2b556b074b452a9672719e8052f6a2:1","pid":19693,"at":1791931580775}
+{"method":"projection","receiver":"ProjectProjection","correlation":"matrix-db2b556b074b452a9672719e8052f6a2:2","pid":19693,"at":1791931580823}

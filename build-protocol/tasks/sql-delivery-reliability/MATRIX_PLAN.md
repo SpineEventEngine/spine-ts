@@ -197,15 +197,18 @@ promise. Use the same process-group timeout cleanup as other cases.
 
 ## Opt-in test integration and fail-fast behavior
 
-Add the process matrix Vitest file to
-`scripts/test-inventory.mjs` `infrastructureTestFiles`, alongside the existing
-PostgreSQL/MySQL integrations and Inbox cleanup acceptance. Add one explicit
-root command such as `test:sql-delivery-reliability` that first checks all four
-SQL URL variables and dedicated matrix opt-in, selects only this infrastructure
-file, and passes through the four-provider URLs. It must not be included in the
-ordinary test/CI path. Run Proto generation and the current worktree package
-build first through the task's normal build workflow; the matrix command itself
-must refuse unbuilt/stale artifacts and must not invoke a build implicitly.
+The process matrix file is now registered as an opt-in infrastructure test in
+`scripts/test-inventory.mjs`. The implemented single-selection entrypoint is
+`pnpm --dir packages/server-blackbox-tests test:matrix`; it reads provider
+connection endpoints from task `evidence/databases.json`, and selects one
+provider/process-count/Delivery-mode tuple through `SPINE_TS_MATRIX_*` variables.
+The exact values and build prerequisites are in IMPLEMENTATION.md. It is excluded
+from the ordinary test/CI path and does not build artifacts implicitly. The
+original proposed root wrapper using four SQL URL variables is not implemented;
+it is not the current invocation contract. The task evidence collector
+`evidence/run-baseline-matrix.mjs` invokes the package command across the planned
+cases and stores a fresh evidence session. Generate Protobuf and build the current
+worktree before running it; freeze dist throughout the run.
 
 Fail before load if any expected environment variable is absent, any DB/image
 version or digest is wrong, any host bind is not loopback, any duplicate run
@@ -258,3 +261,7 @@ on packages/delivery-client/test-fixtures/managed-remote-delivery-application.mj
 
 The human clarified that no production apps exist: no legacy compatibility or
 application data migration is required. Correct the scoped contracts directly.
+
+## Historical workload ID mapping
+
+Current compiled Project workflow uses a composite ProjectId (OrganizationId plus numeric Project number). Historical investigation Project IDs were scalar strings. The recorded historical ID sets may serve as external ledger labels, mapped explicitly to one actual run organization and distinct numeric Project numbers; do not substitute a Project string for a logically different Organization identifier. Repeat workload sizes/burst concurrency and adjacent-ID contention using current domain-correct schemas. Report this mapping and do not claim byte-identical old application IDs or recreation of the original SQL scheduling. No legacy schema, production compatibility or migration support is introduced.

@@ -59,3 +59,34 @@ Extend the existing republishEvents exact-ID loop to inspect domain and System f
 For internally produced System Events, capture the envelope once; validate registered System schema, append idempotently to the System family when persistence is enabled, then dispatch through stored-style System routing. With persistence disabled, validate and dispatch without append. This narrow ordering intentionally persists System diagnostics before recipient acceptance; failure cannot roll back or rerun the successful entity handler. Reuse three delayed cancellable attempts, original IDs/bytes, queue/shutdown fences, truthful internal outcomes and correlated exhaustion diagnostics. Failed append is not a saved Event. Forgotten Event exhaustion is terminal diagnostic failure and exact-ID repair after restart returns NOT_FOUND. Keep strict external/domain post admission unchanged.
 
 Required tests: exact IDs/bytes and family separation on/off; correct System-only recipients; saved System repair from fresh context including current forgetting mode; mixed domain/System order; cross-family collision; missing/unknown/malformed/wrong-tenant IDs; append/recipient transient and permanent failures; partial fanout actual recipient counts without business-handler rerun; cancellation during delay/shutdown timer cleanup; real SQL grouped selector evidence. Whole-Event retry can repeat earlier recipients and schema registration remains required. This follow-up is limited to the demonstrated System seam; PM and spacing fixes continue under the existing independent-write architecture.
+
+## Managed shutdown boundary
+
+Accepted targeted requirements_splitter follow-up, explicit gpt-6-astra/high,
+configured role confirmed; runtime metadata unavailable. Exact source/JVM
+evidence and tests are in evidence/managed-shutdown-boundary.md. The demonstrated
+private drain/relay handshake cannot safely reuse the one-second acknowledgement
+grace as a business-work deadline; context shutdown begins too late to cover
+Delivery detach. No human product decision remains.
+
+Add one optional ManagedServerApplicationOptions.shutdownTimeoutMs, default
+30000ms, positive safe integer at most2147483647. First parent close starts one
+absolute graceful deadline across Delivery, reconciliation, relay Cancel, final
+close and retries. Keep existing one-second IPC/exit/TERM/KILL waits separate;
+cap acknowledgement by remaining budget and document at most3seconds additional
+normal reaping or2seconds after deadline. Reject new unary/Subscribe/Activate
+admission immediately while retaining active relays and Cancel. Keep drained
+child listeners reachable after retryable relay-cleanup failure; reuse pending
+raw cleanup and phase state without resetting deadline or overlapping disposal.
+
+Private close messages carry remaining budget; actual managed children validate
+and clamp their local deadline. Independent child watchdog covers a connected
+silent parent, with nonzero child exit after bounded force grace. Parent force
+closes its network independently of stuck reconciliation and terminates only
+recorded managed child processes; never the embedding parent. Timeout/force is
+retained failure, including repeated close; attempt/observe independent cleanup
+and late settlements without claiming rollback or guaranteed cancellation of
+entered application/SQL work. Context shutdown remains independently configured.
+No persistence records, general Server/Delivery timeout API, legacy IPC fallback
+or new lifecycle subsystem. Implement and review through the same Sol/medium
+context with focused fake-clock and real-process acceptance.

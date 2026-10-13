@@ -1,0 +1,25 @@
+
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/delivery-client/test/managed-external-events.integration.test.ts
+   94:21  error  This assertion is unnecessary since it does not change the type of the expression   @typescript-eslint/no-unnecessary-type-assertion
+  106:26  error  Unsafe argument of type `any` assigned to a parameter of type `SubscriptionUpdate`  @typescript-eslint/no-unsafe-argument
+  116:26  error  Unsafe argument of type `any` assigned to a parameter of type `SubscriptionUpdate`  @typescript-eslint/no-unsafe-argument
+  134:21  error  This assertion is unnecessary since it does not change the type of the expression   @typescript-eslint/no-unnecessary-type-assertion
+  142:26  error  Unsafe argument of type `any` assigned to a parameter of type `SubscriptionUpdate`  @typescript-eslint/no-unsafe-argument
+  153:32  error  Unsafe member access .response on an `any` value                                    @typescript-eslint/no-unsafe-member-access
+  154:32  error  Unsafe member access .update on an `any` value                                      @typescript-eslint/no-unsafe-member-access
+
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/delivery-client/test/managed-remote-delivery-readiness.integration.test.ts
+  102:20  error  This assertion is unnecessary since it does not change the type of the expression   @typescript-eslint/no-unnecessary-type-assertion
+  107:27  error  Unsafe member access .response on an `any` value                                    @typescript-eslint/no-unsafe-member-access
+  108:27  error  Unsafe member access .update on an `any` value                                      @typescript-eslint/no-unsafe-member-access
+  113:25  error  Unsafe argument of type `any` assigned to a parameter of type `SubscriptionUpdate`  @typescript-eslint/no-unsafe-argument
+  149:25  error  Unsafe argument of type `any` assigned to a parameter of type `SubscriptionUpdate`  @typescript-eslint/no-unsafe-argument
+  185:20  error  This assertion is unnecessary since it does not change the type of the expression   @typescript-eslint/no-unnecessary-type-assertion
+  191:27  error  Unsafe member access .response on an `any` value                                    @typescript-eslint/no-unsafe-member-access
+  192:27  error  Unsafe member access .update on an `any` value                                      @typescript-eslint/no-unsafe-member-access
+  196:25  error  Unsafe argument of type `any` assigned to a parameter of type `SubscriptionUpdate`  @typescript-eslint/no-unsafe-argument
+  216:25  error  Unsafe argument of type `any` assigned to a parameter of type `SubscriptionUpdate`  @typescript-eslint/no-unsafe-argument
+  227:25  error  Unsafe argument of type `any` assigned to a parameter of type `SubscriptionUpdate`  @typescript-eslint/no-unsafe-argument
+
+✖ 18 problems (18 errors, 0 warnings)
+  4 errors and 0 warnings potentially fixable with the `--fix` option.

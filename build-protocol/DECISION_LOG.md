@@ -6105,3 +6105,47 @@ for unrelated network or Delivery teardown.
 This changes lifecycle behavior and adds configuration, not persistence or runtime
 scheduling contracts. The focused acceptance cases and profile evidence are in
 [the task architecture record](tasks/sql-delivery-reliability/ARCHITECTURE.md).
+
+## D-0131: Finite Managed Process Shutdown
+
+Date: 2026-10-14. Status: accepted targeted architecture clarification; implementation in progress.
+
+Managed shutdown must drain admitted Delivery and preserve final subscription
+updates, then cancel child subscriptions while their listeners remain reachable.
+Closing child listeners first causes cleanup failure. A two-phase private
+handoff fixes ordering but requires a finite bound even when a connected parent
+never releases the child. The existing one-second IPC acknowledgement grace
+cannot serve as a business-work deadline; the context deadline in D-0130 starts
+after Delivery detachment and remains independently scoped.
+
+Add optional ManagedServerApplicationOptions.shutdownTimeoutMs, default30000ms,
+validated as a positive safe integer no greater than2147483647. The first close
+starts one graceful deadline across all managed phases and cleanup retries.
+Do not extend it at phase transitions or duplicate close. Existing one-second
+acknowledgement and process-control graces remain separate; normal reaping can
+add at most3000ms and post-deadline TERM/KILL/reaping at most2000ms, concurrently
+across children. These values are unrelated to Delivery recovery or takeover.
+
+Stop new unary, Subscribe and Activate admission synchronously while keeping
+existing relays and Cancel usable. Drain actual admitted work, cancel relays,
+then release final child close. A pre-deadline relay-cleanup failure remains
+retryable with the same drained listeners and pending operations. Do not repeat
+completed phases or overlap raw cleanup. Private IPC conveys remaining budget;
+child deadlines can only move earlier. No legacy IPC fallback is required.
+
+Parent timeout closes its network independently of stuck reconciliation and
+terminates only recorded managed children. An independent actual-child watchdog
+also bounds a connected silent parent; it reports failure and exits nonzero
+after bounded force cleanup. Never terminate the embedding parent. Timeout or
+force remains a terminal failure for repeated close, even if process reaping
+succeeds. Attempt independent cleanup, observe late failures and preserve the
+initiating error. No successful drain or acknowledgement is fabricated.
+
+Forced termination may interrupt effects before Inbox acknowledgement. Entered
+SQL can still settle; there is no rollback, exactly-once guarantee or new
+persistence contract. Existing persistent unacknowledged Delivery remains
+subject to at-least-once recovery. No general Server/Delivery timeout API or
+new lifecycle subsystem is introduced. JVM orderly/force shutdown is a design
+guardrail, not proof of a matching Node IPC contract or timeout default.
+
+Implementation and acceptance: [managed shutdown analysis](tasks/sql-delivery-reliability/evidence/managed-shutdown-boundary.md).
