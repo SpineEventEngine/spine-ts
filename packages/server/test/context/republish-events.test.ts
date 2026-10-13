@@ -204,11 +204,77 @@ describe("known committed Event repair", () => {
     expect(seen).toEqual(["entered"]);
   });
 
-  it("cancels an entered exact-ID read without waiting for the storage query", async () => {
-    const entered = Promise.withResolvers<undefined>();
-    const release = Promise.withResolvers<undefined>();
-    class PausedReadFactory extends InMemoryStorageFactory {
-      pause = false;
+  it.each([false, true])(
+    "cancels an entered exact-ID read without waiting for the storage query (System read: %s)",
+    async (pauseSystem) => {
+      const entered = Promise.withResolvers<undefined>();
+      const release = Promise.withResolvers<undefined>();
+      class PausedReadFactory extends InMemoryStorageFactory {
+        pause = false;
+
+        protected override onCreateRecordStorage<I, R extends Message>(
+          context: StorageContext,
+          spec: RecordSpec<I, R>,
+          group?: StorageGroup,
+        ): RecordStorage<I, R> {
+          const storage = super.onCreateRecordStorage(context, spec, group);
+          if (!this.pause || (pauseSystem && group?.name !== "spine_system_events")) return storage;
+          return new Proxy(storage, {
+            get(target, property, receiver) {
+              if (property === "query")
+                return async (...args: Parameters<typeof target.query>) => {
+                  entered.resolve(undefined);
+                  await release.promise;
+                  return target.query(...args);
+                };
+              const value: unknown = Reflect.get(target, property, receiver);
+              if (typeof value === "function") {
+                const bound: unknown = value.bind(target);
+                return bound;
+              }
+              return value;
+            },
+          });
+        }
+      }
+      const factory = new PausedReadFactory();
+      const context = BoundedContext.singleTenant("ReadCancellation")
+        .withStorageFactory(factory)
+        .build();
+      const store = new EventStore({ name: "ReadCancellation", multitenant: false }, factory);
+      await store.append(committedEvent("paused-read"));
+      factory.pause = true;
+      const controller = new AbortController();
+      const repair = context.republishEvents({
+        eventIds: ["paused-read"],
+        signal: controller.signal,
+      });
+      await entered.promise;
+      controller.abort();
+      try {
+        await expect(
+          Promise.race([
+            repair,
+            new Promise((resolve) =>
+              setTimeout(() => {
+                resolve("timed-out");
+              }, 25),
+            ),
+          ]),
+        ).resolves.toEqual([{ eventId: "paused-read", status: "CANCELLED", attempts: 0 }]);
+      } finally {
+        release.resolve(undefined);
+        await context.close();
+      }
+    },
+  );
+
+  it("stops before the System read when cancellation follows the domain read", async () => {
+    const controller = new AbortController();
+    const releaseGrouped = Promise.withResolvers<undefined>();
+    let groupedReads = 0;
+    class AbortBetweenFamiliesFactory extends InMemoryStorageFactory {
+      intercept = false;
 
       protected override onCreateRecordStorage<I, R extends Message>(
         context: StorageContext,
@@ -216,14 +282,26 @@ describe("known committed Event repair", () => {
         group?: StorageGroup,
       ): RecordStorage<I, R> {
         const storage = super.onCreateRecordStorage(context, spec, group);
-        if (!this.pause) return storage;
+        if (!this.intercept) return storage;
         return new Proxy(storage, {
           get(target, property, receiver) {
             if (property === "query")
               return async (...args: Parameters<typeof target.query>) => {
-                entered.resolve(undefined);
-                await release.promise;
-                return target.query(...args);
+                if (group?.name === "spine_system_events") {
+                  groupedReads += 1;
+                  await releaseGrouped.promise;
+                }
+                const records = await target.query(...args);
+                // Let the first read win its race before aborting its caller continuation.
+                if (group === undefined)
+                  queueMicrotask(() => {
+                    queueMicrotask(() => {
+                      queueMicrotask(() => {
+                        controller.abort();
+                      });
+                    });
+                  });
+                return records;
               };
             const value: unknown = Reflect.get(target, property, receiver);
             if (typeof value === "function") {
@@ -235,21 +313,24 @@ describe("known committed Event repair", () => {
         });
       }
     }
-    const factory = new PausedReadFactory();
-    const context = BoundedContext.singleTenant("ReadCancellation")
+    const factory = new AbortBetweenFamiliesFactory();
+    const dispatch = vi.fn(() => Promise.resolve());
+    const context = BoundedContext.singleTenant("BetweenFamilyCancellation")
       .withStorageFactory(factory)
+      .addEventDispatcher({ messageSchemas: () => [TaskCreatedSchema], dispatch })
       .build();
-    const store = new EventStore({ name: "ReadCancellation", multitenant: false }, factory);
-    await store.append(committedEvent("paused-read"));
-    factory.pause = true;
-    const controller = new AbortController();
-    const repair = context.republishEvents({
-      eventIds: ["paused-read"],
-      signal: controller.signal,
-    });
-    await entered.promise;
-    controller.abort();
+    const store = new EventStore(
+      { name: "BetweenFamilyCancellation", multitenant: false },
+      factory,
+    );
+    await store.append(committedEvent("between-family-read"));
+    factory.intercept = true;
+
     try {
+      const repair = context.republishEvents({
+        eventIds: ["between-family-read"],
+        signal: controller.signal,
+      });
       await expect(
         Promise.race([
           repair,
@@ -259,9 +340,11 @@ describe("known committed Event repair", () => {
             }, 25),
           ),
         ]),
-      ).resolves.toEqual([{ eventId: "paused-read", status: "CANCELLED", attempts: 0 }]);
+      ).resolves.toEqual([{ eventId: "between-family-read", status: "CANCELLED", attempts: 0 }]);
+      expect(groupedReads).toBe(0);
+      expect(dispatch).not.toHaveBeenCalled();
     } finally {
-      release.resolve(undefined);
+      releaseGrouped.resolve(undefined);
       await context.close();
     }
   });

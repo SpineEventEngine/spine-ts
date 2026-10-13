@@ -1,0 +1,50 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------xx------------------------------------------------------------------------------------------------------------------------
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > keeps System Event publication separate from domain repair when persistence is false
+AssertionError: expected [ { …(4) } ] to have a length of +0 but got 1
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ packages/server/test/repository/repository-routing.test.ts:9093:23
+    9091|         expect(RoutingProcessManager.commandCalls).toBe(1);
+    9092|         const saved = await systemStore.read();
+    9093|         expect(saved).toHaveLength(persist ? 1 : 0);
+       |                       ^
+    9094|         if (persist) {
+    9095|           expect(saved[0]).toEqual(received[0]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > keeps System Event publication separate from domain repair when persistence is true
+AssertionError: expected [ { …(4) }, { …(4) }, { …(4) }, …(1) ] to have a length of 1 but got 4
+
+- Expected
++ Received
+
+- 1
++ 4
+
+ ❯ packages/server/test/repository/repository-routing.test.ts:9093:23
+    9091|         expect(RoutingProcessManager.commandCalls).toBe(1);
+    9092|         const saved = await systemStore.read();
+    9093|         expect(saved).toHaveLength(persist ? 1 : 0);
+       |                       ^
+    9094|         if (persist) {
+    9095|           expect(saved[0]).toEqual(received[0]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 328 skipped (330)
+   Start at  22:40:46
+   Duration  1.03s (transform 630ms, setup 0ms, import 889ms, tests 34ms, environment 0ms)

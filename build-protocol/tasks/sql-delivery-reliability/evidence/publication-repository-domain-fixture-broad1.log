@@ -1,0 +1,32 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/server/test/repository/repository-routing.test.ts (333 tests | 1 failed) 11472ms
+     × does not commit a state subscriber that returns a concrete value 231ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > Projection state-update routing > does not commit a state subscriber that returns a concrete value
+AssertionError: expected 17 to be 10 // Object.is equality
+
+- Expected
++ Received
+
+- 10
++ 17
+
+ ❯ packages/server/test/repository/repository-routing.test.ts:16268:56
+    16266|     try {
+    16267|       await boundedContextAccess.postSystemEvent(context, createStateC…
+    16268|       expect(StateObservingProjection.subscriberCalls).toBe(10);
+       |                                                        ^
+    16269|       await expect(storage.readCurrent("target")).resolves.toBeUndefin…
+    16270|       await expect(storage.readStates("target")).resolves.toEqual([]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 332 passed (333)
+   Start at  22:58:16
+   Duration  12.47s (transform 634ms, setup 0ms, import 892ms, tests 11.47s, environment 0ms)

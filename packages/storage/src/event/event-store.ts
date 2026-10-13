@@ -22,6 +22,7 @@ import { ColumnTypes } from "../record/column-type.js";
 import type { RecordQuery } from "../record/record-query.js";
 import { RecordSpec } from "../record/record-spec.js";
 import type { RecordStorage } from "../record/record-storage.js";
+import type { StorageGroup } from "../record/storage-group.js";
 import type { StorageContext } from "../storage/storage.js";
 import type { StorageFactory } from "../storage/storage-factory.js";
 import { TenantBoundary } from "../internal/tenancy.js";
@@ -46,6 +47,11 @@ export class EventStore {
   readonly #factory: StorageFactory;
 
   /**
+   * Optional record family selector independent of the diagnostic context name.
+   */
+  readonly #group: StorageGroup | undefined;
+
+  /**
    * Whether this Event Store accepts operations.
    */
   #open = true;
@@ -55,10 +61,12 @@ export class EventStore {
    *
    * @param context Specifies the storage context.
    * @param factory Creates the backing record storage.
+   * @param group Selects a separate Event record family when supplied.
    */
-  constructor(context: EventStoreContext, factory: StorageFactory) {
+  constructor(context: EventStoreContext, factory: StorageFactory, group?: StorageGroup) {
     this.#context = EventContexts.base(context);
     this.#factory = factory;
+    this.#group = group;
   }
 
   /**
@@ -149,6 +157,7 @@ export class EventStore {
     const storage = this.#factory.createRecordStorage(
       EventContexts.snapshot(this.#context),
       eventStoreRecordSpec,
+      this.#group,
     );
     try {
       return await storage.query(query);
@@ -169,7 +178,7 @@ export class EventStore {
     const ids = records.map((record) => EventIds.require(record));
     EventIds.rejectDuplicates(ids);
 
-    const storage = this.#factory.createRecordStorage(context, eventStoreRecordSpec);
+    const storage = this.#factory.createRecordStorage(context, eventStoreRecordSpec, this.#group);
     try {
       await EventIds.insertUnique(storage, records);
     } finally {
@@ -187,7 +196,7 @@ export class EventStore {
   private async appendImmutable(records: readonly Event[], context: StorageContext): Promise<void> {
     this.requireOpen();
     EventIds.rejectDuplicates(records.map((record) => EventIds.require(record)));
-    const storage = this.#factory.createRecordStorage(context, eventStoreRecordSpec);
+    const storage = this.#factory.createRecordStorage(context, eventStoreRecordSpec, this.#group);
     try {
       await EventIds.insertImmutable(storage, records);
     } finally {
@@ -206,7 +215,7 @@ export class EventStore {
     this.requireOpen();
     EventIds.rejectDuplicates(ids);
 
-    const storage = this.#factory.createRecordStorage(context, eventStoreRecordSpec);
+    const storage = this.#factory.createRecordStorage(context, eventStoreRecordSpec, this.#group);
     try {
       await EventIds.rejectStored(storage, ids);
     } finally {

@@ -18,7 +18,14 @@ import type { MysqlResolvedTable } from "./table-spec.js";
  * Resolves stable MySQL-safe table names for record families.
  */
 export class MysqlTableResolver {
+  /**
+   * Explicit names keyed by physical record family.
+   */
   readonly #names = new Map<string, string>();
+
+  /**
+   * Table names already resolved for a family.
+   */
   readonly #resolved = new Map<string, string>();
 
   /**
@@ -60,8 +67,7 @@ export class MysqlTableResolver {
     const registered =
       group === undefined
         ? this.#names.get(`record:${sourceType}`)
-        : (this.#names.get(`group:${sourceType}:${recordType ?? ""}`) ??
-          this.#names.get(`record:${recordType ?? ""}`));
+        : this.#names.get(`group:${sourceType}:${recordType ?? ""}`);
     const readable =
       name ??
       registered ??
@@ -74,15 +80,11 @@ export class MysqlTableResolver {
       throw new Error(`MySQL table name is invalid: ${readable}`);
     }
     const identity =
-      group === undefined && this.#names.get(`record:${sourceType}`) !== undefined
-        ? `record:${sourceType}`
-        : group !== undefined &&
-            this.#names.get(`group:${sourceType}:${recordType ?? ""}`) === undefined &&
-            this.#names.get(`record:${recordType ?? ""}`) !== undefined
-          ? `record:${recordType ?? sourceType}`
-          : group === undefined
-            ? sourceType
-            : `${sourceType}\u0000${recordType ?? sourceType}\u0000${group}`;
+      group !== undefined
+        ? `group:${sourceType}:${recordType ?? ""}:${group}`
+        : this.#names.get(`record:${sourceType}`) !== undefined
+          ? `record:${sourceType}`
+          : sourceType;
     const previous = this.#resolved.get(readable);
     if (previous !== undefined && previous !== identity)
       throw new Error(`MySQL table name collides: ${readable}`);
@@ -91,6 +93,13 @@ export class MysqlTableResolver {
       tableName: readable,
     });
   }
+
+  /**
+   * Registers a validated explicit name without aliasing another family.
+   *
+   * @param identity Physical record-family key.
+   * @param name Explicit MySQL table name.
+   */
   private set(identity: string, name: string): void {
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) || Buffer.byteLength(name) > 64)
       throw new Error(`MySQL table name is invalid: ${name}`);

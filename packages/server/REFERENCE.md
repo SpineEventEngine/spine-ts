@@ -933,19 +933,40 @@ settle later; the timeout does not roll them back or bound separate server
 network and Delivery teardown.
 
 `BoundedContext.republishEvents({eventIds, tenantId?, signal?})` re-admits at
-most 100 exact known committed Event IDs in order to current recipients. The
-caller must know the corresponding Entity save completed; an Event row alone
-cannot prove it because Entity records are written independently. Outcomes
-distinguish admission, missing IDs, failure, and cancellation. Admission does
+most 100 exact known committed Event IDs in order to current recipients. For
+domain Events, the caller must know the corresponding Entity save completed;
+an Event row alone cannot prove it because Entity records are written
+independently. Outcomes distinguish admission, missing IDs, failure, and cancellation. Admission does
 not guarantee recipient completion, and a recipient may run more than once.
+Each known-ID repair makes up to three actual bus dispatch attempts using the
+unchanged stored Event envelope and ID, with 100 milliseconds between failed
+attempts unless caller cancellation or terminal context closure stops them.
+The reported attempt count does not prove recipient completion; partial
+recipient effects may repeat.
+Persisted System Events use a separate fixed storage group; the context name
+does not select that group. Repair reads both
+domain and System groups by exact ID and dispatches through the matching bus.
+If the same ID exists in both groups, repair reports failure without dispatch.
+An Event never saved because System persistence was disabled cannot be repaired
+after it is forgotten; a new forgetting-mode context can still repair a System
+Event previously saved in that group.
 For normal Events from completed Entity saves, the internal publisher makes up
-to three actual dispatch attempts with the same captured envelope and Event ID.
+to three actual dispatch attempts with the same captured envelope and Event ID,
+waiting 100 milliseconds between failed attempts unless caller cancellation or
+terminal context closure stops them.
+This also applies to saved Process Manager outputs and reactor follow-up Events.
 It reports exhaustion internally without rerunning the successful Command
 handler; Command acceptance does not promise publication or recipient
 completion. Earlier recipient effects can repeat on a later attempt, and an
 exhausted saved Event remains eligible for explicit known-ID repair. This
 finite retry does not change the independent typed rejection-event posting
 behavior described above.
+System publication uses finite delayed recipient retries in both persistence
+modes. With persistence enabled, it validates the registered System schema and
+idempotently appends the captured envelope before dispatch. Transient append
+or dispatch failures share the three-attempt budget and 100-millisecond delay;
+exhaustion is reported internally with the original Event ID. A failed append
+leaves no repairable Event unless an earlier attempt stored it.
 
 `Environment` resolves the Node `local` or `production` profile once from
 `NODE_ENV`. `ServerEnvironment` resolves configured facilities once for that

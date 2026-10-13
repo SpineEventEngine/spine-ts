@@ -1,0 +1,14 @@
+
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/src/context/bounded-context.ts
+  1365:11  error  Unnecessary conditional, value is always falsy  @typescript-eslint/no-unnecessary-condition
+  1365:29  error  Unnecessary conditional, value is always falsy  @typescript-eslint/no-unnecessary-condition
+
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/test/context/republish-events.test.ts
+  298:21  error  Returning a void expression from an arrow function shorthand is forbidden. Please add braces to the arrow function  @typescript-eslint/no-confusing-void-expression
+  298:42  error  Returning a void expression from an arrow function shorthand is forbidden. Please add braces to the arrow function  @typescript-eslint/no-confusing-void-expression
+  298:63  error  Returning a void expression from an arrow function shorthand is forbidden. Please add braces to the arrow function  @typescript-eslint/no-confusing-void-expression
+  303:13  error  Unsafe return of a value of type `any`                                                                              @typescript-eslint/no-unsafe-return
+  329:53  error  Returning a void expression from an arrow function shorthand is forbidden. Please add braces to the arrow function  @typescript-eslint/no-confusing-void-expression
+
+✖ 7 problems (7 errors, 0 warnings)
+  4 errors and 0 warnings potentially fixable with the `--fix` option.

@@ -1,0 +1,24 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------x---------------------------------------------------------------------------------------------------------------------------------------------
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > does not commit a Process Manager Command state when its produced Event append fails
+Error: Timed out waiting for produced Process Manager Event append failure.
+ ❯ Timeout.<anonymous> packages/server/test/repository/repository-routing.test.ts:14673:14
+    14671|   const timer = new Promise<never>((_, reject) => {
+    14672|     timeout = setTimeout(() => {
+    14673|       reject(new Error(`Timed out waiting for ${label}.`));
+       |              ^
+    14674|     }, 1_000);
+    14675|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 323 skipped (324)
+   Start at  22:34:51
+   Duration  2.04s (transform 638ms, setup 0ms, import 892ms, tests 1.04s, environment 0ms)

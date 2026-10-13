@@ -55,6 +55,7 @@ const eventSchemaLists = new WeakMap<EventBus, () => readonly MessageSchema[]>()
 const eventSchemaRegistrars = new WeakMap<EventBus, (schemas: Iterable<MessageSchema>) => void>();
 const dispatcherUnregistrars = new WeakMap<EventBus, (dispatcher: EventDispatcher) => void>();
 const eventSchemaFinders = new WeakMap<EventBus, (typeUrl: string) => MessageSchema | undefined>();
+const storedEventValidators = new WeakMap<EventBus, (event: Event) => void>();
 const eventBusCloseStarters = new WeakMap<EventBus, () => void>();
 const eventBusDrainers = new WeakMap<EventBus, () => Promise<void>>();
 const eventBusCloseFinishers = new WeakMap<EventBus, () => Promise<void>>();
@@ -103,6 +104,13 @@ interface EventBusAccess {
    * @returns Completion after recipient dispatch.
    */
   postStored(eventBus: EventBus, event: Event, signal?: AbortSignal): Promise<void>;
+
+  /**
+   * Validates a captured Event against its registered bus role before storage.
+   * @param eventBus Target domain or System bus.
+   * @param event Captured Event envelope.
+   */
+  validateStored(eventBus: EventBus, event: Event): void;
 
   /**
    * Queues an already-stored Event as a trusted follow-up.
@@ -275,6 +283,20 @@ export class EventBus {
       this.#registry.unregister(dispatcher);
     });
     eventSchemaFinders.set(this, (typeUrl) => this.#registry.schema(typeUrl));
+    storedEventValidators.set(this, (event) => {
+      this.#validateStoredEvent(event);
+    });
+    this.#registerCloseHooks();
+
+    for (const dispatcher of dispatchers) {
+      this.register(dispatcher);
+    }
+  }
+
+  /**
+   * Registers lifecycle callbacks for the package-internal bus access seam.
+   */
+  #registerCloseHooks(): void {
     eventBusCloseStarters.set(this, () => {
       this.#beginClose();
     });
@@ -287,10 +309,6 @@ export class EventBus {
       this.#terminalClose();
     });
     eventBusWorkCounters.set(this, () => this.#acceptedWorkCount);
-
-    for (const dispatcher of dispatchers) {
-      this.register(dispatcher);
-    }
   }
 
   /**
@@ -516,6 +534,18 @@ export class EventBus {
     }
 
     Validate.check(schema, message);
+  }
+
+  /**
+   * Validates an Event before independent persistence or stored dispatch.
+   *
+   * @param event Captured Event envelope.
+   */
+  #validateStoredEvent(event: Event): void {
+    const typeUrl = event.message?.typeUrl;
+    if (typeUrl === undefined || typeUrl === "")
+      throw new Error("EventBus requires event.message.typeUrl.");
+    this.#validate(event, typeUrl);
   }
 
   /**
@@ -792,6 +822,13 @@ export const eventBusAccess: EventBusAccess = Object.freeze({
     }
 
     return postStored(event, signal);
+  },
+
+  validateStored(eventBus: EventBus, event: Event): void {
+    const validate = storedEventValidators.get(eventBus);
+    if (validate === undefined)
+      throw new TypeError("Stored event validation requires an EventBus instance.");
+    validate(event);
   },
 
   postStoredFollowUp(eventBus: EventBus, event: Event, signal?: AbortSignal): Promise<void> {

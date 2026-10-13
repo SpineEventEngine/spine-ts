@@ -1,0 +1,12 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+·································································································································································································stderr | packages/server/test/repository/repository-routing.test.ts > repository signal routing > validates and preserves the complete custom Event target plan
+{"severity":"WARN","timestamp":"2026-10-13T22:01:55.550Z","message":"Routing repository_routing.ProjectCreated to 1001 recipients in repository repository_routing.ProjectState.","operation":"repository.route","count":1001,"entityType":"repository_routing.ProjectState"}
+
+·················································································································································································································
+
+ Test Files  5 passed (5)
+      Tests  402 passed (402)
+   Start at  23:01:52
+   Duration  12.19s (transform 1.96s, setup 0ms, import 2.74s, tests 12.04s, environment 0ms)

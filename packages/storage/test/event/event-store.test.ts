@@ -42,13 +42,35 @@ import {
   InMemoryStorageBackend,
   InMemoryStorageFactory,
   RecordStorage,
+  StorageGroup,
   type RecordSpec,
   type StorageContext,
-  type StorageGroup,
 } from "../../src/index.js";
 import { InMemoryRecordStorage } from "../../src/memory/in-memory-record-storage.js";
 
 describe("EventStore", () => {
+  it("keeps a grouped Event family separate across reads and strict admission", async () => {
+    const factory = new InMemoryStorageFactory();
+    const context = { name: "Tasks", multitenant: false } as const;
+    const domain = new EventStore(context, factory);
+    const system = new EventStore(context, factory, new StorageGroup("spine_system_events"));
+    const event = createEvent("shared-event-id", "created", 1n);
+
+    await domain.append(event);
+    await system.append(event);
+    expect(await domain.read()).toEqual([event]);
+    expect(await system.read()).toEqual([event]);
+    await expect(domain.accept(event)).rejects.toThrow();
+    await expect(system.accept(event)).rejects.toThrow();
+
+    const groupedOnly = createEvent("grouped-only", "renamed", 2n);
+    await system.append(groupedOnly);
+    const groupedId = groupedOnly.id;
+    if (groupedId === undefined) throw new Error("Expected a generated Event ID.");
+    expect(await domain.read({ ids: [groupedId] })).toEqual([]);
+    expect(await system.read({ ids: [groupedId] })).toEqual([groupedOnly]);
+  });
+
   it("persists generated Spine events through record storage", async () => {
     const factory = new InMemoryStorageFactory();
     const store = new EventStore({ name: "Tasks", multitenant: false }, factory);

@@ -1,0 +1,46 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/storage-mysql/test/mysql-table-spec.test.ts (12 tests | 2 failed | 10 skipped) 5ms
+     × separates grouped records from ungrouped names and permits explicit grouped names 4ms
+     × does not alias grouped Events through an ungrouped Event table override 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/storage-mysql/test/mysql-table-spec.test.ts > MysqlTableResolver > separates grouped records from ungrouped names and permits explicit grouped names
+AssertionError: expected 'all_records' to be 'history_Record' // Object.is equality
+
+Expected: "history_Record"
+Received: "all_records"
+
+ ❯ packages/storage-mysql/test/mysql-table-spec.test.ts:49:7
+     47|     expect(
+     48|       resolver.resolve("example.Other", "history", undefined, "example…
+     49|     ).toBe("history_Record");
+       |       ^
+     50|     expect(
+     51|       resolver.resolve("example.Source", "history", "explicit", "examp…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  packages/storage-mysql/test/mysql-table-spec.test.ts > MysqlTableResolver > does not alias grouped Events through an ungrouped Event table override
+AssertionError: expected 'domain_events' to be 'spine_system_events_Event' // Object.is equality
+
+Expected: "spine_system_events_Event"
+Received: "domain_events"
+
+ ❯ packages/storage-mysql/test/mysql-table-spec.test.ts:63:7
+     61|       resolver.resolve("example.Event", "spine_system_events", undefin…
+     62|         .tableName,
+     63|     ).toBe("spine_system_events_Event");
+       |       ^
+     64|   });
+     65|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 10 skipped (12)
+   Start at  22:52:28
+   Duration  384ms (transform 177ms, setup 0ms, import 276ms, tests 5ms, environment 0ms)

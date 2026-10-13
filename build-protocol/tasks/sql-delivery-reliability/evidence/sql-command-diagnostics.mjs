@@ -31,7 +31,7 @@ async function load(path) {
   return import(pathToFileURL(absolute).href);
 }
 const require = createRequire(resolve(root, "packages/server/package.json"));
-const { create, toBinary } = require("@bufbuild/protobuf");
+const { clone, create, toBinary } = require("@bufbuild/protobuf");
 const { createClient } = require("@connectrpc/connect");
 const { createGrpcTransport } = require("@connectrpc/connect-node");
 const { BoundedContext, Server, ServerEnvironment, EnvironmentType } = await load(
@@ -143,8 +143,12 @@ async function verify(record) {
       ),
     });
     const ack = await client.post(command, { timeoutMs: 5000 });
+    assert.equal(AnyMessages.unpack(ack.messageId, CommandIdSchema).uuid, commandId);
     assert.equal(dispatchCalls, 1);
-    assert.ok(internalFailure instanceof Error);
+    assert.ok(
+      internalFailure instanceof
+        (adapters.PostgresStorageOperationError ?? adapters.MysqlStorageOperationError),
+    );
     assert.ok(internalFailure.cause instanceof Error);
     const code = pg ? "42703" : "ER_BAD_FIELD_ERROR";
     assert.equal(internalFailure.cause.code, code);
@@ -166,8 +170,43 @@ async function verify(record) {
     assert.equal(matching[0].facts.contextName, contextName);
     assert.equal(matching[0].message, "Command post failed.");
     assert.equal(JSON.stringify(matching).includes(record.urls.spine_test), false);
+    const malformed = clone(CommandSchema, command);
+    malformed.id.uuid = `malformed-${suffix}`;
+    malformed.message.value = new Uint8Array([0x0a, 0x80]);
+    const validationAck = await client.post(malformed, { timeoutMs: 5000 });
+    assert.equal(dispatchCalls, 1, "Malformed payload must not enter the dispatcher.");
+    assert.equal(
+      AnyMessages.unpack(validationAck.messageId, CommandIdSchema).uuid,
+      malformed.id.uuid,
+    );
+    assert.equal(validationAck.status?.status.case, "error");
+    assert.equal(validationAck.status.status.value.message, "Command payload validation failed.");
+    assert.equal(
+      diagnostics.filter(({ facts }) => facts.commandId === malformed.id.uuid).length,
+      0,
+    );
     process.stdout.write(
-      `${JSON.stringify({ provider: record.name, version: record.serverVersion, pid: process.pid, port: running.port, commandId, dispatchCalls, originalCauseType: internalFailure.cause.name, originalDriverCode: code, diagnostic: matching[0], publicSafeError: ack.status.status.value.message, fault: "prepared-record-required-column-removed", status: "PASS" })}\n`,
+      `${JSON.stringify({
+        provider: record.name,
+        version: record.serverVersion,
+        pid: process.pid,
+        port: running.port,
+        commandId,
+        dispatchCalls,
+        malformedPayload: {
+          commandId: malformed.id.uuid,
+          handlerCalls: 0,
+          infrastructureDiagnostics: 0,
+          publicMessage: validationAck.status.status.value.message,
+        },
+        providerErrorClass: internalFailure.constructor.name,
+        originalCauseType: internalFailure.cause.name,
+        originalDriverCode: code,
+        diagnostic: matching[0],
+        publicSafeError: ack.status.status.value.message,
+        fault: "prepared-record-required-column-removed",
+        status: "PASS",
+      })}\n`,
     );
   } finally {
     try {

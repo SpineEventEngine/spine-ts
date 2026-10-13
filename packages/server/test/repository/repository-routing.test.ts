@@ -13,7 +13,7 @@
  */
 
 import { Time } from "@spine-event-engine/core/time";
-import { clone, create, type Message } from "@bufbuild/protobuf";
+import { clone, create, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import {
   type Any,
@@ -81,6 +81,7 @@ import {
   ColumnTypes,
   RecordColumn,
   RecordStorage,
+  StorageGroup,
   type NormalizedQueryPlan,
   type RecordSpec,
   type StorageContext,
@@ -1469,15 +1470,18 @@ class AccumulatingTaskProjection extends Projection<string, typeof ProjectOvervi
 
 class StateObservingProjection extends Projection<string, typeof ProjectOverviewStateSchema> {
   static subscriberCalls = 0;
+  static receivedIds: string[] = [];
   static result: unknown = undefined;
 
   static reset(): void {
     this.subscriberCalls = 0;
+    this.receivedIds = [];
     this.result = undefined;
   }
 
   subscribeState(state: ProjectState): unknown {
     StateObservingProjection.subscriberCalls++;
+    StateObservingProjection.receivedIds.push(state.id);
     this.update((draft) => {
       draft.name = `${state.name} (projected)`;
       draft.priority = state.archived ? 2 : 1;
@@ -3936,6 +3940,47 @@ describe("repository signal routing", () => {
     expect(observed[0]).toMatch(/.+/);
   });
 
+  it("repairs an Aggregate reactor output after stored publication exhaustion", async () => {
+    ProjectRegistrationReactorAggregate.reset();
+    const factory = new InMemoryStorageFactory();
+    const received: Uint8Array[] = [];
+    let available = false;
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createGeneratedReactorRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [ProjectRegisteredSchema],
+        dispatch: (event) => {
+          received.push(toBinary(EventSchema, event));
+          if (!available) throw new Error("reactor recipient unavailable");
+          return Promise.resolve();
+        },
+      })
+      .withStorageFactory(factory)
+      .build();
+    const store = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+    await context.eventBus().post(createProjectCreated("reactor-source-fault", "reactor-fault"));
+    await waitForCondition(() => received.length === 3);
+    const saved = await store.read();
+    const produced = saved.find(
+      (event) => event.message?.typeUrl === TypeUrls.derive(ProjectRegisteredSchema),
+    );
+    if (produced?.id?.value === undefined) throw new Error("Expected the reactor Event ID.");
+    expect(ProjectRegistrationReactorAggregate.argumentCounts).toEqual([2]);
+    await expect(context.stand().read(ProjectStateSchema, "reactor-fault")).resolves.toMatchObject({
+      id: "reactor-fault",
+    });
+
+    available = true;
+    await expect(context.republishEvents({ eventIds: [produced.id.value] })).resolves.toMatchObject(
+      [{ eventId: produced.id.value, status: "ADMITTED" }],
+    );
+    expect(received).toHaveLength(4);
+    for (const bytes of received) expect(bytes).toEqual(received[0]);
+    expect(ProjectRegistrationReactorAggregate.argumentCounts).toEqual([2]);
+    expect(await store.read()).toEqual(saved);
+  });
+
   it("retries a failed state-only Aggregate reaction without exposing or duplicating state", async () => {
     const factory = new FailingSourceDiagnosticStorageFactory();
     const repository = createCountingReactorRepository();
@@ -4342,6 +4387,10 @@ describe("repository signal routing", () => {
     const factory = new InMemoryStorageFactory();
     const context = BoundedContext.singleTenant("Tasks")
       .add(createProcessManagerAssignRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [ProjectCreatedSchema],
+        dispatch: () => Promise.resolve(),
+      })
       .withStorageFactory(factory)
       .build();
     const storage = new CurrentRecordTestStorage({
@@ -7910,6 +7959,69 @@ describe("repository signal routing", () => {
     expect("storedEventDispatchFailures" in context).toBe(false);
   });
 
+  it("does not commit a Process Manager Command state when its produced Event append fails", async () => {
+    RoutingProcessManager.reset();
+    const factory = new FailingProcessManagerProducedEventFactory(
+      TypeUrls.derive(ProjectCreatedSchema),
+    );
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerAssignRepository())
+      .withStorageFactory(factory)
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+    await expect(
+      context.commandBus().post(createAggregateCommand("command-pm-fault", "pm-fault")),
+    ).rejects.toThrow("forced produced Event append failure");
+    await withTimeout(factory.failed, "produced Process Manager Event append failure");
+
+    expect(RoutingProcessManager.commandCalls).toBe(1);
+    await expect(
+      context.stand().read(ProjectQueueStateSchema, "pm-fault"),
+    ).resolves.toBeUndefined();
+    expect(await eventStore.read()).toEqual([]);
+  });
+
+  it("repairs a completed Process Manager Command output by its original Event ID", async () => {
+    RoutingProcessManager.reset();
+    const factory = new InMemoryStorageFactory();
+    const received: Uint8Array[] = [];
+    let available = false;
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerAssignRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [ProjectCreatedSchema],
+        dispatch: (event) => {
+          received.push(toBinary(EventSchema, event));
+          if (!available) throw new Error("recipient unavailable");
+          return Promise.resolve();
+        },
+      })
+      .withStorageFactory(factory)
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+    await context.commandBus().post(createAggregateCommand("command-pm-repair", "pm-repair"));
+    await waitForCondition(() => received.length === 3);
+    const [stored] = await eventStore.read();
+    if (stored?.id?.value === undefined) throw new Error("Expected the produced Event ID.");
+    expect(RoutingProcessManager.commandCalls).toBe(1);
+    await expect(context.stand().read(ProjectQueueStateSchema, "pm-repair")).resolves.toMatchObject(
+      {
+        id: "pm-repair",
+      },
+    );
+
+    available = true;
+    await expect(context.republishEvents({ eventIds: [stored.id.value] })).resolves.toMatchObject([
+      { eventId: stored.id.value, status: "ADMITTED" },
+    ]);
+    expect(received).toHaveLength(4);
+    for (const bytes of received) expect(bytes).toEqual(received[0]);
+    expect(RoutingProcessManager.commandCalls).toBe(1);
+    expect(await eventStore.read()).toEqual([stored]);
+  });
+
   it("copies the full pre-dispatch Process Manager Version to produced Events", async () => {
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
@@ -8960,6 +9072,234 @@ describe("repository signal routing", () => {
     }
   });
 
+  it.each([false, true])(
+    "keeps System Event publication separate from domain repair when persistence is %s",
+    async (persist) => {
+      RoutingProcessManager.reset();
+      const factory = new InMemoryStorageFactory();
+      const received: SpineEvent[] = [];
+      let available = false;
+      let builder = BoundedContext.singleTenant("Tasks")
+        .add(createProcessManagerAssignRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [CommandDispatchedToHandlerSchema],
+          dispatch: (event) => {
+            received.push(event);
+            if (!available) throw new Error("System diagnostic recipient unavailable");
+            return Promise.resolve();
+          },
+        })
+        .withStorageFactory(factory);
+      if (persist) builder = builder.persistSystemEvents();
+      const context = builder.build();
+      const systemStore = new EventStore(
+        { name: "Tasks_System", multitenant: false },
+        factory,
+        new StorageGroup("spine_system_events"),
+      );
+      const domainStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+      try {
+        await context
+          .commandBus()
+          .post(createAggregateCommand("command-system-fault", "pm-system-fault"));
+        await waitForCondition(() => received.length === 3);
+        expect(received).toHaveLength(3);
+        const first = received[0];
+        if (first === undefined) throw new Error("Expected a dispatched System Event.");
+        for (const event of received)
+          expect(toBinary(EventSchema, event)).toEqual(toBinary(EventSchema, first));
+        expect(RoutingProcessManager.commandCalls).toBe(1);
+        const saved = await systemStore.read();
+        const systemId = received[0]?.id?.value;
+        if (systemId === undefined) throw new Error("Expected a dispatched System Event ID.");
+        const matched = saved.filter((event) => event.id?.value === systemId);
+        expect(matched).toHaveLength(persist ? 1 : 0);
+        expect(
+          await domainStore.read({ ids: [create(EventIdSchema, { value: systemId })] }),
+        ).toEqual([]);
+        if (persist) {
+          expect(matched[0]).toEqual(received[0]);
+          available = true;
+          await expect(context.republishEvents({ eventIds: [systemId] })).resolves.toMatchObject([
+            { eventId: systemId, status: "ADMITTED" },
+          ]);
+          const domain = (await domainStore.read())[0];
+          const domainId = domain?.id?.value;
+          if (domainId === undefined) throw new Error("Expected a stored domain Event ID.");
+          await expect(
+            context.republishEvents({ eventIds: [systemId, domainId] }),
+          ).resolves.toMatchObject([
+            { eventId: systemId, status: "ADMITTED" },
+            { eventId: domainId, status: "ADMITTED" },
+          ]);
+          const callsBeforeCollision = received.length;
+          await domainStore.append(createProjectCreated(systemId, "collision-target"));
+          await expect(context.republishEvents({ eventIds: [systemId] })).resolves.toMatchObject([
+            { eventId: systemId, status: "FAILED", attempts: 0 },
+          ]);
+          expect(received).toHaveLength(callsBeforeCollision);
+        }
+        expect(RoutingProcessManager.commandCalls).toBe(1);
+      } finally {
+        await context.close();
+      }
+    },
+  );
+
+  it("repairs a persisted System Event from a fresh forgetting context without rerunning its Command", async () => {
+    RoutingProcessManager.reset();
+    const factory = new InMemoryStorageFactory();
+    const first = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerAssignRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [CommandDispatchedToHandlerSchema],
+        dispatch: () => Promise.resolve(),
+      })
+      .withStorageFactory(factory)
+      .persistSystemEvents()
+      .build();
+    const stored = new EventStore(
+      { name: "Tasks_System", multitenant: false },
+      factory,
+      new StorageGroup("spine_system_events"),
+    );
+    let systemId: string;
+    try {
+      await first.commandBus().post(createAggregateCommand("command-system-restart", "pm-restart"));
+      const saved = (await stored.read()).find(
+        (event) => event.message?.typeUrl === TypeUrls.derive(CommandDispatchedToHandlerSchema),
+      );
+      if (saved?.id?.value === undefined) throw new Error("Expected a saved System Event ID.");
+      systemId = saved.id.value;
+    } finally {
+      await first.close();
+    }
+
+    const replayed: SpineEvent[] = [];
+    const second = BoundedContext.singleTenant("Tasks")
+      .addEventDispatcher({
+        messageSchemas: () => [CommandDispatchedToHandlerSchema],
+        dispatch: (event) => {
+          replayed.push(event);
+          return Promise.resolve();
+        },
+      })
+      .withStorageFactory(factory)
+      .build();
+    try {
+      await expect(second.republishEvents({ eventIds: [systemId] })).resolves.toMatchObject([
+        { eventId: systemId, status: "ADMITTED" },
+      ]);
+      expect(replayed).toHaveLength(1);
+      expect(replayed[0]?.id?.value).toBe(systemId);
+      expect(RoutingProcessManager.commandCalls).toBe(1);
+      expect(await stored.read()).not.toHaveLength(0);
+    } finally {
+      await second.close();
+      stored.close();
+    }
+  });
+
+  it("does not append a domain Event passed to persisted System publication", async () => {
+    const factory = new InMemoryStorageFactory();
+    const received: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .addEventDispatcher({
+        messageSchemas: () => [CommandDispatchedToHandlerSchema],
+        dispatch: (event) => {
+          received.push(event);
+          return Promise.resolve();
+        },
+      })
+      .withStorageFactory(factory)
+      .persistSystemEvents()
+      .build();
+    const stored = new EventStore(
+      { name: "Tasks_System", multitenant: false },
+      factory,
+      new StorageGroup("spine_system_events"),
+    );
+    const domainEvent = createProjectCreated("not-a-system-event", "task-1");
+    const missingPayload = create(EventSchema, {
+      id: create(EventIdSchema, { value: "missing-system-payload" }),
+    });
+
+    try {
+      await boundedContextAccess.postSystemEvent(context, domainEvent);
+      await boundedContextAccess.postSystemEvent(context, missingPayload);
+      expect(await stored.read()).toEqual([]);
+      expect(received).toEqual([]);
+      await expect(
+        context.republishEvents({ eventIds: ["not-a-system-event"] }),
+      ).resolves.toMatchObject([
+        { eventId: "not-a-system-event", status: "NOT_FOUND", attempts: 0 },
+      ]);
+    } finally {
+      await context.close();
+      stored.close();
+    }
+  });
+
+  it.each([1, 3])(
+    "retries a produced System Event append %s time(s) before truthful dispatch or exhaustion",
+    async (failures) => {
+      RoutingProcessManager.reset();
+      const factory = new FailingProcessManagerProducedEventFactory(
+        TypeUrls.derive(CommandDispatchedToHandlerSchema),
+        "spine_system_events",
+        failures,
+      );
+      const received: SpineEvent[] = [];
+      const context = BoundedContext.singleTenant("Tasks")
+        .add(createProcessManagerAssignRepository())
+        .addEventDispatcher({
+          messageSchemas: () => [CommandDispatchedToHandlerSchema],
+          dispatch: (event) => {
+            received.push(event);
+            return Promise.resolve();
+          },
+        })
+        .withStorageFactory(factory)
+        .persistSystemEvents()
+        .build();
+      const stored = new EventStore(
+        { name: "Tasks_System", multitenant: false },
+        factory,
+        new StorageGroup("spine_system_events"),
+      );
+      try {
+        await context
+          .commandBus()
+          .post(
+            createAggregateCommand(
+              `command-system-${String(failures)}`,
+              `pm-system-${String(failures)}`,
+            ),
+          );
+        await withTimeout(factory.failed, "first System append failure");
+        await waitForCondition(() =>
+          failures === 1 ? received.length === 1 : factory.failedEvents.length === 3,
+        );
+        const saved = (await stored.read()).filter(
+          (event) => event.message?.typeUrl === TypeUrls.derive(CommandDispatchedToHandlerSchema),
+        );
+        expect(RoutingProcessManager.commandCalls).toBe(1);
+        await expect(
+          context.stand().read(ProjectQueueStateSchema, `pm-system-${String(failures)}`),
+        ).resolves.toBeDefined();
+        expect(saved).toHaveLength(failures === 1 ? 1 : 0);
+        expect(received).toHaveLength(failures === 1 ? 1 : 0);
+        for (const bytes of factory.failedEvents) expect(bytes).toEqual(factory.failedEvents[0]);
+        if (failures === 1 && saved[0] !== undefined)
+          expect(toBinary(EventSchema, saved[0])).toEqual(factory.failedEvents[0]);
+      } finally {
+        await context.close();
+        stored.close();
+      }
+    },
+  );
+
   it("does not emit reactor diagnostics without a matched reactor", async () => {
     const diagnostics: SpineEvent[] = [];
     const context = BoundedContext.singleTenant("Tasks")
@@ -9241,6 +9581,79 @@ describe("repository signal routing", () => {
     });
     expect(typeof errors[0]?.facts.eventId).toBe("string");
     expect(JSON.stringify(errors)).not.toContain("process-manager event dispatch failed");
+  });
+
+  it("does not commit a Process Manager Event reaction state when its produced Event append fails", async () => {
+    RoutingProcessManager.reset();
+    const factory = new FailingProcessManagerProducedEventFactory(
+      TypeUrls.derive(ProjectRegisteredSchema),
+    );
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerEventProducingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [ProjectRegisteredSchema],
+        dispatch: () => Promise.resolve(),
+      })
+      .withStorageFactory(factory)
+      .build();
+    const source = createProjectCreated("event-pm-source-fault", "pm-event-fault");
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+    await context
+      .eventBus()
+      .post(source)
+      .catch(() => undefined);
+    await withTimeout(factory.failed, "produced Process Manager Event reaction append failure");
+
+    expect(RoutingProcessManager.eventCalls).toBe(1);
+    await expect(
+      context.stand().read(ProjectQueueStateSchema, "pm-event-fault"),
+    ).resolves.toBeUndefined();
+    expect(await eventStore.read()).toEqual([source]);
+  });
+
+  it("repairs a completed Process Manager Event reaction output without rerunning its handler", async () => {
+    RoutingProcessManager.reset();
+    const factory = new InMemoryStorageFactory();
+    const received: Uint8Array[] = [];
+    let available = false;
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerEventProducingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [ProjectRegisteredSchema],
+        dispatch: (event) => {
+          received.push(toBinary(EventSchema, event));
+          if (!available) throw new Error("recipient unavailable");
+          return Promise.resolve();
+        },
+      })
+      .withStorageFactory(factory)
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    const source = createProjectCreated("event-pm-repair-source", "pm-event-repair");
+
+    await context.eventBus().post(source);
+    await waitForCondition(() => received.length === 3);
+    const stored = await eventStore.read();
+    const produced = stored.find(
+      (event) => event.message?.typeUrl === TypeUrls.derive(ProjectRegisteredSchema),
+    );
+    if (produced?.id?.value === undefined) throw new Error("Expected the produced Event ID.");
+    expect(RoutingProcessManager.eventCalls).toBe(1);
+    await expect(
+      context.stand().read(ProjectQueueStateSchema, "pm-event-repair"),
+    ).resolves.toMatchObject({
+      id: "pm-event-repair",
+    });
+
+    available = true;
+    await expect(context.republishEvents({ eventIds: [produced.id.value] })).resolves.toMatchObject(
+      [{ eventId: produced.id.value, status: "ADMITTED" }],
+    );
+    expect(received).toHaveLength(4);
+    for (const bytes of received) expect(bytes).toEqual(received[0]);
+    expect(RoutingProcessManager.eventCalls).toBe(1);
+    expect(await eventStore.read()).toEqual(stored);
   });
 
   it("rejects blank source event ids before process-manager event reactions mutate state", async () => {
@@ -15169,6 +15582,109 @@ class FailingSourceDiagnosticStorageFactory extends InMemoryStorageFactory {
   }
 }
 
+class FailingProcessManagerProducedEventFactory extends InMemoryStorageFactory {
+  readonly #targetType: string;
+  readonly #targetGroup: string | undefined;
+  readonly #failure = Promise.withResolvers<undefined>();
+  readonly failedEvents: Uint8Array[] = [];
+  #remaining: number;
+
+  constructor(targetType: string, targetGroup?: string, failures = 1) {
+    super();
+    this.#targetType = targetType;
+    this.#targetGroup = targetGroup;
+    this.#remaining = failures;
+  }
+
+  get failed(): Promise<void> {
+    return this.#failure.promise;
+  }
+
+  fail(event: SpineEvent): void {
+    if (this.#remaining === 0 || event.message?.typeUrl !== this.#targetType) return;
+    this.#remaining -= 1;
+    this.failedEvents.push(toBinary(EventSchema, event));
+    this.#failure.resolve(undefined);
+    throw new Error("forced produced Event append failure");
+  }
+
+  protected override createEntityCommitStorage<I, S extends Message>(
+    input: EntityStorageInput<I, S>,
+  ): EntityCommitStorage {
+    const storage = super.createEntityCommitStorage(input);
+    return {
+      commit: async <T, R extends Message>(unit: EntityCommitInput<T, R>): Promise<void> => {
+        if (this.#targetGroup === undefined)
+          for (const event of unit.events ?? []) this.fail(event);
+        await storage.commit(unit);
+      },
+      close: () => {
+        storage.close();
+      },
+    } satisfies EntityCommitStorage;
+  }
+
+  protected override onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+    group?: StorageGroup,
+  ): RecordStorage<I, R> {
+    const storage = super.onCreateRecordStorage(context, recordSpec, group);
+    if (
+      recordSpec.recordType.typeName !== EventSchema.typeName ||
+      group?.name !== this.#targetGroup
+    )
+      return storage;
+    return new FailingProcessManagerEventRecordStorage(context, recordSpec, storage, this);
+  }
+}
+
+class FailingProcessManagerEventRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
+  override readonly atomicCompareAndSet = true;
+
+  constructor(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+    private readonly delegate: RecordStorage<I, R>,
+    private readonly failure: FailingProcessManagerProducedEventFactory,
+  ) {
+    super(context, recordSpec);
+  }
+
+  protected deleteRecord(id: I): Promise<boolean> {
+    return this.delegate.delete(id);
+  }
+
+  protected queryRecordEntries(query: Parameters<RecordStorage<I, R>["queryEntries"]>[0]) {
+    return this.delegate.queryEntries(query);
+  }
+
+  protected readRecord(id: I): Promise<R | undefined> {
+    return this.delegate.read(id);
+  }
+
+  protected compareAndSetRecord(
+    id: I,
+    expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+    next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+  ): Promise<boolean> {
+    if (next !== undefined) this.failure.fail(next.record as unknown as SpineEvent);
+    return this.delegate.compareAndSet(id, expected?.record, next?.record);
+  }
+
+  protected writeAllRecords(
+    records: readonly ReturnType<RecordSpec<I, R>["materialize"]>[],
+  ): Promise<void> {
+    for (const record of records) this.failure.fail(record.record as unknown as SpineEvent);
+    return this.delegate.writeAll(records.map((record) => record.record));
+  }
+
+  protected writeRecord(record: ReturnType<RecordSpec<I, R>["materialize"]>): Promise<void> {
+    this.failure.fail(record.record as unknown as SpineEvent);
+    return this.delegate.write(record.record);
+  }
+}
+
 class ObservingStorageFactory extends InMemoryStorageFactory {
   readonly operations: string[] = [];
 
@@ -15800,7 +16316,9 @@ describe("Projection state-update routing", () => {
     });
     try {
       await boundedContextAccess.postSystemEvent(context, createStateChangedEvent("source"));
-      await waitForCondition(() => StateObservingProjection.subscriberCalls === 1);
+      const entries = StateObservingProjection.subscriberCalls;
+      expect(entries).toBe(3);
+      expect(StateObservingProjection.receivedIds).toEqual(Array(entries).fill("source"));
       await expect(storage.readCurrent("target")).resolves.toBeUndefined();
       await expect(storage.readStates("target")).resolves.toEqual([]);
     } finally {
@@ -16135,17 +16653,14 @@ function createStateChangedEvent(
       EntityStateChangedSchema,
       create(EntityStateChangedSchema, {
         entity: create(MessageIdSchema, {
-          id: AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id })),
+          id: AnyMessages.pack(ProjectIdSchema, create(ProjectIdSchema, { value: id })),
           typeUrl: TypeUrls.derive(stateSchema),
         }),
         newState: AnyMessages.pack(stateSchema, state as never, { validate: false }),
         signalId: [
           create(MessageIdSchema, {
-            id: AnyMessages.pack(
-              StringValueSchema,
-              create(StringValueSchema, { value: `signal-${id}` }),
-            ),
-            typeUrl: TypeUrls.derive(StringValueSchema),
+            id: AnyMessages.pack(EventIdSchema, create(EventIdSchema, { value: `signal-${id}` })),
+            typeUrl: TypeUrls.derive(EventSchema),
           }),
         ],
       }),

@@ -1,0 +1,32 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------x------------------------------·---------------------------------------------------------------------------------------------------------------
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > does not commit a Process Manager Command state when its produced Event append fails
+Error: forced produced Event append failure
+ ❯ FailingProcessManagerProducedEventFactory.fail packages/server/test/repository/repository-routing.test.ts:15234:11
+    15232|     this.#remaining -= 1;
+    15233|     this.#failure.resolve(undefined);
+    15234|     throw new Error("forced produced Event append failure");
+       |           ^
+    15235|   }
+    15236|
+ ❯ Object.commit packages/server/test/repository/repository-routing.test.ts:15243:53
+ ❯ ProcessManagerExecutionSupport.#commitProcessManagerRecord packages/server/src/repository/repository.ts:3680:27
+ ❯ ProcessManagerExecutionSupport.#storeProcessManagerRecord packages/server/src/repository/repository.ts:3653:18
+ ❯ ProcessManagerExecutionSupport.commit packages/server/src/repository/repository.ts:3614:16
+ ❯ ProcessManagerCommandExecution.#commitAndPublish packages/server/src/repository/repository.ts:3848:23
+ ❯ ProcessManagerCommandExecution.run packages/server/src/repository/repository.ts:3774:14
+ ❯ Object.replayProcessManagerCommand packages/server/src/repository/repository.ts:8929:12
+ ❯ Object.replayPmInbox packages/server/src/repository/repository.ts:8887:14
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed | 323 skipped (325)
+   Start at  22:36:46
+   Duration  1.02s (transform 629ms, setup 0ms, import 880ms, tests 32ms, environment 0ms)

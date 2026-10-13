@@ -62,6 +62,7 @@ async function verify(record) {
   const Factory = adapters.PostgresStorageFactory ?? adapters.MysqlStorageFactory;
   const suffix = randomUUID().replaceAll("-", "");
   const tableName = `external_${suffix}`;
+  const systemTableName = `external_system_${suffix}`;
   const contextName = `ExternalRepair_${suffix}`;
   const boundary = { name: contextName, multitenant: false };
   const taskId = create(TaskIdSchema, { value: `task-${suffix}` });
@@ -120,6 +121,7 @@ async function verify(record) {
         pid: process.pid,
         node: process.version,
         table: tableName,
+        systemTable: systemTableName,
         contextName,
         eventId: event.id.value,
         eventSha256: createHash("sha256").update(original).digest("hex"),
@@ -142,7 +144,8 @@ async function verify(record) {
     for (const store of stores) store.close();
     for (const factory of factories) factory.close();
     try {
-      await driver.query(`DROP TABLE IF EXISTS ${pg ? `"${tableName}"` : `\`${tableName}\``}`);
+      for (const table of [tableName, systemTableName])
+        await driver.query(`DROP TABLE IF EXISTS ${pg ? `"${table}"` : `\`${table}\``}`);
     } finally {
       await driver.end();
     }
@@ -152,6 +155,7 @@ async function verify(record) {
     const factory = await Factory.newBuilder()
       .setOptions({ url: record.urls.spine_test })
       .setTableName(EventSchema, tableName)
+      .setTableName(EventSchema, EventSchema, systemTableName)
       .build();
     factories.push(factory);
     const store = new EventStore(boundary, factory);

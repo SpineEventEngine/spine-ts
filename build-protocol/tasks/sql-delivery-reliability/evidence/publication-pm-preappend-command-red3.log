@@ -1,0 +1,35 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------x---------------------------------------------------------------------------------------------------------------------------------------------
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > does not commit a Process Manager Command state when its produced Event append fails
+AssertionError: expected { …(3) } to be undefined
+
+- Expected:
+undefined
+
++ Received:
+{
+  "$typeName": "repository_routing.ProjectQueueState",
+  "id": "pm-fault",
+  "queue": "Task assigned",
+}
+
+ ❯ packages/server/test/repository/repository-routing.test.ts:7931:76
+    7929|
+    7930|     expect(RoutingProcessManager.commandCalls).toBe(1);
+    7931|     await expect(context.stand().read(ProjectQueueStateSchema, "pm-fau…
+       |                                                                            ^
+    7932|     expect(await eventStore.read()).toEqual([]);
+    7933|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 323 skipped (324)
+   Start at  22:35:46
+   Duration  1.00s (transform 619ms, setup 0ms, import 870ms, tests 26ms, environment 0ms)

@@ -1,0 +1,38 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/server/test/repository/repository-routing.test.ts (330 tests | 1 failed | 328 skipped) 252ms
+     × keeps System Event publication separate from domain repair when persistence is true 232ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > keeps System Event publication separate from domain repair when persistence is true
+AssertionError: expected [ { …(3) } ] to match object [ { …(2) } ]
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  [
+    {
+      "eventId": "868d63dc-7d96-4d61-b69f-c3b98e9e29b3",
+-     "status": "MISSING",
++     "status": "FAILED",
+    },
+  ]
+
+ ❯ packages/server/test/repository/repository-routing.test.ts:9105:74
+    9103|         if (persist) {
+    9104|           expect(matched[0]).toEqual(received[0]);
+    9105|           await expect(context.republishEvents({ eventIds: [systemId] …
+       |                                                                          ^
+    9106|             { eventId: systemId, status: "MISSING" },
+    9107|           ]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed | 328 skipped (330)
+   Start at  22:43:53
+   Duration  1.25s (transform 622ms, setup 0ms, import 875ms, tests 252ms, environment 0ms)

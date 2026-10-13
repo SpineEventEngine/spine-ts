@@ -344,20 +344,37 @@ event coordination, delivery jobs, schedulers, inbox lifecycle, retries,
 restart, resumption, or transport topology.
 `BoundedContext.republishEvents({eventIds, tenantId?, signal?})` is a separate
 bounded repair call for 1–100 distinct IDs known by the caller to belong to
-completed Entity saves. It performs exact tenant-scoped reads and returns
+completed Entity saves or persisted System Events. It performs exact tenant-scoped reads and returns
 ordered admitted, failed, missing, or cancelled outcomes. An Event row alone
 does not prove the Entity save completed because its records are written
 independently. Admission does not guarantee current recipient completion;
 repeated recipients may observe the same Event again. No historical scan or
-automatic recovery discovery is provided.
+automatic recovery discovery is provided. Each known-ID repair makes up to
+three actual bus dispatch attempts using the same stored envelope and ID,
+with 100 milliseconds between failed attempts unless caller cancellation or
+terminal context closure stops them. The attempt count does not prove
+recipient completion; partial effects may repeat.
+Persisted System Events use a separate fixed storage group. Repair reads both
+groups by exact ID, uses the corresponding
+bus, and fails without dispatch if the same ID appears in both. Context names
+are diagnostic labels, not storage namespaces. A forgotten System Event that
+was never persisted cannot be repaired by ID; a fresh forgetting-mode context
+can repair one that a previous context saved.
 Normal publication of an Event from a completed Entity save makes up to three
-actual dispatch attempts with the same captured Event envelope and ID before
+actual dispatch attempts with the same captured Event envelope and ID, waiting
+100 milliseconds between failed attempts unless caller cancellation or terminal
+context closure stops them, before
 reporting exhaustion internally. Those attempts do not rerun the successful
 Command handler, and accepted Command posting does not promise publication or
 recipient completion. Partial recipient effects can repeat across attempts;
 an exhausted Event remains available for explicit known-ID repair. This finite
 normal-Event retry does not apply to the independent typed rejection-event
 posting described above.
+System Events use finite delayed recipient retries in either persistence mode.
+With persistence enabled, they are validated and appended before recipients
+run. Transient append and dispatch failures use the same three-attempt budget and
+100-millisecond spacing. If append never succeeds, there is no stored Event
+for later repair.
 `BoundedContextBuilder.withShutdownTimeout(milliseconds)` sets one shared
 deadline for context draining and cleanup (default 5,000 ms). A close first
 stops external work and repair, but allows accepted framework follow-ups during

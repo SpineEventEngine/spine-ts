@@ -67,12 +67,7 @@ then recipient delivery. Raw publication currently has no three-attempt stored
 publication loop. Test the actual after-append failure outcome and exact-ID repair
 instead of inferring the Aggregate retry policy applies there.
 
-System Events use a distinct `${domainName}_System` storage context and System
-bus; storage is enabled only by `persistSystemEvents()`. `republishEvents` selects
-the domain store and domain bus. No System repair path is established by this
-API. Cover both configured persistence and forgetting behavior explicitly;
-decide any necessary scoped correction from a regression, without claiming a
-System recovery contract from the domain repair tests.
+System Events use a separately named `${domainName}_System` context and System bus; storage is enabled only by `persistSystemEvents()`. Later source verification corrects the earlier physical-isolation inference: StorageContext.name is diagnostics-only, explicitly forbidden from provider record-family identity. EventStore uses canonical EventSchema without a group, so the same factory/backend and tenant share domain and persisted System records. `republishEvents` currently reads that shared family but routes through the domain bus. Counts from a freshly opened named System EventStore alone do not prove System persistence; inspect exact IDs/types. Supported System repair/routing is a demonstrated contract question for bounded architecture follow-up, not permission to key storage by context name.
 
 ### Process Manager append-before-publication gap to reproduce
 

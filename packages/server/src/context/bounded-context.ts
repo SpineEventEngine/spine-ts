@@ -37,11 +37,14 @@ import {
   EventStore,
   InMemoryStorageFactory,
   RecordColumn,
+  StorageGroup,
   type StorageContext,
   type StorageFactory,
   type StorageMode,
 } from "@spine-event-engine/storage";
 import { TenantBoundary } from "@spine-event-engine/storage/provider";
+
+const systemEventGroup = new StorageGroup("spine_system_events");
 
 import { CommandBus, commandBusAccess } from "../bus/command-bus.js";
 import type { CommandDispatcher } from "../bus/command-dispatcher.js";
@@ -431,7 +434,8 @@ export interface ReadCatchUpOptions {
  */
 export interface RepublishEventsOptions {
   /**
-   * IDs from completed saves, in dispatch order; 1–100 distinct non-blank IDs.
+   * IDs from completed Entity saves or persisted System Events, in dispatch order;
+   * 1–100 distinct non-blank IDs.
    */
   readonly eventIds: readonly string[];
 
@@ -976,7 +980,9 @@ export class BoundedContext {
     eventSubscribers.set(this, (typeUrl, subscriber) =>
       eventBusAccess.subscribe(this.#eventBus, typeUrl, subscriber),
     );
-    systemEventPosters.set(this, (event) => this.#publisher.publishSystemEvent(event));
+    systemEventPosters.set(this, (event) =>
+      this.#publisher.publishSystemEvent(event).then(() => undefined),
+    );
     contextSystemPairings.set(
       this,
       ContextParts.createSystemPairing(this.#snapshot, input.systemSpec),
@@ -1226,9 +1232,10 @@ export class BoundedContext {
   }
 
   /**
-   * Admits only the supplied IDs known by the caller to belong to completed Entity saves.
-   * Event presence alone does not prove a save completed. Existing recipients may run again;
-   * a successful admission does not prove recipient processing completion.
+   * Admits only supplied IDs known to belong to completed Entity saves or persisted
+   * System Events. Domain Event presence alone does not prove an Entity save completed.
+   * Exact reads cover both storage families; a cross-family ID collision fails without
+   * dispatch. Existing recipients may run again, and admission does not prove processing.
    *
    * @param options Exact IDs, tenant scope, and optional cancellation signal.
    * @returns Ordered per-ID outcomes without exposing storage or recipient error details.
@@ -1268,6 +1275,7 @@ export class BoundedContext {
     signal: AbortSignal | undefined,
   ): Promise<readonly RepublishEventResult[]> {
     const store = new EventStore(storageContext, this.#storageFactory);
+    const systemStore = new EventStore(storageContext, this.#storageFactory, systemEventGroup);
     const results: RepublishEventResult[] = [];
     const cancellation =
       signal === undefined
@@ -1275,11 +1283,14 @@ export class BoundedContext {
         : AbortSignal.any([signal, this.#repairCloseController.signal]);
     try {
       for (const eventId of ids) {
-        results.push(await this.#republishOne(store, storageContext, eventId, cancellation));
+        results.push(
+          await this.#republishOne(store, systemStore, storageContext, eventId, cancellation),
+        );
       }
       return Object.freeze(results);
     } finally {
       store.close();
+      systemStore.close();
     }
   }
 
@@ -1287,6 +1298,7 @@ export class BoundedContext {
    * Reads and admits one exact ID, containing read and recipient failures.
    *
    * @param store Tenant-scoped Event store.
+   * @param systemStore Tenant-scoped System Event store.
    * @param storageContext Boundary used to verify the returned Event.
    * @param eventId Exact requested ID.
    * @param signal Combined caller and context-close cancellation.
@@ -1294,6 +1306,7 @@ export class BoundedContext {
    */
   async #republishOne(
     store: EventStore,
+    systemStore: EventStore,
     storageContext: StorageContext,
     eventId: string,
     signal: AbortSignal,
@@ -1302,10 +1315,19 @@ export class BoundedContext {
     try {
       const found = await this.#readRepairEvents(store, eventId, signal);
       if (found === undefined) return { eventId, status: "CANCELLED", attempts: 0 };
-      const event = found.find((candidate) => candidate.id?.value === eventId);
+      const systemFound = await this.#readRepairEvents(systemStore, eventId, signal);
+      if (systemFound === undefined) return { eventId, status: "CANCELLED", attempts: 0 };
+      const domain = found.find((candidate) => candidate.id?.value === eventId);
+      const system = systemFound.find((candidate) => candidate.id?.value === eventId);
+      if (domain !== undefined && system !== undefined)
+        throw new Error(`Event ID ${eventId} exists in both domain and System families.`);
+      const event = domain ?? system;
       if (event === undefined) return { eventId, status: "NOT_FOUND", attempts: 0 };
       ContextParts.validateReplayTenant(storageContext, event);
-      const outcome = await this.#publisher.redispatchStored(event, { signal });
+      const outcome =
+        system === undefined
+          ? await this.#publisher.redispatchStored(event, { signal })
+          : await this.#publisher.redispatchSystemStored(event, { signal });
       return { eventId, status: outcome.status, attempts: outcome.attempts };
     } catch (error) {
       this.#publisher.reportFailure(
@@ -1332,6 +1354,8 @@ export class BoundedContext {
     signal: AbortSignal,
   ): Promise<readonly Event[] | undefined> {
     const closing = this.#repairCloseController.signal;
+    const isCancelled = () => signal.aborted || closing.aborted;
+    if (isCancelled()) return undefined;
     const cancelled = Promise.withResolvers<undefined>();
     const onAbort = () => {
       cancelled.resolve(undefined);
@@ -1339,6 +1363,7 @@ export class BoundedContext {
     signal.addEventListener("abort", onAbort, { once: true });
     closing.addEventListener("abort", onAbort, { once: true });
     try {
+      if (isCancelled()) return undefined;
       return await Promise.race([
         store.read({ ids: [create(EventIdSchema, { value: eventId })], limit: 1 }),
         cancelled.promise,
@@ -2248,6 +2273,7 @@ export class BoundedContextBuilder {
       eventBus,
       system.eventBus,
       this.#specSnapshot.name.value,
+      system.eventStore,
     );
     resources.publisher = publisher;
     return {
@@ -2269,7 +2295,7 @@ export class BoundedContextBuilder {
   ): ContextSystemBuses {
     const systemSpec = ContextParts.createSystemSpec(this.#specSnapshot, this.#persistSystemEvents);
     const systemEventStore = systemSpec.storesEvents
-      ? new EventStore(ContextParts.createStorageMode(systemSpec), storageFactory)
+      ? new EventStore(ContextParts.createStorageMode(systemSpec), storageFactory, systemEventGroup)
       : undefined;
     if (systemEventStore !== undefined) resources.systemEventStore = systemEventStore;
     const systemEventBus = eventBusAccess.createSystemBus(systemEventStore);

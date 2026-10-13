@@ -14,24 +14,216 @@
 
 import { create, toBinary } from "@bufbuild/protobuf";
 import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
+import type { EventStore } from "@spine-event-engine/storage";
 import {
   EventContextSchema,
   EventIdSchema,
   EventSchema,
+  MessageIdSchema,
   VersionSchema,
 } from "@spine-event-engine/proto";
+import { EntityOption_Kind } from "@spine-event-engine/proto/generated/spine/options_pb.js";
+import { EntityCreatedSchema } from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
 import { describe, expect, it, vi } from "vitest";
 import {
   TaskIdSchema,
   TaskListIdSchema,
 } from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
 import { TaskCreatedSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
+import { TaskSchema } from "../../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 
 import { CommandBus } from "../../src/bus/command-bus.js";
 import { eventBusAccess } from "../../src/bus/event-bus.js";
 import { SignalPublisher } from "../../src/runtime/signal-publisher.js";
 
 describe("stored Event publication", () => {
+  it("cancels a System publication waiting on append without dispatching after late completion", async () => {
+    const pending = Promise.withResolvers<undefined>();
+    const entered = Promise.withResolvers<undefined>();
+    const append = vi.fn(() => {
+      entered.resolve(undefined);
+      return pending.promise;
+    });
+    const store = { append } as unknown as EventStore;
+    const dispatch = vi.fn(() => Promise.resolve());
+    const system = eventBusAccess.createSystemBus(store, [
+      { messageSchemas: () => [EntityCreatedSchema], dispatch },
+    ]);
+    const publisher = new SignalPublisher(new CommandBus(), system, system, "Tasks", store);
+    const publication = publisher.publishSystemEvent(systemCreatedEvent());
+    await entered.promise;
+    publisher.finishClose();
+    await expect(publication).resolves.toMatchObject({
+      status: "CANCELLED",
+      eventId: "created-task-1",
+      attempts: 0,
+    });
+    pending.resolve(undefined);
+    await Promise.resolve();
+    expect(append).toHaveBeenCalledOnce();
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it("does not dispatch when terminal closure follows a completed System append", async () => {
+    const append = vi.fn(() => Promise.resolve());
+    const store = { append } as unknown as EventStore;
+    const dispatch = vi.fn(() => Promise.resolve());
+    const system = eventBusAccess.createSystemBus(store, [
+      { messageSchemas: () => [EntityCreatedSchema], dispatch },
+    ]);
+    const publisher = new SignalPublisher(new CommandBus(), system, system, "Tasks", store);
+
+    const publication = publisher.publishSystemEvent(systemCreatedEvent());
+    publisher.finishClose();
+    await expect(publication).resolves.toMatchObject({ status: "CANCELLED", attempts: 0 });
+    expect(append).toHaveBeenCalledOnce();
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it("reports partial System fanout retries with the original Event ID", async () => {
+    const append = vi.fn(() => Promise.resolve());
+    const store = { append } as unknown as EventStore;
+    const firstIds: string[] = [];
+    const secondIds: string[] = [];
+    const system = eventBusAccess.createSystemBus(store, [
+      {
+        messageSchemas: () => [EntityCreatedSchema],
+        dispatch: (event) => {
+          firstIds.push(event.id?.value ?? "missing");
+          return Promise.resolve();
+        },
+      },
+      {
+        messageSchemas: () => [EntityCreatedSchema],
+        dispatch: (event) => {
+          secondIds.push(event.id?.value ?? "missing");
+          throw new Error("second recipient remains unavailable");
+        },
+      },
+    ]);
+    const publisher = new SignalPublisher(new CommandBus(), system, system, "Tasks", store);
+
+    await expect(publisher.publishSystemEvent(systemCreatedEvent())).resolves.toMatchObject({
+      status: "FAILED",
+      eventId: "created-task-1",
+      attempts: 3,
+    });
+    expect(firstIds).toEqual(Array(3).fill("created-task-1"));
+    expect(secondIds).toEqual(Array(3).fill("created-task-1"));
+    expect(append).toHaveBeenCalledTimes(3);
+  });
+
+  it("spaces failed stored dispatch attempts and clears the final retry timer", async () => {
+    vi.useFakeTimers();
+    let calls = 0;
+    const events = eventBusAccess.createForgettingBus([
+      {
+        messageSchemas: () => [TaskCreatedSchema],
+        dispatch: () => {
+          calls++;
+          if (calls < 3) throw new Error("temporary recipient failure");
+          return Promise.resolve();
+        },
+      },
+    ]);
+    const publisher = new SignalPublisher(new CommandBus(), events, events, "Tasks");
+    try {
+      const publication = publisher.publishCommittedEvent(committedEvent("spaced-retry"));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(calls).toBe(1);
+      await vi.advanceTimersByTimeAsync(99);
+      expect(calls).toBe(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(calls).toBe(2);
+      await vi.advanceTimersByTimeAsync(100);
+      await expect(publication).resolves.toMatchObject({ status: "ADMITTED", attempts: 3 });
+      expect(calls).toBe(3);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reports exhausted stored dispatch after two waits without a final timer", async () => {
+    vi.useFakeTimers();
+    let calls = 0;
+    const events = eventBusAccess.createForgettingBus([
+      {
+        messageSchemas: () => [TaskCreatedSchema],
+        dispatch: () => {
+          calls++;
+          throw new Error("recipient remains unavailable");
+        },
+      },
+    ]);
+    const publisher = new SignalPublisher(new CommandBus(), events, events, "Tasks");
+    try {
+      const publication = publisher.publishCommittedEvent(committedEvent("exhausted-retry"));
+      await vi.advanceTimersByTimeAsync(199);
+      expect(calls).toBe(2);
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(publication).resolves.toMatchObject({ status: "FAILED", attempts: 3 });
+      expect(calls).toBe(3);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("cancels stored dispatch while waiting between failures without another attempt", async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    let calls = 0;
+    const events = eventBusAccess.createForgettingBus([
+      {
+        messageSchemas: () => [TaskCreatedSchema],
+        dispatch: () => {
+          calls++;
+          throw new Error("temporary recipient failure");
+        },
+      },
+    ]);
+    const publisher = new SignalPublisher(new CommandBus(), events, events, "Tasks");
+    try {
+      const publication = publisher.publishCommittedEvent(committedEvent("cancel-delay"), {
+        signal: controller.signal,
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(calls).toBe(1);
+      controller.abort(new Error("caller cancelled"));
+      await expect(publication).resolves.toMatchObject({ status: "CANCELLED", attempts: 1 });
+      expect(calls).toBe(1);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops a waiting retry when terminal shutdown begins", async () => {
+    vi.useFakeTimers();
+    let calls = 0;
+    const events = eventBusAccess.createForgettingBus([
+      {
+        messageSchemas: () => [TaskCreatedSchema],
+        dispatch: () => {
+          calls++;
+          throw new Error("temporary recipient failure");
+        },
+      },
+    ]);
+    const publisher = new SignalPublisher(new CommandBus(), events, events, "Tasks");
+    try {
+      const publication = publisher.publishCommittedEvent(committedEvent("shutdown-delay"));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(calls).toBe(1);
+      publisher.finishClose();
+      await expect(publication).resolves.toMatchObject({ status: "CANCELLED", attempts: 1 });
+      expect(calls).toBe(1);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it("retries actual dispatch with one committed ID and envelope before reporting admission", async () => {
     const observed: Uint8Array[] = [];
     const events = eventBusAccess.createForgettingBus([
@@ -261,7 +453,7 @@ describe("stored Event publication", () => {
       },
     ]);
     const publisher = new SignalPublisher(new CommandBus(), events, events, "Tasks");
-    const pending = publisher.publishSystemEvent(committedEvent("fenced-detached"));
+    const pending = publisher.publishEvent(committedEvent("fenced-detached"));
     publisher.finishClose();
 
     await expect(pending).resolves.toBeUndefined();
@@ -392,6 +584,23 @@ function committedEvent(value: string) {
         id,
         title: "Task",
         taskListId: create(TaskListIdSchema, { value: "list-1" }),
+      }),
+    ),
+  });
+}
+
+function systemCreatedEvent() {
+  const entityId = create(TaskIdSchema, { value: "task-1" });
+  return create(EventSchema, {
+    id: create(EventIdSchema, { value: "created-task-1" }),
+    message: AnyMessages.pack(
+      EntityCreatedSchema,
+      create(EntityCreatedSchema, {
+        entity: create(MessageIdSchema, {
+          id: AnyMessages.pack(TaskIdSchema, entityId),
+          typeUrl: TypeUrls.derive(TaskSchema),
+        }),
+        kind: EntityOption_Kind.AGGREGATE,
       }),
     ),
   });

@@ -140,5 +140,7 @@ current-state write completed.
 `MysqlStorageDataError` reports stored bytes that cannot be decoded, and
 `MysqlStorageOperationError` reports sanitized bounds, query, collision, and
 driver-operation failures. Custom creation uses `useOperationFactory()`; its
-resolved `MysqlTableSpec` has the same native column types and naming precedence
-as default DDL (explicit grouped name, explicit record name, then default).
+resolved `MysqlTableSpec` has the same native column types and family-specific
+naming as default DDL. A grouped family uses its explicit grouped override or
+grouped default; an ungrouped family uses its explicit record override or
+ungrouped default. An ungrouped override never aliases a grouped family.

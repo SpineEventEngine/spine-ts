@@ -1,0 +1,16 @@
+packages/server/src/bus/event-bus.ts: added executable lines 13/14, branch arms 5/6
+  uncovered line 830
+  uncovered branch 829:46:0
+packages/server/src/context/bounded-context.ts: added executable lines 14/14, branch arms 10/10
+packages/server/src/context/local-inbox-handoff.ts: added executable lines 2/2, branch arms 7/7
+packages/server/src/repository/repository.ts: added executable lines 14/14, branch arms 0/0
+packages/server/src/runtime/signal-publisher.ts: added executable lines 41/41, branch arms 17/23
+  uncovered branch 443:11:0
+  uncovered branch 444:12:0
+  uncovered branch 444:12:1
+  uncovered branch 454:14:1
+  uncovered branch 509:18:0
+  uncovered branch 524:19:0
+packages/storage/src/event/event-store.ts: added executable lines 4/4, branch arms 0/0
+packages/storage-mysql/src/mysql/table-resolver.ts: added executable lines 1/1, branch arms 8/8
+TOTAL: added executable lines 89/90, branch arms 47/54
