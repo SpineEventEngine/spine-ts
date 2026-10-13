@@ -33,6 +33,23 @@ import { resolvedMysqlTableSpec } from "../src/mysql/table-spec.js";
 import { MysqlStorageSchemaError } from "../src/mysql/errors.js";
 
 describe("MysqlRecordStorage", () => {
+  it("binds each legacy scalar-list member and makes an empty list match no rows", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const storage = schemaStorage(
+      readyConnection(calls, { columns: ["ID", "bytes", "value"] }) as never,
+    );
+
+    await storage.queryEntries({ filters: [{ column: "value", value: ["one", "two", "one"] }] });
+    const listed = calls.find((call) => call.sql.startsWith("SELECT ID, bytes"));
+    expect(listed?.sql).toContain("(`value` <=> ? OR `value` <=> ? OR `value` <=> ?)");
+    expect(listed?.values?.slice(0, 3)).toEqual(["one", "two", "one"]);
+
+    calls.length = 0;
+    await storage.queryEntries({ filters: [{ column: "value", value: [] }] });
+    const empty = calls.find((call) => call.sql.startsWith("SELECT ID, bytes"));
+    expect(empty?.sql).toContain("WHERE 1=0");
+    expect(empty?.values).not.toContain([]);
+  });
   it("pushes an admitted normalized equality plan into bound SQL through production execution", async () => {
     const calls: { sql: string; values?: readonly unknown[] }[] = [];
     const storage = schemaStorage(

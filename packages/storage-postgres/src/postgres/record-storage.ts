@@ -18,12 +18,12 @@ import { StringifierRegistry } from "@spine-event-engine/core";
 import {
   ColumnMappings,
   defaultQueryCandidateLimit,
+  RecordQuery,
   RecordStorage,
   type ColumnMapping,
   type NormalizedQueryPlan,
   type NormalizedQueryPredicate,
   type RecordEntry,
-  type RecordQuery,
   type RecordSpec,
   type StorageContext,
   type StorageQueryCapabilities,
@@ -908,11 +908,20 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     const clauses: string[] = [];
     if (query.ids !== undefined)
       clauses.push(`"ID" IN (${query.ids.map((id) => bind.add(this.id(id))).join(", ")})`);
-    for (const filter of query.filters ?? [])
-      clauses.push(
-        `${this.column(filter.column === "id" ? "ID" : filter.column)} ` +
-          `IS NOT DISTINCT FROM ${bind.add(this.value(filter.column, filter.value))}`,
+    for (const filter of query.filters ?? []) {
+      const column = this.column(filter.column === "id" ? "ID" : filter.column);
+      const accepted = RecordQuery.acceptedValues(filter);
+      const alternatives = accepted.map(
+        (value) => `${column} IS NOT DISTINCT FROM ${bind.add(this.value(filter.column, value))}`,
       );
+      clauses.push(
+        accepted.length === 0
+          ? "1=0"
+          : accepted.length === 1
+            ? (alternatives[0] ?? "1=0")
+            : `(${alternatives.join(" OR ")})`,
+      );
+    }
     return clauses;
   }
 

@@ -87,6 +87,24 @@ import { PostgresRecordStorage } from "../src/postgres/record-storage.js";
 import { PostgresTableSpecs } from "../src/postgres/table-spec.js";
 
 describe("Postgres record storage", () => {
+  it("binds each legacy scalar-list member and makes an empty list match no rows", async () => {
+    const storage = await recordStorage();
+    await (storage as unknown as { prepare(): Promise<void> }).prepare();
+    driver.calls.length = 0;
+
+    await storage.queryEntries({ filters: [{ column: "value", value: ["one", "two", "one"] }] });
+    const listed = driver.calls.find(({ sql }) => sql.startsWith('SELECT "ID", "bytes"'));
+    expect(listed?.sql).toContain(
+      '("value" IS NOT DISTINCT FROM $1 OR "value" IS NOT DISTINCT FROM $2 OR "value" IS NOT DISTINCT FROM $3)',
+    );
+    expect(listed?.values?.slice(0, 3)).toEqual(["one", "two", "one"]);
+
+    driver.calls.length = 0;
+    await storage.queryEntries({ filters: [{ column: "value", value: [] }] });
+    const empty = driver.calls.find(({ sql }) => sql.startsWith('SELECT "ID", "bytes"'));
+    expect(empty?.sql).toContain("WHERE 1=0");
+    expect(empty?.values).not.toContain([]);
+  });
   beforeEach(() => {
     driver.query.mockReset();
     driver.query.mockImplementation((sql, values) => {

@@ -1,0 +1,81 @@
+packages/storage/src/memory/in-memory-entity-commit.ts:131:      : eventStoreAccess.withLock(this.#factory, snapshot.context, work);
+packages/storage/src/event/event-store.ts:175:    await eventStoreAccess.withLock(this.#factory, context, async () => {
+packages/storage/src/event/event-store.ts:188:    await eventStoreAccess.withLock(this.#factory, context, async () => {
+packages/storage/src/event/event-store.ts:204:    await eventStoreAccess.withLock(this.#factory, context, async () => {
+packages/storage/src/event/event-store.ts:283:  async withLock<T>(
+packages/storage/src/event/event-store.ts:322:  readonly withLock: <T>(
+packages/storage/src/event/event-store.ts:338:  withLock<T>(
+packages/storage/src/event/event-store.ts:343:    return EventStoreLocks.withLock(factory, context, work);
+packages/storage-mysql/src/mysql/record-storage.ts:411:      if (transactional) await connection.beginTransaction();
+packages/storage-mysql/src/mysql/record-storage.ts:430:   * Acquires the advisory lock for a non-transactional record slot.
+packages/storage-mysql/src/mysql/record-storage.ts:441:      "SELECT GET_LOCK(?, ?) AS acquired",
+packages/storage-mysql/src/mysql/record-storage.ts:491:      await connection.beginTransaction();
+packages/storage-mysql/src/mysql/record-storage.ts:682:      `SELECT bytes FROM \`${this.table.tableName}\` WHERE ID=?${lock ? " FOR UPDATE" : ""}`,
+packages/storage-mysql/src/mysql/record-storage.ts:710:   * Calculates the fixed-width advisory-lock key for one record slot.
+packages/storage-mysql/src/mysql/record-storage.ts:713:   * @returns The advisory-lock key.
+packages/storage-postgres/src/postgres/record-storage.ts:53:   * Names the selected database for advisory coordination.
+packages/storage-postgres/src/postgres/record-storage.ts:173:   * Returns a hash for one provider-private advisory-lock identity.
+packages/storage-postgres/src/postgres/record-storage.ts:176:   * @returns A signed PostgreSQL advisory key.
+packages/storage-postgres/src/postgres/record-storage.ts:183:   * @returns A signed PostgreSQL advisory key.
+packages/storage-postgres/src/postgres/record-storage.ts:378:   * @param id Identifies the record guarded by the transaction advisory lock.
+packages/storage-postgres/src/postgres/record-storage.ts:472:      await client.query("BEGIN");
+packages/storage-postgres/src/postgres/record-storage.ts:474:      await client.query("COMMIT");
+packages/storage-postgres/src/postgres/record-storage.ts:478:        await client.query("ROLLBACK");
+packages/storage-postgres/src/postgres/record-storage.ts:521:      `SELECT "bytes" FROM ${this.qualified()} WHERE "ID" = $1${lock ? " FOR UPDATE" : ""}`,
+packages/storage-postgres/src/postgres/record-storage.ts:567:      .query("SELECT pg_advisory_xact_lock($1)", [this.casKey(id)])
+packages/storage-postgres/src/postgres/record-storage.ts:581:    for (const key of keys) await client.query("SELECT pg_advisory_xact_lock($1)", [key]);
+packages/storage-postgres/src/postgres/record-storage.ts:685:   * Calculates a stable advisory-lock key within the selected database and schema.
+packages/storage-postgres/src/postgres/record-storage.ts:689:   * @returns A signed PostgreSQL advisory-lock key.
+packages/storage-postgres/src/postgres/record-storage.ts:1139:   * Calculates the advisory key for one record mutation.
+packages/storage-postgres/src/postgres/record-storage.ts:1142:   * @returns The signed advisory-lock key.
+packages/storage-mysql/src/mysql/entity-commit.ts:19: * Identifies one Entity commit in MySQL's server advisory-lock namespace.
+packages/storage-mysql/src/mysql/entity-commit.ts:41: * Calculates MySQL's fixed-width advisory-lock key for one Entity identity.
+packages/storage-mysql/src/mysql/entity-commit.ts:44: * @returns Returns the advisory-lock key.
+packages/storage-mysql/src/mysql/entity-commit.ts:71:   * Commits one Entity mutation with a transaction or advisory lock.
+packages/storage-mysql/src/mysql/entity-commit.ts:74:   * @param key Identifies the advisory lock.
+packages/storage-mysql/src/mysql/entity-commit.ts:76:   * @param options Requires a transaction when the caller cannot use an advisory lock.
+packages/storage-mysql/src/mysql/entity-commit.ts:136:        await connection.beginTransaction();
+packages/storage-mysql/src/mysql/entity-commit.ts:150:   * Acquires the advisory lock for a non-transactional commit.
+packages/storage-mysql/src/mysql/entity-commit.ts:153:   * @param key Identifies the advisory lock.
+packages/storage-mysql/src/mysql/entity-commit.ts:158:      "SELECT GET_LOCK(?, ?) AS acquired",
+packages/storage-postgres/src/postgres/entity-commit.ts:68:        await client.query("BEGIN");
+packages/storage-postgres/src/postgres/entity-commit.ts:70:        await client.query("COMMIT");
+packages/storage-postgres/src/postgres/entity-commit.ts:74:          await client.query("ROLLBACK");
+packages/storage-postgres/src/postgres/entity-commit.ts:301:      await client.query("SELECT pg_advisory_xact_lock_shared($1)", [
+packages/storage-postgres/src/postgres/entity-commit.ts:305:      await client.query("SELECT pg_advisory_xact_lock_shared($1)", [
+packages/storage-postgres/src/postgres/entity-commit.ts:308:    await client.query("SELECT pg_advisory_xact_lock($1)", [
+packages/storage-postgres/src/postgres/entity-history.ts:205:        await client.query("SELECT pg_advisory_xact_lock_shared($1)", [this.familyKey()]);
+packages/storage-postgres/src/postgres/entity-history.ts:206:        await client.query("SELECT pg_advisory_xact_lock($1)", [this.entityKey(record.entityId)]);
+packages/storage-postgres/src/postgres/entity-history.ts:291:          await client.query("SELECT pg_advisory_lock_shared($1)", [family]);
+packages/storage-postgres/src/postgres/entity-history.ts:293:          await client.query("SELECT pg_advisory_lock($1)", [entity]);
+packages/storage-postgres/src/postgres/entity-history.ts:324:      await client.query("SELECT pg_advisory_lock($1)", [key]);
+packages/storage-postgres/src/postgres/entity-history.ts:415:   * @returns PostgreSQL advisory-lock key.
+packages/storage-postgres/src/postgres/entity-history.ts:442:   * @returns PostgreSQL advisory-lock key.
+packages/storage-postgres/src/postgres/entity-history.ts:487:    await client.query("BEGIN");
+packages/storage-postgres/src/postgres/entity-history.ts:496:      await client.query("COMMIT");
+packages/storage-postgres/src/postgres/entity-history.ts:502:      await client.query("ROLLBACK").catch(() => undefined);
+packages/storage-postgres/src/postgres/entity-history.ts:520:    await client.query("BEGIN");
+packages/storage-postgres/src/postgres/entity-history.ts:524:      await client.query("COMMIT");
+packages/storage-postgres/src/postgres/entity-history.ts:527:      await client.query("ROLLBACK").catch(() => undefined);
+packages/storage-postgres/src/postgres/entity-history.ts:676:        await client.query("SELECT pg_advisory_xact_lock_shared($1)", [this.familyKey()]);
+packages/storage-postgres/src/postgres/entity-history.ts:719:      await client.query("SELECT pg_advisory_lock($1)", [key]);
+packages/storage-postgres/src/postgres/entity-history.ts:787:   * @returns PostgreSQL advisory-lock key.
+packages/storage-postgres/src/postgres/entity-history.ts:829:    await client.query("BEGIN");
+packages/storage-postgres/src/postgres/entity-history.ts:833:      await client.query("COMMIT");
+packages/storage-postgres/src/postgres/entity-history.ts:836:      await client.query("ROLLBACK").catch(() => undefined);
+packages/storage-postgres/src/postgres/entity-history.ts:957:   * Clears one PostgreSQL advisory session lock.
+packages/storage-postgres/src/postgres/entity-history.ts:967:        readonly pg_advisory_unlock?: boolean;
+packages/storage-postgres/src/postgres/entity-history.ts:968:        readonly pg_advisory_unlock_shared?: boolean;
+packages/storage-postgres/src/postgres/entity-history.ts:969:      }>(shared ? "SELECT pg_advisory_unlock_shared($1)" : "SELECT pg_advisory_unlock($1)", [key]);
+packages/storage-postgres/src/postgres/entity-history.ts:971:        ? result.rows[0]?.pg_advisory_unlock_shared
+packages/storage-postgres/src/postgres/entity-history.ts:972:        : result.rows[0]?.pg_advisory_unlock;
+packages/storage-postgres/src/postgres/table-initializer.ts:79:      await client.query("BEGIN");
+packages/storage-postgres/src/postgres/table-initializer.ts:83:      await client.query("COMMIT");
+packages/storage-postgres/src/postgres/table-initializer.ts:86:        await client.query("ROLLBACK");
+packages/storage-postgres/src/postgres/table-initializer.ts:103:    return client.query("SELECT pg_advisory_xact_lock($1)", [
+packages/storage-postgres/src/postgres/table-initializer.ts:340:   * Calculates the advisory lock key for one physical table.
+packages/storage-postgres/src/postgres/table-initializer.ts:345:   * @returns Signed 64-bit advisory-lock key.
+packages/storage-postgres/src/postgres/delivery-cleanup.ts:127:        await client.query("BEGIN");
+packages/storage-postgres/src/postgres/delivery-cleanup.ts:129:        await client.query("COMMIT");
+packages/storage-postgres/src/postgres/delivery-cleanup.ts:133:          await client.query("ROLLBACK");
+packages/storage-postgres/src/postgres/delivery-cleanup.ts:174:    await client.query("SELECT pg_advisory_xact_lock($1)", [session.lockRecord(input.session.id)]);

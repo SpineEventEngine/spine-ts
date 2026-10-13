@@ -342,7 +342,18 @@ const Values = Object.freeze({
    * @returns The stored status value.
    */
   status(value: DeliveryStatus): number {
-    return { TO_DELIVER: 1, SCHEDULED: 2, DELIVERED: 3, TO_CATCH_UP: 4 }[value];
+    switch (value) {
+      case "TO_DELIVER":
+        return 1;
+      case "SCHEDULED":
+        return 2;
+      case "DELIVERED":
+        return 3;
+      case "TO_CATCH_UP":
+        return 4;
+      default:
+        throw new InboxMessageError("Inbox read status is invalid.");
+    }
   },
 
   /**

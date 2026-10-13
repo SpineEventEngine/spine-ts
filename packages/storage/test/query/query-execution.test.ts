@@ -28,6 +28,15 @@ const rows: readonly NormalizedQueryEntry<string, Row>[] = [
 ];
 
 describe("StorageQueryEvaluator", () => {
+  it("compares literal arrays as values in normalized plans", () => {
+    const entries = [entry("array", { tags: ["red", "blue"] }), entry("scalar", { tags: "red" })];
+
+    const matched = StorageQueryEvaluator.evaluate(entries, {
+      predicate: { kind: "comparison", column: "tags", operator: "equal", value: ["red", "blue"] },
+    });
+
+    expect(matched.map(({ id }) => id)).toEqual(["array"]);
+  });
   it("evaluates nested ALL/EITHER comparisons with the complete truth table", () => {
     const result = StorageQueryEvaluator.evaluate(rows, {
       predicate: {

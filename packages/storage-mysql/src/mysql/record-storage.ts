@@ -21,7 +21,8 @@ import type {
   NormalizedQueryPlan,
   NormalizedQueryPredicate,
   RecordEntry,
-  RecordQuery,
+  RecordFilter,
+  RecordOrder,
   RecordSpec,
   StorageQueryCapabilities,
   StorageContext,
@@ -29,6 +30,7 @@ import type {
 import {
   ColumnMappings,
   defaultQueryCandidateLimit,
+  RecordQuery,
   RecordStorage,
 } from "@spine-event-engine/storage";
 
@@ -821,59 +823,10 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
    */
   private querySql(query: RecordQuery<I>): { sql: string; values: unknown[] } {
     const values: unknown[] = [];
-    const clauses: string[] = [];
-    if (query.ids !== undefined) {
-      clauses.push(`ID IN (${query.ids.map(() => "?").join(", ")})`);
-      values.push(...query.ids.map((id) => this.idKey(id)));
-    }
-    for (const filter of query.filters ?? []) {
-      const name = filter.column === "id" ? "ID" : filter.column;
-      this.assertColumn(name);
-      clauses.push(`\`${name}\` <=> ?`);
-      values.push(this.queryValue(name, filter.value));
-    }
+    const clauses = this.recordClauses(query, values);
     const order = query.sort ?? [];
     for (const item of order) this.assertColumn(item.field === "id" ? "ID" : item.field);
-    if (query.after !== undefined) {
-      const terms: string[] = [];
-      for (let index = 0; index < order.length; index += 1) {
-        const item = order[index];
-        if (item === undefined) continue;
-        const field = item.field === "id" ? "ID" : item.field;
-        const prefix = order
-          .slice(0, index)
-          .map((previous) => `\`${previous.field === "id" ? "ID" : previous.field}\` <=> ?`);
-        for (const previous of order.slice(0, index))
-          values.push(
-            this.queryValue(
-              previous.field === "id" ? "ID" : previous.field,
-              previous.field === "id"
-                ? query.after.id
-                : query.after.values[order.indexOf(previous)]?.value,
-            ),
-          );
-        const previous = prefix.length === 0 ? "" : `${prefix.join(" AND ")} AND `;
-        const operator = item.direction === "desc" ? "<" : ">";
-        terms.push(`${previous}\`${field}\` ${operator} ?`);
-        values.push(
-          this.queryValue(
-            field,
-            field === "ID" ? query.after.id : query.after.values[index]?.value,
-          ),
-        );
-      }
-      const prefixes = order.map((item) => `\`${item.field === "id" ? "ID" : item.field}\` <=> ?`);
-      for (let index = 0; index < order.length; index += 1)
-        values.push(
-          this.queryValue(
-            order[index]?.field === "id" ? "ID" : (order[index]?.field ?? "ID"),
-            order[index]?.field === "id" ? query.after.id : query.after.values[index]?.value,
-          ),
-        );
-      terms.push(`${prefixes.length === 0 ? "" : `${prefixes.join(" AND ")} AND `}ID > ?`);
-      values.push(this.idKey(query.after.id));
-      clauses.push(`(${terms.join(" OR ")})`);
-    }
+    if (query.after !== undefined) clauses.push(this.recordContinuation(query, order, values));
     const orders = [
       ...order.map(
         (item) =>
@@ -897,6 +850,79 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
       values.push(query.offset);
     }
     return { sql, values };
+  }
+
+  /**
+   * Builds legacy ID and scalar-column clauses while retaining bind order.
+   *
+   * @param query The legacy record query.
+   * @param values Receives the bound values.
+   * @returns SQL clauses for IDs and column filters.
+   */
+  private recordClauses(query: RecordQuery<I>, values: unknown[]): string[] {
+    const clauses: string[] = [];
+    if (query.ids !== undefined) {
+      clauses.push(`ID IN (${query.ids.map(() => "?").join(", ")})`);
+      values.push(...query.ids.map((id) => this.idKey(id)));
+    }
+    for (const filter of query.filters ?? []) clauses.push(this.recordFilter(filter, values));
+    return clauses;
+  }
+
+  /**
+   * Builds one legacy scalar-column filter with individually bound choices.
+   *
+   * @param filter The scalar filter.
+   * @param values Receives the bound choices.
+   * @returns A false predicate, equality, or disjunction.
+   */
+  private recordFilter(filter: RecordFilter, values: unknown[]): string {
+    const name = filter.column === "id" ? "ID" : filter.column;
+    this.assertColumn(name);
+    const accepted = RecordQuery.acceptedValues(filter);
+    values.push(...accepted.map((value) => this.queryValue(name, value)));
+    if (accepted.length === 0) return "1=0";
+    if (accepted.length === 1) return `\`${name}\` <=> ?`;
+    return `(${accepted.map(() => `\`${name}\` <=> ?`).join(" OR ")})`;
+  }
+
+  /**
+   * Builds the legacy lexicographic continuation without changing its bind order.
+   *
+   * @param query The query with a continuation cursor.
+   * @param order The validated sort fields.
+   * @param values Receives the bound cursor values.
+   * @returns The continuation SQL predicate.
+   */
+  private recordContinuation(
+    query: RecordQuery<I>,
+    order: readonly RecordOrder[],
+    values: unknown[],
+  ): string {
+    const after = query.after;
+    if (after === undefined) return "1=0";
+    const terms = order.map((item, index) => {
+      const prefix = order.slice(0, index).map((previous, position) => {
+        const field = previous.field === "id" ? "ID" : previous.field;
+        values.push(
+          this.queryValue(field, field === "ID" ? after.id : after.values[position]?.value),
+        );
+        return `\`${field}\` <=> ?`;
+      });
+      const field = item.field === "id" ? "ID" : item.field;
+      values.push(this.queryValue(field, field === "ID" ? after.id : after.values[index]?.value));
+      const prior = prefix.length === 0 ? "" : `${prefix.join(" AND ")} AND `;
+      const comparison = item.direction === "desc" ? "<" : ">";
+      return `${prior}\`${field}\` ${comparison} ?`;
+    });
+    const prefixes = order.map((item, index) => {
+      const field = item.field === "id" ? "ID" : item.field;
+      values.push(this.queryValue(field, field === "ID" ? after.id : after.values[index]?.value));
+      return `\`${field}\` <=> ?`;
+    });
+    terms.push(`${prefixes.length === 0 ? "" : `${prefixes.join(" AND ")} AND `}ID > ?`);
+    values.push(this.idKey(after.id));
+    return `(${terms.join(" OR ")})`;
   }
 
   /**
