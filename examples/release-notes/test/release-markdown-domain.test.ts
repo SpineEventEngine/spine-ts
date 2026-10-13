@@ -66,7 +66,7 @@ const comparison = create(ReleaseComparisonSchema, {
   repository: create(RepositorySelectionIdSchema, { value: "selected-repository" }),
   base: create(GitCommitIdSchema, { value: "a".repeat(40) }),
   target: create(GitCommitIdSchema, { value: "b".repeat(40) }),
-  policy: ReleaseComparisonPolicy.ANCESTOR_NET_TREE,
+  policy: ReleaseComparisonPolicy.SELECTED_NET_TREE,
 });
 const encoder = new TextEncoder();
 

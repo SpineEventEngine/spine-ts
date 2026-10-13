@@ -535,14 +535,14 @@ test("Retry cannot invalidate a pending project picker after comparison failure"
   expect(compareProject).toHaveBeenCalledTimes(1);
 });
 
-test("unrelated Git revisions ask for another range without suggesting an unchanged retry", async () => {
+test("comparison failures offer retry with the selected revisions", async () => {
   renderFlow(
     bridge({
       session: () => Promise.resolve({ drafts: [], generations: {} }),
       chooseProject: () =>
         Promise.resolve({ handle: "handle", name: "portal", refs: ["v1", "main"] }),
       compareProject: () =>
-        Promise.reject(new Error("From must be part of To's Git history. Choose another range.")),
+        Promise.reject(new Error("Could not compare those Git revisions. Try again.")),
     }),
   );
   fireEvent.click(screen.getByRole("button", { name: "New release" }));
@@ -552,9 +552,9 @@ test("unrelated Git revisions ask for another range without suggesting an unchan
   await chooseRevision("To", "main");
   expect(await screen.findByRole("alert")).toHaveProperty(
     "textContent",
-    "From must be part of To's Git history. Choose another range.",
+    "Could not compare those Git revisions. Try again.Retry",
   );
-  expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+  expect(screen.getByRole("button", { name: "Retry" })).not.toBeNull();
   expect(screen.getByRole<HTMLButtonElement>("combobox", { name: "To" }).disabled).toBe(false);
 });
 

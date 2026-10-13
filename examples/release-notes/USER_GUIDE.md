@@ -89,7 +89,7 @@ import { ReleaseDocumentValidation } from "../src/domain/model.js";
  */
 const draftReleaseNotes = AiModel.define({
     name: "draft-release-notes",
-    version: "1",
+    version: "2",
     kind: "generation",
     input: ReleaseGenerationRequestedSchema,
     output: ReleaseNotesDocumentSchema,
@@ -97,17 +97,18 @@ const draftReleaseNotes = AiModel.define({
     instructions: [
         "Draft structured release notes for the supplied audience and instruction.",
         "Use only the accepted comparison and exact catalog evidence.",
-        "Call the local read-only Git tools when detail is needed; cite exact commit, parent, and path.",
+        "Call the local read-only Git tools when detail is needed. Cite exact commit, parent, and path for per-parent evidence, or selected base, target, and path for a net tree change.",
         "Do not invent changes or claim incomplete detail as confirmed evidence.",
         "Return sections and evidence-backed entries for human review, not an approval.",
     ].join(" "),
     tools: [
         { server: "release-git", tool: "list_release_changes" },
         { server: "release-git", tool: "read_change_patch" },
+        { server: "release-git", tool: "read_net_change_patch" },
         { server: "release-git", tool: "read_release_file" },
     ],
     validation: {
-        version: "1",
+        version: "2",
         check: ReleaseDocumentValidation.check,
     },
 });
@@ -116,8 +117,9 @@ const draftReleaseNotes = AiModel.define({
 
 For example, a model might cite `rotation.ts` even though that file is absent
 from the accepted comparison. Parsing JSON does not catch that mistake. The
-application validator checks the exact commit, parent, and path against the
-catalog, and returns an `UNLISTED_EVIDENCE` issue with its field path. The runtime
+application validator checks either the exact commit, parent, and path or the
+selected From, To, and net changed path against the catalog. It returns an
+`UNLISTED_EVIDENCE` issue with the field path for any unsupported citation. The runtime
 can include that issue in a recorded correction attempt.
 
 A plain-text answer cannot become a `ReleaseNotesDocument` merely because the
@@ -326,13 +328,14 @@ inference outside the recorded Agent operation.
 ## 7. Permit only the Git tools needed for this draft
 
 The private [Git registration](src/trusted/git-mcp-registration.ts) configures a
-local stdio MCP worker. The Agent's model definition permits only three tools:
+local stdio MCP worker. The Agent's model definition permits only four tools:
 
-| Tool                   | Purpose                                        |
-| ---------------------- | ---------------------------------------------- |
-| `list_release_changes` | Read the accepted change and evidence catalog. |
-| `read_change_patch`    | Read a cataloged commit/parent/path diff.      |
-| `read_release_file`    | Read a cataloged committed file.               |
+| Tool                    | Purpose                                        |
+| ----------------------- | ---------------------------------------------- |
+| `list_release_changes`  | Read the accepted change and evidence catalog. |
+| `read_change_patch`     | Read a cataloged commit/parent/path diff.      |
+| `read_net_change_patch` | Read a listed path's direct From-to-To diff.   |
+| `read_release_file`     | Read a cataloged committed file.               |
 
 The model supplies tool arguments. The framework checks them against the
 advertised schemas and configured policy, records the call, enforces any configured bounds,

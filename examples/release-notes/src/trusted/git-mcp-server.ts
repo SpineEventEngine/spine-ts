@@ -25,19 +25,20 @@ const annotations = Object.freeze({
 });
 
 /**
- * Registers the three bounded read-only tools on an SDK MCP server.
+ * Registers the bounded read-only tools on an SDK MCP server.
  */
 export const GitMcpServer = {
   /**
    * Creates a worker server for one pinned comparison.
    *
    * @param comparison Immutable accepted comparison.
-   * @returns SDK MCP server with exactly three evidence tools.
+   * @returns SDK MCP server with catalog-constrained evidence tools.
    */
   create(comparison: GitReleaseComparison): McpServer {
     const server = new McpServer({ name: "release-git-mcp-server", version: "1.0.0" });
     this.registerList(server, comparison);
     this.registerPatch(server, comparison);
+    this.registerNetPatch(server, comparison);
     this.registerFile(server, comparison);
     return server;
   },
@@ -123,6 +124,40 @@ export const GitMcpServer = {
           const detail = await comparison.readChangePatch(evidence, context.mcpReq.signal);
           context.mcpReq.signal.throwIfAborted();
           return this.success({ commit, parent, path, ...detail });
+        } catch {
+          return this.denied();
+        }
+      },
+    );
+  },
+
+  /**
+   * Registers direct selected-tree patches for net changed paths.
+   *
+   * @param server SDK server.
+   * @param comparison Immutable accepted comparison.
+   */
+  registerNetPatch(server: McpServer, comparison: GitReleaseComparison): void {
+    server.registerTool(
+      "read_net_change_patch",
+      {
+        title: "Read a net change patch",
+        description:
+          "Read the direct selected From-to-To tree patch for a listed net changed path, including source-only deletions.",
+        inputSchema: z.object({ path: z.string() }).strict(),
+        annotations,
+      },
+      async ({ path }, context) => {
+        if (context.mcpReq.signal.aborted) return this.denied();
+        try {
+          const detail = await comparison.readNetChangePatch(path, context.mcpReq.signal);
+          context.mcpReq.signal.throwIfAborted();
+          return this.success({
+            base: comparison.baseCommit,
+            target: comparison.targetCommit,
+            path,
+            ...detail,
+          });
         } catch {
           return this.denied();
         }

@@ -70,8 +70,8 @@ function responses(number: number, base: string, target: string): string {
     const calls = [
       { name: "tool_0", arguments: "{}" },
       {
-        name: "tool_1",
-        arguments: JSON.stringify({ commit: target, parent: base, path: "notes.txt" }),
+        name: "tool_2",
+        arguments: JSON.stringify({ path: "notes.txt" }),
       },
       {
         name: "tool_1",
@@ -123,10 +123,10 @@ function responses(number: number, base: string, target: string): string {
         entries: [
           {
             text: "Changed release file.",
-            evidence: [
+            netEvidence: [
               {
-                commit: { value: target },
-                parent: { value: base },
+                base: { value: base },
+                target: { value: target },
                 path: number === 2 ? "unlisted.txt" : "notes.txt",
               },
             ],
@@ -284,7 +284,7 @@ it("uses the real Agent, plan Responses, and local Git tool before staging evide
               repository: create(RepositorySelectionIdSchema, { value: "selected-repository" }),
               base: create(GitCommitIdSchema, { value: base }),
               target: create(GitCommitIdSchema, { value: target }),
-              policy: ReleaseComparisonPolicy.ANCESTOR_NET_TREE,
+              policy: ReleaseComparisonPolicy.SELECTED_NET_TREE,
             }),
             audience: "SDK users",
           }),
@@ -384,7 +384,7 @@ it("uses the real Agent, plan Responses, and local Git tool before staging evide
       const value = event.message && AnyMessages.unpack(event.message, ReleaseNotesProposedSchema);
       return value ? [value] : [];
     });
-    expect(proposal[0]?.document?.sections[0]?.entries[0]?.evidence[0]?.path).toBe("notes.txt");
+    expect(proposal[0]?.document?.sections[0]?.entries[0]?.netEvidence[0]?.path).toBe("notes.txt");
     expect(new TextDecoder().decode(result[0].staged.markdown?.utf8)).toContain(
       "- Changed release file.",
     );

@@ -59,6 +59,16 @@ fails the existing ancestor requirement. Current native user session stays open
 while this feedback correction is built and reviewed. All40 focused comparison
 tests, scoped mechanical checks and independent lifecycle review pass. The
 converged source is packaged separately to preserve the running app session.
+The human then rejected the ancestor-only Git policy. Direct selected-tree
+comparisons now accept diverged/reverse/unrelated histories, with typed net
+citations and a scoped MCP patch tool. Real base-1x v1.8.0/master comparison
+succeeds; focused checks and independent contract/reliability review pass.
+The sole TSDoc finding is corrected. Isolated packaging succeeded. Canonical
+task gates pass; its full run passed6286 tests and found one stale three-tool
+inventory assertion. That test is corrected and its two-case suite passes,
+including scoped patch access and denial. The comparison correction is ready
+to push; the open native session was preserved. The previous push failed CI cleanup for long wizard functions; those
+functions have been refactored and the cleanup gate now passes locally.
 The live model-call and UI-inspection blockers are resolved.
 Current evidence and acceptance criteria are in the Agent task record.
 The ChatGPT subscription adapter checkpoint is implemented, reviewed, and pushed

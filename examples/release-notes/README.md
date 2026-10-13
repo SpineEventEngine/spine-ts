@@ -102,7 +102,9 @@ for how the application connects sign-in to the Agent API.
 ## Git scope
 
 The app reads committed changes only. A selected subdirectory resolves to its
-working-tree repository root; bare repositories are unsupported. The accepted
+working-tree repository root; bare repositories are unsupported. From and To
+may be divergent or reversed. Net changes compare their selected trees directly;
+the commit list contains commits reachable from To but not From. The accepted
 comparison contains full commit IDs, so moving a branch afterward cannot change
 that generation's input.
 
@@ -112,8 +114,10 @@ still stop work. Binary or missing detail is reported as incomplete rather than
 silently truncated. Listing results are complete by default; a caller can request
 a page size and continue with `nextPageToken`.
 
-The MCP worker exposes only `list_release_changes`, `read_change_patch`, and
-`read_release_file` for accepted evidence. It cannot edit code, fetch arbitrary
+The MCP worker exposes only `list_release_changes`, `read_change_patch`,
+`read_net_change_patch`, and `read_release_file` for accepted evidence. The net
+patch reads the direct selected From-to-To tree difference, including paths
+removed from To. It cannot edit code, fetch arbitrary
 paths, push, publish a release, or execute a model-supplied shell command.
 
 ## Follow the implementation

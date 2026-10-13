@@ -7709,3 +7709,93 @@ Converged Studio build and isolated package both exit0. Review app location:
 Current native app intentionally remains on the previous build to preserve the
 human session; new feedback is verified by focused renderer tests, not claimed
 as live-tested in that still-running old process.
+
+Human correction: remove the unjustified ancestor-only comparison restriction.
+Direct From-to-To tree differences must work for diverged and reverse ranges;
+do not silently substitute a PR merge-base comparison. Standard example fix
+now reaches a serialized example evidence contract: target-only commit/parent
+citations cannot describe source-only removals. Existing implementer explicitly
+dispatched Sol/medium with no inherited history/memory/children. Necessary
+acceptance includes usable net-diff MCP evidence and typed citations, pinning,
+exact catalog validation, tests, docs and updated package. One architecture
+pass explicitly dispatched existing requirements_splitter Astra/high at this
+demonstrated contract blocker; read-only, no inherited history/memory/children.
+Runtime metadata not exposed; explicit immutable profiles satisfy allocation.
+Only example contracts change; no new framework policy or artificial limits.
+Current native session remains untouched. Live base-1x range contains2203
+target-not-base commits and no root commits; read-only Git counts confirmed.
+
+Architecture pass confirms smallest additive example schema: net evidence
+reference holds typed base/target commit IDs and path; ReleaseNoteEntry adds a
+net_evidence collection, existing per-parent evidence unchanged. A valid claim
+has either collection. Validate exact pinned comparison plus catalog.changes
+path; no duplicated catalog/fake parent relation. Independent Git tests now
+accept diverged/reverse/unrelated histories; roots have no parent edges.
+Previous9a1da2ee1 CI fails deterministic lint:cleanup: four wizard functions
+exceed repository callable line rule (ChangesFields, useWizardState,
+useOperationalState, ChangesRoute). Existing writer receives this correction,
+with local cleanup/TSDoc checks mandatory before review. No runtime limit added.
+
+Architecture result accepted: additive net citations, endpoint-bound MCP patch
+response, exact validation, model/validation version advance, root commits with
+empty parent lists, no renderer citation redesign. One recommendation adjusted
+to the human's explicit no-legacy-compatibility preference: rename the unreleased
+example comparison enum to SELECTED_NET_TREE rather than retaining a deprecated
+ANCESTOR_NET_TREE alias. No public framework contract is changed. High-risk
+example serialized semantics use this one architecture pass; focused contract
+and reliability review follow deterministic checks.
+
+Read-only live-repository reproduction now succeeds on current Git slice:
+base-1x v1.8.0 to master yields2203 target-not-base commits,1548 net changed
+files and29422 genuine parent-edge entries. Pinned endpoints457bf41d3bf3b4724f10af59fb579569d2b899c1
+and80ed808d7b9f818aac0e45129d07cd821ee79c13. No repository mutation or provider
+call. Shared generation support remains under focused validation before review.
+
+Implementation reports77 focused tests across eight suites pass, plus Agent
+net-only citation/tool integration after example rebuild. Cleanup/TSDoc,
+TypeScript and generated-Proto checks pass; final Proto lint/docs/format/scoped
+ESLint remain before review. Acceptance includes real divergence, reverse/root
+history, direct deletion patches and exact endpoint citation validation.
+
+Frozen implementation passes focused behavior tests, example build/typecheck,
+cleanup/TSDoc, Proto lint/generation consistency, docs gates, scoped ESLint,
+format and diff checks. Two fresh review concerns dispatched independently with
+no inherited history/memory/children, explicit gpt-6-sol/medium: existing
+TypeScript/API reviewer for example Proto/model validation/docs; existing
+performance/reliability reviewer for Git/MCP pinning and UI refactor. Style
+concern covered by deterministic callable rules/ESLint/format/TSDoc. Security
+exposure remains existing read-only local MCP; reliability review checks exact
+catalog/path constraints, no new auth or external permissions. Broader security
+review N/A to this correction; prior release boundary review remains applicable.
+
+Review wave complete. Reliability/Git/MCP/UI review clean. Contract reviewer
+confirms schema, generated declarations and validation; only finding was
+readNetChangePatch TSDoc calling a deleted path target-side. Existing writer
+corrected it to literal net changed path; TSDoc/format/diff pass. Prose-only
+correction does not reopen review. Configured role models/reasoning match
+explicit dispatch; runtime self-introspection not exposed.
+Existing Luna/low mechanical function builds and isolated-packages first, then
+runs canonical verify:task --no-coverage examples/release-notes/test with
+VITEST_MAX_WORKERS=1. Installed Vitest supports this environment variable;
+sequential workers avoid prior cross-suite contention without increasing
+deadlines. Task profile includes full branch mandatory tests. No duplicate
+expensive profile or provider call. Existing native session stays untouched.
+
+Final build/package exit0; isolated app:
+/var/folders/b7/lgl3q0z57xj72fjjjj_wd9n80000gq/T/spine-release-notes-review-qSKIZo/out/Release Notes Studio-darwin-arm64/Release Notes Studio.app.
+Canonical task verification completes producer exit1: all cheap gates pass;
+395 files pass,1 fail,1 skip;6286 tests pass,1 fail,1 skip (642.46s test stage).
+Sole failure is stale exact three-tool inventory in adapter release-git-interop
+test; actual fourth tool is the intentional read_net_change_patch. Existing
+Sol/medium writer updates that expectation and exercises the new tool through
+framework stdio, including unknown-path denial. No runtime change is required.
+Rerun affected suite and deterministic checks; repeat full profile would add
+no evidence for this test-only correction.
+
+Interop test correction passes2/2: exact four-tool inventory, pinned net-patch
+response through framework stdio, uncataloged path denial. Scoped ESLint,
+Prettier, cleanup and diff checks pass. No runtime code changed after full run;
+all its other6286 tests passed. Acceptance complete for comparison fix and
+previous CI cleanup defect; updated isolated app already provided to human.
+Commit/push follows; new remote checks must not be described as green before
+the new head is actually checked.

@@ -353,6 +353,13 @@ const ChangesFields = (props: ChangesProps): ReactElement => (
         onChange={props.setTarget}
       />
     </div>
+    <ComparisonFeedback {...props} />
+    <ChangesHints {...props} />
+  </>
+);
+
+const ComparisonFeedback = (props: ChangesProps): ReactElement => (
+  <>
     {props.comparison && (
       <p className="rs-change-counts">
         {props.comparison.commits.length}{" "}
@@ -373,19 +380,21 @@ const ChangesFields = (props: ChangesProps): ReactElement => (
     {props.comparisonStatus === "failed" && (
       <div className="rs-comparison-error" role="alert">
         <p>{props.comparisonError}</p>
-        {props.comparisonError !==
-          "From must be part of To's Git history. Choose another range." && (
-          <button
-            type="button"
-            className="rs-secondary"
-            disabled={props.busy}
-            onClick={props.retryComparison}
-          >
-            Retry
-          </button>
-        )}
+        <button
+          type="button"
+          className="rs-secondary"
+          disabled={props.busy}
+          onClick={props.retryComparison}
+        >
+          Retry
+        </button>
       </div>
     )}
+  </>
+);
+
+const ChangesHints = (props: ChangesProps): ReactElement => (
+  <>
     {!props.project && <p className="rs-change-counts">Choose a Git project to continue.</p>}
     {props.project && (!props.base || !props.target) && (
       <p className="rs-change-counts">Select From and To revisions to continue.</p>
@@ -640,6 +649,15 @@ interface FlowConfig {
 }
 
 const useWizardState = () => {
+  const comparison = useComparisonState();
+  const [title, setTitle] = useState("");
+  const [audience, setAudience] = useState("Customers");
+  const [tone, setTone] = useState("Plain");
+  const [notes, setNotes] = useState("");
+  return { ...comparison, title, setTitle, audience, setAudience, tone, setTone, notes, setNotes };
+};
+
+const useComparisonState = () => {
   const [project, setProject] = useState<{
     handle: string;
     name: string;
@@ -647,10 +665,6 @@ const useWizardState = () => {
   }>();
   const [base, setBase] = useState("");
   const [target, setTarget] = useState("");
-  const [title, setTitle] = useState("");
-  const [audience, setAudience] = useState("Customers");
-  const [tone, setTone] = useState("Plain");
-  const [notes, setNotes] = useState("");
   const [comparison, setComparison] = useState<Comparison>();
   const [comparisonStatus, setComparisonStatus] = useState<"idle" | "pending" | "failed">("idle");
   const [comparisonError, setComparisonError] = useState("");
@@ -662,14 +676,6 @@ const useWizardState = () => {
     setBase,
     target,
     setTarget,
-    title,
-    setTitle,
-    audience,
-    setAudience,
-    tone,
-    setTone,
-    notes,
-    setNotes,
     comparison,
     setComparison,
     comparisonStatus,
@@ -686,11 +692,7 @@ const useOperationalState = (config: FlowConfig) => {
   const [draft, setDraft] = useState<Draft>();
   const [busy, setBusy] = useState(false);
   const [writingStatus, setWritingStatus] = useState("Your editor will open when it’s ready.");
-  const sequence = useRef(0);
-  const pickerPending = useRef(false);
-  const generation = useRef<string | undefined>(undefined);
-  const openingId = useRef<string | undefined>(undefined);
-  const cancelRequested = useRef(false);
+  const refs = useOperationalRefs();
   const session = useSessionDrafts(config.bridge, config.onNotice);
   const editor = useMarkdownSave(config.bridge, draft, (saved) => {
     setDraft(saved);
@@ -708,16 +710,20 @@ const useOperationalState = (config: FlowConfig) => {
     setBusy,
     writingStatus,
     setWritingStatus,
-    sequence,
-    pickerPending,
-    generation,
-    openingId,
-    cancelRequested,
+    ...refs,
     session,
     editor,
     report,
   };
 };
+
+const useOperationalRefs = () => ({
+  sequence: useRef(0),
+  pickerPending: useRef(false),
+  generation: useRef<string | undefined>(undefined),
+  openingId: useRef<string | undefined>(undefined),
+  cancelRequested: useRef(false),
+});
 
 const useFlowState = (config: FlowConfig) => ({
   ...useWizardState(),
@@ -1068,35 +1074,43 @@ const ChangesRoute = ({
     comparisonError={state.comparisonError}
     busy={state.busy}
     pickerPending={state.pickerPending.current}
-    retryComparison={() => {
-      state.setComparisonRetry((value) => value + 1);
-    }}
-    choose={() => {
-      void chooseProject(state, config);
-    }}
-    setBase={(value) => {
-      changeRevision(state, "base", value);
-    }}
-    setTarget={(value) => {
-      changeRevision(state, "target", value);
-    }}
-    setTitle={(value) => {
-      changeReleaseTitle(state, value);
-    }}
-    next={() => {
-      nextFromChanges(state);
-    }}
-    dashboard={() => {
-      if (state.busy && !state.pickerPending.current) return;
-      ++state.sequence.current;
-      if (state.pickerPending.current) {
-        state.pickerPending.current = false;
-        state.setBusy(false);
-      }
-      state.setPage("dashboard");
-    }}
+    {...changesActions(state, config)}
   />
 );
+
+const changesActions = (state: FlowState, config: FlowConfig) => ({
+  retryComparison: () => {
+    state.setComparisonRetry((value) => value + 1);
+  },
+  choose: () => {
+    void chooseProject(state, config);
+  },
+  setBase: (value: string) => {
+    changeRevision(state, "base", value);
+  },
+  setTarget: (value: string) => {
+    changeRevision(state, "target", value);
+  },
+  setTitle: (value: string) => {
+    changeReleaseTitle(state, value);
+  },
+  next: () => {
+    nextFromChanges(state);
+  },
+  dashboard: () => {
+    returnToDashboard(state);
+  },
+});
+
+const returnToDashboard = (state: FlowState): void => {
+  if (state.busy && !state.pickerPending.current) return;
+  ++state.sequence.current;
+  if (state.pickerPending.current) {
+    state.pickerPending.current = false;
+    state.setBusy(false);
+  }
+  state.setPage("dashboard");
+};
 
 const changeReleaseTitle = (state: FlowState, value: string): void => {
   state.openingId.current = undefined;

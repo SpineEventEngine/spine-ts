@@ -83,12 +83,12 @@ it("reports sign-in failure as an account action without exposing provider detai
   ).toBe("ChatGPT sign-in did not finish. Try again.");
 });
 
-it("explains a non-ancestor Git range without exposing other Git failures", async () => {
+it("keeps comparison failures generic without exposing Git details", async () => {
   await expect(
     StudioIpcErrors.execute("compare-project", () =>
-      Promise.reject(new Error("Release base must be an ancestor of the target.")),
+      Promise.reject(new Error("Selected Git revision is unavailable.")),
     ),
-  ).rejects.toThrow("From must be part of To's Git history. Choose another range.");
+  ).rejects.toThrow("Could not compare those Git revisions. Try again.");
   await expect(
     StudioIpcErrors.execute("compare-project", () => Promise.reject(new Error("private Git path"))),
   ).rejects.toThrow("Could not compare those Git revisions. Try again.");

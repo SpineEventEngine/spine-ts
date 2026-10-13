@@ -24,7 +24,6 @@ const generic = "We could not confirm this action. Refresh the draft and try aga
 const signIn = "ChatGPT sign-in did not finish. Try again.";
 const accountStatus = "Could not check your ChatGPT connection. Try again.";
 const comparison = "Could not compare those Git revisions. Try again.";
-const unrelatedRevisions = "From must be part of To's Git history. Choose another range.";
 const safeMessages = [
   stale,
   generation,
@@ -35,7 +34,6 @@ const safeMessages = [
   signIn,
   accountStatus,
   comparison,
-  unrelatedRevisions,
   generic,
 ] as const;
 
@@ -67,10 +65,7 @@ export const StudioIpcErrors = {
     if (detail === "Generation inputs changed; read the current draft.") return changedInputs;
     if (command === "sign-in") return signIn;
     if (command === "status") return accountStatus;
-    if (command === "compare-project")
-      return detail === "Release base must be an ancestor of the target."
-        ? unrelatedRevisions
-        : comparison;
+    if (command === "compare-project") return comparison;
     if (command === "generate" || command === "repeat-generation") return generation;
     if (command === "history") return history;
     if (command === "export") return exported;

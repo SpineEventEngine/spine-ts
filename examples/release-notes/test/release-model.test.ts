@@ -18,9 +18,12 @@ import { expect, it } from "vitest";
 import { ReleaseGenerationRequestedSchema } from "../generated/spine/examples/releasenotes/events_pb.js";
 import {
   GitCommitIdSchema,
+  ReleaseChangeSchema,
+  ReleaseComparisonSchema,
   ReleaseEvidenceCatalogSchema,
   ReleaseEvidenceReferenceSchema,
   ReleaseEvidenceSchema,
+  ReleaseNetEvidenceReferenceSchema,
   ReleaseNoteEntrySchema,
   ReleaseNotesDocumentSchema,
   ReleaseNotesSectionSchema,
@@ -107,6 +110,62 @@ it("requires every proposed claim to cite exact accepted catalog evidence", () =
   entry.evidence = [];
   expect(ReleaseDocumentValidation.check(candidate, input)).toEqual(
     expect.arrayContaining([expect.objectContaining({ code: "MISSING_EVIDENCE" })]),
+  );
+});
+
+it("accepts a net change citation only for the exact selected trees and cataloged path", () => {
+  const base = create(GitCommitIdSchema, { value: "a".repeat(40) });
+  const target = create(GitCommitIdSchema, { value: "b".repeat(40) });
+  const input = create(ReleaseGenerationRequestedSchema, {
+    comparison: create(ReleaseComparisonSchema, { base, target }),
+    catalog: create(ReleaseEvidenceCatalogSchema, {
+      changes: [create(ReleaseChangeSchema, { path: "removed.md", status: "D" })],
+      evidence: [
+        create(ReleaseEvidenceSchema, {
+          commit: create(GitCommitIdSchema, { value: "d".repeat(40) }),
+          parent: create(GitCommitIdSchema, { value: "c".repeat(40) }),
+          path: "added.md",
+          status: "A",
+        }),
+      ],
+    }),
+  });
+  const entry = create(ReleaseNoteEntrySchema, { text: "Removed the old guide." });
+  const netEvidence = [
+    create(ReleaseNetEvidenceReferenceSchema, { base, target, path: "removed.md" }),
+  ];
+  entry.netEvidence = netEvidence;
+  const citation = netEvidence[0];
+  if (!citation) throw new Error("Missing net citation fixture.");
+  const candidate = create(ReleaseNotesDocumentSchema, {
+    sections: [create(ReleaseNotesSectionSchema, { heading: "Changes", entries: [entry] })],
+  });
+  expect(ReleaseDocumentValidation.check(candidate, input)).toEqual([]);
+  citation.path = "unlisted.md";
+  expect(ReleaseDocumentValidation.check(candidate, input)).toEqual(
+    expect.arrayContaining([expect.objectContaining({ code: "UNLISTED_EVIDENCE" })]),
+  );
+  citation.path = "removed.md";
+  citation.base = create(GitCommitIdSchema, { value: "c".repeat(40) });
+  expect(ReleaseDocumentValidation.check(candidate, input)).toEqual(
+    expect.arrayContaining([expect.objectContaining({ code: "UNLISTED_EVIDENCE" })]),
+  );
+  citation.base = base;
+  citation.target = base;
+  expect(ReleaseDocumentValidation.check(candidate, input)).toEqual(
+    expect.arrayContaining([expect.objectContaining({ code: "UNLISTED_EVIDENCE" })]),
+  );
+  citation.target = target;
+  entry.evidence = [
+    create(ReleaseEvidenceReferenceSchema, {
+      commit: create(GitCommitIdSchema, { value: "d".repeat(40) }),
+      parent: create(GitCommitIdSchema, { value: "c".repeat(40) }),
+      path: "added.md",
+    }),
+  ];
+  citation.path = "unlisted.md";
+  expect(ReleaseDocumentValidation.check(candidate, input)).toEqual(
+    expect.arrayContaining([expect.objectContaining({ code: "UNLISTED_EVIDENCE" })]),
   );
 });
 

@@ -324,11 +324,6 @@ export class GitReleaseComparison {
       const run = (args: string[]) => admission.run(input.gitExecutable, repository, args);
       const base = await this.resolveCommit(run, input.base);
       const target = await this.resolveCommit(run, input.target);
-      const ancestor = await run(["merge-base", "--is-ancestor", base, target]).then(
-        () => true,
-        () => false,
-      );
-      if (!ancestor) throw new Error("Release base must be an ancestor of the target.");
       const { commits, evidence } = await this.catalogCommits(run, base, target, admission);
       const changes = await this.netChanges(run, base, target, admission);
       return new GitReleaseComparison(
@@ -440,8 +435,6 @@ export class GitReleaseComparison {
     for (const row of ids) {
       const [commit, ...parents] = row.split(" ");
       if (!commit) throw new Error("Malformed Git commit catalog.");
-      if (parents.length === 0)
-        throw new Error("Unrelated-history root commit is unsupported; narrow the range.");
       const subject = GitCodec.text(await run(["show", "-s", "--format=%s", commit])).trim();
       const entry = { commit, parents, subject };
       admission.record(entry);
@@ -595,6 +588,22 @@ export class GitReleaseComparison {
   }
 
   /**
+   * Reads the direct selected-tree patch for a cataloged net changed path.
+   *
+   * @param path Literal net changed path from the verified catalog.
+   * @param signal Optional cancellation signal.
+   * @returns Complete patch or explicit incomplete reason.
+   */
+  async readNetChangePatch(
+    path: string,
+    signal?: AbortSignal,
+  ): Promise<{ complete: boolean; patch?: string; reason?: string }> {
+    const change = this.changes.find((entry) => entry.path === path);
+    if (!change) throw new Error("Requested patch is outside the verified catalog.");
+    return this.patchBetween(this.baseCommit, this.targetCommit, change, signal);
+  }
+
+  /**
    * Reads a bounded literal-path diff after catalog membership is checked.
    *
    * @param request Verified evidence entry.
@@ -602,22 +611,31 @@ export class GitReleaseComparison {
    * @returns Complete patch or explicit incomplete reason.
    */
   private async patch(request: GitEvidence, signal?: AbortSignal) {
-    const paths = (
-      request.previousPath ? [request.previousPath, request.path] : [request.path]
-    ).map((path) => `:(literal)${path}`);
+    return this.patchBetween(request.parent, request.commit, request, signal);
+  }
+
+  /**
+   * Reads one verified path diff between pinned commits.
+   *
+   * @param source Pinned source commit.
+   * @param destination Pinned destination commit.
+   * @param change Verified change and any source-side rename path.
+   * @param signal Optional cancellation signal.
+   * @returns Complete patch or explicit incomplete reason.
+   */
+  private async patchBetween(
+    source: string,
+    destination: string,
+    change: GitChange,
+    signal?: AbortSignal,
+  ) {
+    const paths = (change.previousPath ? [change.previousPath, change.path] : [change.path]).map(
+      (path) => `:(literal)${path}`,
+    );
     try {
       const patch = GitCodec.text(
         await this.run(
-          [
-            "diff",
-            "--no-ext-diff",
-            "--no-textconv",
-            "-M",
-            request.parent,
-            request.commit,
-            "--",
-            ...paths,
-          ],
+          ["diff", "--no-ext-diff", "--no-textconv", "-M", source, destination, "--", ...paths],
           signal,
         ),
       );

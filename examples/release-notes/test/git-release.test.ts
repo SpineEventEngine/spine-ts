@@ -123,21 +123,51 @@ describe("trusted Git release comparison", () => {
     ).rejects.toThrow("catalog");
   });
 
-  it("rejects a nonancestor comparison before building a catalog", async () => {
+  it("compares divergent selected trees and reads source-only net deletion evidence", async () => {
     const directory = repository();
     const base = commit(directory, "first.txt", "first\n", "Base");
     git(directory, "checkout", "--quiet", "-b", "side");
     const side = commit(directory, "side.txt", "side\n", "Side");
     git(directory, "checkout", "--quiet", "--detach", base);
     const target = commit(directory, "target.txt", "target\n", "Target");
-    await expect(
-      GitReleaseComparison.open({
-        repository: directory,
-        gitExecutable,
-        base: side,
-        target,
-      }),
-    ).rejects.toThrow("ancestor");
+    const comparison = await GitReleaseComparison.open({
+      repository: directory,
+      gitExecutable,
+      base: "side",
+      target: "HEAD",
+    });
+    expect(comparison.baseCommit).toBe(side);
+    expect(comparison.targetCommit).toBe(target);
+    expect(comparison.commits.map((entry) => entry.commit)).toEqual([target]);
+    expect(comparison.changes).toEqual(
+      expect.arrayContaining([
+        { path: "side.txt", status: "D" },
+        { path: "target.txt", status: "A" },
+      ]),
+    );
+    expect(comparison.evidence.some((entry) => entry.path === "side.txt")).toBe(false);
+    expect((await comparison.readNetChangePatch("side.txt")).patch).toContain("-side");
+    expect((await comparison.readNetChangePatch("target.txt")).patch).toContain("+target");
+    await expect(comparison.readNetChangePatch("first.txt")).rejects.toThrow("catalog");
+    git(directory, "branch", "-f", "side", target);
+    expect((await comparison.readNetChangePatch("side.txt")).patch).toContain("-side");
+  });
+
+  it("compares a reverse range through the direct selected tree difference", async () => {
+    const directory = repository();
+    const base = commit(directory, "notes.txt", "before\n", "Base");
+    const target = commit(directory, "notes.txt", "after\n", "Later");
+    const comparison = await GitReleaseComparison.open({
+      repository: directory,
+      gitExecutable,
+      base: target,
+      target: base,
+    });
+    expect(comparison.commits).toEqual([]);
+    expect(comparison.evidence).toEqual([]);
+    expect(comparison.changes).toEqual([{ path: "notes.txt", status: "M" }]);
+    expect((await comparison.readNetChangePatch("notes.txt")).patch).toContain("+before");
+    expect((await comparison.readNetChangePatch("notes.txt")).patch).toContain("-after");
   });
 
   it("uses repository-root paths when selected from a nested directory", async () => {
@@ -467,7 +497,7 @@ describe("trusted Git release comparison", () => {
     expect(readFileSync(invocations, "utf8").trim().split("\n")).toHaveLength(2);
   });
 
-  it("rejects an unrelated-history root before claiming complete per-commit evidence", async () => {
+  it("accepts an unrelated-history root without inventing a parent edge", async () => {
     const directory = repository();
     const base = commit(directory, "base.txt", "base\n", "Base");
     const main = git(directory, "symbolic-ref", "--short", "HEAD");
@@ -486,8 +516,20 @@ describe("trusted Git release comparison", () => {
       "-m",
       "Merge unrelated",
     );
-    await expect(
-      GitReleaseComparison.open({ repository: directory, gitExecutable, base, target: "HEAD" }),
-    ).rejects.toThrow("root commit");
+    const comparison = await GitReleaseComparison.open({
+      repository: directory,
+      gitExecutable,
+      base,
+      target: "HEAD",
+    });
+    expect(comparison.commits).toEqual(
+      expect.arrayContaining([expect.objectContaining({ parents: [], subject: "Unrelated root" })]),
+    );
+    expect(
+      comparison.evidence.some(
+        (entry) => entry.commit === git(directory, "rev-parse", "unrelated"),
+      ),
+    ).toBe(false);
+    expect((await comparison.readNetChangePatch("other.txt")).patch).toContain("+other");
   });
 });

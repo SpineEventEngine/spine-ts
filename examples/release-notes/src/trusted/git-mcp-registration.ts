@@ -59,7 +59,7 @@ export interface GitMcpOperationLookup {
  */
 export const ReleaseGitRegistration = {
   /**
-   * Registers a fixed executable and three read-only tools through Spine MCP.
+   * Registers a fixed executable and read-only evidence tools through Spine MCP.
    *
    * @param options Trusted process paths and accepted comparison lookup.
    * @returns Registry-ready MCP server registration.
@@ -89,7 +89,12 @@ export const ReleaseGitRegistration = {
           };
         },
       },
-      tools: { list_release_changes: policy, read_change_patch: policy, read_release_file: policy },
+      tools: {
+        list_release_changes: policy,
+        read_change_patch: policy,
+        read_net_change_patch: policy,
+        read_release_file: policy,
+      },
     });
   },
 

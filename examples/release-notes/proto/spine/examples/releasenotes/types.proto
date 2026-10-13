@@ -57,13 +57,13 @@ message ReleaseInstruction {
   string value = 1 [(required) = true];
 }
 
-// The one comparison policy supported by the local Git evidence service.
+// The comparison policy supported by the local Git evidence service.
 enum ReleaseComparisonPolicy {
   // No comparison policy was supplied.
   RELEASE_COMPARISON_POLICY_UNSPECIFIED = 0;
 
-  // Target-not-base commits and the net committed tree difference.
-  ANCESTOR_NET_TREE = 1;
+  // Target-not-base commits and the direct selected committed-tree difference.
+  SELECTED_NET_TREE = 1;
 }
 
 // Pinned comparison for one selected local repository.
@@ -71,7 +71,7 @@ message ReleaseComparison {
   // Fixed repository selection for the draft.
   RepositorySelectionId repository = 1 [(required) = true, (validate) = true];
 
-  // Identifies the ancestor commit used as the comparison baseline.
+  // Identifies the selected From commit used as the comparison baseline.
   GitCommitId base = 2 [(required) = true, (validate) = true];
 
   // Identifies the target commit whose changes are summarized.
@@ -159,6 +159,18 @@ message ReleaseEvidenceReference {
   string path = 3 [(required) = true];
 }
 
+// One exact direct selected-tree path reference from the verified catalog.
+message ReleaseNetEvidenceReference {
+  // Selected From commit for the direct tree difference.
+  GitCommitId base = 1 [(required) = true, (validate) = true];
+
+  // Selected To commit for the direct tree difference.
+  GitCommitId target = 2 [(required) = true, (validate) = true];
+
+  // Literal net changed path from the verified catalog.
+  string path = 3 [(required) = true];
+}
+
 // One evidence-backed release note in a model proposal.
 message ReleaseNoteEntry {
   // Claim converted once to initial Markdown.
@@ -166,6 +178,9 @@ message ReleaseNoteEntry {
 
   // Evidence supporting this claim.
   repeated ReleaseEvidenceReference evidence = 2 [(validate) = true];
+
+  // Direct selected-tree changes supporting this claim.
+  repeated ReleaseNetEvidenceReference net_evidence = 3 [(validate) = true];
 }
 
 // One section in a model proposal.

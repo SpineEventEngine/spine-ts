@@ -240,6 +240,7 @@ test("development and packaged Electron binaries serve the scoped Git worker", a
       expect(await workerTools(executable, worker, binding)).toEqual([
         "list_release_changes",
         "read_change_patch",
+        "read_net_change_patch",
         "read_release_file",
       ]);
     }

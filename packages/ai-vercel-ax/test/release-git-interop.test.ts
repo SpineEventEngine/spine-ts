@@ -37,7 +37,7 @@ afterEach(() => {
 });
 
 describe("release Git MCP worker over the framework's bounded stdio client", () => {
-  it("advertises only three read-only tools and refuses uncataloged detail", async () => {
+  it("advertises four read-only tools and refuses uncataloged detail", async () => {
     const directory = mkdtempSync(join(tmpdir(), "spine-git-mcp-"));
     directories.push(directory);
     const run = (...args: string[]) =>
@@ -106,6 +106,7 @@ describe("release Git MCP worker over the framework's bounded stdio client", () 
       expect(tools.tools.map((tool) => tool.name).sort()).toEqual([
         "list_release_changes",
         "read_change_patch",
+        "read_net_change_patch",
         "read_release_file",
       ]);
       expect(tools.tools.every((tool) => tool.annotations?.readOnlyHint === true)).toBe(true);
@@ -127,6 +128,19 @@ describe("release Git MCP worker over the framework's bounded stdio client", () 
       transport.clearCallTicket();
       expect(patch.structuredContent).toMatchObject({ complete: true });
       expect(JSON.stringify(patch.structuredContent)).toContain("+after");
+      transport.setCallTicket("net-patch", 512_000);
+      const netPatch = await client.callTool({
+        name: "read_net_change_patch",
+        arguments: { path: "release.md" },
+      });
+      transport.clearCallTicket();
+      expect(netPatch.structuredContent).toMatchObject({
+        complete: true,
+        base,
+        target,
+        path: "release.md",
+      });
+      expect(JSON.stringify(netPatch.structuredContent)).toContain("+after");
       transport.setCallTicket("file", 512_000);
       const file = await client.callTool({
         name: "read_release_file",
@@ -145,6 +159,13 @@ describe("release Git MCP worker over the framework's bounded stdio client", () 
       });
       transport.clearCallTicket();
       expect(denied.isError).toBe(true);
+      transport.setCallTicket("denied-net-patch", 512_000);
+      const deniedNetPatch = await client.callTool({
+        name: "read_net_change_patch",
+        arguments: { path: "private.txt" },
+      });
+      transport.clearCallTicket();
+      expect(deniedNetPatch.isError).toBe(true);
     } finally {
       await client.close();
     }

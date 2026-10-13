@@ -120,7 +120,7 @@ const openDraftCommand = (
       repository: create(RepositorySelectionIdSchema, { value: selectionId }),
       base: create(GitCommitIdSchema, { value: comparison.baseCommit }),
       target: create(GitCommitIdSchema, { value: comparison.targetCommit }),
-      policy: ReleaseComparisonPolicy.ANCESTOR_NET_TREE,
+      policy: ReleaseComparisonPolicy.SELECTED_NET_TREE,
     }),
     audience,
   });

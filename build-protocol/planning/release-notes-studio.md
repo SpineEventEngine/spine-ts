@@ -378,20 +378,23 @@ MCP tool call through that path. Do not substitute callbacks and call them MCP.
 
 Resolve a selected directory to its working-tree repository root before reading
 paths; bare repositories are outside this first example. Resolve both revision
-names to commit objects before accepting generation. For v1, require the base
-to be an ancestor of the target. Reject ranges containing unrelated-history
-root commits explicitly, before claiming a complete catalog. List commits reachable
-from the target but not the base; compare the two committed trees for net file
-changes. Explain this comparison policy in the UI. A moved branch or tag cannot
+names to commit objects before accepting generation. Compare the selected
+committed trees directly, including diverged, reverse and unrelated histories.
+List commits reachable from the target but not the base as supporting history.
+Root commits have no parent edges; their presence does not invalidate the net
+comparison. Expose exact net-change patches and typed citations independently
+of commit-parent patches. Do not substitute a merge-base comparison. Explain
+this comparison policy in the UI. A moved branch or tag cannot
 change an already accepted generation Command. Do not read uncommitted files.
 
-Offer three narrow tools:
+Offer narrow read-only tools for the accepted comparison:
 
-| Tool                   | Input and result                                                                                                      |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `list_release_changes` | The accepted comparison and a page token; returns commit summaries and changed paths with continuation.               |
-| `read_change_patch`    | A commit/path from that comparison; returns a bounded patch with evidence identity and an explicit completeness flag. |
-| `read_release_file`    | A path at the accepted target commit; returns bounded text for migration instructions or documented behavior.         |
+| Tool                    | Input and result                                                                                              |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `list_release_changes`  | The accepted comparison and a page token; returns commit summaries and changed paths with continuation.       |
+| `read_change_patch`     | A commit/parent/path from the catalog; returns the patch with evidence identity and a completeness flag.      |
+| `read_net_change_patch` | A net changed path; returns the direct selected-tree patch with pinned base, target, path, and completeness.  |
+| `read_release_file`     | A path at the accepted target commit; returns bounded text for migration instructions or documented behavior. |
 
 The trusted service supplies the repository/comparison binding. The model cannot
 select another repository, arbitrary revision, command, or filesystem path.

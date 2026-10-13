@@ -94,6 +94,7 @@ it("serves pinned evidence and rejects paths outside the catalog through the SDK
     expect(tools.tools.map((tool) => tool.name)).toEqual([
       "list_release_changes",
       "read_change_patch",
+      "read_net_change_patch",
       "read_release_file",
     ]);
     expect(tools.tools.every((tool) => tool.annotations?.readOnlyHint === true)).toBe(true);
@@ -106,6 +107,17 @@ it("serves pinned evidence and rejects paths outside the catalog through the SDK
     });
     expect(patch.structuredContent).toMatchObject({ complete: true, path: "notes.txt" });
     expect(JSON.stringify(patch.structuredContent)).toContain("+After");
+    const netPatch = await client.callTool({
+      name: "read_net_change_patch",
+      arguments: { path: "notes.txt" },
+    });
+    expect(netPatch.structuredContent).toMatchObject({
+      complete: true,
+      base,
+      target,
+      path: "notes.txt",
+    });
+    expect(JSON.stringify(netPatch.structuredContent)).toContain("+After");
     const file = await client.callTool({
       name: "read_release_file",
       arguments: { path: "notes.txt" },
@@ -122,6 +134,11 @@ it("serves pinned evidence and rejects paths outside the catalog through the SDK
       arguments: { commit: target, parent: base, path: "secret.txt" },
     });
     expect(deniedPatch.isError).toBe(true);
+    const deniedNetPatch = await client.callTool({
+      name: "read_net_change_patch",
+      arguments: { path: "secret.txt" },
+    });
+    expect(deniedNetPatch.isError).toBe(true);
     const incomplete = await client.callTool({
       name: "read_release_file",
       arguments: { path: "binary.dat" },
@@ -149,6 +166,63 @@ it("serves pinned evidence and rejects paths outside the catalog through the SDK
         { signal: cancelled.signal },
       ),
     ).rejects.toThrow();
+  } finally {
+    await client.close();
+    await server.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+it("serves a source-only deletion patch for divergent refs through the MCP tool", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "spine-mcp-diverged-"));
+  const gitExecutable = execFileSync("which", ["git"], { encoding: "utf8" }).trim();
+  const git = (...args: string[]) =>
+    execFileSync(gitExecutable, args, { cwd: directory, encoding: "utf8" }).trim();
+  git("init", "--quiet");
+  git("config", "user.name", "Fixture");
+  git("config", "user.email", "fixture@example.invalid");
+  writeFileSync(join(directory, "common.txt"), "common\n");
+  git("add", "common.txt");
+  git("commit", "--quiet", "-m", "Common");
+  const common = git("rev-parse", "HEAD");
+  writeFileSync(join(directory, "source.txt"), "removed from To\n");
+  git("add", "source.txt");
+  git("commit", "--quiet", "-m", "Source side");
+  const source = git("rev-parse", "HEAD");
+  git("checkout", "--quiet", "--detach", common);
+  writeFileSync(join(directory, "target.txt"), "added in To\n");
+  git("add", "target.txt");
+  git("commit", "--quiet", "-m", "Target side");
+  const comparison = await GitReleaseComparison.open({
+    repository: directory,
+    gitExecutable,
+    base: source,
+    target: "HEAD",
+  });
+  const server = GitMcpServer.create(comparison);
+  const client = new Client({ name: "release-diverged-test", version: "1.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  try {
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    const listing = await client.callTool({ name: "list_release_changes", arguments: {} });
+    expect(listing.structuredContent).toMatchObject({ complete: true });
+    expect(JSON.stringify(listing.structuredContent)).toContain('"status":"D","path":"source.txt"');
+    const deleted = await client.callTool({
+      name: "read_net_change_patch",
+      arguments: { path: "source.txt" },
+    });
+    expect(deleted.structuredContent).toMatchObject({
+      complete: true,
+      base: source,
+      target: comparison.targetCommit,
+      path: "source.txt",
+    });
+    expect(JSON.stringify(deleted.structuredContent)).toContain("-removed from To");
+    const unavailable = await client.callTool({
+      name: "read_release_file",
+      arguments: { path: "source.txt" },
+    });
+    expect(unavailable.isError).toBe(true);
   } finally {
     await client.close();
     await server.close();
