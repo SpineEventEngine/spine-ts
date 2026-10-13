@@ -20,20 +20,21 @@ Git executable. From the repository root:
 
 ```sh
 pnpm install --ignore-scripts
-pnpm --filter @spine-event-engine/example-release-notes exec install-electron --no
-pnpm --filter @spine-event-engine/example-release-notes build
+pnpm proto:generate
+pnpm typecheck:build:generated
 pnpm --filter @spine-event-engine/example-release-notes start
 ```
 
-Create a local macOS application bundle with:
-
-```sh
-pnpm --filter @spine-event-engine/example-release-notes package
-```
-
-This source example is not code-signed or notarized. Windows and Linux installers
-are outside its current scope. No Codex installation, terminal sign-in, API key,
+`start` builds and launches the local native app. To build without launching,
+run `pnpm --filter @spine-event-engine/example-release-notes build`; its app
+bundle appears under `examples/release-notes/build/bin/`. For Vite hot reload, run
+`pnpm --filter @spine-event-engine/example-release-notes dev` instead.
+This source example does not produce a signed or notarized installer. Windows
+and Linux distribution are outside its current scope. No Codex installation, terminal sign-in, API key,
 Docker container, or separately installed database is required.
+The build downloads a pinned official Node.js binary, verifies its published
+SHA-256 checksum, and bundles it with its license for the scoped Git MCP worker;
+running the built app does not depend on a system Node installation.
 
 ## Prepare a release
 
@@ -83,8 +84,15 @@ OAuth grants, issued client IDs, and the host ID remain only in the trusted
 process's memory. Closing the app discards them. Tokens are not passed to the
 renderer, stored in domain messages or Agent history, or included in exports.
 Refresh is tied to the same issued registration and verified account while the
-app remains open. The renderer uses a nonpersistent Electron session.
+app remains open. Studio keeps its account and draft state in memory for this run.
 The system browser's own login state is separate from this app.
+
+The packaged renderer is restricted to its `mobrowser://app` assets by CSP and
+blocks external navigation and popups. The desktop service checks the browser
+identity and validates each fixed operation. MōBrowser grants some browser
+permissions to its built-in application origin before the `requestPermissions`
+hook; its current API offers no blanket denial for that origin. Studio also
+rejects media-device selection requests and does not request those permissions.
 
 If an initial grant fails with `invalid_grant`, the next dialog sign-in can retry
 the issued client in that app session with fresh browser authorization secrets.
@@ -135,10 +143,12 @@ paths, push, publish a release, or execute a model-supplied shell command.
 | Real adapter and MCP protocol fixtures                 | [Agent integration test](test/release-agent.test.ts)    |
 
 Automated tests use controlled OAuth and provider responses, not a live account.
-The development and packaged Electron checks can be run with:
+The focused trusted-service checks run with the repository test command. The
+supported native sign-in screen regression uses MōBrowser's built-app fixture:
 
 ```sh
-pnpm --filter @spine-event-engine/example-release-notes test:electron
+pnpm exec vitest run examples/release-notes/test --exclude 'examples/release-notes/test/e2e/**'
+pnpm --filter @spine-event-engine/example-release-notes test:e2e
 ```
 
 A live subscription check requires a person to complete the actual browser

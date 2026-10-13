@@ -5,19 +5,23 @@
 High-risk runtime/public-contract task authorized on 7 October 2026. Base:
 `658da1cdddcb8fd40f9205b1c200abc3a58dd62e` (snapshot.22). Feature branch:
 `agent-entities`; worktree: native managed `agent-readiness/spine-ts`.
-Earlier Agent implementation passed local release and exact-commit CI at
-`6ee952766`, including 6,222 tests and both dependency audits. The later desktop
-UI changes completed three independent review-and-fix rounds. Subsequent live
-failures required the current optional-limit and shared ChatGPT session changes;
-those changes now have focused checks, independent specialist/security review
-and corrections. Real native ChatGPT generation succeeded on 13 October in the
-latest reviewed package. Editing, Preview, export, reopening and sign-out also
-passed in the preceding checkpoint. The human then rejected oversized UI scale;
-the proportional desktop sizing correction now passes native inspection at
-1200x820 and 720x720, including a final narrow field-spacing correction. The
-updated app is open for human review. Final release qualification and push
-remain pending; its first pass stopped at 12 mechanical ESLint errors before
-coverage. Earlier green CI does not cover this dirty changeset.
+The latest pushed checkpoint `fff182eea` passed GitHub verify and trial checks.
+That checkpoint still used Electron. Earlier native ChatGPT generation, editing,
+Preview, export and sign-out evidence applies to that earlier desktop host.
+
+The human-authorized MōBrowser 2.18 migration is implemented and locally verified.
+Real ChatGPT sign-in, Git comparison, generation, Preview, editing, exact native
+export, dashboard reopening, sign-out and signed-out close have succeeded in the
+new host. The reviewed local bundle builds, and its bundled Git MCP worker passes
+all four tools, out-of-scope denial and clean exit. The final build is installed
+at the example's build/bin path and opens at a fresh sign-in screen.
+
+Independent reviews and corrections have converged. Final security review found
+no confirmed defects. The final canonical verify:release passes: 397 files and
+6,302 tests passed, one skipped; coverage is 93.61% statements, 90.01% branches,
+95.37% functions and 95.40% lines. Participants have completed their assignments.
+Remote readiness is established by the exact feature-commit checks on PR 18;
+previous checkpoint CI is not substituted for the migration commit's checks.
 Physical Entity deletion remains explicitly deferred.
 
 The approved specification is `AGENT_ENTITIES_API_TASK_2026-10-02.md` and its
@@ -7846,3 +7850,219 @@ pass,1 skip;637.68s total. No failures. Native Electron rendering remains
 unverified as noted above. Implementation and review accepted; commit/push
 to existing agent-entities branch follows. Exact-head CI is checked after push,
 and must not be reported green until confirmed.
+
+Human host change, 2026-10-13: replace Electron with MōBrowser for Release
+Notes Studio within existing agent-entities worktree/PR. Begin with official
+2.18.0 API/CLI/scaffolder downloaded to /tmp/spine-mobrowser-research; no package
+scripts run at install. Read official quickstart, architecture, IPC, packaging,
+automation and scaffold AGENTS. Initial investigation/setup estimate0.5–1h;
+implementation estimate follows architecture inventory. High-risk host boundary
+migration (IPC, auth browser, process lifecycle, packaging), UI/domain behavior
+unchanged. Preserve memory-only credentials/session data, no account recall,
+no limits without human approval, read-only Git, current wizard and UI scale.
+Reuse active feature worktree (continuation of existing PR); no new branch.
+Desktop supports explicit child model/reasoning. Selected subagent-driven-
+development skill; repository existing roles/review protocol/log paths override
+skill generic roles and record proliferation. Expected-skills manifest read;
+installed skill files accessible. Official vendor docs are API evidence, not
+permission to override tool policy. Existing requirements splitter will perform
+one architecture pass, explicit gpt-6-astra/high, no memory/history or child
+delegation. Parent investigates SDK setup independently; splitter read-only
+maps source migration and compatibility risks. Runtime metadata not exposed
+beyond configured profile; no accidental inherited child model.
+
+Official template build and native launch succeed without license prompt.
+Actual runtime Node24.21.0, process.execPath is desktop executable, default
+session.isPersistent true. Vendor architecture pass completed in standalone
+requirements_splitter gpt-6-astra/high; report /tmp/spine-mobrowser-architecture.md.
+Accepted migration: retain app UI/domain/services; replace Electron shell/IPC,
+use generated vendor IPC separately from Buf domain generation, package an
+official Node binary for stdio Git worker, preserve one main/handler module graph
+and async close semantics. Sensitive application data stays memory-only; no
+claim that default browser cache is ephemeral. Permission policy and packaged
+module loading require concrete proof. No human blocker established.
+Revised migration estimate1.5–2.5h including implementation/runtime checks,
+focused tests/reviews, package and required verification. Existing implementer
+new standalone dispatch gpt-6-sol/medium, no memory/history/children, single writer
+for example plus necessary package/lock/tool config. Parent handles records
+and integration. No auth bypass, provider call on user data, native session
+closure, generated source commits or new framework abstractions authorized.
+
+Migration evidence: baseline focused tests12/12 passed; desktop Version/Markdown
+transport and async native-close regressions pass after expected red tests.
+Generated desktop IPC typechecks. Official Node24.21.0 arm64 resource verified
+against pinned digest and official SHASUMS. SDK renderer/main compilation works;
+packaging exposes a pnpm symlink-scanning incompatibility under investigation.
+Parent native probe: custom scheme honors Permissions-Policy but has no generated
+IPC bridge with either exact origin spelling tested. Continue on documented
+app.url origin; record the vendor trusted-origin permission behavior precisely.
+D-0140 records the host decision. Existing Electron user session is untouched.
+
+SDK dev build succeeded after prebundling workspace dependencies, but the first
+native Studio launch failed before window creation. Temporary startup stack
+proved generated registry root /app/out/main is not a readable filesystem
+directory inside app.bin. Implementation uses the previously planned fallback:
+package one coherent main/registry graph as real resources and load its entry
+from a thin vendor bootstrap. No framework discovery changes. Temporary
+diagnostics must be removed before acceptance. Parent also caught proto3 optional
+fields and duplicated Version in the draft desktop schema; these must be replaced
+with documented presence and existing Version wire bytes preserving nanoseconds.
+
+Native startup follow-up: resource graph loads successfully. Embedded Node lacks
+a detected timezone, so the example's existing internal Client options specify
+UTC; no framework change. Native window now opens. Renderer console proves
+CSP 'self' rejects the mobrowser://app/assets scripts/styles, requiring explicit
+bundled asset sources while retaining blocked network, frames and forms. No
+credentials or provider calls were used in any startup probe.
+
+Clean MōBrowser build now renders the actual compact sign-in screen. Native close
+exits the signed-out instance normally. Clicking Sign in transitions to waiting
+for the browser; Chrome profile selection/human sign-in is pending, so no OAuth
+callback or model success is claimed. Temporary startup/console logging removed
+from the clean candidate. Reuse the existing mechanical-check function
+studio_package_check (explicit original gpt-6-luna/low dispatch) for read-only
+dependency audit during implementation cleanup; no source edits, package install,
+app launch or full verification in that assignment. Configured profile remains
+unchanged; runtime metadata not exposed beyond that profile.
+
+Review handoff: 36 focused tests, scoped ESLint and tooling TypeScript, Proto
+style, copyright, TSDoc, dependency audit and production-dependency checks pass.
+Native e2e is excluded from root Vitest; pending human OAuth prevents live
+generation confirmation. Production source frozen for one concern-specific
+review wave against fff182eea. Fresh reviewers have no inherited conversation,
+no memory use, no edits or children: performance/reliability and TypeScript/API
+use explicit gpt-6-sol/medium; style uses gpt-6-sol/medium; documentation uses
+gpt-6-luna/medium. Record configured profiles when runtime metadata is absent.
+Collect all findings before returning one correction batch to existing
+implementer. Final release-readiness security review follows convergence.
+
+Review dispatch was deferred: cleanup gate found two oversized new native
+callables. Same implementer fixes those mechanical findings before the reviewer
+wave; no reviewer has started yet. Previous pushed head fff182eea now has green
+GitHub verify and trial checks; that success does not cover the migration diff.
+
+Fresh-checkout correction before review: root TypeScript build lacked the ignored
+vendor desktop generation prerequisite; direct vendor start/test also omitted
+main/worker/resource preparation. Existing implementer gpt-6-sol/medium resumed
+to fix these build entries and prove missing-output regeneration. No active
+OAuth-pending native bundle will be overwritten. Remaining estimate stays
+1–1.5h for corrections, review, isolated packaging and full checks, excluding
+human sign-in wait. Existing version-only commit already covers snapshot.23;
+no additional version bump is required for this continuation.
+Mechanical function studio_package_check (same explicit Luna/low profile) prepares
+an isolated /tmp package and real bundled-worker protocol probe. It must wait
+for source freeze before final copying/building, use disposable Git data, and
+never launch/control UI, read credentials, or touch the live native bundle.
+Fresh-build corrections pass: domain generation works without vendor outputs;
+desktop generation restores them, then tooling TypeScript passes. Vendor-schema
+exclusions are limited to the desktop path and covered by focused gate tests.
+The worker binding no longer has an unapproved 8 KiB limit; schema validation
+remains. Serve-only CSP permits Vite local assets; packaged CSP remains strict.
+Implementation returned frozen source and passed focused checks. Resume isolated
+package mechanical function and dispatch relevant independent reviewer wave.
+Independent review wave complete: fresh configured Sol/medium reliability, API,
+and style reviewers plus Luna/medium documentation reviewer, no inherited
+history/memory or children. Explicit dispatch fields confirmed; no additional
+runtime metadata exposed. Documentation clean. Accepted six findings: shutdown
+admission race and cleanup-failure trapped window (P1); comparison-picker Proto
+misrepresents required input, repeated worker Node downloads, duplicated untyped
+draft mapping, and missing mapped-RPC behavior coverage (P2). All are in the
+migration's affected paths. One consolidated correction batch returns to the
+same implementer. Re-review only affected runtime/API concerns after focused
+checks; final security and release checks follow convergence.
+Isolated packaging evidence: full production build reached vpk but failed on
+missing signing entitlements; pack then crashed in vendor installer code.
+Official CLI/docs distinguish production build+pack from dev:build, which creates
+a local self-contained native .app. The source example needs no signed installer
+or updater. Use supported local dev:build for its build command and document the
+actual native path; remove the advertised failing installer route. No vendor
+patches or signing credentials. Staged resource MCP probe passed all four tools,
+accepted patch/file, rejected uncatalogued file, and exited0. Node/license hashes
+match source and bundle; SDK hash unchanged. Repeat local bundle proof after
+corrections. This is a local launch/documentation correction, not runtime redesign.
+Correction batch frozen: six affected files/28 tests pass, including real
+service admission and registered desktop mappings, tooling TypeScript, cleanup,
+TSDoc, ESLint, formatting and diff check. Node reuse and changed-LICENSE repair
+work offline using the pinned archive. Focused re-review: reuse independent
+reliability and API reviewer contexts (same explicit Sol/medium profiles) only
+for affected findings; style Node caching and single converter are mechanically
+checked and API/reliability paths cover changed behavior. Final release-readiness
+security reviewer dispatched fresh Sol/high, no memory/history/children, for
+new native boundary/resources only. No framework runtime files changed.
+Follow-up results: reliability confirms both close P1s resolved,19 focused tests
+pass. API confirms picker P2 resolved but still finds four draft calls casting
+unknown results to StudioDraft; accepted residual P2. Security reviewer fresh
+Sol/high reports no confirmed P0–P2 defects; vendor origin-permission and unsigned
+local-build limits remain documented, not asserted away. Parent's focused new
+RPC/transport/close coverage check:17 tests pass but75.92% statements,82.85%
+branches,64.55% functions,77.46% lines, below90% gate. This is a cheap preflight
+finding before broad verification. Same implementer receives final typed-call
+and meaningful coverage correction batch. No threshold reduction or handwritten
+source exclusion permitted. Security scope unchanged by this bounded correction.
+
+Final correction acceptance: existing implementer Sol/medium supplied typed
+StudioDraft results on all four RPC paths and meaningful mapped-route coverage.
+The independent API reviewer confirmed the residual P2 resolved, with no further
+findings. All 23 focused tests pass: statements 95.83%, branches 95.71%, functions
+96.38%, lines 96.62%. Tooling TypeScript, full ESLint, TSDoc, cleanup, formatting
+and diff checks pass. Generated bundle lint exclusions apply only to generated
+build directories. Final isolated build and current bundled-worker probe pass.
+Mechanical function studio_package_check resumes using its explicit configured
+Luna/low profile to run cheap preflight then verify:release, no source edits or
+UI interaction. Parent performs live native wizard testing separately.
+
+Live native completion: with human-authorized ChatGPT sign-in and demo use,
+a disposable Parcel Desk repository supplied one commit and one changed file.
+The real selected model returned editable release notes; Preview rendered them,
+an added sentence autosaved, and the native export contained the exact edited
+Markdown. Dashboard reopened the same session draft. Earlier native screenshots
+lagged the accessibility tree until window zoom refreshed them; no source change
+was made from that observation. The active bundle precedes final typed/lifecycle
+review corrections; the final-source isolated native build and worker probe pass.
+A parent-only documentation micro correction adds the required TSDoc blank line
+before selectProject parameters; runtime behavior is unchanged. Full cheap
+preflight and 69 focused tests pass. A mechanical subset run accidentally applied
+whole-repository coverage; disregard that invocation's aggregate threshold and
+use the already-passing focused new-module coverage plus canonical full release
+profile now running.
+
+Final staging inventory found the downloaded Node archive cache was not ignored.
+Added its exact resources/cache directory to .gitignore; no source/runtime
+change. The downloaded binary archive must not enter the feature commit.
+
+The first canonical run stopped before tests because a parent TSDoc-only edit
+coincided with source-view generation validation. No generated transaction
+artifacts remained. Frozen-source retry completed in 845.12 seconds: generated
+gates pass; 396 test files pass, one skipped, one failed; 6,298 tests pass, one
+skipped, two failures. Both failures are package metadata discovery: custom
+workspace wildcard expansion treats hidden .studio-build/package.json as a
+workspace, unlike pnpm's observed package inventory. Existing implementer
+Sol/medium read-only diagnosis also confirms the same expansion defect in
+package-boundary-policy.mjs. One bounded correction batch aligns wildcard
+segments with pnpm and covers hidden versus visible nested fixture directories;
+no runtime failures and no framework runtime changes. Native sign-out and close
+passed, then the final reviewed build was installed at the canonical example
+build/bin path and opened at the fresh sign-in screen.
+
+Bounded helper correction converged: wildcard segments now skip dot-prefixed
+directories; explicitly named hidden paths still work. Both new regression
+fixtures failed before the fix and pass afterward. Focused suites pass 25/25;
+targeted ESLint, formatting, cleanup, TSDoc, production dependencies and diff
+checks pass. This deterministic pnpm-inventory correction does not alter native,
+AI, storage or public contracts, so no specialist lane is reopened. Existing
+mechanical function Luna/low reruns the canonical release profile on the frozen
+corrected source. No further app packaging is needed for these script-only fixes.
+
+Final local acceptance: corrected frozen-source pnpm verify:release exits 0,
+with 397 passed test files, one skipped; 6,302 passed tests, one skipped.
+Global coverage: statements 93.61%, branches 90.01%, functions 95.37%, lines
+95.40%. All generated gates pass. The mechanical function's explicit configured
+Luna/low profile is confirmed; runtime self-introspection was unavailable. All
+participating implementation/review/mechanical assignments have completed and
+were stopped. Publish this migration commit to the existing agent-entities
+branch immediately; exact-commit GitHub checks are the final remote acceptance
+evidence at https://github.com/SpineEventEngine/spine-ts/pull/18/checks.
+Native live evidence used a disposable demo repository and real granted ChatGPT
+plan access. The final source bundle was independently built and its worker
+exercised; it also launches at the fresh sign-in screen. Signed/notarized installer
+production remains outside the source example's supported local-build route.

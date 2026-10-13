@@ -3,7 +3,6 @@
   "version": "2.0.0-snapshot.23",
   "private": true,
   "type": "module",
-  "main": "dist/app/src/main.mjs",
   "exports": {
     "./spine-proto-manifest.json": "./spine-proto-manifest.json",
     "./proto/*": "./proto/*",
@@ -13,10 +12,17 @@
     }
   },
   "scripts": {
-    "build": "node scripts/build.mjs",
-    "start": "electron .",
-    "package": "node scripts/package.mjs",
-    "test:electron": "playwright test test/electron.spec.ts --workers=1 --tsconfig tsconfig.tooling.json"
+    "build": "pnpm dev:build",
+    "dev:build": "pnpm prepare:studio && mobrowser dev:build",
+    "start": "pnpm build && mobrowser run",
+    "dev": "pnpm prepare:studio && mobrowser dev",
+    "test:e2e": "pnpm prepare:studio && mobrowser test:e2e",
+    "prepare:studio": "pnpm gen:desktop && pnpm build:main-source && pnpm build:worker && pnpm prepare:node",
+    "gen:desktop": "mobrowser gen",
+    "build:worker": "node scripts/build-worker.mjs",
+    "build:main-source": "node scripts/build-main-source.mjs",
+    "prepare:node": "node scripts/prepare-node.mjs",
+    "mobrowser": "mobrowser"
   },
   "dependencies": {
     "@bufbuild/protobuf": "2.12.1",
@@ -31,7 +37,8 @@
     "@spine-event-engine/proto": "2.0.0-snapshot.23",
     "@spine-event-engine/server": "workspace:*",
     "@spine-event-engine/storage": "workspace:*",
-    "electron": "44.7.0",
+    "@mobrowser/api": "2.18.0",
+    "@mobrowser/cli": "2.18.0",
     "lucide-react": "1.28.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
@@ -39,11 +46,18 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
-    "@electron/packager": "20.3.0",
     "@modelcontextprotocol/client": "2.3.1",
-    "@playwright/test": "1.62.0",
+    "@playwright/test": "1.63.0",
     "@spine-event-engine/proto-tools": "2.0.0-snapshot.23",
     "@spine-event-engine/testing": "workspace:*",
-    "esbuild": "0.28.2"
+    "esbuild": "0.28.2",
+    "ts-proto": "2.15.0",
+    "vite": "8.1.0"
+  },
+  "optionalDependencies": {
+    "@mobrowser/sdk-darwin-arm64": "2.18.0",
+    "@mobrowser/sdk-darwin-x64": "2.18.0",
+    "@mobrowser/sdk-linux-x64": "2.18.0",
+    "@mobrowser/sdk-win-x64": "2.18.0"
   }
 }

@@ -298,6 +298,7 @@ export function authoredProtoFormatCommands(
         path.endsWith(".proto") &&
         existsSync(join(root, path)) &&
         !frozen.has(path) &&
+        !path.startsWith("examples/release-notes/src/renderer/proto/") &&
         !isGeneratedProtoPath(path)
       )
         paths.add(path);

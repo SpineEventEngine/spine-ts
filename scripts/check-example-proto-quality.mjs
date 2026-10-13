@@ -31,6 +31,12 @@ const frameworkJargon = [
 ].join("|");
 const baselineFailureCache = new Map();
 
+function isExampleDomainProto(file) {
+  // MōBrowser consumes this dedicated desktop IPC schema through its own generator.
+  if (file.startsWith("examples/release-notes/src/renderer/proto/")) return false;
+  return /^examples\/(?:[^/]+\/)*proto\/.+\.proto$/.test(file);
+}
+
 /**
  * Checks tracked authored example Protos for provenance, documentation, naming, and debt violations.
  *
@@ -42,7 +48,7 @@ export function checkExampleProtoQuality(repoRoot = defaultRepoRoot) {
   const resolvedRoot = realpathSync(root);
   const failures = [];
   const files = candidateFiles(root);
-  const protoFiles = files.filter((file) => /^examples\/(?:[^/]+\/)*proto\/.+\.proto$/.test(file));
+  const protoFiles = files.filter(isExampleDomainProto);
   const manifests = exampleManifests(root, files, protoFiles, failures);
 
   for (const file of protoFiles) {
@@ -138,7 +144,7 @@ function writeDebtPartitions(root) {
 function checkExampleProtoQualityWithoutDebt(root) {
   const failures = [];
   const files = candidateFiles(root);
-  const protoFiles = files.filter((file) => /^examples\/(?:[^/]+\/)*proto\/.+\.proto$/.test(file));
+  const protoFiles = files.filter(isExampleDomainProto);
   const manifests = exampleManifests(root, files, protoFiles, failures);
   for (const file of protoFiles) {
     const provenance = manifests.get(file);

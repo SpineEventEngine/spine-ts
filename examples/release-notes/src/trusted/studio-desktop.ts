@@ -13,7 +13,7 @@
  */
 
 import { fromJson, toJson, type JsonValue } from "@bufbuild/protobuf";
-import { dialog, type BrowserWindow } from "electron";
+import { app, type BrowserWindow } from "@mobrowser/api";
 import { VersionSchema } from "@spine-event-engine/proto";
 
 import type { StudioIpcCommand } from "./studio-ipc.js";
@@ -31,25 +31,6 @@ const version = (input: Record<string, unknown> | null) =>
  */
 export const StudioDesktop = {
   /**
-   * Maps an authoritative draft into credential-free renderer data.
-   *
-   * @param value Draft state paired with its framework Version.
-   * @returns Detached Markdown and comparison fields for IPC.
-   */
-  draft(value: StudioDraft): Record<string, unknown> {
-    return {
-      id: value.id,
-      version: toJson(VersionSchema, value.version),
-      title: value.title,
-      audience: value.audience,
-      comparison: value.comparison,
-      generationStatus: value.generationStatus,
-      markdown: new Uint8Array(value.markdown),
-      lastEditedAt: value.lastEditedAt,
-    };
-  },
-
-  /**
    * Opens a native directory dialog before accepting a Git comparison.
    *
    * @param window Isolated application window for the dialog.
@@ -62,27 +43,30 @@ export const StudioDesktop = {
     studio: ReleaseStudio,
     input: Record<string, unknown> | null,
   ): Promise<unknown> {
-    const selected = await dialog.showOpenDialog(window, {
+    const selected = await app.showOpenDialog({
+      parentWindow: window,
       title: "Choose release repository",
-      properties: ["openDirectory"],
+      selectionPolicy: "directories",
     });
-    if (selected.canceled || selected.filePaths.length !== 1) return null;
-    return studio.compare(selected.filePaths[0] ?? "", text(input, "base"), text(input, "target"));
+    if (selected.canceled || selected.paths.length !== 1) return null;
+    return studio.compare(selected.paths[0] ?? "", text(input, "base"), text(input, "target"));
   },
 
   /**
    * Opens a native project picker and returns only a private handle and real refs.
+   *
    * @param window Current application window.
    * @param studio Trusted session service.
    * @returns Selected project metadata or null after cancellation.
    */
   async selectProject(window: BrowserWindow, studio: ReleaseStudio): Promise<unknown> {
-    const selected = await dialog.showOpenDialog(window, {
+    const selected = await app.showOpenDialog({
+      parentWindow: window,
       title: "Choose Git project",
-      properties: ["openDirectory"],
+      selectionPolicy: "directories",
     });
-    if (selected.canceled || selected.filePaths.length !== 1) return null;
-    return studio.selectProject(selected.filePaths[0] ?? "");
+    if (selected.canceled || selected.paths.length !== 1) return null;
+    return studio.selectProject(selected.paths[0] ?? "");
   },
 
   /**
@@ -98,14 +82,15 @@ export const StudioDesktop = {
     studio: ReleaseStudio,
     input: Record<string, unknown> | null,
   ): Promise<{ saved: boolean }> {
-    const selected = await dialog.showSaveDialog(window, {
+    const selected = await app.showSaveDialog({
+      parentWindow: window,
       title: "Export release notes",
       defaultPath: "release-notes.md",
       filters: [{ name: "Markdown", extensions: ["md"] }],
     });
-    if (selected.canceled || !selected.filePath) return { saved: false };
+    if (selected.canceled || !selected.path) return { saved: false };
     const bytes = await studio.prepareExport(text(input, "id"), version(input));
-    await StudioFiles.writeMarkdown(selected.filePath, bytes);
+    await StudioFiles.writeMarkdown(selected.path, bytes);
     return { saved: true };
   },
 
@@ -169,7 +154,7 @@ export const StudioDesktop = {
       case "open-draft":
         return this.openDraft(studio, input);
       case "read-draft":
-        return this.draft(await studio.readDraft(text(input, "id")));
+        return studio.readDraft(text(input, "id"));
       case "generate":
         return this.generation(studio, command, input);
       case "repeat-generation":
@@ -255,9 +240,7 @@ export const StudioDesktop = {
       case "repeat-generation":
         return { generation: await studio.repeatGeneration(text(input, "generation")) };
       case "cancel-generation":
-        return this.draft(
-          await studio.cancelGeneration(text(input, "id"), text(input, "generation")),
-        );
+        return studio.cancelGeneration(text(input, "id"), text(input, "generation"));
       case "phase":
         return studio.generationObservation(text(input, "generation"));
       default:
@@ -305,14 +288,15 @@ export const StudioDesktop = {
    * @param input Validated comparison identifier and draft metadata.
    * @returns Authoritative draft projection.
    */
-  async openDraft(studio: ReleaseStudio, input: Record<string, unknown> | null): Promise<unknown> {
-    return this.draft(
-      await studio.openDraft(
-        text(input, "selectionId"),
-        text(input, "title"),
-        text(input, "audience"),
-        text(input, "id"),
-      ),
+  async openDraft(
+    studio: ReleaseStudio,
+    input: Record<string, unknown> | null,
+  ): Promise<StudioDraft> {
+    return studio.openDraft(
+      text(input, "selectionId"),
+      text(input, "title"),
+      text(input, "audience"),
+      text(input, "id"),
     );
   },
 
@@ -339,9 +323,10 @@ export const StudioDesktop = {
    * @param input Validated draft, Version, and Markdown bytes.
    * @returns Updated authoritative draft projection.
    */
-  async editDraft(studio: ReleaseStudio, input: Record<string, unknown> | null): Promise<unknown> {
-    return this.draft(
-      await studio.edit(text(input, "id"), version(input), field(input, "markdown") as Uint8Array),
-    );
+  async editDraft(
+    studio: ReleaseStudio,
+    input: Record<string, unknown> | null,
+  ): Promise<StudioDraft> {
+    return studio.edit(text(input, "id"), version(input), field(input, "markdown") as Uint8Array);
   },
 };

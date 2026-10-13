@@ -12,256 +12,130 @@
  * the License.
  */
 
+import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
-import { app, BrowserWindow, dialog, ipcMain, shell, type IpcMainInvokeEvent } from "electron";
+import { fileURLToPath } from "node:url";
+import { app, BrowserWindow, workspace } from "@mobrowser/api";
+import { VercelAx } from "@spine-event-engine/ai-vercel-ax";
 
 import { CredentialStore } from "./trusted/credential-store.js";
-import { VercelAx } from "@spine-event-engine/ai-vercel-ax";
 import { DesktopAuth } from "./trusted/desktop-auth.js";
-import { assertIpcSender, validateIpc } from "./trusted/electron-security.js";
 import { PlanModelSelection } from "./trusted/plan-model-selection.js";
+import { registerStudioRpc } from "./trusted/studio-rpc.js";
 import { ReleaseStudio } from "./trusted/studio-service.js";
-import { isStudioIpcCommand, validateStudioIpc } from "./trusted/studio-ipc.js";
-import { StudioDesktop } from "./trusted/studio-desktop.js";
-import { StudioAccountGate } from "./trusted/studio-account-gate.js";
-import { StudioIpcErrors } from "./trusted/studio-ipc-errors.js";
 import { StudioWindowClose } from "./trusted/studio-window-close.js";
-import { windowOptions } from "./trusted/window-options.js";
 
 const sourceDirectory = fileURLToPath(new URL(".", import.meta.url));
-const rendererPath = join(sourceDirectory, "../renderer.html");
-const preloadPath = join(sourceDirectory, "../preload.cjs");
 
-const Runtime = {
+const workerPaths = (): { executable: string; worker: string } => {
+  const resources = join(app.getPath("appResources"), "studio");
+  const executable = join(resources, "node");
+  const worker = join(resources, "main/git-worker.mjs");
+  if (existsSync(executable) && existsSync(worker)) return { executable, worker };
+  if (app.url.startsWith("http://localhost:") || app.url.startsWith("http://127.0.0.1:")) {
+    const directory = join(sourceDirectory, "../..");
+    const development = {
+      executable: join(directory, "resources/node"),
+      worker: join(directory, ".studio-build/git-worker.mjs"),
+    };
+    if (existsSync(development.executable) && existsSync(development.worker)) return development;
+  }
+  throw new Error("The packaged Git worker resources are missing.");
+};
+
+const StudioBootstrap = {
   /**
-   * Starts the restricted desktop window and account services.
+   * Creates session-only provider authentication and model selection.
    *
-   * @returns Completion after the initial window loads.
+   * @returns Trusted account and model services.
    */
-  async start(): Promise<void> {
-    app.setName("Release Notes Studio");
-    const store = new CredentialStore();
+  accountServices(): { auth: DesktopAuth; plan: PlanModelSelection } {
     const session = VercelAx.chatgptPlanSession({
       agentName: "Release Notes Studio",
-      credentials: store,
+      credentials: new CredentialStore(),
     });
-    const auth = new DesktopAuth(session, async (url) => {
+    const auth = new DesktopAuth(session, (url) => {
       if (new URL(url).origin !== "https://auth.openai.com")
         throw new Error("Invalid sign-in destination.");
-      await shell.openExternal(url);
+      workspace.openUrl(url);
+      return Promise.resolve();
     });
-    const plan = new PlanModelSelection(auth, session);
-    const studio = await ReleaseStudio.start({
-      gitExecutable: "/usr/bin/git",
-      workerExecutable: process.execPath,
-      workerPath: join(sourceDirectory, "git-worker.mjs"),
-      workerCwd: app.getPath("userData"),
-      registryRoot: new URL("../", import.meta.url),
-      plan,
-    });
-    const window = new BrowserWindow(windowOptions(preloadPath));
-    this.configureWindow(window, auth, studio);
-    this.registerIpc(window, auth, plan, studio);
-    await window.loadFile(rendererPath);
+    return { auth, plan: new PlanModelSelection(auth, session) };
   },
 
   /**
-   * Rejects window navigation, popups, webviews, and permission requests.
+   * Creates the native window with its browser boundary.
    *
-   * @param window The application window.
-   * @param auth The trusted account service to close with the window.
-   * @param studio In-memory Bounded Context to stop on window close.
+   * @returns The application window before its renderer is loaded.
    */
-  configureWindow(window: BrowserWindow, auth: DesktopAuth, studio: ReleaseStudio): void {
-    this.restrictWindow(window);
-    this.confirmClose(window, auth, studio);
-  },
-
-  /**
-   * Rejects unexpected renderer navigation, popups, permissions, and webviews.
-   *
-   * @param window Isolated release editor window.
-   */
-  restrictWindow(window: BrowserWindow): void {
-    const expectedFrameUrl = pathToFileURL(rendererPath).href;
-    window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-    window.webContents.session.setPermissionRequestHandler((_contents, _permission, respond) => {
-      respond(false);
-    });
-    window.webContents.on("will-navigate", (event, url) => {
-      if (url !== expectedFrameUrl) event.preventDefault();
-    });
-    app.on("web-contents-created", (_event, contents) => {
-      contents.on("will-attach-webview", (event) => {
-        event.preventDefault();
-      });
-    });
-  },
-
-  /**
-   * Checks whether the user will wait or stop the Bounded Context before closing.
-   *
-   * @param window Isolated release editor window.
-   * @param auth Trusted account service closed with the window.
-   * @param studio In-memory release workflow closed with the window.
-   */
-  confirmClose(window: BrowserWindow, auth: DesktopAuth, studio: ReleaseStudio): void {
-    StudioWindowClose.install(window, studio, auth, async () => {
-      const choice = await dialog.showMessageBox(window, {
-        type: "warning",
-        buttons: ["Wait", "Stop"],
-        defaultId: 0,
-        cancelId: 0,
-        message: "Your release notes may still be in progress.",
-        detail:
-          "Wait keeps this window open. If you stop, your drafts will disappear and ChatGPT usage may still count.",
-      });
-      return choice.response === 1 ? "stop" : "wait";
-    });
-  },
-
-  /**
-   * Registers one sender-validated renderer command channel.
-   *
-   * @param window The application window.
-   * @param auth The trusted account service.
-   * @param plan The selected plan model service.
-   * @param studio In-memory release workflow for renderer actions.
-   */
-  registerIpc(
-    window: BrowserWindow,
-    auth: DesktopAuth,
-    plan: PlanModelSelection,
-    studio: ReleaseStudio,
-  ): void {
-    ipcMain.handle("release-notes:command", async (event, command: unknown, argument: unknown) => {
-      return StudioIpcErrors.execute(command, () =>
-        this.command(window, auth, plan, studio, event, command, argument),
-      );
-    });
-  },
-
-  /**
-   * Routes a validated account or model command.
-   *
-   * @param window The application window that sent the command.
-   * @param auth The trusted account service.
-   * @param plan The selected plan model service.
-   * @param studio In-memory release workflow for renderer actions.
-   * @param event The Electron invocation with sender identity.
-   * @param command The requested bounded command name.
-   * @param argument The untrusted renderer argument.
-   * @returns The credential-free command result.
-   */
-  async command(
-    window: BrowserWindow,
-    auth: DesktopAuth,
-    plan: PlanModelSelection,
-    studio: ReleaseStudio,
-    event: IpcMainInvokeEvent,
-    command: unknown,
-    argument: unknown,
-  ): Promise<unknown> {
-    if (typeof command !== "string") throw new Error("Invalid command.");
-    const sender = {
-      senderId: event.sender.id,
-      expectedSenderId: window.webContents.id,
-      frameUrl: event.senderFrame?.url ?? "",
-      expectedFrameUrl: pathToFileURL(rendererPath).href,
-    };
-    assertIpcSender(sender);
-    if (isStudioIpcCommand(command))
-      return StudioDesktop.action(window, studio, command, validateStudioIpc(command, argument));
-    const account = validateIpc(sender, command, argument);
-    return await this.route(auth, plan, studio, command, account);
-  },
-
-  /**
-   * Routes a validated renderer command to trusted account services.
-   *
-   * @param auth The trusted account service.
-   * @param plan The selected plan model service.
-   * @param studio In-memory workflow used to check active account binding.
-   * @param command The validated command name.
-   * @param account The validated command argument.
-   * @returns The credential-free command result.
-   */
-  async route(
-    auth: DesktopAuth,
-    plan: PlanModelSelection,
-    studio: ReleaseStudio,
-    command: string,
-    account: ReturnType<typeof validateIpc>,
-  ): Promise<unknown> {
-    return StudioAccountGate.run(studio, command, () =>
-      this.accountAction(auth, plan, command, account),
+  studioWindow(): BrowserWindow {
+    const window = new BrowserWindow();
+    window.setTitle("Release Notes Studio");
+    window.setSize({ width: 1320, height: 900 });
+    window.centerWindow();
+    window.browser.handle("navigation", (params) =>
+      params.url === app.url ? "proceed" : "cancel",
     );
+    window.browser.handle("openPopup", () => "block");
+    window.browser.handle("requestPermissions", () => Promise.resolve("deny"));
+    window.browser.handle("selectMediaDevice", () => Promise.resolve("cancel"));
+    return window;
   },
 
   /**
-   * Dispatches a validated account action without returning credentials.
+   * Gets the user's decision about stopping active work when the window closes.
    *
-   * @param auth Trusted account service.
-   * @param plan Selected plan model service.
-   * @param command Fixed account action name.
-   * @param account Validated account action input.
-   * @returns Credential-free action result.
+   * @param window Application window for the native dialog.
+   * @returns The user's close decision.
    */
-  async accountAction(
-    auth: DesktopAuth,
-    plan: PlanModelSelection,
-    command: string,
-    account: ReturnType<typeof validateIpc>,
-  ): Promise<unknown> {
-    const clientId = typeof account === "string" ? account : "";
-    switch (command) {
-      case "status":
-        return await auth.status();
-      case "current-model":
-        return { model: (await plan.activeBinding())?.model ?? "" };
-      case "sign-in":
-        return await auth.signInOrResume();
-      case "models":
-        return await auth.models(clientId);
-      case "select-model":
-        return await this.selectModel(plan, account);
-      case "sign-out":
-        return await auth.signOut(clientId);
-      case "usage":
-        await shell.openExternal("https://chatgpt.com/#settings/usage");
-        return null;
-      default:
-        throw new Error("Unknown command.");
-    }
-  },
-
-  /**
-   * Binds an account-advertised model to this account's registration reference.
-   *
-   * @param plan The selected plan model service.
-   * @param account The validated account and model pair.
-   * @returns The selected model label for the renderer.
-   */
-  async selectModel(
-    plan: PlanModelSelection,
-    account: ReturnType<typeof validateIpc>,
-  ): Promise<{ model: string }> {
-    if (account === null || typeof account === "string")
-      throw new Error("Invalid model selection.");
-    await plan.selectDiscovered(account.clientId, account.model);
-    return { model: account.model };
+  async closeChoice(window: BrowserWindow): Promise<"wait" | "stop"> {
+    const choice = await app.showMessageDialog({
+      parentWindow: window,
+      type: "warning",
+      message: "Your release notes may still be in progress.",
+      informativeText:
+        "Wait keeps this window open. If you stop, your drafts will disappear and ChatGPT usage may still count.",
+      buttons: [
+        { label: "Wait", type: "primary" },
+        { label: "Stop", type: "secondary" },
+      ],
+    });
+    return choice.button.label === "Stop" ? "stop" : "wait";
   },
 };
 
-if (!app.requestSingleInstanceLock()) {
+/**
+ * Starts the release workflow and one native Studio window.
+ */
+export const StudioRuntime = {
+  /**
+   * Creates real account, domain, and IPC services before loading the renderer.
+   *
+   * @returns Completion after window creation.
+   */
+  async start(): Promise<void> {
+    const { executable, worker } = workerPaths();
+    const { auth, plan } = StudioBootstrap.accountServices();
+    const studio = await ReleaseStudio.start({
+      gitExecutable: "/usr/bin/git",
+      workerExecutable: executable,
+      workerPath: worker,
+      workerCwd: app.getPath("userData"),
+      registryRoot: new URL(".", import.meta.url),
+      plan,
+    });
+    const window = StudioBootstrap.studioWindow();
+    StudioWindowClose.install(window, studio, auth, () => StudioBootstrap.closeChoice(window));
+    registerStudioRpc({ window, auth, plan, studio });
+    window.browser.loadUrl(app.url);
+    window.show();
+  },
+};
+
+app.on("allWindowsClosed", () => {
   app.quit();
-} else {
-  app.on("second-instance", () => {
-    BrowserWindow.getAllWindows()[0]?.focus();
-  });
-  app.on("window-all-closed", () => {
-    app.quit();
-  });
-  void app.whenReady().then(() => Runtime.start());
-}
+});
+void StudioRuntime.start().catch(() => {
+  console.error("Studio could not start.");
+  app.quit();
+});

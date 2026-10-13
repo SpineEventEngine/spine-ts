@@ -69,7 +69,7 @@ function expandWorkspacePattern(root, pattern) {
       directories = directories.flatMap((directory) =>
         existsSync(directory)
           ? readdirSync(directory, { withFileTypes: true })
-              .filter((entry) => entry.isDirectory())
+              .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
               .map((entry) => join(directory, entry.name))
           : [],
       );

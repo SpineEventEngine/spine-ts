@@ -2,6 +2,9 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "composite": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "verbatimModuleSyntax": false,
     "lib": ["ES2024", "DOM", "decorators"],
     "jsx": "react-jsx",
     "types": ["node"],

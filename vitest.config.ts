@@ -37,7 +37,11 @@ export default defineConfig({
     ],
     // Provider tests must be selected only by their explicit package commands;
     // environment variables never broaden the release suite.
-    exclude: [...configDefaults.exclude, ...infrastructureTestFiles],
+    exclude: [
+      ...configDefaults.exclude,
+      ...infrastructureTestFiles,
+      "examples/release-notes/test/e2e/**",
+    ],
     coverage: {
       provider: "v8",
       reporter: ["text", "lcov"],
@@ -60,6 +64,8 @@ export default defineConfig({
         "packages/*/dist/generated/**",
         "examples/*/generated/**",
         "examples/*/dist/generated/**",
+        "examples/release-notes/src/main/gen/**",
+        "examples/release-notes/src/renderer/gen/**",
         "examples/*/*/generated/**",
         "examples/*/*/dist/generated/**",
         // The build-time handler analyzer is a TypeScript compiler integration

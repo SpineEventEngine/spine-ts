@@ -174,6 +174,38 @@ it("detects nested examples and development-dependency cycles", () => {
   }
 });
 
+it("matches pnpm wildcard discovery while retaining explicit hidden workspace paths", () => {
+  const root = mkdtempSync(join(tmpdir(), "spine-hidden-workspace-"));
+  try {
+    writeFileSync(
+      join(root, "pnpm-workspace.yaml"),
+      'packages:\n  - "packages/*"\n  - "examples/*/*"\n',
+    );
+    writeManifest(root, "packages/server", {
+      name: "@example/server",
+      dependencies: {
+        "@example/visible": "workspace:*",
+        "@example/hidden": "workspace:*",
+      },
+    });
+    writeManifest(root, "examples/release-notes/app", { name: "@example/visible" });
+    writeManifest(root, "examples/release-notes/.studio-build", { name: "@example/hidden" });
+    expect(frameworkExampleDependencyProblems(root)).toEqual([
+      "@example/server dependencies contains example @example/visible",
+    ]);
+    writeFileSync(
+      join(root, "pnpm-workspace.yaml"),
+      'packages:\n  - "packages/*"\n  - "examples/*/*"\n  - "examples/release-notes/.studio-build"\n',
+    );
+    expect(frameworkExampleDependencyProblems(root)).toEqual([
+      "@example/server dependencies contains example @example/hidden",
+      "@example/server dependencies contains example @example/visible",
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 it("excludes development-only package edges from the publication graph", () => {
   const root = mkdtempSync(join(tmpdir(), "spine-public-graph-"));
   try {

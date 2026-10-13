@@ -73,7 +73,7 @@ function workspaceDirectories(repoRoot, pattern) {
     for (const directory of directories) {
       if (part === "*") {
         for (const entry of readdirSync(directory, { withFileTypes: true })) {
-          if (entry.isDirectory()) {
+          if (entry.isDirectory() && !entry.name.startsWith(".")) {
             next.push(join(directory, entry.name));
           }
         }
@@ -312,6 +312,32 @@ describe("package metadata", () => {
       expect(versionProblems(fixture)).toEqual([
         "root package must define a non-placeholder version",
       ]);
+    });
+  });
+
+  it("matches pnpm wildcard discovery for visible nested packages and explicit hidden paths", () => {
+    withWorkspaceFixture((fixture) => {
+      writeFileSync(
+        join(fixture, "pnpm-workspace.yaml"),
+        'packages:\n  - "packages/*"\n  - "examples/*/*"\n',
+      );
+      for (const name of ["app", ".studio-build"]) {
+        const directory = join(fixture, "examples", "release-notes", name);
+        mkdirSync(directory, { recursive: true });
+        writeFileSync(join(directory, "package.json"), '{"version":"1.2.3"}\n');
+      }
+      expect(readWorkspacePackages(fixture).map(({ path }) => path)).toEqual([
+        "examples/release-notes/app",
+        "packages/core",
+        "packages/example",
+      ]);
+      writeFileSync(
+        join(fixture, "pnpm-workspace.yaml"),
+        'packages:\n  - "packages/*"\n  - "examples/*/*"\n  - "examples/release-notes/.studio-build"\n',
+      );
+      expect(readWorkspacePackages(fixture).map(({ path }) => path)).toContain(
+        "examples/release-notes/.studio-build",
+      );
     });
   });
 

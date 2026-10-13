@@ -89,7 +89,7 @@ export const StudioIpcErrors = {
   },
 
   /**
-   * Reads only known fixed messages from Electron's wrapped error text.
+   * Reads only known fixed messages from the desktop IPC error text.
    *
    * @param error Renderer-side invocation failure.
    * @param fallback Safe message for an unknown failure.

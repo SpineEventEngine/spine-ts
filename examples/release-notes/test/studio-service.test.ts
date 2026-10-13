@@ -13,7 +13,6 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { EventEmitter } from "node:events";
 import { createRouterTransport } from "@connectrpc/connect";
 import { create } from "@bufbuild/protobuf";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -376,6 +375,14 @@ it("opens a draft through the public in-process Client with one pinned Git compa
     await expect(studio.requestGeneration(draft.id, "Overlapping action")).rejects.toThrow("Wait");
     releaseMutation.resolve(undefined);
     await mutation;
+    studio.reserveClose();
+    await expect(studio.requestGeneration(draft.id, "During close decision")).rejects.toThrow(
+      "Wait",
+    );
+    studio.releaseCloseReservation();
+    await expect(studio.requestGeneration(draft.id, "After Wait")).rejects.toThrow(
+      "Select an available ChatGPT plan model",
+    );
   } finally {
     await studio.close();
     rmSync(directory, { recursive: true, force: true });
@@ -973,25 +980,24 @@ it("retains uncertain accepted admission and locks account switching without a d
     ).rejects.toThrow("Wait");
     expect(changedAccount).toBe(false);
     await expect(studio.requestGeneration(first.id, "Clicked twice")).rejects.toThrow("Wait");
+    studio.reserveClose();
+    await expect(studio.repeatGeneration(generation)).rejects.toThrow("Wait");
+    studio.releaseCloseReservation();
     expect(studio.session().generations[first.id]).toBe(generation);
     await expect(studio.requestGeneration(second.id, "Another release")).rejects.toThrow("Wait");
     expect((await studio.readDraft(second.id)).generationStatus).toBe("");
     await expect.poll(() => providerRequests).toBe(1);
 
     const closeEvents: string[] = [];
-    const window = new EventEmitter() as EventEmitter & { close(): void };
-    window.close = () => {
-      const event = {
-        defaultPrevented: false,
-        preventDefault() {
-          this.defaultPrevented = true;
-        },
-      };
-      window.emit("close", event);
-      if (!event.defaultPrevented) {
-        closeEvents.push("window-closed");
-        window.emit("closed");
-      }
+    let closeHandler: (() => Promise<"close" | "cancel">) | undefined;
+    let closedHandler: (() => void) | undefined;
+    const window = {
+      handle: (_action: "close", handler: () => Promise<"close" | "cancel">) => {
+        closeHandler = handler;
+      },
+      on: (_action: "closed", handler: () => void) => {
+        closedHandler = handler;
+      },
     };
     const decisions: ("wait" | "stop")[] = ["wait", "stop"];
     StudioWindowClose.install(
@@ -1009,13 +1015,15 @@ it("retains uncertain accepted admission and locks account switching without a d
         return Promise.resolve(decision);
       },
     );
-    window.close();
-    await expect.poll(() => closeEvents.includes("wait")).toBe(true);
+    if (!closeHandler) throw new Error("Native close handler was not installed.");
+    expect(await closeHandler()).toBe("cancel");
+    expect(closeEvents).toContain("wait");
     expect(closeEvents).not.toContain("window-closed");
     expect(studio.session().generations[first.id]).toBe(generation);
-    window.close();
-    await expect.poll(() => closeEvents.includes("window-closed")).toBe(true);
-    expect(closeEvents).toEqual(["wait", "stop", "window-closed", "auth-closed"]);
+    expect(await closeHandler()).toBe("close");
+    closeEvents.push("window-closed");
+    closedHandler?.();
+    expect(closeEvents).toEqual(["wait", "stop", "auth-closed", "window-closed"]);
     expect(providerRequests).toBe(1);
   } finally {
     releaseResponse?.();

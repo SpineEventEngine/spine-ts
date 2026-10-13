@@ -4,6 +4,8 @@ packages:
   - "examples/*"
   - "examples/*/*"
 overrides:
+  # MōBrowser CLI's ^0.5 range excludes the release fixing ZIP resource exhaustion and extraction advisories.
+  "@mobrowser/cli>adm-zip": 0.6.1
   brace-expansion@1.1.18: 1.1.21
   brace-expansion@2.1.2: 2.1.7
   brace-expansion@5.0.8: 5.0.12

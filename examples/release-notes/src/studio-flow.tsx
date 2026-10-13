@@ -131,6 +131,14 @@ export interface StudioFlowBridge {
   edit(id: string, version: object, markdown: Uint8Array): Promise<Draft>;
 
   /**
+   * Copies the current editor buffer without waiting for autosave.
+   *
+   * @param markdown Exact text displayed in the editor.
+   * @returns Completion after the native clipboard write.
+   */
+  copyMarkdown(markdown: string): Promise<void>;
+
+  /**
    * Writes a saved Markdown snapshot.
    *
    * @param id Draft identifier.
@@ -1312,7 +1320,7 @@ const stopWriting = (state: FlowState, config: FlowConfig): void => {
 };
 
 const copyMarkdown = (state: FlowState, config: FlowConfig): void => {
-  void navigator.clipboard.writeText(state.editor.buffer).then(
+  void config.bridge.copyMarkdown(state.editor.buffer).then(
     () => {
       config.onNotice("Markdown copied.");
     },

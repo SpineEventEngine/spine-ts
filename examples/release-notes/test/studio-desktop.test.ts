@@ -13,14 +13,16 @@
  */
 
 import { create, toJson } from "@bufbuild/protobuf";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { BrowserWindow } from "electron";
+import type { BrowserWindow } from "@mobrowser/api";
 import { afterEach, expect, it, vi } from "vitest";
 import { VersionSchema } from "@spine-event-engine/proto";
 
 import { StudioDesktop } from "../src/trusted/studio-desktop.js";
+import { StudioTransport } from "../src/trusted/studio-transport.js";
 import type { ReleaseStudio, StudioDraft } from "../src/trusted/studio-service.js";
 
 const native = vi.hoisted(() => ({
@@ -28,8 +30,8 @@ const native = vi.hoisted(() => ({
   save: vi.fn(),
 }));
 
-vi.mock("electron", () => ({
-  dialog: { showOpenDialog: native.open, showSaveDialog: native.save },
+vi.mock("@mobrowser/api", () => ({
+  app: { showOpenDialog: native.open, showSaveDialog: native.save },
 }));
 
 afterEach(() => {
@@ -37,7 +39,10 @@ afterEach(() => {
 });
 
 const window = { destroy: vi.fn() } as unknown as BrowserWindow;
-const version = create(VersionSchema, { number: 7 });
+const version = create(VersionSchema, {
+  number: 7,
+  timestamp: create(TimestampSchema, { seconds: 1n, nanos: 123456789 }),
+});
 
 it("projects exact Markdown without credentials", () => {
   const markdown = new TextEncoder().encode("# Café 🐈\n\nTrailing  \n");
@@ -60,15 +65,15 @@ it("projects exact Markdown without credentials", () => {
     },
     markdown,
   };
-  const projected = StudioDesktop.draft(draft);
+  const projected = StudioTransport.draft(draft);
   markdown[0] = 0;
-  expect(projected.version).toEqual(toJson(VersionSchema, version));
-  expect(projected.markdown).toEqual(new TextEncoder().encode("# Café 🐈\n\nTrailing  \n"));
+  expect(StudioTransport.versionJson(projected.version)).toEqual(toJson(VersionSchema, version));
+  expect(projected.markdown).toEqual(Buffer.from("# Café 🐈\n\nTrailing  \n"));
   expect(JSON.stringify(projected)).not.toContain("accessToken");
 });
 
 it("cancels native comparison before any Git operation", async () => {
-  native.open.mockResolvedValue({ canceled: true, filePaths: [] });
+  native.open.mockResolvedValue({ canceled: true, paths: [] });
   const compare = vi.fn();
   const studio = { compare } as unknown as ReleaseStudio;
   await expect(
@@ -81,8 +86,8 @@ it("passes exactly the native-selected repository to comparison admission", asyn
   const compare = vi.fn().mockResolvedValue({ selectionId: "selected" });
   const studio = { compare } as unknown as ReleaseStudio;
   native.open
-    .mockResolvedValueOnce({ canceled: false, filePaths: ["/repo/one", "/repo/two"] })
-    .mockResolvedValueOnce({ canceled: false, filePaths: ["/repo/one"] });
+    .mockResolvedValueOnce({ canceled: false, paths: ["/repo/one", "/repo/two"] })
+    .mockResolvedValueOnce({ canceled: false, paths: ["/repo/one"] });
   await expect(
     StudioDesktop.action(window, studio, "choose-comparison", {
       base: "main~1",
@@ -184,7 +189,7 @@ it("transports exact editor bytes, stable draft ID, and cancel through trusted a
   const inputVersion = toJson(VersionSchema, version);
   await expect(
     StudioDesktop.action(window, studio, "read-draft", { id: "draft" }),
-  ).resolves.toMatchObject({ id: "draft", version: inputVersion });
+  ).resolves.toMatchObject({ id: "draft", version });
   await expect(
     StudioDesktop.action(window, studio, "open-draft", {
       id: "retained-id",
@@ -225,7 +230,7 @@ it("cancels export before the Command and writes only exact saved bytes", async 
     const input = { id: "draft", version: toJson(VersionSchema, version) };
     native.save
       .mockResolvedValueOnce({ canceled: true })
-      .mockResolvedValueOnce({ canceled: false, filePath: destination });
+      .mockResolvedValueOnce({ canceled: false, path: destination });
     await expect(StudioDesktop.action(window, studio, "export", input)).resolves.toEqual({
       saved: false,
     });

@@ -803,6 +803,26 @@ describe("proto-workflow", () => {
     }
   });
 
+  it("routes only Spine domain Proto through Buf formatting, leaving vendor desktop IPC separate", () => {
+    const fixture = formatFixture();
+    try {
+      const desktop = "examples/release-notes/src/renderer/proto/studio.proto";
+      const domain = "examples/todo/proto/todo.proto";
+      mkdirSync(join(fixture.root, "examples/release-notes/src/renderer/proto"), {
+        recursive: true,
+      });
+      writeFileSync(join(fixture.root, desktop), 'syntax = "proto3";\n');
+      expect(authoredProtoFormatCommands(fixture.root, gitResponses([desktop, domain]))).toEqual([
+        {
+          label: "buf format workspace",
+          args: ["format", "--diff", "--exit-code", "--path", domain],
+        },
+      ]);
+    } finally {
+      rmSync(fixture.root, { recursive: true, force: true });
+    }
+  });
+
   it("excludes frozen, deleted, and generated Proto files", () => {
     const fixture = formatFixture({ frozen: ["packages/proto/proto/frozen.proto"] });
     try {

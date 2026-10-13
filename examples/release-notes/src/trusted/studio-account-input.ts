@@ -12,28 +12,6 @@
  * the License.
  */
 
-interface IpcContext {
-  /**
-   * The sender id value.
-   */
-  readonly senderId: number;
-
-  /**
-   * The expected sender id value.
-   */
-  readonly expectedSenderId: number;
-
-  /**
-   * The frame url value.
-   */
-  readonly frameUrl: string;
-
-  /**
-   * The expected frame url value.
-   */
-  readonly expectedFrameUrl: string;
-}
-
 const argumentsFor = {
   /**
    * Validates a bounded account and model pair.
@@ -73,19 +51,16 @@ const argumentsFor = {
 };
 
 /**
- * Validates the sender and bounded renderer command surface.
+ * Validates the bounded renderer account command surface.
  *
- * @param context The sender and expected window identity.
  * @param command The requested command.
  * @param argument The untrusted renderer payload.
  * @returns The validated command argument.
  */
-export const validateIpc = (
-  context: IpcContext,
+export const validateAccountInput = (
   command: string,
   argument: unknown,
 ): string | { readonly clientId: string; readonly model: string } | null => {
-  assertIpcSender(context);
   if (
     command === "status" ||
     command === "sign-in" ||
@@ -100,18 +75,4 @@ export const validateIpc = (
     throw new Error("Unknown IPC command.");
   }
   return argumentsFor.account(argument);
-};
-
-/**
- * Rejects IPC from any frame other than the isolated application renderer.
- *
- * @param context Actual and expected sender identity and frame URL.
- */
-export const assertIpcSender = (context: IpcContext): void => {
-  if (
-    context.senderId !== context.expectedSenderId ||
-    context.frameUrl !== context.expectedFrameUrl
-  ) {
-    throw new Error("IPC sender is not the application renderer.");
-  }
 };

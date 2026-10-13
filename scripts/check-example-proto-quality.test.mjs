@@ -57,6 +57,20 @@ function protoDebt(name = "Model") {
 }
 
 describe("check-example-proto-quality", () => {
+  it("keeps vendor desktop IPC outside Spine model checks while still checking domain Proto", () => {
+    const root = fixture();
+    const desktop = join(root, "examples/release-notes/src/renderer/proto");
+    mkdirSync(desktop, { recursive: true });
+    writeFileSync(join(desktop, "studio.proto"), 'syntax = "proto3";\n');
+    const domain = join(root, "examples/release-notes/proto");
+    mkdirSync(domain, { recursive: true });
+    writeFileSync(join(domain, "unlisted.proto"), 'syntax = "proto3";\n');
+
+    expect(checkExampleProtoQuality(root)).toEqual([
+      "examples/release-notes/proto/unlisted.proto invalid-provenance unlisted-file",
+    ]);
+  });
+
   it("checks untracked authored Proto files before a commit", () => {
     const root = fixture();
     writeModel(

@@ -141,12 +141,12 @@ const historyTypes = createRegistry(
  */
 export interface StudioStartOptions {
   /**
-   * Git executable selected by the trusted Electron main process.
+   * Git executable selected by the trusted desktop process.
    */
   readonly gitExecutable: string;
 
   /**
-   * Electron or Node executable used for the scoped Git worker.
+   * Bundled Node executable used for the scoped Git worker.
    */
   readonly workerExecutable: string;
 
@@ -424,6 +424,11 @@ export class ReleaseStudio {
   private accountTransition = false;
 
   /**
+   * Synchronously fences generation admission during a native close decision.
+   */
+  private closeAdmission: "open" | "reserved" | "accepted" = "open";
+
+  /**
    * Shared completion for Bounded Context shutdown.
    */
   private closing?: Promise<void>;
@@ -455,7 +460,7 @@ export class ReleaseStudio {
   /**
    * Starts a fresh in-memory session without restoring drafts or inference.
    *
-   * @param options Fixed worker and account services from the Electron main process.
+   * @param options Fixed worker and account services from the trusted desktop process.
    * @returns Ready trusted release workflow.
    */
   static async start(options: StudioStartOptions): Promise<ReleaseStudio> {
@@ -471,6 +476,8 @@ export class ReleaseStudio {
     const services = new SpineServices({ contexts: [context] });
     const client = Client.usingTransport(
       createRouterTransport((router) => services.register(router)),
+      // The embedded Node runtime may not expose an IANA system zone.
+      { zoneId: "UTC" },
     );
     const studio = new ReleaseStudio(options, context, client, registry, admissions, bySource);
     try {
@@ -1141,7 +1148,7 @@ export class ReleaseStudio {
    */
   async requestGeneration(id: string, instruction: string): Promise<string> {
     if (!this.drafts.has(id)) throw new Error("Release draft is unavailable.");
-    if (this.selectingGeneration || this.accountTransition)
+    if (this.selectingGeneration || this.accountTransition || this.closeAdmission !== "open")
       throw new Error("Wait for the active generation or stop it before closing.");
     this.selectingGeneration = true;
     try {
@@ -1164,7 +1171,7 @@ export class ReleaseStudio {
     if (!admission || this.generations.get(admission.draftId) !== generation)
       throw new Error("The original generation Command is unavailable.");
     if (admission.rejection) throw new Error("Generation inputs changed; read the current draft.");
-    if (this.selectingGeneration || this.accountTransition)
+    if (this.selectingGeneration || this.accountTransition || this.closeAdmission !== "open")
       throw new Error("Wait for the current account or generation action.");
     this.selectingGeneration = true;
     try {
@@ -1306,7 +1313,7 @@ export class ReleaseStudio {
    * @returns Action result after the reservation is released.
    */
   async withAccountTransition<Result>(action: () => Promise<Result>): Promise<Result> {
-    if (this.accountTransition || this.selectingGeneration)
+    if (this.accountTransition || this.selectingGeneration || this.closeAdmission !== "open")
       throw new Error("Wait for the current account or generation action.");
     this.accountTransition = true;
     try {
@@ -1518,6 +1525,36 @@ export class ReleaseStudio {
   }
 
   /**
+   * Acquires a generation-admission fence before an asynchronous native close decision.
+   */
+  reserveClose(): void {
+    if (this.closeAdmission === "open") this.closeAdmission = "reserved";
+  }
+
+  /**
+   * Restores admission when the user chooses Wait or a close decision fails.
+   */
+  releaseCloseReservation(): void {
+    if (this.closeAdmission === "reserved") this.closeAdmission = "open";
+  }
+
+  /**
+   * Marks an accepted native close terminal before cleanup begins.
+   */
+  acceptClose(): void {
+    this.closeAdmission = "accepted";
+  }
+
+  /**
+   * Returns whether trusted RPC actions may still begin.
+   *
+   * @returns Whether close has already been accepted.
+   */
+  isClosing(): boolean {
+    return this.closeAdmission === "accepted";
+  }
+
+  /**
    * Reads one newest-first category page from the production Agent history index.
    *
    * @param id Draft identifier issued by this session.
@@ -1661,6 +1698,7 @@ export class ReleaseStudio {
    * @returns Completion after the source subscription and runtime close.
    */
   async close(): Promise<void> {
+    this.acceptClose();
     this.closing ??= (async () => {
       this.lifecycle.abort();
       const cancellations = await Promise.allSettled([

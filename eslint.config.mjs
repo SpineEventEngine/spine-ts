@@ -15,6 +15,11 @@ export default tseslint.config(
       "packages/*/test-fixtures/generated/**",
       "examples/*/generated/**",
       "examples/*/*/generated/**",
+      "examples/release-notes/src/main/gen/**",
+      "examples/release-notes/src/renderer/gen/**",
+      "examples/release-notes/.studio-build/**",
+      "examples/release-notes/out/**",
+      "examples/release-notes/build/**",
       "eslint.config.mjs",
       "vitest.config.ts",
     ],
@@ -53,6 +58,7 @@ export default tseslint.config(
     files: [
       "examples/release-notes/{src,test}/**/*.ts",
       "examples/release-notes/{src,test}/**/*.tsx",
+      "examples/release-notes/vite.config.ts",
     ],
     languageOptions: {
       parserOptions: {
@@ -75,6 +81,7 @@ export default tseslint.config(
     languageOptions: {
       globals: {
         console: "readonly",
+        fetch: "readonly",
         process: "readonly",
         URL: "readonly",
       },

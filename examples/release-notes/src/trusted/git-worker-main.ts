@@ -13,29 +13,13 @@
  */
 
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
-import { z } from "zod/v4";
-
+import { GitWorkerBinding } from "./git-worker-binding.js";
 import { GitMcpServer } from "./git-mcp-server.js";
 import { GitReleaseComparison } from "./git-release.js";
 
-const bindingSchema = z
-  .object({
-    repository: z.string().min(1),
-    gitExecutable: z.string().min(1),
-    base: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/),
-    target: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/),
-    repositoryDevice: z.number().int().nonnegative(),
-    repositoryInode: z.number().int().nonnegative(),
-    catalogDigest: z.string().regex(/^[a-f0-9]{64}$/),
-  })
-  .strict();
-
 const encoded = process.env.SPINE_RELEASE_GIT_BINDING;
 delete process.env.SPINE_RELEASE_GIT_BINDING;
-if (!encoded || Buffer.byteLength(encoded, "utf8") > 8192) {
-  throw new Error("Release Git worker binding is invalid.");
-}
-const binding = bindingSchema.parse(JSON.parse(encoded) as unknown);
+const binding = GitWorkerBinding.parse(encoded);
 const comparison = await GitReleaseComparison.open(binding);
 const pinned = comparison.workerBinding();
 if (

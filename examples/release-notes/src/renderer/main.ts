@@ -12,18 +12,6 @@
  * the License.
  */
 
-import { expect, test } from "vitest";
-
-import { windowOptions } from "../src/trusted/window-options.js";
-
-test("the app window isolates its renderer and exposes only a preload bridge", () => {
-  const options = windowOptions("/app/preload.cjs");
-  expect(options.webPreferences).toMatchObject({
-    contextIsolation: true,
-    sandbox: true,
-    nodeIntegration: false,
-    webSecurity: true,
-    preload: "/app/preload.cjs",
-    partition: "release-notes-session",
-  });
-});
+import "../renderer.css";
+import "./studio-bridge.js";
+import "../renderer.js";

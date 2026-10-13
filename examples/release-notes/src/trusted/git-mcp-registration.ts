@@ -27,7 +27,7 @@ import { GitReleaseComparison } from "./git-release.js";
  */
 export interface GitMcpOperationLookup {
   /**
-   * Absolute Electron or Node executable path.
+   * Absolute path to the bundled official Node executable.
    */
   readonly executable: string;
 
@@ -83,10 +83,7 @@ export const ReleaseGitRegistration = {
         environment: async (scope, control) => {
           const comparison = await active(scope, control);
           if (!comparison) throw new Error("Release comparison is not active.");
-          return {
-            ELECTRON_RUN_AS_NODE: "1",
-            SPINE_RELEASE_GIT_BINDING: JSON.stringify(comparison.workerBinding()),
-          };
+          return { SPINE_RELEASE_GIT_BINDING: JSON.stringify(comparison.workerBinding()) };
         },
       },
       tools: {

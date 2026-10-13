@@ -6450,3 +6450,32 @@ this lookup idiom internally. This decision deliberately makes a typed lookup
 public in TypeScript; it does not claim identical JVM public API. Tests cover
 explicit/generated registration, exact constructor and Bounded Context scope,
 typed Agent history/status use, no lookup side effects, and closure.
+
+## D-0140: MōBrowser desktop shell for Release Notes Studio
+
+Status: Accepted
+
+Date: 2026-10-13
+
+The human requested replacing Electron with MōBrowser. Use the official 2.18.0
+API, CLI and generated desktop IPC. Retain the existing React screens, domain
+Entities, memory-only account service and Git worker protocol. Vendor desktop
+messages are generated separately from the domain's Buf messages, with explicit
+conversion at that boundary. Package an official, checksum-verified standalone
+Node executable for the stdio worker; the desktop executable is not Node CLI.
+
+Keep the generated handler registry and main entry in one module graph. Native
+close decisions must await existing cancellation/cleanup and apply to Cmd+Q too.
+Credentials, drafts and histories remain in memory. MōBrowser's default browser
+cache is persistent; clearing it at startup/normal close is not crash-safe
+incognito and must not be documented as such.
+
+Read the vendor's agent and testing documentation before implementation. A
+native template probe confirmed the runtime and build work. Custom protocol
+response headers enforce Permissions-Policy, but exact custom origins tested
+did not expose generated IPC. Use the documented application origin, restrictive
+CSP, fixed navigation, blocked popups, denied external permission requests and
+cancelled media-device selection. MōBrowser automatically grants website
+permissions to its application origin; the external deny callback does not
+change that vendor behavior. Do not claim a universal deny policy. No remote
+origin is added to the trusted-origin list.

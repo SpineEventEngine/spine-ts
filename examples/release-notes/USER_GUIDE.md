@@ -307,7 +307,7 @@ Sign-in and inference are separate operations:
    in without ChatGPT plan permission does not enable generation.
 3. Credentials and the OAuth host ID remain only in trusted-process memory for
    the current app session. The renderer receives account availability, not
-   access tokens, and uses a nonpersistent Electron session.
+   access tokens; Studio keeps its account and draft state in memory for this run.
 4. A generation binds the selected registration, account, endpoint, and model
    to its accepted Event. Refresh can renew that registration's credentials;
    it cannot silently substitute another account.

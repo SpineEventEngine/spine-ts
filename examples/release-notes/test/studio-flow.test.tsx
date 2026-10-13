@@ -61,6 +61,7 @@ const bridge = (overrides: Partial<StudioFlowBridge> = {}): StudioFlowBridge => 
   cancelGeneration: () => Promise.resolve(release()),
   phase: () => Promise.resolve({ receipt: true, phase: "completed" }),
   edit: (_id, _version, bytes) => Promise.resolve(release(decoder.decode(bytes), 2)),
+  copyMarkdown: () => Promise.resolve(),
   exportMarkdown: () => Promise.resolve({ saved: true }),
   ...overrides,
 });
@@ -305,6 +306,21 @@ test("Export flushes exact Markdown before using the acknowledged Version", asyn
     },
   );
   expect(decoder.decode(current.markdown)).toBe(markdown);
+});
+
+test("Copy Markdown sends the exact unsaved editor buffer to the desktop", async () => {
+  const pending = deferred<ReturnType<typeof release>>();
+  const copyMarkdown = vi.fn(() => Promise.resolve());
+  renderFlow(bridge({ edit: () => pending.promise, copyMarkdown }));
+  fireEvent.click(await screen.findByRole("button", { name: /Portal 2.4/ }));
+  const markdown = "# Unsent 🐈\n\nTwo trailing spaces  \n";
+  fireEvent.change(screen.getByRole("textbox", { name: "Markdown" }), {
+    target: { value: markdown },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Copy Markdown" }));
+  await waitFor(() => {
+    expect(copyMarkdown).toHaveBeenCalledExactlyOnceWith(markdown);
+  });
 });
 
 test("Changes enables Next for a valid range without waiting for Git", async () => {
