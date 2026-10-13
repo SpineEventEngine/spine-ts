@@ -93,8 +93,44 @@ const startReleaseStyle = async () => {
   await chooseRevision("To", "main");
   fireEvent.change(screen.getByLabelText("Release"), { target: { value: "Portal 2.4" } });
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  await screen.findByRole("heading", { name: "Review changes" });
+  await screen.findByText("1 commit · 1 file");
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
   await screen.findByRole("heading", { name: "Writing style" });
 };
+
+test("comparison starts after Next and Review remains visible until the user continues", async () => {
+  const pending = deferred<typeof comparison>();
+  const compare = vi.fn(() => pending.promise);
+  renderFlow(
+    bridge({
+      session: () => Promise.resolve({ drafts: [], generations: {} }),
+      chooseProject: () =>
+        Promise.resolve({ handle: "handle", name: "portal", refs: ["v1", "main"] }),
+      compareProject: compare,
+    }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "New release" }));
+  fireEvent.click(screen.getByRole("button", { name: "Choose a Git project" }));
+  await screen.findByText("portal");
+  await chooseRevision("From", "v1");
+  await chooseRevision("To", "main");
+  fireEvent.change(screen.getByLabelText("Release"), { target: { value: "Portal 2.4" } });
+  expect(compare).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  expect(screen.getByRole("heading", { name: "Review changes" })).toBeTruthy();
+  expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBeNull();
+  expect(screen.getByRole<HTMLButtonElement>("button", { name: "Next" }).disabled).toBe(true);
+  await waitFor(() => {
+    expect(compare).toHaveBeenCalledWith("handle", "v1", "main");
+  });
+  pending.resolve(comparison);
+  await screen.findByText("1 commit · 1 file");
+  expect(screen.getByText("portal · v1 → main")).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "Review changes" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  await screen.findByRole("heading", { name: "Writing style" });
+});
 
 test("a displayed model awaiting registration cannot start writing while style fields remain editable", async () => {
   const openDraft = vi.fn(() => Promise.resolve(release()));
@@ -158,46 +194,31 @@ test("a session read failure reports a safe message without inventing releases",
   expect(screen.queryByRole("button", { name: /Portal 2.4/ })).toBeNull();
 });
 
-test("project selection and comparison failures keep the release wizard recoverable", async () => {
+test("project selection failures keep the Changes step recoverable", async () => {
   const notice = vi.fn();
   const choose = vi
     .fn()
     .mockResolvedValueOnce(null)
     .mockRejectedValueOnce(new Error("private chooser detail"))
     .mockResolvedValueOnce({ handle: "handle", name: "portal", refs: ["v1", "main"] });
-  const compare = vi.fn().mockRejectedValueOnce(new Error("private comparison detail"));
   renderFlow(
     bridge({
       session: () => Promise.resolve({ drafts: [], generations: {} }),
       chooseProject: choose,
-      compareProject: compare,
     }),
     notice,
   );
   fireEvent.click(screen.getByRole("button", { name: "New release" }));
-  fireEvent.click(screen.getByText("Choose a Git project"));
+  fireEvent.click(screen.getByRole("button", { name: "Choose a Git project" }));
   await waitFor(() => {
     expect(choose).toHaveBeenCalledTimes(1);
   });
-  expect(screen.queryByText("portal")).toBeNull();
-  fireEvent.click(screen.getByText("Choose a Git project"));
+  fireEvent.click(screen.getByRole("button", { name: "Choose a Git project" }));
   await waitFor(() => {
-    expect(notice).toHaveBeenCalled();
+    expect(notice).toHaveBeenCalledOnce();
   });
-  expect(screen.queryByText("portal")).toBeNull();
-  fireEvent.click(screen.getByText("Choose a Git project"));
+  fireEvent.click(screen.getByRole("button", { name: "Choose a Git project" }));
   await screen.findByText("portal");
-  await chooseRevision("From", "v1");
-  await chooseRevision("To", "main");
-  await waitFor(() => {
-    expect(compare).toHaveBeenCalledWith("handle", "v1", "main");
-  });
-  expect(await screen.findByRole("alert")).toHaveProperty(
-    "textContent",
-    "Could not compare those Git revisions. Try again.Retry",
-  );
-  expect(notice).toHaveBeenCalledTimes(1);
-  expect(screen.queryByText("1 commit · 1 file")).toBeNull();
 });
 
 test("opening a release failure returns to style without starting generation", async () => {
@@ -286,53 +307,27 @@ test("Export flushes exact Markdown before using the acknowledged Version", asyn
   expect(decoder.decode(current.markdown)).toBe(markdown);
 });
 
-test("Changes chooses a real project/ref pair before showing style", async () => {
+test("Changes enables Next for a valid range without waiting for Git", async () => {
   const compare = vi.fn(() => Promise.resolve(comparison));
   renderFlow(
     bridge({
       session: () => Promise.resolve({ drafts: [], generations: {} }),
       chooseProject: () =>
-        Promise.resolve({ handle: "handle", name: "portal", refs: ["v1.0.0", "main"] }),
+        Promise.resolve({ handle: "handle", name: "portal", refs: ["v1", "main"] }),
       compareProject: compare,
     }),
   );
   fireEvent.click(screen.getByRole("button", { name: "New release" }));
-  fireEvent.click(screen.getByText("Choose a Git project"));
-  await screen.findByText("portal");
-  await chooseRevision("From", "v1.0.0");
-  await chooseRevision("To", "main");
-  fireEvent.change(screen.getByLabelText("Release"), { target: { value: "Portal 2.4" } });
-  await screen.findByText("1 commit · 1 file");
-  fireEvent.click(screen.getByRole("button", { name: "Next" }));
-  await screen.findByRole("heading", { name: "Writing style" });
-  expect(compare).toHaveBeenCalledWith("handle", "v1.0.0", "main");
-});
-
-test("pending Git comparison explains why Next waits while inputs remain editable", async () => {
-  const pending = deferred<typeof comparison>();
-  renderFlow(
-    bridge({
-      session: () => Promise.resolve({ drafts: [], generations: {} }),
-      chooseProject: () =>
-        Promise.resolve({ handle: "handle", name: "portal", refs: ["v1", "main"] }),
-      compareProject: () => pending.promise,
-    }),
-  );
-  fireEvent.click(screen.getByRole("button", { name: "New release" }));
-  fireEvent.click(screen.getByText("Choose a Git project"));
+  fireEvent.click(screen.getByRole("button", { name: "Choose a Git project" }));
   await screen.findByText("portal");
   await chooseRevision("From", "v1");
   await chooseRevision("To", "main");
-  expect(await screen.findByRole("status")).toHaveProperty("textContent", "Comparing Git changes…");
-  expect(screen.getByRole<HTMLButtonElement>("button", { name: /Next/ }).disabled).toBe(true);
-  expect(screen.getByRole<HTMLButtonElement>("combobox", { name: "From" }).disabled).toBe(false);
   fireEvent.change(screen.getByLabelText("Release"), { target: { value: "Portal 2.4" } });
-  pending.resolve(comparison);
-  await screen.findByText("1 commit · 1 file");
-  expect(screen.getByRole<HTMLButtonElement>("button", { name: /Next/ }).disabled).toBe(false);
+  expect(screen.getByRole<HTMLButtonElement>("button", { name: "Next" }).disabled).toBe(false);
+  expect(compare).not.toHaveBeenCalled();
 });
 
-test("project chooser announces its pending state", async () => {
+test("project chooser stays disabled while pending without a top status", async () => {
   const chooser = deferred<{ handle: string; name: string; refs: readonly string[] } | null>();
   renderFlow(
     bridge({
@@ -342,7 +337,7 @@ test("project chooser announces its pending state", async () => {
   );
   fireEvent.click(screen.getByRole("button", { name: "New release" }));
   fireEvent.click(screen.getByText("Choose a Git project"));
-  expect(await screen.findByRole("status")).toHaveProperty("textContent", "Opening Git project…");
+  expect(screen.queryByText("Opening Git project…")).toBeNull();
   expect(
     screen.getByRole<HTMLButtonElement>("button", { name: "Choose a Git project" }).disabled,
   ).toBe(true);
@@ -364,7 +359,7 @@ test("leaving a pending picker restores controls without letting its late result
   );
   fireEvent.click(screen.getByRole("button", { name: "New release" }));
   fireEvent.click(screen.getByRole("button", { name: "Choose a Git project" }));
-  await screen.findByText("Opening Git project…");
+  expect(screen.queryByText("Opening Git project…")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Dashboard" }));
   expect(screen.getByRole<HTMLButtonElement>("button", { name: "Sign out" }).disabled).toBe(false);
   fireEvent.click(screen.getByRole("button", { name: "New release" }));
@@ -399,7 +394,7 @@ test("a picker failure after leaving Changes does not interrupt the next wizard"
   );
   fireEvent.click(screen.getByRole("button", { name: "New release" }));
   fireEvent.click(screen.getByRole("button", { name: "Choose a Git project" }));
-  await screen.findByText("Opening Git project…");
+  expect(screen.queryByText("Opening Git project…")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Dashboard" }));
   fireEvent.click(screen.getByRole("button", { name: "New release" }));
   first.reject(new Error("private old picker failure"));
@@ -436,8 +431,8 @@ test("Dashboard cannot release sign-out busy state while sign-out is pending", a
   await screen.findByRole("heading", { name: "Your releases" });
 });
 
-test("a completed comparison remains available through Style and Write", async () => {
-  const pending = deferred<typeof comparison>();
+test("completed Review persists through Style and back without another comparison", async () => {
+  const compare = vi.fn(() => Promise.resolve(comparison));
   const openDraft = vi.fn(() =>
     Promise.resolve({ ...release("", 1), generationStatus: "pending" }),
   );
@@ -446,20 +441,16 @@ test("a completed comparison remains available through Style and Write", async (
       session: () => Promise.resolve({ drafts: [], generations: {} }),
       chooseProject: () =>
         Promise.resolve({ handle: "handle", name: "portal", refs: ["v1", "main"] }),
-      compareProject: () => pending.promise,
+      compareProject: compare,
       openDraft,
     }),
   );
-  fireEvent.click(screen.getByRole("button", { name: "New release" }));
-  fireEvent.click(screen.getByText("Choose a Git project"));
-  await screen.findByText("portal");
-  await chooseRevision("From", "v1");
-  await chooseRevision("To", "main");
-  fireEvent.change(screen.getByLabelText("Release"), { target: { value: "Portal 2.4" } });
-  pending.resolve(comparison);
-  await screen.findByText("1 commit · 1 file");
+  await startReleaseStyle();
+  fireEvent.click(screen.getByRole("button", { name: "Back" }));
+  expect(screen.getByRole("heading", { name: "Review changes" })).toBeTruthy();
+  expect(screen.getByText("1 commit · 1 file")).toBeTruthy();
+  expect(compare).toHaveBeenCalledTimes(1);
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
-  await screen.findByRole("heading", { name: "Writing style" });
   fireEvent.click(screen.getByRole("button", { name: "Write" }));
   await waitFor(() => {
     expect(openDraft).toHaveBeenCalledWith(
@@ -471,7 +462,29 @@ test("a completed comparison remains available through Style and Write", async (
   });
 });
 
-test("failed comparison explains the block and Retry compares the same revisions", async () => {
+test("editing a completed selection compares the new range only after Next", async () => {
+  const compare = vi.fn(() => Promise.resolve(comparison));
+  renderFlow(
+    bridge({
+      session: () => Promise.resolve({ drafts: [], generations: {} }),
+      chooseProject: () =>
+        Promise.resolve({ handle: "handle", name: "portal", refs: ["v1", "main", "release"] }),
+      compareProject: compare,
+    }),
+  );
+  await startReleaseStyle();
+  fireEvent.click(screen.getByRole("button", { name: "Back" }));
+  fireEvent.click(screen.getByRole("button", { name: "Back" }));
+  await chooseRevision("To", "release");
+  expect(compare).toHaveBeenCalledTimes(1);
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  await waitFor(() => {
+    expect(compare).toHaveBeenCalledTimes(2);
+  });
+  expect(compare).toHaveBeenLastCalledWith("handle", "v1", "release");
+});
+
+test("Review failure offers retry and keeps the same selection", async () => {
   const first = deferred<typeof comparison>();
   const retry = deferred<typeof comparison>();
   const compare = vi
@@ -487,133 +500,29 @@ test("failed comparison explains the block and Retry compares the same revisions
     }),
   );
   fireEvent.click(screen.getByRole("button", { name: "New release" }));
-  fireEvent.click(screen.getByText("Choose a Git project"));
+  fireEvent.click(screen.getByRole("button", { name: "Choose a Git project" }));
   await screen.findByText("portal");
   await chooseRevision("From", "v1");
   await chooseRevision("To", "main");
+  fireEvent.change(screen.getByLabelText("Release"), { target: { value: "Portal 2.4" } });
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
   first.reject(new Error("private Git path"));
   expect(await screen.findByRole("alert")).toHaveProperty(
     "textContent",
     "Could not compare those Git revisions. Try again.Retry",
   );
-  expect(screen.getByRole<HTMLButtonElement>("button", { name: /Next/ }).disabled).toBe(true);
+  expect(screen.getByRole<HTMLButtonElement>("button", { name: "Next" }).disabled).toBe(true);
   fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-  expect(compare).toHaveBeenCalledTimes(2);
-  expect(screen.queryByRole("alert")).toBeNull();
+  await waitFor(() => {
+    expect(compare).toHaveBeenCalledTimes(2);
+  });
+  expect(screen.getByRole("progressbar")).toBeTruthy();
   retry.resolve(comparison);
   await screen.findByText("1 commit · 1 file");
+  expect(compare).toHaveBeenNthCalledWith(2, "handle", "v1", "main");
 });
 
-test("Retry cannot invalidate a pending project picker after comparison failure", async () => {
-  const chooser = deferred<{ handle: string; name: string; refs: readonly string[] } | null>();
-  const chooseProject = vi
-    .fn()
-    .mockResolvedValueOnce({ handle: "handle", name: "portal", refs: ["v1", "main"] })
-    .mockImplementationOnce(() => chooser.promise);
-  const compareProject = vi.fn().mockRejectedValue(new Error("private Git path"));
-  renderFlow(
-    bridge({
-      session: () => Promise.resolve({ drafts: [], generations: {} }),
-      chooseProject,
-      compareProject,
-    }),
-  );
-  fireEvent.click(screen.getByRole("button", { name: "New release" }));
-  fireEvent.click(screen.getByRole("button", { name: "Choose a Git project" }));
-  await screen.findByText("portal");
-  await chooseRevision("From", "v1");
-  await chooseRevision("To", "main");
-  await screen.findByRole("alert");
-  fireEvent.click(screen.getByRole("button", { name: "Choose a Git project" }));
-  expect(screen.getByRole<HTMLButtonElement>("button", { name: "Retry" }).disabled).toBe(true);
-  chooser.resolve(null);
-  await waitFor(() => {
-    expect(
-      screen.getByRole<HTMLButtonElement>("button", { name: "Choose a Git project" }).disabled,
-    ).toBe(false);
-  });
-  expect(compareProject).toHaveBeenCalledTimes(1);
-});
-
-test("comparison failures offer retry with the selected revisions", async () => {
-  renderFlow(
-    bridge({
-      session: () => Promise.resolve({ drafts: [], generations: {} }),
-      chooseProject: () =>
-        Promise.resolve({ handle: "handle", name: "portal", refs: ["v1", "main"] }),
-      compareProject: () =>
-        Promise.reject(new Error("Could not compare those Git revisions. Try again.")),
-    }),
-  );
-  fireEvent.click(screen.getByRole("button", { name: "New release" }));
-  fireEvent.click(screen.getByText("Choose a Git project"));
-  await screen.findByText("portal");
-  await chooseRevision("From", "v1");
-  await chooseRevision("To", "main");
-  expect(await screen.findByRole("alert")).toHaveProperty(
-    "textContent",
-    "Could not compare those Git revisions. Try again.Retry",
-  );
-  expect(screen.getByRole("button", { name: "Retry" })).not.toBeNull();
-  expect(screen.getByRole<HTMLButtonElement>("combobox", { name: "To" }).disabled).toBe(false);
-});
-
-test("a late older comparison cannot replace counts for the selected refs", async () => {
-  const first = deferred<typeof comparison>();
-  const second = deferred<typeof comparison>();
-  let requests = 0;
-  renderFlow(
-    bridge({
-      session: () => Promise.resolve({ drafts: [], generations: {} }),
-      chooseProject: () =>
-        Promise.resolve({ handle: "handle", name: "portal", refs: ["v1", "main", "release"] }),
-      compareProject: () => (++requests === 1 ? first.promise : second.promise),
-    }),
-  );
-  fireEvent.click(screen.getByRole("button", { name: "New release" }));
-  fireEvent.click(screen.getByText("Choose a Git project"));
-  await screen.findByText("portal");
-  await chooseRevision("From", "v1");
-  await chooseRevision("To", "main");
-  await chooseRevision("To", "release");
-  second.resolve({ ...comparison, commits: [{}, {}, {}], changes: [{}, {}] });
-  await screen.findByText("3 commits · 2 files");
-  first.resolve(comparison);
-  expect(screen.queryByText("1 commit · 1 file")).toBeNull();
-});
-
-test("equal revisions invalidate an in-flight comparison and a valid pair compares again", async () => {
-  const stale = deferred<typeof comparison>();
-  const current = deferred<typeof comparison>();
-  const compare = vi
-    .fn()
-    .mockImplementationOnce(() => stale.promise)
-    .mockImplementationOnce(() => current.promise);
-  renderFlow(
-    bridge({
-      session: () => Promise.resolve({ drafts: [], generations: {} }),
-      chooseProject: () =>
-        Promise.resolve({ handle: "handle", name: "portal", refs: ["v1", "main"] }),
-      compareProject: compare,
-    }),
-  );
-  fireEvent.click(screen.getByRole("button", { name: "New release" }));
-  fireEvent.click(screen.getByText("Choose a Git project"));
-  await screen.findByText("portal");
-  await chooseRevision("From", "v1");
-  await chooseRevision("To", "main");
-  await screen.findByRole("status");
-  await chooseRevision("To", "v1");
-  expect(await screen.findByText("Choose two different revisions.")).toBeTruthy();
-  stale.resolve(comparison);
-  expect(screen.queryByText("1 commit · 1 file")).toBeNull();
-  await chooseRevision("To", "main");
-  expect(compare).toHaveBeenCalledTimes(2);
-  current.resolve({ ...comparison, changes: [{}, {}] });
-  await screen.findByText("1 commit · 2 files");
-});
-
-test("leaving Changes discards a late result before a new wizard selection", async () => {
+test("Back ignores a pending Review result and changed revisions compare only after Next", async () => {
   const stale = deferred<typeof comparison>();
   const fresh = deferred<typeof comparison>();
   const compare = vi
@@ -624,50 +533,32 @@ test("leaving Changes discards a late result before a new wizard selection", asy
     bridge({
       session: () => Promise.resolve({ drafts: [], generations: {} }),
       chooseProject: () =>
-        Promise.resolve({ handle: "handle", name: "portal", refs: ["v1", "main"] }),
+        Promise.resolve({ handle: "handle", name: "portal", refs: ["v1", "main", "release"] }),
       compareProject: compare,
     }),
   );
   fireEvent.click(screen.getByRole("button", { name: "New release" }));
-  fireEvent.click(screen.getByText("Choose a Git project"));
-  await screen.findByText("portal");
-  await chooseRevision("From", "v1");
-  await chooseRevision("To", "main");
-  await screen.findByRole("status");
-  fireEvent.click(screen.getByRole("button", { name: "Dashboard" }));
-  stale.resolve(comparison);
-  fireEvent.click(screen.getByRole("button", { name: "New release" }));
-  fireEvent.click(screen.getByText("Choose a Git project"));
-  await screen.findByText("portal");
-  await chooseRevision("From", "v1");
-  await chooseRevision("To", "main");
-  expect(compare).toHaveBeenCalledTimes(2);
-  expect(screen.queryByText("1 commit · 1 file")).toBeNull();
-  fresh.resolve(comparison);
-  await screen.findByText("1 commit · 1 file");
-});
-
-test("canceling project selection during comparison still lets the selected range complete", async () => {
-  const pending = deferred<typeof comparison>();
-  renderFlow(
-    bridge({
-      session: () => Promise.resolve({ drafts: [], generations: {} }),
-      chooseProject: vi
-        .fn()
-        .mockResolvedValueOnce({ handle: "handle", name: "portal", refs: ["v1", "main"] })
-        .mockResolvedValueOnce(null),
-      compareProject: () => pending.promise,
-    }),
-  );
-  fireEvent.click(screen.getByRole("button", { name: "New release" }));
-  fireEvent.click(screen.getByText("Choose a Git project"));
-  await screen.findByText("portal");
-  await chooseRevision("From", "v1");
-  await chooseRevision("To", "main");
-  await screen.findByRole("status");
   fireEvent.click(screen.getByRole("button", { name: "Choose a Git project" }));
-  pending.resolve(comparison);
-  await screen.findByText("1 commit · 1 file");
+  await screen.findByText("portal");
+  await chooseRevision("From", "v1");
+  await chooseRevision("To", "main");
+  fireEvent.change(screen.getByLabelText("Release"), { target: { value: "Portal 2.4" } });
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  await waitFor(() => {
+    expect(compare).toHaveBeenCalledTimes(1);
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Back" }));
+  stale.resolve(comparison);
+  await chooseRevision("To", "release");
+  expect(compare).toHaveBeenCalledTimes(1);
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  expect(screen.getByRole("progressbar")).toBeTruthy();
+  await waitFor(() => {
+    expect(compare).toHaveBeenCalledTimes(2);
+  });
+  fresh.resolve({ ...comparison, changes: [{}, {}] });
+  await screen.findByText("1 commit · 2 files");
+  expect(screen.queryByText("1 commit · 1 file")).toBeNull();
 });
 
 test("a second export after editing uses the post-export Version and exact new bytes", async () => {
@@ -851,6 +742,9 @@ test("writing observes the accepted generation and opens its resulting Markdown"
   await chooseRevision("To", "main");
   fireEvent.change(screen.getByLabelText("Release"), { target: { value: "Portal 2.4" } });
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  await screen.findByRole("heading", { name: "Review changes" });
+  await screen.findByText("1 commit · 1 file");
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
   await screen.findByRole("heading", { name: "Writing style" });
   fireEvent.click(screen.getByRole("button", { name: "Write" }));
   await screen.findByRole("heading", { name: "Writing…" });
@@ -885,6 +779,9 @@ test("failed generation stays out of the completed editor and offers another try
   await chooseRevision("To", "main");
   fireEvent.change(screen.getByLabelText("Release"), { target: { value: "Portal 2.4" } });
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  await screen.findByRole("heading", { name: "Review changes" });
+  await screen.findByText("1 commit · 1 file");
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
   await screen.findByRole("heading", { name: "Writing style" });
   fireEvent.click(screen.getByRole("button", { name: "Write" }));
   await screen.findByRole("button", { name: "Try again" });
@@ -910,6 +807,9 @@ test("uncertain generation retains its original reference and can retry", async 
   await chooseRevision("From", "v1");
   await chooseRevision("To", "main");
   fireEvent.change(screen.getByLabelText("Release"), { target: { value: "Portal 2.4" } });
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  await screen.findByRole("heading", { name: "Review changes" });
+  await screen.findByText("1 commit · 1 file");
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
   await screen.findByRole("heading", { name: "Writing style" });
   fireEvent.click(screen.getByRole("button", { name: "Write" }));
@@ -943,6 +843,8 @@ test("Cancel made before a lost generation acknowledgment cancels the retained a
   await chooseRevision("From", "v1");
   await chooseRevision("To", "main");
   fireEvent.change(screen.getByLabelText("Release"), { target: { value: "Portal 2.4" } });
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  await screen.findByText("1 commit · 1 file");
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
   fireEvent.click(await screen.findByRole("button", { name: "Write" }));
   await waitFor(() => {
@@ -983,6 +885,8 @@ test("a transient session failure keeps uncertain writing recoverable with the s
   await chooseRevision("From", "v1");
   await chooseRevision("To", "main");
   fireEvent.change(screen.getByLabelText("Release"), { target: { value: "Portal 2.4" } });
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  await screen.findByText("1 commit · 1 file");
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
   fireEvent.click(await screen.findByRole("button", { name: "Write" }));
   fireEvent.click(await screen.findByRole("button", { name: "Try again" }));

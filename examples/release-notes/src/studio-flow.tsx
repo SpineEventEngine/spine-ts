@@ -140,7 +140,7 @@ export interface StudioFlowBridge {
   exportMarkdown(id: string, version: object): Promise<{ saved: boolean }>;
 }
 
-type Page = "dashboard" | "changes" | "style" | "writing" | "editor";
+type Page = "dashboard" | "changes" | "review" | "style" | "writing" | "editor";
 const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true });
 const releaseExcerpt = (markdown: Uint8Array): string =>
@@ -296,12 +296,8 @@ interface ChangesProps {
   base: string;
   target: string;
   title: string;
-  comparison: Comparison | undefined;
-  comparisonStatus: "idle" | "pending" | "failed";
-  comparisonError: string;
   busy: boolean;
   pickerPending: boolean;
-  retryComparison: () => void;
   choose: () => void;
   setBase: (value: string) => void;
   setTarget: (value: string) => void;
@@ -353,43 +349,12 @@ const ChangesFields = (props: ChangesProps): ReactElement => (
         onChange={props.setTarget}
       />
     </div>
-    <ComparisonFeedback {...props} />
+    {props.busy && !props.pickerPending && (
+      <p className="rs-change-counts" role="status">
+        Signing out…
+      </p>
+    )}
     <ChangesHints {...props} />
-  </>
-);
-
-const ComparisonFeedback = (props: ChangesProps): ReactElement => (
-  <>
-    {props.comparison && (
-      <p className="rs-change-counts">
-        {props.comparison.commits.length}{" "}
-        {props.comparison.commits.length === 1 ? "commit" : "commits"} ·{" "}
-        {props.comparison.changes.length} {props.comparison.changes.length === 1 ? "file" : "files"}
-      </p>
-    )}
-    {props.busy && (
-      <p className="rs-change-counts" role="status">
-        {props.pickerPending ? "Opening Git project…" : "Signing out…"}
-      </p>
-    )}
-    {!props.busy && props.comparisonStatus === "pending" && (
-      <p className="rs-change-counts" role="status">
-        Comparing Git changes…
-      </p>
-    )}
-    {props.comparisonStatus === "failed" && (
-      <div className="rs-comparison-error" role="alert">
-        <p>{props.comparisonError}</p>
-        <button
-          type="button"
-          className="rs-secondary"
-          disabled={props.busy}
-          onClick={props.retryComparison}
-        >
-          Retry
-        </button>
-      </div>
-    )}
   </>
 );
 
@@ -406,10 +371,7 @@ const ChangesHints = (props: ChangesProps): ReactElement => (
       props.base &&
       props.target &&
       props.base !== props.target &&
-      !props.title.trim() &&
-      props.comparisonStatus !== "failed" && (
-        <p className="rs-change-counts">Enter a release title to continue.</p>
-      )}
+      !props.title.trim() && <p className="rs-change-counts">Enter a release title to continue.</p>}
   </>
 );
 
@@ -451,7 +413,14 @@ const ChangesStep = (props: ChangesProps): ReactElement => (
       <button
         type="button"
         className="rs-primary"
-        disabled={props.busy || !props.comparison || !props.title.trim()}
+        disabled={
+          props.busy ||
+          !props.project ||
+          !props.base ||
+          !props.target ||
+          props.base === props.target ||
+          !props.title.trim()
+        }
         onClick={props.next}
       >
         Next <ArrowRight aria-hidden="true" size={16} />
@@ -459,6 +428,74 @@ const ChangesStep = (props: ChangesProps): ReactElement => (
     }
   >
     <ChangesFields {...props} />
+  </WizardFrame>
+);
+
+interface ReviewProps {
+  project: string;
+  base: string;
+  target: string;
+  comparison: Comparison | undefined;
+  status: "idle" | "pending" | "failed";
+  error: string;
+  busy: boolean;
+  retry: () => void;
+  back: () => void;
+  next: () => void;
+  dashboard: () => void;
+}
+
+const ReviewBody = (props: ReviewProps): ReactElement => (
+  <div className="rs-review-state">
+    <p className="rs-review-range">
+      {props.project} · {props.base} → {props.target}
+    </p>
+    {!props.comparison && props.status !== "failed" && (
+      <div role="status" className="rs-review-pending">
+        <div className="rs-review-progress" role="progressbar" aria-label="Comparing changes" />
+        <p>Comparing changes…</p>
+      </div>
+    )}
+    {props.comparison && (
+      <p className="rs-review-counts">
+        {props.comparison.commits.length}{" "}
+        {props.comparison.commits.length === 1 ? "commit" : "commits"} ·{" "}
+        {props.comparison.changes.length} {props.comparison.changes.length === 1 ? "file" : "files"}
+      </p>
+    )}
+    {props.status === "failed" && (
+      <div className="rs-comparison-error" role="alert">
+        <p>{props.error}</p>
+        <button type="button" className="rs-secondary" disabled={props.busy} onClick={props.retry}>
+          Retry
+        </button>
+      </div>
+    )}
+  </div>
+);
+
+const ReviewStep = (props: ReviewProps): ReactElement => (
+  <WizardFrame
+    step="review"
+    dashboard={props.dashboard}
+    heading="Review changes"
+    footer={
+      <>
+        <button type="button" className="rs-secondary" disabled={props.busy} onClick={props.back}>
+          <ArrowLeft aria-hidden="true" size={16} /> Back
+        </button>
+        <button
+          type="button"
+          className="rs-primary"
+          disabled={props.busy || !props.comparison}
+          onClick={props.next}
+        >
+          Next <ArrowRight aria-hidden="true" size={16} />
+        </button>
+      </>
+    }
+  >
+    <ReviewBody {...props} />
   </WizardFrame>
 );
 
@@ -734,13 +771,11 @@ type FlowState = ReturnType<typeof useFlowState>;
 
 const chooseProject = async (state: FlowState, config: FlowConfig): Promise<void> => {
   const token = ++state.sequence.current;
-  let changed = false;
   state.pickerPending.current = true;
   state.setBusy(true);
   try {
     const selected = await config.bridge.chooseProject();
     if (token !== state.sequence.current || !selected) return;
-    changed = true;
     state.setProject(selected);
     state.setBase("");
     state.setTarget("");
@@ -752,42 +787,52 @@ const chooseProject = async (state: FlowState, config: FlowConfig): Promise<void
     if (token === state.sequence.current) {
       state.pickerPending.current = false;
       state.setBusy(false);
-      if (!changed && state.comparisonStatus === "pending")
-        state.setComparisonRetry((value) => value + 1);
     }
   }
+};
+
+const runComparison = (
+  state: FlowState,
+  config: FlowConfig,
+  token: number,
+  handle: string,
+  base: string,
+  target: string,
+): void => {
+  void config.bridge.compareProject(handle, base, target).then(
+    (selected) => {
+      if (token === state.sequence.current) {
+        state.setComparison(selected);
+        state.setComparisonStatus("idle");
+      }
+    },
+    (error: unknown) => {
+      if (token === state.sequence.current) {
+        state.setComparisonError(
+          StudioIpcErrors.display(error, "Could not compare those Git revisions. Try again."),
+        );
+        state.setComparisonStatus("failed");
+      }
+    },
+  );
 };
 
 const useComparison = (state: FlowState, config: FlowConfig): void => {
   useEffect(() => {
     if (
-      state.page !== "changes" ||
+      state.page !== "review" ||
       !state.project ||
       !state.base ||
       !state.target ||
-      state.base === state.target
+      state.base === state.target ||
+      state.comparison
     )
       return;
     const token = ++state.sequence.current;
     state.setComparison(undefined);
     state.setComparisonStatus("pending");
     state.setComparisonError("");
-    void config.bridge.compareProject(state.project.handle, state.base, state.target).then(
-      (selected) => {
-        if (token === state.sequence.current) {
-          state.setComparison(selected);
-          state.setComparisonStatus("idle");
-        }
-      },
-      (error: unknown) => {
-        if (token === state.sequence.current) {
-          state.setComparisonError(
-            StudioIpcErrors.display(error, "Could not compare those Git revisions. Try again."),
-          );
-          state.setComparisonStatus("failed");
-        }
-      },
-    );
+    runComparison(state, config, token, state.project.handle, state.base, state.target);
     return () => {
       if (token === state.sequence.current) ++state.sequence.current;
     };
@@ -1069,9 +1114,6 @@ const ChangesRoute = ({
     base={state.base}
     target={state.target}
     title={state.title}
-    comparison={state.comparison}
-    comparisonStatus={state.comparisonStatus}
-    comparisonError={state.comparisonError}
     busy={state.busy}
     pickerPending={state.pickerPending.current}
     {...changesActions(state, config)}
@@ -1079,9 +1121,6 @@ const ChangesRoute = ({
 );
 
 const changesActions = (state: FlowState, config: FlowConfig) => ({
-  retryComparison: () => {
-    state.setComparisonRetry((value) => value + 1);
-  },
   choose: () => {
     void chooseProject(state, config);
   },
@@ -1118,9 +1157,17 @@ const changeReleaseTitle = (state: FlowState, value: string): void => {
 };
 
 const nextFromChanges = (state: FlowState): void => {
-  if (!state.comparison) return;
+  if (
+    state.busy ||
+    !state.project ||
+    !state.base ||
+    !state.target ||
+    state.base === state.target ||
+    !state.title.trim()
+  )
+    return;
   state.openingId.current = undefined;
-  state.setPage("style");
+  state.setPage("review");
 };
 
 const changeRevision = (state: FlowState, side: "base" | "target", value: string): void => {
@@ -1150,13 +1197,41 @@ const StyleRoute = ({ state, config }: { state: FlowState; config: FlowConfig })
       void config.selectModel(slug);
     }}
     back={() => {
-      state.setPage("changes");
+      state.setPage("review");
     }}
     write={() => {
       void startGeneration(state, config);
     }}
     dashboard={() => {
       state.setPage("dashboard");
+    }}
+  />
+);
+
+const ReviewRoute = ({ state }: { state: FlowState }): ReactElement => (
+  <ReviewStep
+    project={state.project?.name ?? ""}
+    base={state.base}
+    target={state.target}
+    comparison={state.comparison}
+    status={state.comparisonStatus}
+    error={state.comparisonError}
+    busy={state.busy}
+    retry={() => {
+      state.setComparison(undefined);
+      state.setComparisonStatus("idle");
+      state.setComparisonRetry((value) => value + 1);
+    }}
+    back={() => {
+      ++state.sequence.current;
+      state.setComparisonStatus("idle");
+      state.setPage("changes");
+    }}
+    next={() => {
+      if (state.comparison) state.setPage("style");
+    }}
+    dashboard={() => {
+      returnToDashboard(state);
     }}
   />
 );
@@ -1289,6 +1364,8 @@ const FlowRoute = ({
       return <DashboardRoute state={state} config={config} />;
     case "changes":
       return <ChangesRoute state={state} config={config} />;
+    case "review":
+      return <ReviewRoute state={state} />;
     case "style":
       return <StyleRoute state={state} config={config} />;
     case "writing":

@@ -160,9 +160,10 @@ const ReleaseCard = ({
 /**
  * Visible step of new-release creation.
  */
-export type WizardStep = "changes" | "style" | "writing";
+export type WizardStep = "changes" | "review" | "style" | "writing";
 const steps: readonly { value: WizardStep; label: string }[] = [
   { value: "changes", label: "Changes" },
+  { value: "review", label: "Review" },
   { value: "style", label: "Style" },
   { value: "writing", label: "Write" },
 ];

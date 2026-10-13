@@ -595,6 +595,45 @@ button:not(:disabled):hover {
 .rs-comparison-error p {
   margin: 0 0 8px;
 }
+.rs-review-state {
+  color: #17272e;
+  font-size: 14px;
+}
+.rs-review-range {
+  margin: 0 0 20px;
+  color: #596974;
+}
+.rs-review-pending {
+  max-width: 320px;
+}
+.rs-review-pending p {
+  margin: 10px 0 0;
+  color: #596974;
+}
+.rs-review-progress {
+  overflow: hidden;
+  height: 6px;
+  border-radius: 3px;
+  background: #dbe6df;
+}
+.rs-review-progress::after {
+  display: block;
+  width: 35%;
+  height: 100%;
+  border-radius: inherit;
+  background: #145038;
+  animation: rs-review-move 1.2s ease-in-out infinite alternate;
+  content: "";
+}
+@keyframes rs-review-move {
+  to {
+    transform: translateX(185%);
+  }
+}
+.rs-review-counts {
+  margin: 0;
+  font-weight: 600;
+}
 .rs-segmented-field {
   min-width: 0;
   margin: 0;

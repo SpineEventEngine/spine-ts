@@ -260,11 +260,12 @@ No parser turns those edits back into a structured proposal. A matching
 current Markdown. A later proposal for that generation is discarded.
 
 The workspace opens only after a usable ChatGPT sign-in. Sign in again after
-restarting the app. On **Your releases**, **New
-release** starts the **Changes** → **Style** → **Write** wizard. A native
+restarting the app. On **Your releases**, **New release** starts the
+**Changes** → **Review** → **Style** → **Write** wizard. A native
 project picker returns an opaque handle and real local refs; the trusted
-process resolves the selected comparison. The Changes step shows commit and file
-counts before **Next**. **Writing style** offers Customers or Developers,
+process resolves the selected comparison after **Next**. **Review** shows
+comparison progress, then the selected project and range with full commit and
+file counts. Another **Next** opens **Writing style**, which offers Customers or Developers,
 Plain or Friendly tone, optional Notes, and an account model. Tone and Notes
 become model instructions. The sign-out icon is at the right of the top bar.
 

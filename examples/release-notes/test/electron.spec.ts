@@ -157,8 +157,11 @@ test("packaged sample flow chooses real refs, writes, edits, previews, and expor
     await window.getByRole("combobox", { name: "To" }).click();
     await window.getByRole("option", { name: "HEAD", exact: true }).click();
     await window.getByRole("textbox", { name: "Release" }).fill("v2.4.0");
-    await expect(window.getByText("1 commit · 1 file")).toBeVisible();
     await window.screenshot({ path: "/tmp/spine-redesign-changes-filled.png" });
+    await window.getByRole("button", { name: "Next" }).click();
+    await expect(window.getByRole("heading", { name: "Review changes" })).toBeVisible();
+    await expect(window.getByText("1 commit · 1 file")).toBeVisible();
+    await window.screenshot({ path: "/tmp/spine-redesign-review.png" });
     await window.getByRole("button", { name: "Next" }).click();
     await expect(window.getByRole("heading", { name: "Writing style" })).toBeVisible();
     await window.getByRole("combobox", { name: "Model" }).click();

@@ -42,10 +42,11 @@ Docker container, or separately installed database is required.
    If authorization fails, the same dialog offers **Continue sign-in** for an
    issued client in the current app session.
 2. On **Your releases**, choose **New release**. In **Changes**, choose a local
-   Git project, then real local **From** and **To** revisions. The earlier
-   commit must be in the later commit's history. Uncommitted changes are
-   excluded. Enter a **Release** name, check the commit and file counts, then
-   choose **Next**.
+   Git project, then real local **From** and **To** revisions. The app compares
+   their committed trees directly; uncommitted changes are excluded. Enter a
+   **Release** name and choose **Next**. In **Review**, wait
+   while the app compares the selected changes, check the project, range, and
+   full commit and file counts, then choose **Next**.
 3. In **Writing style**, choose **Customers** or **Developers**, a **Plain** or
    **Friendly** tone, optional **Notes**, and a model advertised for the selected
    account. **Write** sends the selected changes to OpenAI. The writing screen shows

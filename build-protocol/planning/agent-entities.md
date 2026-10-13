@@ -7799,3 +7799,50 @@ all its other6286 tests passed. Acceptance complete for comparison fix and
 previous CI cleanup defect; updated isolated app already provided to human.
 Commit/push follows; new remote checks must not be described as green before
 the new head is actually checked.
+
+Human UI correction: remove the redundant Opening Git project status behind
+the native picker. Git comparison must be a separate wizard step with progress
+then a useful commit/file summary. Standard example-only slice, estimate
+0.25–0.4h including tests/review/package. Flow: Changes -> Review -> Style -> Write.
+Changes Next depends only on valid selections and moves immediately; only Review
+starts comparison. Use accessible indeterminate progress, never invented percent.
+Show completed summary until human continues; Back retains fields, edits invalidate
+old results, unchanged Style return reuses pinned comparison, retries stay on
+Review. Preserve picker/signout and stale-completion guards. No arbitrary limits
+or new backend progress contracts. Existing implementer dispatched explicit
+gpt-6-sol/medium, no inherited history/memory/children, sole example UI writer.
+Current native app must stay open; package separately. Previous e09390f9d CI
+verify and trial both confirmed successful before this correction starts.
+
+Implementation focused checks pass:34 UI tests, tooling TypeScript, scoped
+ESLint, cleanup, TSDoc and diff check. Existing implementer updates current
+README/USER_GUIDE workflow before acceptance. Review uses fresh existing
+performance/reliability role, explicit gpt-6-sol/medium, no memory/history or
+children; scope is async Review navigation and stale results. Configured profile
+matches dispatch; runtime self-introspection is unavailable. Style covered by
+mechanical rules plus visual inspection; API/Proto N/A (UI-only, no contract
+changes); docs checked against changed workflow; security N/A (no new authority,
+transport, auth or storage). Selected requesting-code-review and
+verification-before-completion skills read from installed skill paths; existing
+repository roles and protocol override generic role names in skill guidance.
+
+Review converged: fresh performance/reliability reviewer reports no confirmed
+async/navigation defect. Docs updated; scoped formatting/audience/diff pass.
+Browser policy blocks local file UI fixture; no bypass attempted and visual
+confirmation is not claimed. Existing native user session remains untouched.
+Next: isolated app package and canonical bounded task profile once, using
+existing mechanical function configured gpt-6-luna/low. No source edits or
+provider calls in mechanical work. Required branch-wide tests remain included.
+
+Isolated app build/package passes at spine-release-notes-review-KcXnEg in the
+system temporary directory; user received app link before broad checks.
+README ancestry restriction corrected to direct committed-tree comparison.
+Existing native journey test now visits Review before Style; scoped tooling
+TypeScript, ESLint, format and diff checks pass. Native journey was not executed;
+Vitest does not include Electron-runner specs. Browser file policy prevented
+visual fixture inspection, so no live visual success claim is made.
+Canonical task profile passes, producer exit0:396 files pass,1 skip;6283 tests
+pass,1 skip;637.68s total. No failures. Native Electron rendering remains
+unverified as noted above. Implementation and review accepted; commit/push
+to existing agent-entities branch follows. Exact-head CI is checked after push,
+and must not be reported green until confirmed.
