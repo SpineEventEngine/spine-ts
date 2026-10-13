@@ -1,0 +1,10 @@
+packages/server/src/bus/command-bus.ts: changed executable lines 8/9; changed branch arms 1/2; uncovered branch lines [360]
+packages/server/src/bus/event-bus.ts: changed executable lines 29/30; changed branch arms 6/8; uncovered branch lines [483, 916]
+packages/server/src/context/bounded-context.ts: changed executable lines 100/102; changed branch arms 30/30; uncovered branch lines []
+packages/server/src/delivery/delivery-monitor.ts: changed executable lines 13/13; changed branch arms 2/2; uncovered branch lines []
+packages/server/src/delivery/delivery-supervisor.ts: changed executable lines 1/1; changed branch arms 4/4; uncovered branch lines []
+packages/server/src/delivery/delivery.ts: changed executable lines 18/18; changed branch arms 16/16; uncovered branch lines []
+packages/server/src/runtime/runtime.ts: changed executable lines 9/9; changed branch arms 3/4; uncovered branch lines [342]
+packages/server/src/runtime/signal-publisher.ts: changed executable lines 43/45; changed branch arms 26/30; uncovered branch lines [405, 421]
+packages/server/src/server/server.ts: changed executable lines 12/12; changed branch arms 8/8; uncovered branch lines []
+TOTAL: changed executable lines 233/239; changed branch arms 96/104

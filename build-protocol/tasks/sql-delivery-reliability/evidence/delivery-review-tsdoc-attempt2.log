@@ -1,0 +1,6 @@
+$ node scripts/check-tsdoc.mjs
+callable-summary: packages/server/src/delivery/delivery-run-control.ts :: DeliveryControlledRun.onDrainResult(result)
+tsdoc-block-opener: packages/server/src/delivery/delivery-supervisor.ts :: block@206
+tsdoc-block-opener: packages/server/src/delivery/delivery-supervisor.ts :: block@355
+tsdoc-block-opener: packages/server/src/delivery/delivery-supervisor.ts :: block@362
+[ELIFECYCLE] Command failed with exit code 1.

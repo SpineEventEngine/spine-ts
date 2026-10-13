@@ -255,8 +255,9 @@ export class Delivery {
       onMessage: options.onMessage,
       ...(options.acceptMessage === undefined ? {} : { acceptMessage: options.acceptMessage }),
       operation: { signal: options.signal },
-    }).then((run) =>
-      Object.freeze({
+    }).then((run) => {
+      options.onDrainResult?.(run);
+      return Object.freeze({
         status:
           run.status === "SKIPPED"
             ? "SKIPPED"
@@ -265,8 +266,8 @@ export class Delivery {
               : run.status === "STOPPED"
                 ? "STOPPED"
                 : "COMPLETED",
-      }),
-    );
+      });
+    });
   }
 
   /**
@@ -572,10 +573,16 @@ class DeliveryDrain {
     try {
       this.#statistics.accepted += 1;
       await this.#dispatch(message);
-      if (this.input.options.operation?.signal?.aborted || !(await this.#validate())) return false;
-      await this.#markDelivered(message);
     } catch (error) {
-      await this.#handleReceptionFailure(message, target, error);
+      await this.#handleReceptionFailure(message, target, error, "PROCESSING");
+      if (this.#ownershipLost) return false;
+      return true;
+    }
+    if (this.input.options.operation?.signal?.aborted || !(await this.#validate())) return false;
+    try {
+      await this.#acknowledgeWithRetry(message);
+    } catch (error) {
+      await this.#handleReceptionFailure(message, target, error, "ACKNOWLEDGEMENT");
       if (this.#ownershipLost) return false;
     }
     return true;
@@ -587,29 +594,48 @@ class DeliveryDrain {
    * @param message Supplies the failed inbox message.
    * @param target Identifies the message target.
    * @param error Supplies the endpoint or acknowledgement failure.
+   * @param phase Distinguishes processing from acknowledgement failure.
    * @returns Completion after the recovery action finishes.
    */
   async #handleReceptionFailure(
     message: InboxMessage,
     target: string,
     error: unknown,
+    phase: "PROCESSING" | "ACKNOWLEDGEMENT",
   ): Promise<void> {
     this.#recordFailure(message, error);
     const reception = new FailedReception(
       message,
       error,
       () => this.#acknowledge(message),
-      () => this.#repeat(message),
+      phase === "PROCESSING" ? () => this.#repeat(message) : undefined,
     );
     const action = await safelyValue(
       () => this.input.monitor.onReceptionFailure(reception),
-      reception.markDelivered(),
+      reception.leavePending(),
     );
-    if (
-      !(await safely(() => action.execute())) &&
-      !(await safely(() => reception.markDelivered().execute()))
-    )
+    if (!(await safely(() => action.execute())) || !reception.acknowledged())
       this.#blockedTargets.add(target);
+  }
+
+  /**
+   * Retries only durable acknowledgement after processing has completed.
+   *
+   * @param message Supplies the successfully processed message.
+   * @returns Completion after acknowledgement.
+   */
+  async #acknowledgeWithRetry(message: InboxMessage): Promise<void> {
+    let firstError: unknown;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        await this.#acknowledge(message);
+        return;
+      } catch (error) {
+        firstError ??= error;
+        if (this.#ownershipLost || this.input.options.operation?.signal?.aborted) break;
+      }
+    }
+    throw firstError;
   }
 
   /**
@@ -660,7 +686,11 @@ class DeliveryDrain {
       throw new Error("Inbox message was not marked delivered.");
     this.#deduplication.recordDelivered(message);
     this.#statistics.delivered += 1;
-    this.input.options.onDelivered?.(message);
+    try {
+      this.input.options.onDelivered?.(message);
+    } catch {
+      // A post-ack observer cannot undo durable delivery or repeat processing.
+    }
   }
 
   /**

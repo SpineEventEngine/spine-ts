@@ -1,0 +1,623 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/server/test/delivery/delivery-worker.test.ts (46 tests | 39 failed) 22ms
+     × preserves microsecond receive time in a retained delivery failure 5ms
+     × deduplicates pending identities in one raw page without inbox admission 1ms
+     × continues after productive pages and restarts once after the whole scan 0ms
+     × ends a scan after duplicate removal without a successful delivery 0ms
+     × uses the inbox clock for retained identity and cleanup at offset 60000 0ms
+     × uses the inbox clock for retained identity and cleanup at offset -60000 0ms
+     × uses the inbox clock for retained identity and cleanup at offset +0 0ms
+     × skips per-record checks for future retained rows 0ms
+     × delivers after an expired retained identity is cleaned from a new wrapper 0ms
+     × delivers the same signal to different typed targets 0ms
+     × continues past 1000 unrelated rows without treating cache capacity as a scan limit 0ms
+     × evicts the oldest recent identity after 1000 newer deliveries 0ms
+     × retains an acknowledged identity across short-lived delivery wrappers 0ms
+     × suppresses a retained duplicate through the normal local delivery drain 1ms
+     × reports exact acknowledgement through the callback shorthand 0ms
+     × reports when the selected direct message is removed as a duplicate 0ms
+     × runs one owned delivered cleanup page after each delivery page and on an empty drain 0ms
+     × keeps a completed cleanup deletion when cancellation stops later work 0ms
+     × leaves a delivered row retryable when cancellation arrives before cleanup deletion 0ms
+     × removes every delivered row returned by one bounded cleanup page 0ms
+     × continues past one full protected cleanup page to remove a later eligible row 0ms
+     × retains a delivered row when cleanup refuses deletion without a post-delete lease check 0ms
+     × stops before cleanup deletion when the shard fence is lost 2ms
+     × stops after a delivery page when ownership is lost before its maintenance pass 0ms
+     × renews before callback and durable acknowledgement 0ms
+     × fences callback when renewal is lost 0ms
+     × validates ownership at repository commit time 0ms
+     × contains a thrown renewal before callback or acknowledgement 0ms
+     × defaults a failed reception to durable acknowledgement 0ms
+     × retains a failure message independently from later caller mutation 0ms
+     × repeats a failed reception when the monitor selects repeat dispatch 0ms
+     × retries and acknowledges the pending snapshot after dispatch failure 0ms
+     × blocks only a target after acknowledgement failure and does not spin 0ms
+     × advances beyond a full blocked page to deliver an independent target 0ms
+     × rescans rows that arrive while a preceding page is dispatched 0ms
+     × finds a same-time insertion behind a removed cursor on the second scan 0ms
+     × releases only after an in-flight callback settles when aborted 0ms
+     × does not dispatch unsupported labels 0ms
+     × stops after retaining a bounded sample of distinct target failures 0ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 39 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > preserves microsecond receive time in a retained delivery failure
+ValidationException: Message validation failed with 1 violation(s).
+ ❯ Object.check packages/core/src/index.ts:626:30
+ ❯ Object.pack packages/core/src/index.ts:969:46
+ ❯ message packages/server/test/delivery/delivery-worker.test.ts:1381:25
+    1379|     inboxId: { targetId: Identifiers.pack(TaskIdSchema, id), targetTyp…
+    1380|     signalId,
+    1381|     signal: AnyMessages.pack(EventSchema, event),
+       |                         ^
+    1382|     label,
+    1383|     status: "TO_DELIVER",
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:42:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/39]⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > deduplicates pending identities in one raw page without inbox admission
+ValidationException: Message validation failed with 1 violation(s).
+ ❯ Object.check packages/core/src/index.ts:626:30
+ ❯ Object.pack packages/core/src/index.ts:969:46
+ ❯ message packages/server/test/delivery/delivery-worker.test.ts:1381:25
+    1379|     inboxId: { targetId: Identifiers.pack(TaskIdSchema, id), targetTyp…
+    1380|     signalId,
+    1381|     signal: AnyMessages.pack(EventSchema, event),
+       |                         ^
+    1382|     label,
+    1383|     status: "TO_DELIVER",
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:54:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/39]⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > continues after productive pages and restarts once after the whole scan
+ValidationException: Message validation failed with 1 violation(s).
+ ❯ Object.check packages/core/src/index.ts:626:30
+ ❯ Object.pack packages/core/src/index.ts:969:46
+ ❯ message packages/server/test/delivery/delivery-worker.test.ts:1381:25
+    1379|     inboxId: { targetId: Identifiers.pack(TaskIdSchema, id), targetTyp…
+    1380|     signalId,
+    1381|     signal: AnyMessages.pack(EventSchema, event),
+       |                         ^
+    1382|     label,
+    1383|     status: "TO_DELIVER",
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:93:10
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:92:51
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/39]⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > ends a scan after duplicate removal without a successful delivery
+ValidationException: Message validation failed with 1 violation(s).
+ ❯ Object.check packages/core/src/index.ts:626:30
+ ❯ Object.pack packages/core/src/index.ts:969:46
+ ❯ message packages/server/test/delivery/delivery-worker.test.ts:1381:25
+    1379|     inboxId: { targetId: Identifiers.pack(TaskIdSchema, id), targetTyp…
+    1380|     signalId,
+    1381|     signal: AnyMessages.pack(EventSchema, event),
+       |                         ^
+    1382|     label,
+    1383|     status: "TO_DELIVER",
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:117:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/39]⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > uses the inbox clock for retained identity and cleanup at offset 60000
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > uses the inbox clock for retained identity and cleanup at offset -60000
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > uses the inbox clock for retained identity and cleanup at offset +0
+ValidationException: Message validation failed with 1 violation(s).
+ ❯ Object.check packages/core/src/index.ts:626:30
+ ❯ Object.pack packages/core/src/index.ts:969:46
+ ❯ message packages/server/test/delivery/delivery-worker.test.ts:1381:25
+    1379|     inboxId: { targetId: Identifiers.pack(TaskIdSchema, id), targetTyp…
+    1380|     signalId,
+    1381|     signal: AnyMessages.pack(EventSchema, event),
+       |                         ^
+    1382|     label,
+    1383|     status: "TO_DELIVER",
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:155:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/39]⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > skips per-record checks for future retained rows
+ValidationException: Message validation failed with 1 violation(s).
+ ❯ Object.check packages/core/src/index.ts:626:30
+ ❯ Object.pack packages/core/src/index.ts:969:46
+ ❯ message packages/server/test/delivery/delivery-worker.test.ts:1381:25
+    1379|     inboxId: { targetId: Identifiers.pack(TaskIdSchema, id), targetTyp…
+    1380|     signalId,
+    1381|     signal: AnyMessages.pack(EventSchema, event),
+       |                         ^
+    1382|     label,
+    1383|     status: "TO_DELIVER",
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:187:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/39]⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > delivers after an expired retained identity is cleaned from a new wrapper
+ValidationException: Message validation failed with 1 violation(s).
+ ❯ Object.check packages/core/src/index.ts:626:30
+ ❯ Object.pack packages/core/src/index.ts:969:46
+ ❯ message packages/server/test/delivery/delivery-worker.test.ts:1381:25
+    1379|     inboxId: { targetId: Identifiers.pack(TaskIdSchema, id), targetTyp…
+    1380|     signalId,
+    1381|     signal: AnyMessages.pack(EventSchema, event),
+       |                         ^
+    1382|     label,
+    1383|     status: "TO_DELIVER",
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:219:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/39]⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > delivers the same signal to different typed targets
+ValidationException: Message validation failed with 1 violation(s).
+ ❯ Object.check packages/core/src/index.ts:626:30
+ ❯ Object.pack packages/core/src/index.ts:969:46
+ ❯ message packages/server/test/delivery/delivery-worker.test.ts:1381:25
+    1379|     inboxId: { targetId: Identifiers.pack(TaskIdSchema, id), targetTyp…
+    1380|     signalId,
+    1381|     signal: AnyMessages.pack(EventSchema, event),
+       |                         ^
+    1382|     label,
+    1383|     status: "TO_DELIVER",
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:252:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/39]⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > continues past 1000 unrelated rows without treating cache capacity as a scan limit
+ValidationException: Message validation failed with 1 violation(s).
+ ❯ Object.check packages/core/src/index.ts:626:30
+ ❯ Object.pack packages/core/src/index.ts:969:46
+ ❯ message packages/server/test/delivery/delivery-worker.test.ts:1381:25
+    1379|     inboxId: { targetId: Identifiers.pack(TaskIdSchema, id), targetTyp…
+    1380|     signalId,
+    1381|     signal: AnyMessages.pack(EventSchema, event),
+       |                         ^
+    1382|     label,
+    1383|     status: "TO_DELIVER",
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:298:10
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:297:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/39]⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > evicts the oldest recent identity after 1000 newer deliveries
+ValidationException: Message validation failed with 1 violation(s).
+ ❯ Object.check packages/core/src/index.ts:626:30
+ ❯ Object.pack packages/core/src/index.ts:969:46
+ ❯ message packages/server/test/delivery/delivery-worker.test.ts:1381:25
+    1379|     inboxId: { targetId: Identifiers.pack(TaskIdSchema, id), targetTyp…
+    1380|     signalId,
+    1381|     signal: AnyMessages.pack(EventSchema, event),
+       |                         ^
+    1382|     label,
+    1383|     status: "TO_DELIVER",
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:335:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/39]⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > retains an acknowledged identity across short-lived delivery wrappers
+ValidationException: Message validation failed with 1 violation(s).
+ ❯ Object.check packages/core/src/index.ts:626:30
+ ❯ Object.pack packages/core/src/index.ts:969:46
+ ❯ message packages/server/test/delivery/delivery-worker.test.ts:1381:25
+    1379|     inboxId: { targetId: Identifiers.pack(TaskIdSchema, id), targetTyp…
+    1380|     signalId,
+    1381|     signal: AnyMessages.pack(EventSchema, event),
+       |                         ^
+    1382|     label,
+    1383|     status: "TO_DELIVER",
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:385:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/39]⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > suppresses a retained duplicate through the normal local delivery drain
+ValidationException: Message validation failed with 1 violation(s).
+ ❯ Object.check packages/core/src/index.ts:626:30
+ ❯ Object.pack packages/core/src/index.ts:969:46
+ ❯ message packages/server/test/delivery/delivery-worker.test.ts:1381:25
+    1379|     inboxId: { targetId: Identifiers.pack(TaskIdSchema, id), targetTyp…
+    1380|     signalId,
+    1381|     signal: AnyMessages.pack(EventSchema, event),
+       |                         ^
+    1382|     label,
+    1383|     status: "TO_DELIVER",
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:429:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/39]⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > reports exact acknowledgement through the callback shorthand
+ValidationException: Message validation failed with 1 violation(s).
+ ❯ Object.check packages/core/src/index.ts:626:30
+ ❯ Object.pack packages/core/src/index.ts:969:46
+ ❯ message packages/server/test/delivery/delivery-worker.test.ts:1381:25
+    1379|     inboxId: { targetId: Identifiers.pack(TaskIdSchema, id), targetTyp…
+    1380|     signalId,
+    1381|     signal: AnyMessages.pack(EventSchema, event),
+       |                         ^
+    1382|     label,
+    1383|     status: "TO_DELIVER",
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:466:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/39]⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > reports when the selected direct message is removed as a duplicate
+ValidationException: Message validation failed with 1 violation(s).
+ ❯ Object.check packages/core/src/index.ts:626:30
+ ❯ Object.pack packages/core/src/index.ts:969:46
+ ❯ message packages/server/test/delivery/delivery-worker.test.ts:1381:25
+    1379|     inboxId: { targetId: Identifiers.pack(TaskIdSchema, id), targetTyp…
+    1380|     signalId,
+    1381|     signal: AnyMessages.pack(EventSchema, event),
+       |                         ^
+    1382|     label,
+    1383|     status: "TO_DELIVER",
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:487:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/39]⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > runs one owned delivered cleanup page after each delivery page and on an empty drain
+ValidationException: Message validation failed with 1 violation(s).
+ ❯ Object.check packages/core/src/index.ts:626:30
+ ❯ Object.pack packages/core/src/index.ts:969:46
+ ❯ message packages/server/test/delivery/delivery-worker.test.ts:1381:25
+    1379|     inboxId: { targetId: Identifiers.pack(TaskIdSchema, id), targetTyp…
+    1380|     signalId,
+    1381|     signal: AnyMessages.pack(EventSchema, event),
+       |                         ^
+    1382|     label,
+    1383|     status: "TO_DELIVER",
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:509:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/39]⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > keeps a completed cleanup deletion when cancellation stops later work
+ValidationException: Message validation failed with 1 violation(s).
+ ❯ Object.check packages/core/src/index.ts:626:30
+ ❯ Object.pack packages/core/src/index.ts:969:46
+ ❯ message packages/server/test/delivery/delivery-worker.test.ts:1381:25
+    1379|     inboxId: { targetId: Identifiers.pack(TaskIdSchema, id), targetTyp…
+    1380|     signalId,
+    1381|     signal: AnyMessages.pack(EventSchema, event),
+       |                         ^
+    1382|     label,
+    1383|     status: "TO_DELIVER",
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:532:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/39]⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > leaves a delivered row retryable when cancellation arrives before cleanup deletion
+ValidationException: Message validation failed with 1 violation(s).
+ ❯ Object.check packages/core/src/index.ts:626:30
+ ❯ Object.pack packages/core/src/index.ts:969:46
+ ❯ message packages/server/test/delivery/delivery-worker.test.ts:1381:25
+    1379|     inboxId: { targetId: Identifiers.pack(TaskIdSchema, id), targetTyp…
+    1380|     signalId,
+    1381|     signal: AnyMessages.pack(EventSchema, event),
+       |                         ^
+    1382|     label,
+    1383|     status: "TO_DELIVER",
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:566:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/39]⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > removes every delivered row returned by one bounded cleanup page
+ValidationException: Message validation failed with 1 violation(s).
+ ❯ Object.check packages/core/src/index.ts:626:30
+ ❯ Object.pack packages/core/src/index.ts:969:46
+ ❯ message packages/server/test/delivery/delivery-worker.test.ts:1381:25
+    1379|     inboxId: { targetId: Identifiers.pack(TaskIdSchema, id), targetTyp…
+    1380|     signalId,
+    1381|     signal: AnyMessages.pack(EventSchema, event),
+       |                         ^
+    1382|     label,
+    1383|     status: "TO_DELIVER",
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:592:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/39]⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > continues past one full protected cleanup page to remove a later eligible row
+ValidationException: Message validation failed with 1 violation(s).
+ ❯ Object.check packages/core/src/index.ts:626:30
+ ❯ Object.pack packages/core/src/index.ts:969:46
+ ❯ message packages/server/test/delivery/delivery-worker.test.ts:1381:25
+    1379|     inboxId: { targetId: Identifiers.pack(TaskIdSchema, id), targetTyp…
+    1380|     signalId,
+    1381|     signal: AnyMessages.pack(EventSchema, event),
+       |                         ^
+    1382|     label,
+    1383|     status: "TO_DELIVER",
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:615:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/39]⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > retains a delivered row when cleanup refuses deletion without a post-delete lease check
+ValidationException: Message validation failed with 1 violation(s).
+ ❯ Object.check packages/core/src/index.ts:626:30
+ ❯ Object.pack packages/core/src/index.ts:969:46
+ ❯ message packages/server/test/delivery/delivery-worker.test.ts:1381:25
+    1379|     inboxId: { targetId: Identifiers.pack(TaskIdSchema, id), targetTyp…
+    1380|     signalId,
+    1381|     signal: AnyMessages.pack(EventSchema, event),
+       |                         ^
+    1382|     label,
+    1383|     status: "TO_DELIVER",
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:643:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/39]⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > stops before cleanup deletion when the shard fence is lost
+AssertionError: promise rejected "ValidationException: Message validation f… { violations: [ { …(7) } ] }" instead of resolving
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:706:72
+    704|       },
+    705|     });
+    706|     await expect(delivery.drain(shard, { onMessage: () => undefined })…
+       |                                                                        ^
+    707|       status: "STOPPED",
+    708|     });
+
+Caused by: ValidationException: Message validation failed with 1 violation(s).
+ ❯ Object.check packages/core/src/index.ts:626:30
+ ❯ Object.pack packages/core/src/index.ts:969:46
+ ❯ message packages/server/test/delivery/delivery-worker.test.ts:1381:25
+ ❯ Object.read packages/server/test/delivery/delivery-worker.test.ts:695:31
+ ❯ Object.read packages/server/test/delivery/delivery-worker.test.ts:1298:45
+ ❯ DeliveryDrain.#readPage packages/server/src/delivery/delivery.ts:468:29
+ ❯ DeliveryDrain.#readPages packages/server/src/delivery/delivery.ts:438:35
+ ❯ DeliveryDrain.run packages/server/src/delivery/delivery.ts:396:51
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:706:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { violations: [ { '$typeName': 'spine.validation.ConstraintViolation', msgFormat: '', param: [], typeName: 'spine.core.Event', violation: [], message: { '$typeName': 'spine.string.TemplateString', withPlaceholders: 'The field `${parent.type}.${field.path}` of the type `${field.type}` must have a non-default value.', placeholderValue: { 'message.type': '[redacted]', 'parent.type': '[redacted]', 'field.path': '[redacted]', 'field.type': '[redacted]' } }, fieldPath: { '$typeName': 'spine.base.FieldPath', fieldName: [ 'context' ] } } ], asMessage: 'Function<asMessage>' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/39]⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > stops after a delivery page when ownership is lost before its maintenance pass
+ValidationException: Message validation failed with 1 violation(s).
+ ❯ Object.check packages/core/src/index.ts:626:30
+ ❯ Object.pack packages/core/src/index.ts:969:46
+ ❯ message packages/server/test/delivery/delivery-worker.test.ts:1381:25
+    1379|     inboxId: { targetId: Identifiers.pack(TaskIdSchema, id), targetTyp…
+    1380|     signalId,
+    1381|     signal: AnyMessages.pack(EventSchema, event),
+       |                         ^
+    1382|     label,
+    1383|     status: "TO_DELIVER",
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:714:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/39]⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > renews before callback and durable acknowledgement
+ValidationException: Message validation failed with 1 violation(s).
+ ❯ Object.check packages/core/src/index.ts:626:30
+ ❯ Object.pack packages/core/src/index.ts:969:46
+ ❯ message packages/server/test/delivery/delivery-worker.test.ts:1381:25
+    1379|     inboxId: { targetId: Identifiers.pack(TaskIdSchema, id), targetTyp…
+    1380|     signalId,
+    1381|     signal: AnyMessages.pack(EventSchema, event),
+       |                         ^
+    1382|     label,
+    1383|     status: "TO_DELIVER",
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:770:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/39]⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > fences callback when renewal is lost
+ValidationException: Message validation failed with 1 violation(s).
+ ❯ Object.check packages/core/src/index.ts:626:30
+ ❯ Object.pack packages/core/src/index.ts:969:46
+ ❯ message packages/server/test/delivery/delivery-worker.test.ts:1381:25
+    1379|     inboxId: { targetId: Identifiers.pack(TaskIdSchema, id), targetTyp…
+    1380|     signalId,
+    1381|     signal: AnyMessages.pack(EventSchema, event),
+       |                         ^
+    1382|     label,
+    1383|     status: "TO_DELIVER",
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:799:14
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/39]⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > validates ownership at repository commit time
+ValidationException: Message validation failed with 1 violation(s).
+ ❯ Object.check packages/core/src/index.ts:626:30
+ ❯ Object.pack packages/core/src/index.ts:969:46
+ ❯ message packages/server/test/delivery/delivery-worker.test.ts:1381:25
+    1379|     inboxId: { targetId: Identifiers.pack(TaskIdSchema, id), targetTyp…
+    1380|     signalId,
+    1381|     signal: AnyMessages.pack(EventSchema, event),
+       |                         ^
+    1382|     label,
+    1383|     status: "TO_DELIVER",
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:817:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/39]⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > contains a thrown renewal before callback or acknowledgement
+ValidationException: Message validation failed with 1 violation(s).
+ ❯ Object.check packages/core/src/index.ts:626:30
+ ❯ Object.pack packages/core/src/index.ts:969:46
+ ❯ message packages/server/test/delivery/delivery-worker.test.ts:1381:25
+    1379|     inboxId: { targetId: Identifiers.pack(TaskIdSchema, id), targetTyp…
+    1380|     signalId,
+    1381|     signal: AnyMessages.pack(EventSchema, event),
+       |                         ^
+    1382|     label,
+    1383|     status: "TO_DELIVER",
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:849:14
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/39]⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > defaults a failed reception to durable acknowledgement
+ValidationException: Message validation failed with 1 violation(s).
+ ❯ Object.check packages/core/src/index.ts:626:30
+ ❯ Object.pack packages/core/src/index.ts:969:46
+ ❯ message packages/server/test/delivery/delivery-worker.test.ts:1381:25
+    1379|     inboxId: { targetId: Identifiers.pack(TaskIdSchema, id), targetTyp…
+    1380|     signalId,
+    1381|     signal: AnyMessages.pack(EventSchema, event),
+       |                         ^
+    1382|     label,
+    1383|     status: "TO_DELIVER",
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:931:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[27/39]⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > retains a failure message independently from later caller mutation
+ValidationException: Message validation failed with 1 violation(s).
+ ❯ Object.check packages/core/src/index.ts:626:30
+ ❯ Object.pack packages/core/src/index.ts:969:46
+ ❯ message packages/server/test/delivery/delivery-worker.test.ts:1381:25
+    1379|     inboxId: { targetId: Identifiers.pack(TaskIdSchema, id), targetTyp…
+    1380|     signalId,
+    1381|     signal: AnyMessages.pack(EventSchema, event),
+       |                         ^
+    1382|     label,
+    1383|     status: "TO_DELIVER",
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:950:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[28/39]⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > repeats a failed reception when the monitor selects repeat dispatch
+ValidationException: Message validation failed with 1 violation(s).
+ ❯ Object.check packages/core/src/index.ts:626:30
+ ❯ Object.pack packages/core/src/index.ts:969:46
+ ❯ message packages/server/test/delivery/delivery-worker.test.ts:1381:25
+    1379|     inboxId: { targetId: Identifiers.pack(TaskIdSchema, id), targetTyp…
+    1380|     signalId,
+    1381|     signal: AnyMessages.pack(EventSchema, event),
+       |                         ^
+    1382|     label,
+    1383|     status: "TO_DELIVER",
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:992:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[29/39]⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > retries and acknowledges the pending snapshot after dispatch failure
+ValidationException: Message validation failed with 1 violation(s).
+ ❯ Object.check packages/core/src/index.ts:626:30
+ ❯ Object.pack packages/core/src/index.ts:969:46
+ ❯ message packages/server/test/delivery/delivery-worker.test.ts:1381:25
+    1379|     inboxId: { targetId: Identifiers.pack(TaskIdSchema, id), targetTyp…
+    1380|     signalId,
+    1381|     signal: AnyMessages.pack(EventSchema, event),
+       |                         ^
+    1382|     label,
+    1383|     status: "TO_DELIVER",
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:1020:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[30/39]⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > blocks only a target after acknowledgement failure and does not spin
+ValidationException: Message validation failed with 1 violation(s).
+ ❯ Object.check packages/core/src/index.ts:626:30
+ ❯ Object.pack packages/core/src/index.ts:969:46
+ ❯ message packages/server/test/delivery/delivery-worker.test.ts:1381:25
+    1379|     inboxId: { targetId: Identifiers.pack(TaskIdSchema, id), targetTyp…
+    1380|     signalId,
+    1381|     signal: AnyMessages.pack(EventSchema, event),
+       |                         ^
+    1382|     label,
+    1383|     status: "TO_DELIVER",
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:1072:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[31/39]⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > advances beyond a full blocked page to deliver an independent target
+ValidationException: Message validation failed with 1 violation(s).
+ ❯ Object.check packages/core/src/index.ts:626:30
+ ❯ Object.pack packages/core/src/index.ts:969:46
+ ❯ message packages/server/test/delivery/delivery-worker.test.ts:1381:25
+    1379|     inboxId: { targetId: Identifiers.pack(TaskIdSchema, id), targetTyp…
+    1380|     signalId,
+    1381|     signal: AnyMessages.pack(EventSchema, event),
+       |                         ^
+    1382|     label,
+    1383|     status: "TO_DELIVER",
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:1104:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[32/39]⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > rescans rows that arrive while a preceding page is dispatched
+ValidationException: Message validation failed with 1 violation(s).
+ ❯ Object.check packages/core/src/index.ts:626:30
+ ❯ Object.pack packages/core/src/index.ts:969:46
+ ❯ message packages/server/test/delivery/delivery-worker.test.ts:1381:25
+    1379|     inboxId: { targetId: Identifiers.pack(TaskIdSchema, id), targetTyp…
+    1380|     signalId,
+    1381|     signal: AnyMessages.pack(EventSchema, event),
+       |                         ^
+    1382|     label,
+    1383|     status: "TO_DELIVER",
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:1142:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[33/39]⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > finds a same-time insertion behind a removed cursor on the second scan
+ValidationException: Message validation failed with 1 violation(s).
+ ❯ Object.check packages/core/src/index.ts:626:30
+ ❯ Object.pack packages/core/src/index.ts:969:46
+ ❯ message packages/server/test/delivery/delivery-worker.test.ts:1381:25
+    1379|     inboxId: { targetId: Identifiers.pack(TaskIdSchema, id), targetTyp…
+    1380|     signalId,
+    1381|     signal: AnyMessages.pack(EventSchema, event),
+       |                         ^
+    1382|     label,
+    1383|     status: "TO_DELIVER",
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:1164:10
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:1163:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[34/39]⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > releases only after an in-flight callback settles when aborted
+ValidationException: Message validation failed with 1 violation(s).
+ ❯ Object.check packages/core/src/index.ts:626:30
+ ❯ Object.pack packages/core/src/index.ts:969:46
+ ❯ message packages/server/test/delivery/delivery-worker.test.ts:1381:25
+    1379|     inboxId: { targetId: Identifiers.pack(TaskIdSchema, id), targetTyp…
+    1380|     signalId,
+    1381|     signal: AnyMessages.pack(EventSchema, event),
+       |                         ^
+    1382|     label,
+    1383|     status: "TO_DELIVER",
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:1199:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[35/39]⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > does not dispatch unsupported labels
+ValidationException: Message validation failed with 1 violation(s).
+ ❯ Object.check packages/core/src/index.ts:626:30
+ ❯ Object.pack packages/core/src/index.ts:969:46
+ ❯ message packages/server/test/delivery/delivery-worker.test.ts:1381:25
+    1379|     inboxId: { targetId: Identifiers.pack(TaskIdSchema, id), targetTyp…
+    1380|     signalId,
+    1381|     signal: AnyMessages.pack(EventSchema, event),
+       |                         ^
+    1382|     label,
+    1383|     status: "TO_DELIVER",
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:1232:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[36/39]⎯
+
+ FAIL  packages/server/test/delivery/delivery-worker.test.ts > Delivery direct worker > stops after retaining a bounded sample of distinct target failures
+ValidationException: Message validation failed with 1 violation(s).
+ ❯ Object.check packages/core/src/index.ts:626:30
+ ❯ Object.pack packages/core/src/index.ts:969:46
+ ❯ message packages/server/test/delivery/delivery-worker.test.ts:1381:25
+    1379|     inboxId: { targetId: Identifiers.pack(TaskIdSchema, id), targetTyp…
+    1380|     signalId,
+    1381|     signal: AnyMessages.pack(EventSchema, event),
+       |                         ^
+    1382|     label,
+    1383|     status: "TO_DELIVER",
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:1249:12
+ ❯ packages/server/test/delivery/delivery-worker.test.ts:1245:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[37/39]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  39 failed | 7 passed (46)
+   Start at  20:02:46
+   Duration  898ms (transform 514ms, setup 0ms, import 724ms, tests 22ms, environment 0ms)
+

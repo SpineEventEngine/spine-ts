@@ -1,0 +1,36 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/server/test/context/bounded-context.test.ts (81 tests | 1 failed | 80 skipped) 42ms
+     × retains a failed dynamic-tenant row for fresh-runtime recovery 41ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/test/context/bounded-context.test.ts > BoundedContext assembly > retains a failed dynamic-tenant row for fresh-runtime recovery
+AssertionError: expected { …(3) } to match object { queue: 'dynamic-task recovered' }
+(2 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "queue": "dynamic-task recovered",
++   "queue": "Task Ready recovered",
+  }
+
+ ❯ packages/server/test/context/bounded-context.test.ts:1460:8
+    1458|       await expect(
+    1459|         recovered.stand().read(ProcessManagerStateSchema, "dynamic-tas…
+    1460|       ).resolves.toMatchObject({ queue: "dynamic-task recovered" });
+       |        ^
+    1461|       await expect(
+    1462|         new Delivery({ context: descriptor.storageContext({ tenantId }…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 80 skipped (81)
+   Start at  20:33:46
+   Duration  851ms (transform 510ms, setup 0ms, import 707ms, tests 42ms, environment 0ms)
+

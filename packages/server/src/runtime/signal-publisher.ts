@@ -22,6 +22,42 @@ import { emitServerError } from "../server/server-log.js";
 
 type PublicationKind = "command" | "event" | "rejection-event" | "system-event" | "stored-event";
 type PublisherState = "open" | "closing" | "closed";
+const storedDispatchAttempts = 3;
+
+/**
+ * Describes attempted admission of one committed Event to current recipients.
+ */
+export interface StoredEventPublication {
+  /**
+   * Admission outcome.
+   */
+  readonly status: "ADMITTED" | "FAILED" | "CANCELLED";
+
+  /**
+   * Committed Event ID.
+   */
+  readonly eventId: string;
+
+  /**
+   * Number of actual stored dispatch attempts.
+   */
+  readonly attempts: number;
+
+  /**
+   * First internal failure cause, never included in public repair results.
+   */
+  readonly cause?: unknown;
+}
+
+/**
+ * Supplies cancellation to stored Event dispatch.
+ */
+export interface StoredEventPublicationOptions {
+  /**
+   * Stops later attempts when aborted.
+   */
+  readonly signal?: AbortSignal;
+}
 interface ProducedSignalObserver {
   readonly onCommand?: (command: Readonly<Command>) => void;
   readonly onEvent?: (event: Readonly<Event>) => void;
@@ -33,13 +69,44 @@ interface ProducedSignalObserver {
  * @internal
  */
 export class SignalPublisher {
+  /**
+   * Bus for produced Commands.
+   */
   readonly #commandBus: CommandBus;
+
+  /**
+   * Bus for produced and stored Events.
+   */
   readonly #eventBus: EventBus;
+
+  /**
+   * Bus for System Events.
+   */
   readonly #systemEventBus: EventBus;
+
+  /**
+   * Context name included in safe diagnostics.
+   */
   readonly #contextName: string;
+
+  /**
+   * Admitted publication work awaited by drain.
+   */
   readonly #inFlight = new Set<Promise<void>>();
+
+  /**
+   * Test observers of produced signals.
+   */
   readonly #observers = new Set<ProducedSignalObserver>();
+
+  /**
+   * Optional internal error logger.
+   */
   #logger: ILogLayer | undefined;
+
+  /**
+   * Current publication lifecycle phase.
+   */
   #state: PublisherState = "open";
 
   /**
@@ -105,10 +172,16 @@ export class SignalPublisher {
    *
    * @internal
    * @param event The committed Aggregate Event envelope.
-   * @returns A promise that settles after stored dispatch handling is contained.
+   * @param options Cancels remaining attempts without undoing earlier recipient effects.
+   * @returns The admission outcome; admission does not guarantee recipient processing completion.
    */
-  publishCommittedEvent(event: Event): Promise<void> {
-    return this.#publish("event", event, () => eventBusAccess.postStored(this.#eventBus, event));
+  publishCommittedEvent(
+    event: Event,
+    options?: StoredEventPublicationOptions,
+  ): Promise<StoredEventPublication> {
+    return this.#publishStored("event", event, options, (snapshot, signal) =>
+      eventBusAccess.postStored(this.#eventBus, snapshot, signal),
+    );
   }
 
   /**
@@ -116,11 +189,15 @@ export class SignalPublisher {
    *
    * @internal
    * @param event The committed follow-up Event envelope.
-   * @returns A promise that settles after stored follow-up dispatch is contained.
+   * @param options Cancels remaining attempts without undoing earlier recipient effects.
+   * @returns The admission outcome; admission does not guarantee recipient processing completion.
    */
-  publishReactorEvent(event: Event): Promise<void> {
-    return this.#publish("event", event, () =>
-      eventBusAccess.postStoredFollowUp(this.#eventBus, event),
+  publishReactorEvent(
+    event: Event,
+    options?: StoredEventPublicationOptions,
+  ): Promise<StoredEventPublication> {
+    return this.#publishStored("event", event, options, (snapshot, signal) =>
+      eventBusAccess.postStoredFollowUp(this.#eventBus, snapshot, signal),
     );
   }
 
@@ -140,11 +217,15 @@ export class SignalPublisher {
    * Publishes a stored Event for detached handling.
    *
    * @param event The stored Event envelope.
-   * @returns A promise that settles after the Event is handled or its failure is contained.
+   * @param options Cancels remaining attempts without undoing earlier recipient effects.
+   * @returns The admission outcome; admission does not guarantee recipient processing completion.
    */
-  redispatchStored(event: Event): Promise<void> {
-    return this.#publish("stored-event", event, () =>
-      eventBusAccess.postStored(this.#eventBus, event),
+  redispatchStored(
+    event: Event,
+    options?: StoredEventPublicationOptions,
+  ): Promise<StoredEventPublication> {
+    return this.#publishStored("stored-event", event, options, (snapshot, signal) =>
+      eventBusAccess.postStored(this.#eventBus, snapshot, signal),
     );
   }
 
@@ -152,11 +233,15 @@ export class SignalPublisher {
    * Publishes a stored Event after current bus work for detached handling.
    *
    * @param event The stored Event envelope.
-   * @returns A promise that settles after the Event is handled or its failure is contained.
+   * @param options Cancels remaining attempts without undoing earlier recipient effects.
+   * @returns The admission outcome; admission does not guarantee recipient processing completion.
    */
-  redispatchStoredFollowUp(event: Event): Promise<void> {
-    return this.#publish("stored-event", event, () =>
-      eventBusAccess.postStoredFollowUp(this.#eventBus, event),
+  redispatchStoredFollowUp(
+    event: Event,
+    options?: StoredEventPublicationOptions,
+  ): Promise<StoredEventPublication> {
+    return this.#publishStored("stored-event", event, options, (snapshot, signal) =>
+      eventBusAccess.postStoredFollowUp(this.#eventBus, snapshot, signal),
     );
   }
 
@@ -170,15 +255,30 @@ export class SignalPublisher {
   reportFailure(kind: PublicationKind, signal: Command | Event | undefined, error: unknown): void {
     const logger = this.#logger;
     if (logger === undefined) return;
-    emitServerError(logger, "Produced signal handling failed.", {
-      context: this.#contextName,
-      kind,
-      signalId: SignalPublisher.signalId(signal),
-      signalType: signal?.message?.typeUrl ?? "unknown",
-      operation: "signal_publisher.handle",
-      reasonCode: "handled_failure",
-    });
-    void error;
+    const event = kind !== "command";
+    try {
+      emitServerError(logger, "Produced signal handling failed.", {
+        contextName: this.#contextName,
+        ...(event
+          ? {
+              eventId: SignalPublisher.signalId(signal),
+              eventType: signal?.message?.typeUrl ?? "unknown",
+            }
+          : {
+              commandId: SignalPublisher.signalId(signal),
+              commandType: signal?.message?.typeUrl ?? "unknown",
+            }),
+        operation: "signal_publisher.handle",
+        reasonCode: "handled_failure",
+        errorName:
+          error instanceof Error &&
+          ["Error", "TypeError", "RangeError", "AggregateError"].includes(error.name)
+            ? error.name
+            : undefined,
+      });
+    } catch {
+      // Diagnostics cannot turn a contained publication failure into detached rejection.
+    }
   }
 
   /**
@@ -257,7 +357,10 @@ export class SignalPublisher {
     }
     this.#observe(kind, signal);
     const handled = Promise.resolve()
-      .then(publish)
+      .then(() => {
+        if (this.#state === "closed") throw new Error("SignalPublisher is closed.");
+        return publish();
+      })
       .catch((error: unknown) => {
         this.reportFailure(kind, signal, error);
       });
@@ -266,6 +369,95 @@ export class SignalPublisher {
       this.#inFlight.delete(handled);
     });
     return handled;
+  }
+
+  /**
+   * Retries one captured stored Event through the actual recipient bus.
+   *
+   * @param kind Category used for failure diagnostics.
+   * @param snapshot Captured Event reused across attempts.
+   * @param options Optional cancellation of later attempts.
+   * @param publish Admits the Event to the selected stored route.
+   * @returns Finite admission outcome with the first internal failure cause.
+   */
+  async #dispatchStored(
+    kind: PublicationKind,
+    snapshot: Event,
+    options: StoredEventPublicationOptions | undefined,
+    publish: (snapshot: Event, signal?: AbortSignal) => Promise<void>,
+  ): Promise<StoredEventPublication> {
+    let cause: unknown;
+    let attempts = 0;
+    const eventId = SignalPublisher.signalId(snapshot);
+    for (; attempts < storedDispatchAttempts;) {
+      if (options?.signal?.aborted)
+        return { status: "CANCELLED", eventId, attempts, cause: cause ?? options.signal.reason };
+      attempts += 1;
+      try {
+        await SignalPublisher.#awaitStoredAttempt(
+          publish(snapshot, options?.signal),
+          options?.signal,
+        );
+        return { status: "ADMITTED", eventId, attempts };
+      } catch (error) {
+        cause ??= error;
+        if (options?.signal?.aborted)
+          return { status: "CANCELLED", eventId, attempts, cause: options.signal.reason ?? cause };
+      }
+    }
+    this.reportFailure(kind, snapshot, cause);
+    return { status: "FAILED", eventId, attempts, cause };
+  }
+
+  /**
+   * Cancels the caller wait while the raw bus queue retains the attempt.
+   *
+   * @param attempt Underlying queued dispatch, observed even after cancellation.
+   * @param signal Optional caller cancellation.
+   * @returns Completion of dispatch or rejection when cancelled.
+   */
+  static async #awaitStoredAttempt(attempt: Promise<void>, signal?: AbortSignal): Promise<void> {
+    if (signal === undefined) return attempt;
+    if (signal.aborted) throw signal.reason ?? new Error("Stored dispatch cancelled.");
+    const cancelled = Promise.withResolvers<never>();
+    const onAbort = () => {
+      cancelled.reject(
+        signal.reason instanceof Error
+          ? signal.reason
+          : new Error("Stored dispatch cancelled.", { cause: signal.reason }),
+      );
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    try {
+      await Promise.race([attempt, cancelled.promise]);
+    } finally {
+      signal.removeEventListener("abort", onAbort);
+    }
+  }
+
+  /**
+   * Tracks one stored publication until its bounded attempt sequence settles.
+   *
+   * @param kind Category used for observation and diagnostics.
+   * @param event Committed Event to snapshot.
+   * @param options Optional cancellation of later attempts.
+   * @param publish Admits the captured Event to the selected route.
+   * @returns Finite admission outcome.
+   */
+  #publishStored(
+    kind: PublicationKind,
+    event: Event,
+    options: StoredEventPublicationOptions | undefined,
+    publish: (snapshot: Event, signal?: AbortSignal) => Promise<void>,
+  ): Promise<StoredEventPublication> {
+    if (this.#state === "closed") return Promise.reject(new Error("SignalPublisher is closed."));
+    const snapshot = clone(EventSchema, event);
+    this.#observe(kind, snapshot);
+    const publication = this.#dispatchStored(kind, snapshot, options, publish);
+    const settled = publication.then(() => undefined);
+    this.#inFlight.add(settled);
+    void settled.then(() => this.#inFlight.delete(settled));
+    return publication;
   }
 
   #observe(kind: PublicationKind, signal: Command | Event): void {

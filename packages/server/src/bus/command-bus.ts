@@ -32,15 +32,63 @@ const commandBusCloseStarters = new WeakMap<CommandBus, () => void>();
 const commandBusDrainers = new WeakMap<CommandBus, () => Promise<void>>();
 const commandBusCloseFinishers = new WeakMap<CommandBus, () => Promise<void>>();
 const commandBusAborters = new WeakMap<CommandBus, () => void>();
+const commandBusTerminalClosers = new WeakMap<CommandBus, () => void>();
 const commandBusWorkCounters = new WeakMap<CommandBus, () => number>();
 
 interface CommandBusAccess {
+  /**
+   * Posts an internal Command after normal external intake stops.
+   * @param commandBus Target bus.
+   * @param command Command envelope.
+   * @returns Completion after dispatch.
+   */
   postInternal(commandBus: CommandBus, command: Command): Promise<void>;
+
+  /**
+   * Queues a trusted Command follow-up during graceful drain.
+   * @param commandBus Target bus.
+   * @param command Command envelope.
+   * @returns Completion after dispatch.
+   */
   postInternalFollowUp(commandBus: CommandBus, command: Command): Promise<void>;
+
+  /**
+   * Stops new external Command intake.
+   * @param commandBus Target bus.
+   */
   beginClose(commandBus: CommandBus): void;
+
+  /**
+   * Waits for accepted Command work.
+   * @param commandBus Target bus.
+   * @returns Completion after the queue drains.
+   */
   drain(commandBus: CommandBus): Promise<void>;
+
+  /**
+   * Completes graceful Command-bus closure.
+   * @param commandBus Target bus.
+   * @returns Completion after closure.
+   */
   finishClose(commandBus: CommandBus): Promise<void>;
+
+  /**
+   * Closes a partially assembled bus.
+   * @param commandBus Target bus.
+   */
   abortClose(commandBus: CommandBus): void;
+
+  /**
+   * Stops queued Command callbacks after a context deadline.
+   * @param commandBus Target bus.
+   */
+  terminalClose(commandBus: CommandBus): void;
+
+  /**
+   * Returns accepted Command work count for drain stability.
+   * @param commandBus Target bus.
+   * @returns Number of accepted work items.
+   */
   acceptedWorkCount(commandBus: CommandBus): number;
 }
 
@@ -54,10 +102,15 @@ type CommandBusIntakeState = "open" | "closing" | "closed";
  */
 export class CommandBus {
   readonly #registry = new CommandDispatcherRegistry();
+
   readonly #runtime = new SingleProcessServerRuntime();
+
   readonly #started: Promise<void>;
+
   #intakeState: CommandBusIntakeState = "open";
+
   #acceptedWorkCount = 0;
+
   #closed: Promise<void> | undefined;
 
   /**
@@ -79,6 +132,9 @@ export class CommandBus {
     commandBusAborters.set(this, () => {
       this.#abortClose();
     });
+    commandBusTerminalClosers.set(this, () => {
+      this.#terminalClose();
+    });
     commandBusWorkCounters.set(this, () => this.#acceptedWorkCount);
 
     for (const dispatcher of dispatchers) {
@@ -89,6 +145,7 @@ export class CommandBus {
   /**
    * Registers a dispatcher.
    *
+   * @typeParam Dispatcher Concrete dispatcher being registered.
    * @param dispatcher the dispatcher to register.
    * @returns the registered dispatcher.
    */
@@ -180,6 +237,14 @@ export class CommandBus {
     this.#beginClose();
     void this.#started.then(() => this.#runtime.close()).catch(() => undefined);
     this.#intakeState = "closed";
+  }
+
+  /**
+   * Fences queued work after the context shutdown deadline.
+   */
+  #terminalClose(): void {
+    this.#intakeState = "closed";
+    runtimeAccess.abortClose(this.#runtime);
   }
 
   async #closeOnce(): Promise<void> {
@@ -288,6 +353,13 @@ export const commandBusAccess: CommandBusAccess = Object.freeze({
     }
 
     abortClose();
+  },
+
+  terminalClose(commandBus: CommandBus): void {
+    const terminalClose = commandBusTerminalClosers.get(commandBus);
+    if (terminalClose === undefined)
+      throw new TypeError("Command-bus terminal close requires a CommandBus instance.");
+    terminalClose();
   },
 
   acceptedWorkCount(commandBus: CommandBus): number {

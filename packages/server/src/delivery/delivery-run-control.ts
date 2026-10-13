@@ -20,6 +20,7 @@ import {
 } from "./delivery-builder.js";
 import type { ShardIndex } from "./shard-index.js";
 import type { InboxMessage } from "./inbox.js";
+import type { DeliveryRun } from "./delivery.js";
 
 /**
  * Controls admission for one finite delivery run.
@@ -108,4 +109,12 @@ export interface DeliveryControlledRun extends DeliveryRunOptions {
    * @internal
    */
   readonly onRunSettled?: () => void;
+
+  /**
+   * Records the full finite drain result before reducing it to the public status.
+   *
+   * @param result Contains failure counts used for supervisor feedback control.
+   * @internal
+   */
+  readonly onDrainResult?: (result: DeliveryRun) => void;
 }

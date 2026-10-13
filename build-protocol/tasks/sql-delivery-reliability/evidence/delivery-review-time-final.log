@@ -1,0 +1,2 @@
+$ node scripts/check-time-reads.mjs
+Runtime time reads use Time; tooling and TSX use platform clocks.

@@ -1,0 +1,17 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+      Coverage enabled with v8
+
+···················································································································································································································································stderr | packages/server/test/server/server.test.ts > Server > retries a failed final environment close on a later process signal
+{"severity":"ERROR","timestamp":"2026-10-13T19:52:38.582Z","message":"Process-owned server shutdown failed.","operation":"server.process_shutdown","reasonCode":"close_failed"}
+
+······························································································································································································································································································································stderr | packages/server/test/repository/repository-routing.test.ts > repository signal routing > validates and preserves the complete custom Event target plan
+{"severity":"WARN","timestamp":"2026-10-13T19:52:41.741Z","message":"Routing repository_routing.ProjectCreated to 1001 recipients in repository repository_routing.ProjectState.","operation":"repository.route","count":1001,"entityType":"repository_routing.ProjectState"}
+
+··········································································································································································································
+
+ Test Files  10 passed (10)
+      Tests  763 passed (763)
+   Start at  20:52:37
+   Duration  13.39s (transform 5.96s, setup 0ms, import 9.30s, tests 12.75s, environment 1ms)
+

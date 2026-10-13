@@ -398,8 +398,13 @@ Process Managers also expose protected `select()` reads of Entity state.
 One Server resolves each queried Entity type to its registered context and
 rejects duplicate type registrations. Queries preserve the handler's effective
 tenant, reject incompatible destinations before reading, and require query
-visibility for foreign targets. Routes are installed before recovery; shutdown
-drains accepted handlers across contexts before closing any target read-side.
+visibility for foreign targets. Routes are installed before recovery. Shutdown
+normally drains accepted handlers across contexts before closing target read-sides.
+Each context has one configurable shutdown deadline (5 seconds by default):
+after it expires, queued work is fenced and close reports the timeout while
+already-entered effects may still settle. The server continues independent
+cleanup after a context drain failure. The context deadline begins after the
+server's separate network and Delivery teardown.
 See the [query contract](../../packages/server/REFERENCE.md#handler-routing-and-operations)
 for the single-tenant identity and the limits of eventually consistent reads.
 Aggregates and Process Managers provide protected Event-history reads backed
@@ -779,10 +784,14 @@ exclusion; it creates neither a per-message claim nor a separate dedup record.
 Delivered rows are the deduplication fact. Handler effects and the delivered-row
 compare-and-set are not transactional, so a lost acknowledgement can redeliver
 after restart and downstream handling must be idempotent. `DeliveryMonitor`
-defines reception-failure policy: its default marks a failed reception delivered
-and continues independent targets; applications may choose the immediate repeat
-action. It adds no attempts, quarantine, receipts, markers, timers, backoff,
-dead-letter storage, or scheduler policy. Callback snapshots copy `Date` values
+defines reception-failure policy: its default leaves a failed reception pending
+and continues independent targets; applications may choose an immediate repeat
+of failed processing or deliberate terminal discard. A successful handler with
+failed acknowledgement gets finite acknowledgement-only retries. The supervisor
+rescans pending shards every 10 seconds by default, separately from the
+60-second stale-session threshold and delivery server processing timeout. It
+adds no persisted attempts, quarantine, receipts, markers, or dead-letter
+storage. Callback snapshots copy `Date` values
 and `Any.value` bytes. The package exposes no raw worker callback API; replay
 stays behind validated endpoints. Local posting handoffs cover command rows,
 projection subscriber rows, and process-manager event rows. Command

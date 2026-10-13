@@ -1,0 +1,3 @@
+$ node scripts/check-tsdoc.mjs
+missing-tsdoc-blank-line: packages/server/src/bus/event-bus.ts :: block@39
+[ELIFECYCLE] Command failed with exit code 1.

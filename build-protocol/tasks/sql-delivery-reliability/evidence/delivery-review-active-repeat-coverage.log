@@ -1,0 +1,25 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+      Coverage enabled with v8
+
+···················································
+
+ Test Files  1 passed (1)
+      Tests  51 passed (51)
+   Start at  21:15:39
+   Duration  1.06s (transform 531ms, setup 0ms, import 772ms, tests 108ms, environment 0ms)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   95.01 |    91.61 |   94.11 |   96.81 |                   
+ ...-supervisor.ts |   95.01 |    91.61 |   94.11 |   96.81 | ...84,726-729,741 
+-------------------|---------|----------|---------|---------|-------------------
+
+=============================== Coverage summary ===============================
+Statements   : 95.01% ( 248/261 )
+Branches     : 91.61% ( 153/167 )
+Functions    : 94.11% ( 48/51 )
+Lines        : 96.81% ( 213/220 )
+================================================================================

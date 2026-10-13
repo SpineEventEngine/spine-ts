@@ -31,12 +31,35 @@ const deliverySupervisorFinalizers = new WeakMap<DeliverySupervisor, (shard: Sha
 const deliverySupervisors = new WeakSet<DeliverySupervisor>();
 
 interface DeliverySupervisorAccess {
+  /**
+   * Sets the supervisor's contained-failure logger.
+   * @param supervisor The target supervisor.
+   * @param logger Receives safe diagnostics.
+   */
   installLogger(supervisor: DeliverySupervisor, logger: ILogLayer): void;
+
+  /**
+   * Returns the installed logger.
+   * @param supervisor The target supervisor.
+   * @returns The installed logger.
+   */
   loggerFor(supervisor: DeliverySupervisor): ILogLayer;
+
+  /**
+   * Sets the callback that admits one pending message.
+   * @param supervisor The target supervisor.
+   * @param admission Tests one message for admission.
+   */
   installAdmission(
     supervisor: DeliverySupervisor,
     admission: (message: InboxMessage) => boolean,
   ): void;
+
+  /**
+   * Sets a callback for settled shard runs.
+   * @param supervisor The target supervisor.
+   * @param onRunSettled Receives the settled shard.
+   */
   installFinalization(
     supervisor: DeliverySupervisor,
     onRunSettled: (shard: ShardIndex) => void,
@@ -130,31 +153,139 @@ export type SupervisedDelivery = Delivery;
  * Admits bounded local delivery and observes remote shards.
  */
 export class DeliverySupervisor {
+  /**
+   * Remote source of sessions and shard notifications.
+   */
   readonly #source: DeliverySource;
+
+  /**
+   * Configured delivery runner.
+   */
   readonly #runs: DeliveryRunControl;
+
+  /**
+   * Endpoint invoked for received messages.
+   */
   readonly #onMessage: OnDeliveryMessage;
+
+  /**
+   * Maximum concurrent shard runs.
+   */
   readonly #concurrency: number;
+
+  /**
+   * Maximum retained pending shard notifications.
+   */
   readonly #pendingLimit: number;
+
+  /**
+   * Delay between missed-notification rescans.
+   */
   readonly #recoveryMs: number;
+
+  /**
+   * Separate stale-session age used during release.
+   */
   readonly #staleMs: number;
+
+  /**
+   * Initial watch reconnect delay.
+   */
   readonly #watchInitialBackoffMs: number;
+
+  /**
+   * Maximum watch reconnect delay.
+   */
   readonly #watchMaxBackoffMs: number;
-  readonly #pending = new Map<string, ShardIndex>();
+
+  /**
+   * Shards waiting for a run slot.
+   */
+  readonly #pending = new Map<string, { shard: ShardIndex; observed: boolean }>();
+
+  /**
+   * Shards whose failed runs await the next periodic recovery before another observation.
+   */
+  readonly #failedObserved = new Set<string>();
+
+  /**
+   * Shards with an active run.
+   */
   readonly #active = new Set<string>();
+
+  /**
+   * Waiters for an empty active and pending set.
+   */
   readonly #idle = new Set<() => undefined>();
+
+  /**
+   * Cancels worker runs during close.
+   */
   readonly #controller = new AbortController();
+
+  /**
+   * Cancels remote watch and recovery reads during close.
+   */
   readonly #sourceController = new AbortController();
+
+  /**
+   * Whether startup began.
+   */
   #started = false;
+
+  /**
+   * Whether close stopped new admissions.
+   */
   #closing = false;
+
+  /**
+   * Whether all close phases completed.
+   */
   #closed = false;
+
+  /**
+   * Whether overflow requested another full rescan.
+   */
   #rescanRequired = false;
+
+  /**
+   * Shared in-progress recovery.
+   */
   #recovering: Promise<boolean> | undefined;
+
+  /**
+   * Timer for the next periodic recovery.
+   */
   #recoveryTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /**
+   * Timer for a watch reconnect.
+   */
   #watchTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /**
+   * Current watch reconnect delay.
+   */
   #watchBackoffMs: number;
+
+  /**
+   * Whether a remote watch is active.
+   */
   #watching = false;
+
+  /**
+   * Whether close confirmed expired-session release.
+   */
   #releaseConfirmed = false;
+
+  /**
+   * Shared in-progress release call.
+   */
   #releaseAttempt: Promise<void> | undefined;
+
+  /**
+   * Shared in-progress close call.
+   */
   #closeAttempt: Promise<void> | undefined;
 
   /**
@@ -177,7 +308,7 @@ export class DeliverySupervisor {
     );
     this.#recoveryMs = DeliverySupervisor.#requireBound(
       "Delivery supervisor recovery interval",
-      options.recoveryMs ?? 30_000,
+      options.recoveryMs ?? 10_000,
     );
     this.#staleMs = DeliverySupervisor.#requireBound(
       "Delivery supervisor stale session interval",
@@ -191,11 +322,10 @@ export class DeliverySupervisor {
       "Delivery supervisor watch maximum backoff",
       options.watchMaxBackoffMs ?? 30_000,
     );
-    if (this.#watchMaxBackoffMs < this.#watchInitialBackoffMs) {
+    if (this.#watchMaxBackoffMs < this.#watchInitialBackoffMs)
       throw new Error(
         "Delivery supervisor watch maximum backoff must not be smaller than initial backoff.",
       );
-    }
     this.#watchBackoffMs = this.#watchInitialBackoffMs;
   }
 
@@ -221,10 +351,31 @@ export class DeliverySupervisor {
    * @param shard The shard whose work may be scheduled.
    */
   notify(shard: ShardIndex): void {
+    this.#admit(shard, false);
+  }
+
+  /**
+   * Admits one source observation unless a failed run awaits periodic recovery.
+   *
+   * @param update Source update with status and pending count.
+   */
+  #notifyObserved(update: DeliveryShardUpdate): void {
+    if (update.status !== "NOT_PICKED" || update.messages <= 0) return;
+    if (this.#failedObserved.has(DeliverySupervisor.#shardKey(update.shard))) return;
+    this.#admit(update.shard, true);
+  }
+
+  /**
+   * Starts or retains one explicit or observed shard request.
+   *
+   * @param shard Shard selected for delivery.
+   * @param observed Distinguishes a remote status observation from an explicit notification.
+   */
+  #admit(shard: ShardIndex, observed: boolean): void {
     if (!this.#started || this.#closing || this.#closed) return;
     const key = DeliverySupervisor.#shardKey(shard);
     if (this.#active.has(key) || this.#active.size >= this.#concurrency) {
-      this.#queue(key, shard);
+      this.#queue(key, shard, observed);
       return;
     }
     this.#active.add(key);
@@ -326,10 +477,11 @@ export class DeliverySupervisor {
   }
 
   async #run(shard: ShardIndex, key: string): Promise<void> {
+    let failed = true;
     try {
       const admission = deliverySupervisorAdmissions.get(this);
       const finalization = deliverySupervisorFinalizers.get(this);
-      await this.#runs.run({
+      const result = await this.#runs.run({
         shard,
         onMessage: this.#onMessage,
         ...(admission === undefined ? {} : { acceptMessage: admission }),
@@ -340,9 +492,14 @@ export class DeliverySupervisor {
                 finalization(shard);
               },
             }),
+        onDrainResult: (run) => {
+          failed = run.failed > 0;
+        },
         signal: this.#controller.signal,
       });
+      failed ||= result.status === "FAILED";
     } finally {
+      if (failed && !this.#closing) this.#failedObserved.add(key);
       this.#active.delete(key);
       this.#startNext(key);
       this.#settleIdle();
@@ -370,9 +527,7 @@ export class DeliverySupervisor {
       // Release is a mutation: a rejection is not treated as a successful release.
       await this.#releaseExpired({ signal: this.#sourceController.signal });
       const shards = await this.#source.shardSnapshot({ signal: this.#sourceController.signal });
-      for (const shard of shards) {
-        if (shard.status === "NOT_PICKED" && shard.messages > 0) this.notify(shard.shard);
-      }
+      for (const shard of shards) this.#notifyObserved(shard);
       return true;
       // spine-log-boundary: server.delivery_recovery_failure
     } catch {
@@ -399,6 +554,7 @@ export class DeliverySupervisor {
     if (this.#closing || this.#closed || this.#recoveryTimer !== undefined) return;
     this.#recoveryTimer = setTimeout(() => {
       this.#recoveryTimer = undefined;
+      this.#failedObserved.clear();
       void this.#recover().then((recovered) => {
         if (recovered) this.#startWatch();
         this.#scheduleRecovery();
@@ -421,7 +577,7 @@ export class DeliverySupervisor {
       })) {
         if (this.#closing || this.#closed) return;
         this.#watchBackoffMs = this.#watchInitialBackoffMs;
-        if (shard.status === "NOT_PICKED" && shard.messages > 0) this.notify(shard.shard);
+        this.#notifyObserved(shard);
       }
       failed = !this.#closing && !this.#closed;
       // spine-log-boundary: server.delivery_watch_failure
@@ -466,27 +622,37 @@ export class DeliverySupervisor {
     this.#watchTimer = undefined;
   }
 
-  #queue(key: string, shard: ShardIndex): void {
-    if (this.#pending.has(key)) return;
+  #queue(key: string, shard: ShardIndex, observed: boolean): void {
+    const pending = this.#pending.get(key);
+    if (pending !== undefined) {
+      if (!observed) this.#pending.set(key, { shard, observed: false });
+      return;
+    }
     if (this.#pending.size >= this.#pendingLimit) {
       this.#rescanRequired = true;
       return;
     }
-    this.#pending.set(key, shard);
+    this.#pending.set(key, { shard, observed });
   }
 
+  /**
+   * Starts available pending shards after a run settles, retaining repeats for active shards.
+   *
+   * @param completed Key of the shard whose run settled.
+   */
   #startNext(completed: string): void {
     if (this.#closing || this.#closed) return;
     const repeat = this.#pending.get(completed);
     if (repeat !== undefined) {
       this.#pending.delete(completed);
-      this.notify(repeat);
+      if (!repeat.observed || !this.#failedObserved.has(completed))
+        this.#admit(repeat.shard, repeat.observed);
     }
-    while (this.#active.size < this.#concurrency) {
-      const next = this.#pending.entries().next().value;
-      if (next === undefined) break;
-      this.#pending.delete(next[0]);
-      this.notify(next[1]);
+    for (const [key, request] of [...this.#pending]) {
+      if (this.#active.size >= this.#concurrency) break;
+      if (this.#active.has(key)) continue;
+      this.#pending.delete(key);
+      this.#admit(request.shard, request.observed);
     }
     if (this.#rescanRequired) {
       this.#rescanRequired = false;
@@ -608,7 +774,7 @@ export interface DeliverySupervisorOptions {
   readonly pendingLimit?: number;
 
   /**
-   * Positive safe-integer periodic recovery delay in milliseconds. Defaults to `30000`.
+   * Positive safe-integer periodic recovery delay in milliseconds. Defaults to `10000`.
    */
   readonly recoveryMs?: number;
 

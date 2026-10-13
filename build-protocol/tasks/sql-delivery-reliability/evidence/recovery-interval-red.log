@@ -1,0 +1,33 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/server/test/delivery/delivery-supervisor.test.ts (45 tests | 1 failed | 44 skipped) 8ms
+     × rescans missed notifications after ten seconds independently of stale-session age 7ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/test/delivery/delivery-supervisor.test.ts > DeliverySupervisor > rescans missed notifications after ten seconds independently of stale-session age
+AssertionError: expected 1 to be 2 // Object.is equality
+
+- Expected
++ Received
+
+- 2
++ 1
+
+ ❯ packages/server/test/delivery/delivery-supervisor.test.ts:79:25
+     77|       await vi.advanceTimersByTimeAsync(1);
+     78|       await supervisor.whenIdle();
+     79|       expect(snapshots).toBe(2);
+       |                         ^
+     80|       expect(runs).toBe(1);
+     81|       expect(staleAges).toEqual([60_000, 60_000]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 44 skipped (45)
+   Start at  20:11:59
+   Duration  788ms (transform 478ms, setup 0ms, import 677ms, tests 8ms, environment 0ms)
+

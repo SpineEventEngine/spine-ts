@@ -1,0 +1,1000 @@
+$ rg -n ... FIRST_SPINE_TS_DELIVERY_TASK.md
+39:Every accepted command in the initial independent shared-server matrix reached aggregate and projection state. A subsequent replay with the same Project application, same 80 Entity IDs, batches of 16, eight processes/shards and default shared-server settings accepted all 80 but left two without aggregate or projection after 35 seconds and application restart. Their remote command Inbox records were marked delivered. The initial pass was an intermittent success, not evidence that the Project setup avoided the bug. See [the replay](evidence/shared-delivery-trigger/replay80.json) and DEL-02 below.
+41:The investigator also reproduced status-filter and nontransactional cleanup failures. Its timing test measured about 29 seconds without notifications at the default interval and 9 seconds with a 10-second override. This was a controlled one-process timing test, not a new two-process release-race reproduction. A separate worker-kill test recovered pending remote work by 70 seconds; the supervisor's 60-second stale-session threshold is distinct from its recovery interval. Recreating the in-memory Delivery-server instance lost eight accepted pending commands; this was component replacement in one coordinator process, not an OS-process crash.
+59:MyISAM and Aria were configured with the documented `latin1_bin` layout so an unrelated key-size restriction would not prevent testing. The fresh investigator also encountered MyISAM’s key-size limit when converting a default utf8mb4 `VARCHAR(512)` primary key. Its narrower-key/latin1 adaptations were disposable fixtures, not a recommendation to convert production identifiers. Distinguish this schema constraint from the later cleanup transaction guard. They were not used for the complete Message Board application. Browser protocol checks ran the browser client transport in Node against the actual HTTP gateway; they were not automated browser UI tests.
+61:The three suites cover status filtering, duplicate writes, nanosecond pagination, deleted cursors, acknowledgements, competing workers, lease expiry and takeover, retention cleanup, cancellation, tenant separation, database failures during acknowledgement, command delivery to a projection, subscriptions, and persisted state after application restart. Lower-level tests use the published concrete `Delivery` implementation for its diagnostic counters. The retention-stall test separately calls the public `DeliveryBuilder.run()` API.
+67:## STS-01: status filtering is broken in all three SQL databases
+81:| Multi-status query continued onto the next page | Correct rows | Throws | Throws |
+85:The normal delivery loop reads unfiltered pages and checks status in memory. These results do **not** mean that every SQL-backed command stops delivering. The direct delivery and complete application tests separately establish what still works.
+91:A further test of the numeric `shard_index` column with `[0]` succeeds in memory and MySQL/MariaDB but fails in PostgreSQL. This confirms that the mismatch is not limited to enum statuses. It does not establish the correct meaning of every possible array-valued field.
+97:- [In-memory record matching](sources/spine-ts/packages/storage/src/memory/tenant-records.ts).
+103:For inbox statuses, the practical expected behavior is clear: omitted filter means all statuses; an empty list means no statuses; a nonempty list means any listed status. Preserve parameter binding, sorting, page limits, offsets, precise timestamps, and tenant selection.
+105:### Tests required for the fix
+109:Use more than one page, equal timestamps with different versions and message IDs, a deleted cursor record, and two tenant databases. Check record contents and order, not merely that the call resolves. Add a caller-level inbox inspection or cleanup test that uses a multi-status query.
+111:## STS-02: both SQL adapters discard the original database error
+120:2. A database trigger deliberately rejected the inbox acknowledgement update. The delivery run recorded a generic storage failure, again without the database cause. The inbox row remained pending, and a later run succeeded after the trigger was removed.
+132:### Tests required for the fix
+138:## STS-03: activation can finish before the server receives Activate
+175:### Tests required for the fix
+179:Exercise all three real transports on all transactional databases. Cover a slow Activate request, idle subscriptions, disconnect and cancellation during activation, entity and event subscriptions, and late query responses. Subscribe and immediately send a command without adding a delay to the application code. Preserve the best-effort notification contract unless a stronger guarantee is explicitly designed.
+181:## STS-04: browser cancellation fails during normal stream cleanup
+214:Keep the fresh-wire-versus-same-handle test to check retry behavior. Also test a fresh `client.close()` that initiates the cancellation itself, permanent backend failure, timeouts, and repeated close. These broader close-path cases remain acceptance work; the current run only established close after an explicitly failed cancellation.
+232:3. Advance the controlled clock beyond that deadline and add a pending record on the next page.
+233:4. Run delivery again with one record per page.
+275:### Tests required for the change
+277:Verify eligible-record deletion, bounded batches, repeated deletion of an absent record, pending duplicate deletion, normal producer arrival, and stopping subsequent work after cancellation. A completed deletion stays completed. Check tenant/storage and shard selection through normal record addressing. Assert that cleanup issues direct deletes without explicit transaction boundaries, lease-row reads or post-delete validation. Run MyISAM, Aria, InnoDB and PostgreSQL cases. Remove the tests that demand post-delete rollback instead of preserving their invented contract.
+285:- Acknowledgement is idempotent and refuses a mismatched record. A database-triggered acknowledgement failure leaves pending work available for a later run.
+289:- Direct delivery progresses through 105 records over multiple pages, including retained records. Two concurrent drains do not dispatch the same records twice in the tested run. Distinct targets still receive the same originating Event separately.
+290:- Separate tenant databases isolate inboxes and leases. Different context names within one SQL database do **not** create isolation; that is documented SQL storage behavior.
+304:The tests submit commands through the real Coordinator, wait for matching projections, check subscriptions over native gRPC, gRPC-Web and Connect, hold an actual Activate request, kill and replace one application process, and restart the application cohort. The Delivery server remains running during the cohort restart. It is not a test of Delivery-server crash recovery.
+310:## DEL-02: a second database deadlock is treated as completed delivery
+334:The [controlled follow-up report](evidence/shared-delivery-trigger/RESULTS.md) records the setup comparison, replays, SQL traces and their limits.
+336:A replay of the previously passing workload used the same Project app, the same 80 Entity IDs, batches of 16, eight application processes and eight shards, the default ten-connection pool and disabled Delivery-server timeout. It accepted all 80 commands, but `my8-remote-concurrent-project-2` and `my8-remote-concurrent-project-6` had no aggregate or projection after 35 seconds and application restart. Both exact remote command records had status `DELIVERED`. See [the replay result](evidence/shared-delivery-trigger/replay80.json).
+338:MariaDB also reproduced the failure with the original 80 Entity IDs and batches of 16: 80 accepted, 79 aggregates/projections, and `ma8-remote-concurrent-project-4` still missing after 35 seconds and restart. Unlike the uninstrumented MySQL replay, this run logged driver errors: the missing ID had two `ER_LOCK_DEADLOCK` failures and an exact remote command record marked `DELIVERED`. Ten other IDs had one deadlock each and completed. See [the per-ID MariaDB summary](evidence/shared-delivery-trigger/maria80-summary.json).
+342:The precise trigger is overlapping creation of absent Entity rows whose IDs fall in the same database index gap. Each transaction performs its locking read before either finishes its insert. The transactions then block one another. A command becomes permanently missing from ordinary delivery when its immediate retry also deadlocks and the failure policy acknowledges it as delivered. Different delivery shards can still touch the same database index gap; a shared server does not serialize all Entity-table writes.
+344:In a traced shared-server run, `cohort-project-7` and `cohort-project-2` each encountered one deadlock and completed. `cohort-project-5` and `cohort-project-31` each encountered two and remained absent after 35 seconds and application restart. This distinguishes a recovered collision from the actual loss condition. See the [run result](evidence/shared-delivery-trigger/fixed32.json), [SQL error trace](evidence/shared-delivery-trigger/fixed32-workers.log) and [setup comparison](evidence/shared-delivery-trigger/STATIC_COMPARISON.md). The earlier successful run did not record every SQL statement, so its exact transaction timing cannot be reconstructed retrospectively. Do not describe “different application and workload” as an established explanation, or treat its pass as proof against this race.
+431:Restart does not repair a projection whose Inbox row was never stored. The delivery recovery scan has no pending row to find; keeping an Event in aggregate history does not itself queue another publication attempt. A correct fix must distinguish preventing the Inbox deadlock from making failed publication recoverable. Removing the deadlock trigger does not establish recovery after other database or publication failures.
+455:This verifies removal of the reproduced Inbox deadlock trigger in these workloads. It does not fix the separate swallowed-publication failure, prove recovery from arbitrary storage errors, or implement any framework change. PostgreSQL, cleanup and acknowledgement policy were unchanged.
+466:- **After restart:** accept an explicit, bounded list of known committed Event IDs, read only those records from the correct context and tenant, and dispatch them as Events. Return an actual outcome for each ID. Preserving the supplied order for related Events is an implementation requirement; the disposable concurrent test covers independent Events only. A missing ID or failed dispatch must not look successful. Do not submit the original Commands.
+484:The [recovery experiment report](evidence/event-publication-recovery/RESULTS.md) records the verified scope and limits. Implementation must also define cancellation, shutdown, bounded per-ID reads, tenant selection, retryable failures, and observability. Replaying an Event uses current routing; the experiment does not establish recovery of historical, query-dependent recipient lists or original sibling-Event order from UUID sorting.
+494:### Tests required for the fix
+502:## DEL-03: examples should lead with the shared Delivery server
+526:Test a controlled Delivery-server crash with accepted work still pending, restart it, and reconcile every accepted ID. Separately test the chosen deployment's failover if availability is claimed. The saved tests restart application processes while leaving the Delivery server running; they do not cover this failure. This acceptance requirement does not presume that a durable server has already been implemented.
+530:## DEL-04: recover missed work every 10 seconds by default
+544:## DEL-05: independent storage operations should not acquire extra transaction semantics
+558:This concerns explicit framework transaction boundaries; each SQL statement still receives the database's normal execution guarantees. PostgreSQL's first-use schema initialization is separate from ordinary reading.
+584:| [extended-matrix.mjs](experiments/delivery-matrix/extended-matrix.mjs) | Retention stall, duplicate cleanup, concurrent drains, tenant isolation, and injected acknowledgement failure |
+596:The runner refuses to overwrite a previous live container registry. It creates fresh containers for each complete run and removes all fixture tables, triggers, and tenant databases by removing those containers in `finally`. If the runner itself is forcibly killed, run `python3 experiments/delivery-matrix/stop-databases.py` before starting again. Each report records its run ID, command, Node version, installed package versions, lockfile integrity values, and SHA-256 hashes of the harness and generated fixture. Earlier reports remain under `evidence/delivery-matrix/runs`; preliminary reports predate this provenance scheme and should not be treated as the final run. Read the JSON assertions: a zero process exit means the collection script finished, not that every behavior passed. During implementation, turn these reproductions into regression tests that fail the normal test command until the corresponding problem is fixed.
+600:This is a broad local delivery investigation, not a claim of exhaustive production certification. It did not run the framework's entire release suite, a real browser UI, cloud proxies or authentication providers, production-scale throughput tests, database failover, a kill during a controlled in-flight business transaction, Delivery-server crash recovery, or prolonged network partitions. MyISAM and Aria were tested through direct delivery, not a complete application.
+604:Before this task is considered finished, the implementation must pass the database and transport checks above, add the stated missing regression cases, update the relevant API and setup documentation, and pass the repository's normal verification and review requirements. Record any deliberate API or engine-support decision clearly. Do not close an issue by increasing timeouts or disabling cleanup. Replace assertions for the rejected cleanup contract with tests of direct deletion. Keep competing shard acquisition correct.
+$ rg -n acceptance/implementation status
+build-protocol/tasks/sql-delivery-reliability/ACCEPTANCE.md:3:Status: partial implementation and verification. The SQL-boundary subset below passed; the complete task is not accepted. Evidence must identify the exact code, database image/version, transport, process IDs and configuration. A script exit alone is not behavioral acceptance.
+build-protocol/tasks/sql-delivery-reliability/ACCEPTANCE.md:7:| Diagnostics                  | raw driver cause/code; typed error unchanged; Any serialization; pre-handler failure; one correlated safe log; retry success/exhaustion; safe RPC                                                                                                                    | pending                                                                                                                                                       |
+build-protocol/tasks/sql-delivery-reliability/ACCEPTANCE.md:8:| Status filters               | omitted, every single status, multi/all/empty/repeated/invalid; empty/populated; scalar numeric list vs array-valued field; precise ordering, multi-page/deleted cursor and two tenants                                                                              | pending                                                                                                                                                       |
+build-protocol/tasks/sql-delivery-reliability/ACCEPTANCE.md:11:| Immutable and partial writes | same-ID identical retry/conflict; failure after every history/diagnostic/Event/current-state write and each batch member; visible prefix, retry and dispatch behavior                                                                                                | pending                                                                                                                                                       |
+build-protocol/tasks/sql-delivery-reliability/ACCEPTANCE.md:17:| Subscription lifecycle       | held Activate and idle readiness; entity/Event streams; immediate post; disconnect/cancel during activation; gRPC/gRPC-Web/Connect on memory and four transactional DBs                                                                                              | pending                                                                                                                                                       |
+build-protocol/tasks/sql-delivery-reliability/ACCEPTANCE.md:18:| Cancellation                 | same-handle failed then successful retry; simultaneous calls; already removed; explicit Cancel vs teardown; resources released; fresh close failure, timeout/permanent failure, repeated close, no unhandled library promises                                        | pending                                                                                                                                                       |
+build-protocol/tasks/sql-delivery-reliability/ACCEPTANCE.md:19:| Process matrix               | PostgreSQL16/18 × MySQL/MariaDB × 2/8 processes × DB-only/shared Delivery; repeat 80/burst16 and 32/burst32 failures, every accepted ID/state/projection and handler count, restart                                                                                  | pending                                                                                                                                                       |
+build-protocol/tasks/sql-delivery-reliability/ACCEPTANCE.md:20:| Shared-server restart        | OS-process crash with accepted pending work; new in-memory server and reconciled lost IDs; no durability or availability claim                                                                                                                                       | pending                                                                                                                                                       |
+build-protocol/tasks/sql-delivery-reliability/IMPLEMENTATION.md:39:Remaining STS-01 acceptance: explicit tenant-isolation matrix and broader status/ordering combinations with real transports remain in the later SQL/process matrix. This checkpoint makes no claim about independent-write, cleanup, or delivery reliability changes.
+build-protocol/tasks/sql-delivery-reliability/IMPLEMENTATION.md:55:The next storage slice must remove the still-present EventStore compensation/cross-record coordination and the Entity and cleanup rollback seams, adapt memory coordination without promising atomic multi-record saves, and check prepared-input retries and ordered partial writes. Delivery and subscription behavior are separate later slices. This checkpoint does not claim those contracts are complete.
+build-protocol/tasks/sql-delivery-reliability/IMPLEMENTATION.md:71:Scoped TypeScript build exited 0 before the trace window (`storage-local-build-before-trace.log`), and touched-file ESLint exited 0 (`storage-local-lint-2.log`). Cleanup enforcement and TSDoc enforcement passed after the latest source correction (`storage-freeze-{cleanup,tsdoc}-2.log`); `git diff --check` passed. MySQL's unused connection-binding/locking helper was removed with its obsolete test, and SQL factory/helper comments now describe independent record work. The consolidated frozen-slice preflight must rerun broad typecheck, format, copyright, and changed-path branch coverage. The eventual release threshold and full real-process matrix remain open. Event presence alone cannot establish a completed Entity save; current-state writes can interleave, and a caller retry must reuse captured input. The later delivery/publication and subscription slices remain separate.
+build-protocol/tasks/sql-delivery-reliability/IMPLEMENTATION.md:81:After the last test edit, touched ESLint, Prettier, `pnpm lint:cleanup`, `pnpm lint:tsdoc`, `pnpm exec tsc --noEmit -p tsconfig.eslint.json`, `pnpm exec tsc -b --pretty false`, and `git diff --check` all exited 0; logs use the `storage-correction-*` prefix. The focused V8 aggregate percentages include unrelated workspace source and are not a release threshold claim. The source is frozen for the storage specialist review wave; the later release profile and real-process matrix remain acceptance work.
+build-protocol/tasks/sql-delivery-reliability/IMPLEMENTATION.md:87:MySQL Entity commit validation previously accepted blank/repeated delivery Event IDs and absent/mismatched current Entity IDs, so malformed input could reach table preparation or leave a state-history prefix. RED: the malformed-input test resolved a blank-ID commit (`evidence/review-mysql-validation-red.log`). GREEN: validation checks current and state-history IDs against the requested Entity, plus missing, blank, and repeated IDs in both diagnostic and delivery Event families before any I/O. The test asserts no prepare or write calls for each malformed case. The existing valid deadlock/replay and partial-prefix cases remain in the affected suites. The touched builder test now uses generated Todo `TaskId`/`Task` state instead of a scalar message pretending to be an Entity; its old missing-ID expectation was updated to the safe validation text.
+build-protocol/tasks/sql-delivery-reliability/IMPLEMENTATION.md:91:Final focused V8: **17/17 files, 174/174 tests pass** (`evidence/review-correction-coverage-final.log`), with **22/22 added-line branch records hit** in the two changed runtime files (`evidence/review-correction-branches.md`). The delivery-client suite passed 129/129. Live MySQL-family integration passed **15/15 on MySQL 8.4** and **15/15 on MariaDB 11.4** (`evidence/review-mysql-live-{mysql84,mariadb114}-final.log`). An initial direct Vitest invocation selected no infrastructure tests; the infrastructure config then selected them but the process-substitution shell environment did not set the URLs, producing a skipped run. A subsequent run with explicit task environment parsing exercised the real databases; the first MySQL run exposed only the obsolete error-message expectation, then both final live runs passed. Typecheck, build, touched ESLint, cleanup, TSDoc, and diff-check passed in the `review-correction-*` logs. The frozen correction awaits the reliability/style re-review; the whole-task release profile and real-process matrix remain open.
+$ rg -n status-filter and test seams
+packages/server/test/services/native-subscription-integration.test.ts:27:  TenantIdSchema,
+packages/server/test/services/native-subscription-integration.test.ts:144:    const context = BoundedContext.multitenant("NativeAggregate")
+packages/server/test/services/native-subscription-integration.test.ts:163:      await activationTurn();
+packages/server/test/services/native-subscription-integration.test.ts:180:    const context = BoundedContext.multitenant("NativeProjection")
+packages/server/test/services/native-subscription-integration.test.ts:204:      await activationTurn();
+packages/server/test/services/native-subscription-integration.test.ts:206:      await context.eventBus().post(createProjectionTriggerEvent("projection-1", "Projection"));
+packages/server/test/services/native-subscription-integration.test.ts:232:      await activationTurn();
+packages/server/test/services/native-subscription-integration.test.ts:259:      await activationTurn();
+packages/server/test/services/native-subscription-integration.test.ts:347:  return BoundedContext.multitenant(name)
+packages/server/test/services/native-subscription-integration.test.ts:396:function createProjectionTriggerEvent(id: string, title: string) {
+packages/server/test/services/native-subscription-integration.test.ts:435:    tenantId: create(TenantIdSchema, { kind: { case: "value", value: "tenant-native" } }),
+packages/server/test/services/native-subscription-integration.test.ts:488:function activationTurn(): Promise<void> {
+packages/delivery-client/test/managed-remote-delivery-readiness.integration.test.ts:24:import { Code, ConnectError, createClient } from "@connectrpc/connect";
+packages/delivery-client/test/managed-remote-delivery-readiness.integration.test.ts:25:import { connectNodeAdapter, createGrpcTransport } from "@connectrpc/connect-node";
+packages/delivery-client/test/managed-remote-delivery-readiness.integration.test.ts:125:  expect(rejectedAfterDrain).toBeInstanceOf(ConnectError);
+packages/delivery-client/test/managed-remote-delivery-readiness.integration.test.ts:126:  expect([Code.Unavailable, Code.Canceled]).toContain((rejectedAfterDrain as ConnectError).code);
+packages/delivery-client/test/managed-remote-delivery-readiness.integration.test.ts:142:  // above had reached a replica despite its canceled/unavailable response.
+packages/delivery-client/test/managed-remote-delivery-readiness.integration.test.ts:366:      connectNodeAdapter({
+packages/storage-postgres/test/postgresql-integration.test.ts:21:  TenantIdSchema,
+packages/storage-postgres/test/postgresql-integration.test.ts:61:const tenantAUrl = requireUrl("SPINE_TS_POSTGRESQL_TENANT_A_URL");
+packages/storage-postgres/test/postgresql-integration.test.ts:62:const tenantBUrl = requireUrl("SPINE_TS_POSTGRESQL_TENANT_B_URL");
+packages/storage-postgres/test/postgresql-integration.test.ts:68:  readonly multitenant: false;
+packages/storage-postgres/test/postgresql-integration.test.ts:77:      assertSupportedServer(tenantAUrl, expectedMajor),
+packages/storage-postgres/test/postgresql-integration.test.ts:78:      assertSupportedServer(tenantBUrl, expectedMajor),
+packages/storage-postgres/test/postgresql-integration.test.ts:100:        const marker = new Pool({ connectionString: url });
+packages/storage-postgres/test/postgresql-integration.test.ts:119:        const marker = new Pool({ connectionString: url });
+packages/storage-postgres/test/postgresql-integration.test.ts:223:      for (let offset = 0; offset < values.length; offset += 500) {
+packages/storage-postgres/test/postgresql-integration.test.ts:224:        await storage.writeAll(values.slice(offset, offset + 500).map(value));
+packages/storage-postgres/test/postgresql-integration.test.ts:260:    const catalog = new Pool({ connectionString: url });
+packages/storage-postgres/test/postgresql-integration.test.ts:282:    const pool = new Pool({ connectionString: url });
+packages/storage-postgres/test/postgresql-integration.test.ts:319:    const pool = new Pool({ connectionString: url });
+packages/storage-postgres/test/postgresql-integration.test.ts:361:  it("keeps equal record families in their configured tenant databases", async () => {
+packages/storage-postgres/test/postgresql-integration.test.ts:362:    const tenantA = tenant("a");
+packages/storage-postgres/test/postgresql-integration.test.ts:363:    const tenantB = tenant("b");
+packages/storage-postgres/test/postgresql-integration.test.ts:364:    const tenants = await postgresBuilder()
+packages/storage-postgres/test/postgresql-integration.test.ts:365:      .setTenantOptions([
+packages/storage-postgres/test/postgresql-integration.test.ts:366:        { tenantId: tenantA, options: { url: tenantAUrl } },
+packages/storage-postgres/test/postgresql-integration.test.ts:367:        { tenantId: tenantB, options: { url: tenantBUrl } },
+packages/storage-postgres/test/postgresql-integration.test.ts:370:    const storageGroup = group("tenants");
+packages/storage-postgres/test/postgresql-integration.test.ts:371:    const first = tenants.createRecordStorage(
+packages/storage-postgres/test/postgresql-integration.test.ts:372:      tenantContext("tenants", tenantA),
+packages/storage-postgres/test/postgresql-integration.test.ts:376:    const second = tenants.createRecordStorage(
+packages/storage-postgres/test/postgresql-integration.test.ts:377:      tenantContext("tenants", tenantB),
+packages/storage-postgres/test/postgresql-integration.test.ts:382:      await first.write(value("tenant-a"));
+packages/storage-postgres/test/postgresql-integration.test.ts:383:      await second.write(value("tenant-b"));
+packages/storage-postgres/test/postgresql-integration.test.ts:385:        first.queryPlan({ predicate: { kind: "ids", ids: ["tenant-a", "tenant-b"] } }),
+packages/storage-postgres/test/postgresql-integration.test.ts:386:      ).resolves.toEqual([value("tenant-a")]);
+packages/storage-postgres/test/postgresql-integration.test.ts:388:        second.queryPlan({ predicate: { kind: "ids", ids: ["tenant-a", "tenant-b"] } }),
+packages/storage-postgres/test/postgresql-integration.test.ts:389:      ).resolves.toEqual([value("tenant-b")]);
+packages/storage-postgres/test/postgresql-integration.test.ts:393:      tenants.close();
+packages/storage-postgres/test/postgresql-integration.test.ts:436:    const pool = new Pool({ connectionString: url });
+packages/storage-postgres/test/postgresql-integration.test.ts:531:  return { name: `t0230_pg_${run}_${name}`, multitenant: false };
+packages/storage-postgres/test/postgresql-integration.test.ts:534:function tenantContext(name: string, tenantId: ReturnType<typeof tenant>) {
+packages/storage-postgres/test/postgresql-integration.test.ts:535:  return { name: `t0230_pg_${run}_${name}`, multitenant: true, tenantId } as const;
+packages/storage-postgres/test/postgresql-integration.test.ts:580:function tenant(text: string) {
+packages/storage-postgres/test/postgresql-integration.test.ts:581:  return create(TenantIdSchema, { kind: { case: "value", value: text } });
+packages/storage-postgres/test/postgresql-integration.test.ts:678:  const pool = new Pool({ connectionString: databaseUrl });
+packages/server/test/delivery/direct-inbox-records.test.ts:33:import { tenant } from "../tenant-fixture.js";
+packages/server/test/delivery/direct-inbox-records.test.ts:38:      context: { name: "Precise", multitenant: false },
+packages/server/test/delivery/direct-inbox-records.test.ts:109:      context: { name: "Tasks", multitenant: false },
+packages/server/test/delivery/direct-inbox-records.test.ts:196:      context: { name: "Tasks", multitenant: false },
+packages/server/test/delivery/direct-inbox-records.test.ts:230:        context: { name: `Contested-${outcome}`, multitenant: false },
+packages/server/test/delivery/direct-inbox-records.test.ts:247:      context: { name: "Tasks", multitenant: false },
+packages/server/test/delivery/direct-inbox-records.test.ts:273:    const context = { name: "Tasks", multitenant: false } as const;
+packages/server/test/delivery/direct-inbox-records.test.ts:291:  it("converts a public continuation to durable sort values and excludes its cursor row", async () => {
+packages/server/test/delivery/direct-inbox-records.test.ts:293:      context: { name: "Tasks", multitenant: false },
+packages/server/test/delivery/direct-inbox-records.test.ts:315:      context: { name: "Tasks", multitenant: false },
+packages/server/test/delivery/direct-inbox-records.test.ts:335:  it("validates direct read bounds, clock output, and multitenant storage context", async () => {
+packages/server/test/delivery/direct-inbox-records.test.ts:337:      context: { name: "Tasks", multitenant: true, tenantId: tenant("tenant-a") },
+packages/server/test/delivery/direct-inbox-records.test.ts:348:    for (const offset of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1])
+packages/server/test/delivery/direct-inbox-records.test.ts:349:      await expect(storage.read(message.shard, { offset })).rejects.toThrow("offset");
+packages/server/test/delivery/direct-inbox-records.test.ts:356:      await expect(storage.read(message.shard, { after })).rejects.toThrow("continuation");
+packages/server/test/server/server.test.ts:21:import { createClient } from "@connectrpc/connect";
+packages/server/test/server/server.test.ts:22:import { createConnectTransport } from "@connectrpc/connect-node";
+packages/server/test/server/server.test.ts:23:import { createGrpcWebTransport } from "@connectrpc/connect-web";
+packages/server/test/server/server.test.ts:37:  TenantIdSchema,
+packages/server/test/server/server.test.ts:233:    const context = BoundedContext.singleTenant("RegistryFacts").build();
+packages/server/test/server/server.test.ts:261:    const context = BoundedContext.singleTenant("Tasks").build();
+packages/server/test/server/server.test.ts:967:      createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" }),
+packages/server/test/server/server.test.ts:1021:    const transport = createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" });
+packages/server/test/server/server.test.ts:1049:      await subscriptions.cancel(subscription, { headers });
+packages/server/test/server/server.test.ts:1198:  it("rejects retained-connection auth admission while the listener drains", async () => {
+packages/server/test/server/server.test.ts:1235:  it("aborts auth work when its client disconnects", async () => {
+packages/server/test/server/server.test.ts:1246:          path: "/auth/disconnect",
+packages/server/test/server/server.test.ts:1267:      const request = http.request(`${server.baseUrl}/auth/disconnect`, {
+packages/server/test/server/server.test.ts:1390:    let cancelled!: () => void;
+packages/server/test/server/server.test.ts:1391:    const cancellation = new Promise<void>((resolve) => (cancelled = resolve));
+packages/server/test/server/server.test.ts:1409:                cancel() {
+packages/server/test/server/server.test.ts:1410:                  cancelled();
+packages/server/test/server/server.test.ts:1411:                  return Promise.reject(new Error("application cancellation failure"));
+packages/server/test/server/server.test.ts:1426:      await expect(cancellation).resolves.toBeUndefined();
+packages/server/test/server/server.test.ts:1433:    let cancel!: () => void;
+packages/server/test/server/server.test.ts:1434:    const cancelled = new Promise<void>((resolve) => (cancel = resolve));
+packages/server/test/server/server.test.ts:1449:                cancel,
+packages/server/test/server/server.test.ts:1461:      await expect(cancelled).resolves.toBeUndefined();
+packages/server/test/server/server.test.ts:1487:        readonly connection: string | undefined;
+packages/server/test/server/server.test.ts:1499:            resolve({ connection: response.headers.connection, status: response.statusCode });
+packages/server/test/server/server.test.ts:1505:      expect(result.connection).toBe("close");
+packages/server/test/server/server.test.ts:1702:    const session = http2.connect(server.baseUrl);
+packages/server/test/server/server.test.ts:1979:    const session = http2.connect(second.baseUrl);
+packages/server/test/server/server.test.ts:2102:  it("routes browser Connect RPCs through its authentication boundary", async () => {
+packages/server/test/server/server.test.ts:2106:      createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" }),
+packages/server/test/server/server.test.ts:2124:      registry: new TypeRegistry([TenantIdSchema]),
+packages/server/test/server/server.test.ts:2141:      createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" }),
+packages/server/test/server/server.test.ts:2180:      createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" }),
+packages/server/test/server/server.test.ts:2193:  it("enforces the configured browser request-message limit over gRPC-Web", async () => {
+packages/server/test/server/server.test.ts:2217:  it("enforces the configured browser response-message limit over gRPC-Web", async () => {
+packages/server/test/server/server.test.ts:2253:  it("routes browser gRPC-Web RPCs through its authentication boundary", async () => {
+packages/server/test/server/server.test.ts:2291:      createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" }),
+packages/server/test/server/server.test.ts:2333:      createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" }),
+packages/server/test/server/server.test.ts:2369:      createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" }),
+packages/server/test/server/server.test.ts:2404:      createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" }),
+packages/server/test/server/server.test.ts:2430:    const drain = vi.spyOn(http.Server.prototype, "closeAllConnections");
+packages/server/test/server/server.test.ts:2458:      createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" }),
+packages/server/test/server/server.test.ts:2497:  it("replaces browser actor and tenant facts with trusted context", async () => {
+packages/server/test/server/server.test.ts:2516:            tenant: create(TenantIdSchema, { kind: { case: "value", value: "acme" } }),
+packages/server/test/server/server.test.ts:2524:      createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" }),
+packages/server/test/server/server.test.ts:2531:      expect(response.tenant?.kind.value).toBe("acme");
+packages/server/test/server/server.test.ts:2764:    const session = http2.connect(server.baseUrl);
+packages/server/test/server/server.test.ts:2776:    const context = BoundedContext.singleTenant("Tasks").build();
+packages/server/test/server/server.test.ts:2786:    const session = http2.connect(server.baseUrl);
+packages/server/test/server/server.test.ts:2791:      [http2.constants.HTTP2_HEADER_CONTENT_TYPE]: "application/connect+proto",
+packages/server/test/server/server.test.ts:2823:    const session = http2.connect(server.baseUrl);
+packages/server/test/server/server.test.ts:2889:    const context = BoundedContext.singleTenant("Tasks").build();
+packages/server/test/server/server.test.ts:2906:      contexts: [BoundedContext.singleTenant("Tasks")],
+packages/server/test/server/server.test.ts:2923:      .add(BoundedContext.singleTenant("Tasks").withStorageFactory(builderStorage))
+packages/server/test/server/server.test.ts:2937:    const brokenBuilder = BoundedContext.singleTenant("Broken").addEventDispatcher({
+packages/server/test/server/server.test.ts:2945:      Server.atPort(0).add(BoundedContext.singleTenant("Tasks")).add(brokenBuilder).start(),
+packages/server/test/server/server.test.ts:2997:  it("closes resources before singleton facilities and disconnects clients", async () => {
+packages/server/test/server/server.test.ts:3010:    const session = http2.connect(server.baseUrl);
+packages/server/test/delivery/inbox.test.ts:35:        context: { name: "DirectDeleteById", multitenant: false },
+packages/server/test/delivery/inbox.test.ts:50:        context: { name: "PreciseReceiveOutput", multitenant: false },
+packages/server/test/delivery/inbox.test.ts:71:    const context = { name: "PreciseSnapshotMutations", multitenant: false } as const;
+packages/server/test/delivery/inbox.test.ts:91:  it("checks cancellation before deleting a pending duplicate ID", async () => {
+packages/server/test/delivery/inbox.test.ts:94:        context: { name: "DuplicateCancellation", multitenant: false },
+packages/server/test/delivery/inbox.test.ts:98:    const message = createMessage("cancelled", "signal", 1n);
+packages/server/test/delivery/inbox.test.ts:114:        context: { name: "DeliveredEligibility", multitenant: false },
+packages/server/test/delivery/inbox.test.ts:141:        context: { name: "DirectCleanupPayload", multitenant: false },
+packages/server/test/delivery/inbox.test.ts:157:  it("checks cancellation and deadline before deleting a delivered ID", async () => {
+packages/server/test/delivery/inbox.test.ts:160:        context: { name: "DeliveredCancellation", multitenant: false },
+packages/server/test/delivery/inbox.test.ts:183:        context: { name: "DeadlineBeforeDelete", multitenant: false },
+packages/server/test/delivery/inbox.test.ts:284:    new InboxStorage({ context: { name, multitenant: false }, storageFactory: factory }),
+packages/client-web/test/client.test.ts:17:import type { Interceptor, Transport, UnaryRequest, UnaryResponse } from "@connectrpc/connect";
+packages/client-web/test/client.test.ts:29:  TenantIdSchema,
+packages/client-web/test/client.test.ts:67:  connect: vi.fn(),
+packages/client-web/test/client.test.ts:72:vi.mock("@connectrpc/connect-web", () => ({
+packages/client-web/test/client.test.ts:73:  createConnectTransport: browserFactories.connect,
+packages/client-web/test/client.test.ts:145:      | { readonly state: "connecting"; readonly generation: number; readonly attempt: number }
+packages/client-web/test/client.test.ts:148:          readonly state: "connected" | "resynchronizing" | "gapPossible" | "closed";
+packages/client-web/test/client.test.ts:222:    await subscription.cancel();
+packages/client-web/test/client.test.ts:241:      await subscription.cancel();
+packages/client-web/test/client.test.ts:295:      await subscription.cancel();
+packages/client-web/test/client.test.ts:322:    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
+packages/client-web/test/client.test.ts:323:    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connected" } });
+packages/client-web/test/client.test.ts:324:    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
+packages/client-web/test/client.test.ts:326:    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connected" } });
+packages/client-web/test/client.test.ts:337:    let cancels = 0;
+packages/client-web/test/client.test.ts:352:            if (method.name === "Cancel") cancels++;
+packages/client-web/test/client.test.ts:376:    expect(cancels).toBe(1);
+packages/client-web/test/client.test.ts:378:      value: { state: "connecting", generation: 1 },
+packages/client-web/test/client.test.ts:381:      value: { state: "connected", generation: 1 },
+packages/client-web/test/client.test.ts:384:      value: { state: "connecting", generation: 2, attempt: 1 },
+packages/client-web/test/client.test.ts:387:      value: { state: "connecting", generation: 3, attempt: 2 },
+packages/client-web/test/client.test.ts:393:      value: { state: "connected", generation: 3 },
+packages/client-web/test/client.test.ts:395:    await subscription.cancel();
+packages/client-web/test/client.test.ts:396:    expect(cancels).toBe(2);
+packages/client-web/test/client.test.ts:400:  it("retries an initial rejected Subscribe before exposing a connected stream", async () => {
+packages/client-web/test/client.test.ts:435:      value: { state: "connecting", generation: 1, attempt: 0 },
+packages/client-web/test/client.test.ts:438:      value: { state: "connecting", generation: 2, attempt: 1 },
+packages/client-web/test/client.test.ts:444:      value: { state: "connected", generation: 2 },
+packages/client-web/test/client.test.ts:446:    await subscription.cancel();
+packages/client-web/test/client.test.ts:565:      value: { state: "connecting", generation: 1 },
+packages/client-web/test/client.test.ts:568:      value: { state: "connected", generation: 1 },
+packages/client-web/test/client.test.ts:571:      value: { state: "connecting", generation: 2 },
+packages/client-web/test/client.test.ts:596:      value: { state: "connected", generation: 2 },
+packages/client-web/test/client.test.ts:598:    await subscription.cancel();
+packages/client-web/test/client.test.ts:655:      const cancelled: string[] = [];
+packages/client-web/test/client.test.ts:667:              if (method.name === "Cancel")
+packages/client-web/test/client.test.ts:668:                cancelled.push((input as { id?: { value?: string } }).id?.value ?? "");
+packages/client-web/test/client.test.ts:707:      expect(cancelled, testCase.name).toEqual(["terminal-1", "terminal-2"]);
+packages/client-web/test/client.test.ts:709:      expect(cancelled, testCase.name).toEqual(["terminal-1", "terminal-2"]);
+packages/client-web/test/client.test.ts:717:    let activations = 0;
+packages/client-web/test/client.test.ts:718:    const cancelled: string[] = [];
+packages/client-web/test/client.test.ts:734:            if (method.name === "Cancel")
+packages/client-web/test/client.test.ts:735:              cancelled.push((input as { id?: { value?: string } }).id?.value ?? "");
+packages/client-web/test/client.test.ts:748:            activations++;
+packages/client-web/test/client.test.ts:749:            return activations === 1 ? emptyUpdates() : neverEndingUpdates();
+packages/client-web/test/client.test.ts:778:    expect(cancelled).toEqual(["read-retry-1", "read-retry-2"]);
+packages/client-web/test/client.test.ts:782:      value: { state: "connected", generation: 3 },
+packages/client-web/test/client.test.ts:784:    await subscription.cancel();
+packages/client-web/test/client.test.ts:785:    expect(cancelled).toEqual(["read-retry-1", "read-retry-2", "read-retry-3"]);
+packages/client-web/test/client.test.ts:789:  it.each(["cancel", "close"] as const)(
+packages/client-web/test/client.test.ts:795:      let activations = 0;
+packages/client-web/test/client.test.ts:797:      const cancelled: string[] = [];
+packages/client-web/test/client.test.ts:813:              if (method.name === "Cancel")
+packages/client-web/test/client.test.ts:814:                cancelled.push((input as { id?: { value?: string } }).id?.value ?? "");
+packages/client-web/test/client.test.ts:830:              activations++;
+packages/client-web/test/client.test.ts:831:              if (activations === 1) return emptyUpdates();
+packages/client-web/test/client.test.ts:864:      if (operation === "cancel") await subscription.cancel();
+packages/client-web/test/client.test.ts:868:      expect(cancelled).toEqual(["pending-read-1", "pending-read-2"]);
+packages/client-web/test/client.test.ts:877:      if (operation === "cancel") await client.close();
+packages/client-web/test/client.test.ts:896:      let activations = 0;
+packages/client-web/test/client.test.ts:898:      let cancels = 0;
+packages/client-web/test/client.test.ts:911:              if (method.name === "Cancel") cancels++;
+packages/client-web/test/client.test.ts:916:              activations++;
+packages/client-web/test/client.test.ts:917:              if (activations === 1) return emptyUpdates();
+packages/client-web/test/client.test.ts:948:        expect(cancels).toBe(2);
+packages/client-web/test/client.test.ts:954:      expect(cancels).toBe(2);
+packages/client-web/test/client.test.ts:956:      expect(cancels).toBe(2);
+packages/client-web/test/client.test.ts:962:    const cancelled: string[] = [];
+packages/client-web/test/client.test.ts:974:            if (method.name === "Cancel")
+packages/client-web/test/client.test.ts:975:              cancelled.push((input as { id?: { value?: string } }).id?.value ?? "");
+packages/client-web/test/client.test.ts:1002:    expect(cancelled).toEqual(["initial-wire-1"]);
+packages/client-web/test/client.test.ts:1003:    await subscription.cancel();
+packages/client-web/test/client.test.ts:1004:    expect(cancelled).toEqual(["initial-wire-1", "initial-wire-2"]);
+packages/client-web/test/client.test.ts:1010:    const cancelled: string[] = [];
+packages/client-web/test/client.test.ts:1024:            if (method.name === "Cancel")
+packages/client-web/test/client.test.ts:1025:              cancelled.push((input as { id?: { value?: string } }).id?.value ?? "");
+packages/client-web/test/client.test.ts:1054:    expect(cancelled).toEqual(["wire-1", "wire-2"]);
+packages/client-web/test/client.test.ts:1055:    await subscription.cancel();
+packages/client-web/test/client.test.ts:1056:    expect(cancelled).toEqual(["wire-1", "wire-2", "wire-3"]);
+packages/client-web/test/client.test.ts:1062:    let cancels = 0;
+packages/client-web/test/client.test.ts:1075:            if (method.name === "Cancel") cancels++;
+packages/client-web/test/client.test.ts:1098:    expect(cancels).toBe(2);
+packages/client-web/test/client.test.ts:1103:    expect(cancels).toBe(2);
+packages/client-web/test/client.test.ts:1109:    let cancels = 0;
+packages/client-web/test/client.test.ts:1121:            if (method.name === "Cancel") cancels++;
+packages/client-web/test/client.test.ts:1150:    expect(cancels).toBe(1);
+packages/client-web/test/client.test.ts:1156:    expect(cancels).toBe(1);
+packages/client-web/test/client.test.ts:1159:  it("cancels a scheduler wait promptly, emits only closed, and starts no later RPC", async () => {
+packages/client-web/test/client.test.ts:1161:    let cancels = 0;
+packages/client-web/test/client.test.ts:1174:            if (method.name === "Cancel") cancels++;
+packages/client-web/test/client.test.ts:1209:    await subscription.cancel();
+packages/client-web/test/client.test.ts:1211:    expect(cancels).toBe(1);
+packages/client-web/test/client.test.ts:1212:    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
+packages/client-web/test/client.test.ts:1213:    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connected" } });
+packages/client-web/test/client.test.ts:1282:  it("rejects pending initial activation when cancellation aborts its retry wait", async () => {
+packages/client-web/test/client.test.ts:1314:    const activation = subscription.activate();
+packages/client-web/test/client.test.ts:1319:    await subscription.cancel();
+packages/client-web/test/client.test.ts:1320:    await expect(activation).rejects.toThrow("aborted");
+packages/client-web/test/client.test.ts:1321:    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
+packages/client-web/test/client.test.ts:1327:  it("fences an abort-ignoring retry wait after caller activation abort", async () => {
+packages/client-web/test/client.test.ts:1355:    const activation = subscription.activate({ signal: abort.signal });
+packages/client-web/test/client.test.ts:1360:    abort.abort(new Error("activation interrupted"));
+packages/client-web/test/client.test.ts:1362:    await expect(activation).rejects.toThrow("activation interrupted");
+packages/client-web/test/client.test.ts:1364:    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
+packages/client-web/test/client.test.ts:1369:    expect(failedLifecycle.value.error.message).toBe("activation interrupted");
+packages/client-web/test/client.test.ts:1400:    const activation = subscription.activate({ signal: abort.signal });
+packages/client-web/test/client.test.ts:1403:    abort.abort(new Error("activation interrupted"));
+packages/client-web/test/client.test.ts:1406:        reject(new Error("activation did not settle"));
+packages/client-web/test/client.test.ts:1409:    const settlement = expect(Promise.race([activation, deadline])).rejects.toThrow(
+packages/client-web/test/client.test.ts:1410:      "activation interrupted",
+packages/client-web/test/client.test.ts:1415:    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
+packages/client-web/test/client.test.ts:1420:    expect(failedLifecycle.value.error.message).toBe("activation interrupted");
+packages/client-web/test/client.test.ts:1477:    await subscription.cancel();
+packages/client-web/test/client.test.ts:1500:  beforeEach(() => browserFactories.connect.mockReset());
+packages/client-web/test/client.test.ts:1506:      browserTransport("grpc-web", interceptorsFrom(options), calls),
+packages/client-web/test/client.test.ts:1508:    browserFactories.connect.mockImplementation((options: unknown) =>
+packages/client-web/test/client.test.ts:1509:      browserTransport("connect", interceptorsFrom(options), calls),
+packages/client-web/test/client.test.ts:1518:    const connect = Client.forConnect("https://gateway.example", options);
+packages/client-web/test/client.test.ts:1521:    await connect.asGuest().post(UserIdSchema, create(UserIdSchema, { value: "command" }));
+packages/client-web/test/client.test.ts:1522:    await connect.asGuest().send(create(QuerySchema));
+packages/client-web/test/client.test.ts:1525:      { protocol: "grpc-web", method: "Post", metadata: "1" },
+packages/client-web/test/client.test.ts:1526:      { protocol: "grpc-web", method: "Read", metadata: "2" },
+packages/client-web/test/client.test.ts:1527:      { protocol: "connect", method: "Post", metadata: "3" },
+packages/client-web/test/client.test.ts:1528:      { protocol: "connect", method: "Read", metadata: "4" },
+packages/client-web/test/client.test.ts:1531:    expect(browserFactories.connect).toHaveBeenCalledTimes(1);
+packages/client-web/test/client.test.ts:1538:    expect(browserFactories.connect).toHaveBeenCalledWith(
+packages/client-web/test/client.test.ts:1545:    await Promise.all([grpcWeb.close(), connect.close()]);
+packages/client-web/test/client.test.ts:1551:      browserTransport("grpc-web", interceptorsFrom(options), calls),
+packages/client-web/test/client.test.ts:1627:  it("creates a subscription before activation and cancels it after activation", async () => {
+packages/client-web/test/client.test.ts:1646:    await subscription.cancel();
+packages/client-web/test/client.test.ts:1648:    expect(calls).toEqual(["Subscribe", "Cancel"]);
+packages/client-web/test/client.test.ts:1654:    let cancelled = 0;
+packages/client-web/test/client.test.ts:1658:          if (method.name === "Cancel") cancelled++;
+packages/client-web/test/client.test.ts:1676:    await subscription.cancel();
+packages/client-web/test/client.test.ts:1677:    expect(cancelled).toBe(0);
+packages/client-web/test/client.test.ts:1681:  it("rejects invalid accepted and delivered subscription identities and cancels the wire subscription", async () => {
+packages/client-web/test/client.test.ts:1697:    expect(calls).toEqual(["Subscribe", "Cancel"]);
+packages/client-web/test/client.test.ts:1699:    expect(calls).toEqual(["Subscribe", "Cancel"]);
+packages/client-web/test/client.test.ts:1702:  it("exhausts EOF retries and does not re-cancel accepted wires during client close", async () => {
+packages/client-web/test/client.test.ts:1703:    let cancels = 0;
+packages/client-web/test/client.test.ts:1713:          if (method.name === "Cancel") cancels++;
+packages/client-web/test/client.test.ts:1729:    expect(cancels).toBe(2);
+packages/client-web/test/client.test.ts:1731:    expect(cancels).toBe(2);
+packages/client-web/test/client.test.ts:1734:  it("reconnects an event subscription after EOF through the injected scheduler", async () => {
+packages/client-web/test/client.test.ts:1776:    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
+packages/client-web/test/client.test.ts:1777:    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connected" } });
+packages/client-web/test/client.test.ts:1778:    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
+packages/client-web/test/client.test.ts:1780:    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connected" } });
+packages/client-web/test/client.test.ts:1781:    await subscription.cancel();
+packages/client-web/test/client.test.ts:1835:    await subscription.cancel();
+packages/client-web/test/client.test.ts:1898:  it("reauthenticates with the live cancellation signal before reconnecting", async () => {
+packages/client-web/test/client.test.ts:1923:        onReauthenticateBeforeReconnect: reauthenticate,
+packages/client-web/test/client.test.ts:1939:    await subscription.cancel();
+packages/client-web/test/client.test.ts:1943:  it("aborts an in-progress reauthentication hook on cancel and never starts a second Subscribe", async () => {
+packages/client-web/test/client.test.ts:1955:                id: create(SubscriptionIdSchema, { value: `cancel-${String(subscribes)}` }),
+packages/client-web/test/client.test.ts:1966:        onReauthenticateBeforeReconnect: (signal) => {
+packages/client-web/test/client.test.ts:1991:    await subscription.cancel();
+packages/client-web/test/client.test.ts:2000:  it("ignores a late successful reauthentication hook after terminal cancellation", async () => {
+packages/client-web/test/client.test.ts:2023:        onReauthenticateBeforeReconnect: (signal) => {
+packages/client-web/test/client.test.ts:2049:    await subscription.cancel();
+packages/client-web/test/client.test.ts:2055:    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
+packages/client-web/test/client.test.ts:2056:    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connected" } });
+packages/client-web/test/client.test.ts:2083:        onReauthenticateBeforeReconnect: () => {
+packages/client-web/test/client.test.ts:2126:        onReauthenticateBeforeReconnect: (signal) => {
+packages/client-web/test/client.test.ts:2150:    let cancels = 0;
+packages/client-web/test/client.test.ts:2160:          if (method.name === "Cancel") cancels++;
+packages/client-web/test/client.test.ts:2182:    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
+packages/client-web/test/client.test.ts:2183:    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connected" } });
+packages/client-web/test/client.test.ts:2187:    expect(cancels).toBe(1);
+packages/client-web/test/client.test.ts:2189:    expect(cancels).toBe(1);
+packages/client-web/test/client.test.ts:2192:  it("bounds a stalled remote cancellation", async () => {
+packages/client-web/test/client.test.ts:2202:        if (method.name === "Cancel")
+packages/client-web/test/client.test.ts:2219:    const cancellation = subscription.cancel();
+packages/client-web/test/client.test.ts:2220:    const rejected = expect(cancellation).rejects.toThrow("cleanup timed out");
+packages/client-web/test/client.test.ts:2226:  it("settles cancellation when a non-cooperative transport ignores abort", async () => {
+packages/client-web/test/client.test.ts:2236:        if (method.name === "Cancel") return never<Message>();
+packages/client-web/test/client.test.ts:2242:    const cancellation = subscription.cancel();
+packages/client-web/test/client.test.ts:2243:    const cancellationFailure = cancellation.catch((error: unknown) => error);
+packages/client-web/test/client.test.ts:2245:    await cancellationFailure.then((failure) => {
+packages/client-web/test/client.test.ts:2247:      if (!(failure instanceof Error)) throw new Error("expected cancellation failure");
+packages/client-web/test/client.test.ts:2264:        if (method.name === "Cancel") throw new Error("cancel failed");
+packages/client-web/test/client.test.ts:2273:    await expect(client.close()).rejects.toThrow("cancel failed");
+packages/client-web/test/client.test.ts:2275:    await expect(client.close()).rejects.toThrow("cancel failed");
+packages/client-web/test/client.test.ts:2278:  it("releases invalid activation ownership when compensating cancellation fails", async () => {
+packages/client-web/test/client.test.ts:2279:    let cancels = 0;
+packages/client-web/test/client.test.ts:2288:        if (method.name === "Cancel") {
+packages/client-web/test/client.test.ts:2289:          cancels++;
+packages/client-web/test/client.test.ts:2290:          throw new Error("compensating cancel failed");
+packages/client-web/test/client.test.ts:2306:    expect((errors[1] as Error).message).toBe("compensating cancel failed");
+packages/client-web/test/client.test.ts:2307:    expect(cancels).toBe(1);
+packages/client-web/test/client.test.ts:2309:    expect(cancels).toBe(1);
+packages/client-web/test/client.test.ts:2313:  it("serializes activation and cancels a late accepted subscription once", async () => {
+packages/client-web/test/client.test.ts:2316:    let cancels = 0;
+packages/client-web/test/client.test.ts:2326:        if (method.name === "Cancel") cancels++;
+packages/client-web/test/client.test.ts:2332:    const activation = subscription.activate();
+packages/client-web/test/client.test.ts:2334:    const activationError = activation.catch((error: unknown) => error);
+packages/client-web/test/client.test.ts:2336:    const cancellation = subscription.cancel();
+packages/client-web/test/client.test.ts:2337:    expect(subscription.cancel()).toBe(cancellation);
+packages/client-web/test/client.test.ts:2344:    for (const failure of [await activationError, await duplicateError]) {
+packages/client-web/test/client.test.ts:2346:      if (!(failure instanceof Error)) throw new Error("expected activation failure");
+packages/client-web/test/client.test.ts:2349:    await cancellation;
+packages/client-web/test/client.test.ts:2352:    expect(cancels).toBe(1);
+packages/client-web/test/client.test.ts:2354:    expect(cancels).toBe(1);
+packages/client-web/test/client.test.ts:2375:  it("settles cancellation requested synchronously while Subscribe is dispatched", async () => {
+packages/client-web/test/client.test.ts:2376:    let cancellation: Promise<void> | undefined;
+packages/client-web/test/client.test.ts:2380:          cancellation = subscription.cancel();
+packages/client-web/test/client.test.ts:2389:    const activationError = subscription.activate().catch((error: unknown) => error);
+packages/client-web/test/client.test.ts:2391:    await expect(cancellation).resolves.toBeUndefined();
+packages/client-web/test/client.test.ts:2392:    await activationError.then((failure) => {
+packages/client-web/test/client.test.ts:2394:      if (!(failure instanceof Error)) throw new Error("expected activation failure");
+packages/client-web/test/client.test.ts:2403:  it("cancels a wire accepted after client close exactly once", async () => {
+packages/client-web/test/client.test.ts:2406:    let cancels = 0;
+packages/client-web/test/client.test.ts:2413:        if (method.name === "Cancel") cancels++;
+packages/client-web/test/client.test.ts:2431:      expect(cancels).toBe(1);
+packages/client-web/test/client.test.ts:2434:    expect(cancels).toBe(1);
+packages/client-web/test/client.test.ts:2437:  it("settles local streams when update next ignores cancellation", async () => {
+packages/client-web/test/client.test.ts:2486:                    reject(new Error("activation aborted"));
+packages/client-web/test/client.test.ts:2500:    const activation = subscription.activate();
+packages/client-web/test/client.test.ts:2502:    await subscription.cancel();
+packages/client-web/test/client.test.ts:2503:    await expect(activation).rejects.toThrow("aborted");
+packages/client-web/test/client.test.ts:2506:      value: { state: "connecting" },
+packages/client-web/test/client.test.ts:2516:  it("rejects creation and activation through their caller-owned abort signals", async () => {
+packages/client-web/test/client.test.ts:2535:    const activationAbort = new AbortController();
+packages/client-web/test/client.test.ts:2538:      .createSubscription(create(TopicSchema), { kind: "event", signal: activationAbort.signal });
+packages/client-web/test/client.test.ts:2539:    activationAbort.abort(new Error("subscription stopped"));
+packages/client-web/test/client.test.ts:2540:    await expect(subscription.activate({ signal: activationAbort.signal })).rejects.toThrow(
+packages/client-web/test/client.test.ts:2544:    await subscription.cancel();
+packages/client-web/test/client.test.ts:2545:    await expect(subscription.activate()).rejects.toThrow("cancelled");
+packages/client-web/test/client.test.ts:2558:        if (method.name === "Cancel") throw new Error("cancel failed");
+packages/client-web/test/client.test.ts:2570:      { message: "cancel failed" },
+packages/client-web/test/client.test.ts:2575:  it("fails activation without attempting cleanup when Subscribe rejects before a wire exists", async () => {
+packages/client-web/test/client.test.ts:2576:    let cancels = 0;
+packages/client-web/test/client.test.ts:2581:          if (method.name === "Cancel") cancels++;
+packages/client-web/test/client.test.ts:2596:    expect(cancels).toBe(0);
+packages/client-web/test/client.test.ts:2600:  it("emits one connecting transition for concurrent activation calls", async () => {
+packages/client-web/test/client.test.ts:2609:    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
+packages/client-web/test/client.test.ts:2610:    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connected" } });
+packages/client-web/test/client.test.ts:2611:    await subscription.cancel();
+packages/client-web/test/client.test.ts:2627:    await subscription.cancel();
+packages/client-web/test/client.test.ts:2632:  it("settles a pending iterator locally when its transport ignores cancellation", async () => {
+packages/client-web/test/client.test.ts:2654:    await subscription.cancel();
+packages/client-web/test/client.test.ts:2658:  it("closes its source once when remote cancellation fails", async () => {
+packages/client-web/test/client.test.ts:2668:        if (method.name === "Cancel") throw new Error("cancel failed");
+packages/client-web/test/client.test.ts:2675:    await expect(client.close()).rejects.toThrow("cancel failed");
+packages/client-web/test/client.test.ts:2676:    await expect(client.close()).rejects.toThrow("cancel failed");
+packages/client-web/test/client.test.ts:2793:  it("validates and snapshots tenant, zone, and actor context for outbound work", async () => {
+packages/client-web/test/client.test.ts:2794:    expect(() => Client.usingTransport(source(), { tenant: "" })).toThrow(
+packages/client-web/test/client.test.ts:2795:      "tenant must not be empty",
+packages/client-web/test/client.test.ts:2801:    expect(() => Client.usingTransport(source(), { tenant: create(TenantIdSchema) })).toThrow(
+packages/client-web/test/client.test.ts:2802:      "tenant",
+packages/client-web/test/client.test.ts:2808:    const tenant = create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } });
+packages/client-web/test/client.test.ts:2813:            tenantId?: { kind: { value?: string } };
+packages/client-web/test/client.test.ts:2826:      { tenant, zoneId },
+packages/client-web/test/client.test.ts:2828:    tenant.kind = { case: "value", value: "changed" };
+packages/client-web/test/client.test.ts:2831:    expect(received?.context?.tenantId?.kind.value).toBe("tenant-a");
+packages/client-web/test/client.test.ts:2843:      { tenant: "tenant-string", zoneId: "Europe/Lisbon" },
+packages/client-web/test/client.test.ts:2846:    expect(received?.context?.tenantId?.kind.value).toBe("tenant-string");
+packages/client-web/test/client.test.ts:2875:  it("reuses one generated query in concurrent tenant-scoped sends", async () => {
+packages/client-web/test/client.test.ts:2877:    const seen: { readonly tenant: string | undefined; readonly actor: string | undefined }[] = [];
+packages/client-web/test/client.test.ts:2878:    const clientFor = (tenant: string) =>
+packages/client-web/test/client.test.ts:2884:              const tenant = query.context?.tenantId?.kind;
+packages/client-web/test/client.test.ts:2886:                tenant: tenant?.case === "value" ? tenant.value : undefined,
+packages/client-web/test/client.test.ts:2893:        { tenant },
+packages/client-web/test/client.test.ts:2895:    const first = clientFor("tenant-a");
+packages/client-web/test/client.test.ts:2896:    const second = clientFor("tenant-b");
+packages/client-web/test/client.test.ts:2904:          { tenant: "tenant-a", actor: "alice" },
+packages/client-web/test/client.test.ts:2905:          { tenant: "tenant-b", actor: "bob" },
+packages/client-web/test/client.test.ts:2914:  it("reuses one authoritative generated query across subscription tenants", async () => {
+packages/client-web/test/client.test.ts:2918:    const clientFor = (tenant: string) => {
+packages/client-web/test/client.test.ts:2920:      attempts.set(tenant, current);
+packages/client-web/test/client.test.ts:2931:                  value: `${tenant}-${String(current.subscribes)}`,
+packages/client-web/test/client.test.ts:2947:                        id: tenant,
+packages/client-web/test/client.test.ts:2948:                        name: `recovered-${tenant}`,
+packages/client-web/test/client.test.ts:2962:                    id: create(SubscriptionIdSchema, { value: `${tenant}-2` }),
+packages/client-web/test/client.test.ts:2975:                                id: tenant,
+packages/client-web/test/client.test.ts:2976:                                name: `live-${tenant}`,
+packages/client-web/test/client.test.ts:2992:          tenant,
+packages/client-web/test/client.test.ts:3000:    const first = clientFor("tenant-a");
+packages/client-web/test/client.test.ts:3001:    const second = clientFor("tenant-b");
+packages/client-web/test/client.test.ts:3020:      for (const [tenant, updates] of [
+packages/client-web/test/client.test.ts:3021:        ["tenant-a", firstUpdates],
+packages/client-web/test/client.test.ts:3022:        ["tenant-b", secondUpdates],
+packages/client-web/test/client.test.ts:3026:          throw new Error(`Expected ${tenant} resynchronization`);
+packages/client-web/test/client.test.ts:3028:        if (state === undefined) throw new Error(`Missing ${tenant} recovered state`);
+packages/client-web/test/client.test.ts:3031:            id: tenant,
+packages/client-web/test/client.test.ts:3032:            name: `recovered-${tenant}`,
+packages/client-web/test/client.test.ts:3042:          throw new Error(`Expected ${tenant} live Entity update`);
+packages/client-web/test/client.test.ts:3044:        if (liveState?.case !== "state") throw new Error(`Missing ${tenant} live state`);
+packages/client-web/test/client.test.ts:3046:          create(ProjectOverviewStateSchema, { id: tenant, name: `live-${tenant}`, priority: 8 }),
+packages/client-web/test/client.test.ts:3048:        expect(attempts.get(tenant)).toEqual({ subscribes: 2, streams: 2 });
+packages/client-web/test/client.test.ts:3055:        seen.find((query) => query.context?.actor?.value === "alice")?.context?.tenantId?.kind,
+packages/client-web/test/client.test.ts:3056:      ).toMatchObject({ case: "value", value: "tenant-a" });
+packages/client-web/test/client.test.ts:3058:        seen.find((query) => query.context?.actor?.value === "bob")?.context?.tenantId?.kind,
+packages/client-web/test/client.test.ts:3059:      ).toMatchObject({ case: "value", value: "tenant-b" });
+packages/client-web/test/client.test.ts:3062:      await Promise.all([firstSubscription.cancel(), secondSubscription.cancel()]);
+packages/client-web/test/client.test.ts:3067:  it("allows pre-activation iteration and validates subscription topic and delivered identity", async () => {
+packages/client-web/test/client.test.ts:3149:    await subscription.cancel();
+packages/client-web/test/client.test.ts:3150:    expect(calls).toContain("Cancel");
+packages/client-web/test/client.test.ts:3207:    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connected" } });
+packages/client-web/test/client.test.ts:3217:  it("honors an activation signal that was already aborted", async () => {
+packages/client-web/test/client.test.ts:3232:    abort.abort(new Error("activation stopped"));
+packages/client-web/test/client.test.ts:3234:      "activation stopped",
+packages/client-web/test/client.test.ts:3240:  it("aborts an in-flight activation and forwards its abort reason to Subscribe", async () => {
+packages/client-web/test/client.test.ts:3254:                reject(new Error("activation aborted"));
+packages/client-web/test/client.test.ts:3268:    const activation = subscription.activate({ signal: abort.signal });
+packages/client-web/test/client.test.ts:3270:    const reason = new Error("activation interrupted");
+packages/client-web/test/client.test.ts:3272:    await expect(activation).rejects.toThrow("activation interrupted");
+packages/client-web/test/client.test.ts:3274:    await subscription.cancel();
+packages/client-web/test/client.test.ts:3322:  readonly protocol: "connect" | "grpc-web";
+packages/storage-mysql/test/mysql-integration.test.ts:27:  TenantIdSchema,
+packages/storage-mysql/test/mysql-integration.test.ts:66:const tenantAUrl = process.env.SPINE_TS_MYSQL_TENANT_A_URL;
+packages/storage-mysql/test/mysql-integration.test.ts:67:const tenantBUrl = process.env.SPINE_TS_MYSQL_TENANT_B_URL;
+packages/storage-mysql/test/mysql-integration.test.ts:69:const tenantLive = tenantAUrl === undefined || tenantBUrl === undefined ? describe.skip : describe;
+packages/storage-mysql/test/mysql-integration.test.ts:97:    const context = { name: `t0134_event_retry_${randomUUID()}`, multitenant: false } as const;
+packages/storage-mysql/test/mysql-integration.test.ts:195:      multitenant: false,
+packages/storage-mysql/test/mysql-integration.test.ts:240:      { name: `t0134_records_${String(Date.now())}`, multitenant: false },
+packages/storage-mysql/test/mysql-integration.test.ts:245:      { name: `t0134_records_${String(Date.now())}`, multitenant: false },
+packages/storage-mysql/test/mysql-integration.test.ts:289:      { name: `repository_reads_${String(Date.now())}`, multitenant: false },
+packages/storage-mysql/test/mysql-integration.test.ts:298:      for (let offset = 0; offset < values.length; offset += 500) {
+packages/storage-mysql/test/mysql-integration.test.ts:300:          values.slice(offset, offset + 500).map((value) => create(StringValueSchema, { value })),
+packages/storage-mysql/test/mysql-integration.test.ts:351:      { name: `repository_collation_${String(Date.now())}`, multitenant: false },
+packages/storage-mysql/test/mysql-integration.test.ts:408:      multitenant: false,
+packages/storage-mysql/test/mysql-integration.test.ts:447:        const trigger = `t0134_fail_${run}_${String(index)}`;
+packages/storage-mysql/test/mysql-integration.test.ts:449:          throw new Error("SPINE_TS_MYSQL_ADMIN_URL is required for trigger injection.");
+packages/storage-mysql/test/mysql-integration.test.ts:451:          `CREATE TRIGGER \`${trigger}\` BEFORE INSERT ON \`${tableName}\` ` +
+packages/storage-mysql/test/mysql-integration.test.ts:457:          await admin.query(`DROP TRIGGER IF EXISTS \`${trigger}\``);
+packages/storage-mysql/test/mysql-integration.test.ts:491:      multitenant: false,
+packages/storage-mysql/test/mysql-integration.test.ts:525:      multitenant: false,
+packages/storage-mysql/test/mysql-integration.test.ts:545:      multitenant: false,
+packages/storage-mysql/test/mysql-integration.test.ts:581:      multitenant: false,
+packages/storage-mysql/test/mysql-integration.test.ts:657:      multitenant: false,
+packages/storage-mysql/test/mysql-integration.test.ts:718:      multitenant: false,
+packages/storage-mysql/test/mysql-integration.test.ts:743:      multitenant: false,
+packages/storage-mysql/test/mysql-integration.test.ts:762:tenantLive("MySQL normalized-plan tenant containment", () => {
+packages/storage-mysql/test/mysql-integration.test.ts:763:  it("keeps matching IDs inside the selected tenant and storage group", async () => {
+packages/storage-mysql/test/mysql-integration.test.ts:764:    if (tenantAUrl === undefined || tenantBUrl === undefined) {
+packages/storage-mysql/test/mysql-integration.test.ts:765:      throw new Error("Dedicated MySQL tenant URLs are required.");
+packages/storage-mysql/test/mysql-integration.test.ts:767:    const tenantA = tenant("a");
+packages/storage-mysql/test/mysql-integration.test.ts:768:    const tenantB = tenant("b");
+packages/storage-mysql/test/mysql-integration.test.ts:771:      .setTenantOptions([
+packages/storage-mysql/test/mysql-integration.test.ts:772:        { tenantId: tenantA, options: { url: tenantAUrl } },
+packages/storage-mysql/test/mysql-integration.test.ts:773:        { tenantId: tenantB, options: { url: tenantBUrl } },
+packages/storage-mysql/test/mysql-integration.test.ts:785:      { name: "t0190", multitenant: true, tenantId: tenantA },
+packages/storage-mysql/test/mysql-integration.test.ts:790:      { name: "t0190", multitenant: true, tenantId: tenantB },
+packages/storage-mysql/test/mysql-integration.test.ts:795:      await first.write(create(StringValueSchema, { value: "tenant-a" }));
+packages/storage-mysql/test/mysql-integration.test.ts:796:      await second.write(create(StringValueSchema, { value: "tenant-b" }));
+packages/storage-mysql/test/mysql-integration.test.ts:798:        first.queryPlan({ predicate: { kind: "ids", ids: ["tenant-a", "tenant-b"] } }),
+packages/storage-mysql/test/mysql-integration.test.ts:799:      ).resolves.toEqual([create(StringValueSchema, { value: "tenant-a" })]);
+packages/storage-mysql/test/mysql-integration.test.ts:801:        second.queryPlan({ predicate: { kind: "ids", ids: ["tenant-a", "tenant-b"] } }),
+packages/storage-mysql/test/mysql-integration.test.ts:802:      ).resolves.toEqual([create(StringValueSchema, { value: "tenant-b" })]);
+packages/storage-mysql/test/mysql-integration.test.ts:811:function tenant(value: string) {
+packages/storage-mysql/test/mysql-integration.test.ts:812:  return create(TenantIdSchema, { kind: { case: "value", value } });
+packages/server/test/services/spine-services.test.ts:15:import { Code, ConnectError, createClient } from "@connectrpc/connect";
+packages/server/test/services/spine-services.test.ts:16:import { compressionGzip, createGrpcTransport } from "@connectrpc/connect-node";
+packages/server/test/services/spine-services.test.ts:52:  TenantIdSchema,
+packages/server/test/services/spine-services.test.ts:53:  type TenantId,
+packages/server/test/services/spine-services.test.ts:151:type TenantInput = string | TenantId;
+packages/server/test/services/spine-services.test.ts:248:    const context = BoundedContext.singleTenant("Tasks").addCommandDispatcher(dispatcher).build();
+packages/server/test/services/spine-services.test.ts:270:    const context = BoundedContext.singleTenant("Tasks").addCommandDispatcher(dispatcher).build();
+packages/server/test/services/spine-services.test.ts:281:      ).rejects.toMatchObject({ code: Code.ResourceExhausted } satisfies Partial<ConnectError>);
+packages/server/test/services/spine-services.test.ts:293:    const context = BoundedContext.singleTenant("Tasks").addCommandDispatcher(dispatcher).build();
+packages/server/test/services/spine-services.test.ts:304:      ).rejects.toMatchObject({ code: Code.ResourceExhausted } satisfies Partial<ConnectError>);
+packages/server/test/services/spine-services.test.ts:316:    const context = BoundedContext.singleTenant("Tasks").addCommandDispatcher(dispatcher).build();
+packages/server/test/services/spine-services.test.ts:332:      ).rejects.toMatchObject({ code: Code.ResourceExhausted } satisfies Partial<ConnectError>);
+packages/server/test/services/spine-services.test.ts:344:    const context = BoundedContext.singleTenant("Tasks")
+packages/server/test/services/spine-services.test.ts:361:      } satisfies Partial<ConnectError>);
+packages/server/test/services/spine-services.test.ts:372:    const context = BoundedContext.singleTenant("Tasks")
+packages/server/test/services/spine-services.test.ts:402:    const context = BoundedContext.singleTenant("NetworkQuery").add(repository).build();
+packages/server/test/services/spine-services.test.ts:488:    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+packages/server/test/services/spine-services.test.ts:509:    const context = BoundedContext.singleTenant("MessageIdTasks")
+packages/server/test/services/spine-services.test.ts:537:  it("keeps QueryService reads isolated by tenant", async () => {
+packages/server/test/services/spine-services.test.ts:542:    const context = BoundedContext.multitenant("Tasks").add(repository).build();
+packages/server/test/services/spine-services.test.ts:543:    await context.stand().update(ProjectOverviewStateSchema, createState("task-1", "Tenant A"), {
+packages/server/test/services/spine-services.test.ts:544:      tenantId: tenantValue("tenant-a"),
+packages/server/test/services/spine-services.test.ts:546:    await context.stand().update(ProjectOverviewStateSchema, createState("task-1", "Tenant B"), {
+packages/server/test/services/spine-services.test.ts:547:      tenantId: tenantValue("tenant-b"),
+packages/server/test/services/spine-services.test.ts:554:      const response = await client.read(createQuery("task-1", "tenant-b"));
+packages/server/test/services/spine-services.test.ts:560:      ).toEqual(createState("task-1", "Tenant B"));
+packages/server/test/services/spine-services.test.ts:571:    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+packages/server/test/services/spine-services.test.ts:594:  it("keeps QueryService include-all reads isolated by tenant", async () => {
+packages/server/test/services/spine-services.test.ts:599:    const context = BoundedContext.multitenant("Tasks").add(repository).build();
+packages/server/test/services/spine-services.test.ts:600:    await context.stand().update(ProjectOverviewStateSchema, createState("task-1", "Tenant A"), {
+packages/server/test/services/spine-services.test.ts:601:      tenantId: tenantValue("tenant-a"),
+packages/server/test/services/spine-services.test.ts:604:    await context.stand().update(ProjectOverviewStateSchema, createState("task-2", "Tenant B"), {
+packages/server/test/services/spine-services.test.ts:605:      tenantId: tenantValue("tenant-b"),
+packages/server/test/services/spine-services.test.ts:610:      .update(ProjectOverviewStateSchema, createState("task-3", "Tenant B Again"), {
+packages/server/test/services/spine-services.test.ts:611:        tenantId: tenantValue("tenant-b"),
+packages/server/test/services/spine-services.test.ts:616:    const response = await handlers.read(createIncludeAllQuery("tenant-b"));
+packages/server/test/services/spine-services.test.ts:622:    ).toEqual(createState("task-2", "Tenant B"));
+packages/server/test/services/spine-services.test.ts:626:    ).toEqual(createState("task-3", "Tenant B Again"));
+packages/server/test/services/spine-services.test.ts:700:    const context = BoundedContext.singleTenant("Tasks").build();
+packages/server/test/services/spine-services.test.ts:724:    const context = BoundedContext.singleTenant("Tasks")
+packages/server/test/services/spine-services.test.ts:752:    const context = BoundedContext.singleTenant("Tasks").addCommandDispatcher(dispatcher).build();
+packages/server/test/services/spine-services.test.ts:791:    const context = BoundedContext.singleTenant("Tasks")
+packages/server/test/services/spine-services.test.ts:822:    const context = BoundedContext.singleTenant("Tasks")
+packages/server/test/services/spine-services.test.ts:853:    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+packages/server/test/services/spine-services.test.ts:909:    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+packages/server/test/services/spine-services.test.ts:962:    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+packages/server/test/services/spine-services.test.ts:997:    const context = BoundedContext.singleTenant("VersionQuery").add(repository).build();
+packages/server/test/services/spine-services.test.ts:1029:    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+packages/server/test/services/spine-services.test.ts:1044:  it("applies tenant-scoped filters and ordering while ignoring wire masks", async () => {
+packages/server/test/services/spine-services.test.ts:1049:    const context = BoundedContext.multitenant("Tasks").add(repository).build();
+packages/server/test/services/spine-services.test.ts:1050:    await context.stand().update(ProjectOverviewStateSchema, createState("task-1", "Tenant A", 1), {
+packages/server/test/services/spine-services.test.ts:1051:      tenantId: tenantValue("tenant-a"),
+packages/server/test/services/spine-services.test.ts:1054:      tenantId: tenantValue("tenant-b"),
+packages/server/test/services/spine-services.test.ts:1058:      tenantId: tenantValue("tenant-b"),
+packages/server/test/services/spine-services.test.ts:1076:        "tenant-b",
+packages/server/test/services/spine-services.test.ts:1162:  it("applies tenant filtering before the implicit storage query cap", async () => {
+packages/server/test/services/spine-services.test.ts:1167:    const context = BoundedContext.multitenant("ImplicitQueryCap").add(repository).build();
+packages/server/test/services/spine-services.test.ts:1168:    const tenantAUpdates = Array.from({ length: 1_001 }, (_, index) =>
+packages/server/test/services/spine-services.test.ts:1173:          createState(`tenant-a-${String(index)}`, `Tenant A ${String(index)}`),
+packages/server/test/services/spine-services.test.ts:1174:          { tenantId: tenantValue("tenant-a") },
+packages/server/test/services/spine-services.test.ts:1177:    await Promise.all(tenantAUpdates);
+packages/server/test/services/spine-services.test.ts:1180:      .update(ProjectOverviewStateSchema, createState("tenant-b-1", "Tenant B 1"), {
+packages/server/test/services/spine-services.test.ts:1181:        tenantId: tenantValue("tenant-b"),
+packages/server/test/services/spine-services.test.ts:1185:      .update(ProjectOverviewStateSchema, createState("tenant-b-2", "Tenant B 2"), {
+packages/server/test/services/spine-services.test.ts:1186:        tenantId: tenantValue("tenant-b"),
+packages/server/test/services/spine-services.test.ts:1190:    const tenantA = await handlers.read(createIncludeAllQuery("tenant-a"));
+packages/server/test/services/spine-services.test.ts:1191:    const tenantB = await handlers.read(createIncludeAllQuery("tenant-b"));
+packages/server/test/services/spine-services.test.ts:1192:    const tenantASystem = await handlers.read(
+packages/server/test/services/spine-services.test.ts:1202:        "tenant-a",
+packages/server/test/services/spine-services.test.ts:1205:    const tenantAExplicit = await handlers.read(
+packages/server/test/services/spine-services.test.ts:1216:        "tenant-a",
+packages/server/test/services/spine-services.test.ts:1219:    const tenantAExplicitSystem = await handlers.read(
+packages/server/test/services/spine-services.test.ts:1230:        "tenant-a",
+packages/server/test/services/spine-services.test.ts:1234:    expect(responseErrorMessage(tenantA)).toBe("Query read failed.");
+packages/server/test/services/spine-services.test.ts:1235:    expect(responseErrorMessage(tenantASystem)).toBe("Query read failed.");
+packages/server/test/services/spine-services.test.ts:1236:    expect(responseErrorMessage(tenantAExplicit)).toBe("Query read failed.");
+packages/server/test/services/spine-services.test.ts:1237:    expect(responseErrorMessage(tenantAExplicitSystem)).toBe("Query read failed.");
+packages/server/test/services/spine-services.test.ts:1238:    expect(tenantB.message.map((message) => unpackProjectOverviewState(message.state)?.id)).toEqual(
+packages/server/test/services/spine-services.test.ts:1239:      ["tenant-b-1", "tenant-b-2"],
+packages/server/test/services/spine-services.test.ts:1306:    const context = BoundedContext.singleTenant("NestedQuery").add(repository).build();
+packages/server/test/services/spine-services.test.ts:1608:    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+packages/server/test/services/spine-services.test.ts:1690:    const context = BoundedContext.singleTenant("Tasks").addCommandDispatcher(dispatcher).build();
+packages/server/test/services/spine-services.test.ts:1707:    const context = BoundedContext.singleTenant("Tasks")
+packages/server/test/services/spine-services.test.ts:1712:    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, storageFactory);
+packages/server/test/services/spine-services.test.ts:1733:    const context = BoundedContext.singleTenant("DeclaredRejections")
+packages/server/test/services/spine-services.test.ts:1773:    const context = BoundedContext.singleTenant("Tasks").add(createValidatingRepository()).build();
+packages/server/test/services/spine-services.test.ts:1786:    const context = BoundedContext.singleTenant("Tasks")
+packages/server/test/services/spine-services.test.ts:1805:    const context = BoundedContext.singleTenant("Tasks").add(createValidatingRepository()).build();
+packages/server/test/services/spine-services.test.ts:1827:    const context = BoundedContext.singleTenant("Tasks").addCommandDispatcher(dispatcher).build();
+packages/server/test/services/spine-services.test.ts:1839:    const context = BoundedContext.singleTenant("Tasks")
+packages/server/test/services/spine-services.test.ts:1852:    const context = BoundedContext.singleTenant("Tasks")
+packages/server/test/services/spine-services.test.ts:1864:  it("rejects command tenant mismatches without dispatching", async () => {
+packages/server/test/services/spine-services.test.ts:1865:    const singleTenantDispatches: string[] = [];
+packages/server/test/services/spine-services.test.ts:1866:    const multitenantDispatches: string[] = [];
+packages/server/test/services/spine-services.test.ts:1867:    const singleTenant = BoundedContext.singleTenant("Single")
+packages/server/test/services/spine-services.test.ts:1869:        createCommandDispatcher((command) => singleTenantDispatches.push(command.id?.uuid ?? "")),
+packages/server/test/services/spine-services.test.ts:1872:    const multitenant = BoundedContext.multitenant("Multi")
+packages/server/test/services/spine-services.test.ts:1874:        createCommandDispatcher((command) => multitenantDispatches.push(command.id?.uuid ?? "")),
+packages/server/test/services/spine-services.test.ts:1877:    const singleServer = await startServices(singleTenant);
+packages/server/test/services/spine-services.test.ts:1884:      const singleTenantAck = await singleClient.post(
+packages/server/test/services/spine-services.test.ts:1885:        createProjectionCommand("single-with-tenant", "tenant-a"),
+packages/server/test/services/spine-services.test.ts:1888:      expect(singleTenantAck.status?.status.case).toBe("error");
+packages/server/test/services/spine-services.test.ts:1889:      expect(errorMessage(singleTenantAck.status?.status)).toBe(
+packages/server/test/services/spine-services.test.ts:1890:        "Tenant is not applicable for this command.",
+packages/server/test/services/spine-services.test.ts:1896:    const multiServer = await startServices(multitenant);
+packages/server/test/services/spine-services.test.ts:1902:      const multitenantAck = await multiClient.post(
+packages/server/test/services/spine-services.test.ts:1903:        createProjectionCommand("multi-without-tenant"),
+packages/server/test/services/spine-services.test.ts:1906:      expect(multitenantAck.status?.status.case).toBe("error");
+packages/server/test/services/spine-services.test.ts:1907:      expect(errorMessage(multitenantAck.status?.status)).toBe(
+packages/server/test/services/spine-services.test.ts:1908:        "Tenant is required for this command.",
+packages/server/test/services/spine-services.test.ts:1910:      expect(singleTenantDispatches).toEqual([]);
+packages/server/test/services/spine-services.test.ts:1911:      expect(multitenantDispatches).toEqual([]);
+packages/server/test/services/spine-services.test.ts:1917:  it("treats command tenant domain and email variants as present", async () => {
+packages/server/test/services/spine-services.test.ts:1918:    const singleTenantDispatches: string[] = [];
+packages/server/test/services/spine-services.test.ts:1919:    const multitenantDispatches: string[] = [];
+packages/server/test/services/spine-services.test.ts:1920:    const singleTenant = BoundedContext.singleTenant("Single")
+packages/server/test/services/spine-services.test.ts:1922:        createCommandDispatcher((command) => singleTenantDispatches.push(command.id?.uuid ?? "")),
+packages/server/test/services/spine-services.test.ts:1925:    const multitenant = BoundedContext.multitenant("Multi")
+packages/server/test/services/spine-services.test.ts:1927:        createCommandDispatcher((command) => multitenantDispatches.push(command.id?.uuid ?? "")),
+packages/server/test/services/spine-services.test.ts:1930:    const singleServer = await startServices(singleTenant);
+packages/server/test/services/spine-services.test.ts:1938:        createProjectionCommand("single-domain-tenant", tenantDomain("tenant.example")),
+packages/server/test/services/spine-services.test.ts:1943:        "Tenant is not applicable for this command.",
+packages/server/test/services/spine-services.test.ts:1949:    const multiServer = await startServices(multitenant);
+packages/server/test/services/spine-services.test.ts:1956:        createProjectionCommand("multi-email-tenant", tenantEmail("tenant@example.test")),
+packages/server/test/services/spine-services.test.ts:1960:      expect(singleTenantDispatches).toEqual([]);
+packages/server/test/services/spine-services.test.ts:1961:      expect(multitenantDispatches).toEqual(["multi-email-tenant"]);
+packages/server/test/services/spine-services.test.ts:2019:  it("rejects subscription tenant mismatches contractually", async () => {
+packages/server/test/services/spine-services.test.ts:2024:    const singleTenant = BoundedContext.singleTenant("SingleSubscription").add(repository).build();
+packages/server/test/services/spine-services.test.ts:2029:    const multitenant = BoundedContext.multitenant("MultiSubscription")
+packages/server/test/services/spine-services.test.ts:2032:    const singleServer = await startServices(singleTenant);
+packages/server/test/services/spine-services.test.ts:2033:    const multiServer = await startServices(multitenant);
+packages/server/test/services/spine-services.test.ts:2045:      await expect(singleClient.subscribe(createTopic("tenant-a"))).rejects.toMatchObject({
+packages/server/test/services/spine-services.test.ts:2047:      } satisfies Partial<ConnectError>);
+packages/server/test/services/spine-services.test.ts:2050:      } satisfies Partial<ConnectError>);
+packages/server/test/services/spine-services.test.ts:2057:  it("treats subscription tenant domain and email variants as present", async () => {
+packages/server/test/services/spine-services.test.ts:2058:    const capturedTenantKeys: (TenantId | undefined)[] = [];
+packages/server/test/services/spine-services.test.ts:2066:    const singleTenant = createFakeContext({
+packages/server/test/services/spine-services.test.ts:2068:      isMultitenant: false,
+packages/server/test/services/spine-services.test.ts:2070:    const multitenant = createFakeContext({
+packages/server/test/services/spine-services.test.ts:2072:      isMultitenant: true,
+packages/server/test/services/spine-services.test.ts:2075:        capturedTenantKeys.push(options.tenantId);
+packages/server/test/services/spine-services.test.ts:2082:    const singleHandlers = registeredSubscriptionHandlers(singleTenant);
+packages/server/test/services/spine-services.test.ts:2083:    const multiHandlers = registeredSubscriptionHandlers(multitenant);
+packages/server/test/services/spine-services.test.ts:2087:        singleHandlers.subscribe(createTopic(tenantDomain("tenant.example"))),
+packages/server/test/services/spine-services.test.ts:2091:    } satisfies Partial<ConnectError>);
+packages/server/test/services/spine-services.test.ts:2094:      createTopic(tenantEmail("tenant@example.test")),
+packages/server/test/services/spine-services.test.ts:2102:      id: "task-tenant",
+packages/server/test/services/spine-services.test.ts:2103:      state: createState("task-tenant", "Tenant"),
+packages/server/test/services/spine-services.test.ts:2105:    await withTimeout(pending, "subscription tenant activation update");
+packages/server/test/services/spine-services.test.ts:2108:    expect(capturedTenantKeys).toEqual([tenantEmail("tenant@example.test")]);
+packages/server/test/services/spine-services.test.ts:2111:  it("returns QueryResponse errors for query tenant mismatches", async () => {
+packages/server/test/services/spine-services.test.ts:2116:    const singleTenant = BoundedContext.singleTenant("Single").add(repository).build();
+packages/server/test/services/spine-services.test.ts:2121:    const multitenant = BoundedContext.multitenant("Multi").add(secondRepository).build();
+packages/server/test/services/spine-services.test.ts:2122:    const singleServer = await startServices(singleTenant);
+packages/server/test/services/spine-services.test.ts:2123:    const multiServer = await startServices(multitenant);
+packages/server/test/services/spine-services.test.ts:2135:      const inapplicable = await singleClient.read(createQuery("task-1", "tenant-a"));
+packages/server/test/services/spine-services.test.ts:2139:      expect(responseErrorMessage(inapplicable)).toBe("Tenant is not applicable for this query.");
+packages/server/test/services/spine-services.test.ts:2141:      expect(responseErrorMessage(missing)).toBe("Tenant is required for this query.");
+packages/server/test/services/spine-services.test.ts:2148:  it("treats query tenant domain and email variants as present", async () => {
+packages/server/test/services/spine-services.test.ts:2149:    const capturedTenantKeys: (TenantId | undefined)[] = [];
+packages/server/test/services/spine-services.test.ts:2150:    const singleTenant = createFakeContext({
+packages/server/test/services/spine-services.test.ts:2152:      isMultitenant: false,
+packages/server/test/services/spine-services.test.ts:2154:    const multitenant = createFakeContext({
+packages/server/test/services/spine-services.test.ts:2156:      isMultitenant: true,
+packages/server/test/services/spine-services.test.ts:2158:        capturedTenantKeys.push(options.tenantId);
+packages/server/test/services/spine-services.test.ts:2160:          state: createState("task-1", "Tenant Domain"),
+packages/server/test/services/spine-services.test.ts:2165:    const singleHandlers = registeredQueryHandlers(singleTenant);
+packages/server/test/services/spine-services.test.ts:2166:    const multiHandlers = registeredQueryHandlers(multitenant);
+packages/server/test/services/spine-services.test.ts:2169:      createQuery("task-1", tenantEmail("tenant@example.test")),
+packages/server/test/services/spine-services.test.ts:2172:      createQuery("task-1", tenantDomain("tenant.example")),
+packages/server/test/services/spine-services.test.ts:2176:    expect(responseErrorMessage(inapplicable)).toBe("Tenant is not applicable for this query.");
+packages/server/test/services/spine-services.test.ts:2178:    expect(capturedTenantKeys).toEqual([tenantDomain("tenant.example")]);
+packages/server/test/services/spine-services.test.ts:2181:  it("treats include-all query tenant domain and email variants as present", async () => {
+packages/server/test/services/spine-services.test.ts:2182:    const capturedTenantKeys: (TenantId | undefined)[] = [];
+packages/server/test/services/spine-services.test.ts:2183:    const singleTenant = createFakeContext({
+packages/server/test/services/spine-services.test.ts:2185:      isMultitenant: false,
+packages/server/test/services/spine-services.test.ts:2187:    const multitenant = createFakeContext({
+packages/server/test/services/spine-services.test.ts:2189:      isMultitenant: true,
+packages/server/test/services/spine-services.test.ts:2191:        capturedTenantKeys.push(options.tenantId);
+packages/server/test/services/spine-services.test.ts:2194:            state: createState("task-1", "Tenant Domain"),
+packages/server/test/services/spine-services.test.ts:2200:    const singleHandlers = registeredQueryHandlers(singleTenant);
+packages/server/test/services/spine-services.test.ts:2201:    const multiHandlers = registeredQueryHandlers(multitenant);
+packages/server/test/services/spine-services.test.ts:2204:      createIncludeAllQuery(tenantEmail("tenant@example.test")),
+packages/server/test/services/spine-services.test.ts:2207:      createIncludeAllQuery(tenantDomain("tenant.example")),
+packages/server/test/services/spine-services.test.ts:2211:    expect(responseErrorMessage(inapplicable)).toBe("Tenant is not applicable for this query.");
+packages/server/test/services/spine-services.test.ts:2213:    expect(capturedTenantKeys).toEqual([tenantDomain("tenant.example")]);
+packages/server/test/services/spine-services.test.ts:2216:  it("activates and cancels explicit subscriptions over a real gRPC transport", async () => {
+packages/server/test/services/spine-services.test.ts:2221:    const context = BoundedContext.singleTenant("Tasks")
+packages/server/test/services/spine-services.test.ts:2263:      const cancel = await withTimeout(client.cancel(subscription), "subscription cancellation");
+packages/server/test/services/spine-services.test.ts:2266:      expect(cancel.status?.status.case).toBe("ok");
+packages/server/test/services/spine-services.test.ts:2278:    const context = BoundedContext.singleTenant("RegistrySubscriptions")
+packages/server/test/services/spine-services.test.ts:2298:    await handlers.cancel(subscription);
+packages/server/test/services/spine-services.test.ts:2306:    const firstContext = BoundedContext.singleTenant("SharedSubscriptions")
+packages/server/test/services/spine-services.test.ts:2311:    const secondContext = BoundedContext.singleTenant("SharedSubscriptions")
+packages/server/test/services/spine-services.test.ts:2332:      await second.cancel(subscription);
+packages/server/test/services/spine-services.test.ts:2341:    const context = BoundedContext.singleTenant("Events")
+packages/server/test/services/spine-services.test.ts:2382:    const context = BoundedContext.singleTenant("EventCleanup")
+packages/server/test/services/spine-services.test.ts:2416:    const context = BoundedContext.multitenant("RejectionEvents")
+packages/server/test/services/spine-services.test.ts:2427:      createEventTopic("tenant-rejected", TaskAlreadyDoneSchema),
+packages/server/test/services/spine-services.test.ts:2472:  it("keeps multitenant event subscriptions isolated by tenant", async () => {
+packages/server/test/services/spine-services.test.ts:2473:    const context = BoundedContext.multitenant("TenantEvents")
+packages/server/test/services/spine-services.test.ts:2477:    const subscription = await handlers.subscribe(createEventTopic("tenant-a"));
+packages/server/test/services/spine-services.test.ts:2488:      .post(createAggregateEvent("event-tenant-b", "aggregate-1", "Tenant B", "tenant-b"));
+packages/server/test/services/spine-services.test.ts:2494:      .post(createAggregateEvent("event-tenant-a", "aggregate-1", "Tenant A", "tenant-a"));
+packages/server/test/services/spine-services.test.ts:2495:    const delivered = await withTimeout(nextUpdate, "tenant event subscription update");
+packages/server/test/services/spine-services.test.ts:2500:      throw new Error("Expected tenant event subscription update.");
+packages/server/test/services/spine-services.test.ts:2502:    expect(update.update.value.event.map((event) => event.id?.value)).toEqual(["event-tenant-a"]);
+packages/server/test/services/spine-services.test.ts:2507:  it("matches multitenant event subscriptions against past-message actor tenants", async () => {
+packages/server/test/services/spine-services.test.ts:2508:    const context = BoundedContext.multitenant("PastMessageTenantEvents")
+packages/server/test/services/spine-services.test.ts:2512:    const subscription = await handlers.subscribe(createEventTopic("tenant-past"));
+packages/server/test/services/spine-services.test.ts:2523:      .post(createPastMessageAggregateEvent("event-past-other", "tenant-other"));
+packages/server/test/services/spine-services.test.ts:2528:      .post(createPastMessageAggregateEvent("event-past-match", "tenant-past"));
+packages/server/test/services/spine-services.test.ts:2530:    const delivered = await withTimeout(nextUpdate, "past-message tenant subscription update");
+packages/server/test/services/spine-services.test.ts:2544:  it("keeps duplicate activation and cancellation behavior for event subscriptions", async () => {
+packages/server/test/services/spine-services.test.ts:2545:    const context = BoundedContext.singleTenant("EventLifecycle")
+packages/server/test/services/spine-services.test.ts:2557:      "duplicate event activation close",
+packages/server/test/services/spine-services.test.ts:2561:    const delivered = await withTimeout(firstUpdate, "primary event activation update");
+packages/server/test/services/spine-services.test.ts:2562:    const afterCancel = primaryIterator.next();
+packages/server/test/services/spine-services.test.ts:2563:    await handlers.cancel(subscription);
+packages/server/test/services/spine-services.test.ts:2567:      .post(createAggregateEvent("event-after-cancel", "aggregate-1", "Late"));
+packages/server/test/services/spine-services.test.ts:2568:    const closed = await withTimeout(afterCancel, "canceled event subscription close");
+packages/server/test/services/spine-services.test.ts:2576:    const context = BoundedContext.singleTenant("FilteredEvents")
+packages/server/test/services/spine-services.test.ts:2599:    expect(thrown).toBeInstanceOf(ConnectError);
+packages/server/test/services/spine-services.test.ts:2600:    expect((thrown as ConnectError).code).toBe(Code.InvalidArgument);
+packages/server/test/services/spine-services.test.ts:2601:    expect((thrown as ConnectError).rawMessage).toBe(
+packages/server/test/services/spine-services.test.ts:2607:    const context = BoundedContext.singleTenant("MalformedEventTopics")
+packages/server/test/services/spine-services.test.ts:2626:    const context = BoundedContext.singleTenant("UnknownEventMaskDelivery")
+packages/server/test/services/spine-services.test.ts:2653:    const context = BoundedContext.singleTenant("InternalEvents")
+packages/server/test/services/spine-services.test.ts:2667:    expect(thrown).toBeInstanceOf(ConnectError);
+packages/server/test/services/spine-services.test.ts:2668:    expect((thrown as ConnectError).code).toBe(Code.InvalidArgument);
+packages/server/test/services/spine-services.test.ts:2669:    expect((thrown as ConnectError).rawMessage).toBe("Unsupported subscription target.");
+packages/server/test/services/spine-services.test.ts:2673:    const context = BoundedContext.singleTenant("Tasks")
+packages/server/test/services/spine-services.test.ts:2847:  it("rejects unsupported subscription filters before activation attaches Stand delivery", async () => {
+packages/server/test/services/spine-services.test.ts:2876:  it("rejects malformed subscription topics before activation attaches Stand delivery", () => {
+packages/server/test/services/spine-services.test.ts:2922:  it("rejects empty subscription target filters before activation attaches Stand delivery", () => {
+packages/server/test/services/spine-services.test.ts:2990:    const context = BoundedContext.singleTenant("MalformedStateMaskDelivery")
+packages/server/test/services/spine-services.test.ts:3012:  it("rejects invalid subscription field filters before activation attaches Stand delivery", () => {
+packages/server/test/services/spine-services.test.ts:3079:    const context = BoundedContext.singleTenant("MessageIdTasks")
+packages/server/test/services/spine-services.test.ts:3107:  it("keeps returned subscription mutation from changing activation tenant or topic", async () => {
+packages/server/test/services/spine-services.test.ts:3108:    const capturedTenantKeys: (TenantId | undefined)[] = [];
+packages/server/test/services/spine-services.test.ts:3118:      isMultitenant: true,
+packages/server/test/services/spine-services.test.ts:3120:        capturedTenantKeys.push(options.tenantId);
+packages/server/test/services/spine-services.test.ts:3129:    const subscription = await handlers.subscribe(createTopic("tenant-a"));
+packages/server/test/services/spine-services.test.ts:3133:    subscription.topic = createFilteredTopic({ name: "Never", tenantId: "tenant-b" });
+packages/server/test/services/spine-services.test.ts:3145:    expect(capturedTenantKeys).toEqual([tenantValue("tenant-a")]);
+packages/server/test/services/spine-services.test.ts:3232:      withTimeout(iterator.next(), "missing subscription ID activation"),
+packages/server/test/services/spine-services.test.ts:3237:    expect((handlers.cancel(create(SubscriptionSchema)) as Response).status?.status.case).toBe(
+packages/server/test/services/spine-services.test.ts:3242:  it("keeps registry-missing and expired subscriptions inert during activation", async () => {
+packages/server/test/services/spine-services.test.ts:3244:      const context = BoundedContext.singleTenant(`Subscription-${outcome}`)
+packages/server/test/services/spine-services.test.ts:3245:        .withSubscriptionRegistry(new InertActivationRegistry(outcome))
+packages/server/test/services/spine-services.test.ts:3255:            `${outcome} subscription activation`,
+packages/server/test/services/spine-services.test.ts:3264:  it("rejects empty subscription ID filters before activation attaches Stand delivery", () => {
+packages/server/test/services/spine-services.test.ts:3444:    const context = BoundedContext.singleTenant("MessageIdTasks")
+packages/server/test/services/spine-services.test.ts:3493:    const context = BoundedContext.singleTenant("MessageFieldTasks")
+packages/server/test/services/spine-services.test.ts:3546:  it("rejects malformed subscription ID filters before activation attaches Stand delivery", () => {
+packages/server/test/services/spine-services.test.ts:3576:  it("rejects over-limit subscription ID filters before activation attaches Stand delivery", () => {
+packages/server/test/services/spine-services.test.ts:3601:  it("rejects over-depth subscription composites before activation attaches Stand delivery", () => {
+packages/server/test/services/spine-services.test.ts:3625:  it("rejects too many nested subscription composites before activation attaches Stand delivery", () => {
+packages/server/test/services/spine-services.test.ts:3686:  it("rejects empty undefined-operator subscription composites before activation attaches Stand delivery", () => {
+packages/server/test/services/spine-services.test.ts:3714:  it("does not deliver pre-activation updates and tolerates unknown subscription cancellation", async () => {
+packages/server/test/services/spine-services.test.ts:3719:    const context = BoundedContext.singleTenant("Tasks")
+packages/server/test/services/spine-services.test.ts:3736:      const nextUpdate = withTimeout(iterator.next(), "post-activation subscription update");
+packages/server/test/services/spine-services.test.ts:3751:      const cancel = await client.cancel(unknown);
+packages/server/test/services/spine-services.test.ts:3752:      const missingIdCancel = await client.cancel(create(SubscriptionSchema));
+packages/server/test/services/spine-services.test.ts:3766:      expect(cancel.status?.status.case).toBe("ok");
+packages/server/test/services/spine-services.test.ts:3767:      expect(missingIdCancel.status?.status.case).toBe("ok");
+packages/server/test/services/spine-services.test.ts:3768:      await client.cancel(subscription);
+packages/server/test/services/spine-services.test.ts:3774:  it("releases subscription delivery when the activation iterator closes", async () => {
+packages/server/test/services/spine-services.test.ts:3819:  it("keeps duplicate activation inert after a subscription is active", async () => {
+packages/server/test/services/spine-services.test.ts:3851:    const duplicateDone = await withTimeout(duplicateIterator.next(), "duplicate activation close");
+packages/server/test/services/spine-services.test.ts:3858:    const delivered = await withTimeout(firstUpdate, "primary activation update");
+packages/server/test/services/spine-services.test.ts:3866:    const stillActive = await withTimeout(secondUpdate, "primary activation after duplicate");
+packages/server/test/services/spine-services.test.ts:3877:  it("serializes simultaneous activation before the registry activation await", async () => {
+packages/server/test/services/spine-services.test.ts:3879:    const context = BoundedContext.singleTenant("ActivationRace")
+packages/server/test/services/spine-services.test.ts:3891:    await registry.activationStarted;
+packages/server/test/services/spine-services.test.ts:3892:    registry.releaseActivation();
+packages/server/test/services/spine-services.test.ts:3894:    const duplicate = await withTimeout(secondNext, "simultaneous duplicate activation close");
+packages/server/test/services/spine-services.test.ts:3900:    const primary = await withTimeout(firstNext, "simultaneous primary activation update");
+packages/server/test/services/spine-services.test.ts:3904:    expect(registry.activations).toBe(1);
+packages/server/test/services/spine-services.test.ts:3909:  it("removes inactive subscription records when activation attachment fails", async () => {
+packages/server/test/services/spine-services.test.ts:3924:    const secondActivation = await withTimeout(
+packages/server/test/services/spine-services.test.ts:3926:      "activation after failed attachment",
+packages/server/test/services/spine-services.test.ts:3929:    expect(secondActivation.done).toBe(true);
+packages/server/test/services/spine-services.test.ts:3933:  it("surfaces attachment setup and registry cleanup failures together during activation", async () => {
+packages/server/test/services/spine-services.test.ts:3935:    const context = BoundedContext.singleTenant("SubscriptionCleanup")
+packages/server/test/services/spine-services.test.ts:3946:        message: "Subscription activation and cleanup failed.",
+packages/server/test/services/spine-services.test.ts:3960:    const context = BoundedContext.singleTenant("CleanupWarning")
+packages/server/test/services/spine-services.test.ts:4016:  it("cancels subscriptions by ID and keeps cleanup idempotent", async () => {
+packages/server/test/services/spine-services.test.ts:4050:    await handlers.cancel(firstSubscription);
+packages/server/test/services/spine-services.test.ts:4051:    await handlers.cancel(firstSubscription);
+packages/server/test/services/spine-services.test.ts:4059:    const firstClosed = await withTimeout(firstNext, "canceled subscription close");
+packages/server/test/services/spine-services.test.ts:4066:    await handlers.cancel(secondSubscription);
+packages/server/test/services/spine-services.test.ts:4250:  it("releases subscription capacity after activation attachment fails", async () => {
+packages/server/test/services/spine-services.test.ts:4255:          throw new Error("activation failed");
+packages/server/test/services/spine-services.test.ts:4263:      "activation failed",
+packages/server/test/services/spine-services.test.ts:4269:    const context = BoundedContext.singleTenant("Tasks").build();
+packages/server/test/services/spine-services.test.ts:4280:      } satisfies Partial<ConnectError>);
+packages/server/test/services/spine-services.test.ts:4320:    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+packages/server/test/services/spine-services.test.ts:4336:      } satisfies Partial<ConnectError>);
+packages/server/test/services/spine-services.test.ts:4347:    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+packages/server/test/services/spine-services.test.ts:4503:function createProjectionCommand(id: string, tenantId?: TenantInput, name = "Task") {
+packages/server/test/services/spine-services.test.ts:4507:      actorContext: createActorContext(tenantId),
+packages/server/test/services/spine-services.test.ts:4552:  tenantId?: TenantInput,
+packages/server/test/services/spine-services.test.ts:4556:    context: createEventContext(aggregateId, tenantId),
+packages/server/test/services/spine-services.test.ts:4568:function createPastMessageAggregateEvent(id: string, tenantId: string) {
+packages/server/test/services/spine-services.test.ts:4574:        value: create(OriginSchema, { actorContext: createActorContext(tenantId) }),
+packages/server/test/services/spine-services.test.ts:4598:        value: createActorContext("tenant-rejected"),
+packages/server/test/services/spine-services.test.ts:4622:function createEventContext(producerId: string, tenantId?: TenantInput) {
+packages/server/test/services/spine-services.test.ts:4630:  if (tenantId !== undefined) {
+packages/server/test/services/spine-services.test.ts:4633:      value: createActorContext(tenantId),
+packages/server/test/services/spine-services.test.ts:4690:function createQuery(id: string, tenantId?: TenantInput) {
+packages/server/test/services/spine-services.test.ts:4691:  return createQueryWithIds([packStringId(id)], tenantId);
+packages/server/test/services/spine-services.test.ts:4694:function createQueryWithIds(ids: ReturnType<typeof AnyMessages.pack>[], tenantId?: TenantInput) {
+packages/server/test/services/spine-services.test.ts:4706:    context: createActorContext(tenantId),
+packages/server/test/services/spine-services.test.ts:4821:  tenantId?: TenantInput,
+packages/server/test/services/spine-services.test.ts:4824:  query.context = createActorContext(tenantId);
+packages/server/test/services/spine-services.test.ts:4837:function createIncludeAllQuery(tenantId?: TenantInput) {
+packages/server/test/services/spine-services.test.ts:4847:    context: createActorContext(tenantId),
+packages/server/test/services/spine-services.test.ts:4851:function createFormattedIncludeAllQuery(format: Query["format"], tenantId?: TenantInput) {
+packages/server/test/services/spine-services.test.ts:4852:  const query = createIncludeAllQuery(tenantId);
+packages/server/test/services/spine-services.test.ts:4858:function createTopic(tenantId?: TenantInput) {
+packages/server/test/services/spine-services.test.ts:4862:    context: createActorContext(tenantId),
+packages/server/test/services/spine-services.test.ts:4866:function createEventTopic(tenantId?: TenantInput, schema: MessageSchema = TaskCreatedSchema) {
+packages/server/test/services/spine-services.test.ts:4870:    context: createActorContext(tenantId),
+packages/server/test/services/spine-services.test.ts:4898:  readonly tenantId?: TenantInput;
+packages/server/test/services/spine-services.test.ts:4939:    context: createActorContext(options.tenantId),
+packages/server/test/services/spine-services.test.ts:4997:function createActorContext(tenantId?: TenantInput) {
+packages/server/test/services/spine-services.test.ts:4999:    ...(tenantId === undefined
+packages/server/test/services/spine-services.test.ts:5002:          tenantId: typeof tenantId === "string" ? tenantValue(tenantId) : tenantId,
+packages/server/test/services/spine-services.test.ts:5008:function tenantValue(value: string): TenantId {
+packages/server/test/services/spine-services.test.ts:5009:  return create(TenantIdSchema, {
+packages/server/test/services/spine-services.test.ts:5017:function tenantDomain(value: string): TenantId {
+packages/server/test/services/spine-services.test.ts:5018:  return create(TenantIdSchema, {
+packages/server/test/services/spine-services.test.ts:5026:function tenantEmail(value: string): TenantId {
+packages/server/test/services/spine-services.test.ts:5027:  return create(TenantIdSchema, {
+packages/server/test/services/spine-services.test.ts:5210:  activations = 0;
+packages/server/test/services/spine-services.test.ts:5213:  readonly activationStarted = new Promise<void>((resolve) => {
+packages/server/test/services/spine-services.test.ts:5217:  releaseActivation(): void {
+packages/server/test/services/spine-services.test.ts:5222:    this.activations += 1;
+packages/server/test/services/spine-services.test.ts:5231:class InertActivationRegistry extends InMemorySubscriptionRegistry {
+packages/server/test/services/spine-services.test.ts:5273:  readonly isMultitenant?: boolean;
+packages/server/test/services/spine-services.test.ts:5282:    options: { readonly tenantId?: TenantId },
+packages/server/test/services/spine-services.test.ts:5286:    options: { readonly tenantId?: TenantId },
+packages/server/test/services/spine-services.test.ts:5291:    options: { readonly tenantId?: TenantId },
+packages/server/test/services/spine-services.test.ts:5301:    options: { readonly tenantId?: TenantId },
+packages/server/test/services/spine-services.test.ts:5310:    isMultitenant: options.isMultitenant ?? false,
+packages/server/test/services/spine-services.test.ts:5347:    options: { readonly tenantId?: TenantId },
+packages/server/test/services/spine-services.test.ts:5351:    options: { readonly tenantId?: TenantId },
+packages/server/test/services/spine-services.test.ts:5359:      readOptions: { readonly tenantId?: TenantId },
+packages/server/test/services/spine-services.test.ts:5376:        readOptions: { readonly tenantId?: TenantId },
+packages/server/test/services/spine-services.test.ts:5433:        cancel(subscription: Subscription): unknown;
+$ rg --files selected integration/test paths
+packages/storage-mysql/test/mysql-integration.test.ts
+packages/auth/test/subscriptions/index.test.ts
+packages/auth/test/subscriptions/direct-subscribe.test.ts
+packages/storage-postgres/test/postgresql-integration.test.ts
+packages/proto/test/integration-broker-contract.test.ts
+packages/auth/test/dynamic-subscription-creator.test.ts
+packages/server/test/services/native-subscription-integration.test.ts
+packages/server/test/delivery/delivery-supervisor.test.ts
+packages/server/test/delivery/inbox-provider-selection.ts
+packages/server/test/delivery/delivery-fencing.test.ts
+packages/server/test/delivery/delivery-worker.test.ts
+packages/server/test/delivery/inbox-provider-cleanup.test.ts
+packages/server/test/delivery/delivery-loop.test.ts
+packages/server/test/delivery/direct-shard-session-records.test.ts
+packages/server/test/delivery/delivery-builder.test.ts
+packages/server/test/delivery/delivery-worker-runtime.test.ts
+packages/server/test/delivery/delivery-run-control.test.ts
+packages/server/test/delivery/direct-inbox-records.test.ts
+packages/server/test/delivery/inbox-record-fixture.ts
+packages/server/test/delivery/direct-record-provider-conformance.test.ts
+packages/server/test/delivery/parked-delivery-obligations.test.ts
+packages/server/test/delivery/inbox-provider-status.test.ts
+packages/server/test/delivery/shard-index.test.ts
+packages/server/test/delivery/inbox-provider-selection.test.ts
+packages/server/test/delivery/inbox-message-fixture.ts
+packages/server/test/delivery/delivery-run-coordinator.test.ts
+packages/server/test/delivery/inbox.test.ts
+packages/server/test/delivery/inbox-records.test.ts
+packages/server/test/stand/subscription-runtime.test.ts
+packages/server/test/stand/subscription-observer.test.ts
+packages/server/test/stand/subscription-registry-provider-conformance.test.ts
+packages/server/test/stand/subscription-registry.test.ts
+packages/delivery-client/test-fixtures/managed-project-context.mjs
+packages/delivery-client/test-fixtures/managed-remote-delivery-application.mjs
+packages/delivery-client/test-fixtures/managed-external-events-application.mjs
+packages/delivery-client/test-fixtures/remote-environment-app.mjs
+packages/delivery-client/test-fixtures/multi-machine-app.mjs
+packages/server/test/server/durable-subscription-bindings.test.ts
+packages/server/test/server/server-lifecycle-integration.test.ts
+packages/server/test/server/server-integration-broker-lifecycle.test.ts
+packages/server/test/server/durable-subscription-public-contract.test.ts
+packages/server/test/server/managed-child-subscription.test.ts
+packages/server/test/server/managed-server-subscription-registry-child.mjs
+packages/server/test/server/environment-delivery-records.test.ts
+packages/server/test/server/durable-subscription-provider-conformance.test.ts
+packages/server/test/context/local-inbox-handoff.test.ts
+packages/server/test/context/entity-inbox.test.ts
+packages/delivery-server/src/testing/index.ts
+packages/delivery-client/test/delivery-client-owned-transport.test.ts
+packages/delivery-client/test/e2e/README.md
+packages/delivery-client/test/e2e/multi-machine-delivery.test.ts
+packages/delivery-client/test/remote-work-registry.test.ts
+packages/delivery-client/test/remote-supervisor-grpc.integration.test.ts
+packages/delivery-client/test/supervisor-source.test.ts
+packages/delivery-client/test/delivery-client-grpc.integration.test.ts
+packages/delivery-client/test/in-memory-core-response-loss.test.ts
+packages/delivery-client/test/managed-external-events.integration.test.ts
+packages/delivery-client/test/shard-observation.test.ts
+packages/delivery-client/test/remote-inbox-direct.test.ts
+packages/delivery-client/test/managed-remote-delivery-readiness.integration.test.ts
+packages/delivery-client/test/client-rpc-lifecycle.test.ts
+packages/delivery-client/test/remote-delivery-direct.test.ts
+packages/delivery-client/test/codec-immutability.test.ts
+packages/delivery-client/test/shared-fixtures.ts
+packages/server/test/repository/entity-delivery-benchmark.test.ts
+packages/server/test-fixtures/native-subscription-fixtures.ts
+packages/server/test/integration/external-messages.test.ts
+packages/server/test/integration/integration-broker-module.test.ts
+packages/server/test/integration/third-party-context.test.ts
+packages/server/test/integration/wave13-origin-repository.ts
+packages/server/test/integration/integration-broker.test.ts
+packages/server/test/integration/wave13-red-support.ts
+packages/server/test/integration/wave13-compile-contract.ts
+packages/delivery-server/test/public-api.test.ts
+packages/delivery-server/test/server/delivery-server-config.test.ts
+packages/delivery-server/test/server/delivery-server-log.test.ts
+packages/delivery-server/test/server/delivery-server-listener.test.ts
+packages/delivery-server/test/server/delivery-server-shutdown-order.test.ts
+packages/delivery-server/test/server/delivery-server-lifecycle.test.ts
+packages/delivery-server/test/health/health-service.test.ts
+packages/delivery-server/test/admin/delivery-assembly-admin.test.ts
+packages/delivery-server/test/admin/delivery-server-admin.test.ts
+packages/delivery-server/test/admin/admin-publisher.test.ts
+packages/delivery-server/test/bin/delivery-server-process.test.ts
+packages/delivery-server/test/core/transition-notifications.test.ts
+packages/delivery-server/test/core/in-memory-delivery-state.test.ts
+packages/delivery-server/test/core/inbox-service.test.ts
+packages/delivery-server/test/core/shard-service.test.ts
+packages/delivery-server/test/core/mutation-admission.test.ts

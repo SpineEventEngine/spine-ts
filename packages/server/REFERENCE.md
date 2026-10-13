@@ -898,11 +898,47 @@ the remote server.
 `DeliveryMonitor` is an instantiable, customizable policy seam exposing
 asynchronous continuation, start/completion, failed-reception, pickup-failure,
 and already-picked hooks.
-`FailedReception` supplies only `markDelivered()` and one immediate
-`repeatDispatching()` action; the framework adds no attempt history, timer,
-backoff, quarantine, dead-letter, receipt, marker, or scheduler policy. A failed
-durable acknowledgement keeps that row pending, blocks later rows for its
-target during the run, and does not prevent independent targets from running.
+`FailedReception` supplies `leavePending()`, explicit terminal
+`markDelivered()`, and one immediate `repeatDispatching()` action for failed
+processing. The default leaves a failed row pending and blocks that target for
+the finite drain; independent targets continue. A successful handler followed
+by a failed acknowledgement retries acknowledgement up to three times without
+deliberately rerunning the handler. Explicit `markDelivered()` discards the failed
+row as a custom terminal policy; it does not mean processing succeeded. Handler
+effects and acknowledgement are separate, so a crash between them may redeliver.
+The framework adds no persisted attempts, quarantine, dead-letter, receipt, or
+marker policy. The supervisor rescans pending shards every 10 seconds by default;
+the stale-session threshold is separately 60 seconds.
+After a failed finite run, release-generated remote observations of that shard
+are held locally until the next periodic rescan, preventing an immediate
+self-triggered retry loop. Explicit notifications remain admissible. A newly
+enqueued remote row on that shard may wait for the next rescan; other shards
+continue, and other processes may each attempt the failed row before applying
+local suppression. This timing is not a delivery deadline.
+
+`BoundedContextBuilder.withShutdownTimeout(milliseconds)` configures one
+deadline for the built context's drain and cleanup (default 5,000 ms). New
+external work and Event repair stop at close; accepted ordinary framework
+follow-ups may finish during grace. When the deadline expires, queued work is
+fenced and close rejects with an `AggregateError`. Repeated context close
+returns that terminal result. Already-entered handler or storage effects may
+settle later; the timeout does not roll them back or bound separate server
+network and Delivery teardown.
+
+`BoundedContext.republishEvents({eventIds, tenantId?, signal?})` re-admits at
+most 100 exact known committed Event IDs in order to current recipients. The
+caller must know the corresponding Entity save completed; an Event row alone
+cannot prove it because Entity records are written independently. Outcomes
+distinguish admission, missing IDs, failure, and cancellation. Admission does
+not guarantee recipient completion, and a recipient may run more than once.
+For normal Events from completed Entity saves, the internal publisher makes up
+to three actual dispatch attempts with the same captured envelope and Event ID.
+It reports exhaustion internally without rerunning the successful Command
+handler; Command acceptance does not promise publication or recipient
+completion. Earlier recipient effects can repeat on a later attempt, and an
+exhausted saved Event remains eligible for explicit known-ID repair. This
+finite retry does not change the independent typed rejection-event posting
+behavior described above.
 
 `Environment` resolves the Node `local` or `production` profile once from
 `NODE_ENV`. `ServerEnvironment` resolves configured facilities once for that

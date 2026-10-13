@@ -49,20 +49,40 @@ export interface PickUpAction {
 export class FailedReception {
   // prettier-ignore
 
+  #acknowledged = false;
+
   /**
    * Creates facts and fallback actions for a failed reception.
    *
    * @param message The message whose dispatch failed.
    * @param error The dispatch failure.
    * @param mark Marks the message delivered under the current shard session.
-   * @param repeat Repeats dispatch once under the current shard session.
+   * @param repeat Repeats processing once when processing failed; omitted after successful processing.
    */
   constructor(
     readonly message: InboxMessage,
     readonly error: unknown,
     private readonly mark: () => Promise<void>,
-    private readonly repeat: () => Promise<void>,
+    private readonly repeat: (() => Promise<void>) | undefined,
   ) {}
+
+  /**
+   * Returns whether a selected action durably acknowledged the message.
+   *
+   * @returns Whether acknowledgement completed.
+   */
+  acknowledged(): boolean {
+    return this.#acknowledged;
+  }
+
+  /**
+   * Returns an action that leaves failed processing pending for a later drain.
+   *
+   * @returns An action with no acknowledgement.
+   */
+  leavePending(): ReceptionAction {
+    return Object.freeze({ execute: () => Promise.resolve() });
+  }
 
   /**
    * Returns durable acknowledgement of the failed row.
@@ -70,7 +90,12 @@ export class FailedReception {
    * @returns The acknowledgement action.
    */
   markDelivered(): ReceptionAction {
-    return Object.freeze({ execute: this.mark });
+    return Object.freeze({
+      execute: async () => {
+        await this.mark();
+        this.#acknowledged = true;
+      },
+    });
   }
 
   /**
@@ -79,7 +104,14 @@ export class FailedReception {
    * @returns The repeat-dispatch action.
    */
   repeatDispatching(): ReceptionAction {
-    return Object.freeze({ execute: this.repeat });
+    return Object.freeze({
+      execute: async () => {
+        if (this.repeat === undefined)
+          throw new Error("Successful processing cannot be dispatched again after ack failure.");
+        await this.repeat();
+        this.#acknowledged = true;
+      },
+    });
   }
 }
 
@@ -164,8 +196,8 @@ export interface DeliveryStatistics {
  * Controls finite delivery failure actions without scheduling retries.
  *
  * Subclasses can return direct values or promises from every hook. The default
- * reception policy marks the failed row delivered so independent targets keep
- * draining; it never persists attempts, receipts, markers, or quarantine data.
+ * reception policy leaves a failed row pending and blocks its target for the
+ * finite drain. It never persists attempts, receipts, markers, or quarantine data.
  */
 export class DeliveryMonitor {
   // prettier-ignore
@@ -208,7 +240,7 @@ export class DeliveryMonitor {
    * @returns The selected asynchronous reception action.
    */
   onReceptionFailure(reception: FailedReception): ReceptionAction | Promise<ReceptionAction> {
-    return reception.markDelivered();
+    return reception.leavePending();
   }
 
   /**

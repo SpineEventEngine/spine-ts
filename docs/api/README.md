@@ -300,8 +300,10 @@ separate dedup record. Delivered rows are the deduplication fact. Handler
 effects and the delivered-row compare-and-set are not one transaction, so a
 lost acknowledgement can redeliver after restart and downstream handling must
 be idempotent. `DeliveryMonitor` is the explicit failure-policy seam: by
-default it marks a failed reception delivered and continues independent targets;
-an application can instead choose the immediate repeat action.
+default it leaves failed processing pending and continues independent targets.
+A custom monitor may repeat failed processing or deliberately mark the row
+delivered as a terminal discard. Successful processing followed by failed
+acknowledgement gets finite acknowledgement-only retries.
 Normal local and remote delivery reads every status in a bounded page. It
 removes a pending duplicate when its signal ID and typed Inbox target match a
 delivered row in that page or one of the 1,000 most recent deliveries remembered
@@ -323,7 +325,7 @@ repositories with authentic generated metadata do execute through the local
 command/event buses: default command routing reads the first command field,
 process-manager event routing reads the first event message field, state is
 loaded/created and stored through `Stand`, and returned domain commands/events
-are wrapped only after the current transaction and state write succeed.
+are wrapped only after the prepared Entity write sequence succeeds.
 `BoundedContext.catchUpReadSide(options?)` is a legacy-named, process-local
 whole-read-side reset/replay maintenance helper. It is not the framework's
 Projection catch-up boundary. It clears registered projection rows through
@@ -336,6 +338,30 @@ Projection repository, entity IDs, or a starting time. It does not return a
 catch-up operation ID or implement durable progress, overlap admission, live
 event coordination, delivery jobs, schedulers, inbox lifecycle, retries,
 restart, resumption, or transport topology.
+`BoundedContext.republishEvents({eventIds, tenantId?, signal?})` is a separate
+bounded repair call for 1–100 distinct IDs known by the caller to belong to
+completed Entity saves. It performs exact tenant-scoped reads and returns
+ordered admitted, failed, missing, or cancelled outcomes. An Event row alone
+does not prove the Entity save completed because its records are written
+independently. Admission does not guarantee current recipient completion;
+repeated recipients may observe the same Event again. No historical scan or
+automatic recovery discovery is provided.
+Normal publication of an Event from a completed Entity save makes up to three
+actual dispatch attempts with the same captured Event envelope and ID before
+reporting exhaustion internally. Those attempts do not rerun the successful
+Command handler, and accepted Command posting does not promise publication or
+recipient completion. Partial recipient effects can repeat across attempts;
+an exhausted Event remains available for explicit known-ID repair. This finite
+normal-Event retry does not apply to the independent typed rejection-event
+posting described above.
+`BoundedContextBuilder.withShutdownTimeout(milliseconds)` sets one shared
+deadline for context draining and cleanup (default 5,000 ms). A close first
+stops external work and repair, but allows accepted framework follow-ups during
+grace. At expiry it fences queued work and rejects with an `AggregateError`;
+repeated close returns the same terminal outcome. Already-entered application
+or storage effects may still finish after that deadline. This budget starts
+when context close begins, including a server's split close, and does not bound
+the server's separate network or Delivery teardown.
 Server exports also include the abstract `Entity`, `TransactionalEntity`,
 `Aggregate`, `Projection`, `ProcessManager`, `EntityFamily`,
 `TransactionalEntityScopeError`, `EntityScopeReason`,
@@ -530,7 +556,8 @@ Shared facilities remain open when a server closes. Network or context-intake
 close failure is a hard gate: delivery detach and dependency cleanup do not begin
 until a later `close()` retry completes that step. After the hard gate,
 remaining phases are attempted in order; failures are combined, and a later
-close retries only unfinished cleanup. The API deliberately hides private child
+close retries only unfinished cleanup except for a terminal context shutdown
+timeout. The API deliberately hides private child
 listener details, worker/process supervision, durable scheduling, and Java-style
 delivery-topology configuration; it intentionally exposes this one JVM-style
 global process environment configuration.
@@ -626,20 +653,29 @@ session, then marks the Inbox row delivered in a separate operation. Another
 worker may take the shard between those operations. The same complete `WorkerId`
 can recover its unexpired session;
 a different worker is excluded until it expires, and a previous worker cannot
-release a newer session. `DeliveryMonitor` contains reception failures: by
-default it marks the row delivered and continues independent targets; an
-application may choose immediate repeat dispatch instead. There is no
-callback/failure budget or timer-driven renewal model.
+release a newer session. `DeliveryMonitor` leaves failed reception pending by
+default and continues independent targets; a custom monitor may choose an
+immediate repeat of failed processing or terminal discard. The supervisor
+rescans pending shards every 10 seconds by default, independently of its
+60-second stale-session threshold and the delivery server processing timeout.
+After a failed run, release-generated remote observations of that shard are
+held locally until the next periodic rescan. Explicit notifications remain
+admissible; newly enqueued remote work on the failed shard may wait for the
+rescan, while other shards continue. Other processes can each make a failed
+attempt before applying their local suppression. The interval is not a
+per-message delivery deadline.
 
 `DeliveryMonitor` contains endpoint failures. Its default reception action
-marks the row delivered; a custom monitor may repeat dispatch immediately.
-If that durable action fails, the row remains pending, later messages for that
-target stop, independent targets continue, and a later run can retry. Shard
-ownership protects only concurrent workers, not endpoint effects. Therefore a
+leaves the row pending; a custom monitor may repeat failed processing or
+explicitly mark the row delivered as terminal discard. After successful
+processing, a failed acknowledgement is retried without deliberate handler
+rerun. Later messages for that target stop, independent targets continue, and a
+later run can retry. Shard coordination protects concurrent workers, not
+endpoint effects. Therefore a
 lost acknowledgement can redeliver after a handler runs, and downstream effects
-must be idempotent. The delivery model has no attempt history, exhaustion,
-claims, quarantine, receipts, markers, timers, backoff, dead-letter storage,
-or scheduler persistence.
+must be idempotent. The delivery model has no persisted attempt history,
+exhaustion, claims, quarantine, receipts, markers, backoff, dead-letter storage,
+or scheduler state beyond the configured in-process recovery timer.
 The package does not expose a raw worker callback API; framework replay
 uses the framework's validated endpoints. Delivery operations check that the
 worker still holds the shard, rather than renewing it on a timer around callbacks.

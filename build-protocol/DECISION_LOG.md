@@ -6063,3 +6063,45 @@ The supplied in-memory Delivery server remains non-durable; SQL business-state
 storage does not persist its Inbox.
 
 Implementation and acceptance: [task ledger](tasks/sql-delivery-reliability/TASK.md).
+
+## D-0130: Bounded Context Shutdown Preserving Dispatch Order
+
+Date: 2026-10-13. Status: accepted architecture clarification; implementation in progress.
+
+Known-ID Event repair exposed an unbounded context shutdown wait: a recipient
+that never settles remains in the EventBus and publisher drains. Returning early
+from repair alone cannot bound context close. The task requires cancellation and
+shutdown bounds while preserving ordinary dispatch ordering.
+
+Configure one context shutdown deadline with
+`BoundedContextBuilder.withShutdownTimeout(milliseconds)`, default 5,000 ms.
+Validate a positive safe integer within the timer range. The first close start
+creates the deadline, including split server close phases; drains and cleanup
+share its remaining time. This is separate from delivery recovery, stale-session
+and server-processing timers.
+
+Before expiry, drain admitted ordinary follow-ups while refusing external
+admission and cancelling repair. At expiry, terminally fence bus/publisher intake
+and queued execution, settle framework-facing waits, and report a timeout through
+AggregateError. Repeated close retains that terminal timeout outcome. Independent
+cleanup is still attempted, with no wait extending the shared deadline. Preserve
+retry behavior for unrelated cleanup failures.
+
+Caller cancellation propagates into stored-Event dispatch, with checks before
+queued work, between recipients and before notifications. Keep the raw FIFO queue
+tail attached to the actual running callback; never release it or start a retry
+because an outward cancellation race settled first. Cancellation after an attempt
+starts may leave partial effects. Report attempted counts and truthful cancelled
+outcomes; never label uncertain admission successful.
+
+A deadline cannot terminate already-entered application code or SQL. Those calls
+may settle later, including failure after resources close. Observe their late
+settlement and prevent subsequent framework continuations from starting work.
+Do not promise rollback, forced termination or guaranteed reclamation of a
+permanently blocked external resource. Server cleanup must continue after a
+context-drain error and aggregate failures; this does not introduce a new deadline
+for unrelated network or Delivery teardown.
+
+This changes lifecycle behavior and adds configuration, not persistence or runtime
+scheduling contracts. The focused acceptance cases and profile evidence are in
+[the task architecture record](tasks/sql-delivery-reliability/ARCHITECTURE.md).

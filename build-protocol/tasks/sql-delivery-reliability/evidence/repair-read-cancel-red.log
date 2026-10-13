@@ -1,0 +1,39 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/server/test/context/republish-events.test.ts (7 tests | 1 failed | 6 skipped) 37ms
+     × cancels an entered exact-ID read without waiting for the storage query 36ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/test/context/republish-events.test.ts > known committed Event repair > cancels an entered exact-ID read without waiting for the storage query
+AssertionError: expected 'timed-out' to deeply equal [ { eventId: 'paused-read', …(2) } ]
+
+- Expected:
+[
+  {
+    "attempts": 0,
+    "eventId": "paused-read",
+    "status": "CANCELLED",
+  },
+]
+
++ Received:
+"timed-out"
+
+ ❯ packages/server/test/context/republish-events.test.ts:200:113
+    198|     controller.abort();
+    199|     try {
+    200|       await expect(Promise.race([repair, new Promise((resolve) => setT…
+       |                                                                                                                 ^
+    201|         { eventId: "paused-read", status: "CANCELLED", attempts: 0 },
+    202|       ]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 skipped (7)
+   Start at  20:18:54
+   Duration  798ms (transform 464ms, setup 0ms, import 660ms, tests 37ms, environment 0ms)
+

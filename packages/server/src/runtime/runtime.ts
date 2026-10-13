@@ -142,7 +142,9 @@ export class ServerRuntimeStateError extends Error {
  */
 export class SingleProcessServerRuntime implements ServerRuntimeLifecycle {
   #state: ServerRuntimeState = "created";
+
   #tail: Promise<void> = Promise.resolve();
+
   #closePromise: Promise<void> | undefined;
 
   /**
@@ -152,6 +154,9 @@ export class SingleProcessServerRuntime implements ServerRuntimeLifecycle {
   constructor() {
     followUpEnqueuers.set(this, (work) => this.#enqueueFollowUp(work));
     runtimeDrainers.set(this, () => this.#drain());
+    runtimeAborters.set(this, () => {
+      this.#abortClose();
+    });
   }
 
   /**
@@ -212,6 +217,7 @@ export class SingleProcessServerRuntime implements ServerRuntimeLifecycle {
     }
 
     const completion = this.#tail.then(async () => {
+      if (this.#state === "closed") throw new ServerRuntimeStateError("enqueue", "closed");
       const frame: RuntimeWorkFrame = { runtime: this, active: true };
       try {
         await runtimeWork.run(frame, work);
@@ -258,6 +264,14 @@ export class SingleProcessServerRuntime implements ServerRuntimeLifecycle {
     this.#state = "closed";
   }
 
+  /**
+   * Fences queued callbacks without detaching the raw FIFO tail.
+   */
+  #abortClose(): void {
+    this.#state = "closed";
+    this.#closePromise = Promise.resolve();
+  }
+
   async #drain(): Promise<void> {
     let observedTail: Promise<void>;
 
@@ -269,8 +283,26 @@ export class SingleProcessServerRuntime implements ServerRuntimeLifecycle {
 }
 
 interface RuntimeAccess {
+  /**
+   * Queues a trusted follow-up during graceful drain.
+   * @param runtime Target queue.
+   * @param work Framework callback.
+   * @returns Completion after the callback.
+   */
   enqueueFollowUp(runtime: SingleProcessServerRuntime, work: ServerRuntimeWork): Promise<void>;
+
+  /**
+   * Waits for accepted queue work.
+   * @param runtime Target queue.
+   * @returns Completion after the current tail settles.
+   */
   drain(runtime: SingleProcessServerRuntime): Promise<void>;
+
+  /**
+   * Stops queued work after a context deadline.
+   * @param runtime Target queue.
+   */
+  abortClose(runtime: SingleProcessServerRuntime): void;
 }
 
 const followUpEnqueuers = new WeakMap<
@@ -278,6 +310,7 @@ const followUpEnqueuers = new WeakMap<
   (work: ServerRuntimeWork) => Promise<void>
 >();
 const runtimeDrainers = new WeakMap<SingleProcessServerRuntime, () => Promise<void>>();
+const runtimeAborters = new WeakMap<SingleProcessServerRuntime, () => void>();
 
 /**
  * Provides package-owned authority for framework follow-up work.
@@ -304,6 +337,11 @@ export const runtimeAccess: RuntimeAccess = Object.freeze({
 
     return drain();
   },
+  abortClose(runtime: SingleProcessServerRuntime): void {
+    const abortClose = runtimeAborters.get(runtime);
+    if (abortClose === undefined) throw new TypeError("Runtime close requires a runtime instance.");
+    abortClose();
+  },
 });
 
 interface RuntimeWorkFrame {
@@ -317,6 +355,12 @@ const runtimeWork = new AsyncLocalStorage<RuntimeWorkFrame>();
  * Private runtime state and execution helpers.
  */
 const RuntimeValues = Object.freeze({
+  /**
+   * Formats a stable lifecycle failure message.
+   * @param operation Rejected lifecycle operation.
+   * @param state State that rejected the operation.
+   * @returns Safe error message.
+   */
   formatStateError(
     operation: ServerRuntimeStateOperation,
     state: ServerRuntimeRejectedState,
@@ -336,6 +380,11 @@ const RuntimeValues = Object.freeze({
     return `Cannot enqueue runtime work while server runtime is ${state}.`;
   },
 
+  /**
+   * Checks whether the current async frame executes on this queue.
+   * @param runtime Target queue.
+   * @returns True while a callback executes on this queue.
+   */
   isRunningWork(runtime: SingleProcessServerRuntime): boolean {
     const frame = runtimeWork.getStore();
     return frame?.runtime === runtime && frame.active;

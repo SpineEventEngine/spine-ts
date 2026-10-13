@@ -1,0 +1,378 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+      Coverage enabled with v8
+
+
+ Test Files  10 passed (10)
+      Tests  752 passed (752)
+   Start at  20:40:24
+   Duration  13.30s (transform 6.09s, setup 0ms, import 9.56s, tests 12.29s, environment 1ms)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   31.01 |    23.61 |   35.41 |   32.43 |                   
+ ...-board/app/src |       0 |        0 |       0 |       0 |                   
+  ...ion-server.ts |       0 |        0 |     100 |       0 | 24-31             
+  board-access.ts  |       0 |        0 |       0 |       0 | 40-187            
+  ...ned-server.ts |       0 |        0 |     100 |       0 | 24-31             
+  ...ent-config.ts |       0 |        0 |       0 |       0 | 93-271            
+  ...way-server.ts |       0 |        0 |     100 |       0 | 29-59             
+  index.ts         |       0 |        0 |       0 |       0 | 82-319            
+  ...ion-server.ts |       0 |      100 |     100 |       0 | 19-20             
+  ...l-registry.ts |       0 |      100 |     100 |       0 | 17                
+  ...rocess-app.ts |       0 |        0 |     100 |       0 | 20-23             
+  ...oordinator.ts |       0 |      100 |     100 |       0 | 22-31             
+  ...ss-replica.ts |       0 |        0 |       0 |       0 | 38-64             
+  ...rocess-app.ts |       0 |      100 |     100 |       0 | 16                
+  system-clock.ts  |       0 |      100 |       0 |       0 | 32                
+ ...-board/web/src |       0 |        0 |       0 |       0 |                   
+  board-config.ts  |       0 |        0 |       0 |       0 | 23-50             
+  ...d-payloads.ts |       0 |        0 |       0 |       0 | 88-171            
+  board-sync.ts    |       0 |        0 |       0 |       0 | 66-222            
+  board-view.ts    |       0 |        0 |       0 |       0 | 53-148            
+  browser-app.tsx  |       0 |        0 |       0 |       0 | 35-45             
+  index.tsx        |       0 |        0 |       0 |       0 | 62-104            
+  message-list.tsx |       0 |        0 |       0 |       0 | 42-113            
+  post-feedback.ts |       0 |        0 |       0 |       0 | 43-76             
+  post-form.tsx    |       0 |        0 |       0 |       0 | 86-269            
+  relative-time.ts |       0 |        0 |       0 |       0 | 15-48             
+ .../components/ui |       0 |        0 |       0 |       0 |                   
+  alert.tsx        |       0 |      100 |       0 |       0 | 25-27             
+  avatar.tsx       |       0 |      100 |       0 |       0 | 25-27             
+  button.tsx       |       0 |        0 |       0 |       0 | 28-54             
+  card.tsx         |       0 |      100 |       0 |       0 | 25-60             
+  input.tsx        |       0 |        0 |       0 |       0 | 25-27             
+  label.tsx        |       0 |      100 |       0 |       0 | 25-27             
+  textarea.tsx     |       0 |      100 |       0 |       0 | 25-27             
+ ...d/web/src/docs |       0 |        0 |       0 |       0 |                   
+  ...ider-query.ts |       0 |      100 |       0 |       0 | 23-49             
+  ...bscription.ts |       0 |        0 |       0 |       0 | 27-40             
+  ...ate-client.ts |       0 |      100 |       0 |       0 | 17-25             
+  ...bscription.ts |       0 |      100 |       0 |       0 | 28-48             
+ ...rd/web/src/lib |       0 |      100 |       0 |       0 |                   
+  utils.ts         |       0 |      100 |       0 |       0 | 24-25             
+ ...les/orders/src |       0 |        0 |       0 |       0 |                   
+  cross-context.ts |       0 |        0 |       0 |       0 | 46-93             
+  index.ts         |       0 |        0 |       0 |       0 | 72-420            
+  load-runner.ts   |       0 |        0 |       0 |       0 | 44-446            
+  query-routing.ts |       0 |      100 |       0 |       0 | 41-93             
+ ...s/src/internal |       0 |        0 |       0 |       0 |                   
+  ...stribution.ts |       0 |        0 |       0 |       0 | 43-69             
+ ...s/projects/src |       0 |        0 |       0 |       0 |                   
+  index.ts         |       0 |        0 |       0 |       0 | 97-986            
+  load-runner.ts   |       0 |        0 |       0 |       0 | 44-369            
+ ...s/src/internal |       0 |        0 |       0 |       0 |                   
+  ...stribution.ts |       0 |        0 |       0 |       0 | 51-67             
+ examples/todo/src |       0 |        0 |       0 |       0 |                   
+  ...rocess-app.ts |       0 |        0 |       0 |       0 | 25-43             
+  ...oordinator.ts |       0 |      100 |       0 |       0 | 34-46             
+  ...ss-replica.ts |       0 |      100 |       0 |       0 | 66-91             
+  ...s-settings.ts |       0 |        0 |       0 |       0 | 66-101            
+  process.ts       |       0 |        0 |       0 |       0 | 42-58             
+  ...rocess-app.ts |       0 |        0 |       0 |       0 | 63-91             
+  ...task-lists.ts |       0 |        0 |       0 |       0 | 20-108            
+  todo-app.ts      |       0 |        0 |       0 |       0 | 118-738           
+  todo-storage.ts  |       0 |        0 |       0 |       0 | 33-55             
+ .../todo/src/docs |       0 |        0 |       0 |       0 |                   
+  ...ox-command.ts |       0 |        0 |     100 |       0 | 21-30             
+  create-task.ts   |       0 |      100 |       0 |       0 | 21-28             
+  query-client.ts  |       0 |        0 |       0 |       0 | 30-74             
+  routing.ts       |       0 |        0 |       0 |       0 | 24-39             
+ packages/auth/src |       0 |        0 |       0 |       0 |                   
+  index.ts         |       0 |        0 |       0 |       0 | 575-607           
+ ...th/src/gateway |       0 |        0 |       0 |       0 |                   
+  ...on-creator.ts |       0 |        0 |       0 |       0 | 34-89             
+  ...-forwarder.ts |       0 |        0 |       0 |       0 | 93-290            
+  index.ts         |       0 |        0 |       0 |       0 | 265-465           
+ ...uth/src/native |       0 |        0 |       0 |       0 |                   
+  index.ts         |       0 |        0 |       0 |       0 | 69-707            
+ .../auth/src/oidc |       0 |        0 |       0 |       0 |                   
+  index.ts         |       0 |        0 |       0 |       0 | 41-1257           
+ .../src/providers |       0 |        0 |       0 |       0 |                   
+  index.ts         |       0 |        0 |       0 |       0 | 24-1089           
+ ...th/src/request |       0 |        0 |       0 |       0 |                   
+  index.ts         |       0 |        0 |       0 |       0 | 33-90             
+ ...h/src/sessions |       0 |        0 |       0 |       0 |                   
+  cookies.ts       |       0 |        0 |       0 |       0 | 112-420           
+  opaque.ts        |       0 |        0 |       0 |       0 | 179-506           
+  signed.ts        |       0 |        0 |       0 |       0 | 333-1072          
+ .../subscriptions |       0 |        0 |       0 |       0 |                   
+  index.ts         |       0 |        0 |       0 |       0 | 196-1435          
+ ...lient-node/src |       0 |      100 |     100 |       0 |                   
+  index.ts         |       0 |      100 |     100 |       0 | 20                
+ ...ode/src/client |       0 |        0 |       0 |       0 |                   
+  node-client.ts   |       0 |        0 |       0 |       0 | 46-84             
+ ...de/src/codegen |       0 |      100 |     100 |       0 |                   
+  index.ts         |       0 |      100 |     100 |       0 | 20                
+ ...ode/src/entity |       0 |      100 |     100 |       0 |                   
+  entity-column.ts |       0 |      100 |     100 |       0 | 114               
+ ...node/src/query |       0 |      100 |     100 |       0 |                   
+  entity-query.ts  |       0 |      100 |     100 |       0 | 65-70             
+ ...ient-react/src |       0 |        0 |       0 |       0 |                   
+  index.ts         |       0 |        0 |       0 |       0 | 131-416           
+ ...web/src/client |       0 |        0 |       0 |       0 |                   
+  ...er-session.ts |       0 |        0 |       0 |       0 | 82-319            
+  client.ts        |       0 |        0 |       0 |       0 | 440-2121          
+ packages/core/src |       0 |        0 |       0 |       0 |                   
+  index.ts         |       0 |        0 |       0 |       0 | 109-2356          
+ ...ore/src/entity |       0 |        0 |       0 |       0 |                   
+  entity-column.ts |       0 |        0 |       0 |       0 | 142-586           
+ ...e/src/internal |       0 |      100 |     100 |       0 |                   
+  ...-lifecycle.ts |       0 |      100 |     100 |       0 | 19                
+ ...core/src/query |       0 |        0 |       0 |       0 |                   
+  ...sification.ts |       0 |        0 |       0 |       0 | 33-70             
+  entity-query.ts  |       0 |        0 |       0 |       0 | 102-1425          
+  ...tity-query.ts |       0 |        0 |       0 |       0 | 198-444           
+ .../core/src/time |       0 |        0 |       0 |       0 |                   
+  index.ts         |       0 |        0 |       0 |       0 | 43-164            
+ ...ent/src/client |       0 |        0 |       0 |       0 |                   
+  client.ts        |       0 |        0 |       0 |       0 | 102-690           
+  ...bservation.ts |       0 |        0 |       0 |       0 | 29-192            
+  types.ts         |       0 |        0 |       0 |       0 | 105-245           
+ ...ent/src/remote |       0 |        0 |       0 |       0 |                   
+  adapters.ts      |       0 |        0 |       0 |       0 | 61-664            
+  ...e-delivery.ts |       0 |        0 |       0 |       0 | 52-195            
+ ...lient/src/wire |       0 |        0 |       0 |       0 |                   
+  codec.ts         |       0 |        0 |       0 |       0 | 66-1310           
+ ...rver/src/admin |       0 |        0 |       0 |       0 |                   
+  admin-service.ts |       0 |        0 |       0 |       0 | 82-305            
+ ...server/src/bin |       0 |        0 |       0 |       0 |                   
+  ...ery-server.ts |       0 |        0 |       0 |       0 | 39-81             
+ ...erver/src/core |       0 |        0 |       0 |       0 |                   
+  ...ivery-core.ts |       0 |        0 |       0 |       0 | 89-106            
+  ...very-state.ts |       0 |        0 |       0 |       0 | 57-249            
+  inbox-service.ts |       0 |        0 |       0 |       0 | 67-512            
+  limits.ts        |       0 |        0 |       0 |       0 | 41-119            
+  ...-admission.ts |       0 |        0 |       0 |       0 | 21-79             
+  shard-service.ts |       0 |        0 |       0 |       0 | 55-335            
+  wire-values.ts   |       0 |        0 |       0 |       0 | 31-85             
+ ...ver/src/health |       0 |        0 |       0 |       0 |                   
+  ...th-service.ts |       0 |        0 |       0 |       0 | 21-52             
+ ...ver/src/server |       0 |        0 |       0 |       0 |                   
+  assembly.ts      |       0 |        0 |       0 |       0 | 81-112            
+  config.ts        |       0 |        0 |       0 |       0 | 95-168            
+  ...server-log.ts |       0 |        0 |       0 |       0 | 25-43             
+  ...ery-server.ts |       0 |        0 |       0 |       0 | 109-272           
+  shutdown.ts      |       0 |      100 |       0 |       0 | 57-62             
+ .../src/discovery |       0 |        0 |       0 |       0 |                   
+  ...-discovery.ts |       0 |        0 |       0 |       0 | 40-90             
+ ...e/src/metadata |       0 |        0 |       0 |       0 |                   
+  ...ta-service.ts |       0 |        0 |       0 |       0 | 71-102            
+ ...t-gce/src/node |       0 |        0 |       0 |       0 |                   
+  ...ation-node.ts |       0 |        0 |       0 |       0 | 57-72             
+ .../src/registrar |       0 |        0 |       0 |       0 |                   
+  ...istrar-log.ts |       0 |        0 |       0 |       0 | 25-43             
+  gce-registrar.ts |       0 |        0 |       0 |       0 | 126-299           
+  operations.ts    |       0 |        0 |       0 |       0 | 49-131            
+ ...e/src/registry |       0 |        0 |       0 |       0 |                   
+  ...try-reader.ts |       0 |        0 |       0 |       0 | 35-46             
+ .../src/discovery |       0 |        0 |       0 |       0 |                   
+  gke-log.ts       |       0 |        0 |       0 |       0 | 25-43             
+  ...-discovery.ts |       0 |        0 |       0 |       0 | 118-326           
+  ...s-resolver.ts |       0 |        0 |       0 |       0 | 66-112            
+ ...deployment/src |       0 |        0 |       0 |       0 |                   
+  index.ts         |       0 |        0 |       0 |       0 | 104-240           
+ .../src/discovery |       0 |        0 |       0 |       0 |                   
+  ...ation-node.ts |       0 |        0 |       0 |       0 | 47-92             
+  ...covery-log.ts |       0 |        0 |       0 |       0 | 23-40             
+ ...t/src/internal |       0 |        0 |       0 |       0 |                   
+  ...hip-kernel.ts |       0 |        0 |       0 |       0 | 168-785           
+ ...t/src/registry |       0 |        0 |       0 |       0 |                   
+  ...e-registry.ts |       0 |        0 |       0 |       0 | 35-430            
+ ...roto-tools/src |       0 |        0 |       0 |       0 |                   
+  index.ts         |       0 |        0 |       0 |       0 | 34-935            
+ ...-tools/src/cli |       0 |        0 |       0 |       0 |                   
+  ...-bootstrap.ts |       0 |        0 |       0 |       0 | 23-55             
+  spine-proto.ts   |       0 |        0 |     100 |       0 | 21-30             
+ ...src/generation |       0 |        0 |       0 |       0 |                   
+  ...e-provider.ts |       0 |        0 |       0 |       0 | 36-349            
+  ...-generator.ts |       0 |        0 |       0 |       0 | 39-413            
+  ...try-writer.ts |       0 |        0 |       0 |       0 | 27-696            
+  ...rce-policy.ts |       0 |        0 |       0 |       0 | 24-171            
+  generator.ts     |       0 |        0 |       0 |       0 | 242-1215          
+  ...er-codegen.ts |       0 |        0 |       0 |       0 | 72-321            
+  ...-generator.ts |       0 |        0 |       0 |       0 | 25-57             
+  ...-generator.ts |       0 |        0 |       0 |       0 | 24-365            
+  ...-generator.ts |       0 |        0 |       0 |       0 | 26-94             
+  source-view.ts   |       0 |        0 |       0 |       0 | 31-447            
+ ...o-tools/src/io |       0 |        0 |       0 |       0 |                   
+  ...c-manifest.ts |       0 |        0 |       0 |       0 | 48-97             
+  ...est-reader.ts |       0 |      100 |     100 |       0 | 22                
+ ...ools/src/model |       0 |        0 |       0 |       0 |                   
+  model-graph.ts   |       0 |        0 |       0 |       0 | 113-349           
+  ...ckage-name.ts |       0 |        0 |       0 |       0 | 18-33             
+  ...dependency.ts |       0 |        0 |       0 |       0 | 25-77             
+ ...ages/proto/src |       0 |      100 |     100 |       0 |                   
+  index.ts         |       0 |      100 |     100 |       0 | 237-582           
+ ...er/src/browser |   64.96 |    66.45 |   60.15 |   68.31 |                   
+  ...ser-server.ts |   94.92 |    94.08 |   91.42 |   95.94 | ...58-662,798-800 
+  ...n-bindings.ts |   18.88 |     7.33 |   22.41 |   21.12 | ...07-612,618-676 
+ ...server/src/bus |   96.38 |    90.74 |   98.65 |   97.25 |                   
+  command-bus.ts   |   96.77 |    91.89 |   97.36 |   97.36 | 202,283,361       
+  event-bus.ts     |   96.11 |    90.67 |   98.83 |   97.17 | ...49,764,910,917 
+  ...r-registry.ts |    95.5 |    88.67 |     100 |   96.29 | 45,150,169        
+ ...er/src/context |   89.09 |    75.74 |   90.86 |   89.85 |                   
+  ...ed-context.ts |   89.77 |    79.88 |   89.66 |   90.28 | ...4315,4344-4347 
+  ...ive-tenant.ts |      60 |       50 |      50 |   69.23 | 56-60             
+  entity-inbox.ts  |   92.39 |    76.54 |   96.49 |   92.54 | ...81,504,548,551 
+  ...ox-handoff.ts |   82.14 |    65.11 |   87.17 |   84.09 | ...79,310,493,617 
+  ...on-handoff.ts |   92.45 |    59.25 |   95.45 |   92.15 | 63,228,238,241    
+  tenant-index.ts  |      90 |    81.25 |     100 |    93.1 | 182,219           
+ ...r/src/delivery |   73.19 |    65.54 |   80.36 |   74.52 |                   
+  ...nal-pickup.ts |       0 |      100 |       0 |       0 | 28-56             
+  ...ry-builder.ts |   64.94 |    54.66 |      76 |   65.26 | ...72,476,481-483 
+  ...very-lease.ts |      75 |    66.66 |     100 |      75 | 42,47             
+  delivery-loop.ts |   78.26 |       50 |   83.33 |   81.81 | 57-58,68,105      
+  ...ry-monitor.ts |   83.33 |      100 |      80 |   85.18 | 131-141,253       
+  ...un-control.ts |      95 |       75 |     100 |     100 | 50,76             
+  ...oordinator.ts |    58.3 |    35.87 |    60.6 |    59.1 | ...73-799,810-820 
+  ...rage-error.ts |       0 |      100 |       0 |       0 | 28-29             
+  ...supervisor.ts |   96.73 |    94.26 |   97.91 |   98.55 | 581,643,686       
+  ...ery-worker.ts |   57.01 |    38.29 |   66.66 |   60.78 | ...44,460,467-477 
+  delivery.ts      |   92.24 |    83.51 |   95.94 |   95.85 | ...34,425,727,960 
+  inbox-records.ts |   82.52 |    80.37 |     100 |   82.52 | ...53,569,584,596 
+  inbox-storage.ts |   76.66 |    61.32 |   96.55 |   80.73 | ...34-435,473,485 
+  inbox.ts         |   82.85 |       75 |   92.85 |   87.87 | 141,151,199,205   
+  ...bligations.ts |   36.02 |    32.05 |      40 |   35.89 | ...33-366,562-646 
+  shard-index.ts   |   72.72 |       70 |     100 |   72.72 | 41,44,47          
+  ...k-registry.ts |   70.71 |    60.57 |   88.88 |    75.8 | ...69,372,378,431 
+ ...ver/src/entity |   64.98 |     60.8 |      75 |   65.99 |                   
+  ...y-metadata.ts |    74.5 |    73.91 |    92.3 |    74.5 | ...97,405,432,438 
+  ...descriptor.ts |   85.18 |    74.68 |     100 |   89.47 | ...05,244,261,316 
+  ...ransaction.ts |    59.8 |    59.61 |   72.72 |      60 | ...84-785,810-835 
+  ...validation.ts |   54.86 |       52 |    82.6 |   55.71 | ...59,482,487-489 
+  entity.ts        |   59.89 |    53.42 |   58.44 |   61.23 | ...1208,1282-1370 
+  ...equired-id.ts |   78.57 |    57.89 |     100 |    77.5 | ...50-152,161-167 
+  spec-scanner.ts  |   83.33 |       75 |     100 |   83.33 | 76,78             
+ ...er/src/handler |   69.17 |    61.08 |    81.5 |   69.02 |                   
+  ...-readiness.ts |   89.65 |    45.45 |   91.66 |   89.65 | 109,183,207       
+  ...rejections.ts |      80 |       50 |     100 |   66.66 | 46                
+  ...ler-filter.ts |    77.5 |    53.19 |   93.33 |   78.26 | ...68,173,200-203 
+  ...-readiness.ts |   93.02 |    63.63 |   93.33 |   93.02 | 171,247,285       
+  ...r-registry.ts |   74.57 |       71 |   97.91 |   75.15 | ...1166,1180-1205 
+  ...-discovery.ts |   50.61 |    51.35 |   78.94 |   49.36 | ...10,320-337,351 
+  ...decorators.ts |   10.34 |     1.75 |    3.84 |   10.46 | ...46-586,598-613 
+  ...r-metadata.ts |   85.58 |    85.71 |   91.11 |   85.45 | ...1217,1233,1258 
+  ...s-metadata.ts |   97.95 |       90 |     100 |   97.95 | 81                
+ ...rc/integration |   45.45 |     22.5 |   57.69 |   46.76 |                   
+  ...l-messages.ts |   20.68 |     5.55 |   57.14 |      24 | 44-45,95-124      
+  ...ion-broker.ts |   53.66 |     31.7 |    61.9 |   55.11 | ...35,545,555,566 
+  ...ty-context.ts |       0 |        0 |      25 |       0 | 43-175            
+ ...src/repository |   89.66 |    80.07 |   94.55 |   90.69 |                   
+  ...nd-routing.ts |    91.3 |    83.33 |     100 |    90.9 | 181,204           
+  event-routing.ts |    91.3 |    83.33 |     100 |     100 | 180,202           
+  primitive-id.ts  |   59.09 |    61.29 |    62.5 |   59.09 | 109-122,132-136   
+  repository.ts    |   90.23 |     80.6 |   96.05 |    91.3 | ...9327,9879,9907 
+  ...clarations.ts |   76.74 |    77.77 |   63.15 |    75.6 | ...05,157,169,173 
+  ...te-routing.ts |    91.3 |    83.33 |     100 |    90.9 | 182,205           
+ ...er/src/runtime |    85.6 |    72.76 |   91.72 |   86.58 |                   
+  runtime.ts       |   96.55 |    95.23 |     100 |   97.56 | 247-248           
+  signal-intake.ts |   13.04 |        0 |       0 |   13.04 | 133-153,170-206   
+  ...l-metadata.ts |   83.33 |    73.33 |   95.23 |   83.33 | ...63-271,285,410 
+  ...-publisher.ts |   94.23 |    73.91 |    92.5 |   96.66 | 243-244,394       
+  ...er-runtime.ts |   84.87 |    74.15 |   95.65 |   86.79 | ...49-350,394,494 
+ ...ver/src/server |   44.15 |    32.18 |   47.26 |   45.47 |                   
+  ...attachment.ts |   41.55 |    30.78 |   47.76 |   41.77 | ...2767,2792,2805 
+  ...ry-records.ts |   55.73 |       42 |      50 |   56.19 | ...72,278-292,297 
+  ...ery-worker.ts |   71.65 |    52.17 |   75.49 |   75.25 | ...82,899,912,915 
+  environment.ts   |   93.33 |       50 |    87.5 |   93.33 | 35                
+  ...bscription.ts |      20 |        0 |       0 |   22.22 | 36-46             
+  ...pplication.ts |    3.76 |        0 |       0 |    4.33 | ...1339,1353-1664 
+  ...oordinator.ts |    2.19 |        0 |    1.21 |    2.39 | 232-650,667-852   
+  ...oordinator.ts |   97.95 |    83.33 |     100 |     100 | 101-112,123       
+  ...able-close.ts |   88.67 |    86.36 |     100 |   88.46 | ...06-107,113-115 
+  ...nvironment.ts |   61.76 |    41.75 |   80.48 |   62.26 | ...33,538,574,577 
+  server-log.ts    |   89.28 |     87.5 |     100 |   95.83 | 110               
+  server.ts        |   76.03 |    61.48 |   91.25 |   77.17 | ...1220-1241,1275 
+ ...r/src/services |    7.67 |     2.56 |    7.86 |    7.95 |                   
+  query-reader.ts  |      20 |        0 |       0 |      20 | 51-70             
+  ...ed-targets.ts |      50 |    13.63 |   66.66 |   45.94 | 67-117,142,146    
+  ...e-services.ts |    5.35 |     2.17 |    4.81 |    5.83 | ...2298,2325-2416 
+ ...rver/src/stand |    36.1 |    20.88 |   47.96 |    38.9 |                   
+  stand.ts         |   71.47 |    60.56 |   74.24 |   73.72 | ...1347-1372,1416 
+  ...n-observer.ts |    0.51 |        0 |   42.85 |    0.59 | 128-555,559-650   
+  ...on-records.ts |    4.65 |        0 |       0 |    5.26 | 40-115            
+  ...n-registry.ts |    23.6 |     7.79 |   23.68 |   26.02 | ...83,586,614-653 
+  ...on-runtime.ts |   35.97 |    17.39 |   42.85 |   39.28 | ...93,399,404-432 
+ ...er/src/testing |      60 |      100 |   33.33 |      60 |                   
+  index.ts         |      60 |      100 |   33.33 |      60 | 55-72             
+ .../src/datastore |       0 |        0 |       0 |       0 |                   
+  ...mn-mapping.ts |       0 |        0 |       0 |       0 | 25-213            
+  ...ty-history.ts |       0 |        0 |       0 |       0 | 81-742            
+  id-column.ts     |       0 |        0 |       0 |       0 | 34-115            
+  namespace.ts     |       0 |        0 |       0 |       0 | 60-153            
+  ...rd-storage.ts |       0 |        0 |       0 |       0 | 41-1556           
+  ...ge-factory.ts |       0 |        0 |       0 |       0 | 52-745            
+  ...nt-catalog.ts |       0 |        0 |       0 |       0 | 25-189            
+ ...ysql/src/mysql |       0 |        0 |       0 |       0 |                   
+  ...mn-mapping.ts |       0 |        0 |       0 |       0 | 24-108            
+  ...ty-history.ts |       0 |        0 |       0 |       0 | 144-560           
+  errors.ts        |       0 |        0 |       0 |       0 | 44                
+  id-column.ts     |       0 |        0 |       0 |       0 | 40-121            
+  ...rd-storage.ts |       0 |        0 |       0 |       0 | 47-1345           
+  ...ge-factory.ts |       0 |        0 |       0 |       0 | 242-970           
+  ...e-resolver.ts |       0 |        0 |       0 |       0 | 21-100            
+  table-spec.ts    |       0 |        0 |       0 |       0 | 41-207            
+  testing.ts       |       0 |        0 |       0 |       0 | 43-158            
+ ...s/src/postgres |       0 |        0 |       0 |       0 |                   
+  ...mn-mapping.ts |       0 |        0 |       0 |       0 | 26-106            
+  data-type.ts     |       0 |      100 |     100 |       0 | 34                
+  entity-commit.ts |       0 |        0 |       0 |       0 | 71-338            
+  ...ty-history.ts |       0 |        0 |       0 |       0 | 115-856           
+  errors.ts        |       0 |        0 |       0 |       0 | 43-125            
+  id-column.ts     |       0 |        0 |       0 |       0 | 50-177            
+  ...rd-storage.ts |       0 |        0 |       0 |       0 | 43-1119           
+  ...ge-factory.ts |       0 |        0 |       0 |       0 | 289-973           
+  ...nitializer.ts |       0 |        0 |       0 |       0 | 43-348            
+  ...e-resolver.ts |       0 |        0 |       0 |       0 | 19-241            
+  table-spec.ts    |       0 |        0 |       0 |       0 | 27-165            
+ ...age/src/entity |       0 |        0 |       0 |       0 |                   
+  ...ecord-spec.ts |       0 |        0 |       0 |       0 | 42-107            
+  ...ry-storage.ts |       0 |      100 |       0 |       0 | 148-167           
+  ...onformance.ts |       0 |        0 |       0 |       0 | 98-270            
+ ...rage/src/event |       0 |        0 |       0 |       0 |                   
+  event-store.ts   |       0 |        0 |       0 |       0 | 51-500            
+ ...e/src/internal |       0 |        0 |       0 |       0 |                   
+  entity-commit.ts |       0 |        0 |       0 |       0 | 92-232            
+  tenancy.ts       |       0 |        0 |       0 |       0 | 19-158            
+ ...age/src/memory |       0 |        0 |       0 |       0 |                   
+  ...nical-utf8.ts |       0 |        0 |       0 |       0 | 18-73             
+  ...ity-commit.ts |       0 |        0 |       0 |       0 | 84-280            
+  ...ty-history.ts |       0 |        0 |       0 |       0 | 51-1258           
+  ...rd-storage.ts |       0 |        0 |       0 |       0 | 39-191            
+  ...ge-backend.ts |       0 |        0 |       0 |       0 | 27-130            
+  ...ge-factory.ts |       0 |        0 |       0 |       0 | 66-254            
+  ...nt-records.ts |       0 |        0 |       0 |       0 | 30-1035           
+ ...rage/src/query |       0 |        0 |       0 |       0 |                   
+  ...-execution.ts |       0 |        0 |       0 |       0 | 24-301            
+  query-policy.ts  |       0 |        0 |       0 |       0 | 153-507           
+ ...age/src/record |       0 |        0 |       0 |       0 |                   
+  ...mn-mapping.ts |       0 |        0 |       0 |       0 | 48-71             
+  column-type.ts   |       0 |        0 |       0 |       0 | 79-137            
+  record-column.ts |       0 |      100 |       0 |       0 | 30-43             
+  record-query.ts  |       0 |        0 |       0 |       0 | 74-116            
+  record-spec.ts   |       0 |        0 |       0 |       0 | 21-244            
+  ...rd-storage.ts |       0 |        0 |       0 |       0 | 46-343            
+  storage-group.ts |       0 |        0 |       0 |       0 | 26-37             
+ ...ge/src/storage |       0 |        0 |       0 |       0 |                   
+  ...ge-factory.ts |       0 |        0 |       0 |       0 | 26-80             
+ .../src/black-box |       0 |        0 |       0 |       0 |                   
+  black-box.ts     |       0 |        0 |       0 |       0 | 89-1302           
+ ...t/src/internal |       0 |        0 |       0 |       0 |                   
+  ...ge-channel.ts |       0 |        0 |       0 |       0 | 31-35             
+ ...ort/src/memory |       0 |        0 |       0 |       0 |                   
+  ...-transport.ts |       0 |        0 |       0 |       0 | 33-251            
+-------------------|---------|----------|---------|---------|-------------------
+
+=============================== Coverage summary ===============================
+Statements   : 31.01% ( 8070/26022 )
+Branches     : 23.61% ( 3784/16023 )
+Functions    : 35.41% ( 2361/6666 )
+Lines        : 32.43% ( 7684/23692 )
+================================================================================
+ERROR: Coverage for lines (32.43%) does not meet global threshold (90%)
+ERROR: Coverage for functions (35.41%) does not meet global threshold (90%)
+ERROR: Coverage for statements (31.01%) does not meet global threshold (90%)
+ERROR: Coverage for branches (23.61%) does not meet global threshold (90%)

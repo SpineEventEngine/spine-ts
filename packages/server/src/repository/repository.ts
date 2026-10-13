@@ -2264,7 +2264,7 @@ class AggregateExecutionSupport {
     loaded: LoadedAggregate,
     entityId: unknown,
     events: readonly Event[],
-    dispatch: (event: Event) => Promise<void>,
+    dispatch: (event: Event) => Promise<unknown>,
     onPersisted: () => Promise<void> | void,
     diagnostics: readonly Event[] = events,
   ): Promise<() => Promise<void>> {

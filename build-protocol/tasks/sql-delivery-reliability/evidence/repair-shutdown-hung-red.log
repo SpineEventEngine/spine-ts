@@ -1,0 +1,30 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/server/test/context/republish-events.test.ts (8 tests | 1 failed | 7 skipped) 112ms
+     × bounds close while a repaired recipient never settles 111ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/test/context/republish-events.test.ts > known committed Event repair > bounds close while a repaired recipient never settles
+AssertionError: expected 'timed-out' to be 'failed' // Object.is equality
+
+Expected: "failed"
+Received: "timed-out"
+
+ ❯ packages/server/test/context/republish-events.test.ts:294:20
+    292|       new Promise<string>((resolve) => setTimeout(() => resolve("timed…
+    293|     ]);
+    294|     expect(result).toBe("failed");
+       |                    ^
+    295|     await expect(repair).resolves.toEqual([
+    296|       { eventId: "never-settles", status: "CANCELLED", attempts: 1 },
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 7 skipped (8)
+   Start at  20:24:37
+   Duration  877ms (transform 469ms, setup 0ms, import 667ms, tests 112ms, environment 0ms)
+

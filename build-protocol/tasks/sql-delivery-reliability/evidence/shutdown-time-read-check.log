@@ -1,0 +1,5 @@
+$ node scripts/check-time-reads.mjs
+packages/server/src/context/bounded-context.ts:1417:32 performance.now()
+packages/server/src/context/bounded-context.ts:1544:34 performance.now()
+packages/server/src/context/bounded-context.ts:1544:55 performance.now()
+[ELIFECYCLE] Command failed with exit code 1.

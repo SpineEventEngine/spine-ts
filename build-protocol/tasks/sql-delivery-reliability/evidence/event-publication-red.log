@@ -1,0 +1,88 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/server/test/runtime/signal-publisher-storage-retry.test.ts (3 tests | 3 failed) 8ms
+     × retries actual dispatch with one committed ID and envelope before reporting admission 6ms
+     × reports exhausted dispatch with the original cause after finite attempts 1ms
+     × stops a stored dispatch retry when its signal is cancelled 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/test/runtime/signal-publisher-storage-retry.test.ts > stored Event publication > retries actual dispatch with one committed ID and envelope before reporting admission
+AssertionError: expected undefined to match object { status: 'ADMITTED', …(2) }
+
+- Expected:
+{
+  "attempts": 3,
+  "eventId": "stored-1",
+  "status": "ADMITTED",
+}
+
++ Received:
+undefined
+
+ ❯ packages/server/test/runtime/signal-publisher-storage-retry.test.ts:40:57
+     38|     const event = committedEvent("stored-1");
+     39|
+     40|     await expect(publisher.publishCommittedEvent(event)).resolves.toMa…
+       |                                                         ^
+     41|       status: "ADMITTED", eventId: "stored-1", attempts: 3,
+     42|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  packages/server/test/runtime/signal-publisher-storage-retry.test.ts > stored Event publication > reports exhausted dispatch with the original cause after finite attempts
+AssertionError: expected undefined to match object { status: 'FAILED', …(3) }
+
+- Expected:
+{
+  "attempts": 3,
+  "cause": Error {
+    "message": "private recipient detail",
+  },
+  "eventId": "stored-2",
+  "status": "FAILED",
+}
+
++ Received:
+undefined
+
+ ❯ packages/server/test/runtime/signal-publisher-storage-retry.test.ts:60:78
+     58|     const publisher = new SignalPublisher(new CommandBus(), events, ev…
+     59|
+     60|     await expect(publisher.publishCommittedEvent(committedEvent("store…
+       |                                                                              ^
+     61|       status: "FAILED", eventId: "stored-2", attempts: 3, cause: failu…
+     62|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  packages/server/test/runtime/signal-publisher-storage-retry.test.ts > stored Event publication > stops a stored dispatch retry when its signal is cancelled
+AssertionError: expected undefined to match object { status: 'CANCELLED', …(2) }
+
+- Expected:
+{
+  "attempts": 1,
+  "eventId": "stored-3",
+  "status": "CANCELLED",
+}
+
++ Received:
+undefined
+
+ ❯ packages/server/test/runtime/signal-publisher-storage-retry.test.ts:79:106
+     77|     const publisher = new SignalPublisher(new CommandBus(), events, ev…
+     78|
+     79|     await expect(publisher.publishCommittedEvent(committedEvent("store…
+       |                                                                                                          ^
+     80|       status: "CANCELLED", eventId: "stored-3", attempts: 1,
+     81|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  20:06:35
+   Duration  346ms (transform 148ms, setup 0ms, import 236ms, tests 8ms, environment 0ms)
+

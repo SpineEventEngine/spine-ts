@@ -1,0 +1,701 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/server/test/repository/repository-routing.test.ts (323 tests | 33 failed) 5466ms
+     × drains a slow accepted Command route before closing its repository 53ms
+     × fails an asynchronous Command route before Inbox handoff and accepts the next route 3ms
+     × rejects a different Entity returned by onCreate before its handler runs 1ms
+     × rejects a Promise returned by onCreate before its handler runs 1ms
+     × stops dispatch before handlers and persistence when onCreate throws 1ms
+     × keeps 'ordinary errors' as technical aggregate failures 1ms
+     × keeps 'prototype-spoofed rejection errors' as technical aggregate failures 1ms
+     × rejects managed aggregate handlers that return no domain event 2ms
+     × rejects empty Process Manager assignment before state and event commit 2ms
+     × rejects concrete Projection subscriber returns before committing state 2ms
+     × rejects framework event envelopes returned by managed aggregate handlers 2ms
+     × rejects an undeclared Event payload inside an Aggregate handler envelope 2ms
+     × rejects a malformed packed Event payload before Aggregate commit 2ms
+     × rolls back a rejected async aggregate assignment without publishing output 53ms
+     × rejects a returned framework envelope without a typed Event payload 2ms
+     × rejects state-transition validation failures before storing aggregate output 3ms
+     × rejects produced aggregate versions outside the protobuf int32 range 3ms
+     × retains one command diagnostic when an admitted Process Manager assignment fails 4ms
+     × retains one command diagnostic when an admitted handler fails 4ms
+     × rejects empty implicit state IDs before every Entity-family commit 34ms
+     × marks technical process-manager failures delivered after reporting them 3ms
+     × exact-drains later process-manager event rows while retaining an earlier routed failure 6ms
+     × closes guard probe handles for both entity kinds on success, duplicates, and failures 7ms
+     × marks default-handled delivery failures without retaining journal markers 1ms
+     × retains one reactor diagnostic when an admitted Process Manager reactor fails 6ms
+     × retains one subscriber diagnostic when an admitted subscriber fails 5ms
+     × does not expose projection state when its atomic commit fails 5ms
+     × does not expose aggregate state or state notifications when its atomic commit throws 2ms
+     × does not expose process-manager state or follow-ups when its atomic commit fails 2ms
+     × does not publish when aggregate transition validation rejects the handler mutation 5ms
+     × reports a stable error when stored projection replay fails during catch-up 7ms
+     × reports bounded non-error throw detail during read-side catch-up 7ms
+     × reports missing projection subscriber methods with neutral repository execution wording 9ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 33 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > drains a slow accepted Command route before closing its repository
+AssertionError: promise rejected "Error: Repository aggregate command handl…" instead of resolving
+ ❯ packages/server/test/repository/repository-routing.test.ts:2191:51
+    2189|       );
+    2190|       release();
+    2191|       await expect(Promise.all([posted, closing])).resolves.toEqual([u…
+       |                                                   ^
+    2192|     } finally {
+    2193|       release();
+
+Caused by: Error: Repository aggregate command handlers must return at least one event.
+ ❯ AggregateCommandExecution.#invokeAssignee packages/server/src/repository/repository.ts:2533:15
+ ❯ AggregateCommandExecution.#runAssignee packages/server/src/repository/repository.ts:2415:18
+ ❯ Object.replayAggregateCommand packages/server/src/repository/repository.ts:8854:12
+ ❯ LocalEntityInbox.#replay packages/server/src/context/entity-inbox.ts:515:22
+ ❯ LocalEntityInbox.#replayAndFollowUp packages/server/src/context/entity-inbox.ts:391:7
+ ❯ DeliveryDrain.#dispatch packages/server/src/delivery/delivery.ts:669:5
+ ❯ DeliveryDrain.#deliver packages/server/src/delivery/delivery.ts:574:7
+ ❯ DeliveryDrain.#processPage packages/server/src/delivery/delivery.ts:484:13
+ ❯ DeliveryDrain.#readPages packages/server/src/delivery/delivery.ts:447:13
+ ❯ DeliveryDrain.run packages/server/src/delivery/delivery.ts:396:40
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/33]⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > fails an asynchronous Command route before Inbox handoff and accepts the next route
+AssertionError: promise rejected "Error: Repository aggregate command handl…" instead of resolving
+ ❯ packages/server/test/repository/repository-routing.test.ts:2262:8
+    2260|       await expect(
+    2261|         dispatcher.dispatch(createAggregateCommand("recovered-route", …
+    2262|       ).resolves.toBeUndefined();
+       |        ^
+    2263|       expect(
+    2264|         await delivery.inbox.read(ShardIndex.single(), { statuses: ["T…
+
+Caused by: Error: Repository aggregate command handlers must return at least one event.
+ ❯ AggregateCommandExecution.#invokeAssignee packages/server/src/repository/repository.ts:2533:15
+ ❯ AggregateCommandExecution.#runAssignee packages/server/src/repository/repository.ts:2415:18
+ ❯ Object.replayAggregateCommand packages/server/src/repository/repository.ts:8854:12
+ ❯ LocalEntityInbox.#replay packages/server/src/context/entity-inbox.ts:515:22
+ ❯ LocalEntityInbox.#replayAndFollowUp packages/server/src/context/entity-inbox.ts:391:7
+ ❯ DeliveryDrain.#dispatch packages/server/src/delivery/delivery.ts:669:5
+ ❯ DeliveryDrain.#deliver packages/server/src/delivery/delivery.ts:574:7
+ ❯ DeliveryDrain.#processPage packages/server/src/delivery/delivery.ts:484:13
+ ❯ DeliveryDrain.#readPages packages/server/src/delivery/delivery.ts:447:13
+ ❯ DeliveryDrain.run packages/server/src/delivery/delivery.ts:396:40
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/33]⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > rejects a different Entity returned by onCreate before its handler runs
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > rejects a Promise returned by onCreate before its handler runs
+TypeError: Repository onCreate must synchronously return a InjectedProjectAggregate instance.
+ ❯ Object.create packages/server/src/repository/repository.ts:1752:11
+    1750|     const entity = onCreate === undefined ? new entityType(options) : …
+    1751|     if (entity instanceof entityType) return entity;
+    1752|     throw new TypeError(
+       |           ^
+    1753|       `Repository onCreate must synchronously return a ${entityType.na…
+    1754|     );
+ ❯ AggregateExecutionSupport.#instantiateAggregate packages/server/src/repository/repository.ts:2306:31
+ ❯ AggregateExecutionSupport.loadAggregate packages/server/src/repository/repository.ts:2099:25
+ ❯ AggregateCommandExecution.#runAssignee packages/server/src/repository/repository.ts:2411:20
+ ❯ Object.replayAggregateCommand packages/server/src/repository/repository.ts:8854:12
+ ❯ LocalEntityInbox.#replay packages/server/src/context/entity-inbox.ts:515:22
+ ❯ LocalEntityInbox.#replayAndFollowUp packages/server/src/context/entity-inbox.ts:391:7
+ ❯ DeliveryDrain.#dispatch packages/server/src/delivery/delivery.ts:669:5
+ ❯ DeliveryDrain.#deliver packages/server/src/delivery/delivery.ts:574:7
+ ❯ DeliveryDrain.#processPage packages/server/src/delivery/delivery.ts:484:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/33]⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > stops dispatch before handlers and persistence when onCreate throws
+AssertionError: promise rejected "Error: service unavailable" instead of resolving
+ ❯ packages/server/test/repository/repository-routing.test.ts:2820:8
+    2818|       await expect(
+    2819|         context.commandBus().post(createAggregateCommand("factory-thro…
+    2820|       ).resolves.toBeUndefined();
+       |        ^
+    2821|       expect(InjectedProjectAggregate.calls).toBe(beforeCalls);
+    2822|       await expect(storage.readCurrent("factory-id")).resolves.toBeUnd…
+
+Caused by: Error: service unavailable
+ ❯ packages/server/test/repository/repository-routing.test.ts:2793:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/33]⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > keeps 'ordinary errors' as technical aggregate failures
+AssertionError: promise rejected "Error: ordinary aggregate failure" instead of resolving
+ ❯ packages/server/test/repository/repository-routing.test.ts:3591:6
+    3589|     await expect(
+    3590|       context.commandBus().post(createAggregateCommand("command-techni…
+    3591|     ).resolves.toBeUndefined();
+       |      ^
+    3592|
+    3593|     await expect(eventStore.read()).resolves.toEqual([]);
+
+Caused by: Error: ordinary aggregate failure
+ ❯ failure packages/server/test/repository/repository-routing.test.ts:3566:22
+ ❯ packages/server/test/repository/repository-routing.test.ts:3580:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/33]⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > keeps 'prototype-spoofed rejection errors' as technical aggregate failures
+AssertionError: promise rejected "Error: forged aggregate failure" instead of resolving
+ ❯ packages/server/test/repository/repository-routing.test.ts:3591:6
+    3589|     await expect(
+    3590|       context.commandBus().post(createAggregateCommand("command-techni…
+    3591|     ).resolves.toBeUndefined();
+       |      ^
+    3592|
+    3593|     await expect(eventStore.read()).resolves.toEqual([]);
+
+Caused by: Error: forged aggregate failure
+ ❯ failure packages/server/test/repository/repository-routing.test.ts:3574:24
+ ❯ packages/server/test/repository/repository-routing.test.ts:3580:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { schema: '<unserializable>: Cannot read private member #schema from an object whose class did not declare it', messageData: '<unserializable>: Cannot read private member #schema from an object whose class did not declare it', messageThrown: 'Function<messageThrown>' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/33]⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > rejects managed aggregate handlers that return no domain event
+AssertionError: promise rejected "Error: Repository aggregate command handl…" instead of resolving
+ ❯ packages/server/test/repository/repository-routing.test.ts:4326:6
+    4324|     await expect(
+    4325|       context.commandBus().post(createAggregateCommand("command-empty"…
+    4326|     ).resolves.toBeUndefined();
+       |      ^
+    4327|     await expect(eventStore.read()).resolves.toEqual([]);
+    4328|     await expect(context.stand().read(ProjectStateSchema, "task-empty"…
+
+Caused by: Error: Repository aggregate command handlers must return at least one event.
+ ❯ AggregateCommandExecution.#invokeAssignee packages/server/src/repository/repository.ts:2533:15
+ ❯ AggregateCommandExecution.#runAssignee packages/server/src/repository/repository.ts:2415:18
+ ❯ Object.replayAggregateCommand packages/server/src/repository/repository.ts:8854:12
+ ❯ LocalEntityInbox.#replay packages/server/src/context/entity-inbox.ts:515:22
+ ❯ LocalEntityInbox.#replayAndFollowUp packages/server/src/context/entity-inbox.ts:391:7
+ ❯ DeliveryDrain.#dispatch packages/server/src/delivery/delivery.ts:669:5
+ ❯ DeliveryDrain.#deliver packages/server/src/delivery/delivery.ts:574:7
+ ❯ DeliveryDrain.#processPage packages/server/src/delivery/delivery.ts:484:13
+ ❯ DeliveryDrain.#readPages packages/server/src/delivery/delivery.ts:447:13
+ ❯ DeliveryDrain.run packages/server/src/delivery/delivery.ts:396:40
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/33]⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > rejects empty Process Manager assignment before state and event commit
+AssertionError: promise rejected "Error: Repository Process Manager command…" instead of resolving
+ ❯ packages/server/test/repository/repository-routing.test.ts:4347:8
+    4345|       await expect(
+    4346|         context.commandBus().post(createAggregateCommand("empty-pm-ass…
+    4347|       ).resolves.toBeUndefined();
+       |        ^
+    4348|       expect(RoutingProcessManager.commandCalls).toBe(1);
+    4349|       await expect(storage.readCurrent("empty-pm")).resolves.toBeUndef…
+
+Caused by: Error: Repository Process Manager command handlers must return a signal.
+ ❯ ProcessManagerCommandExecution.#invokeCommandHandler packages/server/src/repository/repository.ts:3970:15
+ ❯ ProcessManagerCommandExecution.#invoke packages/server/src/repository/repository.ts:3940:14
+ ❯ ProcessManagerCommandExecution.run packages/server/src/repository/repository.ts:3754:24
+ ❯ Object.replayProcessManagerCommand packages/server/src/repository/repository.ts:8915:12
+ ❯ Object.replayPmInbox packages/server/src/repository/repository.ts:8873:14
+ ❯ LocalEntityInbox.#replay packages/server/src/context/entity-inbox.ts:515:22
+ ❯ LocalEntityInbox.#replayAndFollowUp packages/server/src/context/entity-inbox.ts:391:7
+ ❯ DeliveryDrain.#dispatch packages/server/src/delivery/delivery.ts:669:5
+ ❯ DeliveryDrain.#deliver packages/server/src/delivery/delivery.ts:574:7
+ ❯ DeliveryDrain.#processPage packages/server/src/delivery/delivery.ts:484:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/33]⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > rejects concrete Projection subscriber returns before committing state
+Error: Projection subscriber "subscribeTask" must not return signals.
+ ❯ ProjectionEventExecution.#invokeSubscriber packages/server/src/repository/repository.ts:3333:13
+    3331|     );
+    3332|     if (result !== undefined)
+    3333|       throw new Error(
+       |             ^
+    3334|         `Projection subscriber "${subscriber.handler.methodName}" must…
+    3335|       );
+ ❯ ProjectionEventExecution.#invokeSubscribers packages/server/src/repository/repository.ts:3292:9
+ ❯ ProjectionEventExecution.#executeTarget packages/server/src/repository/repository.ts:3077:5
+ ❯ ProjectionEventExecution.runTarget packages/server/src/repository/repository.ts:3042:5
+ ❯ Object.replayProjectionEvent packages/server/src/repository/repository.ts:9000:5
+ ❯ Object.replayProjectionMessage packages/server/src/repository/repository.ts:9032:5
+ ❯ LocalProjectionInbox.#replay packages/server/src/context/projection-handoff.ts:233:5
+ ❯ DeliveryDrain.#dispatch packages/server/src/delivery/delivery.ts:669:5
+ ❯ DeliveryDrain.#deliver packages/server/src/delivery/delivery.ts:574:7
+ ❯ DeliveryDrain.#processPage packages/server/src/delivery/delivery.ts:484:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/33]⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > rejects framework event envelopes returned by managed aggregate handlers
+AssertionError: promise rejected "Error: Handler "createProject" returned u…" instead of resolving
+ ❯ packages/server/test/repository/repository-routing.test.ts:4400:6
+    4398|     await expect(
+    4399|       context.commandBus().post(createAggregateCommand("command-envelo…
+    4400|     ).resolves.toBeUndefined();
+       |      ^
+    4401|     await expect(eventStore.read()).resolves.toEqual([]);
+    4402|     await expect(
+
+Caused by: Error: Handler "createProject" returned undeclared message "spine.core.Event".
+ ❯ Object.requireDeclaredOutputs packages/server/src/repository/repository.ts:6360:15
+ ❯ AggregateCommandExecution.#invokeAssignee packages/server/src/repository/repository.ts:2534:26
+ ❯ AggregateCommandExecution.#runAssignee packages/server/src/repository/repository.ts:2415:18
+ ❯ Object.replayAggregateCommand packages/server/src/repository/repository.ts:8854:12
+ ❯ LocalEntityInbox.#replay packages/server/src/context/entity-inbox.ts:515:22
+ ❯ LocalEntityInbox.#replayAndFollowUp packages/server/src/context/entity-inbox.ts:391:7
+ ❯ DeliveryDrain.#dispatch packages/server/src/delivery/delivery.ts:669:5
+ ❯ DeliveryDrain.#deliver packages/server/src/delivery/delivery.ts:574:7
+ ❯ DeliveryDrain.#processPage packages/server/src/delivery/delivery.ts:484:13
+ ❯ DeliveryDrain.#readPages packages/server/src/delivery/delivery.ts:447:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/33]⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > rejects an undeclared Event payload inside an Aggregate handler envelope
+AssertionError: promise rejected "Error: Handler "createProject" returned u…" instead of resolving
+ ❯ packages/server/test/repository/repository-routing.test.ts:4420:8
+    4418|           .commandBus()
+    4419|           .post(createAggregateCommand("command-wrong-envelope", "task…
+    4420|       ).resolves.toBeUndefined();
+       |        ^
+    4421|       await expect(
+    4422|         context.stand().read(ProjectStateSchema, "task-wrong-envelope"…
+
+Caused by: Error: Handler "createProject" returned undeclared message "spine.core.Event".
+ ❯ Object.requireDeclaredOutputs packages/server/src/repository/repository.ts:6360:15
+ ❯ AggregateCommandExecution.#invokeAssignee packages/server/src/repository/repository.ts:2534:26
+ ❯ AggregateCommandExecution.#runAssignee packages/server/src/repository/repository.ts:2415:18
+ ❯ Object.replayAggregateCommand packages/server/src/repository/repository.ts:8854:12
+ ❯ LocalEntityInbox.#replay packages/server/src/context/entity-inbox.ts:515:22
+ ❯ LocalEntityInbox.#replayAndFollowUp packages/server/src/context/entity-inbox.ts:391:7
+ ❯ DeliveryDrain.#dispatch packages/server/src/delivery/delivery.ts:669:5
+ ❯ DeliveryDrain.#deliver packages/server/src/delivery/delivery.ts:574:7
+ ❯ DeliveryDrain.#processPage packages/server/src/delivery/delivery.ts:484:13
+ ❯ DeliveryDrain.#readPages packages/server/src/delivery/delivery.ts:447:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/33]⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > rejects a malformed packed Event payload before Aggregate commit
+AssertionError: promise rejected "Error: Handler "createProject" returned u…" instead of resolving
+ ❯ packages/server/test/repository/repository-routing.test.ts:4444:8
+    4442|           .commandBus()
+    4443|           .post(createAggregateCommand("command-bad-envelope", "task-b…
+    4444|       ).resolves.toBeUndefined();
+       |        ^
+    4445|       await expect(
+    4446|         context.stand().read(ProjectStateSchema, "task-bad-envelope"),
+
+Caused by: Error: Handler "createProject" returned undeclared message "spine.core.Event".
+ ❯ Object.requireDeclaredOutputs packages/server/src/repository/repository.ts:6360:15
+ ❯ AggregateCommandExecution.#invokeAssignee packages/server/src/repository/repository.ts:2534:26
+ ❯ AggregateCommandExecution.#runAssignee packages/server/src/repository/repository.ts:2415:18
+ ❯ Object.replayAggregateCommand packages/server/src/repository/repository.ts:8854:12
+ ❯ LocalEntityInbox.#replay packages/server/src/context/entity-inbox.ts:515:22
+ ❯ LocalEntityInbox.#replayAndFollowUp packages/server/src/context/entity-inbox.ts:391:7
+ ❯ DeliveryDrain.#dispatch packages/server/src/delivery/delivery.ts:669:5
+ ❯ DeliveryDrain.#deliver packages/server/src/delivery/delivery.ts:574:7
+ ❯ DeliveryDrain.#processPage packages/server/src/delivery/delivery.ts:484:13
+ ❯ DeliveryDrain.#readPages packages/server/src/delivery/delivery.ts:447:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/33]⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > rolls back a rejected async aggregate assignment without publishing output
+AssertionError: promise rejected "Error: async assignment failed" instead of resolving
+ ❯ packages/server/test/repository/repository-routing.test.ts:4583:29
+    4581|
+    4582|     RejectedAsyncAssigneeAggregate.rejectCommand?.(failure);
+    4583|     await expect(completion).resolves.toBeUndefined();
+       |                             ^
+    4584|     await expect(storage.readCurrent("task-async-rejected")).resolves.…
+    4585|     await expect(eventStore.read()).resolves.toEqual([]);
+
+Caused by: Error: async assignment failed
+ ❯ packages/server/test/repository/repository-routing.test.ts:4572:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/33]⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > rejects a returned framework envelope without a typed Event payload
+AssertionError: promise rejected "Error: Handler "createProject" returned u…" instead of resolving
+ ❯ packages/server/test/repository/repository-routing.test.ts:4753:6
+    4751|     await expect(
+    4752|       context.commandBus().post(createAggregateCommand("command-malfor…
+    4753|     ).resolves.toBeUndefined();
+       |      ^
+    4754|     await expect(eventStore.read()).resolves.toEqual([]);
+    4755|   });
+
+Caused by: Error: Handler "createProject" returned undeclared message "spine.core.Event".
+ ❯ Object.requireDeclaredOutputs packages/server/src/repository/repository.ts:6360:15
+ ❯ AggregateCommandExecution.#invokeAssignee packages/server/src/repository/repository.ts:2534:26
+ ❯ AggregateCommandExecution.#runAssignee packages/server/src/repository/repository.ts:2415:18
+ ❯ Object.replayAggregateCommand packages/server/src/repository/repository.ts:8854:12
+ ❯ LocalEntityInbox.#replay packages/server/src/context/entity-inbox.ts:515:22
+ ❯ LocalEntityInbox.#replayAndFollowUp packages/server/src/context/entity-inbox.ts:391:7
+ ❯ DeliveryDrain.#dispatch packages/server/src/delivery/delivery.ts:669:5
+ ❯ DeliveryDrain.#deliver packages/server/src/delivery/delivery.ts:574:7
+ ❯ DeliveryDrain.#processPage packages/server/src/delivery/delivery.ts:484:13
+ ❯ DeliveryDrain.#readPages packages/server/src/delivery/delivery.ts:447:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/33]⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > rejects state-transition validation failures before storing aggregate output
+AssertionError: promise rejected "Error: Handler "createProject" returned u…" instead of resolving
+ ❯ packages/server/test/repository/repository-routing.test.ts:4788:6
+    4786|         .commandBus()
+    4787|         .post(createAggregateCommand("command-transition-invalid", "ta…
+    4788|     ).resolves.toBeUndefined();
+       |      ^
+    4789|
+    4790|     await expect(eventStore.read()).resolves.toEqual([]);
+
+Caused by: Error: Handler "createProject" returned undeclared message "repository_routing.ProjectCreated".
+ ❯ Object.requireDeclaredOutputs packages/server/src/repository/repository.ts:6360:15
+ ❯ AggregateCommandExecution.#invokeAssignee packages/server/src/repository/repository.ts:2534:26
+ ❯ AggregateCommandExecution.#runAssignee packages/server/src/repository/repository.ts:2415:18
+ ❯ Object.replayAggregateCommand packages/server/src/repository/repository.ts:8854:12
+ ❯ LocalEntityInbox.#replay packages/server/src/context/entity-inbox.ts:515:22
+ ❯ LocalEntityInbox.#replayAndFollowUp packages/server/src/context/entity-inbox.ts:391:7
+ ❯ DeliveryDrain.#dispatch packages/server/src/delivery/delivery.ts:669:5
+ ❯ DeliveryDrain.#deliver packages/server/src/delivery/delivery.ts:574:7
+ ❯ DeliveryDrain.#processPage packages/server/src/delivery/delivery.ts:484:13
+ ❯ DeliveryDrain.#readPages packages/server/src/delivery/delivery.ts:447:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/33]⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > rejects produced aggregate versions outside the protobuf int32 range
+AssertionError: promise rejected "FieldValueInvalidError: expected number (… { field: [Function] }" instead of resolving
+ ❯ packages/server/test/repository/repository-routing.test.ts:4907:6
+    4905|     await expect(
+    4906|       context.commandBus().post(createAggregateCommand("command-overfl…
+    4907|     ).resolves.toBeUndefined();
+       |      ^
+    4908|     await expect(eventStore.read()).resolves.toEqual([]);
+    4909|   });
+
+Caused by: FieldValueInvalidError: expected number (int32): 2147483648 out of range
+ ❯ checkField node_modules/.pnpm/@bufbuild+protobuf@2.12.1/node_modules/@bufbuild/protobuf/dist/esm/reflect/reflect-check.js:45:12
+ ❯ ReflectMessageImpl.set node_modules/.pnpm/@bufbuild+protobuf@2.12.1/node_modules/@bufbuild/protobuf/dist/esm/reflect/reflect.js:112:25
+ ❯ cloneReflect node_modules/.pnpm/@bufbuild+protobuf@2.12.1/node_modules/@bufbuild/protobuf/dist/esm/clone.js:43:19
+ ❯ clone node_modules/.pnpm/@bufbuild+protobuf@2.12.1/node_modules/@bufbuild/protobuf/dist/esm/clone.js:21:12
+ ❯ ExecutingProjectAggregate.replaceVersion packages/server/src/entity/entity.ts:574:21
+ ❯ ExecutingProjectAggregate.commitTransaction packages/server/src/entity/entity.ts:967:12
+ ❯ Object.call packages/server/src/entity/entity.ts:1133:20
+ ❯ Object.commit packages/server/src/entity/entity.ts:1076:30
+ ❯ packages/server/src/repository/repository.ts:2536:35
+ ❯ commitFenced packages/server/src/repository/commit-fence.ts:50:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { field: 'Function<anonymous>' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/33]⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > retains one command diagnostic when an admitted Process Manager assignment fails
+AssertionError: promise rejected "Error: admitted Process Manager assignmen…" instead of resolving
+ ❯ packages/server/test/repository/repository-routing.test.ts:6738:55
+    6736|     try {
+    6737|       RoutingProcessManager.reset(failure);
+    6738|       await expect(context.commandBus().post(command)).resolves.toBeUn…
+       |                                                       ^
+    6739|       await context.close();
+    6740|
+
+Caused by: Error: admitted Process Manager assignment failed
+ ❯ packages/server/test/repository/repository-routing.test.ts:6722:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/33]⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > retains one command diagnostic when an admitted handler fails
+AssertionError: promise rejected "Error: admitted command handler failed" instead of resolving
+ ❯ packages/server/test/repository/repository-routing.test.ts:6812:55
+    6810|     try {
+    6811|       ExecutingProjectAggregate.reset(failure);
+    6812|       await expect(context.commandBus().post(command)).resolves.toBeUn…
+       |                                                       ^
+    6813|       await waitForCondition(() => diagnostics.length === 1);
+    6814|
+
+Caused by: Error: admitted command handler failed
+ ❯ packages/server/test/repository/repository-routing.test.ts:6796:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/33]⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > rejects empty implicit state IDs before every Entity-family commit
+AssertionError: promise rejected "ForeignFieldError: cannot use field repos… { field: [Function] }" instead of resolving
+ ❯ packages/server/test/repository/repository-routing.test.ts:7459:8
+    7457|       await expect(
+    7458|         aggregate.commandBus().post(createAggregateCommand("blank-aggr…
+    7459|       ).resolves.toBeUndefined();
+       |        ^
+    7460|       await expect(
+    7461|         processManager.commandBus().post(createAggregateCommand("blank…
+
+Caused by: ForeignFieldError: cannot use field repository_routing.ProjectState.id with message repository_routing.CreateProject
+ ❯ assertOwn node_modules/.pnpm/@bufbuild+protobuf@2.12.1/node_modules/@bufbuild/protobuf/dist/esm/reflect/reflect.js:138:15
+ ❯ ReflectMessageImpl.isSet node_modules/.pnpm/@bufbuild+protobuf@2.12.1/node_modules/@bufbuild/protobuf/dist/esm/reflect/reflect.js:71:9
+ ❯ writeFields node_modules/.pnpm/@bufbuild+protobuf@2.12.1/node_modules/@bufbuild/protobuf/dist/esm/to-binary.js:32:18
+ ❯ toBinary node_modules/.pnpm/@bufbuild+protobuf@2.12.1/node_modules/@bufbuild/protobuf/dist/esm/to-binary.js:27:12
+ ❯ Object.clone packages/server/src/entity/entity-transaction.ts:746:31
+ ❯ EntityTransaction.get currentDraft [as currentDraft] packages/server/src/entity/entity-transaction.ts:409:30
+ ❯ EntityTransaction.rollback packages/server/src/entity/entity-transaction.ts:659:19
+ ❯ BlankStateIdAggregate.rollbackTransaction packages/server/src/entity/entity.ts:985:68
+ ❯ Object.call packages/server/src/entity/entity.ts:1133:20
+ ❯ Object.rollback packages/server/src/entity/entity.ts:1090:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { field: 'Function<anonymous>' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/33]⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > marks technical process-manager failures delivered after reporting them
+AssertionError: promise rejected "Error: technical process-manager failure" instead of resolving
+ ❯ packages/server/test/repository/repository-routing.test.ts:8015:6
+    8013|     await expect(
+    8014|       context.commandBus().post(createAggregateCommand("command-pm-tec…
+    8015|     ).resolves.toBeUndefined();
+       |      ^
+    8016|
+    8017|     await expect(
+
+Caused by: Error: technical process-manager failure
+ ❯ packages/server/test/repository/repository-routing.test.ts:8001:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/33]⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > exact-drains later process-manager event rows while retaining an earlier routed failure
+AssertionError: promise rejected "Error: pm-fail replay failed" instead of resolving
+ ❯ packages/server/test/repository/repository-routing.test.ts:8170:25
+    8168|     const posted = dispatcher.dispatch(createProjectCreated("event-pm-…
+    8169|
+    8170|     await expect(posted).resolves.toBeUndefined();
+       |                         ^
+    8171|     expect(SplitRouteProcessManager.startedIds).toEqual(["pm-fail", "p…
+    8172|     expect(SplitRouteProcessManager.completedIds).toEqual(["pm-later"]…
+
+Caused by: Error: pm-fail replay failed
+ ❯ SplitRouteProcessManager.reactTask packages/server/test/repository/repository-routing.test.ts:1906:13
+ ❯ Object.invokeEntityMethod packages/server/src/repository/repository.ts:5023:20
+ ❯ ProcessManagerEventExecution.#invokeHandlersInto packages/server/src/repository/repository.ts:4417:47
+ ❯ ProcessManagerEventExecution.#invokeEventHandlers packages/server/src/repository/repository.ts:4393:16
+ ❯ ProcessManagerEventExecution.#invokeHandlers packages/server/src/repository/repository.ts:4354:18
+ ❯ ProcessManagerEventExecution.#executeEntity packages/server/src/repository/repository.ts:4248:33
+ ❯ packages/server/src/repository/repository.ts:4187:9
+ ❯ ProcessManagerEventExecution.runTarget packages/server/src/repository/repository.ts:4181:5
+ ❯ Object.replayProcessManagerEvent packages/server/src/repository/repository.ts:8959:5
+ ❯ Object.replayPmInbox packages/server/src/repository/repository.ts:8881:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/33]⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > closes guard probe handles for both entity kinds on success, duplicates, and failures
+Error: technical process-manager failure
+ ❯ packages/server/test/repository/repository-routing.test.ts:8001:33
+    7999|
+    8000|   it("marks technical process-manager failures delivered after reporti…
+    8001|     RoutingProcessManager.reset(new Error("technical process-manager f…
+       |                                 ^
+    8002|     const factory = new InMemoryStorageFactory();
+    8003|     const context = BoundedContext.singleTenant("Tasks")
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/33]⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > marks default-handled delivery failures without retaining journal markers
+AssertionError: promise rejected "Error: handler failed before journal" instead of resolving
+ ❯ packages/server/test/repository/repository-routing.test.ts:8555:65
+    8553|     );
+    8554|
+    8555|     await expect(preJournalDispatcher.dispatch(preJournalEvent)).resol…
+       |                                                                 ^
+    8556|     const preJournal = new CurrentRecordTestStorage({
+    8557|       context: { name: "Tasks", multitenant: false },
+
+Caused by: Error: handler failed before journal
+ ❯ packages/server/test/repository/repository-routing.test.ts:8542:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/33]⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > retains one reactor diagnostic when an admitted Process Manager reactor fails
+AssertionError: promise rejected "Error: admitted Process Manager reactor f…" instead of resolving
+ ❯ packages/server/test/repository/repository-routing.test.ts:8868:51
+    8866|     try {
+    8867|       RoutingProcessManager.reset(failure);
+    8868|       await expect(context.eventBus().post(event)).resolves.toBeUndefi…
+       |                                                   ^
+    8869|       await context.close();
+    8870|
+
+Caused by: Error: admitted Process Manager reactor failed
+ ❯ packages/server/test/repository/repository-routing.test.ts:8852:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/33]⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > retains one subscriber diagnostic when an admitted subscriber fails
+AssertionError: promise rejected "Error: admitted projection subscriber fai…" instead of resolving
+ ❯ packages/server/test/repository/repository-routing.test.ts:9557:51
+    9555|     try {
+    9556|       ThrowingTaskProjection.reset(failure);
+    9557|       await expect(context.eventBus().post(event)).resolves.toBeUndefi…
+       |                                                   ^
+    9558|       await waitForCondition(() => diagnostics.length === 1);
+    9559|
+
+Caused by: Error: admitted projection subscriber failed
+ ❯ packages/server/test/repository/repository-routing.test.ts:9538:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/33]⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > does not expose projection state when its atomic commit fails
+AssertionError: promise rejected "Error: forced Entity commit failure" instead of resolving
+ ❯ packages/server/test/repository/repository-routing.test.ts:9726:6
+    9724|     await expect(
+    9725|       context.eventBus().post(createProjectCreated("projection-commit-…
+    9726|     ).resolves.toBeUndefined();
+       |      ^
+    9727|     await expect(
+    9728|       context.stand().read(ProjectOverviewStateSchema, "projection-fai…
+
+Caused by: Error: forced Entity commit failure
+ ❯ Object.commit packages/server/test/repository/repository-routing.test.ts:15057:17
+ ❯ ProjectionEventExecution.#commitProjectionRecord packages/server/src/repository/repository.ts:3227:27
+ ❯ ProjectionEventExecution.#commitProjectionOrCancel packages/server/src/repository/repository.ts:3193:18
+ ❯ ProjectionEventExecution.#storeIfChanged packages/server/src/repository/repository.ts:3174:16
+ ❯ ProjectionEventExecution.#executeTarget packages/server/src/repository/repository.ts:3078:5
+ ❯ ProjectionEventExecution.runTarget packages/server/src/repository/repository.ts:3042:5
+ ❯ Object.replayProjectionEvent packages/server/src/repository/repository.ts:9000:5
+ ❯ Object.replayProjectionMessage packages/server/src/repository/repository.ts:9032:5
+ ❯ LocalProjectionInbox.#replay packages/server/src/context/projection-handoff.ts:233:5
+ ❯ DeliveryDrain.#dispatch packages/server/src/delivery/delivery.ts:669:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/33]⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > does not expose aggregate state or state notifications when its atomic commit throws
+AssertionError: promise rejected "Error: forced Entity commit failure" instead of resolving
+ ❯ packages/server/test/repository/repository-routing.test.ts:9758:6
+    9756|         .commandBus()
+    9757|         .post(createAggregateCommand("aggregate-commit-fails", "aggreg…
+    9758|     ).resolves.toBeUndefined();
+       |      ^
+    9759|     await expect(
+    9760|       context.stand().read(ProjectStateSchema, "aggregate-fails"),
+
+Caused by: Error: forced Entity commit failure
+ ❯ Object.commit packages/server/test/repository/repository-routing.test.ts:15057:17
+ ❯ AggregateExecutionSupport.#commitAggregateRecord packages/server/src/repository/repository.ts:2223:27
+ ❯ AggregateExecutionSupport.persistAggregateUpdate packages/server/src/repository/repository.ts:2177:18
+ ❯ AggregateExecutionSupport.persistAggregateAndDispatch packages/server/src/repository/repository.ts:2271:23
+ ❯ Object.replayAggregateCommand packages/server/src/repository/repository.ts:8854:12
+ ❯ LocalEntityInbox.#replay packages/server/src/context/entity-inbox.ts:515:22
+ ❯ LocalEntityInbox.#replayAndFollowUp packages/server/src/context/entity-inbox.ts:391:7
+ ❯ DeliveryDrain.#dispatch packages/server/src/delivery/delivery.ts:669:5
+ ❯ DeliveryDrain.#deliver packages/server/src/delivery/delivery.ts:574:7
+ ❯ DeliveryDrain.#processPage packages/server/src/delivery/delivery.ts:484:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[27/33]⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > does not expose process-manager state or follow-ups when its atomic commit fails
+AssertionError: promise rejected "Error: forced Entity commit failure" instead of resolving
+ ❯ packages/server/test/repository/repository-routing.test.ts:9790:6
+    9788|     await expect(
+    9789|       context.commandBus().post(createAggregateCommand("pm-commit-fail…
+    9790|     ).resolves.toBeUndefined();
+       |      ^
+    9791|     await expect(
+    9792|       context.stand().read(ProjectQueueStateSchema, "pm-fails"),
+
+Caused by: Error: forced Entity commit failure
+ ❯ Object.commit packages/server/test/repository/repository-routing.test.ts:15057:17
+ ❯ ProcessManagerExecutionSupport.#commitProcessManagerRecord packages/server/src/repository/repository.ts:3667:27
+ ❯ ProcessManagerExecutionSupport.#storeProcessManagerRecord packages/server/src/repository/repository.ts:3642:18
+ ❯ ProcessManagerExecutionSupport.commit packages/server/src/repository/repository.ts:3605:16
+ ❯ ProcessManagerCommandExecution.#commitAndPublish packages/server/src/repository/repository.ts:3834:23
+ ❯ ProcessManagerCommandExecution.run packages/server/src/repository/repository.ts:3760:14
+ ❯ Object.replayProcessManagerCommand packages/server/src/repository/repository.ts:8915:12
+ ❯ Object.replayPmInbox packages/server/src/repository/repository.ts:8873:14
+ ❯ LocalEntityInbox.#replay packages/server/src/context/entity-inbox.ts:515:22
+ ❯ LocalEntityInbox.#replayAndFollowUp packages/server/src/context/entity-inbox.ts:391:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[28/33]⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > does not publish when aggregate transition validation rejects the handler mutation
+AssertionError: promise rejected "Error: Handler "createProject" returned u…" instead of resolving
+ ❯ packages/server/test/repository/repository-routing.test.ts:10311:8
+    10309|       await expect(
+    10310|         context.commandBus().post(createAggregateCommand("rejected-cha…
+    10311|       ).resolves.toBeUndefined();
+       |        ^
+    10312|       await context.close();
+    10313|       expect(changes).toEqual([]);
+
+Caused by: Error: Handler "createProject" returned undeclared message "repository_routing.ProjectCreated".
+ ❯ Object.requireDeclaredOutputs packages/server/src/repository/repository.ts:6360:15
+ ❯ AggregateCommandExecution.#invokeAssignee packages/server/src/repository/repository.ts:2534:26
+ ❯ AggregateCommandExecution.#runAssignee packages/server/src/repository/repository.ts:2415:18
+ ❯ Object.replayAggregateCommand packages/server/src/repository/repository.ts:8854:12
+ ❯ LocalEntityInbox.#replay packages/server/src/context/entity-inbox.ts:515:22
+ ❯ LocalEntityInbox.#replayAndFollowUp packages/server/src/context/entity-inbox.ts:391:7
+ ❯ DeliveryDrain.#dispatch packages/server/src/delivery/delivery.ts:669:5
+ ❯ DeliveryDrain.#deliver packages/server/src/delivery/delivery.ts:574:7
+ ❯ DeliveryDrain.#processPage packages/server/src/delivery/delivery.ts:484:13
+ ❯ DeliveryDrain.#readPages packages/server/src/delivery/delivery.ts:447:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[29/33]⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > reports a stable error when stored projection replay fails during catch-up
+AssertionError: promise rejected "Error: projection subscriber failed" instead of resolving
+ ❯ packages/server/test/repository/repository-routing.test.ts:10934:6
+    10932|         .eventBus()
+    10933|         .post(createProjectCreated("event-catch-up-failure", "task-cat…
+    10934|     ).resolves.toBeUndefined();
+       |      ^
+    10935|
+    10936|     await expect(context.catchUpReadSide()).rejects.toMatchObject({
+
+Caused by: Error: projection subscriber failed
+ ❯ ThrowingTaskProjection.reset packages/server/test/repository/repository-routing.test.ts:1576:35
+ ❯ packages/server/test/repository/repository-routing.test.ts:10925:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[30/33]⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > reports bounded non-error throw detail during read-side catch-up
+AssertionError: promise rejected "Error: Projection inbox replay failed." instead of resolving
+ ❯ packages/server/test/repository/repository-routing.test.ts:10963:8
+    10961|           .eventBus()
+    10962|           .post(createProjectCreated("event-catch-up-string-failure", …
+    10963|       ).resolves.toBeUndefined();
+       |        ^
+    10964|
+    10965|       await expect(context.catchUpReadSide()).rejects.toMatchObject({
+
+Caused by: Error: Projection inbox replay failed.
+ ❯ Object.replayFailure packages/server/src/context/local-inbox-handoff.ts:564:45
+ ❯ Object.drainAttempt packages/server/src/context/local-inbox-handoff.ts:545:26
+ ❯ Object.runDrain packages/server/src/context/local-inbox-handoff.ts:524:23
+ ❯ Object.drain packages/server/src/context/local-inbox-handoff.ts:519:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[31/33]⎯
+
+ FAIL  packages/server/test/repository/repository-routing.test.ts > repository signal routing > reports missing projection subscriber methods with neutral repository execution wording
+AssertionError: promise rejected "TypeError: Repository entity execution re…" instead of resolving
+ ❯ packages/server/test/repository/repository-routing.test.ts:12203:8
+    12201|           .eventBus()
+    12202|           .post(createProjectCreated("event-missing-method", "task-mis…
+    12203|       ).resolves.toBeUndefined();
+       |        ^
+    12204|     } finally {
+    12205|       if (descriptor !== undefined) {
+
+Caused by: TypeError: Repository entity execution requires method "missingSubscriber".
+ ❯ Object.invokeEntityMethod packages/server/src/repository/repository.ts:5020:13
+ ❯ ProjectionEventExecution.#invokeSubscriber packages/server/src/repository/repository.ts:3325:43
+ ❯ ProjectionEventExecution.#invokeSubscribers packages/server/src/repository/repository.ts:3292:20
+ ❯ ProjectionEventExecution.#executeTarget packages/server/src/repository/repository.ts:3077:16
+ ❯ ProjectionEventExecution.runTarget packages/server/src/repository/repository.ts:3042:5
+ ❯ Object.replayProjectionEvent packages/server/src/repository/repository.ts:9000:5
+ ❯ Object.replayProjectionMessage packages/server/src/repository/repository.ts:9032:5
+ ❯ LocalProjectionInbox.#replay packages/server/src/context/projection-handoff.ts:233:5
+ ❯ DeliveryDrain.#dispatch packages/server/src/delivery/delivery.ts:669:5
+ ❯ DeliveryDrain.#deliver packages/server/src/delivery/delivery.ts:574:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[32/33]⎯
+
+
+ Test Files  1 failed | 4 passed (5)
+      Tests  33 failed | 397 passed (430)
+   Start at  20:13:44
+   Duration  6.45s (transform 2.51s, setup 0ms, import 3.74s, tests 5.75s, environment 0ms)
+

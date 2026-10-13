@@ -1391,7 +1391,7 @@ describe("BoundedContext assembly", () => {
     }
   });
 
-  it("marks a failed dynamic-tenant row delivered without fresh-runtime recovery", async () => {
+  it("retains a failed dynamic-tenant row for fresh-runtime recovery", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const tenantId = tenant("tenant-first-row");
     const contextName = "FreshRecoveryTasks";
@@ -1416,17 +1416,17 @@ describe("BoundedContext assembly", () => {
         first
           .commandBus()
           .post(createAggregateCommand("dynamic-command", "dynamic-task", "tenant-first-row")),
-      ).resolves.toBeUndefined();
+      ).rejects.toBe(pendingFreshRecovery);
       const firstDescriptor = internalDeliveryDescriptor(first);
       const durable = new Delivery({
         context: firstDescriptor.storageContext({ tenantId }),
         storageFactory,
       });
-      const delivered = await durable.inbox.read(ShardIndex.single(), {
-        statuses: ["DELIVERED"],
+      const pending = await durable.inbox.read(ShardIndex.single(), {
+        statuses: ["TO_DELIVER"],
       });
-      expect(delivered).toHaveLength(1);
-      expect(delivered[0]).toMatchObject({
+      expect(pending).toHaveLength(1);
+      expect(pending[0]).toMatchObject({
         inboxId: { targetId: Identifiers.pack("string", "dynamic-task") },
         signalId: "dynamic-command",
         version: 1n,
@@ -1449,21 +1449,22 @@ describe("BoundedContext assembly", () => {
       });
 
       expect(attachment.startup.scopes).toHaveLength(1);
+      await waitForCondition(
+        async () =>
+          (await recovered
+            ?.stand()
+            .read(ProcessManagerStateSchema, "dynamic-task", { tenantId })) !== undefined,
+        "fresh dynamic-tenant recovery",
+      );
+      await expect(
+        recovered.stand().read(ProcessManagerStateSchema, "dynamic-task", { tenantId }),
+      ).resolves.toMatchObject({ queue: "Task Ready recovered" });
       await expect(
         new Delivery({
           context: descriptor.storageContext({ tenantId }),
           storageFactory,
         }).inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
-      ).resolves.toMatchObject([
-        {
-          inboxId: { targetId: Identifiers.pack("string", "dynamic-task") },
-          signalId: "dynamic-command",
-          version: 1n,
-        },
-      ]);
-      await expect(
-        recovered.stand().read(ProcessManagerStateSchema, "dynamic-task", { tenantId }),
-      ).resolves.toBeUndefined();
+      ).resolves.toHaveLength(1);
       await serverEnvironmentAccess.detach(ServerEnvironment.instance(), attachment);
     } finally {
       await first?.close();
