@@ -176,12 +176,12 @@ test("refresh follows cursors until it joins already loaded history", async () =
   );
   await screen.findByText("Old");
   await act(async () => {
-    vi.advanceTimersByTime(2_000);
     await Promise.resolve();
   });
-  await waitFor(() => {
-    expect(history).toHaveBeenNthCalledWith(3, "a", "all", 40, "gap");
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(2_000);
   });
+  expect(history).toHaveBeenNthCalledWith(3, "a", "all", 40, "gap");
   const region = screen.getByRole("region", { name: "A history" });
   expect(
     within(region)
@@ -395,7 +395,14 @@ test("failed older paging does not move a reader when a later refresh appends re
   view.rerender(<HistoryDrawer {...props} />);
   await screen.findByText("Fourth");
   expect(list.scrollTop).toBe(0);
-  expect(screen.getByRole("button", { name: "1 new record" })).toBeTruthy();
+  const scrollTo = vi.fn((first?: ScrollToOptions | number) => {
+    if (typeof first === "object") list.scrollTop = Number(first.top);
+  });
+  list.scrollTo = scrollTo;
+  fireEvent.click(screen.getByRole("button", { name: "1 new record" }));
+  expect(scrollTo).toHaveBeenCalledWith({ top: list.scrollHeight, behavior: "smooth" });
+  expect(list.scrollTop).toBe(list.scrollHeight);
+  expect(screen.queryByRole("button", { name: /new record/ })).toBeNull();
 });
 
 test("new records follow a reader at the bottom of the history list", async () => {

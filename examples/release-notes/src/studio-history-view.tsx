@@ -84,7 +84,9 @@ interface DrawerProps {
  */
 const trapFocus = (event: KeyboardEvent<HTMLElement>): void => {
   if (event.key !== "Tab") return;
-  const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>("button, summary"));
+  const controls = Array.from(
+    event.currentTarget.querySelectorAll<HTMLElement>("button:not(:disabled), summary"),
+  );
   const current = controls.indexOf(document.activeElement as HTMLElement);
   event.preventDefault();
   controls[(current + (event.shiftKey ? controls.length - 1 : 1)) % controls.length]?.focus();
@@ -304,24 +306,41 @@ const ModalHeading = ({
 /**
  * Copies the exact visible content, including whitespace.
  */
-const ModalCopy = ({
-  detail,
-  bridge,
-}: {
+interface ModalCopyProps {
   detail: HistoryRecord;
   bridge: HistoryBridge;
-}): ReactElement => (
-  <footer>
-    <button
-      type="button"
-      onClick={() => {
-        void bridge.copyMarkdown(detail.exact || detail.detail);
-      }}
-    >
-      <Copy size={15} aria-hidden="true" /> Copy
-    </button>
-  </footer>
-);
+}
+const ModalCopy = ({ detail, bridge }: ModalCopyProps): ReactElement => {
+  const [status, setStatus] = useState<"idle" | "copying" | "copied" | "error">("idle");
+  const message =
+    status === "copied" ? "Copied." : status === "error" ? "Could not copy. Try again." : "";
+  return (
+    <footer>
+      {message && (
+        <span role={status === "error" ? "alert" : "status"} className="rs-history-status">
+          {message}
+        </span>
+      )}
+      <button
+        type="button"
+        disabled={status === "copying"}
+        onClick={() => {
+          setStatus("copying");
+          void bridge.copyMarkdown(detail.exact || detail.detail).then(
+            () => {
+              setStatus("copied");
+            },
+            () => {
+              setStatus("error");
+            },
+          );
+        }}
+      >
+        <Copy size={15} aria-hidden="true" /> Copy
+      </button>
+    </footer>
+  );
+};
 
 /**
  * Shows full visible content with unchanged recorded fields available beneath it.

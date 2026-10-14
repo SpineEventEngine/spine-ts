@@ -13,7 +13,7 @@
  */
 
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
 import { StudioFlow, type StudioFlowBridge } from "../src/studio-flow.js";
 
@@ -445,6 +445,57 @@ test("Dashboard cannot release sign-out busy state while sign-out is pending", a
   expect(screen.getByRole<HTMLButtonElement>("button", { name: "Sign out" }).disabled).toBe(true);
   pending.resolve(undefined);
   await screen.findByRole("heading", { name: "Your releases" });
+});
+
+test("signed-in History opens from dashboard and editor and restores focus", async () => {
+  const history = vi.fn(() => Promise.resolve({ items: [] }));
+  const signOut = vi.fn(() => Promise.resolve());
+  const view = render(
+    <StudioFlow
+      bridge={bridge({ history })}
+      models={[{ slug: "demo", displayName: "Demo model" }]}
+      model="demo"
+      selectModel={() => Promise.resolve()}
+      signOut={signOut}
+      onNotice={vi.fn()}
+    />,
+  );
+  const dashboardLauncher = await screen.findByRole("button", { name: "History" });
+  dashboardLauncher.focus();
+  fireEvent.click(dashboardLauncher);
+  expect(screen.getByRole("dialog", { name: "History" })).toBeTruthy();
+  expect(screen.getByRole("region", { name: "Portal 2.4 history" })).toBeTruthy();
+  expect(
+    within(screen.getByRole("dialog", { name: "History" }))
+      .getByRole("button", { name: /Portal 2\.4/ })
+      .getAttribute("aria-expanded"),
+  ).toBe("true");
+  await waitFor(() => {
+    expect(history).toHaveBeenCalledWith("draft", "all", 40, undefined);
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Close history" }));
+  expect(screen.queryByRole("dialog", { name: "History" })).toBeNull();
+  expect(document.activeElement).toBe(dashboardLauncher);
+
+  fireEvent.click(screen.getByRole("button", { name: /Portal 2.4/ }));
+  await screen.findByRole("textbox", { name: "Markdown" });
+  const launcher = screen.getByRole("button", { name: "History" });
+  launcher.focus();
+  fireEvent.click(launcher);
+  expect(screen.getByRole("dialog", { name: "History" })).toBeTruthy();
+  expect(screen.getByRole("region", { name: "Portal 2.4 history" })).toBeTruthy();
+  await waitFor(() => {
+    expect(history).toHaveBeenCalledTimes(2);
+    expect(history).toHaveBeenLastCalledWith("draft", "all", 40, undefined);
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Close history" }));
+  expect(screen.queryByRole("dialog", { name: "History" })).toBeNull();
+  expect(document.activeElement).toBe(launcher);
+  fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+  await waitFor(() => {
+    expect(signOut).toHaveBeenCalledOnce();
+  });
+  view.unmount();
 });
 
 test("completed Review persists through Style and back without another comparison", async () => {
