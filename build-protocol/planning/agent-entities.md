@@ -8385,3 +8385,33 @@ push. The HEAD-based clean package build, final cheap preflight and full local
 release profile run against that committed tree while exact-commit CI runs in
 parallel. Their completion is the remaining acceptance gate and will be reported
 in the user-facing completion; no claim of full test success is made yet.
+
+The checkpoint's full local release gate completed naturally: 397 test files and
+6,309 tests passed, with one skipped test; the gate failed only because global
+branch coverage was 89.99% (21,200/23,556), below the existing 90% threshold.
+All preceding quality gates and the isolated clean package build passed.
+Return to the existing implementer (explicit configured Sol/medium, no children)
+for a bounded inspection of uncovered behavior in affected files. Add only
+meaningful missing behavior tests, retain thresholds and public contracts, then
+review the resulting tests independently before the final preflight/release run.
+No full-suite diagnostic rerun is authorized before this correction converges.
+
+The implementer added one observable tenant-pagination regression: malformed
+native metadata and an unrelated namespace precede a valid tenant; paging must
+return the valid tenant and finish correctly. Focused tenant tests pass 21/21,
+and coverage confirms the previously uncovered branch now executes with no
+production or threshold changes. Tooling, lint, cleanup, TSDoc and formatting
+pass. Fresh independent test-quality review dispatched for this addition only,
+existing style/maintainability concern, explicit Sol/medium, fork none, no memory,
+prior reports or child agents. Final acceptance waits for that result.
+
+Fresh test-quality review requested stronger continuation coverage: the initial
+three-candidate page checked filtering but not movement between pages. The same
+implementer revised the test to follow three count-one pages through malformed
+metadata, an external namespace and the valid terminal tenant. Existing native
+fixture cursor/limit behavior is reused. All 21 focused tests and tooling/lint
+checks pass; independent narrow re-review confirms the finding resolved and no
+artificial call-count assertions. Reviewer dispatch was explicit Sol/medium;
+actual runtime metadata unavailable. Commit/push this test and disposition, then
+run mandatory preflight and the final release profile against the frozen commit.
+Documentation/API/security concerns are unchanged by this test-only correction.

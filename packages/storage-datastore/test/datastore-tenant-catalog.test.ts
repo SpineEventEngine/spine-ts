@@ -76,6 +76,35 @@ describe("DatastoreTenantCatalog", () => {
     await expect(catalog.page({ count: 1, signal: aborted.signal })).rejects.toThrow();
   });
 
+  it("skips malformed and external native metadata before a valid tenant", async () => {
+    const client = new NamespaceClient([]);
+    client.response = [
+      [
+        { [client.KEY]: {} },
+        { [client.KEY]: { name: "external" } },
+        { [client.KEY]: { name: "Vvalid" } },
+      ],
+    ];
+    const catalog = new DatastoreTenantCatalog(client as never, new DefaultNamespaceConverter());
+    const signal = new AbortController().signal;
+    const early = await catalog.page({ count: 1, signal });
+    if (early.after === undefined) throw new Error("Expected native phase.");
+    const malformed = await catalog.page({ count: 1, signal, after: early.after });
+    expect(malformed.boundaries).toEqual([]);
+    expect(malformed.hasMore).toBe(true);
+    if (malformed.after === undefined) throw new Error("Expected native continuation.");
+    const external = await catalog.page({ count: 1, signal, after: malformed.after });
+    expect(external.boundaries).toEqual([]);
+    expect(external.hasMore).toBe(true);
+    if (external.after === undefined) throw new Error("Expected native continuation.");
+    const valid = await catalog.page({ count: 1, signal, after: external.after });
+    expect(valid.boundaries.map((boundary) => boundary.tenantId?.kind)).toEqual([
+      { case: "value", value: "valid" },
+    ]);
+    expect(valid.hasMore).toBe(false);
+    expect(valid.after).toBeUndefined();
+  });
+
   it("reads more than 127 native tenant candidates with a continuation", async () => {
     const client = new NamespaceClient(
       Array.from({ length: 130 }, (_, index) => `Vtenant-${String(index).padStart(3, "0")}`),
