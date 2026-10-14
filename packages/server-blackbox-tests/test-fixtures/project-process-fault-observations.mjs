@@ -37,3 +37,58 @@ export function completeInboxRows(observation, shardCount) {
     return shard.rows;
   });
 }
+
+export function classifyCrashReplay({
+  preKillObservation,
+  observation,
+  shardCount,
+  entries,
+  method,
+  recipientTypeUrl,
+  originalEventId,
+  priorPids,
+  freshPids,
+}) {
+  const priorRows = completeInboxRows(preKillObservation, shardCount);
+  const rows = completeInboxRows(observation, shardCount);
+  const matching = entries.filter((entry) => entry.method === method);
+  assert.ok(
+    matching.length === 1 || matching.length === 2,
+    `${method} entered an unexpected number of times.`,
+  );
+  if (matching.length === 1) return undefined;
+  assert.equal(matching.filter((entry) => priorPids.includes(entry.pid)).length, 1);
+  assert.equal(matching.filter((entry) => freshPids.includes(entry.pid)).length, 1);
+  const recipient = matching[0];
+  assert.ok(
+    typeof recipient.recipientTypeUrl === "string" && recipient.recipientTypeUrl.length > 0,
+  );
+  assert.ok(
+    typeof recipient.recipientIdBase64 === "string" && recipient.recipientIdBase64.length > 0,
+  );
+  for (const entry of matching) {
+    assert.equal(entry.recipientTypeUrl, recipient.recipientTypeUrl);
+    assert.equal(entry.recipientIdBase64, recipient.recipientIdBase64);
+  }
+  const exactRecipient = (row) =>
+    row.targetTypeUrl === recipientTypeUrl &&
+    row.signalId === originalEventId &&
+    row.targetIdTypeUrl === recipient.recipientTypeUrl &&
+    row.targetIdBase64 === recipient.recipientIdBase64;
+  const after = rows.filter((row) => exactRecipient(row));
+  const prior = priorRows.filter(exactRecipient);
+  assert.equal(
+    prior.length,
+    1,
+    `${method} replay requires one original Inbox row before the kill.`,
+  );
+  assert.equal(after.length, 1, `${method} replay requires one original Inbox row after the kill.`);
+  assert.equal(prior[0].status, "TO_DELIVER");
+  assert.equal(after[0].status, "TO_DELIVER");
+  assert.equal(
+    after[0].messageId,
+    prior[0].messageId,
+    `${method} replay must retain the exact Inbox row.`,
+  );
+  return { method, pendingMessageId: after[0].messageId };
+}

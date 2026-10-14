@@ -1,0 +1,136 @@
+{
+  "status": "PASS",
+  "mode": "audit-only",
+  "runId": "0c7f664c1e0243e2a2cf5bd87acfbc75",
+  "auditedAt": "2026-10-14T01:44:58.019Z",
+  "config": {
+    "provider": "postgres16",
+    "processes": 2,
+    "scenario": "before-effect",
+    "requireColdRepair": true
+  },
+  "configuredProfile": {
+    "model": "gpt-6-luna",
+    "reasoning": "low",
+    "runtimeMetadata": "not exposed by this execution surface"
+  },
+  "audit": {
+    "runId": "0c7f664c1e0243e2a2cf5bd87acfbc75",
+    "provider": "postgres16",
+    "processes": 2,
+    "scenario": "before-effect",
+    "status": "PASS",
+    "database": "sqlrel_fault_0c7f664c1e0243e2a2cf5bd87acfbc75",
+    "acknowledgedCommandIds": [
+      "1a6ab2c1-4726-48e2-b33f-865cf7fcdf9d"
+    ],
+    "cleanup": {
+      "databaseDropped": true,
+      "errors": [],
+      "exits": [
+        {
+          "pid": 76409,
+          "code": 0,
+          "signal": null
+        },
+        {
+          "pid": 76410,
+          "code": 0,
+          "signal": null
+        }
+      ]
+    },
+    "gitHead": "9582b9fe7d997fbe36a7039075ea8761c52e1d1c",
+    "runtimeTreeSha256": "70460abae5e92bb3b0c3cd49e0961e25c9d13ab61b3f61e141e3ff248d14a818",
+    "artifacts": [
+      {
+        "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server-blackbox-tests/dist/test-fixtures/project-workflow.js",
+        "sha256": "d0dcb0136f8a8db03a7939b639625020e812b2019194ec20f8ad785a92d2bd52"
+      },
+      {
+        "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server-blackbox-tests/dist/generated/spine/server/testing/project_workflow_pb.js",
+        "sha256": "b5e6d882578f431085d42b84e5fefb9d948880867e34c3c1b83c2b96d36c371b"
+      },
+      {
+        "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/dist/index.js",
+        "sha256": "6bf9c9a8c971afc87de534107af1a935953f89a0607193ed3576e2b3def1909e"
+      },
+      {
+        "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/proto/dist/src/index.js",
+        "sha256": "3b16144d721808f5ed8d458be542064c5323575247cf1b7e6d325b038adaeaa2"
+      },
+      {
+        "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/core/dist/index.js",
+        "sha256": "64a74877641ebde82dab6e2c69577ba9cf246009adfd76f74173502d0b03b916"
+      },
+      {
+        "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage/dist/index.js",
+        "sha256": "df614e0461342a5bc52377ed64200cdb3307f669b74cfd0340d587d17b2d55c7"
+      },
+      {
+        "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage-postgres/dist/index.js",
+        "sha256": "84a8658d25708fd1bf4d2b0fd7b1bd678966fd089b9b8e6908df1b1005ad3139"
+      },
+      {
+        "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage-mysql/dist/index.js",
+        "sha256": "1e344dd9d6163df30cabbcb6dec296cde324a3f74a9d185ea29c40a28862da74"
+      },
+      {
+        "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/delivery-client/dist/index.js",
+        "sha256": "1e69a8d6b4ad6584f804baf8746d9d937b0e173a589cb52fba98735aeac22140"
+      },
+      {
+        "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/delivery-server/dist/index.js",
+        "sha256": "b8b79d6f88a3f7f4dd0461062a09dc519e98c84387ae01360b4245acd23b5d08"
+      }
+    ],
+    "scenarioChecks": {
+      "acknowledgedCommandIds": [
+        "1a6ab2c1-4726-48e2-b33f-865cf7fcdf9d"
+      ],
+      "scenario": "before-effect",
+      "event": {
+        "id": "297b1a2f-fd65-482b-937f-8afc17630135",
+        "sha256": "f2513d2e573ede7f27f3caeca243647d7d2954c4265169c3977bf43473cfc9d3",
+        "binaryBase64": "CiYKJDI5N2IxYTJmLWZkNjUtNDgyYi05MzdmLThhZmMxNzYzMDEzNRKkAQo9dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0Q3JlYXRlZBJjCigKJmZhdWx0LTBjN2Y2NjRjMWUwMjQzZTJhMmNmNWJkODdhY2ZiYzc1EiwKKAomZmF1bHQtMGM3ZjY2NGMxZTAyNDNlMmEyY2Y1YmQ4N2FjZmJjNzUQARoJcm9hZG1hcC0xGp4CCgwIjbu71gYQ6OWF3QIaaAo4dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0SWQSLAooCiZmYXVsdC0wYzdmNjY0YzFlMDI0M2UyYTJjZjViZDg3YWNmYmM3NRABIgByoQEKjAEKTAoidHlwZS5zcGluZS5pby9zcGluZS5jb3JlLkNvbW1hbmRJZBImCiQxYTZhYjJjMS00NzI2LTQ4ZTItYjMzZi04NjVjZjdmY2RmOWQSPHR5cGUuc3BpbmUuc2VydmVyLnRlc3Rpbmcvc3BpbmUuc2VydmVyLnRlc3RpbmcuQ3JlYXRlUHJvamVjdBoQEg4KDG1hdHJpeC1hY3Rvcg=="
+      },
+      "handlerEntries": {
+        "entries": 6,
+        "methodCounts": {
+          "create": 1,
+          "planning": 2,
+          "staffing": 1,
+          "portfolio": 1,
+          "projection": 1
+        },
+        "pids": [
+          76264,
+          76265,
+          76409
+        ]
+      },
+      "restartPids": [
+        76409,
+        76410
+      ],
+      "completedStates": true,
+      "extraRecipientReplays": [],
+      "deliverySnapshots": {
+        "preKillShardCount": 3,
+        "postKillShardCount": 3,
+        "recoveredShardCount": 3
+      },
+      "killEvidence": {
+        "selectedPid": 76264,
+        "enteredHandlerPid": 76264,
+        "planningEntriesOnKilledPid": 1,
+        "replayPlanningPids": [
+          76409
+        ],
+        "postKillStateObservationRecorded": true
+      }
+    }
+  },
+  "failure": null,
+  "note": "Validates saved run artifacts and their self-contained hashes; launches no processes or database operations."
+}

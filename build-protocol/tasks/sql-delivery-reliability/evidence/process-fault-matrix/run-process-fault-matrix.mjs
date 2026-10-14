@@ -53,6 +53,12 @@ const recipientTypeUrls = {
   portfolio: "type.spine.server.testing/spine.server.testing.PortfolioId",
   projection: "type.spine.server.testing/spine.server.testing.ProjectId",
 };
+const deliveryTargetTypeUrls = {
+  planning: "type.spine.server.testing/spine.server.testing.PlanningState",
+  staffing: "type.spine.server.testing/spine.server.testing.StaffingState",
+  portfolio: "type.spine.server.testing/spine.server.testing.PortfolioState",
+  projection: "type.spine.server.testing/spine.server.testing.ProjectProjectionState",
+};
 const stateNames = ["project", "planning", "staffing", "portfolio", "projection"];
 const resultTimeoutMs = 240_000;
 const termGraceMs = 2_000;
@@ -164,6 +170,46 @@ function assertEntrySet(entries, expectedCounts, processCount, label) {
   };
 }
 
+function completeDeliveryRows(observation, processCount, label) {
+  const expectedShards = Array.from(
+    { length: processCount },
+    (_, index) => `${index}/${processCount}`,
+  );
+  if (processCount !== 1) expectedShards.push("0/1");
+  assert(Array.isArray(observation?.shards), `${label}: Inbox shard observations are missing`);
+  const actualShards = observation.shards.map((shard) => shard.shard).sort();
+  assert(
+    JSON.stringify(actualShards) === JSON.stringify(expectedShards.sort()),
+    `${label}: expected every Inbox shard exactly once`,
+  );
+  return observation.shards.flatMap((shard) => {
+    assert(shard.error === undefined, `${label}: Inbox shard ${shard.shard} reports an error`);
+    assert(shard.truncated === false, `${label}: Inbox shard ${shard.shard} was truncated`);
+    assert(Array.isArray(shard.rows), `${label}: Inbox shard ${shard.shard} has no rows array`);
+    assert(shard.count === shard.rows.length, `${label}: Inbox shard ${shard.shard} count differs`);
+    assert(
+      shard.rows.every(
+        (row) =>
+          typeof row.messageId === "string" &&
+          row.messageId.length > 0 &&
+          typeof row.signalId === "string" &&
+          row.signalId.length > 0 &&
+          typeof row.status === "string" &&
+          row.status.length > 0,
+      ),
+      `${label}: Inbox rows are missing message identity, Event identity, or status`,
+    );
+    return shard.rows;
+  });
+}
+
+function assertSameSnapshot(actual, expected, label) {
+  assert(
+    JSON.stringify(actual) === JSON.stringify(expected),
+    `${label}: final scenario record differs from its persisted snapshot`,
+  );
+}
+
 async function snapshotProvenance() {
   const files = {};
   for (const relative of provenancePaths) {
@@ -189,6 +235,12 @@ async function auditScenario(config, result, runDirectory) {
 
   if (config.scenario === "before-effect") {
     assert(commandIds.length === 1, "before-effect must acknowledge one Command");
+    const preKillSnapshot = await readJson(runDirectory, "before-effect-pre-kill.json");
+    const postKillSnapshot = await readJson(runDirectory, "before-effect-post-kill.json");
+    const recoveredSnapshot = await readJson(
+      runDirectory,
+      "before-effect-recovered-pre-assert.json",
+    );
     assert(scenarioRecord.entered?.method === "planning", "before-effect did not stop at Planning");
     assert(
       scenarioRecord.entered.pid === scenarioRecord.killedPid,
@@ -204,9 +256,148 @@ async function auditScenario(config, result, runDirectory) {
       original,
       "before-effect replay Event",
     );
+    assertSameSnapshot(
+      preKillSnapshot.preKillDelivery,
+      scenarioRecord.preKillDelivery,
+      "before-effect pre-kill Inbox snapshot",
+    );
+    assertSameSnapshot(
+      preKillSnapshot.entered,
+      scenarioRecord.entered,
+      "before-effect entered record",
+    );
+    assertSameSnapshot(
+      preKillSnapshot.before,
+      scenarioRecord.before,
+      "before-effect initial state",
+    );
+    assert(
+      postKillSnapshot.killedPid === scenarioRecord.killedPid,
+      "before-effect post-kill snapshot PID differs",
+    );
+    assertSameSnapshot(
+      postKillSnapshot.postKill,
+      scenarioRecord.postKill,
+      "before-effect post-kill state",
+    );
+    assertSameSnapshot(
+      postKillSnapshot.postKillDelivery,
+      scenarioRecord.postKillDelivery,
+      "before-effect post-kill Inbox snapshot",
+    );
+    assertSameSnapshot(
+      recoveredSnapshot.after,
+      scenarioRecord.after,
+      "before-effect recovered state",
+    );
+    assertSameSnapshot(
+      recoveredSnapshot.allEntries,
+      scenarioRecord.allEntries,
+      "before-effect recovered handler ledger",
+    );
+    assertSameSnapshot(
+      recoveredSnapshot.restartPids,
+      scenarioRecord.restartPids,
+      "before-effect recovered PID set",
+    );
+    assertSameSnapshot(
+      recoveredSnapshot.recoveredDelivery,
+      scenarioRecord.recoveredDelivery,
+      "before-effect recovered Inbox snapshot",
+    );
+    const preKillRows = completeDeliveryRows(
+      scenarioRecord.preKillDelivery,
+      config.processes,
+      "before-effect pre-kill Inbox",
+    );
+    const postKillRows = completeDeliveryRows(
+      scenarioRecord.postKillDelivery,
+      config.processes,
+      "before-effect post-kill Inbox",
+    );
+    completeDeliveryRows(
+      scenarioRecord.recoveredDelivery,
+      config.processes,
+      "before-effect recovered Inbox",
+    );
+    const oldPids = preKillSnapshot.ready.map((worker) => worker.pid);
+    assert(
+      oldPids.length === config.processes && new Set(oldPids).size === config.processes,
+      "before-effect initial PID set is incomplete",
+    );
+    assert(
+      Array.isArray(scenarioRecord.extraReplays),
+      "before-effect measured extra-replay classification is missing",
+    );
+    const extraReplayMethods = scenarioRecord.extraReplays.map((replay) => replay.method);
+    assert(
+      extraReplayMethods.every((method) =>
+        ["staffing", "portfolio", "projection"].includes(method),
+      ) && new Set(extraReplayMethods).size === extraReplayMethods.length,
+      "before-effect extra-replay methods are invalid or duplicated",
+    );
+    const expectedCounts = { create: 1, planning: 2 };
+    for (const method of ["staffing", "portfolio", "projection"]) {
+      const count = scenarioRecord.allEntries.filter((entry) => entry.method === method).length;
+      assert(
+        count === 1 || count === 2,
+        `before-effect ${method} entry count ${count} is outside the measured replay range`,
+      );
+      const replay = scenarioRecord.extraReplays.find((entry) => entry.method === method);
+      assert(
+        (count === 2) === (replay !== undefined),
+        `before-effect ${method} duplicate entry does not match its measured replay classification`,
+      );
+      expectedCounts[method] = count;
+      if (replay !== undefined) {
+        const methodEntries = scenarioRecord.allEntries.filter((entry) => entry.method === method);
+        const oldEntries = methodEntries.filter((entry) => oldPids.includes(entry.pid));
+        const freshEntries = methodEntries.filter((entry) =>
+          scenarioRecord.restartPids.includes(entry.pid),
+        );
+        assert(
+          oldEntries.length === 1 && freshEntries.length === 1,
+          `before-effect ${method} replay does not have one old and one fresh PID entry`,
+        );
+        assert(
+          replay.preKillEffect === scenarioRecord.before.projects[0].states[method],
+          `before-effect ${method} replay effect snapshot differs`,
+        );
+        assert(
+          oldEntries[0].recipientTypeUrl === freshEntries[0].recipientTypeUrl &&
+            oldEntries[0].recipientIdBase64 === freshEntries[0].recipientIdBase64,
+          `before-effect ${method} old and fresh entries target different typed recipients`,
+        );
+        const exactRow = (row) =>
+          row.signalId === original.id &&
+          row.targetTypeUrl === deliveryTargetTypeUrls[method] &&
+          row.targetIdTypeUrl === oldEntries[0].recipientTypeUrl &&
+          row.targetIdBase64 === oldEntries[0].recipientIdBase64;
+        const preRows = preKillRows.filter(exactRow);
+        const postRows = postKillRows.filter(exactRow);
+        assert(
+          preRows.length === 1 && postRows.length === 1,
+          `before-effect ${method} replay is not supported by exactly one original-Event row for the typed recipient`,
+        );
+        assert(
+          preRows[0].status === "TO_DELIVER" &&
+            postRows[0].status === "TO_DELIVER" &&
+            postRows[0].messageId === preRows[0].messageId &&
+            replay.pendingMessageId === preRows[0].messageId &&
+            postRows[0].targetIdTypeUrl === preRows[0].targetIdTypeUrl &&
+            postRows[0].targetIdBase64 === preRows[0].targetIdBase64 &&
+            [oldEntries[0], freshEntries[0]].every(
+              (entry) =>
+                preRows[0].targetIdTypeUrl === entry.recipientTypeUrl &&
+                preRows[0].targetIdBase64 === entry.recipientIdBase64,
+            ),
+          `before-effect ${method} replay row does not match the exact typed old and fresh handler recipients`,
+        );
+      }
+    }
     const entryCheck = assertEntrySet(
       scenarioRecord.allEntries,
-      { create: 1, planning: 2, staffing: 1, portfolio: 1, projection: 1 },
+      expectedCounts,
       config.processes,
       "before-effect entries",
     );
@@ -231,6 +422,12 @@ async function auditScenario(config, result, runDirectory) {
       "killed before-effect PID appears in restart set",
     );
     assert(
+      scenarioRecord.allEntries.every(
+        (entry) => oldPids.includes(entry.pid) || scenarioRecord.restartPids.includes(entry.pid),
+      ),
+      "before-effect handler entry contains an unknown process PID",
+    );
+    assert(
       result.killedPid === scenarioRecord.killedPid,
       "result does not record the selected process kill",
     );
@@ -248,6 +445,12 @@ async function auditScenario(config, result, runDirectory) {
     checks.handlerEntries = entryCheck;
     checks.restartPids = scenarioRecord.restartPids;
     checks.completedStates = true;
+    checks.extraRecipientReplays = scenarioRecord.extraReplays;
+    checks.deliverySnapshots = {
+      preKillShardCount: scenarioRecord.preKillDelivery.shards.length,
+      postKillShardCount: scenarioRecord.postKillDelivery.shards.length,
+      recoveredShardCount: scenarioRecord.recoveredDelivery.shards.length,
+    };
     checks.killEvidence = {
       selectedPid: scenarioRecord.killedPid,
       enteredHandlerPid: scenarioRecord.entered.pid,

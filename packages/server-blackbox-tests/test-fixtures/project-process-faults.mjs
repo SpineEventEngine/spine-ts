@@ -26,10 +26,12 @@ import { fileURLToPath, URL } from "node:url";
 import { create, toBinary } from "@bufbuild/protobuf";
 import { AnyMessages, StringifierRegistry, TypeRegistry, TypeUrls } from "@spine-event-engine/core";
 import { InboxIdSchema } from "@spine-event-engine/proto/delivery";
-import { completeInboxRows } from "./project-process-fault-observations.mjs";
+import { classifyCrashReplay, completeInboxRows } from "./project-process-fault-observations.mjs";
 import {
   PlanningIdSchema,
+  PortfolioStateSchema,
   ProjectIdSchema,
+  ProjectProjectionStateSchema,
   StaffingIdSchema,
   StaffingStateSchema,
 } from "../dist/generated/spine/server/testing/project_workflow_pb.js";
@@ -99,6 +101,7 @@ for (const path of [
   "packages/server-blackbox-tests/test-fixtures/project-worker.mjs",
   "packages/server-blackbox-tests/test-fixtures/shared-delivery-worker.mjs",
   "packages/server-blackbox-tests/test-fixtures/project-process-faults.mjs",
+  "packages/server-blackbox-tests/test-fixtures/project-process-fault-observations.mjs",
   "packages/server-blackbox-tests/test-fixtures/project-workflow.ts",
 ])
   runtimeFiles.push(resolve(root, path));
@@ -387,15 +390,15 @@ async function beforeEffect(settings) {
     ),
   );
   assert.ok(ready.some((worker) => worker.pid === entered.pid));
-  const before = await request(
-    workers.find((worker) => worker.pid !== entered.pid),
-    "inspect",
-    {
-      numbers: [1],
-    },
-  );
+  const observer = workers.find((worker) => worker.pid !== entered.pid);
+  const before = await request(observer, "inspect", { numbers: [1] });
   const original = before.events.find((event) => event.number === 1);
   assert.ok(original?.id && original.binaryBase64 && original.sha256);
+  const preKillDelivery = await request(observer, "inspectDelivery");
+  await writeFile(
+    resolve(dir, "before-effect-pre-kill.json"),
+    `${JSON.stringify({ entered, ready, before, preKillDelivery, entries: await entries() }, null, 2)}\n`,
+  );
   assert.equal(before.projects[0].states.planning, false);
   const killed = workers.find((worker) => worker.pid === entered.pid);
   await killAndConfirm(killed);
@@ -403,6 +406,14 @@ async function beforeEffect(settings) {
     workers.find((worker) => worker.pid !== killed.pid),
     "inspect",
     { numbers: [1] },
+  );
+  const postKillDelivery = await request(
+    workers.find((worker) => worker.pid !== killed.pid),
+    "inspectDelivery",
+  );
+  await writeFile(
+    resolve(dir, "before-effect-post-kill.json"),
+    `${JSON.stringify({ killedPid: killed.pid, postKill, postKillDelivery, entries: await entries() }, null, 2)}\n`,
   );
   assert.equal(postKill.projects[0].states.planning, false);
   const surviving = workers.filter((worker) => worker !== killed);
@@ -426,8 +437,35 @@ async function beforeEffect(settings) {
   assert.equal(recovered.binaryBase64, original.binaryBase64);
   assert.equal(recovered.sha256, original.sha256);
   const allEntries = await entries();
-  for (const method of ["create", "staffing", "portfolio", "projection"])
-    assert.equal(allEntries.filter((entry) => entry.method === method).length, 1);
+  const recoveredDelivery = await request(workers[0], "inspectDelivery");
+  await writeFile(
+    resolve(dir, "before-effect-recovered-pre-assert.json"),
+    `${JSON.stringify({ after, recoveredDelivery, allEntries, restartPids: restarted.map((worker) => worker.pid) }, null, 2)}\n`,
+  );
+  assert.equal(allEntries.filter((entry) => entry.method === "create").length, 1);
+  const priorPids = ready.map((worker) => worker.pid);
+  const freshPids = restarted.map((worker) => worker.pid);
+  const replayable = [
+    ["staffing", StaffingStateSchema],
+    ["portfolio", PortfolioStateSchema],
+    ["projection", ProjectProjectionStateSchema],
+  ];
+  const extraReplays = [];
+  for (const [method, schema] of replayable) {
+    const replay = classifyCrashReplay({
+      preKillObservation: preKillDelivery,
+      observation: postKillDelivery,
+      shardCount: count,
+      entries: allEntries,
+      method,
+      recipientTypeUrl: TypeUrls.derive(schema),
+      originalEventId: original.id,
+      priorPids,
+      freshPids,
+    });
+    if (replay !== undefined)
+      extraReplays.push({ ...replay, preKillEffect: before.projects[0].states[method] });
+  }
   const planningEntries = allEntries.filter((entry) => entry.method === "planning");
   assert.equal(planningEntries.length, 2);
   assert.equal(
@@ -444,6 +482,10 @@ async function beforeEffect(settings) {
         postKill,
         after,
         allEntries,
+        extraReplays,
+        preKillDelivery,
+        postKillDelivery,
+        recoveredDelivery,
         planningEntryCount: planningEntries.length,
         killedPid: killed.pid,
         restartPids: restarted.map((worker) => worker.pid),

@@ -1,0 +1,19 @@
+{
+  "databaseDropped": true,
+  "exits": [
+    {
+      "pid": 69561,
+      "code": null,
+      "signal": "SIGTERM"
+    },
+    {
+      "pid": 69562,
+      "code": 0,
+      "signal": null
+    }
+  ],
+  "errors": [
+    "app close 0: Error: Worker 69561 did not respond to close.",
+    "app 69561 exited null/SIGTERM"
+  ]
+}

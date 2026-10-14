@@ -771,3 +771,11 @@ Session `383a3ad6-d179-4032-993a-55354558ac8c` first case (PostgreSQL 16, two pr
 The mechanical function corrected its initial inference that the interrupted second case never created resources. Saved run `d99a160691784cbabe734152156c9a25` proves the acknowledgement scenario passed and its cleanup completed; an exact database-catalog query confirms that UUID database absent and recorded PIDs are gone. Wrapper exit remains unknown because its transcript was interrupted. The session now distinguishes the failed first case, artifact-audited second-case pass, and 30 unrun cases. Accept only this corrected evidence. The wrapper fail-fast change passes static checks; no matrix rerun yet.
 
 Before the failure-evidence commit, normalize trailing spaces introduced by the matrix stdout/stderr prefixes in the two text transcripts. Structured measured artifacts and their recorded hashes remain unchanged. The staged diff check is a mandatory successful gate before this commit.
+
+## Crash-assertion correction preflight
+
+The existing implementer reports eight focused assertion checks passing and three additional PostgreSQL 16/two-process observations with complete snapshots and no extra recipient executions. The original failure remains unclassified. An eight-process run and static checks are pending. Resume the existing explicit Luna/low matrix function only for evidence-wrapper schema alignment to the new observed pending-row classification; no matrix execution and no driver edits. The final wrapper must audit the measured classification without restoring blanket one-entry assumptions or retroactively accepting the failed run. Reuse both existing Sol/medium technical reviewers after the fixture freezes.
+
+## Crash matrix ready to restart
+
+The test-only correction is review-converged after exact typed recipient and unique matching row checks. Preserve the old failed run as unclassified, final p8 positive replay, and p2 no-extra result. Resume the existing explicit Luna/low mechanical function for all 32 cases once this commit is pushed. Same frozen runtime and unique resources; transport work may continue without touching process fixtures or compiled outputs. Whitespace normalization below applies only to completed text command transcripts, never measured JSON/JSONL artifacts or their hashes.

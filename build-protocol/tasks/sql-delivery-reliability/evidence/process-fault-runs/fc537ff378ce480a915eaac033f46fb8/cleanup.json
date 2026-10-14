@@ -1,0 +1,46 @@
+{
+  "databaseDropped": true,
+  "exits": [
+    {
+      "pid": 82152,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 82153,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 82154,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 82155,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 82156,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 82157,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 82158,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 82159,
+      "code": 0,
+      "signal": null
+    }
+  ],
+  "errors": []
+}

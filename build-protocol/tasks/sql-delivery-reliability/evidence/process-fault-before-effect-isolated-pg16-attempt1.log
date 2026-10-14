@@ -1,0 +1,18 @@
+FAULT_RESOURCE {"runId":"729415bf1af84e6382f794f8775700c7","database":"sqlrel_fault_729415bf1af84e6382f794f8775700c7","evidencePath":"/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/process-fault-runs/729415bf1af84e6382f794f8775700c7"}
+file:///Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server-blackbox-tests/test-fixtures/project-process-faults.mjs:291
+  throw new AggregateError([failure, ...cleanup.errors], "Fault run and cleanup failed.");
+        ^
+
+AggregateError: Fault run and cleanup failed.
+    at file:///Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server-blackbox-tests/test-fixtures/project-process-faults.mjs:291:9 {
+  [errors]: [
+    Error: Timed out waiting for other recipient effects and acknowledgements before the selected Planning crash.
+        at until (file:///Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server-blackbox-tests/test-fixtures/project-process-faults.mjs:378:9)
+        at async beforeEffect (file:///Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server-blackbox-tests/test-fixtures/project-process-faults.mjs:394:19)
+        at async file:///Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server-blackbox-tests/test-fixtures/project-process-faults.mjs:183:9,
+    'app close 0: Error: Worker 69561 did not respond to close.',
+    'app 69561 exited null/SIGTERM'
+  ]
+}
+
+Node.js v24.18.0

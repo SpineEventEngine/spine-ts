@@ -1,0 +1,112 @@
+{
+  "after": {
+    "projects": [
+      {
+        "number": 1,
+        "states": {
+          "project": true,
+          "planning": true,
+          "staffing": true,
+          "portfolio": true,
+          "projection": true
+        }
+      }
+    ],
+    "events": [
+      {
+        "id": "e263b492-63d3-4bf3-b7d2-1e892a2c3ba0",
+        "typeUrl": "type.spine.server.testing/spine.server.testing.ProjectCreated",
+        "number": 1,
+        "organization": "fault-b63f7be322f84bb486466937c046c799",
+        "name": "roadmap-1",
+        "sha256": "a4bb55d59c6e7fc80bb4718c19a5ecf46a92818a2b6a4f7c7db84294cc776cd4",
+        "binaryBase64": "CiYKJGUyNjNiNDkyLTYzZDMtNGJmMy1iN2QyLTFlODkyYTJjM2JhMBKkAQo9dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0Q3JlYXRlZBJjCigKJmZhdWx0LWI2M2Y3YmUzMjJmODRiYjQ4NjQ2NjkzN2MwNDZjNzk5EiwKKAomZmF1bHQtYjYzZjdiZTMyMmY4NGJiNDg2NDY2OTM3YzA0NmM3OTkQARoJcm9hZG1hcC0xGp4CCgwI07y71gYQ6M2PiQIaaAo4dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0SWQSLAooCiZmYXVsdC1iNjNmN2JlMzIyZjg0YmI0ODY0NjY5MzdjMDQ2Yzc5ORABIgByoQEKjAEKTAoidHlwZS5zcGluZS5pby9zcGluZS5jb3JlLkNvbW1hbmRJZBImCiQ2NjNlNjQxYi0wYTUxLTQ0NDYtYTVlOC1lMjM2MGQ3Yzg1ZGQSPHR5cGUuc3BpbmUuc2VydmVyLnRlc3Rpbmcvc3BpbmUuc2VydmVyLnRlc3RpbmcuQ3JlYXRlUHJvamVjdBoQEg4KDG1hdHJpeC1hY3Rvcg=="
+      }
+    ]
+  },
+  "recoveredDelivery": {
+    "shards": [
+      {
+        "shard": "0/2",
+        "count": 0,
+        "truncated": false,
+        "rows": [],
+        "statuses": {}
+      },
+      {
+        "shard": "1/2",
+        "count": 0,
+        "truncated": false,
+        "rows": [],
+        "statuses": {}
+      },
+      {
+        "shard": "0/1",
+        "count": 0,
+        "truncated": false,
+        "rows": [],
+        "statuses": {}
+      }
+    ]
+  },
+  "allEntries": [
+    {
+      "method": "create",
+      "receiver": "Project",
+      "correlation": "fault-b63f7be322f84bb486466937c046c799:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+      "recipientIdBase64": "CigKJmZhdWx0LWI2M2Y3YmUzMjJmODRiYjQ4NjQ2NjkzN2MwNDZjNzk5EAE=",
+      "pid": 83314,
+      "at": 1791942227545
+    },
+    {
+      "method": "portfolio",
+      "receiver": "Portfolio",
+      "correlation": "fault-b63f7be322f84bb486466937c046c799:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+      "recipientIdBase64": "CigKJmZhdWx0LWI2M2Y3YmUzMjJmODRiYjQ4NjQ2NjkzN2MwNDZjNzk5EAE=",
+      "pid": 83314,
+      "at": 1791942227618
+    },
+    {
+      "method": "planning",
+      "receiver": "ProjectPlanning",
+      "correlation": "fault-b63f7be322f84bb486466937c046c799:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+      "recipientIdBase64": "CigKJmZhdWx0LWI2M2Y3YmUzMjJmODRiYjQ4NjQ2NjkzN2MwNDZjNzk5EAE=",
+      "pid": 83314,
+      "at": 1791942227650
+    },
+    {
+      "method": "staffing",
+      "receiver": "ProjectStaffing",
+      "correlation": "fault-b63f7be322f84bb486466937c046c799:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+      "recipientIdBase64": "CigKJmZhdWx0LWI2M2Y3YmUzMjJmODRiYjQ4NjQ2NjkzN2MwNDZjNzk5EAE=",
+      "pid": 83315,
+      "at": 1791942237708
+    },
+    {
+      "method": "planning",
+      "receiver": "ProjectPlanning",
+      "correlation": "fault-b63f7be322f84bb486466937c046c799:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+      "recipientIdBase64": "CigKJmZhdWx0LWI2M2Y3YmUzMjJmODRiYjQ4NjQ2NjkzN2MwNDZjNzk5EAE=",
+      "pid": 83718,
+      "at": 1791942238156
+    },
+    {
+      "method": "projection",
+      "receiver": "ProjectProjection",
+      "correlation": "fault-b63f7be322f84bb486466937c046c799:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+      "recipientIdBase64": "CigKJmZhdWx0LWI2M2Y3YmUzMjJmODRiYjQ4NjQ2NjkzN2MwNDZjNzk5EAE=",
+      "pid": 83718,
+      "at": 1791942268141
+    }
+  ],
+  "restartPids": [
+    83718,
+    83719
+  ]
+}
