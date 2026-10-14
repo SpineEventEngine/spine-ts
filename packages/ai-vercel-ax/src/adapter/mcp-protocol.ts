@@ -48,6 +48,7 @@ const supportedSchemaKeys = new Set([
 
 /**
  * Connects the pinned SDK client through one bounded transport.
+ *
  * @param options Scoped MCP connection and runtime controls.
  * @returns Negotiated protocol session with credential-free identity.
  */
@@ -70,6 +71,7 @@ const connectMcp: AiMcpProtocolFactory["connect"] = async ({ server, resolved, c
 
 /**
  * Builds the bounded transport and credential-free configured endpoint identity.
+ *
  * @param options Scoped MCP connection and runtime controls.
  * @returns Transport and endpoint digest, without resolved credentials.
  */
@@ -99,6 +101,7 @@ const connectionSettings = ({
 
 /**
  * Creates an MCP transport factory backed by the pinned Vercel client.
+ *
  * @returns Runtime-independent MCP transport factory using the pinned Vercel client.
  */
 export const createMcpProtocolFactory = (): AiMcpProtocolFactory => ({ connect: connectMcp });
@@ -117,6 +120,7 @@ class VercelMcpSession implements AiMcpProtocolSession {
 
   /**
    * Binds the negotiated client to one credential-free configured identity.
+   *
    * @param client Initialized Vercel MCP client.
    * @param transport Bounded physical-message transport.
    * @param control Fenced runtime protocol controls.
@@ -137,6 +141,7 @@ class VercelMcpSession implements AiMcpProtocolSession {
 
   /**
    * Lists only explicitly permitted names with a finite page and schema budget.
+   *
    * @param allowedNames Registered names for this invocation.
    * @returns Accepted bounded definitions.
    */
@@ -203,6 +208,7 @@ class VercelMcpSession implements AiMcpProtocolSession {
 
   /**
    * Rejects unadvertised names and malformed arguments before any tool send.
+   *
    * @param name Discovered tool name.
    * @param canonicalJson Serialized argument object.
    */
@@ -220,6 +226,7 @@ class VercelMcpSession implements AiMcpProtocolSession {
 
   /**
    * Calls one validated tool using a runtime-journaled tool-call ticket.
+   *
    * @param name Discovered tool name.
    * @param canonicalJson Locally validated argument object.
    * @param options Runtime call identity, cancellation and result limit.
@@ -286,6 +293,7 @@ class VercelMcpSession implements AiMcpProtocolSession {
 
   /**
    * Closes the SDK session and active transport requests.
+   *
    * @returns Completion after SDK session and active transport requests close.
    */
   async close(): Promise<void> {
@@ -296,6 +304,7 @@ class VercelMcpSession implements AiMcpProtocolSession {
 
 /**
  * Validates one discovery page without publishing a partial callable catalog.
+ *
  * @param tools Tool definitions from one protocol page.
  * @param allowed Explicitly registered names.
  * @param seen Names from prior pages.
@@ -369,6 +378,7 @@ const acceptTool = (
 
 /**
  * Compiles a bounded advertised output schema without exposing untrusted schema text.
+ *
  * @param schema Advertised output schema, when supplied.
  * @param ajv Strict local JSON Schema compiler.
  * @returns Canonical schema text and validator, or absence when unadvertised.
@@ -409,6 +419,7 @@ const withoutKnownDialect = (schema: unknown): unknown => {
 
 /**
  * Rejects a successful result that omits or violates its advertised structure.
+ *
  * @param result Bounded SDK call result from the untrusted server.
  * @param validator Compiled advertised output schema, when present.
  */
@@ -423,6 +434,7 @@ const validateToolOutput = (result: unknown, validator?: ValidateFunction): void
 
 /**
  * Returns recursively sorted object keys for equivalent discovery schemas.
+ *
  * @param value JSON value to canonicalize.
  * @returns The same JSON value with recursively sorted object keys.
  */

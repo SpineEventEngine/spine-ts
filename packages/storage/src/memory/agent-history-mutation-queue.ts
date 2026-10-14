@@ -22,6 +22,7 @@ import { KeyedSerialQueue } from "./in-memory-entity-history.js";
 export const AgentHistoryMutationQueue = {
   /**
    * Binds the queue to one complete provider tenant boundary.
+   *
    * @param backend Shared in-memory backend.
    * @param tenant Complete tenant boundary.
    * @returns Queue keyed by canonical Agent identifier.

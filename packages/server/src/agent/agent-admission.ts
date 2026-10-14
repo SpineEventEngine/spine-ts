@@ -96,6 +96,7 @@ export interface AgentAdmissionInput {
 interface AgentAdmissionAccess {
   /**
    * Copies the exact accepted recipient and selected bindings for durable admission.
+   *
    * @param input Routed Inbox work and registration revisions.
    * @returns Immutable accepted invocation content.
    */
@@ -103,6 +104,7 @@ interface AgentAdmissionAccess {
 
   /**
    * Compares every persisted handler-binding field with current registration.
+   *
    * @param accepted Binding saved with the original invocation.
    * @param registered Current generated handler metadata.
    * @param ordinal Expected position in the accepted handler order.
@@ -166,6 +168,7 @@ export const AgentAdmission: AgentAdmissionAccess = Object.freeze({
 
 /**
  * Requires the original typed signal identity before constructing its durable key.
+ *
  * @param signal Accepted Command or Event envelope.
  * @returns Typed source identity.
  */
@@ -186,6 +189,7 @@ function signalKey(signal: AgentAdmissionInput["signal"]): AgentSignalKey {
 
 /**
  * Converts one generated handler identity without reinterpreting its route.
+ *
  * @param registered Selected generated handler metadata.
  * @param ordinal Position within this accepted signal.
  * @returns Complete stored binding.
@@ -223,6 +227,7 @@ function binding(registered: RegisteredHandlerMetadata, ordinal: number): AgentH
 
 /**
  * Requires a nonblank serialized identity or revision.
+ *
  * @param value Text to validate.
  * @param label Diagnostic field name.
  * @returns Original checked text.

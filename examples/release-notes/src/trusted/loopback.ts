@@ -33,7 +33,7 @@ export interface LoopbackListener {
   /**
    * Closes the active authorization callback.
    *
-   * @returns The close result.
+   * @returns When the listener has closed.
    */
   close(): Promise<void>;
 }
@@ -48,29 +48,29 @@ class OnLocalCallback implements LoopbackListener {
   redirectUri = "";
 
   /**
-   * The server value.
+   * IPv4 loopback server that accepts one authorization callback.
    */
   private readonly server = createServer((request, response) => {
     this.handle(request, response);
   });
 
   /**
-   * The callback value.
+   * Promise settled by the accepted callback or listener shutdown.
    */
   private readonly callback: Promise<URL>;
 
   /**
-   * The resolve callback value.
+   * Completes the callback promise after the HTTP response closes.
    */
   private resolveCallback!: (value: URL) => void;
 
   /**
-   * The reject callback value.
+   * Rejects the callback promise when the listener closes first.
    */
   private rejectCallback!: (reason: Error) => void;
 
   /**
-   * The settled value.
+   * Whether a callback was accepted or the listener was closed.
    */
   private settled = false;
 
@@ -88,7 +88,7 @@ class OnLocalCallback implements LoopbackListener {
   /**
    * Opens the loopback callback listener.
    *
-   * @returns The open result.
+   * @returns Listener with an assigned loopback callback URL.
    */
   static async open(): Promise<OnLocalCallback> {
     const listener = new OnLocalCallback();
@@ -109,8 +109,8 @@ class OnLocalCallback implements LoopbackListener {
   /**
    * Handles one local browser callback.
    *
-   * @param request The request for this operation.
-   * @param response The response for this operation.
+   * @param request Incoming browser callback request.
+   * @param response HTTP response acknowledging or rejecting the callback.
    */
   private handle(
     request: import("node:http").IncomingMessage,
@@ -151,7 +151,7 @@ class OnLocalCallback implements LoopbackListener {
   /**
    * Closes the active authorization callback.
    *
-   * @returns The close result.
+   * @returns When the listener has closed.
    */
   async close(): Promise<void> {
     if (!this.settled) {

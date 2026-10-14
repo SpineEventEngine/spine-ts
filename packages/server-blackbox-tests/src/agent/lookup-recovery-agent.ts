@@ -72,6 +72,7 @@ export class SupportLookupRecoveryAgent extends Agent<
 
   /**
    * Creates a reply from the recorded prior draft and read-only lookup.
+   *
    * @param command Original customer question for this ticket.
    * @returns Reply proposed for human review.
    */

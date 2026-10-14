@@ -59,6 +59,7 @@ interface ExecutionRows {
 
 /**
  * Persists accepted Agent work, exclusive claims and deterministic evidence.
+ *
  * @typeParam I Typed Agent identifier.
  * @typeParam S Generated Agent state.
  */
@@ -74,6 +75,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
 
   /**
    * Binds prepared record families to one Agent repository and tenant boundary.
+   *
    * @param input Agent repository and current Entity layout.
    * @param invocation Mutable invocation records.
    * @param head Per-instance claim and current preference records.
@@ -92,6 +94,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
 
   /**
    * Persists original accepted work idempotently under its per-instance lock.
+   *
    * @param accepted Complete source signal and selected bindings.
    * @returns Detached stored invocation.
    */
@@ -123,14 +126,15 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
 
   /**
    * Reads a bounded indexed page of eligible accepted or interrupted work.
+   *
    * @param request Complete continuation and page count.
    * @returns Detached records and continuation state.
    */
   async pending(request: AgentPendingRead): Promise<AgentPendingPage> {
     this.requireOpen();
     const rows = await this.ready();
-    if (!Number.isSafeInteger(request.count) || request.count < 1 || request.count > 127)
-      throw new RangeError("Agent pending count must be between 1 and 127.");
+    if (!Number.isSafeInteger(request.count) || request.count < 1)
+      throw new RangeError("Agent pending count must be a positive safe integer.");
     const asOf = request.after?.asOf ?? Time.currentTime();
     const { sql, values } = this.pendingQuery(request, asOf, rows.head.table());
     return rows.head.using(async (client) => {
@@ -156,6 +160,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
 
   /**
    * Builds one binary-collated native pending-head query.
+   *
    * @param request Bounded pending-page request.
    * @param asOf Fixed provider-time eligibility cutoff.
    * @param table Resolved head table in the current schema.
@@ -183,6 +188,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
 
   /**
    * Reads one complete persisted invocation.
+   *
    * @param key Original source and Agent instance identity.
    * @returns Detached record if present.
    */
@@ -198,6 +204,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
 
   /**
    * Acquires only earliest unresolved same-instance work under a fresh transaction clock.
+   *
    * @param key Original source and Agent instance identity.
    * @param token New exclusive token.
    * @param expiresAt Requested future expiry.
@@ -219,6 +226,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
 
   /**
    * Checks the locked instance and persists one exclusive lease.
+   *
    * @param client Native client in the current transaction.
    * @param rows Tenant record executors.
    * @param key Original Agent invocation identity.
@@ -259,6 +267,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
 
   /**
    * Checks the current head and earliest same-instance source.
+   *
    * @param client Native client in the current transaction.
    * @param rows Tenant record executors.
    * @param head Per-instance pending and lease record.
@@ -288,6 +297,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
 
   /**
    * Updates one still-current lease under the per-instance transaction lock.
+   *
    * @param key Original source and Agent instance identity.
    * @param token Current exclusive token.
    * @param expiresAt Requested later expiry.
@@ -315,6 +325,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
 
   /**
    * Persists one execution update and its immutable history rows in the same transaction.
+   *
    * @param input Exact read image, next execution record and history entries.
    * @returns Completion after fenced evidence is persisted.
    */
@@ -345,6 +356,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
 
   /**
    * Commits Entity state, history, preferences and outgoing obligations together.
+   *
    * @param input Complete conditional transition.
    * @returns Completion after conditional Entity and evidence commit.
    */
@@ -366,6 +378,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
 
   /**
    * Applies every conditional completion row on one transaction client.
+   *
    * @param client Native database client in the current transaction.
    * @param input Requested fenced execution change.
    * @param prepared Prepared Entity state and Version write.
@@ -403,6 +416,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
 
   /**
    * Validates one Version increment or no-op and a nonterminal prior phase.
+   *
    * @param input Requested fenced execution change.
    * @param prior Previously persisted execution record.
    * @returns Expected initial Entity Version.
@@ -440,6 +454,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
 
   /**
    * Marks original outgoing IDs accepted by normal delivery.
+   *
    * @param key Original source and Agent instance identity.
    * @param token Current exclusive token.
    * @param expectedRecordBytes Exact previous record bytes.
@@ -462,6 +477,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
 
   /**
    * Marks original output IDs while the per-instance native lock is held.
+   *
    * @param client Native client in the current transaction.
    * @param rows Tenant record executors.
    * @param key Original Agent invocation identity.
@@ -524,6 +540,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
 
   /**
    * Prepares three existing record families and required native indexes once.
+   *
    * @returns Completion after provider capabilities are checked.
    */
   private ready(): Promise<ExecutionRows> {
@@ -537,6 +554,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
 
   /**
    * Ensures full scoped order and expiry indexes before accepted work.
+   *
    * @returns Completion after native tables and indexes are prepared.
    */
   private async initialize(): Promise<void> {
@@ -563,6 +581,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
 
   /**
    * Acquires a transaction-scoped lock even when the head row is absent.
+   *
    * @param client Native database client in the current transaction.
    * @param key Original Agent invocation identity.
    * @param rows Provider record handles bound to the tenant.
@@ -583,6 +602,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
 
   /**
    * Reads one head and rejects a physical digest collision.
+   *
    * @param client Native database client in the current transaction.
    * @param key Original Agent invocation identity.
    * @param rows Provider record handles bound to the tenant.
@@ -612,6 +632,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
 
   /**
    * Reads one invocation and rejects a physical digest collision.
+   *
    * @param client Native database client in the current transaction.
    * @param key Original Agent invocation identity.
    * @param rows Provider record handles bound to the tenant.
@@ -637,6 +658,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
 
   /**
    * Checks fresh Time, exact token and complete previous record bytes.
+   *
    * @param checkNext Whether to validate the proposed next record.
    * @param client Native database client in the current transaction.
    * @param input Requested fenced execution change.
@@ -665,6 +687,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
 
   /**
    * Reads claimed rows under the already acquired per-instance lock.
+   *
    * @param client Native database client in the current transaction.
    * @param key Original Agent invocation identity.
    * @param rows Provider record handles bound to the tenant.
@@ -693,6 +716,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
 
   /**
    * Checks no earlier unresolved signal in the same full Agent scope.
+   *
    * @param client Native database client in the current transaction.
    * @param key Original Agent invocation identity.
    * @param rows Provider record handles bound to the tenant.
@@ -713,6 +737,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
 
   /**
    * Adds an earlier accepted source without resetting an existing eligibility.
+   *
    * @param head Per-instance pending and lease record.
    * @param record Persisted Agent execution record.
    */
@@ -722,6 +747,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
 
   /**
    * Updates the head to one bounded native successor before terminal publication.
+   *
    * @param client Native database client in the current transaction.
    * @param head Per-instance pending and lease record.
    * @param key Original Agent invocation identity.
@@ -742,6 +768,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
 
   /**
    * Reads at most two rows per unresolved status in original Inbox order.
+   *
    * @param client Native database client in the current transaction.
    * @param exclude Invocation omitted while selecting the successor.
    * @param key Original Agent invocation identity.
@@ -785,6 +812,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
 
   /**
    * Builds the bounded native query for one unresolved invocation status.
+   *
    * @param table Resolved invocation table in the current schema.
    * @returns Complete indexed successor query.
    */
@@ -798,6 +826,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
 
   /**
    * Validates current Version and applies optional Entity rows in this transaction.
+   *
    * @param client Native database client in the current transaction.
    * @param expectedVersion Expected current Entity Version.
    * @param input Requested fenced execution change.

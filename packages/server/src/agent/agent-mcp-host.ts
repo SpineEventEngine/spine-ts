@@ -105,6 +105,7 @@ export interface AgentMcpHost {
 
   /**
    * Persists full shared input/output credit before an MCP physical send.
+   *
    * @param server Configured MCP server identifier.
    * @param request Physical protocol message and byte bounds.
    * @returns Fenced ticket for the physical send.
@@ -113,6 +114,7 @@ export interface AgentMcpHost {
 
   /**
    * Checks a received chunk synchronously against its persisted credit.
+   *
    * @param ticketId Saved physical-message ticket.
    * @param bytes Newly decoded response bytes.
    */
@@ -120,6 +122,7 @@ export interface AgentMcpHost {
 
   /**
    * Persists known receipt; uncertain credits remain charged.
+   *
    * @param ticketId Saved physical-message ticket.
    * @param receivedBytes Complete decoded response size, when known.
    * @returns When the receipt is persisted.
@@ -128,6 +131,7 @@ export interface AgentMcpHost {
 
   /**
    * Checks shared tool count and persists intent before a write dispatch.
+   *
    * @param invocation Model proposal and provider call identity.
    * @param request Vetted server, tool, arguments, and effect.
    * @returns Saved or newly allocated tool intent.
@@ -139,6 +143,7 @@ export interface AgentMcpHost {
 
   /**
    * Persists the physical-dispatch boundary under the current claim.
+   *
    * @param callId Saved logical tool-call identity.
    * @returns When the dispatch marker is persisted.
    */
@@ -146,6 +151,7 @@ export interface AgentMcpHost {
 
   /**
    * Persists a complete tool response before model continuation.
+   *
    * @param callId Saved logical tool-call identity.
    * @param response Bounded tool result.
    * @param history Typed conversation row retained with the result.
@@ -155,6 +161,7 @@ export interface AgentMcpHost {
 
   /**
    * Persists a safe nonterminal diagnostic before returning it to an adapter.
+   *
    * @param code Safe failure category.
    * @param retryableByNewSignal Whether a later signal may retry the logical work.
    * @returns Persisted diagnostic identity and category.

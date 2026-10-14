@@ -211,6 +211,7 @@ export interface AgentExecutionStorage<I, S extends Message> {
 
   /**
    * Persists accepted source work before its Inbox handoff is acknowledged.
+   *
    * @param accepted Exact source envelope and selected handler bindings.
    * @returns Stored record, accepting an identical repeat only.
    */
@@ -218,6 +219,7 @@ export interface AgentExecutionStorage<I, S extends Message> {
 
   /**
    * Reads bounded, time-eligible unresolved work through a provider index.
+   *
    * @param request Page count and complete continuation.
    * @returns Independent records and continuation state.
    */
@@ -225,6 +227,7 @@ export interface AgentExecutionStorage<I, S extends Message> {
 
   /**
    * Reads a complete execution record after reconstruction.
+   *
    * @param key Exact source and Agent instance identity.
    * @returns Stored record, if present.
    */
@@ -232,6 +235,7 @@ export interface AgentExecutionStorage<I, S extends Message> {
 
   /**
    * Acquires the earliest unresolved invocation with a fresh provider-side time check.
+   *
    * @param key Exact source and Agent instance identity.
    * @param token New unpredictable exclusive token.
    * @param expiresAt Requested claim expiry.
@@ -245,6 +249,7 @@ export interface AgentExecutionStorage<I, S extends Message> {
 
   /**
    * Updates the same unexpired token under the per-instance claim lock.
+   *
    * @param key Exact source and Agent instance identity.
    * @param token Current exclusive token.
    * @param expiresAt Requested later expiry.
@@ -254,6 +259,7 @@ export interface AgentExecutionStorage<I, S extends Message> {
 
   /**
    * Persists fenced budgets, evidence and conversation/System history atomically.
+   *
    * @param input Expected exact record and next retained evidence.
    * @returns Completion after fenced evidence is persisted.
    */
@@ -261,6 +267,7 @@ export interface AgentExecutionStorage<I, S extends Message> {
 
   /**
    * Persists Entity, history, preferences, execution result and output obligations atomically.
+   *
    * @param input Expected exact record and complete transition.
    * @returns Completion after conditional Entity and evidence commit.
    */
@@ -268,6 +275,7 @@ export interface AgentExecutionStorage<I, S extends Message> {
 
   /**
    * Marks output IDs accepted by normal delivery without rerunning handlers.
+   *
    * @param key Exact source and Agent instance identity.
    * @param token Current exclusive token.
    * @param expectedRecordBytes Exact binary image before acknowledgement.

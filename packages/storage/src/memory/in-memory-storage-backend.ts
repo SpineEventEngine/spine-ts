@@ -28,6 +28,7 @@ export class InMemoryStorageBackend {
 
   /**
    * Binds one tenant and record family to one backend-owned value.
+   *
    * @param backend Selects the shared ephemeral backend.
    * @param namespace Separates Entity and generic record backend values.
    * @param tenant Selects the provider tenant boundary.
@@ -68,6 +69,7 @@ export class InMemoryStorageBackend {
 
   /**
    * Returns the current finite tenant-index length without copying rows.
+   *
    * @param backend Backend containing the admission index.
    * @returns Number of distinct admitted multitenant boundaries.
    */
@@ -77,6 +79,7 @@ export class InMemoryStorageBackend {
 
   /**
    * Reads only one bounded range from the admission-time tenant index.
+   *
    * @param backend Backend containing the admission index.
    * @param start First admission-order position to examine.
    * @param count Maximum number of boundaries to copy.
@@ -106,6 +109,7 @@ const MemoryBackendScopes = {
 
   /**
    * Binds one tenant and record family to one backend-owned value.
+   *
    * @typeParam T Value retained for the selected scope.
    * @param backend Backend containing record families.
    * @param namespace Entity or generic record family namespace.
@@ -148,6 +152,7 @@ const MemoryBackendScopes = {
 
   /**
    * Records a multitenant boundary exactly once in admission order.
+   *
    * @param backend Backend containing the admission index.
    * @param tenant Complete boundary to admit.
    */
@@ -170,6 +175,7 @@ const MemoryBackendScopes = {
 
   /**
    * Lists all admitted boundaries for legacy catalog callers.
+   *
    * @param backend Backend containing the tenant index.
    * @returns Complete sorted boundary snapshots.
    */
@@ -183,6 +189,7 @@ const MemoryBackendScopes = {
 
   /**
    * Reads the admission-order index length without copying entries.
+   *
    * @param backend Backend containing the tenant index.
    * @returns Number of admitted multitenant boundaries.
    */
@@ -192,6 +199,7 @@ const MemoryBackendScopes = {
 
   /**
    * Copies only one admission-order index range.
+   *
    * @param backend Backend containing the tenant index.
    * @param start First position to examine.
    * @param count Maximum copied boundaries.

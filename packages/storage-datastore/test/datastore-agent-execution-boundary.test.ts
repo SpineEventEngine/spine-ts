@@ -101,6 +101,31 @@ describe("Datastore Agent execution provider boundary", () => {
     }
   });
 
+  it("fills a pending page beyond one 128-row native Datastore read", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const factory = DatastoreStorageFactory.newBuilder()
+      .setClient(backend.client() as never)
+      .build();
+    const storage = AgentExecutionStorageFactories.create(factory, {
+      entity: providerEntityInput(),
+      stateType: "spine.server.testing.SupportReplyAgentState",
+    });
+    try {
+      for (let index = 0; index < 130; index++)
+        await storage.admit(accepted(randomUUID(), `T-large-${String(index)}`));
+      const first = await storage.pending({ count: 129 });
+      expect(first.records).toHaveLength(129);
+      expect(first.hasMore).toBe(true);
+      if (first.after === undefined) throw new Error("Expected pending continuation.");
+      const second = await storage.pending({ count: 129, after: first.after });
+      expect(second.records).toHaveLength(1);
+      expect(second.hasMore).toBe(false);
+    } finally {
+      storage.close();
+      factory.close();
+    }
+  });
+
   it("retries native contention, preserves immutable admission, and promotes a waiting source", async () => {
     const backend = new HistoryDatastoreBackend();
     const factory = DatastoreStorageFactory.newBuilder()

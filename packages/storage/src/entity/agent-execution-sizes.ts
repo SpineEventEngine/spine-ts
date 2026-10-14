@@ -31,6 +31,7 @@ import { AgentHistoryRecords } from "./agent-history-record-spec.js";
 export const AgentExecutionSizes = {
   /**
    * Calculates the retained execution journal and accepted source facts.
+   *
    * @param record Complete execution record proposed for persistence.
    * @returns Exact serialized execution-record bytes.
    */
@@ -40,6 +41,7 @@ export const AgentExecutionSizes = {
 
   /**
    * Calculates per-instance claim, eligibility and preferences.
+   *
    * @param head Complete head proposed for persistence.
    * @returns Exact serialized head bytes.
    */
@@ -49,6 +51,7 @@ export const AgentExecutionSizes = {
 
   /**
    * Calculates a history entry inside its persisted scope envelope.
+   *
    * @param scope Generated state type and canonical Agent key.
    * @param entry Original conversation, System or domain entry.
    * @returns Exact serialized internal history-record bytes.

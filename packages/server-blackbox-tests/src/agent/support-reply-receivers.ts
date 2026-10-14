@@ -42,6 +42,7 @@ export class SupportRejectionSubscriber extends AbstractEventSubscriber {
 
   /**
    * Records one delivered support rejection.
+   *
    * @param rejection Rejected ticket identity.
    */
   @Subscribe onReplyUnavailable(rejection: SupportReplyUnavailable): void {
@@ -61,6 +62,7 @@ export class SupportReviewAssignee extends AbstractAssignee {
 
   /**
    * Records the review request and emits its typed domain Event.
+   *
    * @param command Ticket awaiting human review.
    * @returns Review-started Event for this ticket.
    */

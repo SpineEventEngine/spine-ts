@@ -33,6 +33,7 @@ import { PostgresRecordStorage } from "./record-storage.js";
 export const AgentHistoryHash = {
   /**
    * Calculates the fixed-width digest of a complete logical identity.
+   *
    * @param value Complete logical identity.
    * @returns Full SHA-256 hex digest.
    */
@@ -43,6 +44,7 @@ export const AgentHistoryHash = {
 
 /**
  * Stores Agent history in the shared PostgreSQL immutable record family.
+ *
  * @typeParam Id Typed Agent identifier.
  */
 export class PostgresAgentHistory<Id> implements AgentHistoryStorage<Id> {
@@ -60,6 +62,7 @@ export class PostgresAgentHistory<Id> implements AgentHistoryStorage<Id> {
 
   /**
    * Binds one typed Agent repository to the provider record handle.
+   *
    * @param input Repository and complete tenant scope.
    * @param records Native record-family storage.
    */
@@ -70,6 +73,7 @@ export class PostgresAgentHistory<Id> implements AgentHistoryStorage<Id> {
 
   /**
    * Writes one original entry or confirms byte-identical content.
+   *
    * @param entityId Typed Agent identifier.
    * @param entry Complete history entry.
    * @returns Completion after immutable storage confirms the entry.
@@ -84,6 +88,7 @@ export class PostgresAgentHistory<Id> implements AgentHistoryStorage<Id> {
 
   /**
    * Reads a bounded indexed page in full Timestamp/category/UTF-8 order.
+   *
    * @param request Typed Agent, view, continuation, and response limits.
    * @returns Original entries and continuation status.
    */
@@ -112,6 +117,7 @@ export class PostgresAgentHistory<Id> implements AgentHistoryStorage<Id> {
 
   /**
    * Prepares fixed composite indexes after canonical table initialization.
+   *
    * @returns Shared preparation promise for this handle.
    */
   private ready(): Promise<void> {
@@ -120,6 +126,7 @@ export class PostgresAgentHistory<Id> implements AgentHistoryStorage<Id> {
 
   /**
    * Creates each native index idempotently on the shared record family.
+   *
    * @returns Completion after all three definitions are validated.
    */
   private async initialize(): Promise<void> {
@@ -150,6 +157,7 @@ export class PostgresAgentHistory<Id> implements AgentHistoryStorage<Id> {
 
   /**
    * Rejects an existing same-name index with incomplete columns or collation.
+   *
    * @param client Acquired PostgreSQL client.
    * @param table Validated physical table name.
    * @param name Fixed required index name.
@@ -187,6 +195,7 @@ export class PostgresAgentHistory<Id> implements AgentHistoryStorage<Id> {
 
   /**
    * Reads a bounded native page with complete scope and view predicates.
+   *
    * @param agentKey Canonical Agent key.
    * @param request View and response bounds.
    * @param after Exclusive encoded order key.
@@ -220,6 +229,7 @@ export class PostgresAgentHistory<Id> implements AgentHistoryStorage<Id> {
 
   /**
    * Adds the indexed view predicate and exact original selector.
+   *
    * @param request Selected history view.
    * @param clauses Mutable bound SQL predicates.
    * @param values Mutable bound SQL values.
@@ -244,6 +254,7 @@ export class PostgresAgentHistory<Id> implements AgentHistoryStorage<Id> {
 
   /**
    * Validates view identity and complete-key continuation category.
+   *
    * @param request View and continuation key.
    */
   private validateView(request: AgentHistoryRead<Id>): void {
@@ -256,6 +267,7 @@ export class PostgresAgentHistory<Id> implements AgentHistoryStorage<Id> {
 
   /**
    * Converts a typed Agent ID to its canonical key.
+   *
    * @param id Typed Agent identifier.
    * @returns Canonical storage key.
    */

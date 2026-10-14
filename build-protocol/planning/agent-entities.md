@@ -5,9 +5,10 @@
 High-risk runtime/public-contract task authorized on 7 October 2026. Base:
 `658da1cdddcb8fd40f9205b1c200abc3a58dd62e` (snapshot.22). Feature branch:
 `agent-entities`; worktree: native managed `agent-readiness/spine-ts`.
-The latest pushed checkpoint `fff182eea` passed GitHub verify and trial checks.
-That checkpoint still used Electron. Earlier native ChatGPT generation, editing,
-Preview, export and sign-out evidence applies to that earlier desktop host.
+The MōBrowser migration and Linux generator correction at `c8c429d1f` passed
+GitHub verify and publication trial checks in Build run 38448372116.
+A fresh human-requested changeset, test-quality and documentation review is
+now in progress; earlier acceptance does not substitute for this review.
 
 The human-authorized MōBrowser 2.18 migration is implemented and locally verified.
 Real ChatGPT sign-in, Git comparison, generation, Preview, editing, exact native
@@ -8093,3 +8094,294 @@ profile remains evidence for unchanged runtime code; CI runs the full profile
 on the corrected dependency graph. No native app rebuild is needed. Push the
 correction immediately and require both verify and publication trial to pass
 before remote acceptance.
+
+## Independent changeset, test-quality and documentation review — 14 October 2026
+
+Standard review/correction milestone over the existing high-risk Agent PR.
+The Desktop surface supports explicit Sol/medium and Luna/medium dispatch.
+Baseline: 658da1cdddcb8fd40f9205b1c200abc3a58dd62e; reviewed endpoint:
+c8c429d1f463a8fe1776ce69b4e7d03e0ddbf356. Continue the existing feature worktree;
+fresh origin/master was fetched without merging or rewriting the PR.
+
+Acceptance: a fresh independent code review with no conversation/memory or prior
+review conclusions; resolve confirmed defects; then assess all new tests for
+observable behavior, domain-correct fixtures, meaningful failure detection and
+appropriate use of BlackBox; then inventory all framework user documentation
+and reconcile claims and runnable examples with the final public APIs. Finish
+with a beginner-level app/framework explanation grounded in actual source.
+No new product features, arbitrary limits, or generic application policies.
+
+Initial read-only review dispatches: existing performance/reliability reviewer,
+Sol/medium, correctness/spec concern over changed runtime; existing
+style/maintainability reviewer, Sol/medium, standards concern over changed
+production structure. Both get fork_turns none, explicit model and reasoning,
+no memory use, no prior reports, no child agents, and no edits. These are
+independent concern-specific reviews; collect the whole wave before fixes.
+Later test-quality review uses a fresh style/maintainability reviewer Sol/medium;
+documentation inventory/claim review uses Luna/medium and public API snippet
+review uses the existing TypeScript/API-docs concern where necessary.
+All four canonical concerns receive dispositions at convergence. Final security
+review reopens only if a correction changes its established boundary.
+Record actual runtime metadata if exposed, otherwise the explicit configured
+profile and surface limitation. Select focused versus release verification
+from actual accepted fixes after cheap preflight; do not rerun the expensive
+suite merely to repeat the unchanged successful endpoint evidence.
+
+First fresh wave accepted: correctness/reliability reviewed claim renewal,
+serialized replay, model-attempt reservations, MCP write intent, indexed history,
+Studio generation/cancellation/shutdown and Git comparisons; no confirmed P0–P2
+runtime defects in those examined paths. Standards confirmed one P2: placeholder
+and malformed semantic TSDoc in DesktopAuth, ChatGPT session and AI registration/
+execution declarations. This is accepted after inspecting the cited source.
+The review is bounded, not an exhaustive proof of the full 447-file PR. Both
+fresh reviewers used explicit Sol/medium with fork none; runtime introspection
+was unavailable. Reports remain outside the repository.
+
+Correction assignment: existing implementer remit, explicit Sol/medium, fork
+none; no children. Sole production writer for the four cited files and related
+new-file TSDoc occurrences if the same concrete defect is present. Comments
+only, no runtime/API changes or boilerplate replacement. Explain actual state,
+auth lifecycle, parameters and results. Parent maintains this task record.
+After formatting/TSDoc/type-safe diff checks pass, begin the separate fresh
+test-quality review. Remaining estimated work remains within 1.5–3 hours total.
+
+First correction accepted: semantic/malformed TSDoc repaired in seven affected
+source files, including the same concrete defects in loopback, generation and
+decision documentation. Prettier, TSDoc and diff checks pass; TypeScript AST
+printing with comments removed matches HEAD for all seven files. No behavior
+change and no test invented to check prose. Existing implementer Sol/medium
+remains available; explicit profile accepted, runtime introspection unavailable.
+
+Separate test-quality wave: three fresh existing style/maintainability reviewer
+assignments, each explicit Sol/medium with fork none and no memory or prior
+review conclusions. Disjoint scopes: 84 framework test/fixture files, 12 provider
+adapter test/fixture files, and 44 example/tooling test files. Read-only, no
+children, no full suite. Each must inventory its assigned files, inspect source
+under test, distinguish real boundary fixtures from self-fulfilling assertions,
+and propose behavior-focused replacement/deletion for confirmed defects.
+Collect the complete wave before returning a correction batch to the same
+implementer. No coverage weakening or speculative extra tests.
+
+Test-quality wave accepted: all assigned files inventoried; framework review
+structurally screened 84 files with targeted bodies (not every line of 25.7k
+changed test lines), adapter reviewed 12 files and example/tooling 44 files.
+Seven confirmed findings: (1) unapproved pending-discovery maximum 127 in all
+four storage providers and tests; (2) shared history fixture constructs
+noncanonical Any URLs and uses less appropriate support-event substitutes
+instead of the dedicated facts/proposal types; (3) Datastore index assertion
+counts strings without proving composite structure; (4) provider type fixture
+only aliases SDK types without checking adapter compatibility; (5) fragmented
+stdio test asserts Buffer.concat count rather than response delivery; (6) Jev
+answer test's admission/mapping ignores the decoded result; (7) optimistic model
+selection test replaces the real wizard with synthetic controls.
+All three fresh test review dispatches were explicit Sol/medium, fork none;
+no memory or prior reports used, runtime introspection not exposed.
+
+Parent verified the cap and found the same newly introduced 127 maximum in
+TenantCatalogReads. Include it in finding (1). Remove caller-facing arbitrary
+caps rather than raising them; preserve legitimate pagination across any
+existing native provider chunks without introducing truncation. Distinguish
+this from unchanged low-level provider contracts outside this PR.
+An Event can legitimately be an AiModel input, as Studio demonstrates; the
+fixture defect is its inaccurate types/packing for the scenario, not a general
+ban on Event inputs. Correct canonical packing and assert unpacked payloads.
+
+Return the complete accepted batch to existing implementer Sol/medium, sole
+production/test writer; parent handles logs. No generic abstractions or limits.
+Use deterministic deferred inputs for the real selector and fragmented response;
+assert decoded Jev values and actual adapter type compatibility. Preserve
+provider conformance and test thresholds. Focused test/type/lint checks precede
+affected reliability/API/test re-review. Shared storage contract corrections
+require final verify:release after documentation convergence, then exact-SHA CI.
+
+Documentation stage begins after collecting the test-review wave. Read-only
+inventory/claim work is independent of the bounded test/storage correction.
+Fresh existing documentation reviewer: Luna/medium, explicit fork none, no
+memory/previous conclusions, all 76 current user/developer docs plus disposition
+of excluded historical/reference/fixture Markdown. Fresh existing TypeScript/API
+docs reviewer: Sol/medium, explicit fork none, no memory/previous conclusions,
+Agent/AI/storage/testing public declarations, Protos and guide examples/TSDoc.
+Both compare claims to source, know the pending 127-cap removal, and leave fixes
+to the existing implementer after the combined findings are available. No
+children or source edits. Export/audience/snippet mechanical checks passed before
+this stage. Parent candidate: Studio guide names old chatgptPlanModel usage while
+PlanModelSelection delegates session.model; check source before reporting.
+
+Documentation wave accepted: prose review inventoried 96 Markdown files and
+checked current Agent/workflow guides individually, with a repository-wide
+Entity-family terminology sweep. Public API review checked changed declarations,
+entrypoints, Protos and runnable snippets. Six findings across the two reports:
+missing Agent in API/architecture family descriptions; Studio guide names the
+low-level model factory instead of session.model; adapter README incorrectly
+labels Studio credential storage encrypted rather than memory-only; missing
+TSDoc separator lines in public methods/examples and internal declarations.
+No confirmed signature/export/Proto compatibility break. Dispatches were
+explicit Luna/medium and Sol/medium, fork none; runtime metadata not exposed.
+All accepted findings returned together to the existing implementer after the
+test batch. Historical plans and fixture documents are not rewritten as current
+API guidance. No source changes were made by the reviewers.
+
+Affected reliability re-review assignment: existing performance/reliability
+reviewer, explicit Sol/medium, fork none, no memory or previous review reports.
+Scope is the current storage pagination correction (four pending providers and
+tenant discovery), including cross-page filtering/cursors and safe positive
+counts. Read-only; no children or full suite. Implementer confirms runtime
+changes are ready for this focused review while independent adapter/UI test and
+documentation corrections continue. Parent accepts only explicit configured
+profile, recording runtime metadata if available.
+
+Affected reliability review accepted one P1: Datastore tenant catalog forwarded
+the newly unrestricted positive safe-integer count into the SDK's protobuf
+Int32Value query limit. Values at or above 2^31 encode as negative limits.
+Return to the same implementer for internal native paging that preserves the
+caller count and cursor/filter contract, plus meaningful large-count boundary
+coverage. No other confirmed P0–P2 in the changed pending-page providers.
+Reviewer configured explicitly Sol/medium, fork none; runtime metadata was not
+available. The reviewer did not edit source or run the full suite.
+
+Implementer reports focused tests green after demonstrated red runs for native
+tenant paging, real StudioFlow/ChoiceSelect model selection, fragmented MCP
+response delivery, and all Jev decision modes. The provider type fixture now
+checks actual adapter-to-SDK type relations under existing tooling typechecks;
+the redundant separate strict dependency-only config was removed, without
+widening the existing tooling skipLibCheck setting. Its previous independent
+check produced 1,135 dependency declaration errors and lacked Node types.
+Corrected-test review assignment: fresh existing style/maintainability concern,
+explicit Sol/medium, fork none, no memory/prior reports; current uncommitted
+changed tests and fixtures only, with source inspection as needed. Check real
+behavior and test sensitivity, not coverage padding. Affected reliability
+reviewer receives targeted Datastore tenant paging correction for re-review.
+Documentation corrections and focused preflight continue with the same writer.
+
+Targeted Datastore native-limit re-review is clean: native chunks preserve the
+caller count and cursor while avoiding Int32Value overflow. Parent then checked
+the adjacent original branch diff and confirmed an additional unapproved fixed
+five-second tenant-discovery deadline introduced by this PR. Remove that imposed
+deadline, retaining AbortSignal cancellation and stream cleanup; replace its
+timeout assertion with meaningful pending-stream cancellation behavior. The
+existing pre-PR early-tenant cache policy is outside this correction. Corrected
+test review also identified duplicate imports, a mechanical typecheck defect to
+fix before final preflight. Work remains active until all checks converge.
+
+Corrected-test review accepted two findings: duplicate named imports prevent
+test typechecking; Datastore tests unnecessarily assert exact native chunk
+sequences rather than valid native integer limits and returned page/cursor
+behavior. Return both to the same implementer. No additional confirmed findings
+in real wizard/select, fragmented MCP delivery, Jev decoded answers, or adapter
+type relations. Reviewer investigated and withdrew a proposed registry-only
+assertion: explicit-schema AnyMessages.unpack already checks canonical type
+URLs and matches the runtime path, so an additional registry test would not
+address a demonstrated defect. Explicit Sol/medium fork-none profile accepted;
+runtime metadata not exposed.
+
+Implementer preflight result: 308 focused tests pass, build and tooling typechecks
+pass, TSDoc/Prettier/diff checks pass, and focused coverage reports 95.6% lines
+for the two affected Datastore runtime files. Accepted findings are corrected,
+including duplicate imports and semantic native-limit assertions. Final
+comment-only AST proof and report are pending. Existing Sol/medium reliability
+review context receives a final narrow cancellation/cleanup check after removal
+of the unapproved deadline; pagination was already clean. No broad review wave
+is reopened. Full release verification starts only after source freeze.
+
+Correction source freeze accepted. Report confirms 308 tests in 12 focused
+files, affected package build and adapter tooling typechecks, formatting,
+TSDoc and diff checks. Focused Datastore coverage is 95.59% lines overall;
+new pending/tenant paging loops execute, while some provider failure branches
+remain for global verification. Comment-stripped TypeScript printing confirms
+79 of 85 changed production files are comments only; six contain intended
+paging/cancellation behavior changes. No tests were added for comment formatting.
+
+Mechanical verification dispatch: orchestrator function, explicit Luna/low,
+fork none, no children or edits. Finish cheap global tooling, changed-file
+lint/cleanup, documentation gates and diff checks; report before starting the
+expensive profile. After narrow reliability acceptance, run verify:release once
+on the frozen tree, then audit:release. Selected full profile is required by
+shared storage/runtime and build-check changes. Capture logs outside repository;
+report progress at meaningful stage transitions and all results immediately.
+Parent alone handles task record, commit and push. No source changes during
+release verification.
+
+Final narrow reliability review found one lifecycle defect before release
+verification started: a native Readable can emit close without end/error; after
+removing the artificial deadline, the tenant collector would remain pending.
+Return to the same implementer for an unsettled-close rejection and focused
+premature-close test while preserving ordinary end/abort settlement and cleanup.
+Source freeze is reopened only for that correction. No expensive verification
+was started, and the mechanical dispatch remains pending until convergence.
+
+Final lifecycle correction accepted after red/green real-Readable test and
+20/20 tenant-catalog tests, affected Datastore build, formatting/TSDoc/diff gates.
+Targeted Sol/medium reliability re-review confirms idempotent settlement, abort
+listener removal, premature-close rejection, and preservation of specific abort
+and over-limit errors. No P0–P2 remains in the affected reliability scope.
+
+Canonical concerns now disposed: style/test quality corrected and confirmed;
+documentation completeness corrected against the current guides/source; public
+TypeScript/API docs corrected with exports/snippets mechanically checked;
+performance/reliability corrected and independently re-reviewed. Security is not
+reopened: corrections change pagination, cancellation, tests and prose, not the
+previously reviewed authentication/tool authorization boundary. The independent
+reviews are scoped evidence, not a claim that every PR line was re-reviewed.
+Final mechanical Luna/low assignment has begun cheap preflight on frozen source;
+full release gate remains conditional on its clean outcome.
+
+Global cheap preflight stopped before the expensive gate. Documentation API,
+audience and snippet checks, TSDoc, formatting and diff checks pass. Global
+tooling found six exact-optional-property cursor arguments in new tests; changed
+file ESLint found 18 test/fixture issues and cleanup found two overlong imports.
+Return the complete mechanical batch to the existing implementer, preserving
+behavior assertions and compiler/lint settings. These errors were missed by
+the narrower affected-package build and adapter-only tooling check. No runtime
+change or expensive verification attempt occurred during this preflight.
+
+Final mechanical correction batch is accepted: six test cursor arguments now
+use real control-flow presence checks; all 18 lint findings and two overlong
+imports are corrected. The SDK boundary fixture retains supported evaluation
+compatibility with a narrowly documented deprecated-interface lint exception;
+compiler settings and thresholds remain unchanged. Global tooling, changed-file
+ESLint, cleanup, TSDoc, formatting and diff checks pass. Affected tests pass
+94/94, with final three touched files rerun 64/64. Runtime source remains frozen.
+Full and production dependency audits independently passed with no known
+vulnerabilities. Existing Luna/low mechanical function is authorized to repeat
+the cheap gates, then run verify:release once if they remain clean. No source
+edits are permitted while the release profile runs.
+
+The full gate passed all generated/quality gates, then its isolated proto-tools
+clean-build test failed during offline install. Mechanical runner interrupted
+before final suite diagnostics; that interruption is not accepted as a complete
+test result. A focused natural-completion run and standalone detached-checkout
+reproduction established ERR_PNPM_IGNORED_BUILDS for the two pinned MōBrowser
+macOS SDKs. All 602 packages were available offline. Parent inspected their
+scripts: preinstall checks host architecture; postinstall compiles the supplied
+AppKit DMG icon helper with swiftc. No network or credential work occurs there.
+
+Return to the same implementer for explicit allowBuilds entries for those SDKs,
+Mac prerequisite documentation as needed, and useful captured output on isolated
+build failure. Do not relax the general script policy. Because that package test
+checks committed HEAD, checkpoint the reviewed correction and push immediately
+after cheap gates, then run local release verification and exact-commit CI in
+parallel. No broad suite retry until focused install diagnosis and cheap gates
+are clean. The final build-policy change receives a narrow independent review.
+
+Clean-install correction preflight is green in a disposable clean archive and
+the working tree with offline frozen pnpm install; lockfile unchanged. Only two
+pinned MōBrowser macOS SDK script allowances were added, swiftc prerequisites
+documented, and isolated-build errors now include captured stage/command/output.
+The HEAD-based package test correctly remains on the old policy until commit.
+Tooling, affected ESLint, cleanup/TSDoc, formatting and diff checks pass.
+Narrow final release-readiness security review assignment: existing security
+reviewer, explicit Sol/high, fork none, no memory/prior reports/children. Inspect
+only the two SDK execution allowances and actual pinned lifecycle scripts, plus
+error-output/prerequisite changes; no broad authentication re-review. Parent
+will checkpoint/push once this concern is accepted.
+
+Narrow final security review accepted: no P0–P2 in the macOS SDK build
+allowances, fixed-command failure diagnostics or swiftc prerequisite. Inspected
+pinned 2.18.0 lifecycle scripts perform architecture checks and compile the
+bundled icon helper; no network/credential access. Lockfile integrity pins are
+unchanged. Reviewer dispatch explicitly Sol/high fork none; runtime metadata
+unavailable. Source is frozen for the correction checkpoint and immediate origin
+push. The HEAD-based clean package build, final cheap preflight and full local
+release profile run against that committed tree while exact-commit CI runs in
+parallel. Their completion is the remaining acceptance gate and will be reported
+in the user-facing completion; no claim of full test success is made yet.

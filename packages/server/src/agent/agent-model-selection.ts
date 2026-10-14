@@ -83,6 +83,7 @@ interface AgentModelSelectionAccess {
 
   /**
    * Returns each model kind required by the repository's capabilities.
+   *
    * @param registry Effective deployment registry.
    * @param repository Repository models and selection policy.
    * @param scope Authenticated accepted-invocation scope.
@@ -211,6 +212,7 @@ interface AgentModelSelectionAccess {
 
   /**
    * Resolves and authorizes the selected backend's nonsecret identity.
+   *
    * @param backend Factory-proven selected backend callbacks.
    * @param scope Authenticated accepted-invocation scope.
    * @param signal Cancellation signal for this execution.
@@ -226,6 +228,7 @@ interface AgentModelSelectionAccess {
 
   /**
    * Converts a deployment role to its generated enum value.
+   *
    * @param kind Registered generation or decision role.
    * @returns Corresponding generated model kind.
    */
@@ -233,6 +236,7 @@ interface AgentModelSelectionAccess {
 
   /**
    * Awaits a selection hook under cancellation and the invocation deadline.
+   *
    * @typeParam Value Hook result type.
    * @param work Hook result or pending callback promise.
    * @param signal Cancellation signal for this execution.
@@ -248,6 +252,7 @@ interface AgentModelSelectionAccess {
 
 /**
  * Chooses the earliest configured callback or invocation deadline.
+ *
  * @param registry Effective callback policy.
  * @param invocationDeadline Accepted invocation deadline, when configured.
  * @returns Absolute callback deadline, or undefined when no ceiling applies.
@@ -311,6 +316,7 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
 
   /**
    * Resolves, authorizes and records one selected deployment for each available kind.
+   *
    * @param registry Effective deployment registry.
    * @param repository Repository models and selection policy.
    * @param scope Authenticated accepted-invocation scope.
@@ -350,6 +356,7 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
 
   /**
    * Resolves a deployment through normal precedence and checks authenticated identity.
+   *
    * @param registry Effective deployment registry.
    * @param repository Repository models and selection policy.
    * @param scope Authenticated accepted-invocation scope.
@@ -540,6 +547,7 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
 
   /**
    * Builds the accepted deployment precedence from repository and claim-time facts.
+   *
    * @param registry Effective deployment registry.
    * @param repository Repository models and selection policy.
    * @param preferences Claim-time per-instance selections.
@@ -618,6 +626,7 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
 
   /**
    * Converts a registered deployment role to the generated closed enum.
+   *
    * @param kind Registered generation or decision role.
    * @returns Matching generated model kind.
    */
@@ -627,6 +636,7 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
 
   /**
    * Bounds a connection or authorization hook even if its callback ignores cancellation.
+   *
    * @typeParam Value Hook result type.
    * @param work Hook result or pending callback promise.
    * @param signal Cancellation signal for this execution.

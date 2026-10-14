@@ -96,7 +96,7 @@ describe("MySQL Agent execution provider boundary", () => {
           required(key.scope).stateType,
           AgentExecutionRecords.pendingLower(asOf),
           AgentExecutionRecords.pendingKey(eligibleAt, required(beforeKey.scope)),
-          2,
+          historyPage.mock.calls.length === 1 ? 2 : 129,
         ]);
         return Promise.resolve(
           [beforeHead, head, lateHead, wrongTypeHead]
@@ -211,8 +211,12 @@ describe("MySQL Agent execution provider boundary", () => {
         "order_key",
       ]);
       expect(page.after?.key.scope).toEqual(key.scope);
-      await expect(storage.pending({ count: 128 })).rejects.toThrow(/count/i);
-      expect(historyPage).toHaveBeenCalledTimes(1);
+      const larger = await storage.pending({
+        count: 128,
+        after: { asOf, key: { scope: required(beforeKey.scope), eligibleAt } },
+      });
+      expect(larger.records).toEqual([record]);
+      expect(historyPage).toHaveBeenCalledTimes(2);
       const additional = accepted("mysql-admission-source");
       const admitted = await storage.admit(additional);
       expect(admitted.accepted).toEqual(additional);

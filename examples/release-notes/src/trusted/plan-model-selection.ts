@@ -210,6 +210,7 @@ export class PlanModelSelection {
 
   /**
    * Binds provider requests to the one generation admitted by the trusted Studio.
+   *
    * @param generation Accepted generation identity.
    */
   beginGeneration(generation: string): void {
@@ -218,6 +219,7 @@ export class PlanModelSelection {
 
   /**
    * Stops current and subsequent provider fetches for the canceled generation.
+   *
    * @param generation Exact generation selected for cancellation.
    */
   abortGeneration(generation: string): void {

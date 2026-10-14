@@ -48,10 +48,15 @@ import {
 import { Datastore } from "@google-cloud/datastore";
 
 import { AgentHistoryHash } from "./agent-history.js";
-import { DatastoreRecordStorage, type DatastoreRangeFilter } from "./record-storage.js";
+import {
+  DatastoreRecordStorage,
+  type DatastorePageCursor,
+  type DatastoreRangeFilter,
+} from "./record-storage.js";
 
 /**
  * Existing native record families participating in one Agent transaction.
+ *
  * @typeParam I Typed entity identifier.
  */
 export interface DatastoreExecutionRows<I> {
@@ -98,6 +103,7 @@ type NativeRow = ReturnType<
 
 /**
  * Persists Agent execution evidence through native namespace-scoped transactions.
+ *
  * @typeParam I Typed Agent identifier.
  * @typeParam S Generated Agent state.
  */
@@ -120,6 +126,7 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
 
   /**
    * Binds one complete tenant and generated state type to native record kinds.
+   *
    * @param input Requested fenced execution change.
    * @param rows Provider record handles bound to the tenant.
    */
@@ -130,6 +137,7 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
 
   /**
    * Persists source facts once after proving transaction-query capability.
+   *
    * @param accepted Original accepted signal and selected bindings.
    * @returns Persisted invocation with the original accepted facts.
    */
@@ -159,13 +167,14 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
 
   /**
    * Reads a bounded native head page before a fixed provider-time cutoff.
+   *
    * @param request Bounded pending-page request.
    * @returns Bounded eligible work and continuation cursor.
    */
   async pending(request: AgentPendingRead): Promise<AgentPendingPage> {
     this.requireOpen();
-    if (!Number.isSafeInteger(request.count) || request.count < 1 || request.count > 127)
-      throw new RangeError("Agent pending count must be between 1 and 127.");
+    if (!Number.isSafeInteger(request.count) || request.count < 1)
+      throw new RangeError("Agent pending count must be a positive safe integer.");
     if (request.after !== undefined && request.after.key.scope.stateType !== this.input.stateType)
       throw new TypeError("Agent pending cursor belongs to another state type.");
     const asOf = request.after?.asOf ?? Time.currentTime();
@@ -190,11 +199,12 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
 
   /**
    * Reads no more than count plus one complete native head keys.
+   *
    * @param asOf Fixed eligibility cutoff for the page.
    * @param request Bounded pending-page request.
    * @returns Bounded native page of eligible per-instance heads.
    */
-  private pendingHeads(request: AgentPendingRead, asOf: Timestamp) {
+  private async pendingHeads(request: AgentPendingRead, asOf: Timestamp) {
     const filters: DatastoreRangeFilter[] = [
       {
         property: "state_digest",
@@ -212,15 +222,27 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
           request.after.key.scope,
         ),
       });
-    return this.rows.head.queryProviderPage({
-      filters,
-      order: [{ property: "pending_key", direction: "asc" }],
-      limit: request.count + 1,
-    });
+    const entries: { record: AgentExecutionHead }[] = [];
+    const target = request.count === Number.MAX_SAFE_INTEGER ? request.count : request.count + 1;
+    let cursor: DatastorePageCursor | undefined;
+    for (;;) {
+      const page = await this.rows.head.queryProviderPage({
+        filters,
+        order: [{ property: "pending_key", direction: "asc" }],
+        ...(cursor === undefined ? {} : { cursor }),
+        limit: Math.min(128, target - entries.length),
+      });
+      entries.push(...page.entries);
+      if (entries.length >= target || !page.hasMore) return { entries, hasMore: page.hasMore };
+      if (page.cursor === undefined)
+        throw new Error("Datastore pending page continuation is missing.");
+      cursor = page.cursor;
+    }
   }
 
   /**
    * Reads one complete retained invocation after reconstruction.
+   *
    * @param key Original Agent invocation identity.
    * @returns Complete stored invocation when present.
    */
@@ -235,6 +257,7 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
 
   /**
    * Acquires the earliest same-instance candidate with a fresh transaction clock.
+   *
    * @param expiresAt Requested future lease expiry.
    * @param key Original Agent invocation identity.
    * @param token Exclusive claim token.
@@ -251,6 +274,7 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
 
   /**
    * Checks the current head and invocation before writing one exclusive lease.
+   *
    * @param expiresAt Requested future lease expiry.
    * @param key Original Agent invocation identity.
    * @param token Exclusive claim token.
@@ -289,6 +313,7 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
 
   /**
    * Checks the current per-instance head and earliest unresolved source.
+   *
    * @param tx Native transaction that fences the claim.
    * @param head Per-instance pending and lease record.
    * @param key Original Agent invocation identity.
@@ -319,6 +344,7 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
 
   /**
    * Updates the same live token inside a fresh native transaction.
+   *
    * @param expiresAt Requested future lease expiry.
    * @param key Original Agent invocation identity.
    * @param token Exclusive claim token.
@@ -344,6 +370,7 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
 
   /**
    * Persists evidence and immutable history inside one native transaction.
+   *
    * @param input Requested fenced execution change.
    * @returns Completion after fenced evidence is persisted.
    */
@@ -369,6 +396,7 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
 
   /**
    * Commits Entity, history, preferences and outgoing IDs together.
+   *
    * @param input Requested fenced execution change.
    * @returns Completion after conditional Entity and evidence commit.
    */
@@ -398,6 +426,7 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
 
   /**
    * Marks original output IDs delivered without rerunning completed handlers.
+   *
    * @param expectedRecordBytes Exact prior execution record bytes.
    * @param key Original Agent invocation identity.
    * @param signals Original outgoing signal identities.
@@ -446,6 +475,7 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
 
   /**
    * Rejects use after closure and probes native transaction-query support once.
+   *
    * @returns Completion after provider capabilities are checked.
    */
   private ready(): Promise<void> {
@@ -458,6 +488,7 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
 
   /**
    * Checks flat scoped successor and head queries before accepting a signal.
+   *
    * @returns Completion after native query support is verified.
    */
   private async checkCapability(): Promise<void> {
@@ -484,6 +515,7 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
 
   /**
    * Checks that native indexed head pagination is available.
+   *
    * @returns Completion after the indexed query succeeds.
    */
   private async checkHeadCapability(): Promise<void> {
@@ -507,6 +539,7 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
 
   /**
    * Executes one namespace-scoped transaction and retries native contention.
+   *
    * @param work Operation executed inside the transaction.
    * @returns Callback result after the native transaction commits.
    * @typeParam T Result returned by the transaction callback.
@@ -537,6 +570,7 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
 
   /**
    * Reads one head by complete scope inside the active transaction.
+   *
    * @param key Original Agent invocation identity.
    * @param tx Native transaction that fences the change.
    * @returns Per-instance head when present.
@@ -562,6 +596,7 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
 
   /**
    * Reads one invocation by original source and complete scope.
+   *
    * @param key Original Agent invocation identity.
    * @param tx Native transaction that fences the change.
    * @returns Stored invocation when present.
@@ -577,6 +612,7 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
 
   /**
    * Reads a materialized key and decodes exact original Protobuf bytes.
+   *
    * @param id Complete persisted record identity.
    * @param storage Native record storage for this row.
    * @param tx Native transaction that fences the change.
@@ -597,6 +633,7 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
 
   /**
    * Queues one validated native row for the current short transaction.
+   *
    * @param record Persisted Agent execution record.
    * @param storage Native record storage for this row.
    * @param tx Native transaction that fences the change.
@@ -618,6 +655,7 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
 
   /**
    * Checks fresh Time, exact token, and the persisted claim image.
+   *
    * @param key Original Agent invocation identity.
    * @param token Exclusive claim token.
    * @param tx Native transaction that fences the change.
@@ -641,6 +679,7 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
 
   /**
    * Checks exact prior bytes and unchanged immutable source facts.
+   *
    * @param checkNext Whether to validate the proposed next record.
    * @param input Requested fenced execution change.
    * @param tx Native transaction that fences the change.
@@ -663,6 +702,7 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
 
   /**
    * Updates the pending head for one earlier accepted source without resetting existing eligibility.
+   *
    * @param head Per-instance pending and lease record.
    * @param record Persisted Agent execution record.
    */
@@ -673,6 +713,7 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
 
   /**
    * Reads up to two same-instance rows per unresolved status inside the transaction.
+   *
    * @param exclude Invocation omitted while selecting the successor.
    * @param key Original Agent invocation identity.
    * @param tx Native transaction that fences the change.
@@ -707,6 +748,7 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
 
   /**
    * Reads the first two rows of one unresolved status under the instance scope.
+   *
    * @param tx Native transaction that fences successor selection.
    * @param scope Generated state type and canonical Agent key.
    * @param status Persisted unresolved invocation status.
@@ -733,6 +775,7 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
 
   /**
    * Updates the next original Inbox source after terminal work.
+   *
    * @param head Per-instance pending and lease record.
    * @param key Original Agent invocation identity.
    * @param order Original Inbox order.
@@ -752,6 +795,7 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
 
   /**
    * Reads immutable history keys before queuing any transaction writes.
+   *
    * @param entries Immutable history entries to append.
    * @param key Original Agent invocation identity.
    * @param tx Native transaction that fences the change.
@@ -781,6 +825,7 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
 
   /**
    * Persists one missing immutable row or rejects divergent existing bytes.
+   *
    * @param record Persisted Agent execution record.
    * @param storage Native record storage for this row.
    * @param tx Native transaction that fences the change.
@@ -806,6 +851,7 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
 
   /**
    * Checks initial Version and stages Entity records in this transaction.
+   *
    * @param expected Expected current Entity Version.
    * @param input Requested fenced execution change.
    * @param tx Native transaction that fences the change.
@@ -835,6 +881,7 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
 
   /**
    * Rejects cross-Entity completion and disabled framework histories.
+   *
    * @param commit Conditional Entity state and Version write.
    * @param id Complete persisted record identity.
    */
@@ -855,6 +902,7 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
 
   /**
    * Checks exactly one Version advance or an unchanged state.
+   *
    * @param input Requested fenced execution change.
    * @param prior Previously persisted execution record.
    * @returns Expected initial Entity Version.
@@ -892,6 +940,7 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
 
   /**
    * Checks native indexed metadata and per-entity payload limits.
+   *
    * @param record Persisted Agent execution record.
    */
   private validateRecord(record: AgentExecutionRecord): void {
@@ -909,6 +958,7 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
 
   /**
    * Checks complete head discovery key and per-entity payload limits.
+   *
    * @param head Per-instance pending and lease record.
    */
   private validateHead(head: AgentExecutionHead): void {
@@ -961,6 +1011,7 @@ function first(value: unknown): unknown {
 
 /**
  * Requires an enabled native record handle for this Entity.
+ *
  * @typeParam I Typed entity identifier.
  * @typeParam R Typed persisted record.
  */

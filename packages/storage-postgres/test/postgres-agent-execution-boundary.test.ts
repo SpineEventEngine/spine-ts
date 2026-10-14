@@ -120,7 +120,7 @@ describe("PostgreSQL Agent execution provider boundary", () => {
         required(key.scope).stateType,
         AgentExecutionRecords.pendingLower(asOf),
         AgentExecutionRecords.pendingKey(eligibleAt, required(beforeKey.scope)),
-        2,
+        query.mock.calls.length === 1 ? 2 : 129,
       ]);
       return Promise.resolve(
         [beforeHead, head, lateHead, wrongTypeHead]
@@ -201,8 +201,12 @@ describe("PostgreSQL Agent execution provider boundary", () => {
       expect(page.after?.asOf).toEqual(asOf);
       expect(page.hasMore).toBe(false);
       expect(page.after?.key.scope).toEqual(key.scope);
-      await expect(storage.pending({ count: 128 })).rejects.toThrow(/count/i);
-      expect(query).toHaveBeenCalledTimes(1);
+      const larger = await storage.pending({
+        count: 128,
+        after: { asOf, key: { scope: required(beforeKey.scope), eligibleAt } },
+      });
+      expect(larger.records).toEqual([record]);
+      expect(query).toHaveBeenCalledTimes(2);
       readAdmitted = true;
       const additional = accepted("postgres-admission-source");
       const admitted = await storage.admit(additional);

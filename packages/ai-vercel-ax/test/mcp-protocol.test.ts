@@ -13,6 +13,9 @@
  */
 
 import { createServer } from "node:http";
+import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { validateJSONRPCMessage } from "@ai-sdk/mcp";
@@ -38,36 +41,51 @@ afterEach(async () => {
 
 describe("bounded MCP protocol", () => {
   it("joins a fragmented stdio response only after its newline arrives", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "spine-mcp-fragment-"));
+    const gate = join(directory, "release");
     const signal = new AbortController().signal;
+    const firstChunk = Promise.withResolvers<undefined>();
     const delivered = Promise.withResolvers<unknown>();
+    const onMessage = vi.fn((message: unknown) => {
+      delivered.resolve(message);
+    });
+    const finishMessage = vi.fn(() => Promise.resolve());
     const transport = new BoundedMcpStdioTransport(
       process.execPath,
       [fileURLToPath(new URL("./fixtures/mcp-stdio-server.mjs", import.meta.url))],
       undefined,
-      { MCP_FRAGMENT_OUTPUT: "1" },
+      { MCP_FRAGMENT_OUTPUT: "1", MCP_FRAGMENT_GATE: gate },
       {
         signal,
         nowEpochMs: Date.now,
         hasAuthority: () => true,
         reserveMessage: () => Promise.resolve({ id: "fragmented", signal }),
-        onReceived: vi.fn(),
-        finishMessage: vi.fn(() => Promise.resolve()),
+        onReceived: () => {
+          firstChunk.resolve(undefined);
+        },
+        finishMessage,
       },
     );
-    transport.onmessage = delivered.resolve;
+    transport.onmessage = onMessage;
     await transport.start();
-    const joined = vi.spyOn(Buffer, "concat");
     try {
       transport.setCallTicket("fragmented-call");
       await transport.send({ jsonrpc: "2.0", id: 1, method: "tools/call" });
-      await delivered.promise;
-      const responseJoins = joined.mock.calls.filter(([parts]) =>
-        parts.some((part) => Buffer.from(part).toString("utf8").startsWith('{"jsonrpc"')),
-      );
-      expect(responseJoins).toHaveLength(1);
+      await firstChunk.promise;
+      expect(onMessage).not.toHaveBeenCalled();
+      expect(finishMessage).not.toHaveBeenCalled();
+      await writeFile(gate, "release");
+      await expect(delivered.promise).resolves.toEqual({
+        jsonrpc: "2.0",
+        id: 1,
+        result: { content: [{ type: "text", text: "from stdio" }], isError: false },
+      });
+      expect(onMessage).toHaveBeenCalledOnce();
+      expect(finishMessage).toHaveBeenCalledOnce();
     } finally {
-      joined.mockRestore();
+      await writeFile(gate, "release");
       await transport.close();
+      await rm(directory, { recursive: true, force: true });
     }
   }, 3_000);
 

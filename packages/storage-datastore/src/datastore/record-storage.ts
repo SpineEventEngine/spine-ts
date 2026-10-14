@@ -208,6 +208,7 @@ class FlatEntityCodec<I, R extends Message> {
 
   /**
    * Returns the canonical Datastore key name for a logical record ID.
+   *
    * @param id Typed record identifier.
    * @returns Key name shared by equivalent logical IDs.
    */
@@ -500,6 +501,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
 
   /**
    * Returns the exact tenant-scoped native key for a typed record ID.
+   *
    * @param id Complete persisted record identity.
    * @returns Native key for the typed record identity.
    */
@@ -590,6 +592,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
 
   /**
    * Reads at most two indexed successor records inside the caller's transaction.
+   *
    * @param filters Native indexed query predicates.
    * @param orderProperty Native property containing the complete order key.
    * @param transaction Current native transaction.
@@ -633,6 +636,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
 
   /**
    * Deletes the record at one storage slot.
+   *
    * @param id The storage slot identifier.
    * @returns Whether a record was deleted.
    */
@@ -652,6 +656,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
 
   /**
    * Returns records matching a query.
+   *
    * @param _query The record query.
    * @returns The matching storage entries.
    */
@@ -687,6 +692,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
 
   /**
    * Returns the supported Datastore query capabilities.
+   *
    * @returns The supported query capabilities.
    */
   protected override queryCapabilities(): StorageQueryCapabilities {
@@ -698,6 +704,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
 
   /**
    * Returns candidate records for a normalized query plan.
+   *
    * @param plan The normalized query plan.
    * @returns The candidate storage entries.
    */
@@ -833,6 +840,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
 
   /**
    * Reads the record at one storage slot.
+   *
    * @param id The storage slot identifier.
    * @returns The stored record, if present.
    */
@@ -848,6 +856,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
 
   /**
    * Compares and conditionally replaces the record at one storage slot.
+   *
    * @param id The storage slot identifier.
    * @param expected The expected materialized record.
    * @param next The replacement materialized record, if any.
@@ -918,6 +927,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
 
   /**
    * Writes materialized records.
+   *
    * @param records The materialized records to write.
    * @returns Completes when the records are written.
    */
@@ -939,6 +949,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
 
   /**
    * Writes one materialized record.
+   *
    * @param record The materialized record to write.
    * @returns Completes when the record is written.
    */

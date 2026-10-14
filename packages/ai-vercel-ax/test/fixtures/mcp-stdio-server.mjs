@@ -8,6 +8,7 @@
  */
 
 import process from "node:process";
+import { existsSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { setTimeout } from "node:timers";
 
@@ -70,7 +71,12 @@ for await (const line of createInterface({ input: process.stdin })) {
   } else if (request.method === "tools/call" && process.env.MCP_FRAGMENT_OUTPUT) {
     const output = `${JSON.stringify({ jsonrpc: "2.0", id: request.id, result })}\n`;
     process.stdout.write(output.slice(0, 10));
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    if (process.env.MCP_FRAGMENT_GATE) {
+      while (!existsSync(process.env.MCP_FRAGMENT_GATE))
+        await new Promise((resolve) => setTimeout(resolve, 1));
+    } else {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
     process.stdout.write(output.slice(10));
   } else {
     process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: request.id, result })}\n`);

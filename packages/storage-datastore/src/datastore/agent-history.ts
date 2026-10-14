@@ -39,6 +39,7 @@ import {
 export const AgentHistoryHash = {
   /**
    * Calculates the fixed-width digest of a complete logical identity.
+   *
    * @param value Complete logical identity.
    * @returns Full SHA-256 hex digest.
    */
@@ -49,6 +50,7 @@ export const AgentHistoryHash = {
 
 /**
  * Stores Agent history in the shared Datastore immutable record kind.
+ *
  * @typeParam Id Typed Agent identifier.
  */
 export class DatastoreAgentHistory<Id> implements AgentHistoryStorage<Id> {
@@ -59,6 +61,7 @@ export class DatastoreAgentHistory<Id> implements AgentHistoryStorage<Id> {
 
   /**
    * Binds one typed Agent repository to the provider record handle.
+   *
    * @param input Repository and complete tenant scope.
    * @param records Native record-family storage.
    */
@@ -69,6 +72,7 @@ export class DatastoreAgentHistory<Id> implements AgentHistoryStorage<Id> {
 
   /**
    * Writes one original entry or confirms byte-identical content.
+   *
    * @param entityId Typed Agent identifier.
    * @param entry Complete history entry.
    * @returns Completion after immutable storage confirms the entry.
@@ -87,6 +91,7 @@ export class DatastoreAgentHistory<Id> implements AgentHistoryStorage<Id> {
 
   /**
    * Reads a bounded indexed page in full Timestamp/category/UTF-8 order.
+   *
    * @param request Typed Agent, view, continuation, and response limits.
    * @returns Original entries and continuation status.
    */
@@ -114,6 +119,7 @@ export class DatastoreAgentHistory<Id> implements AgentHistoryStorage<Id> {
 
   /**
    * Reads bounded native pages with complete scope and view predicates.
+   *
    * @param agentKey Canonical Agent key.
    * @param request View and response bounds.
    * @param after Exclusive encoded order key.
@@ -153,6 +159,7 @@ export class DatastoreAgentHistory<Id> implements AgentHistoryStorage<Id> {
 
   /**
    * Adds one indexed category or conversation predicate.
+   *
    * @param request Selected history view.
    * @param filters Mutable native Datastore filters.
    */
@@ -172,6 +179,7 @@ export class DatastoreAgentHistory<Id> implements AgentHistoryStorage<Id> {
 
   /**
    * Rejects a digest collision rather than exposing another repository's row.
+   *
    * @param record Decoded original storage envelope.
    * @param agentKey Complete requested Agent key.
    * @param request Selected view and conversation.
@@ -195,6 +203,7 @@ export class DatastoreAgentHistory<Id> implements AgentHistoryStorage<Id> {
 
   /**
    * Validates view identity and complete-key continuation category.
+   *
    * @param request View and continuation key.
    */
   private validateView(request: AgentHistoryRead<Id>): void {
@@ -207,6 +216,7 @@ export class DatastoreAgentHistory<Id> implements AgentHistoryStorage<Id> {
 
   /**
    * Converts a typed Agent ID to its canonical key.
+   *
    * @param id Typed Agent identifier.
    * @returns Canonical storage key.
    */
@@ -227,6 +237,7 @@ export class DatastoreAgentHistory<Id> implements AgentHistoryStorage<Id> {
 
   /**
    * Compares complete stored Proto bytes for immutable repeats.
+   *
    * @param left Existing complete storage record.
    * @param right Requested complete storage record.
    * @returns Whether both records have identical serialized bytes.

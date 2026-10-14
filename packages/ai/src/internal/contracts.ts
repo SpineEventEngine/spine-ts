@@ -489,6 +489,7 @@ export interface AgentAi {
 
   /**
    * Sets a deployment preference for later signals.
+   *
    * @param kind Generation or decision kind.
    * @param model Explicit deployment or inheritance when absent.
    */

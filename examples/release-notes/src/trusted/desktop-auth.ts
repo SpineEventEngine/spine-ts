@@ -60,7 +60,7 @@ export class DesktopAuth {
   private selectedClientId: string | undefined;
 
   /**
-   * The pending value.
+   * Active loopback listener for the current browser grant.
    */
   private pending: LoopbackListener | undefined;
 
@@ -85,15 +85,15 @@ export class DesktopAuth {
   private readonly signOutAborts = new Set<AbortController>();
 
   /**
-   * The closed value.
+   * Whether shutdown has permanently disabled new sign-in attempts.
    */
   private closed = false;
 
   /**
    * Initializes the trusted service.
    *
-   * @param session The session for this operation.
-   * @param openExternal The open external for this operation.
+   * @param session Trusted plan session used for account and grant operations.
+   * @param openExternal Opens the authorization URL in the system browser.
    * @param openCallback Opens the local browser callback listener.
    */
   constructor(
@@ -116,7 +116,7 @@ export class DesktopAuth {
    * Opens the browser and completes local authorization.
    *
    * @param clientId Issued OAuth client identifier.
-   * @returns The sign in result.
+   * @returns Account status after a verified grant is selected.
    */
   async signIn(clientId?: string): Promise<DesktopAuthStatus> {
     if (this.closed || this.signingIn) throw new Error("Sign-in is unavailable.");
@@ -157,7 +157,7 @@ export class DesktopAuth {
   /**
    * Checks whether the desktop authentication service closed.
    *
-   * @returns The is closed result.
+   * @returns Whether shutdown has begun.
    */
   private isClosed(): boolean {
     return this.closed;
@@ -166,7 +166,7 @@ export class DesktopAuth {
   /**
    * Returns the renderer-safe account status.
    *
-   * @returns The status result.
+   * @returns Connected accounts, pending clients, and current selection without credentials.
    */
   async status(): Promise<DesktopAuthStatus> {
     const pendingClientIds = await this.session.pendingClientIds();
@@ -184,7 +184,7 @@ export class DesktopAuth {
    * Fetches the account model catalog.
    *
    * @param clientId Issued OAuth client identifier.
-   * @returns The models result.
+   * @returns Models available to the selected account.
    */
   async models(clientId: string): ReturnType<SessionPort["models"]> {
     if (clientId !== this.selectedClientId) throw new Error("Account selection changed.");
@@ -195,7 +195,7 @@ export class DesktopAuth {
    * Clears local credentials after attempting refresh-token revocation.
    *
    * @param clientId Issued OAuth client identifier.
-   * @returns The sign out result.
+   * @returns Updated account status and whether remote revocation was confirmed.
    */
   async signOut(
     clientId: string,
@@ -215,7 +215,7 @@ export class DesktopAuth {
   /**
    * Closes the active authorization callback.
    *
-   * @returns The close result.
+   * @returns When the pending callback listener has closed.
    */
   async close(): Promise<void> {
     this.closed = true;

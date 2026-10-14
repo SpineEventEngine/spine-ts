@@ -117,6 +117,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
 
   /**
    * Reads a bounded package-local native history page.
+   *
    * @param sql Parameterized SQL assembled by the Agent history provider.
    * @param values Bound scope, view, boundary, and limit values.
    * @returns Decoded original record envelopes.
@@ -134,6 +135,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
 
   /**
    * Creates one required complete Agent history index when absent.
+   *
    * @param name Fixed provider index name.
    * @param columns Fixed complete index columns.
    * @returns Completion after the native index definition is checked.
@@ -159,6 +161,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
 
   /**
    * Reads complete physical index metadata for one fixed history index.
+   *
    * @param connection Active MySQL connection.
    * @param name Fixed required index name.
    * @returns Ordered native index components.
@@ -180,6 +183,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
 
   /**
    * Rejects prefixes, wrong order, or a different native index.
+   *
    * @param rows Ordered native index components.
    * @param columns Required complete index columns.
    */
@@ -423,6 +427,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
 
   /**
    * Returns the normalized query features genuinely executed by MySQL.
+   *
    * @returns The normalized features executed by this provider.
    */
   protected override queryCapabilities(): StorageQueryCapabilities {
@@ -434,6 +439,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
 
   /**
    * Executes the complete candidate selection in contained, bound MySQL SQL.
+   *
    * @param plan The validated normalized query plan.
    * @returns The selected record entries.
    */

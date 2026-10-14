@@ -89,18 +89,21 @@ export interface BoundedFetchOptions {
 
   /**
    * Returns whether the current execution fence still permits work.
+   *
    * @returns True while this execution may still dispatch or record bytes.
    */
   readonly hasAuthority: () => boolean;
 
   /**
    * Reads current epoch milliseconds through the runtime Time abstraction.
+   *
    * @returns Current Unix epoch milliseconds.
    */
   readonly nowEpochMs: () => number;
 
   /**
    * Persists the existing attempt and any configured output credit before network dispatch.
+   *
    * @param ticketId Existing physical attempt identity.
    * @param inputBytes Actual materialized request body bytes.
    * @param outputCredit Configured response byte ceiling, if any.
@@ -114,6 +117,7 @@ export interface BoundedFetchOptions {
 
   /**
    * Records actual decoded response-body bytes, including a rejected crossing chunk.
+   *
    * @param ticketId Existing physical attempt identity.
    * @param bytes Actual bytes in the received platform chunk.
    */
@@ -131,6 +135,7 @@ export interface BoundedProviderFetch {
 
   /**
    * Admits one existing physical-attempt ticket; rejects overlapping admission.
+   *
    * @param ticket Previously admitted physical request and effective limits.
    */
   readonly admit: (ticket: ProviderAttemptTicket) => void;
@@ -163,6 +168,7 @@ interface ActiveAttempt {
 class TransportFailure extends Error {
   /**
    * Creates a diagnostic without provider or callback content.
+   *
    * @param reason Fixed transport failure description.
    */
   constructor(reason: string) {
@@ -185,6 +191,7 @@ class FetchGate implements BoundedProviderFetch {
 
   /**
    * Creates a gate for one trusted provider connection.
+   *
    * @param options Runtime authority, accounting and route callbacks.
    */
   constructor(private readonly options: BoundedFetchOptions) {
@@ -320,6 +327,7 @@ class FetchGate implements BoundedProviderFetch {
 
   /**
    * Prepares one request body while cancellation can still settle fetch.
+   *
    * @param body SDK request body, if supplied.
    * @param attempt Active physical request ticket.
    * @returns Materialized bytes within the accepted input ceiling.
@@ -345,6 +353,7 @@ class FetchGate implements BoundedProviderFetch {
 
   /**
    * Dispatches the consumed ticket through the platform fetch.
+   *
    * @param input Validated provider URL.
    * @param init SDK request settings.
    * @param body Materialized request body within the input ceiling.
@@ -389,6 +398,7 @@ class FetchGate implements BoundedProviderFetch {
 
 /**
  * Creates a one-operation fetch gate; no request is possible before admission.
+ *
  * @param options Runtime authority, accounting and approved provider routes.
  * @returns A scoped provider fetch with admission and revocation controls.
  */
@@ -497,6 +507,7 @@ const guardedBody = (
     {
       /**
        * Reads one platform chunk when the SDK requests it.
+       *
        * @param controller Consumer-facing byte stream controller.
        * @returns Completion of this single bounded pull.
        */

@@ -18,6 +18,7 @@ import { AiOutcome } from "@spine-event-engine/proto/agent";
 
 /**
  * Validates the original persisted failure before a saved terminal response is reused.
+ *
  * @param replay Saved physical response and matching diagnostic.
  * @returns Exact original failure category and retryability.
  */

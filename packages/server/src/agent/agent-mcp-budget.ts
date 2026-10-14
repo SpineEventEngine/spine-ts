@@ -72,12 +72,14 @@ interface JournalSession {
 
   /**
    * Reads the current durable execution record.
+   *
    * @returns Current durable execution record.
    */
   record(): AgentExecutionRecord;
 
   /**
    * Writes one fenced record mutation with optional Agent history rows.
+   *
    * @param change Record transformation under the claim token.
    * @param historyEntries Rows included in the provider mutation.
    * @returns The saved record image.
@@ -89,12 +91,14 @@ interface JournalSession {
 
   /**
    * Reads provider limits for complete encoded rows.
+   *
    * @returns Provider limits for complete encoded rows.
    */
   capacity(): AgentExecutionCapacity;
 
   /**
    * Reads current saved model preferences for the Agent instance.
+   *
    * @returns Current saved model preferences.
    */
   preferences(): Readonly<AgentExecutionHead["preferences"]>;
@@ -108,6 +112,7 @@ export class AgentMcpBudget {
 
   /**
    * Binds one MCP operation to the shared fenced invocation budget.
+   *
    * @param session Fenced execution journal.
    * @param operation Saved named operation.
    * @param deadlineEpochMs Original operation deadline.
@@ -122,6 +127,7 @@ export class AgentMcpBudget {
 
   /**
    * Checks invocation bounds using measured receipts and full unknown credit.
+   *
    * @param record Current durable invocation.
    * @param input Proposed physical input bytes.
    * @param output Proposed physical response allowance.
@@ -171,6 +177,7 @@ export class AgentMcpBudget {
 
   /**
    * Persists full request bytes and response credit before a physical MCP send.
+   *
    * @param server Configured MCP server identifier.
    * @param request Physical protocol message and byte bounds.
    * @returns Fenced ticket for the one physical send.
@@ -205,6 +212,7 @@ export class AgentMcpBudget {
 
   /**
    * Narrows optional message credit by remaining configured invocation credit.
+   *
    * @param record Current durable execution record.
    * @param request Physical MCP message request.
    * @returns Effective byte credit, or undefined when no ceiling is configured.
@@ -225,6 +233,7 @@ export class AgentMcpBudget {
 
   /**
    * Rejects the chunk that crosses persisted full response credit.
+   *
    * @param ticketId Saved physical-message ticket.
    * @param bytes Newly decoded response bytes.
    */
@@ -241,6 +250,7 @@ export class AgentMcpBudget {
 
   /**
    * Persists known receipt; unknown work retains its full original credit.
+   *
    * @param ticketId Saved physical-message ticket.
    * @param receivedBytes Complete decoded response size, when known.
    * @returns When the receipt is persisted.
@@ -271,6 +281,7 @@ export class AgentMcpBudget {
 
   /**
    * Persists one authorized proposal and never reissues an uncertain write.
+   *
    * @param invocation Model proposal and provider call identity.
    * @param facts Vetted server, tool, arguments, and effect.
    * @param operationLimit Capability tool-call bound.
@@ -341,6 +352,7 @@ export class AgentMcpBudget {
 
   /**
    * Checks the saved tool count before appending another intent.
+   *
    * @param record Current fenced execution image.
    * @param operationLimit Selected capability's tool limit.
    */
@@ -382,6 +394,7 @@ export class AgentMcpBudget {
 
   /**
    * Persists the pre-send boundary; repeating a read may retain this flag.
+   *
    * @param callId Saved logical tool-call identity.
    * @returns When the dispatch marker is persisted.
    */
@@ -396,6 +409,7 @@ export class AgentMcpBudget {
 
   /**
    * Persists a complete tool result and its typed conversation row together.
+   *
    * @param callId Saved logical tool-call identity.
    * @param response Bounded tool result.
    * @param history Typed conversation rows retained with the result.

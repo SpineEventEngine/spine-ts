@@ -1833,6 +1833,7 @@ export class BoundedContextBuilder {
    * @param entry The Entity class to register.
    * @param options Routing and constructor callback for its generated repository. The callback
    * is required when the Entity constructor needs additional application arguments.
+   *
    * @returns This builder for further configuration.
    */
   add<EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>>(
@@ -1892,6 +1893,7 @@ export class BoundedContextBuilder {
    *   A standalone commander requires generated receiver metadata and therefore
    *   this builder's `buildAsync()` path. It installs its Command and Event sides
    *   exactly once.
+   *
    * @returns This builder for further configuration.
    */
   addCommandDispatcher(dispatcher: CommandDispatcher | AbstractCommander): this {
@@ -1919,6 +1921,7 @@ export class BoundedContextBuilder {
    *
    * @param dispatcher Raw event dispatcher, or a standalone reactor/subscriber.
    *   Standalone receivers require generated receiver metadata and `buildAsync()`.
+   *
    * @returns This builder for further configuration.
    */
   addEventDispatcher(

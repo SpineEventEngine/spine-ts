@@ -46,10 +46,7 @@ export default tseslint.config(
     files: ["packages/ai-vercel-ax/{src,test}/**/*.ts"],
     languageOptions: {
       parserOptions: {
-        project: [
-          "./packages/ai-vercel-ax/tsconfig.tooling.json",
-          "./packages/ai-vercel-ax/tsconfig.provider-boundary.json",
-        ],
+        project: "./packages/ai-vercel-ax/tsconfig.tooling.json",
         tsconfigRootDir: import.meta.dirname,
       },
     },

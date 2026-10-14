@@ -152,6 +152,7 @@ export interface RequestRecord extends AiTestRequest {
 
 /**
  * Renders the exact scripted generation input and correction feedback.
+ *
  * @param record Physical request observation.
  * @returns Persistable prepared prompt JSON.
  */
@@ -217,6 +218,7 @@ interface ScriptedAttemptOps {
 
   /**
    * Restores a saved response without consuming a queued physical script.
+   *
    * @param request Selected scripted execution.
    * @param saved Durable response and matching original failure.
    * @returns Saved admitted output or exact recorded failure.
@@ -225,6 +227,7 @@ interface ScriptedAttemptOps {
 
   /**
    * Checks saved failure correlation before reuse.
+   *
    * @param response Saved terminal response.
    * @param failure Original persisted failure, when available.
    * @returns Exact saved failure.
@@ -654,6 +657,7 @@ export const ScriptedAttempts: ScriptedAttemptOps = Object.freeze({
 
   /**
    * Restores a saved typed response without consuming a queued physical script.
+   *
    * @param request Selected scripted execution.
    * @param saved Durable response and matching original failure, if any.
    * @returns Saved admitted output or exact recorded failure.
@@ -680,6 +684,7 @@ export const ScriptedAttempts: ScriptedAttemptOps = Object.freeze({
 
   /**
    * Requires the original persisted failure category and matching diagnostic.
+   *
    * @param response Saved terminal response.
    * @param failure Original persisted failure, when available.
    * @returns Exact failure without inventing retryability.

@@ -39,12 +39,14 @@ export class BoundedMcpStdioTransport implements MCPTransport {
 
   /**
    * Notifies the SDK of a bounded transport failure.
+   *
    * @param error Bounded transport failure passed to the MCP client.
    */
   onerror?: (error: Error) => void;
 
   /**
    * Delivers a validated response after receipt persistence.
+   *
    * @param message Validated MCP response after receipt persistence.
    */
   onmessage?: (message: JSONRPCMessage) => void;
@@ -72,6 +74,7 @@ export class BoundedMcpStdioTransport implements MCPTransport {
 
   /**
    * Captures only application-configured process settings and scoped environment.
+   *
    * @param executable Authorized process executable.
    * @param args Authorized process arguments.
    * @param cwd Authorized working directory, if configured.
@@ -88,6 +91,7 @@ export class BoundedMcpStdioTransport implements MCPTransport {
 
   /**
    * Starts the child without a shell or inherited environment.
+   *
    * @returns Completion after process spawn without a shell or inherited environment.
    */
   async start(): Promise<void> {
@@ -127,6 +131,7 @@ export class BoundedMcpStdioTransport implements MCPTransport {
 
   /**
    * Marks one runtime-journaled call; later SDK sends cannot invent it.
+   *
    * @param id Runtime tool-call identity.
    * @param maxOutputBytes Reserved decoded result limit.
    */
@@ -144,6 +149,7 @@ export class BoundedMcpStdioTransport implements MCPTransport {
 
   /**
    * Sends one MCP JSON-RPC line after durable reservation.
+   *
    * @param message SDK protocol message.
    * @param options Optional SDK cancellation signal.
    * @returns Completion after the line is sent or its notification is journaled.
@@ -171,6 +177,7 @@ export class BoundedMcpStdioTransport implements MCPTransport {
 
   /**
    * Writes only after the runtime reservation is effective.
+   *
    * @param message SDK protocol message.
    * @param body Serialized newline-delimited request.
    * @param ticket Durable physical-send reservation.
@@ -215,6 +222,7 @@ export class BoundedMcpStdioTransport implements MCPTransport {
 
   /**
    * Attaches cancellation and a bounded deadline to one response.
+   *
    * @param ticket Durable physical-send reservation.
    * @param messageId JSON-RPC correlation identifier.
    * @returns Mutable receive state for this response only.
@@ -239,6 +247,7 @@ export class BoundedMcpStdioTransport implements MCPTransport {
 
   /**
    * Records a raw child chunk before parsing a complete line.
+   *
    * @param chunk Raw stdout bytes.
    * @returns Completion after any response journal barrier.
    */
@@ -275,6 +284,7 @@ export class BoundedMcpStdioTransport implements MCPTransport {
 
   /**
    * Persists a complete child line before delivering its validated response.
+   *
    * @param pending Current physical protocol reservation.
    * @param bytes Complete stdout line including its final delimiter.
    * @returns Completion after receipt persistence and SDK notification.
@@ -306,6 +316,7 @@ export class BoundedMcpStdioTransport implements MCPTransport {
 
   /**
    * Records an uncertain receipt for an incomplete or rejected response.
+   *
    * @returns Completion after the uncertain receipt is journaled.
    */
   private async failPending(): Promise<void> {
@@ -318,6 +329,7 @@ export class BoundedMcpStdioTransport implements MCPTransport {
 
   /**
    * Stops the child and reports failure only after the journal barrier.
+   *
    * @param error Sanitized transport failure.
    * @returns Completion after process cancellation and receipt recording.
    */
@@ -331,6 +343,7 @@ export class BoundedMcpStdioTransport implements MCPTransport {
 
   /**
    * Waits for durable receipt and definitive child exit before SDK notification.
+   *
    * @param error Initial sanitized transport failure.
    * @returns Completion after journal and child cleanup.
    */
@@ -354,6 +367,7 @@ export class BoundedMcpStdioTransport implements MCPTransport {
 
   /**
    * Stops the child cooperatively or forcibly within bounded time.
+   *
    * @returns Completion after cooperative or forced child exit.
    */
   private async stopChild(): Promise<void> {
@@ -379,6 +393,7 @@ export class BoundedMcpStdioTransport implements MCPTransport {
 
   /**
    * Closes the child after journaling its pending receipt.
+   *
    * @returns Completion after the child is stopped and its pending receipt is journaled.
    */
   close(): Promise<void> {

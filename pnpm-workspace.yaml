@@ -37,5 +37,7 @@ onlyBuiltDependencies:
 allowBuilds:
   "@ax-llm/ax": false
   "@bufbuild/buf": true
+  "@mobrowser/sdk-darwin-arm64": true
+  "@mobrowser/sdk-darwin-x64": true
   esbuild: false
   protobufjs: false

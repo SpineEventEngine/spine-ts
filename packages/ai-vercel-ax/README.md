@@ -63,7 +63,7 @@ import {
 /**
  * Connects the application credential store to ChatGPT sign-in.
  *
- * @param credentials Trusted persistence; encrypt saved tokens at rest.
+ * @param credentials Trusted credential store; encrypt grants at rest if persisted.
  * @returns Session shared by sign-in and model registration.
  */
 function createPlanSession(credentials: ChatgptPlanCredentialStore) {
@@ -137,7 +137,7 @@ The session binds the deployment to the selected account and model, refreshes
 its credential when needed, and rechecks the application permission callback.
 Agent handlers continue to use `this.ai.invoke(...)`; they receive no tokens or
 provider clients. See [Release Notes Studio](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/release-notes/README.md)
-for the native browser callback and encrypted credential store.
+for its native browser callback and in-memory trusted credential store.
 
 ## ChatGPT plan Responses registration
 

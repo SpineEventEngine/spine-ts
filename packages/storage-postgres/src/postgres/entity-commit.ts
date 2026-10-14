@@ -251,6 +251,7 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
 
   /**
    * Prepares existing Entity record families for an Agent's same-client conditional completion.
+   *
    * @typeParam Id Typed Entity identifier.
    * @typeParam State Generated Entity state.
    * @param input Current state and immutable Entity records.
@@ -297,6 +298,7 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
 
   /**
    * Applies one validated Entity commit on an active transaction.
+   *
    * @typeParam Id Entity identifier type supplied by the commit.
    * @typeParam State Entity state message type supplied by the commit.
    * @param client PostgreSQL transaction client.

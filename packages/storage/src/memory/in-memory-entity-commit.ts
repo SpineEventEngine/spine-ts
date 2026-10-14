@@ -38,6 +38,7 @@ import { TenantRecords } from "./tenant-records.js";
 
 /**
  * Opens the in-memory tenant slice for a generated record family.
+ *
  * @typeParam I Record identifier type.
  * @typeParam R Record message type.
  * @param context Supplies the storage and tenant context.
@@ -133,6 +134,7 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
 
   /**
    * Applies an Agent completion only while the current Entity Version matches.
+   *
    * @typeParam I Typed Entity identifier.
    * @typeParam S Generated Entity state.
    * @param entity Existing Entity layout.

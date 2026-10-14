@@ -40,6 +40,7 @@ import type { SignalMetadata } from "../runtime/signal-metadata.js";
 
 /**
  * Requires the original identifier's concrete Protobuf type URL.
+ *
  * @param value Candidate typed identifier.
  * @param field Diagnostic field name.
  * @returns Candidate after its type URL is checked.
@@ -51,6 +52,7 @@ const typedId = (value: Any | undefined, field: string): Any => {
 
 /**
  * Copies the original signal ID and domain payload type from accepted work.
+ *
  * @param accepted Original accepted Command, Event, or rejection.
  * @returns Canonical source MessageId.
  */
@@ -79,6 +81,7 @@ const sourceRef = (accepted: AgentAcceptedInvocation) => {
 interface AgentInteractionEventFactory {
   /**
    * Creates a reference to accepted work and its selected model.
+   *
    * @param accepted Durable accepted invocation.
    * @param operation Named model operation.
    * @param stateSchema Generated Agent state descriptor.
@@ -94,6 +97,7 @@ interface AgentInteractionEventFactory {
 
   /**
    * Wraps a typed System-event payload with the original causal context.
+   *
    * @typeParam Schema Generated System-event descriptor.
    * @param accepted Durable source Command, Event, or rejection.
    * @param metadata Spine ID, Time, and origin metadata provider.
@@ -117,6 +121,7 @@ interface AgentInteractionEventFactory {
 export const AgentInteractionEvents: AgentInteractionEventFactory = Object.freeze({
   /**
    * Correlates a named operation with its typed Agent, source signal, and selected model.
+   *
    * @param accepted Durable accepted invocation.
    * @param operation Named model operation.
    * @param stateSchema Generated Agent state descriptor.
@@ -157,6 +162,7 @@ export const AgentInteractionEvents: AgentInteractionEventFactory = Object.freez
 
   /**
    * Wraps one typed System-event payload with original causality and Agent producer identity.
+   *
    * @typeParam Schema Generated System-event descriptor.
    * @param accepted Durable source Command, Event, or rejection.
    * @param metadata Spine ID, Time, and origin metadata provider.

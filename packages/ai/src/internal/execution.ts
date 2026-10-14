@@ -39,39 +39,40 @@ import type {
 import type { AiMcpAdvertisedTool } from "./mcp-protocol.js";
 
 /**
- * * One model-facing request already recorded against the signal budget.
+ * One model-facing request already recorded against the signal budget.
  */
 export type AiAttemptRequest =
   | {
       /**
-       * * Identifies a generation request.
+       * Identifies a generation request.
        */
       readonly kind: "generation";
 
       /**
-       * * Actual model-facing generation content.
+       * Actual model-facing generation content.
        */
       readonly content: GenerationRequest;
     }
   | {
       /**
-       * * Identifies a non-generative decision request.
+       * Identifies a non-generative decision request.
        */
       readonly kind: "decision";
 
       /**
-       * * Actual model-facing decision content.
+       * Actual model-facing decision content.
        */
       readonly content: DecisionRequest;
     };
 
 /**
- * * One model-facing response journaled before result admission.
+ * One model-facing response journaled before result admission.
  */
 export type AiAttemptResponse = GenerationResponse | DecisionResponse;
 
 /**
  * Rejects a nonterminal tool proposal in incompatible conversation/event contexts.
+ *
  * @param content Typed response or terminal System event.
  */
 export const assertAiOutcomeContext = (
@@ -161,6 +162,7 @@ const projectOpenAiItems = (receipt: NonNullable<GenerationResponse["openaiConte
 
 /**
  * Checks that ordered Anthropic blocks project to the journal's standard fields.
+ *
  * @param content Generation response with ordered Anthropic content.
  */
 const assertAnthropicProjection = (content: GenerationResponse): void => {
@@ -187,6 +189,7 @@ const assertAnthropicProjection = (content: GenerationResponse): void => {
 
 /**
  * Projects a block while requiring complete reasoning for terminal proposals.
+ *
  * @param outcome Saved generation outcome.
  * @param block Ordered Anthropic block.
  * @param text Mutable projected text segments.
@@ -216,31 +219,31 @@ const collectAnthropicBlock = (
 };
 
 /**
- * * One persisted physical request identity and its reserved resource bounds.
+ * One persisted physical request identity and its reserved resource bounds.
  */
 export interface AiAttemptTicket {
   /**
-   * * Runtime-assigned attempt ID; one ticket admits at most one transport fetch.
+   * Runtime-assigned attempt ID; one ticket admits at most one transport fetch.
    */
   readonly id: string;
 
   /**
-   * * Actual serialized provider request-body ceiling.
+   * Actual serialized provider request-body ceiling.
    */
   readonly maxInputBytes?: number;
 
   /**
-   * * Full reserved decoded response-body allowance.
+   * Full reserved decoded response-body allowance.
    */
   readonly maxOutputBytes?: number;
 
   /**
-   * * Absolute deadline read through the runtime Time service.
+   * Absolute deadline read through the runtime Time service.
    */
   readonly deadlineEpochMs?: number;
 
   /**
-   * * Cancellation and execution-fence loss signal.
+   * Cancellation and execution-fence loss signal.
    */
   readonly signal: AbortSignal;
 }
@@ -276,110 +279,113 @@ export interface AiAttemptReplay {
 }
 
 /**
- * * Fenced completion record for one physical model attempt.
+ * Fenced completion record for one physical model attempt.
  */
 export interface AiAttemptCompletion {
   /**
-   * * Previously allocated physical attempt identity.
+   * Previously allocated physical attempt identity.
    */
   readonly ticketId: string;
 
   /**
-   * * Complete measured response bytes; absent for an incomplete or unknown receipt.
+   * Complete measured response bytes; absent for an incomplete or unknown receipt.
    */
   readonly receivedBytes?: number;
 
   /**
-   * * Complete bounded provider and validation response content.
+   * Complete bounded provider and validation response content.
    */
   readonly response: AiAttemptResponse;
 
   /**
-   * * Actual bounded local validation issues, when applicable.
+   * Actual bounded local validation issues, when applicable.
    */
   readonly issues?: readonly AiValidationIssue[];
 
   /**
-   * * Provider token counts; absent means unknown rather than zero.
+   * Provider token counts; absent means unknown rather than zero.
    */
   readonly usage?: AiUsage;
 }
 
 /**
- * * Runtime admission of a generated ProtoJSON candidate.
+ * Runtime admission of a generated ProtoJSON candidate.
  */
 export type AiCandidateAdmission =
   | {
       /**
-       * * Indicates the output passed definitive local validation.
+       * Indicates the output passed definitive local validation.
        */
       readonly ok: true;
 
       /**
-       * * Validated application output.
+       * Validated application output.
        */
       readonly value: MessageShape<MessageSchema>;
     }
   | {
       /**
-       * * Indicates local output validation failed.
+       * Indicates local output validation failed.
        */
       readonly ok: false;
 
       /**
-       * * Actual bounded issues available for correction.
+       * Actual bounded issues available for correction.
        */
       readonly issues: readonly AiValidationIssue[];
     };
 
 /**
- * * Runtime-authorized tool call without a model-selected effect.
+ * Runtime-authorized tool call without a model-selected effect.
  */
 export interface AiToolInvocation {
   /**
-   * * Physical attempt whose recorded response proposed this call.
+   * Physical attempt whose recorded response proposed this call.
    */
   readonly ticketId: string;
 
   /**
-   * * Configured MCP server name.
+   * Configured MCP server name.
    */
   readonly server: string;
 
   /**
-   * * Configured tool name within that server.
+   * Configured tool name within that server.
    */
   readonly tool: string;
 
   /**
-   * * Canonical JSON arguments validated against tool policy.
+   * Canonical JSON arguments validated against tool policy.
    */
   readonly argumentsJson: string;
 
   /**
-   * * Provider call ID used only to correlate the model continuation.
+   * Provider call ID used only to correlate the model continuation.
    */
   readonly providerCallId: string;
 }
 
 /**
- * * Runtime controls shared by optional model adapters and scripted backends.
+ * Runtime controls shared by optional model adapters and scripted backends.
  */
 export interface AiExecutionControl extends AiControl {
   /**
    * Reads Unix milliseconds through the runtime Time service.
+   *
    * @returns Current Unix epoch milliseconds.
    */
   readonly nowEpochMs: () => number;
 
   /**
    * Checks whether the current execution fence still permits work.
+   *
    * @returns Whether the current execution fence remains valid.
    */
   readonly hasAuthority: () => boolean;
 
   /**
    * Records the actual request and reserves one physical attempt.
+   *
    * @param request Typed generation or decision content, including correction text.
    * @returns Runtime-assigned ticket after the journal and budget barrier.
    */
@@ -387,6 +393,7 @@ export interface AiExecutionControl extends AiControl {
 
   /**
    * Records transport bytes against the existing attempt ticket.
+   *
    * @param ticketId Runtime-assigned attempt ID.
    * @param inputBytes Actual serialized provider request-body bytes.
    * @param outputCredit Configured output allowance, if present.
@@ -400,6 +407,7 @@ export interface AiExecutionControl extends AiControl {
 
   /**
    * Records a received platform chunk before parser delivery.
+   *
    * @param ticketId Runtime-assigned attempt ID.
    * @param bytes Actual received byte count for this chunk.
    */
@@ -407,6 +415,7 @@ export interface AiExecutionControl extends AiControl {
 
   /**
    * Records bounded response content and known receipt before output returns.
+   *
    * @param completion Fenced response, usage, receipt, and local validation issues.
    * @returns Completion of the durable journal barrier.
    */
@@ -414,6 +423,7 @@ export interface AiExecutionControl extends AiControl {
 
   /**
    * Persists a bounded safe diagnostic without finishing the attempt or operation.
+   *
    * @param code Allowlisted failure category.
    * @param retryableByNewSignal Whether a later accepted signal may retry.
    * @returns Runtime-allocated checked failure and diagnostic reference.
@@ -425,6 +435,7 @@ export interface AiExecutionControl extends AiControl {
 
   /**
    * Applies definitive Proto and application validation to a generation candidate.
+   *
    * @param candidate Exact bounded provider text candidate.
    * @param definition Registered typed generation capability.
    * @param input Validated application facts for this invocation.
@@ -438,6 +449,7 @@ export interface AiExecutionControl extends AiControl {
 
   /**
    * Applies definitive answer, mapping, Proto, and application validation.
+   *
    * @param result Provider's non-generative answers and rounding.
    * @param definition Registered typed decision capability.
    * @param input Validated application facts for this invocation.
@@ -453,6 +465,7 @@ export interface AiExecutionControl extends AiControl {
 
   /**
    * Executes one authorized tool call using runtime policy and identity.
+   *
    * @param invocation Model request without an authoritative effect or tool-call ID.
    * @returns Recorded bounded result or unresolved write outcome.
    */
@@ -460,7 +473,7 @@ export interface AiExecutionControl extends AiControl {
 }
 
 /**
- * * One selected, authenticated request to an adapter-created backend.
+ * One selected, authenticated request to an adapter-created backend.
  */
 export interface AiBackendExecution {
   /**
@@ -469,71 +482,71 @@ export interface AiBackendExecution {
   readonly advertisedTools?: readonly AiMcpAdvertisedTool[];
 
   /**
-   * * Invocation name supplied by the application handler.
+   * Invocation name supplied by the application handler.
    */
   readonly call: string;
 
   /**
-   * * Runtime-assigned logical operation spanning physical attempts.
+   * Runtime-assigned logical operation spanning physical attempts.
    */
   readonly operationId: AiOperationId;
 
   /**
-   * * Trusted authenticated signal scope.
+   * Trusted authenticated signal scope.
    */
   readonly scope: AiScope;
 
   /**
-   * * Identity established before connection and matched after it.
+   * Identity established before connection and matched after it.
    */
   readonly identity: AiConnectionIdentity;
 
   /**
-   * * Opaque model handle returned by the trusted connection callback.
+   * Opaque model handle returned by the trusted connection callback.
    */
   readonly model: unknown;
 
   /**
-   * * Registered typed capability and limits.
+   * Registered typed capability and limits.
    */
   readonly definition: Readonly<
     AiModelDefinition<MessageSchema, MessageSchema> & { readonly limits: AiLimits }
   >;
 
   /**
-   * * Validated application facts.
+   * Validated application facts.
    */
   readonly input: MessageShape<MessageSchema>;
 
   /**
-   * * Fenced runtime budgets, journal, admission, and tool authority.
+   * Fenced runtime budgets, journal, admission, and tool authority.
    */
   readonly control: AiExecutionControl;
 }
 
 /**
- * * Backend result without a fabricated runtime operation identity.
+ * Backend result without a fabricated runtime operation identity.
  */
 export type AiBackendOutcome =
   | {
       /**
-       * * Indicates a typed application output was admitted.
+       * Indicates a typed application output was admitted.
        */
       readonly ok: true;
 
       /**
-       * * Definitively validated output.
+       * Definitively validated output.
        */
       readonly value: MessageShape<MessageSchema>;
     }
   | {
       /**
-       * * Indicates no application output was admitted.
+       * Indicates no application output was admitted.
        */
       readonly ok: false;
 
       /**
-       * * Safe recorded operational failure.
+       * Safe recorded operational failure.
        */
       readonly failure: AiFailure;
     };

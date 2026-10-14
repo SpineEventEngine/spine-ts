@@ -188,7 +188,7 @@ const semanticRounding = (
 };
 
 /**
- * * Identifies this adapter's bounded decision deadline without inspecting provider text.
+ * Identifies this adapter's bounded decision deadline without inspecting provider text.
  */
 class DecisionDeadlineError extends Error {}
 
@@ -231,6 +231,7 @@ const awaitDecision = async <T>(
 
 /**
  * Builds the received decision content, including provider precision.
+ *
  * @param request Selected execution.
  * @param decision Published provider result.
  * @param admission Definitive runtime validation.
@@ -262,6 +263,7 @@ const decisionResponse = (
 
 /**
  * Applies definitive runtime validation and journals the provider decision.
+ *
  * @param request Selected execution.
  * @param decision Published provider result.
  * @param ticket Durable attempt.
@@ -353,6 +355,7 @@ const decisionModel = (request: AiBackendExecution) => {
 
 /**
  * Sends a no-retry provider decision and preserves journal failures.
+ *
  * @param request Selected decision execution.
  * @param ticket Durable physical attempt.
  * @returns Admitted or classified provider outcome.
@@ -413,6 +416,7 @@ const replayDecision = (request: AiBackendExecution, replay: AiAttemptReplay): A
 
 /**
  * Executes one non-generative Jev decision without SDK retries.
+ *
  * @param request Authenticated capability and fenced runtime controls.
  * @returns Admitted mapped Proto or safe recorded failure.
  */

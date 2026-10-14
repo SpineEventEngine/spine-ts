@@ -27,12 +27,14 @@ export class BoundedMcpHttpTransport implements MCPTransport {
 
   /**
    * Notifies the SDK of a bounded transport failure.
+   *
    * @param error Bounded transport failure passed to the MCP client.
    */
   onerror?: (error: Error) => void;
 
   /**
    * Delivers a validated response after receipt persistence.
+   *
    * @param message Validated MCP response after receipt persistence.
    */
   onmessage?: (message: JSONRPCMessage) => void;
@@ -52,6 +54,7 @@ export class BoundedMcpHttpTransport implements MCPTransport {
 
   /**
    * Creates a connection to an application-selected exact URL.
+   *
    * @param url Authorized endpoint, including any configured query.
    * @param headers Scoped request headers.
    * @param control Fenced runtime accounting controls.
@@ -66,6 +69,7 @@ export class BoundedMcpHttpTransport implements MCPTransport {
 
   /**
    * Starts the transport without opening a network request.
+   *
    * @returns Completion without opening a network request.
    */
   start(): Promise<void> {
@@ -75,6 +79,7 @@ export class BoundedMcpHttpTransport implements MCPTransport {
 
   /**
    * Sets the already-persisted tool-call identity for one SDK request.
+   *
    * @param id Runtime tool-call identity.
    * @param maxOutputBytes Reserved decoded result limit.
    */
@@ -92,6 +97,7 @@ export class BoundedMcpHttpTransport implements MCPTransport {
 
   /**
    * Sends one reserved JSON-RPC request and delivers only bounded decoded messages.
+   *
    * @param message SDK protocol message.
    * @param options Optional SDK cancellation signal.
    * @returns Completion after the response journal barrier and delivery.
@@ -105,6 +111,7 @@ export class BoundedMcpHttpTransport implements MCPTransport {
 
   /**
    * Sends one physical message after its durable reservation.
+   *
    * @param message SDK protocol message.
    * @param signal Optional SDK cancellation signal.
    * @returns Completion after its bounded send.
@@ -129,6 +136,7 @@ export class BoundedMcpHttpTransport implements MCPTransport {
 
   /**
    * Completes a reserved message before exposing its response to the SDK.
+   *
    * @param body Serialized JSON-RPC request.
    * @param ticket Durable physical-send reservation.
    * @param signal Optional SDK cancellation signal.
@@ -171,6 +179,7 @@ export class BoundedMcpHttpTransport implements MCPTransport {
 
   /**
    * Binds one physical send to ticket, caller and connection cancellation.
+   *
    * @param ticket Durable physical-send reservation.
    * @param signal Optional SDK cancellation signal.
    * @returns Active abort control, rejection and listener cleanup.
@@ -212,6 +221,7 @@ export class BoundedMcpHttpTransport implements MCPTransport {
 
   /**
    * Reads one guarded response without delivering it to the SDK.
+   *
    * @param body Serialized JSON-RPC request.
    * @param ticket Durable physical-send reservation.
    * @param abort Per-send abort control.
@@ -247,6 +257,7 @@ export class BoundedMcpHttpTransport implements MCPTransport {
 
   /**
    * Dispatches one admitted HTTP request and rejects redirected responses.
+   *
    * @param body Serialized JSON-RPC request.
    * @param ticket Durable physical-send reservation.
    * @param abort Per-send abort control.
@@ -289,6 +300,7 @@ export class BoundedMcpHttpTransport implements MCPTransport {
 
   /**
    * Checks the caller-configured deadline before a physical MCP send.
+   *
    * @param ticket Durable message ticket.
    * @returns Whether the deadline has passed.
    */
@@ -300,6 +312,7 @@ export class BoundedMcpHttpTransport implements MCPTransport {
 
   /**
    * Validates a complete bounded response before receipt persistence.
+   *
    * @param response HTTP response metadata.
    * @param value Bounded decoded response body.
    * @param parsedMessages Incremental SSE frames, when available.
@@ -336,6 +349,7 @@ export class BoundedMcpHttpTransport implements MCPTransport {
 
   /**
    * Closes the transport by aborting active requests without a termination send.
+   *
    * @returns Completion after active requests are aborted without a termination send.
    */
   close(): Promise<void> {
@@ -386,6 +400,7 @@ const readBoundedBody = async (
 
 /**
  * Returns bounded bytes and finalized SSE frames after the response ends.
+ *
  * @param chunks Decoded response chunks.
  * @param total Known decoded byte count.
  * @param sse Whether the response is an SSE stream.
@@ -405,6 +420,7 @@ const completedBody = (
 
 /**
  * Counts one decoded chunk, including the chunk that crosses the reserved cap.
+ *
  * @param value Decoded response chunk.
  * @param prior Previously received byte count.
  * @param ticket Durable response credit.
@@ -443,6 +459,7 @@ class SseFrames {
 
   /**
    * Adds one bounded chunk to the incremental SSE parser.
+   *
    * @param value Bounded decoded response chunk.
    * @param responseId JSON-RPC request identity, when a response is expected.
    * @returns Whether the appended bytes complete the expected response.
@@ -454,6 +471,7 @@ class SseFrames {
 
   /**
    * Returns parsed frames after flushing final decoder text.
+   *
    * @returns Parsed frames plus any final decoder text after EOF.
    */
   finish(): unknown[] {
@@ -465,6 +483,7 @@ class SseFrames {
 
   /**
    * Processes each decoded character once, including fragmented delimiters.
+   *
    * @param text Newly decoded SSE text.
    * @param responseId JSON-RPC response expected by the physical request.
    */
@@ -477,6 +496,7 @@ class SseFrames {
 
   /**
    * Completes one SSE line without copying an incomplete frame.
+   *
    * @param responseId JSON-RPC response expected by the physical request.
    */
   private completeLine(responseId?: string | number): void {
@@ -489,6 +509,7 @@ class SseFrames {
 
   /**
    * Parses one complete bounded frame and checks only its new response.
+   *
    * @param responseId JSON-RPC response expected by the physical request.
    */
   private completeFrame(responseId?: string | number): void {

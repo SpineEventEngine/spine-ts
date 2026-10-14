@@ -219,6 +219,7 @@ export class CommandBus {
    *
    * Close is idempotent and returns the same close outcome on repeated calls.
    * Runtime close failures reject the returned promise.
+   *
    * @returns A promise that settles after the command bus closes.
    *
    */

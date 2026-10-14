@@ -12,9 +12,10 @@
  * the License.
  */
 
-import { create, toBinary, type Message } from "@bufbuild/protobuf";
+import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { AnySchema, TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
+import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
+import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import {
   EventContextSchema,
   EventIdSchema,
@@ -36,14 +37,19 @@ import {
   type AgentHistoryEntry,
 } from "@spine-event-engine/proto/agent";
 
+// prettier-ignore
 import {
   SupportReplyDraftedSchema,
-  SupportTicketUpdatedSchema,
 } from "../../../server/test-fixtures/generated/entity-metadata/support_agent_events_pb.js";
 // prettier-ignore
 import {
   SupportReplyAgentIdSchema,
 } from "../../../server/test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
+import {
+  ProposedSupportReplySchema,
+  SupportTicketFactsSchema,
+  SupportTicketNumberSchema,
+} from "../../../server/test-fixtures/generated/entity-metadata/support_ai_types_pb.js";
 import type { AgentHistoryStorageInput } from "../../src/provider.js";
 
 export const scope: AgentHistoryStorageInput<string> = {
@@ -52,11 +58,8 @@ export const scope: AgentHistoryStorageInput<string> = {
   id: { key: (ticketNumber) => ticketNumber },
 };
 
-function packed(schema: GenMessage<Message>, message: Message) {
-  return create(AnySchema, {
-    typeUrl: `type.spine.io/${schema.typeName}`,
-    value: toBinary(schema, message as never),
-  });
+function packed<T extends Message>(schema: GenMessage<T>, message: T) {
+  return AnyMessages.pack(schema, message);
 }
 
 export function occurredAt(seconds: bigint, nanos = 0): Timestamp {
@@ -89,9 +92,12 @@ export function conversation(
   time: Timestamp,
 ): AgentHistoryEntry {
   const ticket = create(SupportReplyAgentIdSchema, { ticketNumber: "T-history" });
-  const question = create(SupportTicketUpdatedSchema, { agent: ticket, question: "Delivery?" });
+  const question = create(SupportTicketFactsSchema, {
+    ticketNumber: create(SupportTicketNumberSchema, { value: ticket.ticketNumber }),
+    customerQuestion: "Delivery?",
+  });
   const request = create(GenerationRequestSchema, {
-    input: packed(SupportTicketUpdatedSchema, question),
+    input: packed(SupportTicketFactsSchema, question),
     instructions: "Propose a support reply.",
     promptJson: "[]",
     outputSchemaJson: "{}",
@@ -101,12 +107,11 @@ export function conversation(
 }
 
 export function response(id: string, conversationId: string, time: Timestamp): AgentHistoryEntry {
-  const ticket = create(SupportReplyAgentIdSchema, { ticketNumber: "T-history" });
-  const reply = create(SupportReplyDraftedSchema, { agent: ticket, reply: "Review this reply." });
+  const reply = create(ProposedSupportReplySchema, { replyText: "Review this reply." });
   const result = create(GenerationResponseSchema, {
     rawOutput: "Review this reply.",
     outcome: AiOutcome.ADMITTED,
-    admittedOutput: packed(SupportReplyDraftedSchema, reply),
+    admittedOutput: packed(ProposedSupportReplySchema, reply),
   });
   return conversationRecord(id, conversationId, time, result, GenerationResponseSchema);
 }
@@ -117,9 +122,13 @@ export function event(id: string, time: Timestamp, system: boolean): AgentHistor
     ? packed(
         AgentModelSelectionChangedSchema,
         create(AgentModelSelectionChangedSchema, {
-          agent: create(MessageIdSchema, { id: packed(SupportReplyAgentIdSchema, ticket) }),
+          agent: create(MessageIdSchema, {
+            id: packed(SupportReplyAgentIdSchema, ticket),
+            typeUrl: TypeUrls.derive(SupportReplyAgentIdSchema),
+          }),
           sourceSignal: create(MessageIdSchema, {
             id: packed(EventIdSchema, create(EventIdSchema, { value: id })),
+            typeUrl: TypeUrls.derive(EventIdSchema),
           }),
           kind: AiModelKind.GENERATION,
           changedAt: time,

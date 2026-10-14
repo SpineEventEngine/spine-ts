@@ -19,6 +19,7 @@ const bindings = new WeakMap<object, AgentAi>();
 interface AgentAiBindingAccess {
   /**
    * Attaches one handler-scoped facade and returns its release.
+   *
    * @param agent Active Agent instance receiving the facade.
    * @param ai Fenced facade for this handler invocation.
    * @returns Callback that releases this exact binding.
@@ -27,6 +28,7 @@ interface AgentAiBindingAccess {
 
   /**
    * Returns the facade attached to the active handler.
+   *
    * @param agent Active Agent instance whose binding is required.
    * @returns Handler-scoped facade or throws when none is bound.
    */
@@ -39,6 +41,7 @@ interface AgentAiBindingAccess {
 export const AgentAiBindings: AgentAiBindingAccess = Object.freeze({
   /**
    * Attaches a facade and returns an idempotent release operation.
+   *
    * @param agent Active Agent instance.
    * @param ai Fenced invocation facade.
    * @returns Release of this exact binding.
@@ -53,6 +56,7 @@ export const AgentAiBindings: AgentAiBindingAccess = Object.freeze({
 
   /**
    * Returns the facade scoped to this handler.
+   *
    * @param agent Active Agent instance.
    * @returns Fenced Agent AI operations.
    */

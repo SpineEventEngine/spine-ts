@@ -56,6 +56,7 @@ export class AgentInteractionAudit {
 
   /**
    * Creates a named call reference with its model fixed at invocation start.
+   *
    * @param operation Saved named operation.
    * @param kind Selected generation or decision kind.
    * @returns Reference with the accepted Agent, source, and model identities.
@@ -73,6 +74,7 @@ export class AgentInteractionAudit {
 
   /**
    * Calculates an original typed System row size with this invocation's full scope.
+   *
    * @typeParam Schema Generated System event payload descriptor.
    * @param schema Payload descriptor.
    * @param payload Matching typed event payload.

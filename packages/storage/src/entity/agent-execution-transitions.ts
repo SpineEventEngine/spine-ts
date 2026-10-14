@@ -30,6 +30,7 @@ import {
 export const AgentExecutionTransitions = {
   /**
    * Rejects an initial completion that claims transport acceptance or a saved route.
+   *
    * @param record Persisted Agent execution record.
    */
   assertCompletion(record: AgentExecutionRecord): void {
@@ -46,6 +47,7 @@ export const AgentExecutionTransitions = {
 
   /**
    * Reads the complete typed ID of one original outgoing envelope.
+   *
    * @param output Original Event or Command envelope.
    * @returns Kind and nonempty source ID.
    */
@@ -65,6 +67,7 @@ export const AgentExecutionTransitions = {
 
   /**
    * Accepts only absent-to-present saved-plan installation after completion.
+   *
    * @param next Proposed next execution record.
    * @param prior Previously persisted execution record.
    */
@@ -99,6 +102,7 @@ export const AgentExecutionTransitions = {
 
   /**
    * Validates a persisted plan before acknowledging each selected original ID.
+   *
    * @param record Persisted Agent execution record.
    * @param signals Original outgoing signal identities.
    */
@@ -112,6 +116,7 @@ export const AgentExecutionTransitions = {
 
   /**
    * Checks complete binding identities and typed repository recipients.
+   *
    * @param output Saved outgoing signal.
    */
   validatePlan(output: AgentOutgoingSignal): void {
@@ -121,6 +126,7 @@ export const AgentExecutionTransitions = {
 
   /**
    * Rejects a target that cannot be rebound to the original output kind.
+   *
    * @param output Saved outgoing signal.
    * @param target Prepared delivery target.
    */
@@ -153,6 +159,7 @@ export const AgentExecutionTransitions = {
 
   /**
    * Compares complete original plan bytes after installation.
+   *
    * @param left First value in the comparison.
    * @param right Second value in the comparison.
    * @returns Whether both saved dispatch plans have identical bytes.
@@ -166,6 +173,7 @@ export const AgentExecutionTransitions = {
 
   /**
    * Compares every execution field after masking the newly installed plans.
+   *
    * @param left First value in the comparison.
    * @param right Second value in the comparison.
    * @returns Whether both execution records have identical bytes.
@@ -178,6 +186,7 @@ export const AgentExecutionTransitions = {
 
   /**
    * Matches a selected typed original Event or Command ID.
+   *
    * @param output Saved outgoing signal.
    * @param signal Original signal identity.
    * @returns Whether the saved output has the original signal identity.

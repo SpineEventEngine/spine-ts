@@ -16,6 +16,7 @@ const maximumTimerDelay = 2_147_483_647;
 
 /**
  * Checks an absolute runtime deadline without overflowing Node's timer range.
+ *
  * @param deadlineEpochMs Accepted absolute deadline.
  * @param nowEpochMs Runtime clock read.
  * @param onExpire Callback after the deadline is reached.

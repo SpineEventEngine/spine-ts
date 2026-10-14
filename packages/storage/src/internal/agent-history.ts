@@ -37,6 +37,7 @@ const factories = new WeakMap<StorageFactory, AgentHistoryStorageFactory>();
 export interface AgentHistoryFactoryAccess {
   /**
    * Returns whether the provider registered mandatory Agent history.
+   *
    * @param factory Storage factory checked before a tenant is selected.
    * @returns Whether indexed Agent history handles are available.
    */

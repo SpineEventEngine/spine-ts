@@ -96,6 +96,7 @@ export interface PreparedRequest {
 export interface AxRequestControl {
   /**
    * Restores a journaled assistant turn in a controlled stream.
+   *
    * @param message Ax's assistant projection.
    * @param index Zero-based assistant turn position.
    * @returns Exact recorded provider assistant message.
@@ -112,6 +113,7 @@ export interface AxRequestControl {
 
   /**
    * Records an attempt before dispatch; an unknown outcome still consumes it.
+   *
    * @param attempt One-based physical request number.
    * @returns Completion of the caller's reservation barrier.
    */
@@ -119,6 +121,7 @@ export interface AxRequestControl {
 
   /**
    * Records provider token usage before returning a response.
+   *
    * @param tokens Provider-reported token counts.
    * @returns Completion of the caller's usage-recording barrier.
    */
@@ -136,6 +139,7 @@ export interface AxRequestControl {
 export interface AxControlledRequestControl extends AxRequestControl {
   /**
    * Sends one prepared native request through the guarded provider stream.
+   *
    * @param model Selected authenticated Vercel model.
    * @param prepared Actual Ax prompt, schema, and tools.
    * @param signal Operation cancellation signal.
@@ -154,6 +158,7 @@ export interface AxControlledRequestControl extends AxRequestControl {
 export const AxVercelBridge = {
   /**
    * Creates a service whose every physical request uses controlled streaming.
+   *
    * @param model Authenticated Vercel generation model.
    * @param control Required guarded streaming delegate and request limit.
    * @returns Ax service with no generateText fallback.
@@ -164,6 +169,7 @@ export const AxVercelBridge = {
 
   /**
    * Creates an Ax chat service that delegates requests to one Vercel model.
+   *
    * @param model Authenticated Vercel generation model.
    * @param control Physical-request limits and observations supplied by Spine.
    * @returns An Ax service for one bounded generation operation.
@@ -199,6 +205,7 @@ export const AxVercelBridge = {
 
   /**
    * Validates and materializes a native request before reserving transport.
+   *
    * @param request Ax request containing prompt, schema, and tool state.
    * @param onAssistant Optional journal-backed assistant turn resolver.
    * @returns Request ready for one physical Vercel call.
@@ -224,6 +231,7 @@ export const AxVercelBridge = {
 
   /**
    * Sends one prepared Ax chat turn through the selected Vercel model.
+   *
    * @param model Vercel model selected for this operation.
    * @param prepared Request validated before reservation.
    * @param onUsage Usage persistence barrier.
@@ -266,6 +274,7 @@ export const AxVercelBridge = {
 
   /**
    * Rejects provider stop states that cannot represent a complete answer.
+   *
    * @param finishReason Provider finish status, if available.
    */
   requireSuccessfulFinish(finishReason: string | undefined): void {
@@ -275,6 +284,7 @@ export const AxVercelBridge = {
 
   /**
    * Maps assistant tool calls and results across an Ax continuation.
+   *
    * @param request Ax request containing all conversation turns.
    * @param onAssistant Optional journal-backed assistant turn resolver.
    * @returns Vercel messages in the same order.
@@ -303,6 +313,7 @@ export const AxVercelBridge = {
 
   /**
    * Maps advertised tool schemas while leaving execution with Ax and Spine.
+   *
    * @param request Ax request containing permitted function declarations.
    * @returns Vercel tool descriptions with no SDK executor.
    */
@@ -324,6 +335,7 @@ export const AxVercelBridge = {
 
   /**
    * Returns provider output and usage to Ax for correction or tool execution.
+   *
    * @param result One Vercel model result.
    * @returns An Ax chat response.
    */
@@ -349,6 +361,7 @@ export const AxVercelBridge = {
 
   /**
    * Maps supplied provider counts without fabricating absent usage.
+   *
    * @param usage Provider usage, including optional counts.
    * @returns Ax usage when both counts are available.
    */
@@ -370,6 +383,7 @@ export const AxVercelBridge = {
 
   /**
    * Converts one Ax prompt entry into Vercel's message protocol.
+   *
    * @param message Ax prompt entry.
    * @param toolNames Names indexed by Ax tool call identity.
    * @returns Vercel message with preserved tool identity.
@@ -409,6 +423,7 @@ export const AxVercelBridge = {
 
   /**
    * Maps one tool result using the original tool name and call identity.
+   *
    * @param message Ax result entry.
    * @param toolNames Names from the preceding assistant calls.
    * @returns Vercel tool result entry.
@@ -434,6 +449,7 @@ export const AxVercelBridge = {
 
   /**
    * Maps supported tool payloads without discarding text or structured facts.
+   *
    * @param message Ax tool result with optional MCP protocol payload.
    * @returns Vercel tool output preserving supported content.
    */

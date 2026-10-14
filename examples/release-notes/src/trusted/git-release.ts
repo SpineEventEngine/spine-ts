@@ -70,6 +70,7 @@ export interface GitProjectSelection {
 export const GitProject = {
   /**
    * Inspects a native-picked Git worktree with bounded noninteractive commands.
+   *
    * @param repository Native-picked directory.
    * @param gitExecutable Trusted Git executable.
    * @returns Canonical project path, display name, and actual refs.

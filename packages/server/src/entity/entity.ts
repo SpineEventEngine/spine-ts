@@ -1478,6 +1478,7 @@ export abstract class Agent<Id, Schema extends DescriptorMessageSchema> extends 
 
   /**
    * Reads every recorded Agent occurrence, newest first.
+   *
    * @param request Page size and continuation from this method.
    * @returns Complete Proto history entries and continuation.
    */
@@ -1487,6 +1488,7 @@ export abstract class Agent<Id, Schema extends DescriptorMessageSchema> extends 
 
   /**
    * Reads one explicitly identified conversation, newest first.
+   *
    * @param request Conversation ID, page size and continuation from this method.
    * @returns Recorded exchanges and continuation.
    */
@@ -1498,6 +1500,7 @@ export abstract class Agent<Id, Schema extends DescriptorMessageSchema> extends 
 
   /**
    * Reads framework System Event envelopes for this Agent, newest first.
+   *
    * @param request Page size and continuation from this method.
    * @returns Original System Event envelopes and continuation.
    */
@@ -1507,6 +1510,7 @@ export abstract class Agent<Id, Schema extends DescriptorMessageSchema> extends 
 
   /**
    * Reads domain Event envelopes emitted by this Agent, newest first.
+   *
    * @param request Page size and continuation from this method.
    * @returns Original emitted Event envelopes and continuation.
    */

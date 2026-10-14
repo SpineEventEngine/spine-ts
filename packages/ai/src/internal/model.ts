@@ -58,6 +58,7 @@ export interface AiModel<I extends MessageSchema, O extends MessageSchema> {
 
 /**
  * Checks whether a value came from the capability factory.
+ *
  * @param value Untrusted candidate.
  * @returns True only for an original factory result.
  */
@@ -67,6 +68,7 @@ export const isAiModel = (value: unknown): value is AiModel<MessageSchema, Messa
 
 /**
  * Validates a nonblank application-supplied identifier.
+ *
  * @param value Text to check.
  * @param field Field named in failures.
  * @returns Validated text without changing its identity.
@@ -79,6 +81,7 @@ export const nonblank = (value: string, field: string): string => {
 
 /**
  * Validates a bounded safe integer.
+ *
  * @param value Number to check.
  * @param field Field named in failures.
  * @param allowZero Whether zero is valid.
@@ -98,6 +101,7 @@ export const positiveInteger = (value: number, field: string, allowZero = false)
 export const ModelRef = {
   /**
    * Creates a canonical Protobuf deployment reference.
+   *
    * @param name Registry deployment name.
    * @param revision Configuration revision.
    * @returns New typed deployment reference.
@@ -112,6 +116,7 @@ export const ModelRef = {
 
 /**
  * Checks a Protobuf deployment reference by value.
+ *
  * @param candidate Reference supplied to registration or selection.
  * @returns Key formed from the model name and revision.
  */
@@ -130,6 +135,7 @@ export const modelRefKey = (candidate: ModelRefMessage): string => {
 
 /**
  * Copies validated, explicitly configured operation limits.
+ *
  * @param limits Caller-supplied mutable limits.
  * @param kind Capability kind.
  * @returns Immutable configured limits with absent ceilings preserved.
@@ -168,6 +174,7 @@ const copyLimits = (limits: AiLimits | undefined, kind: "generation" | "decision
 
 /**
  * Copies application tool references without retaining mutable arrays.
+ *
  * @param tools Configured references, if any.
  * @returns Immutable deduplicated references.
  */
@@ -187,6 +194,7 @@ const copyTools = (tools: readonly AiToolRef[] | undefined): readonly AiToolRef[
 
 /**
  * Copies one declared decision question.
+ *
  * @param id Question key.
  * @param question Caller-supplied question.
  * @returns Immutable question and criteria.

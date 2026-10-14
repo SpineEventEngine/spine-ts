@@ -46,6 +46,7 @@ export class MemoryPendingHeadIndex {
 
   /**
    * Replaces the visible entry for one complete Agent scope.
+   *
    * @param head Per-instance pending and lease record.
    * @param scope Generated state type and Agent key.
    */
@@ -66,6 +67,7 @@ export class MemoryPendingHeadIndex {
 
   /**
    * Reads no more than count plus one candidate before the fixed cutoff.
+   *
    * @param after Observed pending-page cursor.
    * @param asOf Fixed eligibility cutoff for the page.
    * @param count Maximum number of records in the page.
@@ -79,6 +81,7 @@ export class MemoryPendingHeadIndex {
 
   /**
    * Finds the first index entry whose key is not smaller than value.
+   *
    * @param value Value read from a provider boundary.
    * @returns First matching index position.
    */
@@ -97,6 +100,7 @@ export class MemoryPendingHeadIndex {
 
   /**
    * Finds the first index entry strictly after the cursor.
+   *
    * @param value Value read from a provider boundary.
    * @returns Position after the last matching index entry.
    */

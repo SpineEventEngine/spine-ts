@@ -37,6 +37,7 @@ import { AgentExecutionRecords } from "./agent-execution-record-spec.js";
 export const AgentExecutionValues = {
   /**
    * Validates a present value at a provider trust boundary.
+   *
    * @param value Optional decoded or selected value.
    * @returns The present value.
    * @typeParam T Value type.
@@ -48,6 +49,7 @@ export const AgentExecutionValues = {
 
   /**
    * Validates an invocation in the configured state family.
+   *
    * @param key Complete original invocation key.
    * @param stateType Configured generated state type.
    * @returns Validated key.
@@ -67,6 +69,7 @@ export const AgentExecutionValues = {
 
   /**
    * Validates immutable source facts and original Inbox order.
+   *
    * @param record Persisted execution record.
    * @returns Complete accepted source facts.
    */
@@ -78,6 +81,7 @@ export const AgentExecutionValues = {
 
   /**
    * Reads the accepted invocation key.
+   *
    * @param record Persisted execution record.
    * @returns Complete key.
    */
@@ -89,6 +93,7 @@ export const AgentExecutionValues = {
 
   /**
    * Validates the generated state type and Agent key.
+   *
    * @param key Original invocation identity.
    * @returns Complete instance scope.
    */
@@ -99,6 +104,7 @@ export const AgentExecutionValues = {
 
   /**
    * Validates the scope stored in one per-instance head.
+   *
    * @param head Persisted claim and discovery head.
    * @returns Complete instance scope.
    */
@@ -109,6 +115,7 @@ export const AgentExecutionValues = {
 
   /**
    * Reads original Inbox order from immutable acceptance.
+   *
    * @param record Persisted execution record.
    * @returns Complete Inbox order.
    */
@@ -120,6 +127,7 @@ export const AgentExecutionValues = {
 
   /**
    * Validates completed output obligations.
+   *
    * @param record Persisted execution record.
    * @returns Complete result.
    */
@@ -130,6 +138,7 @@ export const AgentExecutionValues = {
 
   /**
    * Compares binary indexed strings without locale collation.
+   *
    * @param left First full index key.
    * @param right Second full index key.
    * @returns Negative, zero, or positive order.
@@ -140,6 +149,7 @@ export const AgentExecutionValues = {
 
   /**
    * Compares complete accepted source facts.
+   *
    * @param left Previous accepted facts.
    * @param right Proposed accepted facts.
    * @returns Whether all original bytes match.
@@ -160,6 +170,7 @@ export const AgentExecutionValues = {
 
   /**
    * Compares exact binary images without integer conversion.
+   *
    * @param left Previous Protobuf image.
    * @param right Proposed Protobuf image.
    * @returns Whether each byte matches.
@@ -170,6 +181,7 @@ export const AgentExecutionValues = {
 
   /**
    * Returns an independent exact execution record.
+   *
    * @param record Persisted record.
    * @returns Binary round-tripped record.
    */
@@ -179,6 +191,7 @@ export const AgentExecutionValues = {
 
   /**
    * Compares full seconds and nanos.
+   *
    * @param left First Timestamp.
    * @param right Second Timestamp.
    * @returns Negative, zero, or positive order.
@@ -193,6 +206,7 @@ export const AgentExecutionValues = {
 
   /**
    * Checks whether accepted or expired work is claimable now.
+   *
    * @param record Persisted invocation.
    * @param now Fresh provider Timestamp.
    * @returns Whether a claim may attempt it.
@@ -212,6 +226,7 @@ export const AgentExecutionValues = {
 
   /**
    * Clears the resolved claim while retaining original order.
+   *
    * @param head Per-instance claim and discovery record.
    * @param order Original Inbox order of resolved work.
    */
@@ -224,6 +239,7 @@ export const AgentExecutionValues = {
 
   /**
    * Updates a discoverable head for earlier original Inbox work without resetting eligibility.
+   *
    * @param head Current per-instance claim and discovery row.
    * @param record Newly accepted original invocation.
    */
@@ -243,6 +259,7 @@ export const AgentExecutionValues = {
 
   /**
    * Updates the resolved head with its earliest unresolved successor.
+   *
    * @param head Current per-instance claim and discovery row.
    * @param order Original Inbox order of resolved work.
    * @param next Earliest remaining invocation when present.
@@ -260,6 +277,7 @@ export const AgentExecutionValues = {
 
   /**
    * Marks one original recorded outgoing ID delivered.
+   *
    * @param record Completion carrying original outputs.
    * @param signal Typed Event or Command ID.
    */

@@ -107,6 +107,7 @@ export interface MysqlColumnSpec {
 
 /**
  * Describes the public resolved MySQL layout for one record family.
+ *
  * @typeParam I Typed record identifier.
  * @typeParam R Stored record message.
  */
@@ -184,6 +185,7 @@ export function resolvedMysqlTableSpec<I, R extends Message>(input: {
 
 /**
  * Resolves one native column, including the Agent history index layout.
+ *
  * @param recordType Stored record message descriptor.
  * @param groupName Optional storage group.
  * @param column Declared storage column.
@@ -229,6 +231,7 @@ export const AgentExecutionIndexBytes: number = AgentHistoryIndexBytes;
 const AgentExecutionColumnTypes = Object.freeze({
   /**
    * Returns the native type for one indexed execution column.
+   *
    * @param name Indexed column name.
    * @returns Full binary column type when this execution index uses one.
    */
@@ -248,6 +251,7 @@ const AgentExecutionColumnTypes = Object.freeze({
 const AgentHistoryColumnTypes = Object.freeze({
   /**
    * Returns a native binary type for an Agent history index column.
+   *
    * @param name Materialized history column.
    * @returns Native type override for indexed history metadata.
    */
@@ -261,6 +265,7 @@ const AgentHistoryColumnTypes = Object.freeze({
 
 /**
  * Returns the Entity column default expected by legacy table layouts.
+ *
  * @param recordType Stored record message descriptor.
  * @param groupName Optional storage group.
  * @param column Declared storage column.

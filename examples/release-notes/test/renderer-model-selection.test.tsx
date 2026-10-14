@@ -16,43 +16,23 @@
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { expect, test, vi } from "vitest";
 
-vi.mock("../src/studio-flow.js", async () => {
-  const React = await import("react");
-  return {
-    StudioFlow: (props: {
-      model: string;
-      modelPending: boolean;
-      selectModel: (slug: string) => Promise<void>;
-      signOut: () => Promise<void>;
-    }) =>
-      React.createElement(
-        "div",
-        {},
-        React.createElement("output", { "aria-label": "Selected model" }, props.model),
-        React.createElement(
-          "output",
-          { "aria-label": "Model preparation" },
-          String(props.modelPending),
-        ),
-        React.createElement(
-          "button",
-          { onClick: () => void props.selectModel("model-a") },
-          "Model A",
-        ),
-        React.createElement(
-          "button",
-          { onClick: () => void props.selectModel("model-b") },
-          "Model B",
-        ),
-        React.createElement(
-          "button",
-          { onClick: () => void props.selectModel("model-c") },
-          "Model C",
-        ),
-        React.createElement("button", { onClick: () => void props.signOut() }, "Sign out"),
-      ),
-  };
-});
+HTMLElement.prototype.hasPointerCapture = () => false;
+HTMLElement.prototype.setPointerCapture = () => undefined;
+HTMLElement.prototype.releasePointerCapture = () => undefined;
+HTMLElement.prototype.scrollIntoView = () => undefined;
+
+const choose = async (label: string, value: string) => {
+  fireEvent.pointerDown(screen.getByRole("combobox", { name: label }), {
+    button: 0,
+    ctrlKey: false,
+    pointerType: "mouse",
+    pointerId: 1,
+  });
+  fireEvent.click(await screen.findByRole("option", { name: value }));
+};
+
+const selectedModel = () => screen.getByRole("combobox", { name: "Model" }).textContent;
+const write = () => screen.getByRole<HTMLButtonElement>("button", { name: /Write/ });
 
 const deferred = <T,>() => Promise.withResolvers<T>();
 
@@ -96,6 +76,17 @@ test("a clicked model displays immediately and only the latest confirmed choice 
       currentModel: () => hydration.promise,
       selectModel,
       session: () => Promise.resolve({ drafts: [], generations: {} }),
+      chooseProject: () =>
+        Promise.resolve({ handle: "handle", name: "portal", refs: ["v1", "main"] }),
+      compareProject: () =>
+        Promise.resolve({
+          selectionId: "selection",
+          projectName: "portal",
+          baseLabel: "v1",
+          targetLabel: "main",
+          commits: [{}],
+          changes: [{}],
+        }),
       signOut: () => Promise.resolve({ status: signedOut, revocationConfirmed: true }),
     },
   });
@@ -103,57 +94,72 @@ test("a clicked model displays immediately and only the latest confirmed choice 
   await act(async () => {
     await import("../src/renderer.js");
   });
-  await screen.findByRole("button", { name: "Model A" });
-  fireEvent.click(screen.getByRole("button", { name: "Model A" }));
-  expect(screen.getByLabelText("Selected model").textContent).toBe("model-a");
-  expect(screen.getByLabelText("Model preparation").textContent).toBe("true");
-  fireEvent.click(screen.getByRole("button", { name: "Model B" }));
-  expect(screen.getByLabelText("Selected model").textContent).toBe("model-b");
-  fireEvent.click(screen.getByRole("button", { name: "Model C" }));
-  expect(screen.getByLabelText("Selected model").textContent).toBe("model-c");
+  fireEvent.click(await screen.findByRole("button", { name: "New release" }));
+  fireEvent.click(screen.getByRole("button", { name: "Choose a Git project" }));
+  await screen.findByText("portal");
+  await choose("From", "v1");
+  await choose("To", "main");
+  fireEvent.change(screen.getByLabelText("Release"), { target: { value: "Portal 2.4" } });
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  await screen.findByText("1 commit · 1 file");
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  await screen.findByRole("heading", { name: "Writing style" });
+  expect(write().disabled).toBe(true);
+  await choose("Model", "Model A");
+  expect(selectedModel()).toContain("Model A");
+  expect(screen.getByText("Preparing model…")).toBeTruthy();
+  expect(write().disabled).toBe(true);
+  await choose("Model", "Model B");
+  expect(selectedModel()).toContain("Model B");
+  await choose("Model", "Model C");
+  expect(selectedModel()).toContain("Model C");
   expect(selectModel).toHaveBeenCalledTimes(1);
   await act(async () => {
     hydration.resolve({ model: "model-a" });
     await hydration.promise;
   });
-  expect(screen.getByLabelText("Selected model").textContent).toBe("model-c");
+  expect(selectedModel()).toContain("Model C");
   await act(async () => {
     first.resolve({ model: "model-a" });
     await first.promise;
   });
-  expect(screen.getByLabelText("Selected model").textContent).toBe("model-c");
-  expect(screen.getByLabelText("Model preparation").textContent).toBe("true");
+  expect(selectedModel()).toContain("Model C");
+  expect(screen.getByText("Preparing model…")).toBeTruthy();
+  expect(write().disabled).toBe(true);
   await act(async () => {
     second.resolve({ model: "model-c" });
     await second.promise;
   });
   await waitFor(() => {
-    expect(screen.getByLabelText("Model preparation").textContent).toBe("false");
+    expect(screen.queryByText("Preparing model…")).toBeNull();
   });
   expect(selectModel.mock.calls.map((call) => call[1])).toEqual(["model-a", "model-c"]);
-  fireEvent.click(screen.getByRole("button", { name: "Model A" }));
-  expect(screen.getByLabelText("Model preparation").textContent).toBe("true");
+  await choose("Model", "Model A");
+  expect(screen.getByText("Preparing model…")).toBeTruthy();
+  expect(write().disabled).toBe(true);
   await act(async () => {
     failed.reject(new Error("Unavailable"));
     await failed.promise.catch(() => undefined);
   });
-  expect(screen.getByLabelText("Selected model").textContent).toBe("");
+  expect(selectedModel()).toContain("Select a model");
+  expect(write().disabled).toBe(true);
   expect(screen.getByText("That model is no longer available to this account.")).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "Model A" }));
-  expect(screen.getByLabelText("Selected model").textContent).toBe("model-a");
+  await choose("Model", "Model A");
+  expect(selectedModel()).toContain("Model A");
   expect(screen.queryByText("That model is no longer available to this account.")).toBeNull();
   await act(async () => {
     retry.resolve({ model: "model-a" });
     await retry.promise;
   });
-  expect(screen.getByLabelText("Model preparation").textContent).toBe("false");
-  fireEvent.click(screen.getByRole("button", { name: "Model B" }));
+  expect(screen.queryByText("Preparing model…")).toBeNull();
+  expect(write().disabled).toBe(false);
+  await choose("Model", "Model B");
   fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
   await screen.findByRole("dialog", { name: "Welcome" });
   await act(async () => {
     afterSignOut.resolve({ model: "model-b" });
     await afterSignOut.promise;
   });
-  expect(screen.queryByLabelText("Selected model")).toBeNull();
+  expect(screen.queryByRole("combobox", { name: "Model" })).toBeNull();
   expect(selectModel).toHaveBeenCalledTimes(5);
 });

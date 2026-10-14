@@ -65,6 +65,7 @@ const utf8 = new (
     TextEncoder: new () => {
       /**
        * Encodes a complete string as UTF-8 bytes.
+       *
        * @param value Original string.
        * @returns Exact UTF-8 byte sequence.
        */
@@ -79,6 +80,7 @@ const utf8 = new (
 export const MemoryAgentExecution = {
   /**
    * Opens a closeable Agent execution handle.
+   *
    * @typeParam I Typed Agent identifier.
    * @typeParam S Generated Agent state.
    * @param backend Shared memory backend.
@@ -120,6 +122,7 @@ export const MemoryAgentExecution = {
 
 /**
  * Serializes Agent execution mutations against one shared memory backend.
+ *
  * @typeParam I Typed Agent identifier.
  * @typeParam S Generated Agent state.
  */
@@ -133,6 +136,7 @@ class MemoryAgentExecutionHandle<I, S extends Message> implements AgentExecution
 
   /**
    * Binds shared execution state and existing Entity commit facilities.
+   *
    * @param state Tenant execution records and lock.
    * @param factory Existing storage factory.
    * @param input Agent repository layout.
@@ -145,6 +149,7 @@ class MemoryAgentExecutionHandle<I, S extends Message> implements AgentExecution
 
   /**
    * Persists immutable accepted work, including exact original signal bytes.
+   *
    * @param accepted Complete source envelope and handler bindings.
    * @returns Detached accepted record.
    */
@@ -180,6 +185,7 @@ class MemoryAgentExecutionHandle<I, S extends Message> implements AgentExecution
 
   /**
    * Returns bounded unresolved records in acceptance order.
+   *
    * @param request Complete continuation and count.
    * @returns Detached page.
    */
@@ -187,7 +193,6 @@ class MemoryAgentExecutionHandle<I, S extends Message> implements AgentExecution
     this.requireOpen();
     if (!Number.isSafeInteger(request.count) || request.count <= 0)
       throw new RangeError("Agent pending count must be a positive safe integer.");
-    if (request.count > 127) throw new RangeError("Agent pending count cannot exceed 127.");
     const asOf = request.after?.asOf ?? Time.currentTime();
     const after = request.after?.key;
     if (after !== undefined && after.scope.stateType !== this.input.stateType)
@@ -215,6 +220,7 @@ class MemoryAgentExecutionHandle<I, S extends Message> implements AgentExecution
 
   /**
    * Reads one complete detached execution record.
+   *
    * @param key Original source and Agent instance key.
    * @returns Stored record if present.
    */
@@ -228,6 +234,7 @@ class MemoryAgentExecutionHandle<I, S extends Message> implements AgentExecution
 
   /**
    * Acquires the earliest unresolved same-instance invocation.
+   *
    * @param key Original source and Agent instance key.
    * @param token New exclusive token.
    * @param expiresAt Requested expiry.
@@ -245,6 +252,7 @@ class MemoryAgentExecutionHandle<I, S extends Message> implements AgentExecution
 
   /**
    * Updates the same token before its previous expiry.
+   *
    * @param key Original source and Agent instance key.
    * @param token Existing exclusive token.
    * @param expiresAt Requested later expiry.
@@ -274,6 +282,7 @@ class MemoryAgentExecutionHandle<I, S extends Message> implements AgentExecution
 
   /**
    * Writes fenced journal and history changes under one memory lock.
+   *
    * @param input Expected record, next record and history entries.
    * @returns Completion after fenced evidence is persisted.
    */
@@ -301,6 +310,7 @@ class MemoryAgentExecutionHandle<I, S extends Message> implements AgentExecution
 
   /**
    * Executes one fenced completion with existing Entity commit facilities.
+   *
    * @param input Complete transition and expected execution record.
    * @returns Completion after conditional Entity and evidence commit.
    */
@@ -316,6 +326,7 @@ class MemoryAgentExecutionHandle<I, S extends Message> implements AgentExecution
 
   /**
    * Applies the conditional Entity transition and prepared execution publication.
+   *
    * @param input Requested fenced execution change.
    * @param scope Generated state type and Agent key.
    * @returns Completion after Entity and execution evidence commit.
@@ -350,6 +361,7 @@ class MemoryAgentExecutionHandle<I, S extends Message> implements AgentExecution
 
   /**
    * Validates completion status and one-version/no-op relationship.
+   *
    * @param input Requested fenced execution change.
    * @returns Expected initial Entity Version.
    */
@@ -375,6 +387,7 @@ class MemoryAgentExecutionHandle<I, S extends Message> implements AgentExecution
 
   /**
    * Prepares execution, preference and history replacements with restoration.
+   *
    * @param input Requested fenced execution change.
    * @param scope Generated state type and Agent key.
    * @param staged Rows staged for the native transaction.
@@ -418,6 +431,7 @@ class MemoryAgentExecutionHandle<I, S extends Message> implements AgentExecution
 
   /**
    * Marks original signal IDs delivered without replaying handlers.
+   *
    * @param key Original source and Agent instance key.
    * @param token Current exclusive token.
    * @param expectedRecordBytes Exact previously read record.
@@ -470,6 +484,7 @@ class MemoryAgentExecutionHandle<I, S extends Message> implements AgentExecution
 
   /**
    * Reads and validates the full Agent instance scope.
+   *
    * @param key Original Agent invocation identity.
    * @returns Complete encoded Agent instance scope.
    */
@@ -481,6 +496,7 @@ class MemoryAgentExecutionHandle<I, S extends Message> implements AgentExecution
 
   /**
    * Encodes the original typed signal identity without an Inbox row ID.
+   *
    * @param key Original Agent invocation identity.
    * @returns Complete encoded invocation identity.
    */
@@ -501,6 +517,7 @@ class MemoryAgentExecutionHandle<I, S extends Message> implements AgentExecution
 
   /**
    * Reads or creates the per-instance claim and preference row.
+   *
    * @param scope Generated state type and Agent key.
    * @returns Per-instance head when present.
    */
@@ -512,6 +529,7 @@ class MemoryAgentExecutionHandle<I, S extends Message> implements AgentExecution
 
   /**
    * Checks fresh Time and exact token after the instance lock is acquired.
+   *
    * @param key Original Agent invocation identity.
    * @param token Exclusive claim token.
    * @returns Current claimed record when the token is valid.
@@ -533,6 +551,7 @@ class MemoryAgentExecutionHandle<I, S extends Message> implements AgentExecution
 
   /**
    * Checks the immutable read image before any state or history mutation.
+   *
    * @param input Requested fenced execution change.
    * @returns Current record after exact-byte validation.
    */
@@ -553,6 +572,7 @@ class MemoryAgentExecutionHandle<I, S extends Message> implements AgentExecution
 
   /**
    * Prepares immutable history rows before publishing any mutation.
+   *
    * @param entries Immutable history entries to append.
    * @param key Original Agent invocation identity.
    * @returns Staged immutable history index when entries are present.
@@ -568,6 +588,7 @@ class MemoryAgentExecutionHandle<I, S extends Message> implements AgentExecution
 
   /**
    * Clears a resolved invocation's claim so its next signal can run.
+   *
    * @param key Original Agent invocation identity.
    * @param scope Generated state type and Agent key.
    */
@@ -587,6 +608,7 @@ class MemoryAgentExecutionHandle<I, S extends Message> implements AgentExecution
 
   /**
    * Acquires only the earliest unresolved work for one Agent instance.
+   *
    * @param expiresAt Requested future lease expiry.
    * @param key Original Agent invocation identity.
    * @param token Exclusive claim token.
@@ -629,6 +651,7 @@ class MemoryAgentExecutionHandle<I, S extends Message> implements AgentExecution
 
   /**
    * Adds one unresolved source in original Inbox order.
+   *
    * @param key Original Agent invocation identity.
    * @param scope Generated state type and Agent key.
    */
@@ -646,6 +669,7 @@ class MemoryAgentExecutionHandle<I, S extends Message> implements AgentExecution
 
   /**
    * Updates the discoverable head while retaining every invocation row.
+   *
    * @param scope Generated state type and Agent key.
    */
   private selectCandidate(scope: string): void {

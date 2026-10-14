@@ -132,6 +132,7 @@ class MultitenantBoundary implements MultitenantTenantBoundary {
 
   /**
    * Stores one validated tenant identity.
+   *
    * @param tenantId Complete generated tenant identifier.
    */
   constructor(tenantId: TenantId) {
@@ -143,6 +144,7 @@ class MultitenantBoundary implements MultitenantTenantBoundary {
 
   /**
    * Returns a detached complete tenant identifier.
+   *
    * @returns The cloned generated tenant identifier.
    */
   get tenantId(): TenantId {
@@ -153,6 +155,7 @@ class MultitenantBoundary implements MultitenantTenantBoundary {
 const TenantIds = Object.freeze({
   /**
    * Rejects an empty or unspecified generated tenant identifier.
+   *
    * @param tenantId Identifier to validate.
    */
   require(tenantId: TenantId): void {
@@ -170,6 +173,7 @@ const TenantIds = Object.freeze({
 
   /**
    * Encodes the complete generated tenant identifier as a map key.
+   *
    * @param tenantId Identifier to encode.
    * @returns Hexadecimal Protobuf bytes without unknown fields.
    */
@@ -207,6 +211,7 @@ export interface TenantCatalogSignal {
 
   /**
    * Observes one cancellation notification.
+   *
    * @param type Abort event name.
    * @param onAbort Callback notified on cancellation.
    * @param options One-shot listener selection.
@@ -215,6 +220,7 @@ export interface TenantCatalogSignal {
 
   /**
    * Removes a previously registered cancellation listener.
+   *
    * @param type Abort event name.
    * @param onAbort Callback to remove.
    */
@@ -226,7 +232,7 @@ export interface TenantCatalogSignal {
  */
 export interface TenantCatalogRead {
   /**
-   * Positive safe page size, at most 127 native candidates.
+   * Positive safe page size bounding native candidates.
    */
   readonly count: number;
 
@@ -268,11 +274,12 @@ export const TenantCatalogReads: Readonly<{ require(request: TenantCatalogRead):
   Object.freeze({
     /**
      * Rejects invalid page bounds or cancellation.
+     *
      * @param request Requested finite page.
      */
     require(request: TenantCatalogRead): void {
-      if (!Number.isSafeInteger(request.count) || request.count < 1 || request.count > 127)
-        throw new RangeError("Tenant catalog count must be a positive safe integer at most 127.");
+      if (!Number.isSafeInteger(request.count) || request.count < 1)
+        throw new RangeError("Tenant catalog count must be a positive safe integer.");
       request.signal.throwIfAborted();
     },
   });
@@ -294,6 +301,7 @@ export interface TenantCatalog {
 
   /**
    * Reads at most the requested number of native candidates per page.
+   *
    * @param request Finite page request and opaque continuation.
    * @returns A possibly empty continuing page or terminal page.
    */

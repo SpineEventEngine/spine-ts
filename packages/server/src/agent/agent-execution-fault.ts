@@ -29,6 +29,7 @@ export type AgentExecutionFaultReason =
 export class AgentExecutionFault extends Error {
   /**
    * Records the safe reason included in the terminal System Event.
+   *
    * @param reason Safe terminal category.
    * @param message Specific nonsecret diagnostic for local callers.
    */

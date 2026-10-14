@@ -50,6 +50,7 @@ interface AgentExecutionRecordLayout {
 
   /**
    * Encodes the complete Agent instance scope.
+   *
    * @param scope Generated state type and Agent key.
    * @returns Complete encoded Agent instance scope.
    */
@@ -57,6 +58,7 @@ interface AgentExecutionRecordLayout {
 
   /**
    * Encodes full Agent scope for binary-collated continuations.
+   *
    * @param scope Generated state type and Agent key.
    * @returns Binary-collated Agent instance scope key.
    */
@@ -64,6 +66,7 @@ interface AgentExecutionRecordLayout {
 
   /**
    * Encodes the original source and Agent scope.
+   *
    * @param key Original Agent invocation identity.
    * @returns Complete immutable invocation key.
    */
@@ -71,6 +74,7 @@ interface AgentExecutionRecordLayout {
 
   /**
    * Encodes the typed original Command or Event ID.
+   *
    * @param signal Original signal identity.
    * @returns Complete typed source signal key.
    */
@@ -78,6 +82,7 @@ interface AgentExecutionRecordLayout {
 
   /**
    * Encodes full Inbox time, version and source ID for binary order.
+   *
    * @param order Original Inbox order.
    * @returns Complete binary-collated Inbox order key.
    */
@@ -85,6 +90,7 @@ interface AgentExecutionRecordLayout {
 
   /**
    * Encodes provider eligibility time and complete Agent scope.
+   *
    * @param eligibleAt Time when this head becomes eligible.
    * @param scope Generated state type and Agent key.
    * @returns Complete binary-collated eligibility and scope key.
@@ -93,6 +99,7 @@ interface AgentExecutionRecordLayout {
 
   /**
    * Encodes the strict upper bound before all scopes at this time.
+   *
    * @param asOf Fixed eligibility cutoff for the page.
    * @returns Strict eligibility upper-bound key.
    */
@@ -100,6 +107,7 @@ interface AgentExecutionRecordLayout {
 
   /**
    * Creates the indexed invocation record specification.
+   *
    * @param digest Fixed-width digest of the complete indexed value.
    * @returns Invocation record layout and complete native index columns.
    */
@@ -107,6 +115,7 @@ interface AgentExecutionRecordLayout {
 
   /**
    * Creates the indexed per-instance head specification.
+   *
    * @param digest Fixed-width digest of the complete indexed value.
    * @returns Per-instance head layout and complete native index columns.
    */
@@ -129,6 +138,7 @@ export const AgentExecutionRecords: AgentExecutionRecordLayout = {
 
   /**
    * Encodes complete Agent scope without truncation.
+   *
    * @param scope Generated state type and canonical typed Agent key.
    * @returns Unambiguous complete scope text.
    */
@@ -140,6 +150,7 @@ export const AgentExecutionRecords: AgentExecutionRecordLayout = {
 
   /**
    * Encodes every scope byte for unambiguous binary continuation order.
+   *
    * @param scope Generated state type and canonical typed Agent key.
    * @returns Prefix-safe full ordering text.
    */
@@ -150,6 +161,7 @@ export const AgentExecutionRecords: AgentExecutionRecordLayout = {
 
   /**
    * Encodes one original source identity within its Agent scope.
+   *
    * @param key Agent instance and original Command or Event ID.
    * @returns Complete immutable invocation identity.
    */
@@ -161,6 +173,7 @@ export const AgentExecutionRecords: AgentExecutionRecordLayout = {
 
   /**
    * Encodes a typed source ID without optional MessageId Version metadata.
+   *
    * @param signal Original Command or Event identity.
    * @returns Complete typed source identity.
    */
@@ -173,6 +186,7 @@ export const AgentExecutionRecords: AgentExecutionRecordLayout = {
 
   /**
    * Encodes full Timestamp, Inbox version and source ID for native binary order.
+   *
    * @param order Existing Inbox acceptance order.
    * @returns Prefix-safe order text.
    */
@@ -209,6 +223,7 @@ export const AgentExecutionRecords: AgentExecutionRecordLayout = {
 
   /**
    * Encodes full provider eligibility time and complete instance scope.
+   *
    * @param eligibleAt Time when this head becomes eligible.
    * @param scope Generated state type and Agent key.
    * @returns Complete binary-collated eligibility and scope key.
@@ -219,6 +234,7 @@ export const AgentExecutionRecords: AgentExecutionRecordLayout = {
 
   /**
    * Returns an exclusive upper bound before all scopes at the sampled time.
+   *
    * @param asOf Fixed eligibility cutoff for the page.
    * @returns Strict eligibility upper-bound key.
    */
@@ -228,6 +244,7 @@ export const AgentExecutionRecords: AgentExecutionRecordLayout = {
 
   /**
    * Builds materialized invocation columns under one fixed-width provider digest.
+   *
    * @param digest Physical identity digest of the full logical key.
    * @returns Shared native record specification.
    */
@@ -259,6 +276,7 @@ export const AgentExecutionRecords: AgentExecutionRecordLayout = {
 
   /**
    * Builds materialized current-head columns under one provider digest.
+   *
    * @param digest Physical identity digest of the full Agent scope.
    * @returns Shared native head specification.
    */
@@ -348,6 +366,7 @@ function utf8Hex(value: string): string {
       TextEncoder: new () => {
         /**
          * Encodes a complete string as UTF-8 bytes.
+         *
          * @param text Original string.
          * @returns Exact UTF-8 byte sequence.
          */

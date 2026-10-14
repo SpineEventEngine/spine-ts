@@ -28,7 +28,6 @@ import { NamespaceAssignments, type NamespaceConverter } from "./namespace.js";
 
 const earlyTenantTtlMs = 60_000;
 const maxEarlyTenants = 1_000;
-const nativePageDeadlineMs = 5_000;
 
 interface EarlyTenantOptions {
   readonly now?: () => number;
@@ -124,6 +123,7 @@ export class DatastoreTenantCatalog implements TenantCatalog {
 
   /**
    * Reads one bounded early-admission or native namespace page.
+   *
    * @param request Finite candidate limit and instance-bound continuation.
    * @returns A possibly empty continuing tenant page.
    */
@@ -180,16 +180,32 @@ export class DatastoreTenantCatalog implements TenantCatalog {
     early: readonly TenantBoundaryValue[],
     start?: string,
   ): Promise<TenantCatalogPage> {
-    const query = this.client
-      .createQuery("", "__namespace__")
-      .select("__key__")
-      .limit(request.count);
-    if (start !== undefined) query.start(start);
-    const result = await this.#nativeCandidates(query, request);
-    request.signal.throwIfAborted();
-    this.requireOpen();
-    const boundaries = this.#nativeBoundaries(result.values);
-    return this.#nativeResult(result, early, start, boundaries);
+    const boundaries: TenantBoundaryValue[] = [];
+    let cursor = start;
+    let remaining = request.count;
+    for (;;) {
+      const limit = Math.min(128, remaining);
+      const query = this.client.createQuery("", "__namespace__").select("__key__").limit(limit);
+      if (cursor !== undefined) query.start(cursor);
+      const result = await this.#nativeCandidates(query, request, limit);
+      request.signal.throwIfAborted();
+      this.requireOpen();
+      const chunk = this.#nativeResult(
+        result,
+        early,
+        cursor,
+        this.#nativeBoundaries(result.values),
+      );
+      boundaries.push(...chunk.boundaries);
+      remaining -= result.values.length;
+      if (!chunk.hasMore || remaining === 0)
+        return {
+          boundaries,
+          ...(chunk.after === undefined ? {} : { after: chunk.after }),
+          hasMore: chunk.hasMore,
+        };
+      cursor = result.endCursor;
+    }
   }
 
   /**
@@ -243,16 +259,15 @@ export class DatastoreTenantCatalog implements TenantCatalog {
   }
 
   /**
-   * Collects no more than one native query limit under a finite deadline.
+   * Collects no more than one native query limit with caller cancellation.
    */
   #nativeCandidates(
     query: ReturnType<Datastore["createQuery"]>,
     request: TenantCatalogRead,
+    limit: number,
   ): Promise<NativeCandidatePage> {
-    const stream = this.client.runQueryStream(query, {
-      gaxOptions: { timeout: nativePageDeadlineMs },
-    });
-    return collectNativeCandidates(stream, request);
+    const stream = this.client.runQueryStream(query);
+    return collectNativeCandidates(stream, request, limit);
   }
 
   /**
@@ -272,6 +287,7 @@ export class DatastoreTenantCatalog implements TenantCatalog {
 
   /**
    * Stores a tenant namespace until native Datastore metadata becomes visible.
+   *
    * @param boundary The tenant admitted for early reads.
    */
   private keepNow(boundary: TenantBoundaryValue): void {
@@ -338,6 +354,7 @@ class DatastoreTenantCursor implements TenantCatalogCursor {
 
   /**
    * Captures one early-cache or native namespace continuation.
+   *
    * @param identity Private catalog issuance identity.
    * @param early Bounded early-admission snapshot.
    * @param phase Current early or native phase.
@@ -361,6 +378,7 @@ class DatastoreTenantCursor implements TenantCatalogCursor {
 
   /**
    * Verifies issuance before exposing this catalog's sweep position.
+   *
    * @param identity Private identity of the reading catalog.
    * @returns Bounded early snapshot and phase-specific continuation.
    */
@@ -394,7 +412,8 @@ interface NativeCollection {
 }
 
 /**
- * Collects one finite native namespace query with cancellation and a total deadline.
+ * Collects one finite native namespace query with caller cancellation.
+ *
  * @param stream Public Datastore query stream.
  * @param request Finite page request and cancellation.
  * @returns Native candidates and continuation metadata.
@@ -402,33 +421,30 @@ interface NativeCollection {
 function collectNativeCandidates(
   stream: ReturnType<Datastore["runQueryStream"]>,
   request: TenantCatalogRead,
+  limit: number,
 ): Promise<NativeCandidatePage> {
   return new Promise((resolve, reject) => {
     const state: NativeCollection = { values: [], info: {}, settled: false };
     const finish = (error?: Error) => {
       if (state.settled) return;
       state.settled = true;
-      clearTimeout(timer);
       request.signal.removeEventListener("abort", onAbort);
       if (error === undefined) resolve({ values: state.values, ...state.info });
       else reject(error);
     };
     const onAbort = () => {
-      stream.destroy();
       finish(new Error("Datastore tenant catalog discovery was cancelled."));
-    };
-    const timer = setTimeout(() => {
       stream.destroy();
-      finish(new Error("Datastore tenant catalog page deadline expired."));
-    }, nativePageDeadlineMs);
+    };
     request.signal.addEventListener("abort", onAbort, { once: true });
-    observeNativeCandidates(stream, request.count, state, finish);
+    observeNativeCandidates(stream, limit, state, finish);
     if (request.signal.aborted) onAbort();
   });
 }
 
 /**
  * Observes one bounded stream and ignores data after settlement.
+ *
  * @param stream Public Datastore query stream.
  * @param count Maximum native candidates.
  * @param state Mutable state for this one page.
@@ -443,8 +459,8 @@ function observeNativeCandidates(
   stream.on("data", (value: unknown) => {
     if (state.settled) return;
     if (state.values.length >= count) {
-      stream.destroy();
       onFinish(new Error("Datastore tenant catalog exceeded the page limit."));
+      stream.destroy();
     } else state.values.push(value);
   });
   stream.on("info", (value: NativeCollection["info"]) => {
@@ -455,6 +471,9 @@ function observeNativeCandidates(
   });
   stream.on("end", () => {
     onFinish();
+  });
+  stream.on("close", () => {
+    onFinish(new Error("Datastore namespace discovery closed before completion."));
   });
 }
 

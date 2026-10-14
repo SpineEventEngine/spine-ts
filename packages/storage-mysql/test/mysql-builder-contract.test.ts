@@ -253,6 +253,7 @@ describe("MysqlStorageFactory builder contract", () => {
     const finalPage = await catalog.page({ count: 1, signal, after: firstPage.after });
     expect(finalPage.boundaries).toHaveLength(1);
     expect(finalPage.hasMore).toBe(false);
+    await expect(catalog.page({ count: 129, signal })).resolves.toMatchObject({ hasMore: false });
     await expect(catalog.page({ count: 0, signal })).rejects.toThrow(/count/);
     firstQuery.mockClear();
     secondQuery.mockClear();

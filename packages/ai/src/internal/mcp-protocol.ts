@@ -104,18 +104,21 @@ export interface AiMcpProtocolControl {
 
   /**
    * Reads current epoch milliseconds from the runtime clock.
+   *
    * @returns Current epoch milliseconds from the runtime clock.
    */
   readonly nowEpochMs: () => number;
 
   /**
    * Checks whether the active execution fence still admits sends.
+   *
    * @returns Whether the active execution fence still admits sends.
    */
   readonly hasAuthority: () => boolean;
 
   /**
    * Acquires request bytes and full output credit before physical send.
+   *
    * @param request Exact physical message and requested credit.
    * @returns Fenced reservation ticket after persistence.
    */
@@ -123,6 +126,7 @@ export interface AiMcpProtocolControl {
 
   /**
    * Records each received chunk, including a crossing chunk, synchronously.
+   *
    * @param ticketId Reservation receiving bytes.
    * @param bytes Decoded bytes in this chunk.
    */
@@ -130,6 +134,7 @@ export interface AiMcpProtocolControl {
 
   /**
    * Persists known receipt once a send settles; absent bytes retain uncertain credit.
+   *
    * @param ticketId Settled reservation.
    * @param receivedBytes Complete measured decoded bytes; absent after an incomplete response.
    * @returns Completion after durable receipt recording.
@@ -292,6 +297,7 @@ export interface AiMcpProtocolSession {
 
   /**
    * Validates canonical JSON arguments locally before runtime authorization.
+   *
    * @param name Advertised tool name.
    * @param canonicalJson Serialized argument object.
    */
@@ -299,6 +305,7 @@ export interface AiMcpProtocolSession {
 
   /**
    * Dispatches one already-authorized and journaled tool call.
+   *
    * @param name Advertised tool name.
    * @param canonicalJson Locally validated argument object.
    * @param options Runtime tool identity and call bounds.
@@ -317,6 +324,7 @@ export interface AiMcpProtocolSession {
 
   /**
    * Closes protocol sends and resources.
+   *
    * @returns Completion after protocol sends and resources close.
    */
   close(): Promise<void>;
@@ -328,6 +336,7 @@ export interface AiMcpProtocolSession {
 export interface AiMcpProtocolFactory {
   /**
    * Creates one selected server connection after runtime authorization.
+   *
    * @param options Registered server, scoped credentials, and runtime controls.
    * @returns Negotiated session with credential-free identity.
    */

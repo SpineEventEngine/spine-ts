@@ -40,7 +40,19 @@ const timedCommand = (stage: string, command: string, args: string[], cwd: strin
     process.stdout.write(
       `Isolated proto-tools ${stage} failed after ${String(Math.round(performance.now() - started))}ms.\n`,
     );
-    throw error;
+    const captured = error && typeof error === "object" ? error : {};
+    const output = (value: unknown): string =>
+      Buffer.isBuffer(value) ? value.toString("utf8") : typeof value === "string" ? value : "";
+    const capturedOutput = [
+      output("stdout" in captured ? captured.stdout : undefined),
+      output("stderr" in captured ? captured.stderr : undefined),
+    ]
+      .filter(Boolean)
+      .join("\n");
+    throw new Error(
+      `Isolated proto-tools ${stage} failed: ${command} ${args.join(" ")}\n${capturedOutput}`,
+      { cause: error },
+    );
   }
 };
 

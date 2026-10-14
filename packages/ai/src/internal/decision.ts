@@ -84,6 +84,7 @@ const probability = (value: number): boolean => {
 
 /**
  * Checks full distribution identity, values and sum against explicit rounding.
+ *
  * @param values Provider probabilities.
  * @param keys Declared alternatives.
  * @param path Question path.
@@ -192,6 +193,7 @@ const answerDistributionIssues = (
 
 /**
  * Validates one answer against a declared question.
+ *
  * @param answer Provider answer.
  * @param question Declared question.
  * @param path Question path.

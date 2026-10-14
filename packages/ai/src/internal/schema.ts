@@ -79,6 +79,7 @@ export type AiCandidateResult<S extends MessageSchema> =
 
 /**
  * Fails before provider dispatch for constraints that cannot be represented exactly.
+ *
  * @param field Descriptor being lowered.
  * @param path Field-specific diagnostic path.
  */
@@ -273,6 +274,7 @@ const oneofSchemas = (message: DescMessage): readonly Record<string, unknown>[] 
 
 /**
  * Creates provider-neutral schema directly from a generated descriptor.
+ *
  * @param schema Generated Protobuf output schema.
  * @returns Strict schema or a field-specific unsupported-feature error.
  */

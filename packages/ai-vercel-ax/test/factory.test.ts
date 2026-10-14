@@ -4014,6 +4014,22 @@ describe("Vercel connection registration", () => {
                 choice: "tier-one",
                 probabilities: { "tier-one": 0.75, "tier-two": 0.25 },
               };
+      const expectedAnswer =
+        mode === "boolean"
+          ? { type: "boolean" as const, probability: 0.8 }
+          : mode === "score"
+            ? { type: "score" as const, score: 0.7, probabilities: { "0": 0.3, "1": 0.7 } }
+            : {
+                type: "choice" as const,
+                choice: "tier-one",
+                probabilities: { "tier-one": 0.75, "tier-two": 0.25 },
+              };
+      const expectedQueue =
+        expectedAnswer.type === "choice"
+          ? expectedAnswer.choice
+          : expectedAnswer.type === "score"
+            ? String(expectedAnswer.score)
+            : String(expectedAnswer.probability);
       const decisionIdentity = {
         ...identity,
         provider: "openrouter",
@@ -4066,7 +4082,18 @@ describe("Vercel connection registration", () => {
           questions: { lane: question },
           mapping: {
             version: "v1",
-            toMessage: () => create(SupportRoutingResultSchema, { queue: { value: "tier-one" } }),
+            toMessage: (decision) => {
+              const lane = decision.answers.lane;
+              const value =
+                lane?.type === "choice"
+                  ? lane.choice
+                  : lane?.type === "score"
+                    ? String(lane.score)
+                    : lane?.type === "boolean"
+                      ? String(lane.probability)
+                      : "missing";
+              return create(SupportRoutingResultSchema, { queue: { value } });
+            },
           },
         }).definition,
       );
@@ -4078,11 +4105,22 @@ describe("Vercel connection registration", () => {
         deadlineEpochMs: 1000,
         signal: runtime.signal,
       });
-      vi.mocked(runtime.admitDecision).mockReturnValue(
+      vi.mocked(runtime.admitDecision).mockImplementation((decision) =>
         success
           ? {
               ok: true,
-              value: create(SupportRoutingResultSchema, { queue: { value: "tier-one" } }),
+              value: create(SupportRoutingResultSchema, {
+                queue: {
+                  value:
+                    decision.answers.lane?.type === "choice"
+                      ? decision.answers.lane.choice
+                      : decision.answers.lane?.type === "score"
+                        ? String(decision.answers.lane.score)
+                        : decision.answers.lane?.type === "boolean"
+                          ? String(decision.answers.lane.probability)
+                          : "missing",
+                },
+              }),
             }
           : {
               ok: false,
@@ -4110,7 +4148,7 @@ describe("Vercel connection registration", () => {
         control: runtime,
       });
       if (success)
-        expect(result).toMatchObject({ ok: true, value: { queue: { value: "tier-one" } } });
+        expect(result).toMatchObject({ ok: true, value: { queue: { value: expectedQueue } } });
       else
         expect(result).toMatchObject({
           ok: false,
@@ -4128,7 +4166,7 @@ describe("Vercel connection registration", () => {
       if (mode === "unavailable") expect(runtime.admitDecision).not.toHaveBeenCalled();
       else
         expect(runtime.admitDecision).toHaveBeenCalledWith(
-          expect.anything(),
+          { answers: { lane: expectedAnswer } },
           definition,
           expect.anything(),
           { probabilityDecimals: 2, scoreDecimals: 2 },

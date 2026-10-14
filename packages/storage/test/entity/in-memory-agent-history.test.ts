@@ -12,9 +12,9 @@
  * the License.
  */
 
-import { create, toBinary, type Message } from "@bufbuild/protobuf";
+import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { AnySchema, TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
+import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import {
   EventContextSchema,
   EventIdSchema,
@@ -36,10 +36,20 @@ import {
   type AgentHistoryEntry,
 } from "@spine-event-engine/proto/agent";
 import { describe, expect, it } from "vitest";
+import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
+import {
+  SupportTicketFactsSchema,
+  SupportTicketNumberSchema,
+  ProposedSupportReplySchema,
+} from "../../../server/test-fixtures/generated/entity-metadata/support_ai_types_pb.js";
+import {
+  conversation as storedRequest,
+  response as storedResponse,
+} from "./agent-history-fixtures.js";
 
+// prettier-ignore
 import {
   SupportReplyDraftedSchema,
-  SupportTicketUpdatedSchema,
 } from "../../../server/test-fixtures/generated/entity-metadata/support_agent_events_pb.js";
 // prettier-ignore
 import {
@@ -56,11 +66,8 @@ const scope: AgentHistoryStorageInput<string> = {
   id: { key: (ticketNumber) => ticketNumber },
 };
 
-function packed(schema: GenMessage<Message>, message: Message) {
-  return create(AnySchema, {
-    typeUrl: `type.spine.io/${schema.typeName}`,
-    value: toBinary(schema, message as never),
-  });
+function packed<T extends Message>(schema: GenMessage<T>, message: T) {
+  return AnyMessages.pack(schema, message);
 }
 
 function occurredAt(seconds: bigint, nanos = 0): Timestamp {
@@ -89,9 +96,12 @@ function conversationRecord(
 
 function conversation(id: string, conversationId: string, time: Timestamp): AgentHistoryEntry {
   const ticket = create(SupportReplyAgentIdSchema, { ticketNumber: "T-history" });
-  const question = create(SupportTicketUpdatedSchema, { agent: ticket, question: "Delivery?" });
+  const question = create(SupportTicketFactsSchema, {
+    ticketNumber: create(SupportTicketNumberSchema, { value: ticket.ticketNumber }),
+    customerQuestion: "Delivery?",
+  });
   const request = create(GenerationRequestSchema, {
-    input: packed(SupportTicketUpdatedSchema, question),
+    input: packed(SupportTicketFactsSchema, question),
     instructions: "Propose a support reply.",
     promptJson: "[]",
     outputSchemaJson: "{}",
@@ -101,12 +111,11 @@ function conversation(id: string, conversationId: string, time: Timestamp): Agen
 }
 
 function response(id: string, conversationId: string, time: Timestamp): AgentHistoryEntry {
-  const ticket = create(SupportReplyAgentIdSchema, { ticketNumber: "T-history" });
-  const reply = create(SupportReplyDraftedSchema, { agent: ticket, reply: "Review this reply." });
+  const reply = create(ProposedSupportReplySchema, { replyText: "Review this reply." });
   const result = create(GenerationResponseSchema, {
     rawOutput: "Review this reply.",
     outcome: AiOutcome.ADMITTED,
-    admittedOutput: packed(SupportReplyDraftedSchema, reply),
+    admittedOutput: packed(ProposedSupportReplySchema, reply),
   });
   return conversationRecord(id, conversationId, time, result, GenerationResponseSchema);
 }
@@ -117,9 +126,13 @@ function event(id: string, time: Timestamp, system: boolean): AgentHistoryEntry 
     ? packed(
         AgentModelSelectionChangedSchema,
         create(AgentModelSelectionChangedSchema, {
-          agent: create(MessageIdSchema, { id: packed(SupportReplyAgentIdSchema, ticket) }),
+          agent: create(MessageIdSchema, {
+            id: packed(SupportReplyAgentIdSchema, ticket),
+            typeUrl: TypeUrls.derive(SupportReplyAgentIdSchema),
+          }),
           sourceSignal: create(MessageIdSchema, {
             id: packed(EventIdSchema, create(EventIdSchema, { value: id })),
+            typeUrl: TypeUrls.derive(EventIdSchema),
           }),
           kind: AiModelKind.GENERATION,
           changedAt: time,
@@ -153,6 +166,50 @@ describe("in-memory Agent history", () => {
       occurredAt,
     });
     factory.close();
+  });
+
+  it("retrieves generation history with domain-correct unpackable payloads", async () => {
+    const factory = new InMemoryStorageFactory();
+    const storage = AgentHistoryStorageFactories.create(factory, scope);
+    try {
+      await storage.append("T-history", storedRequest("request", "reply", occurredAt(1n)));
+      await storage.append("T-history", storedResponse("response", "reply", occurredAt(2n)));
+      const page = await storage.read({
+        entityId: "T-history",
+        view: {
+          kind: "conversation",
+          conversation: create(ConversationIdSchema, { value: "reply" }),
+        },
+        count: 2,
+      });
+      const request = page.entries.find(
+        (entry) =>
+          entry.item.case === "conversationRecord" &&
+          entry.item.value.content?.typeUrl.endsWith("GenerationRequest"),
+      );
+      const result = page.entries.find(
+        (entry) =>
+          entry.item.case === "conversationRecord" &&
+          entry.item.value.content?.typeUrl.endsWith("GenerationResponse"),
+      );
+      if (request?.item.case !== "conversationRecord" || result?.item.case !== "conversationRecord")
+        throw new Error("Expected retrieved request and response.");
+      if (request.item.value.content === undefined || result.item.value.content === undefined)
+        throw new Error("Expected packed request and response.");
+      const generation = AnyMessages.unpack(request.item.value.content, GenerationRequestSchema);
+      const response = AnyMessages.unpack(result.item.value.content, GenerationResponseSchema);
+      if (generation?.input === undefined || response?.admittedOutput === undefined)
+        throw new Error("Expected admitted AI request and response payloads.");
+      expect(AnyMessages.unpack(generation.input, SupportTicketFactsSchema)?.customerQuestion).toBe(
+        "Delivery?",
+      );
+      expect(
+        AnyMessages.unpack(response.admittedOutput, ProposedSupportReplySchema)?.replyText,
+      ).toBe("Review this reply.");
+    } finally {
+      storage.close();
+      factory.close();
+    }
   });
 
   it("fails explicitly when a storage factory lacks the provider capability", () => {

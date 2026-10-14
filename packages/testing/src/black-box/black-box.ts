@@ -397,6 +397,7 @@ export class BlackBox {
 
   /**
    * Reads registered Agent history after resolving the typed target.
+   *
    * @param target Typed repository or generated Agent class.
    * @param entityId Agent identifier paired with the target.
    * @param request Page size and optional prior cursor.

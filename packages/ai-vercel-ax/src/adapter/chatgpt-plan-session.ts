@@ -503,7 +503,7 @@ export class ChatgptPlanSession {
    *
    * @param redirectUri Local loopback callback URL.
    * @param clientId Issued OAuth client identifier.
-   * @returns The begin result.
+   * @returns Authorization URL linked to private PKCE state for completion.
    */
   async begin(redirectUri: string, clientId?: string): Promise<PendingAuthorization> {
     this.validateRedirectUri(redirectUri);
@@ -571,11 +571,11 @@ export class ChatgptPlanSession {
   /**
    * Completes a verified browser authorization attempt.
    *
-   * @param pending The pending for this operation.
-   * @param callback The callback for this operation.
+   * @param pending Authorization attempt and its private callback expectations.
+   * @param callback Browser redirect containing an authorization code and state.
    * @param isCurrent Whether the desktop authorization attempt remains active.
    * @param signal Cancels provider work and invalidates any late grant persistence.
-   * @returns The complete result.
+   * @returns Verified account after its grant is persisted.
    */
   async complete(
     pending: PendingAuthorization,
@@ -628,9 +628,9 @@ export class ChatgptPlanSession {
   /**
    * Validates and returns the callback client identifier.
    *
-   * @param pending The pending for this operation.
-   * @param callback The callback for this operation.
-   * @returns The callback client id result.
+   * @param pending Authorization attempt and its private callback expectations.
+   * @param callback Browser redirect containing an authorization code and state.
+   * @returns Issued client ID matching the pending grant and callback.
    */
   private callbackClientId(pending: AuthorizationState, callback: URL): string {
     const expected = new URL(pending.redirectUri);
@@ -658,10 +658,10 @@ export class ChatgptPlanSession {
    * Stores the verified account and grant tokens.
    *
    * @param clientId Issued OAuth client identifier.
-   * @param tokens The tokens for this operation.
+   * @param tokens Provider tokens returned by the verified grant.
    * @param version The browser attempt's sign-out generation.
    * @param isCurrent Whether the desktop authorization attempt remains active.
-   * @returns The save code grant result.
+   * @returns Connected account derived from the persisted verified grant.
    */
   private async saveCodeGrant(
     clientId: string,
@@ -696,6 +696,7 @@ export class ChatgptPlanSession {
 
   /**
    * Adds a concurrent grant write to the sign-out fence until it settles.
+   *
    * @param clientId Issued client receiving the grant.
    * @param writing Active credential-store write.
    * @returns When the write and its post-save fencing have settled.
@@ -740,9 +741,9 @@ export class ChatgptPlanSession {
    * Builds a saved registration from a verified grant.
    *
    * @param clientId Issued OAuth client identifier.
-   * @param claims The claims for this operation.
-   * @param tokens The tokens for this operation.
-   * @returns The registration from grant result.
+   * @param claims Verified identity claims for the granted account.
+   * @param tokens Provider tokens returned by the verified grant.
+   * @returns Account registration with provider tokens and optional expiry.
    */
   private registrationFromGrant(
     clientId: string,
@@ -772,7 +773,7 @@ export class ChatgptPlanSession {
    * @param state CSRF state for the authorization attempt.
    * @param nonce Identity token nonce.
    * @param verifier PKCE verifier.
-   * @returns The authorization parameters result.
+   * @returns OAuth parameters with host identity and PKCE challenge.
    */
   private async authorizationParameters(
     redirectUri: string,
@@ -799,9 +800,9 @@ export class ChatgptPlanSession {
    * Returns a fresh authorized plan access token.
    *
    * @param clientId Issued OAuth client identifier.
-   * @param at The at for this operation.
+   * @param at Current epoch milliseconds used to assess token expiry.
    * @param signal Cancels this caller's wait for a refresh.
-   * @returns The access token result.
+   * @returns Current or refreshed token for the authorized account.
    */
   async accessToken(
     clientId: string,
@@ -903,7 +904,7 @@ export class ChatgptPlanSession {
    *
    * @param clientId Issued OAuth client identifier.
    * @param signal Cancels remote revocation while preserving local token removal.
-   * @returns The sign out result.
+   * @returns Whether remote refresh-token revocation was confirmed.
    */
   async signOut(clientId: string, signal?: AbortSignal): Promise<boolean> {
     if (this.signingOut.has(clientId)) throw new Error("Account sign-out is in progress.");
@@ -970,9 +971,9 @@ export class ChatgptPlanSession {
    * Updates and verifies the existing account grant.
    *
    * @param clientId Issued OAuth client identifier.
-   * @param saved The saved for this operation.
+   * @param saved Existing verified registration and refresh token.
    * @param signal Cancels discovery and token refresh network requests.
-   * @returns The refresh result.
+   * @returns Access token from the verified refreshed grant.
    */
   private async refresh(
     clientId: string,
@@ -1038,7 +1039,7 @@ export class ChatgptPlanSession {
    *
    * @param clientId Issued OAuth client identifier.
    * @param signal Replaces the library's discovery timeout with the caller's cancellation.
-   * @returns The configuration result.
+   * @returns Discovery configuration with provider signature checks enabled.
    */
   private async configuration(clientId: string, signal?: AbortSignal): Promise<oidc.Configuration> {
     const operationSignal = signal ?? new AbortController().signal;

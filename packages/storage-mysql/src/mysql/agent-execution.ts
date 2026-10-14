@@ -52,6 +52,7 @@ import { AgentExecutionIndexBytes } from "./table-spec.js";
 
 /**
  * Native records that participate in every Agent execution transaction.
+ *
  * @typeParam I Typed entity identifier.
  * @typeParam S Generated Entity state.
  */
@@ -65,6 +66,7 @@ interface ExecutionRows<I, S extends Message> {
 
 /**
  * Persists Agent claims and evidence through one required InnoDB transaction.
+ *
  * @typeParam I Typed Agent identifier.
  * @typeParam S Generated Agent state.
  */
@@ -89,6 +91,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
 
   /**
    * Binds tenant-scoped record families and the native transaction coordinator.
+   *
    * @param coordinator Native transaction coordinator.
    * @param databaseName Tenant database name.
    * @param input Requested fenced execution change.
@@ -103,6 +106,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
 
   /**
    * Persists original accepted work once under the per-instance row lock.
+   *
    * @param accepted Original accepted signal and selected bindings.
    * @returns Persisted invocation with the original accepted facts.
    */
@@ -132,13 +136,14 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
 
   /**
    * Reads one bounded page from complete native pending indexes.
+   *
    * @param request Bounded pending-page request.
    * @returns Bounded eligible work and continuation cursor.
    */
   async pending(request: AgentPendingRead): Promise<AgentPendingPage> {
     await this.ready();
-    if (!Number.isSafeInteger(request.count) || request.count < 1 || request.count > 127)
-      throw new RangeError("Agent pending count must be between 1 and 127.");
+    if (!Number.isSafeInteger(request.count) || request.count < 1)
+      throw new RangeError("Agent pending count must be a positive safe integer.");
     const asOf = request.after?.asOf ?? Time.currentTime();
     const { sql, values } = this.pendingQuery(request, asOf);
     const found = await this.rows.head.historyPage(sql, values);
@@ -162,6 +167,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
 
   /**
    * Builds the indexed native query for one fixed eligibility cutoff.
+   *
    * @param request Bounded pending-page request.
    * @param asOf Fixed provider-time eligibility cutoff.
    * @returns Native SQL and exact bound values.
@@ -187,6 +193,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
 
   /**
    * Reads one complete invocation after provider reconstruction.
+   *
    * @param key Original Agent invocation identity.
    * @returns Complete stored invocation when present.
    */
@@ -201,6 +208,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
 
   /**
    * Acquires earliest unresolved work and records the current exclusive token.
+   *
    * @param expiresAt Requested future lease expiry.
    * @param key Original Agent invocation identity.
    * @param token Exclusive claim token.
@@ -217,6 +225,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
 
   /**
    * Checks the locked instance and writes one current lease.
+   *
    * @param key Original Agent invocation identity.
    * @param token New exclusive claim token.
    * @param expiresAt Requested future lease expiry.
@@ -253,6 +262,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
 
   /**
    * Checks the current head and earliest same-instance source.
+   *
    * @param head Per-instance pending and lease record.
    * @param key Original Agent invocation identity.
    * @param now Fresh time read in the locked transaction.
@@ -278,6 +288,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
 
   /**
    * Updates a still-live token under a fresh transaction clock.
+   *
    * @param expiresAt Requested future lease expiry.
    * @param key Original Agent invocation identity.
    * @param token Exclusive claim token.
@@ -303,6 +314,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
 
   /**
    * Persists a journal update and its immutable history under one transaction.
+   *
    * @param input Requested fenced execution change.
    * @returns Completion after fenced evidence is persisted.
    */
@@ -327,6 +339,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
 
   /**
    * Commits state, history, preferences and outgoing obligations together.
+   *
    * @param input Requested fenced execution change.
    * @returns Completion after conditional Entity and evidence commit.
    */
@@ -355,6 +368,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
 
   /**
    * Marks original outgoing IDs delivered under the still-current token.
+   *
    * @param expectedRecordBytes Exact prior execution record bytes.
    * @param key Original Agent invocation identity.
    * @param signals Original outgoing signal identities.
@@ -373,6 +387,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
 
   /**
    * Marks exact saved output IDs within the current per-instance transaction.
+   *
    * @param key Original Agent invocation identity.
    * @param token Current exclusive claim token.
    * @param expectedRecordBytes Exact prior execution record bytes.
@@ -422,6 +437,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
 
   /**
    * Prepares existing record families and verifies complete binary indexes.
+   *
    * @returns Completion after provider capabilities are checked.
    */
   private ready(): Promise<void> {
@@ -431,6 +447,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
 
   /**
    * Prepares every table before transactions and checks the native indexes.
+   *
    * @returns Completion after native tables and indexes are prepared.
    */
   private async initialize(): Promise<void> {
@@ -454,6 +471,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
 
   /**
    * Executes all record-family work on one required InnoDB connection.
+   *
    * @param key Original Agent invocation identity.
    * @param work Operation executed inside the transaction.
    * @returns Callback result after the native transaction commits.
@@ -493,6 +511,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
 
   /**
    * Reads a head under the transaction lock and verifies the full scope.
+   *
    * @param key Original Agent invocation identity.
    * @returns Per-instance head when present.
    */
@@ -512,6 +531,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
 
   /**
    * Reads the invocation under the transaction lock and verifies its identity.
+   *
    * @param key Original Agent invocation identity.
    * @returns Stored invocation when present.
    */
@@ -523,6 +543,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
 
   /**
    * Rejects a physical digest collision on an invocation row.
+   *
    * @param found Stored record read in this transaction.
    * @param key Original Agent invocation identity.
    */
@@ -541,6 +562,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
 
   /**
    * Checks this is the earliest unresolved invocation in the full scope.
+   *
    * @param key Original Agent invocation identity.
    * @returns Whether this invocation is earliest unresolved work.
    */
@@ -555,6 +577,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
 
   /**
    * Reads at most two native rows for each unresolved status.
+   *
    * @param exclude Invocation omitted while selecting the successor.
    * @param key Original Agent invocation identity.
    * @returns Earliest unresolved invocation when present.
@@ -596,6 +619,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
 
   /**
    * Adds an earlier source while retaining the prior eligibility value.
+   *
    * @param head Per-instance pending and lease record.
    * @param record Persisted Agent execution record.
    */
@@ -606,6 +630,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
 
   /**
    * Updates terminal work to the next same-instance source in one transaction.
+   *
    * @param head Per-instance pending and lease record.
    * @param key Original Agent invocation identity.
    * @param order Original Inbox order.
@@ -623,6 +648,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
 
   /**
    * Reads the current claim with fresh Time inside the native transaction.
+   *
    * @param key Original Agent invocation identity.
    * @param token Exclusive claim token.
    * @returns Current record and head if the token remains valid.
@@ -643,6 +669,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
 
   /**
    * Checks exact prior bytes and preserves immutable source facts.
+   *
    * @param checkNext Whether to validate the proposed next record.
    * @param input Requested fenced execution change.
    * @returns Current fenced record and head.
@@ -664,6 +691,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
 
   /**
    * Prepares immutable history records under the same fenced transaction.
+   *
    * @param entries Immutable history entries to append.
    * @param key Original Agent invocation identity.
    * @returns Completion after immutable history is appended.
@@ -685,6 +713,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
 
   /**
    * Rejects a changed initial Version and applies Entity rows in this transaction.
+   *
    * @param expectedVersion Expected current Entity Version.
    * @param input Requested fenced execution change.
    * @returns Completion after conditional Entity state and Version write.
@@ -720,6 +749,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
 
   /**
    * Checks exactly one Version advance or a no-op completion.
+   *
    * @param input Requested fenced execution change.
    * @param prior Previously persisted execution record.
    * @returns Expected initial Entity Version.
@@ -757,6 +787,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
 
   /**
    * Rejects values outside the full InnoDB index or record payload budget.
+   *
    * @param record Persisted Agent execution record.
    */
   private validateRecord(record: AgentExecutionRecord): void {
@@ -771,6 +802,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
 
   /**
    * Checks complete indexed discovery and native record payload budgets.
+   *
    * @param head Per-instance pending and lease record.
    */
   private validateHead(head: AgentExecutionHead): void {

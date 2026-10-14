@@ -35,6 +35,7 @@ export interface McpServerRegistration {
 
 /**
  * Copies an application-defined transport without retaining mutable arrays.
+ *
  * @param transport Streamable HTTP or local stdio configuration.
  * @returns Immutable transport options.
  */
@@ -75,6 +76,7 @@ const copyTransport = (transport: McpTransport): McpTransport => {
 
 /**
  * Checks a configured executable or directory path.
+ *
  * @param path Application-supplied path.
  * @returns Whether the path is absolute on POSIX or Windows.
  */
@@ -84,6 +86,7 @@ const absolutePath = (path: string): boolean => {
 
 /**
  * Copies one bounded authorization policy.
+ *
  * @param name Advertised exact tool name.
  * @param policy Application policy.
  * @returns Frozen validated policy.
@@ -121,6 +124,7 @@ const copyPolicy = (name: string, policy: McpToolPolicy): McpToolPolicy => {
 export const Mcp = {
   /**
    * Validates and snapshots explicit connection and tool policy.
+   *
    * @param definition Application MCP configuration.
    * @returns Factory-created registry entry.
    */
@@ -148,6 +152,7 @@ export const Mcp = {
 
 /**
  * Reads a validated MCP policy after checking runtime provenance.
+ *
  * @param registration Candidate configuration.
  * @returns Original frozen settings.
  */

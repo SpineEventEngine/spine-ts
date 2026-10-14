@@ -76,6 +76,46 @@ describe("DatastoreTenantCatalog", () => {
     await expect(catalog.page({ count: 1, signal: aborted.signal })).rejects.toThrow();
   });
 
+  it("reads more than 127 native tenant candidates with a continuation", async () => {
+    const client = new NamespaceClient(
+      Array.from({ length: 130 }, (_, index) => `Vtenant-${String(index).padStart(3, "0")}`),
+    );
+    const catalog = new DatastoreTenantCatalog(client as never, new DefaultNamespaceConverter());
+    const signal = new AbortController().signal;
+    const early = await catalog.page({ count: 129, signal });
+    if (early.after === undefined) throw new Error("Expected native phase.");
+    const first = await catalog.page({ count: 129, signal, after: early.after });
+    expect(first.boundaries).toHaveLength(129);
+    expect(first.hasMore).toBe(true);
+    if (first.after === undefined) throw new Error("Expected native continuation.");
+    const last = await catalog.page({ count: 129, signal, after: first.after });
+    expect(last.boundaries).toHaveLength(1);
+    expect(last.hasMore).toBe(false);
+    expect(client.pageLimits.length).toBeGreaterThan(0);
+    expect(
+      client.pageLimits.every(
+        (limit) => Number.isSafeInteger(limit) && limit > 0 && limit <= 2 ** 31 - 1,
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps Datastore query limits representable for a safe count above Int32", async () => {
+    const client = new NamespaceClient(["Va", "Vb", "Vc"]);
+    const catalog = new DatastoreTenantCatalog(client as never, new DefaultNamespaceConverter());
+    const signal = new AbortController().signal;
+    const early = await catalog.page({ count: 2 ** 31, signal });
+    if (early.after === undefined) throw new Error("Expected native phase.");
+    const native = await catalog.page({ count: 2 ** 31, signal, after: early.after });
+    expect(native.boundaries).toHaveLength(3);
+    expect(native.hasMore).toBe(false);
+    expect(client.pageLimits.length).toBeGreaterThan(0);
+    expect(
+      client.pageLimits.every(
+        (limit) => Number.isSafeInteger(limit) && limit > 0 && limit <= 2 ** 31 - 1,
+      ),
+    ).toBe(true);
+  });
+
   it("rejects a native continuation that does not advance", async () => {
     const client = new NamespaceClient(["Va", "Vb", "Vc"]);
     client.repeatCursor = true;
@@ -207,7 +247,45 @@ describe("DatastoreTenantCatalog", () => {
     }).not.toThrow();
   });
 
-  it("bounds an unresponsive native page by a total deadline", async () => {
+  it("rejects a native stream that closes without an end or error", async () => {
+    const client = new NamespaceClient([]);
+    const stream = new Readable({
+      objectMode: true,
+      read() {
+        /* Provider never responds. */
+      },
+    });
+    client.runQueryStream = () => stream;
+    const catalog = new DatastoreTenantCatalog(client as never, new DefaultNamespaceConverter());
+    const controller = new AbortController();
+    const early = await catalog.page({ count: 1, signal: controller.signal });
+    if (early.after === undefined) throw new Error("Expected native phase.");
+    const reading = catalog.page({ count: 1, signal: controller.signal, after: early.after });
+    const outcome = reading.then(
+      () => "resolved",
+      (error: unknown) => (error instanceof Error ? error.message : String(error)),
+    );
+    const closed = new Promise<void>((resolve) => {
+      stream.once("close", () => {
+        resolve();
+      });
+    });
+    stream.destroy();
+    await closed;
+    const result = await Promise.race([
+      outcome,
+      new Promise<string>((resolve) => {
+        setTimeout(() => {
+          resolve("pending");
+        }, 25);
+      }),
+    ]);
+    controller.abort();
+    expect(result).toMatch(/closed before completion/);
+    expect(() => stream.emit("error", new Error("late provider detail"))).not.toThrow();
+  });
+
+  it("waits for caller cancellation when a native page never responds", async () => {
     vi.useFakeTimers();
     try {
       const client = new NamespaceClient([]);
@@ -219,13 +297,23 @@ describe("DatastoreTenantCatalog", () => {
           },
         });
       const catalog = new DatastoreTenantCatalog(client as never, new DefaultNamespaceConverter());
-      const signal = new AbortController().signal;
-      const early = await catalog.page({ count: 1, signal });
+      const controller = new AbortController();
+      const early = await catalog.page({ count: 1, signal: controller.signal });
       if (early.after === undefined) throw new Error("Expected native phase.");
-      const reading = catalog.page({ count: 1, signal, after: early.after });
-      const rejected = expect(reading).rejects.toThrow(/deadline expired/);
+      const reading = catalog.page({ count: 1, signal: controller.signal, after: early.after });
+      let settled = false;
+      void reading.then(
+        () => {
+          settled = true;
+        },
+        () => {
+          settled = true;
+        },
+      );
       await vi.advanceTimersByTimeAsync(5_001);
-      await rejected;
+      expect(settled).toBe(false);
+      controller.abort();
+      await expect(reading).rejects.toThrow(/cancelled/);
     } finally {
       vi.useRealTimers();
     }

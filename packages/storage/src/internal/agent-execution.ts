@@ -26,6 +26,7 @@ import type { StorageFactory } from "../storage/storage-factory.js";
 export interface AgentExecutionStorageFactory {
   /**
    * Opens a closeable provider handle for one Agent repository.
+   *
    * @typeParam I Typed Agent identifier.
    * @typeParam S Generated Agent state.
    * @param input Entity layout and generated Agent state type.
@@ -52,6 +53,7 @@ export interface AgentExecutionFactoryAccess {
 
   /**
    * Registers a provider capability.
+   *
    * @param factory Storage factory offering execution.
    * @param creator Provider-specific handle creator.
    */
@@ -59,6 +61,7 @@ export interface AgentExecutionFactoryAccess {
 
   /**
    * Opens the required provider capability.
+   *
    * @typeParam I Typed Agent identifier.
    * @typeParam S Generated Agent state.
    * @param factory Storage factory offering execution.
@@ -87,6 +90,7 @@ export const AgentExecutionStorageFactories: AgentExecutionFactoryAccess = Objec
 
   /**
    * Registers one provider's execution capability.
+   *
    * @param factory Storage factory offering execution.
    * @param creator Provider-specific handle creator.
    */
@@ -96,6 +100,7 @@ export const AgentExecutionStorageFactories: AgentExecutionFactoryAccess = Objec
 
   /**
    * Rejects providers without durable Agent execution support before intake.
+   *
    * @typeParam I Typed Agent identifier.
    * @typeParam S Generated Agent state.
    * @param factory Storage factory offering execution.

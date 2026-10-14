@@ -55,6 +55,7 @@ export class SupportTicket extends Aggregate<SupportTicketId, typeof SupportTick
 
   /**
    * Opens a ticket with the employee's original incident facts.
+   *
    * @param command Ticket identity and reported facts.
    * @returns The ticket-opened domain Event.
    */
@@ -75,6 +76,7 @@ export class SupportDraftAgent extends Agent<SupportTicketId, typeof SupportDraf
 
   /**
    * Invokes the bounded model and emits a reviewable outcome for this ticket.
+   *
    * @param command Current facts and explicit conversation identity.
    * @returns A proposed reply or a failure preserving the submitted facts.
    */
@@ -111,6 +113,7 @@ export class SupportReview extends Projection<SupportTicketId, typeof SupportRev
 
   /**
    * Updates the review state with a validated draft without sending it.
+   *
    * @param event Proposal containing its exact request and conversation.
    */
   @Subscribe onReplySuggested(event: SupportReplySuggested): void {
@@ -128,6 +131,7 @@ export class SupportReview extends Projection<SupportTicketId, typeof SupportRev
 
   /**
    * Records that the latest request has no usable draft.
+   *
    * @param event Failure containing its exact request and conversation.
    */
   @Subscribe onReplyFailed(event: SupportReplyFailed): void {

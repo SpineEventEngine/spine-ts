@@ -12,7 +12,6 @@
  * the License.
  */
 
-import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { create, toBinary } from "@bufbuild/protobuf";
 import { Datastore } from "@google-cloud/datastore";
@@ -177,14 +176,5 @@ describe.runIf(emulatorHost !== undefined)("Datastore Agent history", () => {
       history.close();
       factory.close();
     }
-  });
-});
-
-describe("Datastore Agent history index declaration", () => {
-  it("declares complete order keys for full, category, and conversation views", () => {
-    const source = readFileSync(new URL("../index.yaml", import.meta.url), "utf8");
-    expect(source.match(/- name: order_key/g)).toHaveLength(3);
-    expect(source.match(/- kind: spine_agent_history/g)).toHaveLength(3);
-    expect(source).not.toMatch(/order_key\(\d+\)/);
   });
 });

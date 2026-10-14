@@ -129,6 +129,7 @@ const openRouterProfile = Object.freeze({
 
 /**
  * Rejects incomplete or altered capability declarations before registration.
+ *
  * @param actual Caller-supplied profile.
  * @param expected Adapter-tested protocol profile.
  */
@@ -146,6 +147,7 @@ const assertProfile = (
 
 /**
  * Concrete provider model plus its verified credential-free identity.
+ *
  * @typeParam M Published provider model type.
  */
 export interface VercelConnection<M> {
@@ -167,6 +169,7 @@ export interface VercelConnection<M> {
 
 /**
  * Trusted callbacks for a selected provider deployment.
+ *
  * @typeParam M Published provider model type.
  */
 export interface VercelModelOptions<M extends StreamModel | VercelDecisionModel> {
@@ -187,6 +190,7 @@ export interface VercelModelOptions<M extends StreamModel | VercelDecisionModel>
 
   /**
    * Resolves authenticated provider/account/endpoint/model identity.
+   *
    * @param scope Authenticated signal scope.
    * @param control Runtime cancellation and deadline.
    * @returns Credential-free deployment identity.
@@ -198,6 +202,7 @@ export interface VercelModelOptions<M extends StreamModel | VercelDecisionModel>
 
   /**
    * Checks this scope's permission for the resolved deployment identity.
+   *
    * @param scope Authenticated signal scope.
    * @param identity Resolved deployment identity.
    * @param control Runtime cancellation and deadline.
@@ -211,6 +216,7 @@ export interface VercelModelOptions<M extends StreamModel | VercelDecisionModel>
 
   /**
    * Creates one operation-scoped model using the supplied guarded fetch.
+   *
    * @param scope Authenticated signal scope.
    * @param expected Authorized deployment identity.
    * @param control Scoped fetch, cancellation, and deadline.
@@ -256,6 +262,7 @@ export type VercelDecisionModel = Experimental_DecisionModelV4 | Experimental_Ev
 
 /**
  * Opaque connection retrieved only by this adapter after runtime selection.
+ *
  * @typeParam M Published provider model type.
  */
 export interface ProviderConnection<M> {
@@ -281,6 +288,7 @@ export interface ProviderConnection<M> {
 
   /**
    * Reads locally observed platform bytes for one attempt, if any are known.
+   *
    * @param ticketId Durable physical-attempt identity.
    * @returns Received byte count or undefined before a body receipt.
    */
@@ -291,6 +299,7 @@ const connections = new WeakMap<object, ProviderConnection<StreamModel | VercelD
 
 /**
  * Reads a model and gate previously created by this adapter.
+ *
  * @param handle Opaque selected model handle.
  * @returns Authenticated provider connection.
  */
@@ -305,6 +314,7 @@ export const providerConnection = (
 
 /**
  * Requires the callback identity to match the earlier authorized identity.
+ *
  * @param expected Authenticated identity before provider construction.
  * @param actual Identity returned with the constructed provider.
  */
@@ -338,6 +348,7 @@ const authorizedIdentity = (identity: AiConnectionIdentity): AiConnectionIdentit
 
 /**
  * Checks the trusted callback's deployment and Anthropic model identity.
+ *
  * @param expected Previously authorized identity.
  * @param result Constructed provider connection.
  * @param capabilities Canonical selected provider profile.
@@ -365,6 +376,7 @@ const checkConnectionIdentity = <M extends StreamModel | VercelDecisionModel>(
 
 /**
  * Bounds a connection callback even when it ignores its AbortSignal.
+ *
  * @param pending Trusted model construction.
  * @param control Runtime cancellation and Time read.
  * @typeParam M Published provider model type.
@@ -426,6 +438,7 @@ const verifyAnthropicTokens = (
 
 /**
  * Creates an inert fetch gate for the exact selected provider route.
+ *
  * @param options Trusted deployment callback settings.
  * @param expected Authorized credential-free identity.
  * @param control Runtime reservation and fence callbacks.
@@ -460,6 +473,7 @@ const scopedGate = <M extends StreamModel | VercelDecisionModel>(
 
 /**
  * Rejects a connection after operation cancellation or deadline expiry.
+ *
  * @param control Current operation controls.
  */
 const assertConnectionActive = (control: AiExecutionControl): void => {
@@ -488,6 +502,7 @@ const connectionControl = (
 
 /**
  * Constructs an inert scoped fetch and verifies the callback's connection identity.
+ *
  * @param options Trusted deployment callbacks.
  * @param scope Authenticated operation scope.
  * @param expected Previously authorized identity.
@@ -591,18 +606,21 @@ export const VercelAx = {
   capabilities: {
     /**
      * Returns the pinned OpenAI Responses protocol.
+     *
      * @returns Pinned Vercel OpenAI Responses streaming protocol profile.
      */
     openAIResponses: (): VercelProviderCapabilities => openAIProfile,
 
     /**
      * Returns the bounded ChatGPT plan Responses streaming profile.
+     *
      * @returns Stateless subscription Responses profile.
      */
     chatgptPlanResponses: (): VercelProviderCapabilities => chatgptPlanProfile,
 
     /**
      * Returns the pinned Anthropic Messages protocol.
+     *
      * @returns Pinned Vercel Anthropic Messages streaming protocol profile.
      */
     anthropicMessages: (): VercelProviderCapabilities => anthropicProfile,
@@ -610,6 +628,7 @@ export const VercelAx = {
 
   /**
    * Registers a trusted scoped Vercel generation deployment.
+   *
    * @param options Credential-free identity and guarded provider construction.
    * @returns Immutable SDK-free registration.
    */
@@ -665,6 +684,7 @@ export const VercelDecision = {
   capabilities: {
     /**
      * Returns the pinned OpenRouter Jev protocol.
+     *
      * @returns Pinned OpenRouter Decisions evaluation protocol profile.
      */
     openRouterJev: (): VercelProviderCapabilities => openRouterProfile,
@@ -672,6 +692,7 @@ export const VercelDecision = {
 
   /**
    * Registers a trusted non-generative decision deployment.
+   *
    * @param options Credential-free identity and guarded provider construction.
    * @returns Immutable SDK-free registration.
    */

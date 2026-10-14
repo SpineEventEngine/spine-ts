@@ -204,6 +204,7 @@ export class AgentReadRuntime {
 
   /**
    * Decodes only states matching the requested generated Projection schema.
+   *
    * @typeParam Schema Generated state schema requested by the handler.
    * @param prior Saved read entry with its typed result.
    * @param schema Expected Projection state schema.
@@ -274,6 +275,7 @@ export class AgentReadRuntime {
 
   /**
    * Packs the exact typed state array returned by a Projection read.
+   *
    * @typeParam Schema Schema of the states being saved.
    * @param schema Generated state descriptor.
    * @param states Ordered states returned by the live query.

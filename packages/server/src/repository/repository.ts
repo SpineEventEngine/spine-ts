@@ -1506,6 +1506,7 @@ const RepositoryRegistration = {
 
   /**
    * Captures Agent capability and code revisions during repository registration.
+   *
    * @typeParam EntityType Concrete generated Entity constructor.
    * @param repository Registered Entity repository for this operation.
    * @param options Repository or execution options for this operation.
@@ -1744,6 +1745,7 @@ export interface RepositoryAccess {
 
   /**
    * Returns Command outcomes declared by generated handlers in this repository.
+   *
    * @param repository Registered repository to inspect.
    * @returns Generated Command outcome descriptors.
    */
@@ -1751,6 +1753,7 @@ export interface RepositoryAccess {
 
   /**
    * Returns the Agent's registered capabilities and recovery code revision.
+   *
    * @param repository Agent repository registration.
    * @returns Configured Agent policy, when present.
    */
@@ -1761,6 +1764,7 @@ export interface RepositoryAccess {
 
   /**
    * Processes one provider-claimed Agent invocation for framework scheduling.
+   *
    * @param repository Registered Agent repository.
    * @param tenantId Complete tenant for this accepted invocation.
    * @param key Stored invocation key from a bounded pending page.
@@ -1776,6 +1780,7 @@ export interface RepositoryAccess {
 
   /**
    * Reads one bounded, provider-indexed Agent head page for framework scheduling.
+   *
    * @param repository Registered Agent repository to scan.
    * @param tenantId Complete tenant selected for this scan.
    * @param after Provider continuation from the preceding head page.
@@ -1791,6 +1796,7 @@ export interface RepositoryAccess {
 
   /**
    * Reads retained Agent history for the package's testing observation seam.
+   *
    * @param repository Registered Agent repository.
    * @param entityId Typed Agent identifier.
    * @param view Indexed category.
@@ -1812,6 +1818,7 @@ export interface RepositoryAccess {
 
   /**
    * Reads one full Agent history page with the application opaque cursor.
+   *
    * @param repository Registered Agent repository.
    * @param entityId Typed Agent identifier.
    * @param request Application page size and opaque cursor.
@@ -2027,6 +2034,7 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
 
   /**
    * Opens a scoped provider read without restoring an application Entity.
+   *
    * @param repository Registered Agent repository.
    * @param entityId Typed Agent identifier.
    * @param view Indexed category.
@@ -4179,6 +4187,7 @@ class ProjectionEventExecution {
 
 /**
  * Binds Process Manager query access to Stand for one handler invocation.
+ *
  * @typeParam Schema Generated Projection state descriptor.
  */
 type ProjectionReadInterceptor = <Schema extends DescriptorMessageSchema>(
@@ -4269,6 +4278,7 @@ const ProcessManagerQueries = Object.freeze({
 
   /**
    * Reads the authorized target after optional Agent snapshot reuse is checked.
+   *
    * @typeParam Schema Generated Projection state descriptor.
    * @param stand Stand selected by the authorized query route.
    * @param registeredSchema Descriptor registered for the target.
@@ -4414,6 +4424,7 @@ class ProcessManagerExecutionSupport {
 
   /**
    * Stores original envelopes emitted by an Agent under its repository.
+   *
    * @param loaded Restored Agent with history storage.
    * @param events Emitted domain Event envelopes.
    * @returns Completion after every append.
@@ -4536,6 +4547,7 @@ class ProcessManagerExecutionSupport {
 const AgentExecutionRunner = {
   /**
    * Processes one accepted Agent transition under its provider claim.
+   *
    * @param repository Registered Agent repository.
    * @param tenantId Tenant selected for this invocation.
    * @param key Exact accepted invocation key.
@@ -4686,6 +4698,7 @@ const AgentExecutionRunner = {
 
   /**
    * Tests the original saved deadline without granting recovery fresh time.
+   *
    * @param record Durable Agent execution record.
    * @returns Whether the checked condition holds.
    */
@@ -4700,6 +4713,7 @@ const AgentExecutionRunner = {
 
   /**
    * Checks for a dispatched model reservation whose response was never saved.
+   *
    * @param record Durable Agent execution record.
    * @returns Whether the checked condition holds.
    */
@@ -4718,6 +4732,7 @@ const AgentExecutionRunner = {
 
   /**
    * Checks for a dispatched write with no recorded tool result.
+   *
    * @param record Durable Agent execution record.
    * @returns Whether the checked condition holds.
    */
@@ -4736,6 +4751,7 @@ const AgentExecutionRunner = {
 
   /**
    * Checks for a settled named result even when physical evidence is incomplete.
+   *
    * @param record Durable Agent execution record.
    * @param id Saved signal, operation, or Entity identifier.
    * @returns Whether the checked condition holds.
@@ -4828,6 +4844,7 @@ const AgentExecutionRunner = {
 
   /**
    * Returns IDs only for physically reserved model requests without saved outcomes.
+   *
    * @param record Durable execution journal.
    * @returns Original attempt IDs for unresolved physical sends.
    */
@@ -4846,6 +4863,7 @@ const AgentExecutionRunner = {
 
   /**
    * Returns exact IDs for dispatched write effects without saved results.
+   *
    * @param record Durable Agent execution record.
    * @returns Original ToolCall IDs for unresolved dispatched writes.
    */
@@ -4864,6 +4882,7 @@ const AgentExecutionRunner = {
 
   /**
    * Persists start facts, runs selected handlers, and conditionally completes a no-op.
+   *
    * @param repository Agent registration.
    * @param runtime Bound services.
    * @param tenantId Complete tenant, when applicable.
@@ -5147,6 +5166,7 @@ const AgentExecutionRunner = {
 
   /**
    * Reads an optional saved model deadline and detects incomplete persisted bounds.
+   *
    * @param session Fenced Agent execution session.
    * @param context Selection or preference authorization context.
    * @returns Saved absolute deadline, when configured.
@@ -5203,6 +5223,7 @@ const AgentExecutionRunner = {
 
   /**
    * Wraps original preference Events as indexed Agent history entries.
+   *
    * @param events Original Event envelopes retained for diagnostics.
    * @returns Typed Agent history rows for saved preference changes.
    */
@@ -5291,6 +5312,7 @@ const AgentExecutionRunner = {
 
   /**
    * Reads an explicit model selection, including inherited defaults as absence.
+   *
    * @param preferences Current Agent instance model preferences.
    * @param kind Generation or decision model kind.
    * @returns Selected deployment reference, or inherited default.
@@ -5305,6 +5327,7 @@ const AgentExecutionRunner = {
 
   /**
    * Builds the immutable completion image and emitted domain history.
+   *
    * @param record Durable Agent execution record.
    * @param version Entity version associated with the signal.
    * @param outputs Prepared outgoing domain signals.
@@ -5336,6 +5359,7 @@ const AgentExecutionRunner = {
 
   /**
    * Stores only committed domain Events in the Agent's emitted history.
+   *
    * @param outputs Prepared outgoing domain signals.
    * @returns Committed domain Event rows for Agent history.
    */
@@ -5404,6 +5428,7 @@ const AgentExecutionRunner = {
 
   /**
    * Applies the deferred Stand image only after fenced provider completion.
+   *
    * @param repository Registered Entity repository for this operation.
    * @param session Fenced Agent execution session.
    * @param loaded Loaded Entity and its repository storage state.
@@ -5444,6 +5469,7 @@ const AgentExecutionRunner = {
 
   /**
    * Binds declared generated Event and Command results in handler order.
+   *
    * @param repository Agent declaration.
    * @param runtime Signal metadata factory.
    * @param accepted Original accepted envelope.
@@ -5577,6 +5603,7 @@ const AgentExecutionRunner = {
 
   /**
    * Publishes saved envelopes through normal bus acceptance before marking original IDs.
+   *
    * @param runtime Bound normal bus acceptance callbacks.
    * @param session Fenced record containing pending saved envelopes.
    * @returns When the fenced repository operation completes.
@@ -5615,6 +5642,7 @@ const AgentExecutionRunner = {
 
   /**
    * Returns the typed original ID of one completed outgoing signal.
+   *
    * @param output Prepared outgoing domain signal.
    * @returns Original durable key for the outgoing signal.
    */
@@ -5632,6 +5660,7 @@ const AgentExecutionRunner = {
 
   /**
    * Validates every stored binding against the current generated selectors.
+   *
    * @param repository Agent registration.
    * @param accepted Immutable source and ordered bindings.
    * @returns Current matching handler metadata.
@@ -5661,6 +5690,7 @@ const AgentExecutionRunner = {
 
   /**
    * Finds current Command or Event handlers from the immutable source envelope.
+   *
    * @param routing Registered generated handler routing metadata.
    * @param accepted Durable original signal and saved handler bindings.
    * @returns Generated handlers selected for the accepted signal.
@@ -5688,6 +5718,7 @@ const AgentExecutionRunner = {
 
   /**
    * Records start facts and the original dispatch System Event before handler execution.
+   *
    * @param repository Agent registration.
    * @param runtime Bound services.
    * @param session Fenced provider claim and current record.
@@ -5722,6 +5753,7 @@ const AgentExecutionRunner = {
 
   /**
    * Stores the original dispatch audit envelope in mandatory Agent history.
+   *
    * @param audit Original Agent System event envelope.
    * @returns Typed Agent history row for the original dispatch Event.
    */
@@ -5765,6 +5797,7 @@ const AgentExecutionRunner = {
 
   /**
    * Persists each model kind without a saved connection identity.
+   *
    * @param repository Agent registration and permitted capabilities.
    * @param runtime Bound AI registry.
    * @param session Current fenced execution record.
@@ -5858,6 +5891,7 @@ const AgentExecutionRunner = {
 
   /**
    * Copies the whole-invocation budget into its durable integer fields.
+   *
    * @param limits Configured whole-invocation limits.
    * @returns Whole-transition limits persisted at invocation start.
    */
@@ -5955,6 +5989,7 @@ const AgentExecutionRunner = {
 
   /**
    * Validates the transaction result before Agent output completion.
+   *
    * @param entity Loaded recipient Entity instance.
    * @returns When the fenced repository operation completes.
    */
@@ -6101,6 +6136,7 @@ const AgentExecutionRunner = {
 
   /**
    * Invokes one selected generated handler and validates its declared results.
+   *
    * @param entity Loaded recipient Entity instance.
    * @param accepted Durable original signal and saved handler bindings.
    * @param handler Generated handler selected for this signal.
@@ -6143,6 +6179,7 @@ const AgentExecutionRunner = {
 
   /**
    * Reads the original invocation deadline before starting an application callback.
+   *
    * @param session Current fenced execution session.
    * @returns Absolute saved deadline in milliseconds.
    */
@@ -6160,6 +6197,7 @@ const AgentExecutionRunner = {
 
   /**
    * Awaits an application handler within its saved deadline and current claim.
+   *
    * @typeParam Value Handler result.
    * @param work Already-started generated handler invocation.
    * @param signal Session cancellation when claim authority ends.
@@ -6204,6 +6242,7 @@ const AgentExecutionRunner = {
 
 /**
  * Adds a positive timeout to a Time-sampled Protobuf timestamp.
+ *
  * @param at Provider-independent current time.
  * @param millis Bounded additional milliseconds.
  * @returns Absolute timestamp retaining nanosecond precision.
@@ -11638,6 +11677,7 @@ const InboxReplay = {
 
   /**
    * Persists selected Agent work before the normal Inbox acknowledges delivery.
+   *
    * @param repository Agent repository receiving the original signal.
    * @param routing Registered handler routes and schemas.
    * @param message Original durable Inbox message.
@@ -11743,6 +11783,7 @@ const InboxReplay = {
 
   /**
    * Restores selected Event and Command reactions from the original payload.
+   *
    * @param routing Registered generated handler routing metadata.
    * @param typeName Generated message type name.
    * @param event Original typed Event envelope.
@@ -12527,6 +12568,7 @@ Object.freeze(InboxHandoff);
 const SavedRepositoryDispatch = {
   /**
    * Maps a generated repository family to its serialized binding value.
+   *
    * @param repository Registered Entity repository for this operation.
    * @returns Repository family encoded in a saved dispatch target.
    */
@@ -12545,6 +12587,7 @@ const SavedRepositoryDispatch = {
 
   /**
    * Finds the current generated handlers that determine an Event handoff.
+   *
    * @param routing Registered generated handler routing metadata.
    * @param event Original typed Event envelope.
    * @returns Generated handlers matching the outgoing Event.
@@ -12565,6 +12608,7 @@ const SavedRepositoryDispatch = {
 
   /**
    * Calculates a digest of ordered generated metadata and message descriptors.
+   *
    * @param repository Registered Entity repository for this operation.
    * @param handlers Generated handlers in their saved order.
    * @returns Digest of ordered generated handler metadata.
@@ -12591,6 +12635,7 @@ const SavedRepositoryDispatch = {
 
   /**
    * Restores a typed ID only when its canonical wire representation is unchanged.
+   *
    * @param repository Registered Entity repository for this operation.
    * @param packed Original typed Protobuf payload.
    * @returns Typed recipient identifier from the frozen route.
@@ -12604,6 +12649,7 @@ const SavedRepositoryDispatch = {
 
   /**
    * Checks the stable repository and signal identity before saved transport.
+   *
    * @param repository Registered Entity repository for this operation.
    * @param target Frozen recipient binding.
    * @param kind Generation or decision model kind.
@@ -12623,6 +12669,7 @@ const SavedRepositoryDispatch = {
 
   /**
    * Prepares one typed Command recipient with its selected generated assignee.
+   *
    * @param repository Registered Entity repository for this operation.
    * @param routing Registered generated handler routing metadata.
    * @param command Original typed Command envelope.
@@ -12650,6 +12697,7 @@ const SavedRepositoryDispatch = {
 
   /**
    * Resolves the original Command recipient without calling its route again.
+   *
    * @param repository Registered Entity repository for this operation.
    * @param routing Registered generated handler routing metadata.
    * @param command Original typed Command envelope.
@@ -12681,6 +12729,7 @@ const SavedRepositoryDispatch = {
 
   /**
    * Checks saved Command metadata, typed target presence, and runtime registration.
+   *
    * @param repository Registered Entity repository for this operation.
    * @param routing Registered generated handler routing metadata.
    * @param command Original typed Command envelope.
@@ -12724,6 +12773,7 @@ const SavedRepositoryDispatch = {
 
   /**
    * Prepares the exact ordered Event recipients and selected generated handlers.
+   *
    * @param repository Registered Entity repository for this operation.
    * @param routing Registered generated handler routing metadata.
    * @param event Original typed Event envelope.
@@ -12750,6 +12800,7 @@ const SavedRepositoryDispatch = {
 
   /**
    * Restores the saved Event route and current generated handler metadata.
+   *
    * @param repository Registered Entity repository for this operation.
    * @param routing Registered generated handler routing metadata.
    * @param event Original typed Event envelope.
@@ -12783,6 +12834,7 @@ const SavedRepositoryDispatch = {
 
   /**
    * Checks saved Event metadata and active repository registration.
+   *
    * @param repository Registered Entity repository for this operation.
    * @param routing Registered generated handler routing metadata.
    * @param event Original typed Event envelope.
@@ -12818,6 +12870,7 @@ const SavedRepositoryDispatch = {
 
   /**
    * Creates one internal Command binding from the repository registration.
+   *
    * @param repository Registered Entity repository for this operation.
    * @param routing Registered generated handler routing metadata.
    * @returns Saved Command binding for this registration.
@@ -12841,6 +12894,7 @@ const SavedRepositoryDispatch = {
 
   /**
    * Creates one internal Event binding from the repository registration.
+   *
    * @param repository Registered Entity repository for this operation.
    * @param routing Registered generated handler routing metadata.
    * @returns Saved Event binding for this registration.

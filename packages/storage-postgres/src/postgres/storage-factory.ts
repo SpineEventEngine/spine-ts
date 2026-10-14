@@ -357,6 +357,7 @@ export class PostgresStorageFactory extends StorageFactory {
 
   /**
    * Opens native record families for one typed Agent repository.
+   *
    * @param input Tenant scope, typed ID and generated state layout.
    * @returns Closeable Agent execution storage handle.
    * @typeParam I Typed Agent identifier.
@@ -835,6 +836,7 @@ class PostgresTenantCatalog implements TenantCatalog {
 
   /**
    * Reads one finite page of configured tenants.
+   *
    * @param request Bounded page and catalog continuation.
    * @returns A page without copying other configured boundaries.
    */
@@ -899,6 +901,7 @@ class PostgresTenantCursor implements TenantCatalogCursor {
 
   /**
    * Captures one configured-boundary sweep position.
+   *
    * @param identity Private catalog issuance identity.
    * @param index Next boundary position.
    * @param length Fixed boundary count for this sweep.
@@ -912,6 +915,7 @@ class PostgresTenantCursor implements TenantCatalogCursor {
 
   /**
    * Verifies issuance before exposing the fixed sweep position.
+   *
    * @param identity Private identity of the reading catalog.
    * @returns Fixed boundary count and next position.
    */

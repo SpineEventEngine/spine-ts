@@ -41,6 +41,7 @@ export interface AgentScanScope {
 
   /**
    * Reads a finite page of unresolved Agent invocations.
+   *
    * @param after Provider continuation from the prior page.
    * @param count Maximum records requested for this scan.
    * @returns Pending records and their next continuation.
@@ -68,6 +69,7 @@ export interface AgentScopeSource {
 
   /**
    * Reads one bounded tenant catalog page.
+   *
    * @param after Opaque provider continuation from the prior page.
    * @param signal Scheduler shutdown signal.
    * @returns Complete tenant IDs and a possible continuation.
@@ -76,6 +78,7 @@ export interface AgentScopeSource {
 
   /**
    * Creates one registered repository scope for a selected tenant.
+   *
    * @param tenant Complete tenant identifier.
    * @param repository Index in the fixed registered repository list.
    * @returns A lazily constructed scan scope.
@@ -162,6 +165,7 @@ export class AgentScheduler {
 
   /**
    * Schedules a prompt bounded turn without resetting the fixed-time sweep.
+   *
    * @param scope Newly accepted repository and tenant, when available.
    */
   wake(scope?: AgentScanScope): void {
@@ -181,6 +185,7 @@ export class AgentScheduler {
 
   /**
    * Reads at most four indexed pages and retains continuation across turns.
+   *
    * @returns Completion after this bounded scan, or the scan already in progress.
    */
   async turn(): Promise<void> {
@@ -208,6 +213,7 @@ export class AgentScheduler {
 
   /**
    * Visits a bounded set of accepted scopes ahead of catalog rotation.
+   *
    * @param limit Maximum indexed pages to visit.
    * @returns Number of pages visited.
    */
@@ -227,6 +233,7 @@ export class AgentScheduler {
 
   /**
    * Advances the periodic catalog sweep even under sustained accepted work.
+   *
    * @param limit Remaining page budget.
    * @param visited Residents already read in this turn.
    * @returns Number of pages visited.
@@ -389,6 +396,7 @@ export class AgentScheduler {
 
   /**
    * Detaches promptly from a provider read that ignores cancellation.
+   *
    * @typeParam T Provider response type.
    * @param promise Underlying provider read.
    * @returns Response or prompt shutdown rejection.
@@ -469,6 +477,7 @@ export class AgentScheduler {
 
   /**
    * Waits for dispatched work after stopping new discovery.
+   *
    * @returns Completion after active work has settled.
    */
   async close(): Promise<void> {

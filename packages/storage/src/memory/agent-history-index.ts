@@ -66,6 +66,7 @@ export class AgentHistoryIndex {
 
   /**
    * Validates and serializes only the new entries before a fenced mutation.
+   *
    * @param entries Entries to append after the containing write is accepted.
    * @returns A reversible batch without copying retained rows.
    */
@@ -115,6 +116,7 @@ export class AgentHistoryIndex {
 
   /**
    * Serializes one entry after checking its complete history identity.
+   *
    * @param entry Complete history entry.
    * @returns Immutable indexed row.
    */
@@ -138,6 +140,7 @@ export class AgentHistoryIndex {
 
   /**
    * Adds one already validated immutable entry to its indexed views.
+   *
    * @param indexed Serialized row to append.
    */
   #appendIndexed(indexed: IndexedEntry): void {
@@ -151,6 +154,7 @@ export class AgentHistoryIndex {
 
   /**
    * Reverses only rows appended by a failed containing mutation.
+   *
    * @param indexed Serialized row to remove.
    */
   #removeIndexed(indexed: IndexedEntry): void {
@@ -239,6 +243,7 @@ export class AgentHistoryIndex {
 
   /**
    * Removes one exact indexed row when its containing mutation restores.
+   *
    * @param records Ordered view to update.
    * @param entry Exact appended row.
    */

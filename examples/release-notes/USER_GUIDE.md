@@ -293,10 +293,10 @@ The model definition above says what to do. A deployment registration says
 which account, endpoint, and provider model can do it.
 
 The desktop's [PlanModelSelection](src/trusted/plan-model-selection.ts) uses
-`VercelAx.chatgptPlanModel()`. It selects a model returned by the signed-in
-account's catalog, constructs a credential-free identity, checks that selection
-before use, and obtains a current access token only inside the trusted
-connection callback. See the [complete registration example](../../packages/ai-vercel-ax/README.md#chatgpt-plan-responses-registration)
+`session.model()` from `VercelAx.chatgptPlanSession()`. It selects a model returned
+by the signed-in account's catalog, constructs a credential-free identity, and
+checks that selection before use. The session retrieves or refreshes the grant
+inside the trusted connection path. See the [session registration example](../../packages/ai-vercel-ax/README.md#sign-in-with-a-chatgpt-plan)
 for the adapter API.
 
 Sign-in and inference are separate operations:

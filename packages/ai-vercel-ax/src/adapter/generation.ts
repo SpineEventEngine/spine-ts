@@ -90,6 +90,7 @@ const nativeAnthropicModels = new Set([
 
 /**
  * Returns the exact Anthropic options bound to the recorded output mode.
+ *
  * @param request Selected generation execution.
  * @returns Provider options for native output or undefined for prompted text.
  */
@@ -104,6 +105,7 @@ type AnthropicOptions = ReturnType<typeof anthropicOptions>;
 
 /**
  * Forces the pinned SDK to lower the subscription request as stateless Responses.
+ *
  * @param request Selected generation execution.
  * @returns Provider options for the ChatGPT plan profile.
  */
@@ -161,6 +163,7 @@ const modelPrompt = (prepared: PreparedRequest, instructions: string): LanguageM
 
 /**
  * Checks the exact discovered catalog against configured tool references.
+ *
  * @param request Selected generation execution.
  * @returns Model-visible names with accepted schemas and configured server/tool mapping.
  */
@@ -178,6 +181,7 @@ const advertisedFunctions = (request: AiBackendExecution) => {
 
 /**
  * Validates one catalog entry before exposing it to Ax.
+ *
  * @param reference Configured server and tool reference.
  * @param tool Discovered tool metadata.
  * @param index Model-visible tool position.
@@ -214,6 +218,7 @@ const advertisedFunction = (
 
 /**
  * Validates exact output-schema JSON before exposing a tool to the model.
+ *
  * @param encoded Canonical advertised output schema.
  */
 const validateOutputSchema = (encoded: string): void => {
@@ -337,6 +342,7 @@ const toolPrompt = (
 
 /**
  * Journals a ticket cancelled or expired after durable reservation and before dispatch.
+ *
  * @param request Selected execution.
  * @param state Program state.
  * @param ticket Reserved physical attempt.
@@ -362,6 +368,7 @@ const rejectClosedTicket = async (
 
 /**
  * Completes a reserved ticket if its deadline crosses during gate admission.
+ *
  * @param request Selected execution.
  * @param state Program state.
  * @param ticket Reserved physical attempt.
@@ -386,6 +393,7 @@ const admitGenerationTicket = async (
 
 /**
  * Records the selected Anthropic lowering beside the exact prepared messages.
+ *
  * @param request Selected generation execution.
  * @param prepared Actual Ax prompt.
  * @param instructions Exact provider instructions.
@@ -505,6 +513,7 @@ const semanticUsage = (usage: StreamedPartialResult["usage"]) =>
 
 /**
  * Converts one bounded ordered receipt to its typed journal envelope.
+ *
  * @param blocks Received provider blocks, when Anthropic was selected.
  * @returns Typed ordered blocks or undefined for another provider.
  */
@@ -643,6 +652,7 @@ const responseContent = (
 
 /**
  * Computes the stable journal digest from the received provider projection.
+ *
  * @param partial Received content.
  * @returns Digest of the provider-facing response fields.
  */
@@ -673,7 +683,7 @@ const axCandidate = (candidate: string): string => {
 };
 
 /**
- * * Mutable state for one bounded Ax program; runtime persists every attempt separately.
+ * Mutable state for one bounded Ax program; runtime persists every attempt separately.
  */
 interface GenerationState {
   /**
@@ -682,33 +692,34 @@ interface GenerationState {
   readonly assistantTurns: { response: GenerationResponse; axContent: string }[];
 
   /**
-   * * Most recent physical attempt for correction correlation.
+   * Most recent physical attempt for correction correlation.
    */
   previous?: Pick<AiAttemptTicket, "id">;
 
   /**
-   * * Most recent definitive local admission.
+   * Most recent definitive local admission.
    */
   admission?: AiCandidateAdmission;
 
   /**
-   * * Safe diagnostic from an invalid or failed physical attempt.
+   * Safe diagnostic from an invalid or failed physical attempt.
    */
   failure?: AiFailure;
 
   /**
-   * * Provider IDs retained after their response journal barrier.
+   * Provider IDs retained after their response journal barrier.
    */
   readonly pendingCalls: Map<string, { ticketId: string; providerCallId: string; input: string }[]>;
 
   /**
-   * * Persistence failure that must not be reclassified as provider content.
+   * Persistence failure that must not be reclassified as provider content.
    */
   barrierFailed?: boolean;
 }
 
 /**
  * Restores exact provider block order after checking Ax's projected assistant turn.
+ *
  * @param state Current durable response projections.
  * @param message Ax's assistant turn to correlate.
  * @param index Zero-based assistant turn position.
@@ -816,6 +827,7 @@ const openAiReasoningParts = (
 
 /**
  * Rejects an Ax turn that cannot be correlated with its journaled response.
+ *
  * @param recorded Exact saved response and its Ax projection.
  * @param message Ax's observed assistant turn.
  */
@@ -844,6 +856,7 @@ const verifyAxAssistant = (
 
 /**
  * Restores one typed provider block in its journaled position.
+ *
  * @param block Saved Anthropic assistant block.
  * @returns Published Vercel assistant content part.
  */
@@ -874,6 +887,7 @@ const anthropicAssistantBlock = (block: AnthropicAssistantContent["blocks"][numb
 
 /**
  * Preserves a failed runtime barrier without recategorizing it as model output.
+ *
  * @param state Current Ax operation state.
  * @param callback Runtime reservation, admission, or tool boundary.
  * @typeParam T Runtime callback result.
@@ -942,6 +956,7 @@ const receipt = (request: AiBackendExecution, ticket: AiAttemptTicket) => {
 
 /**
  * Retains a failed stream's known receipt only within its reserved allowance.
+ *
  * @param request Active adapter execution.
  * @param ticket Attempt identity and output allowance.
  * @returns Bounded receipt, if known.
@@ -1118,6 +1133,7 @@ const coherentProposals = (
 
 /**
  * Replays only proposals whose exact response crossed the journal barrier.
+ *
  * @param partial Recorded provider content.
  * @returns Ax function-call continuation with received text.
  */
@@ -1138,6 +1154,7 @@ const toolContinuation = (partial: StreamedPartialResult): AxChatResponse => ({
 
 /**
  * Replays one saved response without admitting a new transport request.
+ *
  * @param request Selected typed capability.
  * @param state Ax continuation and validation state.
  * @param replay Complete durable attempt record.
@@ -1181,6 +1198,7 @@ const replayGeneration = (
 
 /**
  * Checks whether saved Anthropic blocks are complete enough to resume.
+ *
  * @param request Selected typed capability.
  * @param response Saved generation response.
  */
@@ -1346,6 +1364,7 @@ const savedOpenAiDigest = (content: OpenAiContent, response: GenerationResponse)
 
 /**
  * Rebuilds a saved admitted generation without provider dispatch.
+ *
  * @param request Selected typed capability.
  * @param state Ax continuation and validation state.
  * @param response Saved admitted generation response.
@@ -1465,6 +1484,7 @@ const runtimeFunctions = (request: AiBackendExecution, state: GenerationState) =
 
 /**
  * Prepares the exact prompt, output mode, and limits for one provider stream.
+ *
  * @param request Selected generation capability.
  * @param prepared Ax-rendered prompt.
  * @param schema Descriptor-derived application output schema.
@@ -1603,6 +1623,7 @@ const collectAttempt = async (
 
 /**
  * Builds the Ax bridge that routes model turns through durable attempt controls.
+ *
  * @param request Selected generation execution.
  * @param model Authenticated provider model.
  * @param schema Descriptor-derived output schema.
@@ -1667,6 +1688,7 @@ const runProgram = async (
 
 /**
  * Configures the bounded Ax correction feedback for one execution.
+ *
  * @param state Current admission and validation state.
  * @returns Generator with local validation feedback.
  */
@@ -1688,6 +1710,7 @@ const correctionGenerator = (
 
 /**
  * Executes bounded Ax correction over direct Vercel provider streams.
+ *
  * @param request Selected authenticated generation and runtime barriers.
  * @returns Definitively admitted output or safe failure.
  */

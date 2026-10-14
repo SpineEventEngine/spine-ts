@@ -42,6 +42,7 @@ export class AgentExecutionCapacity {
 
   /**
    * Creates a registry gate with optional active and resident waiting limits.
+   *
    * @param concurrent Maximum simultaneously active Agent transitions.
    * @param queued Maximum additional resident waiting descriptors.
    */
@@ -76,6 +77,7 @@ export class AgentExecutionCapacity {
 
   /**
    * Checks whether active and waiting slots are both filled.
+   *
    * @returns Whether another descriptor must remain only in durable storage.
    */
   full(): boolean {

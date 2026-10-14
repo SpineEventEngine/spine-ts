@@ -45,6 +45,7 @@ const registries = new WeakMap<AiRegistry, RegistryState>();
 
 /**
  * Copies only explicitly configured whole-signal ceilings.
+ *
  * @param limits Caller-supplied limits.
  * @returns Immutable invocation limits.
  */
@@ -82,6 +83,7 @@ const copyInvocationLimits = (limits: AiInvocationLimits): AiInvocationLimits =>
 
 /**
  * Copies optional deployment defaults by Protobuf value.
+ *
  * @param defaults Caller-supplied defaults.
  * @returns Immutable references.
  */
@@ -103,6 +105,7 @@ const copyDefaults = (defaults: AiDefaultModels): AiDefaultModels => {
 
 /**
  * Validates and freezes the registry's explicitly configured controls.
+ *
  * @param options Caller-supplied defaults and optional ceilings.
  * @returns Immutable registry options.
  */
@@ -138,6 +141,7 @@ const copyRegistryOptions = (options: AiRegistryOptions): Readonly<AiRegistryOpt
 
 /**
  * Retrieves active registry state without exposing it on the public class.
+ *
  * @param registry Factory-created registry.
  * @returns Internal mutable configuration state.
  */
@@ -193,6 +197,7 @@ export class AiRegistry {
 
   /**
    * Registers one unique MCP server policy.
+   *
    * @param server Factory-created MCP configuration.
    * @returns This registry for configuration chaining.
    */
@@ -208,6 +213,7 @@ export class AiRegistry {
 
 /**
  * Sets registration to its immutable build state.
+ *
  * @param registry Application configuration.
  */
 export const freezeRegistry = (registry: AiRegistry): void => {
@@ -259,6 +265,7 @@ export interface AiSelection {
 
 /**
  * Resolves one deployment by Proto value and validates its capabilities.
+ *
  * @param registry Configured application registry.
  * @param selection Effective scope preferences and registered capabilities.
  * @returns Registered deployment selected for this invocation.
@@ -299,6 +306,7 @@ export const selectDeployment = (
 
 /**
  * Returns frozen application options for internal runtime binding.
+ *
  * @param registry Application registry.
  * @returns Immutable configuration options.
  */
@@ -308,6 +316,7 @@ export const registryOptions = (registry: AiRegistry): Readonly<AiRegistryOption
 
 /**
  * Finds a factory-created MCP registration by configured server ID.
+ *
  * @param registry Application configuration.
  * @param id Configured MCP server identifier.
  * @returns Registered server, or absence when the ID is not configured.
@@ -319,6 +328,7 @@ export const mcpRegistration = (
 
 /**
  * Returns a frozen snapshot of configured MCP registrations.
+ *
  * @param registry Application configuration.
  * @returns Registrations in configuration order without the mutable registry map.
  */

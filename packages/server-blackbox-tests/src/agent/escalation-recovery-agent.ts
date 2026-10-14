@@ -68,6 +68,7 @@ export class SupportEscalationRecoveryAgent extends Agent<
 
   /**
    * Invokes the declared escalation tool through the model operation.
+   *
    * @param command Original ticket and customer question.
    * @returns Reply draft only when the tool outcome is known.
    */

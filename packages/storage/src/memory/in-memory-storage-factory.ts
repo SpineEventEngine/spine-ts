@@ -62,6 +62,7 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
 
   /**
    * Creates a factory with a fresh backend, or deliberately shares one.
+   *
    * @param backend Selects the backend to create or share.
    */
   constructor(backend: InMemoryStorageBackend = new InMemoryStorageBackend()) {
@@ -108,6 +109,7 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
    *
    * This is deliberately not exported from the root storage API. Provider
    * adapters expose the same structural method for the server runtime.
+   *
    * @param input Supplies the internal entity storage configuration.
    * @returns The created internal entity storage.
    */
@@ -175,6 +177,7 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
 
   /**
    * Opens a durable Agent execution handle against this shared memory backend.
+   *
    * @typeParam I Typed Agent identifier.
    * @typeParam S Generated Agent state.
    * @param input Agent repository and Entity layout.
@@ -263,6 +266,7 @@ class MemoryTenantCatalog implements TenantCatalog {
 
   /**
    * Reads one bounded admission-order page from a finite sweep.
+   *
    * @param request Page size, cancellation, and catalog continuation.
    * @returns Complete admitted boundaries and an optional continuation.
    */
@@ -336,6 +340,7 @@ class MemoryTenantCursor implements TenantCatalogCursor {
 
   /**
    * Captures one finite admission-order sweep position.
+   *
    * @param identity Private catalog issuance identity.
    * @param index Next admission-order position.
    * @param length Index length fixed at sweep start.
@@ -349,6 +354,7 @@ class MemoryTenantCursor implements TenantCatalogCursor {
 
   /**
    * Verifies issuance by the requested catalog before revealing the position.
+   *
    * @param identity Private identity of the catalog reading this token.
    * @returns Fixed sweep length and next position.
    */

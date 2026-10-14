@@ -23,27 +23,27 @@ const aiBackendBrand: unique symbol = Symbol("SpineAiBackend");
 const backendDefinitions = new WeakMap<object, AiBackendDefinition>();
 
 /**
- * * Adapter-created deployment admitted to an application registry.
+ * Adapter-created deployment admitted to an application registry.
  */
 export interface AiBackendRegistration {
   /**
-   * * Private marker carried only by an adapter-created backend registration.
+   * Private marker carried only by an adapter-created backend registration.
    */
   readonly [aiBackendBrand]: true;
 
   /**
-   * * Credential-free deployment reference.
+   * Credential-free deployment reference.
    */
   readonly ref: ModelRef;
 
   /**
-   * * Declared generation or decision kind.
+   * Declared generation or decision kind.
    */
   readonly kind: "generation" | "decision";
 }
 
 /**
- * * SDK-free adapter registration boundary used by optional integrations.
+ * SDK-free adapter registration boundary used by optional integrations.
  */
 export interface AiBackendDefinition {
   /**
@@ -52,12 +52,12 @@ export interface AiBackendDefinition {
   readonly mcp?: AiMcpProtocolFactory;
 
   /**
-   * * Credential-free deployment reference.
+   * Credential-free deployment reference.
    */
   readonly ref: ModelRef;
 
   /**
-   * * Declared generation or decision kind.
+   * Declared generation or decision kind.
    */
   readonly kind: "generation" | "decision";
 
@@ -115,6 +115,7 @@ export interface AiBackendDefinition {
 
   /**
    * Executes one selected capability through fenced runtime controls.
+   *
    * @param request Authenticated connection, typed capability, and runtime controls.
    * @returns Admitted output or safe operational failure.
    */
@@ -123,6 +124,7 @@ export interface AiBackendDefinition {
 
 /**
  * Creates a factory-proven deployment for the optional adapter.
+ *
  * @param definition Static capability and trusted connection callbacks.
  * @returns Immutable registration.
  */
@@ -157,6 +159,7 @@ export const createBackendRegistration = (
 
 /**
  * Reads the original adapter definition after runtime provenance validation.
+ *
  * @param registration Candidate registration.
  * @returns Frozen adapter callbacks and reference.
  */

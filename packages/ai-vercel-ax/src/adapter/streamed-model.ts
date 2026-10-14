@@ -275,6 +275,7 @@ export class StreamCollectionError extends Error {
 
   /**
    * Creates a safe error with bounded received content.
+   *
    * @param reason Fixed adapter diagnostic without vendor exception data.
    * @param partial Bounded provider content received before the failure.
    * @param statusCode Safe HTTP status if the provider SDK exposed it.
@@ -302,6 +303,7 @@ interface StreamDeadline {
 
 /**
  * Creates a local deadline signal for provider callbacks that ignore their input signal.
+ *
  * @param source Ticket cancellation signal.
  * @param deadline Runtime ticket deadline and clock.
  * @returns Linked signal, expiry state, and timer cleanup.
@@ -402,6 +404,7 @@ const fail = (
 
 /**
  * Categorizes a bounded local stream interruption without provider error text.
+ *
  * @param signal Linked cancellation signal.
  * @param expired Whether the ticket deadline elapsed.
  * @returns Safe failure reason.
@@ -432,6 +435,7 @@ const safeTransportCause = (error: unknown): string | undefined => {
 
 /**
  * Opens one provider stream and closes a stream that appears after cancellation.
+ *
  * @param model Pinned direct-stream provider.
  * @param options Matching published call options.
  * @param signal Linked cancellation signal.
@@ -513,6 +517,7 @@ const streamState = (anthropic: boolean, openai: boolean): State => ({
 
 /**
  * Consumes one direct stream while retaining only bounded parsed content.
+ *
  * @param stream Provider-native response stream.
  * @param state Current bounded receipt.
  * @param signal Attempt cancellation.
@@ -582,6 +587,7 @@ const assertStreamComplete = (state: State): void => {
 
 /**
  * Settles promptly when a custom provider ignores an operation abort.
+ *
  * @param pending Provider work that may ignore its AbortSignal.
  * @param signal Operation cancellation signal.
  * @typeParam T Pending provider result.
@@ -904,6 +910,7 @@ const assertOpenAiProjection = (state: State): void => {
 
 /**
  * Retains typed Anthropic blocks in start order, with every byte reserved first.
+ *
  * @param state Bounded provider state.
  * @param part One SDK stream part.
  * @param limit Full retained-content allowance.
@@ -942,6 +949,7 @@ const acceptAnthropicPart = (state: State, part: Part, limit: number | undefined
 
 /**
  * Recognizes SDK framing parts that carry no assistant content.
+ *
  * @param part Provider stream part.
  * @returns Whether this part is admitted control framing.
  */
@@ -955,6 +963,7 @@ const isAnthropicControlPart = (part: Part): boolean =>
 
 /**
  * Reserves a block position before any provider content is accumulated.
+ *
  * @param state Bounded stream state.
  * @param content Anthropic block state.
  * @param part Block start event.
@@ -986,6 +995,7 @@ const anthropicStart = (
 
 /**
  * Starts signed or encrypted reasoning without transforming provider data.
+ *
  * @param state Bounded stream state.
  * @param content Anthropic block state.
  * @param part Reasoning start event.
@@ -1016,6 +1026,7 @@ const anthropicReasoningStart = (
 
 /**
  * Adds one text or reasoning delta to its open block.
+ *
  * @param state Bounded stream state.
  * @param content Anthropic block state.
  * @param part Provider delta event.
@@ -1042,6 +1053,7 @@ const anthropicDelta = (
 
 /**
  * Appends reasoning text and all signature fragments in arrival order.
+ *
  * @param state Bounded stream state.
  * @param block Open signed-thinking block.
  * @param part Provider reasoning delta.
@@ -1066,6 +1078,7 @@ const anthropicReasoningDelta = (
 
 /**
  * Reserves tool input fragments until the complete proposal arrives.
+ *
  * @param state Bounded stream state.
  * @param content Anthropic block state.
  * @param part Provider tool input event.
@@ -1092,6 +1105,7 @@ const anthropicToolInput = (
 
 /**
  * Completes only the block previously reserved for this provider ID.
+ *
  * @param state Bounded stream state.
  * @param content Anthropic block state.
  * @param part Provider block end or complete tool call.
@@ -1129,6 +1143,7 @@ const anthropicEnd = (
 
 /**
  * Verifies and completes one already reserved local tool proposal.
+ *
  * @param state Bounded stream state.
  * @param block Reserved content block.
  * @param opened Open-block tracking state.
@@ -1162,6 +1177,7 @@ const addBytes = (state: State, value: string, limit: number | undefined): void 
 
 /**
  * Reserves a known encoded byte count before a provider part is retained.
+ *
  * @param state Current bounded stream.
  * @param bytes Exact additional encoded bytes.
  * @param limit Ticket output allowance.

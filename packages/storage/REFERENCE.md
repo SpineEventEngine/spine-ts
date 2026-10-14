@@ -54,7 +54,7 @@ specify physical index and payload constraints.
 ## Tenant catalog paging
 
 Storage adapters implement `TenantCatalog.page({ count, signal, after? })` from
-the provider entry point. `count` is a positive safe integer up to 127 and bounds
+the provider entry point. `count` is a positive safe integer and bounds
 native candidates examined, including candidates filtered out as unrelated
 namespaces. `signal` accepts a native `AbortSignal`; `TenantCatalogSignal`
 describes the required members without requiring DOM declarations in storage
@@ -74,8 +74,8 @@ its bounded early-admission cache and then native namespace metadata using a
 query limit and native cursor. A tenant can appear in both phases. Existing
 Agent claims prevent that duplicate discovery from running the same accepted
 invocation concurrently. An empty native `MORE_RESULTS_AFTER_LIMIT` tail that repeats its cursor ends
-that sweep; other continuing pages must advance. Datastore limits each page wait to five
-seconds and destroys its query stream on cancellation or timeout.
+that sweep; other continuing pages must advance. Datastore destroys its query
+stream when the caller cancels the read.
 
 Catalogs check cancellation before starting work and before returning a result.
 Paging is a finite traversal, not an atomic catalog snapshot: a concurrent

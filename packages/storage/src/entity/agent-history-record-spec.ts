@@ -42,6 +42,7 @@ interface AgentHistoryRecordLayout {
 
   /**
    * Builds the complete internal envelope.
+   *
    * @param stateType Generated Agent state type name.
    * @param agentKey Canonical typed identifier key.
    * @param entry Complete original history entry.
@@ -51,6 +52,7 @@ interface AgentHistoryRecordLayout {
 
   /**
    * Encodes the immutable logical record identity.
+   *
    * @param record Internal history envelope.
    * @returns Complete logical identity.
    */
@@ -58,6 +60,7 @@ interface AgentHistoryRecordLayout {
 
   /**
    * Encodes the complete Agent repository scope.
+   *
    * @param stateType Generated Agent state type name.
    * @param agentKey Canonical typed identifier key.
    * @returns Complete logical scope.
@@ -66,6 +69,7 @@ interface AgentHistoryRecordLayout {
 
   /**
    * Builds provider columns with a fixed-width physical digest.
+   *
    * @param digest Provider digest of a complete logical identity.
    * @returns Shared native record specification.
    */
@@ -73,6 +77,7 @@ interface AgentHistoryRecordLayout {
 
   /**
    * Reads the validated repository scope from an envelope.
+   *
    * @param record Internal history envelope.
    * @returns Complete original scope.
    */
@@ -80,6 +85,7 @@ interface AgentHistoryRecordLayout {
 
   /**
    * Reads the original history entry from an envelope.
+   *
    * @param record Internal history envelope.
    * @returns Complete original history entry.
    */
@@ -87,6 +93,7 @@ interface AgentHistoryRecordLayout {
 
   /**
    * Builds the materialized repository scope columns.
+   *
    * @param digest Provider digest of a complete logical identity.
    * @returns Complete scope columns.
    */
@@ -94,6 +101,7 @@ interface AgentHistoryRecordLayout {
 
   /**
    * Builds the materialized order and conversation columns.
+   *
    * @param digest Provider digest of a complete logical identity.
    * @returns Complete order and conversation columns.
    */
@@ -111,6 +119,7 @@ export const AgentHistoryRecords: AgentHistoryRecordLayout = {
 
   /**
    * Stores one original entry with its canonical repository scope.
+   *
    * @param stateType Generated Agent state type name.
    * @param agentKey Canonical typed identifier key.
    * @param entry Complete original history entry.
@@ -128,6 +137,7 @@ export const AgentHistoryRecords: AgentHistoryRecordLayout = {
 
   /**
    * Builds the full logical identity hashed into a provider physical ID.
+   *
    * @param record Internal history envelope.
    * @returns Unambiguous identity without an ordering position.
    */
@@ -139,6 +149,7 @@ export const AgentHistoryRecords: AgentHistoryRecordLayout = {
 
   /**
    * Encodes the complete repository scope before provider hashing.
+   *
    * @param stateType Generated Agent state type.
    * @param agentKey Canonical typed Agent key.
    * @returns Unambiguous complete scope identity.
@@ -149,6 +160,7 @@ export const AgentHistoryRecords: AgentHistoryRecordLayout = {
 
   /**
    * Builds materialized columns with one provider's bounded physical digest.
+   *
    * @param digest Maps a complete identity to a fixed-width digest.
    * @returns Shared record specification for native providers.
    */
@@ -167,6 +179,7 @@ export const AgentHistoryRecords: AgentHistoryRecordLayout = {
 
   /**
    * Reads the repository scope required by every stored history entry.
+   *
    * @param record Stored history envelope.
    * @returns Complete original scope.
    */
@@ -182,6 +195,7 @@ export const AgentHistoryRecords: AgentHistoryRecordLayout = {
 
   /**
    * Reads the original history entry required by the storage envelope.
+   *
    * @param record Stored history envelope.
    * @returns Complete original history entry.
    */
@@ -192,6 +206,7 @@ export const AgentHistoryRecords: AgentHistoryRecordLayout = {
 
   /**
    * Builds complete scope columns and their bounded indexed digest.
+   *
    * @param digest Provider physical-identity digest.
    * @returns Native scope columns.
    */
@@ -221,6 +236,7 @@ export const AgentHistoryRecords: AgentHistoryRecordLayout = {
 
   /**
    * Builds complete order and conversation selector columns.
+   *
    * @param digest Provider physical-identity digest.
    * @returns Native order and conversation columns.
    */

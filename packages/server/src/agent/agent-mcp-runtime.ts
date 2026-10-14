@@ -98,6 +98,7 @@ export class AgentMcpRuntime {
 
   /**
    * Binds one accepted capability tool list to the active fenced operation.
+   *
    * @param host Shared budget, session and diagnostic authority.
    * @param allowedTools Capability tools in declared order.
    */
@@ -108,6 +109,7 @@ export class AgentMcpRuntime {
 
   /**
    * Prepares the exact configured catalog before a model request is prepared.
+   *
    * @returns Immutable descriptions and schemas in capability order.
    */
   prepare(): Promise<readonly AiMcpAdvertisedTool[]> {
@@ -118,6 +120,7 @@ export class AgentMcpRuntime {
 
   /**
    * Validates and executes one model-proposed call through persisted intent.
+   *
    * @param invocation Correlated model proposal with canonical arguments.
    * @returns Saved or newly journaled bounded tool response.
    */
@@ -151,6 +154,7 @@ export class AgentMcpRuntime {
 
   /**
    * Checks one registered tool authorization callback before intent is saved.
+   *
    * @param call Model-proposed tool call.
    * @param policy Registered tool policy.
    * @param argumentsObject Parsed JSON object arguments.
@@ -182,6 +186,7 @@ export class AgentMcpRuntime {
 
   /**
    * Cancels pending work and attempts bounded cleanup of connected protocol sessions.
+   *
    * @returns Shared completion, rejecting if cleanup fails or exceeds the deadline.
    */
   close(): Promise<void> {
@@ -191,6 +196,7 @@ export class AgentMcpRuntime {
 
   /**
    * Cancels callbacks and bounds the wait for connected protocol sessions.
+   *
    * @returns Shared cleanup completion or a safe rejection.
    */
   private async closeSessions(): Promise<void> {
@@ -225,6 +231,7 @@ export class AgentMcpRuntime {
 
   /**
    * Lists registry-approved servers without making a connection.
+   *
    * @returns Exact servers and configured tools.
    */
   private selected(): ReadonlyMap<string, SelectedServer> {
@@ -246,6 +253,7 @@ export class AgentMcpRuntime {
 
   /**
    * Prepares every selected server under bounded authorization.
+   *
    * @returns Catalog in capability order.
    */
   private async prepareAll(): Promise<readonly AiMcpAdvertisedTool[]> {
@@ -274,6 +282,7 @@ export class AgentMcpRuntime {
 
   /**
    * Checks discovered definitions against configured names without advertising extras.
+   *
    * @param id Registered server ID.
    * @param allowed Configured tool names.
    * @param found Bounded discovery result.
@@ -311,6 +320,7 @@ export class AgentMcpRuntime {
 
   /**
    * Returns the exact discovered catalog in capability order.
+   *
    * @param definitions Checked descriptions and schemas by configured reference.
    * @returns Immutable catalog in capability order.
    */
@@ -328,6 +338,7 @@ export class AgentMcpRuntime {
 
   /**
    * Connects one authorized server and checks its credential-free identity.
+   *
    * @param server Registered server configuration.
    * @returns Scoped protocol session.
    */
@@ -359,6 +370,7 @@ export class AgentMcpRuntime {
 
   /**
    * Rejects identity drift after attempting bounded cleanup of the session.
+   *
    * @param server Registered server configuration.
    * @param session Newly connected protocol session.
    * @param timeout Local callback timeout in milliseconds.
@@ -385,6 +397,7 @@ export class AgentMcpRuntime {
 
   /**
    * Resolves scoped credentials without adding them to recorded identity.
+   *
    * @param server Registered server configuration.
    * @returns Headers or child environment for connection construction.
    */
@@ -410,6 +423,7 @@ export class AgentMcpRuntime {
 
   /**
    * Reads the finite callback bound from application registration.
+   *
    * @returns Callback timeout in milliseconds.
    */
   private hookTimeout(): number | undefined {
@@ -418,6 +432,7 @@ export class AgentMcpRuntime {
 
   /**
    * Binds protocol reservations and receipts to the shared budget.
+   *
    * @param server Registered server ID.
    * @param control Bounded connection control.
    * @returns Protocol controls scoped to this operation.
@@ -440,6 +455,7 @@ export class AgentMcpRuntime {
 
   /**
    * Checks whether the capability listed this exact tool reference.
+   *
    * @param call Model-proposed tool reference.
    * @returns Whether the tool is in the configured allowlist.
    */
@@ -449,6 +465,7 @@ export class AgentMcpRuntime {
 
   /**
    * Finds a registered server by ID.
+   *
    * @param id Registered server ID.
    * @returns Server definition, or absence for an unknown ID.
    */
@@ -459,6 +476,7 @@ export class AgentMcpRuntime {
 
   /**
    * Records intent, dispatches once and persists the resulting response.
+   *
    * @param call Correlated model proposal.
    * @param session Checked protocol session.
    * @param policy Registered tool policy.
@@ -496,6 +514,7 @@ export class AgentMcpRuntime {
 
   /**
    * Performs a bounded call and preserves uncertainty for failed writes.
+   *
    * @param call Correlated model proposal.
    * @param session Checked protocol session.
    * @param policy Registered tool policy.
@@ -540,6 +559,7 @@ export class AgentMcpRuntime {
 
   /**
    * Converts supported text and structured JSON with the MCP error flag.
+   *
    * @param callId Runtime-allocated tool call ID.
    * @param result Bounded protocol result.
    * @returns Domain tool response.
@@ -558,6 +578,7 @@ export class AgentMcpRuntime {
 
   /**
    * Records a failed proposal without fabricating an authorized request.
+   *
    * @param code Safe failure category.
    * @returns Failed response with a persisted diagnostic reference.
    */
@@ -574,6 +595,7 @@ export class AgentMcpRuntime {
 
   /**
    * Creates response history for one completed tool intent.
+   *
    * @param response Persisted tool response.
    * @returns Conversation record wrapped as an Agent history entry.
    */
@@ -597,6 +619,7 @@ export class AgentMcpRuntime {
 
   /**
    * Executes one callback within the operation and local deadline.
+   *
    * @typeParam T Callback result type.
    * @param run Callback with a child cancellation control.
    * @param limitMs Configured local timeout in milliseconds.
@@ -637,6 +660,7 @@ export class AgentMcpRuntime {
 
 /**
  * Chooses the earliest explicitly configured host or local deadline.
+ *
  * @param hostDeadline Host operation deadline, if configured.
  * @param limitMs Explicit local callback limit, if configured.
  * @param now Current domain time in epoch milliseconds.
@@ -657,6 +681,7 @@ const effectiveDeadline = (
 
 /**
  * Calculates SHA-256 of the configured transport endpoint without resolved credentials.
+ *
  * @param server Registered transport configuration.
  * @returns Credential-free endpoint digest.
  */
@@ -671,6 +696,7 @@ const endpointDigest = (server: McpServerDefinition): string => {
 
 /**
  * Creates an abort rejection with listener cleanup for one bounded callback.
+ *
  * @param signal Child cancellation signal.
  * @returns Abort promise and listener disposal.
  */
@@ -693,6 +719,7 @@ const abortWait = (signal: AbortSignal): { promise: Promise<never>; dispose: () 
 
 /**
  * Schedules a timer that rechecks long absolute deadlines.
+ *
  * @param deadline Absolute epoch millisecond deadline.
  * @param child Child controller to abort when expired.
  * @returns Timer cancellation.

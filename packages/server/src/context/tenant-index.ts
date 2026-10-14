@@ -46,6 +46,7 @@ export interface TenantIndex {
 
   /**
    * Reads a finite page for Agent recovery without enumerating the catalog.
+   *
    * @param request Bounded provider page and cancellation.
    * @returns Complete tenant IDs and an opaque continuation.
    */
@@ -147,6 +148,7 @@ class SingleTenantIndex implements TenantIndex {
 
   /**
    * Returns the single effective tenant without a provider catalog.
+   *
    * @param request Finite page request.
    * @returns One terminal tenant page.
    */
@@ -236,6 +238,7 @@ class StorageTenantIndex implements TenantIndex {
 
   /**
    * Reads exactly one bounded provider page.
+   *
    * @param request Finite page request.
    * @returns Validated complete tenant IDs.
    */

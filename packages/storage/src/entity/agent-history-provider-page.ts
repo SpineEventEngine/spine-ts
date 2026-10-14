@@ -26,6 +26,7 @@ import { AgentHistoryKeys, type AgentHistoryPage } from "./agent-history.js";
 export const AgentHistoryPages = {
   /**
    * Reads complete-key native query chunks until a count or byte boundary.
+   *
    * @param input Positive count and byte bounds.
    * @param after Optional exclusive encoded boundary.
    * @param fetch Reads at most the requested count from one indexed provider view.
@@ -65,6 +66,7 @@ export const AgentHistoryPages = {
 
   /**
    * Rejects malformed provider read bounds before query work.
+   *
    * @param input Caller-supplied count and byte limits.
    */
   validate(input: { readonly count: number; readonly maxBytes?: number }): void {
@@ -79,6 +81,7 @@ export const AgentHistoryPages = {
 
   /**
    * Reads a complete original entry from its internal envelope.
+   *
    * @param record Stored history envelope.
    * @returns Complete original entry.
    */

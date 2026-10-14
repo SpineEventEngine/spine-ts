@@ -307,6 +307,7 @@ export interface EventRollback {
 
   /**
    * Deletes the events appended by the operation that created this token.
+   *
    * @returns Completes when the events are deleted.
    */
   rollback(): Promise<void>;
@@ -443,6 +444,7 @@ export const eventStoreAccess: EventStoreAccess = Object.freeze({
 const SavedEvents = {
   /**
    * Applies atomic insert and compares every original Event byte after a collision.
+   *
    * @param event Original event envelope.
    * @param id Complete persisted record identity.
    * @param storage Native record storage for this row.
@@ -469,6 +471,7 @@ const SavedEvents = {
 
   /**
    * Compares complete Protobuf envelopes, including unknown fields.
+   *
    * @param left First value in the comparison.
    * @param right Second value in the comparison.
    * @returns Whether the two original Event envelopes have identical bytes.
@@ -488,6 +491,7 @@ const EventIds = {
 
   /**
    * Validates an event to have a non-blank ID.
+   *
    * @param event Original event envelope.
    * @returns Present value or an error when missing.
    */
@@ -501,6 +505,7 @@ const EventIds = {
 
   /**
    * Rejects IDs that already exist in storage.
+   *
    * @param ids Original event identities.
    * @param storage Native record storage for this row.
    * @returns Completion after duplicate-ID validation.
@@ -516,6 +521,7 @@ const EventIds = {
 
   /**
    * Writes each event ID and rejects the whole batch on collision.
+   *
    * @param records Records participating in this operation.
    * @param storage Native record storage for this row.
    * @returns Completion after unique Event IDs are persisted.
@@ -556,6 +562,7 @@ const EventIds = {
 
   /**
    * Rejects repeated IDs within one append operation.
+   *
    * @param ids Original event identities.
    */
   rejectDuplicates(ids: readonly EventId[]): void {
@@ -575,6 +582,7 @@ const EventContexts = {
 
   /**
    * Captures one storage context.
+   *
    * @param context Captured event storage context.
    * @returns Base event storage context.
    */
@@ -592,6 +600,7 @@ const EventContexts = {
 
   /**
    * Captures the selected tenant for an Event Store read.
+   *
    * @param context Event Store storage context and selected tenant.
    * @returns Immutable storage context for the read.
    */
@@ -610,6 +619,7 @@ const EventContexts = {
 
   /**
    * Captures one context using an event envelope tenant when present.
+   *
    * @param context Captured event storage context.
    * @param event Original event envelope.
    * @returns Captured storage context for this Event and tenant.
@@ -628,6 +638,7 @@ const EventContexts = {
 
   /**
    * Checks every Event in one batch uses the same captured tenant.
+   *
    * @param context Event Store storage context before envelope validation.
    * @param events Original Event envelopes in the batch.
    * @returns Immutable storage context shared by every Event in the batch.
@@ -646,6 +657,7 @@ const EventContexts = {
 
   /**
    * Reads an explicit tenant from an event envelope.
+   *
    * @param event Original event envelope.
    * @returns Tenant encoded in the original Event when present.
    */
@@ -662,6 +674,7 @@ const EventContexts = {
 
   /**
    * Converts a typed tenant ID to its storage-scope value.
+   *
    * @param tenantId Tenant identifier captured for this operation.
    * @returns Tenant identity when configured.
    */
@@ -671,6 +684,7 @@ const EventContexts = {
 
   /**
    * Creates a deterministic key for a context-scoped append lock.
+   *
    * @param context Captured event storage context.
    * @returns Complete encoded invocation identity.
    */

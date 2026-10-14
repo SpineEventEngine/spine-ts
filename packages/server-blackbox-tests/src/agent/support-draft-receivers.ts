@@ -32,6 +32,7 @@ export class SupportDraftProjection extends Projection<
 
   /**
    * Records the original draft against its ticket identity.
+   *
    * @param event Accepted support draft.
    */
   @Subscribe onDraft(event: SupportReplyDrafted): void {
@@ -50,6 +51,7 @@ export class SupportDraftReceiptObserver extends AbstractEventSubscriber {
 
   /**
    * Creates a recipient that reports the accepted draft.
+   *
    * @param onReceive Reports the accepted draft to the process harness.
    */
   constructor(onReceive: (event: SupportReplyDrafted) => Promise<void> = () => Promise.resolve()) {
@@ -61,6 +63,7 @@ export class SupportDraftReceiptObserver extends AbstractEventSubscriber {
 
   /**
    * Calls the receipt callback before later recipient delivery.
+   *
    * @param event Accepted support draft.
    * @returns Completion after the callback reports receipt.
    */
@@ -77,6 +80,7 @@ export class SupportDraftObserver extends AbstractEventSubscriber {
 
   /**
    * Creates a recipient that can hold later delivery.
+   *
    * @param onReceive Callback that can hold the second recipient before acknowledgement.
    */
   constructor(onReceive: (event: SupportReplyDrafted) => Promise<void> = () => Promise.resolve()) {
@@ -88,6 +92,7 @@ export class SupportDraftObserver extends AbstractEventSubscriber {
 
   /**
    * Calls the separate recipient with the accepted draft.
+   *
    * @param event Accepted support draft.
    * @returns Completion after the recipient finishes.
    */

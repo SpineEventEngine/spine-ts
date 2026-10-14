@@ -194,7 +194,10 @@ describe("PostgresStorageFactory connection", () => {
     const lastPage = await catalog.page({ count: 1, signal, after: firstPage.after });
     expect(lastPage.boundaries).toEqual([boundaries[1]]);
     expect(lastPage.hasMore).toBe(false);
-    await expect(catalog.page({ count: 128, signal })).rejects.toThrow(/count/);
+    await expect(catalog.page({ count: 129, signal })).resolves.toMatchObject({
+      boundaries,
+      hasMore: false,
+    });
     const configured = boundaries[0];
     if (configured === undefined) throw new Error("Expected one configured PostgreSQL tenant.");
     await expect(catalog.keep(configured)).resolves.toBeUndefined();

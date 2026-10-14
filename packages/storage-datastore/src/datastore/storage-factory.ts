@@ -91,6 +91,7 @@ export interface RecordLayout {
 export interface CreateRecordStorage<R extends Message = Message> {
   /**
    * Creates one custom record-family provider.
+   *
    * @param context Complete storage and tenant scope.
    * @param recordSpec Generated record layout.
    * @param client Caller-supplied Datastore client.
@@ -119,6 +120,7 @@ export interface CreateRecordStorage<R extends Message = Message> {
 export interface CreateEntityStorage<S extends Message = Message> {
   /**
    * Creates one custom Entity persistence provider.
+   *
    * @param input Entity storage contract.
    * @param client Caller-supplied Datastore client.
    * @returns Customized Entity storage handle.
@@ -131,6 +133,7 @@ export interface CreateEntityStorage<S extends Message = Message> {
 
 /**
  * Groups the current state, histories, and commits for one Entity type.
+ *
  * @typeParam I Typed Entity identifier.
  * @typeParam S Entity state message.
  */
@@ -419,6 +422,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
 
   /**
    * Opens one Agent execution handle after factory lifecycle validation.
+   *
    * @param input Requested fenced execution change.
    * @returns Tenant-scoped Agent execution storage handle.
    * @typeParam I Typed entity identifier.
@@ -433,6 +437,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
 
   /**
    * Opens the fixed execution kinds and existing Entity record families.
+   *
    * @param input Requested fenced execution change.
    * @returns Tenant-scoped native record handles.
    * @typeParam I Typed entity identifier.
@@ -470,6 +475,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
 
   /**
    * Opens optional existing Entity state and diagnostic record families.
+   *
    * @param input Typed Agent repository and history configuration.
    * @returns Optional native state and diagnostic handles.
    * @typeParam I Typed Agent identifier.
@@ -509,6 +515,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
 
   /**
    * Resolves one native kind through the existing record layout.
+   *
    * @param context Captured event storage context.
    * @param fixedKind Fixed native Datastore kind.
    * @param group Fixed storage group.
@@ -594,6 +601,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
 
   /**
    * Creates a canonical Entity record handle without a custom provider callback.
+   *
    * @param context Complete storage and tenant scope.
    * @param recordSpec Generated record layout.
    * @param group Optional record family group.
@@ -621,6 +629,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
 
   /**
    * Creates a canonical delivery-cleanup record handle.
+   *
    * @param context Complete storage and tenant scope.
    * @param recordSpec Generated record layout.
    * @returns Native record handle.
@@ -646,6 +655,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
 
   /**
    * Resolves a declared record family's native kind and optional callback.
+   *
    * @param recordSpec Generated record layout.
    * @param group Optional record family group.
    * @param includeCreator Whether custom callbacks are permitted.
@@ -742,6 +752,7 @@ class Builder implements DatastoreStorageFactoryBuilder {
 
   /**
    * Binds the resolved configuration to a factory constructor.
+   *
    * @param create Creates the configured Datastore factory.
    */
   constructor(
@@ -757,6 +768,7 @@ class Builder implements DatastoreStorageFactoryBuilder {
 
   /**
    * Sets the caller-supplied Datastore client.
+   *
    * @param client Datastore client.
    * @returns This builder.
    */
@@ -767,6 +779,7 @@ class Builder implements DatastoreStorageFactoryBuilder {
 
   /**
    * Sets reversible complete tenant namespace conversion.
+   *
    * @param converter Tenant namespace converter.
    * @returns This builder.
    */
@@ -777,6 +790,7 @@ class Builder implements DatastoreStorageFactoryBuilder {
 
   /**
    * Sets schema-bound message stringifiers for IDs and columns.
+   *
    * @param registry Custom message stringifiers.
    * @returns This builder.
    */
@@ -787,6 +801,7 @@ class Builder implements DatastoreStorageFactoryBuilder {
 
   /**
    * Maps a record family to one native Datastore kind.
+   *
    * @param first Source or record message type.
    * @param second Record message type or kind layout.
    * @param third Kind layout for a source-record pair.
@@ -809,6 +824,7 @@ class Builder implements DatastoreStorageFactoryBuilder {
 
   /**
    * Registers one custom record provider for a record family.
+   *
    * @param first Source or record message type.
    * @param second Record message type or provider callback.
    * @param third Provider callback for a source-record pair.
@@ -833,6 +849,7 @@ class Builder implements DatastoreStorageFactoryBuilder {
 
   /**
    * Registers one custom Entity provider for a generated state type.
+   *
    * @param sourceType Generated Entity state type.
    * @param creator Custom Entity provider callback.
    * @returns This builder.
@@ -848,6 +865,7 @@ class Builder implements DatastoreStorageFactoryBuilder {
 
   /**
    * Builds the configured Datastore factory.
+   *
    * @returns Factory bound to the supplied client and layout configuration.
    */
   build(): DatastoreStorageFactory {
@@ -867,6 +885,7 @@ class Builder implements DatastoreStorageFactoryBuilder {
 
 /**
  * Groups current Entity records, histories, and commit access in one handle.
+ *
  * @typeParam I Typed Entity identifier.
  * @typeParam S Entity state message.
  */
@@ -906,6 +925,7 @@ class DefaultEntityHandle<I, S extends Message> implements DatastoreEntityStorag
 
   /**
    * Binds Entity storage and commit access to one closeable handle.
+   *
    * @param storage Current record and history access.
    * @param commits Atomic Entity commit access.
    */
@@ -919,6 +939,7 @@ class DefaultEntityHandle<I, S extends Message> implements DatastoreEntityStorag
 
   /**
    * Checks whether the backing Entity storage remains open.
+   *
    * @returns Whether operations are accepted.
    */
   isOpen(): boolean {

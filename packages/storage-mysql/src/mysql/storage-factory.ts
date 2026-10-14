@@ -260,6 +260,7 @@ class MysqlTenantCatalog implements TenantCatalog {
 
   /**
    * Stores configured database mappings for bounded catalog pages.
+   *
    * @param databases Configured databases in deterministic order.
    * @param byTenant Exact boundary-to-database lookup.
    */
@@ -270,6 +271,7 @@ class MysqlTenantCatalog implements TenantCatalog {
 
   /**
    * Returns every configured boundary for legacy catalog callers.
+   *
    * @returns All configured tenant boundaries.
    */
   all(): Promise<readonly TenantBoundary[]> {
@@ -278,6 +280,7 @@ class MysqlTenantCatalog implements TenantCatalog {
 
   /**
    * Reads one bounded configured-database page.
+   *
    * @param request Page size, cancellation, and continuation.
    * @returns The selected complete tenant boundaries.
    */
@@ -305,6 +308,7 @@ class MysqlTenantCatalog implements TenantCatalog {
 
   /**
    * Checks that this factory has a database for the supplied boundary.
+   *
    * @param boundary Complete tenant boundary to verify.
    * @returns Completion when that tenant is configured.
    */
@@ -318,6 +322,7 @@ class MysqlTenantCatalog implements TenantCatalog {
 
   /**
    * Closes the catalog without releasing a separate resource.
+   *
    * @returns Completion of the catalog close.
    */
   close(): Promise<void> {
@@ -339,6 +344,7 @@ class MysqlTenantCursor implements TenantCatalogCursor {
 
   /**
    * Captures one configured-database sweep position.
+   *
    * @param identity Private catalog issuance identity.
    * @param index Next database position.
    * @param length Fixed database count for this sweep.
@@ -352,6 +358,7 @@ class MysqlTenantCursor implements TenantCatalogCursor {
 
   /**
    * Verifies issuance before exposing the fixed sweep position.
+   *
    * @param identity Private identity of the reading catalog.
    * @returns Fixed database count and next position.
    */
@@ -454,6 +461,7 @@ export class MysqlStorageFactory extends StorageFactory {
 
   /**
    * Opens all record families required by fenced Agent completion.
+   *
    * @param input Requested fenced execution change.
    * @returns Tenant-scoped Agent execution storage handle.
    * @typeParam I Typed entity identifier.
@@ -508,6 +516,7 @@ export class MysqlStorageFactory extends StorageFactory {
 
   /**
    * Returns the provider-owned configured tenant catalog.
+   *
    * @returns The factory-owned tenant catalog.
    */
   tenantCatalog(): TenantCatalog {
@@ -765,6 +774,7 @@ class Builder implements MysqlStorageFactoryBuilder {
 
   /**
    * Sets the complete multitenant database registry.
+   *
    * @param entries Assign generated tenants to distinct physical databases.
    * @returns Returns this builder.
    */

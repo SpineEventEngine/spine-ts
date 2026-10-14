@@ -62,10 +62,27 @@ async function withClaim(
 }
 
 describe("in-memory Agent execution request boundaries", () => {
-  it.each([0, -1, 1.5, Number.NaN, 128])("rejects invalid discovery page size %s", (count) => {
+  it.each([0, -1, 1.5, Number.NaN])("rejects invalid discovery page size %s", (count) => {
     const handle = open();
     try {
       expect(() => handle.pending({ count })).toThrow(/count/i);
+    } finally {
+      handle.close();
+    }
+  });
+
+  it("returns more than 127 pending invocations with a stable continuation", async () => {
+    const handle = open();
+    try {
+      for (let index = 0; index < 130; index++)
+        await handle.admit(accepted(`large-page-${String(index)}`, `T-${String(index)}`));
+      const first = await handle.pending({ count: 128 });
+      expect(first.records).toHaveLength(128);
+      expect(first.hasMore).toBe(true);
+      if (first.after === undefined) throw new Error("Expected pending continuation.");
+      const second = await handle.pending({ count: 128, after: first.after });
+      expect(second.records).toHaveLength(2);
+      expect(second.hasMore).toBe(false);
     } finally {
       handle.close();
     }

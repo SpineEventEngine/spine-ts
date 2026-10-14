@@ -156,6 +156,26 @@ describe("InMemoryStorageBackend", () => {
     await expect(catalog.page({ count: 1, signal: aborted.signal })).rejects.toThrow();
   });
 
+  it("returns tenant pages larger than 127 without losing the continuation", async () => {
+    const catalog = new InMemoryStorageFactory().tenantCatalog();
+    const signal = new AbortController().signal;
+    for (let index = 0; index < 130; index++)
+      await catalog.keep(
+        TenantBoundary.from(
+          create(TenantIdSchema, {
+            kind: { case: "value", value: `tenant-${String(index)}` },
+          }),
+        ),
+      );
+    const first = await catalog.page({ count: 129, signal });
+    expect(first.boundaries).toHaveLength(129);
+    expect(first.hasMore).toBe(true);
+    if (first.after === undefined) throw new Error("Expected tenant continuation.");
+    const final = await catalog.page({ count: 129, signal, after: first.after });
+    expect(final.boundaries).toHaveLength(1);
+    expect(final.hasMore).toBe(false);
+  });
+
   it("returns a terminal empty page before any memory tenant is admitted", async () => {
     const catalog = new InMemoryStorageFactory().tenantCatalog();
     const signal = new AbortController().signal;

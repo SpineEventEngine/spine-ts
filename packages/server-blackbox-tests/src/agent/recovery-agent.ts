@@ -64,6 +64,7 @@ export class SupportRecoveryAgent extends Agent<
 
   /**
    * Converts the saved model proposal into one domain Event after recovery.
+   *
    * @param command Original accepted support question.
    * @returns Reply proposed for human review.
    */

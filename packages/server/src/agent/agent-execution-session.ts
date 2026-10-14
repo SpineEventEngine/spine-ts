@@ -55,6 +55,7 @@ export class AgentExecutionSession {
 
   /**
    * Creates a serialized mutation boundary for one exact provider claim.
+   *
    * @param storage Provider methods for this Agent repository.
    * @param record Record returned by the successful claim.
    * @param token Exclusive token required by later provider writes.
@@ -77,6 +78,7 @@ export class AgentExecutionSession {
 
   /**
    * Cancels callbacks after provider authority is lost.
+   *
    * @returns Cancellation signal shared with scoped work.
    */
   get signal(): AbortSignal {
@@ -85,6 +87,7 @@ export class AgentExecutionSession {
 
   /**
    * Returns a defensive copy of the last provider-confirmed image.
+   *
    * @returns Independent execution record image.
    */
   record(): AgentExecutionRecord {
@@ -93,6 +96,7 @@ export class AgentExecutionSession {
 
   /**
    * Returns per-instance selections observed at the claim boundary.
+   *
    * @returns Independent copies of current staged selections.
    */
   preferences(): readonly ModelPreference[] {
@@ -101,6 +105,7 @@ export class AgentExecutionSession {
 
   /**
    * Returns selections fixed when this invocation claimed its Agent.
+   *
    * @returns Independent copies of the claim-time selections.
    */
   initialPreferences(): readonly ModelPreference[] {
@@ -109,6 +114,7 @@ export class AgentExecutionSession {
 
   /**
    * Sets one per-kind selection for conditional completion of this signal.
+   *
    * @param kind Generation or decision kind being selected.
    * @param model Chosen deployment, or undefined to inherit the repository default.
    */
@@ -139,6 +145,7 @@ export class AgentExecutionSession {
 
   /**
    * Returns fixed provider payload bounds for pre-dispatch reservations.
+   *
    * @returns Provider capacity for the current Agent repository.
    */
   capacity(): AgentExecutionCapacity {
@@ -147,6 +154,7 @@ export class AgentExecutionSession {
 
   /**
    * Updates the journal against the latest provider-confirmed image.
+   *
    * @param makeNext Pure transformation of the last confirmed record.
    * @param historyEntries Conversation and System records saved with this update.
    * @returns Independent image confirmed by the provider write.
@@ -175,6 +183,7 @@ export class AgentExecutionSession {
 
   /**
    * Updates the claim expiry and reloads the provider image before later fenced writes.
+   *
    * @param expiresAt Requested later claim expiry.
    * @returns Reloaded provider-confirmed record image.
    */
@@ -194,6 +203,7 @@ export class AgentExecutionSession {
 
   /**
    * Commits Entity and execution results under the same serialized fence.
+   *
    * @param makeNext Pure transformation of the last confirmed record.
    * @param historyEntries History records committed with the Entity transition.
    * @param entityCommit Conditional state and output commit, when supplied.
@@ -225,6 +235,7 @@ export class AgentExecutionSession {
 
   /**
    * Marks saved output IDs delivered and reloads the provider image.
+   *
    * @param signals Original output IDs accepted by normal delivery.
    * @returns Reloaded provider-confirmed record image.
    */
@@ -256,6 +267,7 @@ export class AgentExecutionSession {
 
   /**
    * Serializes one fenced provider operation after preceding writes settle.
+   *
    * @typeParam Result Result returned by the provider operation.
    * @param work Provider mutation to run while the session remains active.
    * @returns Mutation result or a claim-loss rejection.

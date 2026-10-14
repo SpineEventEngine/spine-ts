@@ -127,6 +127,7 @@ const failureCodes: Readonly<Record<AiFailure["code"], AiFailureCode>> = Object.
 
 /**
  * Carries one named typed input within the accepted handler.
+ *
  * @typeParam I Generated input descriptor.
  */
 interface InvokeRequest<I extends MessageSchema> {
@@ -195,6 +196,7 @@ export class AgentAiRuntime implements AgentAi {
 
   /**
    * Returns one saved or newly admitted typed model result.
+   *
    * @typeParam I Generated input descriptor.
    * @typeParam O Generated admitted-output descriptor.
    * @param model Registered capability to invoke.
@@ -228,6 +230,7 @@ export class AgentAiRuntime implements AgentAi {
 
   /**
    * Restores a terminal named result without contacting the backend.
+   *
    * @typeParam O Generated admitted-output descriptor.
    */
   #savedResult<O extends MessageSchema>(
@@ -261,6 +264,7 @@ export class AgentAiRuntime implements AgentAi {
 
   /**
    * Sets a preference only for a later accepted signal.
+   *
    * @param kind Generation or decision selection.
    * @param model Deployment to prefer for later accepted work.
    */
@@ -317,6 +321,7 @@ export class AgentAiRuntime implements AgentAi {
 
   /**
    * Loads or persists the next exact handler-scoped named operation.
+   *
    * @typeParam I Generated input descriptor.
    * @typeParam O Generated admitted-output descriptor.
    */
@@ -351,6 +356,7 @@ export class AgentAiRuntime implements AgentAi {
 
   /**
    * Describes a newly journaled named operation using its original typed input.
+   *
    * @typeParam I Generated input descriptor.
    * @typeParam O Generated admitted-output descriptor.
    */
@@ -383,6 +389,7 @@ export class AgentAiRuntime implements AgentAi {
 
   /**
    * Rejects changed call facts before any recovery side effect.
+   *
    * @typeParam I Generated input descriptor.
    * @typeParam O Generated admitted-output descriptor.
    */
@@ -406,6 +413,7 @@ export class AgentAiRuntime implements AgentAi {
 
   /**
    * Captures one typed call's immutable accepted facts.
+   *
    * @typeParam I Generated input descriptor.
    * @typeParam O Generated admitted-output descriptor.
    */
@@ -450,6 +458,7 @@ export class AgentAiRuntime implements AgentAi {
 
   /**
    * Calls the selected authenticated backend after recording the named operation.
+   *
    * @typeParam I Generated input descriptor.
    * @typeParam O Generated admitted-output descriptor.
    */
@@ -546,6 +555,7 @@ export class AgentAiRuntime implements AgentAi {
 
   /**
    * Reauthorizes and binds the saved operation to the adapter execution.
+   *
    * @typeParam I Generated input descriptor.
    * @typeParam O Generated admitted-output descriptor.
    */
@@ -594,6 +604,7 @@ export class AgentAiRuntime implements AgentAi {
 
   /**
    * Prepares the exact catalog and reconnects the saved model identity.
+   *
    * @typeParam I Generated input descriptor.
    * @typeParam O Generated admitted-output descriptor.
    */
@@ -630,6 +641,7 @@ export class AgentAiRuntime implements AgentAi {
 
   /**
    * Materializes the checked adapter invocation after connection and catalog setup.
+   *
    * @typeParam I Generated input descriptor.
    * @typeParam O Generated admitted-output descriptor.
    */
@@ -848,6 +860,7 @@ export class AgentAiRuntime implements AgentAi {
 
   /**
    * Copies credential-free identity fields from a saved model connection.
+   *
    * @param saved Durable selected connection fields.
    * @returns Identity comparable with the current model binding.
    */
@@ -922,6 +935,7 @@ export class AgentAiRuntime implements AgentAi {
 
   /**
    * Compares exact canonical typed application input.
+   *
    * @typeParam I Generated input descriptor.
    */
   #sameInput<I extends MessageSchema>(
