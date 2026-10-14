@@ -40,13 +40,13 @@ state. No result or `events.json` was written.
 
 ## Entry distribution
 
-| Method / recorded recipient type URL | Entries | Unique encoded IDs | Missing accepted project numbers | Duplicate method/correlation entries | Entry time range (UTC) |
-| --- | ---: | ---: | ---: | ---: | --- |
-| create / `...ProjectId` | 80 | 80 | 0 | 0 | 23:22:51.200–23:22:52.641 |
-| planning / `...PlanningId` | 80 | 80 | 0 | 0 | 23:22:51.628–23:22:53.012 |
-| staffing / `...StaffingId` | 80 | 80 | 0 | 0 | 23:22:51.695–23:22:52.994 |
-| portfolio / `...PortfolioId` | 31 | 31 | 49 | 0 | 23:22:51.374–23:22:53.303 |
-| projection / `...ProjectId` | 31 | 31 | 49 | 0 | 23:22:51.525–23:22:53.321 |
+| Method / recorded recipient type URL | Entries | Unique encoded IDs | Missing accepted project numbers | Duplicate method/correlation entries | Entry time range (UTC)    |
+| ------------------------------------ | ------: | -----------------: | -------------------------------: | -----------------------------------: | ------------------------- |
+| create / `...ProjectId`              |      80 |                 80 |                                0 |                                    0 | 23:22:51.200–23:22:52.641 |
+| planning / `...PlanningId`           |      80 |                 80 |                                0 |                                    0 | 23:22:51.628–23:22:53.012 |
+| staffing / `...StaffingId`           |      80 |                 80 |                                0 |                                    0 | 23:22:51.695–23:22:52.994 |
+| portfolio / `...PortfolioId`         |      31 |                 31 |                               49 |                                    0 | 23:22:51.374–23:22:53.303 |
+| projection / `...ProjectId`          |      31 |                 31 |                               49 |                                    0 | 23:22:51.525–23:22:53.321 |
 
 All entry times are within 23:22:51.200–23:22:53.321 UTC. PID totals are:
 66486: 35, 66488: 28, 66489: 25, 66490: 34, 66491: 32, 66492: 28, 66493: 32,

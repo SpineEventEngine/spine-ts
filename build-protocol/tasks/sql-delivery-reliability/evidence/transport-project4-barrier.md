@@ -7,8 +7,7 @@ publication boundary. That could pass while Project 4 was still in flight.
 The corrected `cancel-publication-race` fixture completes Cancel for the
 original Event subscription, activates a separate generated ProjectCreated
 Event observer, then posts Project 4. It requires the observer's real
-`eventUpdates` item to contain exactly one ProjectCreated with Project number
-4. The server-side trace must then contain exactly one Project 4 yield with
+`eventUpdates` item to contain exactly one ProjectCreated with Project number 4. The server-side trace must then contain exactly one Project 4 yield with
 the same Event ID, attributed to the observer subscription ID, and zero yields
 attributed to the canceled subscription ID. The observer and Entity
 subscription both complete their Cancel RPCs. This is a live publication

@@ -15,7 +15,9 @@
 import { performance } from "node:perf_hooks";
 import { clearTimeout, setTimeout } from "node:timers";
 
-/** Waits for fixture evidence only until its deadline or termination. */
+/**
+ * Waits for fixture evidence only until its deadline or termination.
+ */
 export async function waitUntil(predicate, timeoutMs, label, termination) {
   const deadline = performance.now() + timeoutMs;
   while (!predicate()) {

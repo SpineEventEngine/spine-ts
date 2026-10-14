@@ -12,6 +12,6 @@ Parent persists returned review.
 - P2: reference says termination/reaping may add3seconds after managed expiry.
   Successful graceful child close may add up to3seconds; after managed expiry
   the initial graceful-exit wait is skipped and TERM/KILL/reaping add at most
- 2seconds. Describe the two phases separately.
+  2seconds. Describe the two phases separately.
 
 No affected example or link correction identified in this narrow concern.
