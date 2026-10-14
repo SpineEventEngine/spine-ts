@@ -490,7 +490,9 @@ class ManagedChildLifecycle {
       this.#deadlineReached.resolve(undefined);
       this.#serverCloseRelease.resolve(undefined);
       this.#activation.resolve(undefined);
+      // spine-log-boundary: server.managed_child_deadline_ipc_observer
       void this.#notify("close-failed").catch(() => undefined);
+      // spine-log-boundary: server.managed_child_deadline_close_observer
       void this.#server.close().catch(() => undefined);
       if (process.channel !== undefined && process.env[childMarker] === "true")
         setTimeout(() => process.exit(1), closeKillMs);
@@ -509,6 +511,7 @@ class ManagedChildLifecycle {
       this.#assertBeforeSuccess();
       await this.#closeServerAfterRelayCleanup();
       this.#assertBeforeSuccess();
+      // spine-log-boundary: server.managed_replica_closed_ipc
       await this.#notify("closed").catch(() => undefined);
       this.#disconnect();
     } catch (error) {
@@ -548,6 +551,7 @@ class ManagedChildLifecycle {
    * @returns Completion after final server close.
    */
   async #closeServerAfterRelayCleanup(): Promise<void> {
+    // spine-log-boundary: server.managed_replica_delivery_drained_ipc
     void this.#notify("delivery-drained").catch(() => undefined);
     if (this.#waitForParentClose) await this.#serverCloseRelease.promise;
     if (this.#shutdownFailure !== undefined) throw this.#shutdownFailure;
@@ -1202,6 +1206,7 @@ export class ManagedServerCoordinator {
         `Managed shutdown deadline expired during ${this.#shutdownPhase}.`,
       );
       this.#deadlineReached.resolve(undefined);
+      // spine-log-boundary: server.managed_force_cleanup_observer
       void this.#forceCleanup().catch(() => undefined);
     }, this.#shutdownTimeoutMs);
   }
@@ -1380,6 +1385,7 @@ export class ManagedServerCoordinator {
           this.#terminalChildFailure ??= replica.forcedFailure ?? error;
       },
     );
+    // spine-log-boundary: server.managed_replica_close_finally_observer
     void close
       .finally(() => {
         if (replica.closePromise === close) replica.closePromise = undefined;
@@ -1795,6 +1801,7 @@ const ManagedServerCoordinatorValues = Object.freeze({
       resolve = next;
       reject = fail;
     });
+    // spine-log-boundary: server.managed_deferred_rejection_observer
     void promise.catch(() => undefined);
     return { promise, resolve, reject };
   },

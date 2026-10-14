@@ -1156,6 +1156,7 @@ export class SubscriptionGateway {
     const entry = { context: clone(ActorContextSchema, context), promise };
     active.push(entry);
     this.#cancellations.set(id, active);
+    // spine-log-boundary: auth.subscription_cancel_finally_observer
     void promise
       .finally(() => {
         const current = this.#cancellations.get(id);

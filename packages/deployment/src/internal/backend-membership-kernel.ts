@@ -532,6 +532,7 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
       settled: false,
       failure: undefined,
     };
+    // spine-log-boundary: deployment.membership_readiness_rejection_observer
     void readiness.gate.promise.catch(() => undefined);
     return readiness;
   }
@@ -545,6 +546,7 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
       gate: Promise.withResolvers<undefined>(),
       failure: undefined,
     };
+    // spine-log-boundary: deployment.membership_lifetime_rejection_observer
     void lifetime.gate.promise.catch(() => undefined);
     return lifetime;
   }
