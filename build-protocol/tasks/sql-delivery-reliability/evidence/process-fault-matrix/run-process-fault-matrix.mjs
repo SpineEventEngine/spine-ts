@@ -469,12 +469,38 @@ async function auditScenario(config, result, runDirectory) {
       scenarioRecord.pending.status === "TO_DELIVER",
       "pending row was not left pending at the selected boundary",
     );
-    assertFullState(scenarioRecord.saved?.observation, "saved pre-ack state");
-    assertFullState(scenarioRecord.after, "after-save-before-ack recovered state");
     const original = assertEventIntegrity(
       scenarioRecord.original,
       "after-save-before-ack original Event",
     );
+    const savedProject = scenarioRecord.saved?.observation?.projects?.find(
+      (project) => project.number === 1,
+    );
+    assert(savedProject !== undefined, "saved pre-ack state omitted Project 1");
+    assert(
+      savedProject.states?.project === true && savedProject.states?.planning === true,
+      "saved pre-ack state did not commit Project and the selected Planning handler",
+    );
+    assert(
+      Object.values(savedProject.states ?? {}).every((state) => typeof state === "boolean"),
+      "saved pre-ack state contains a non-boolean state value",
+    );
+    assertSameEvent(
+      scenarioRecord.saved?.observation?.events?.find((event) => event.id === original.id),
+      original,
+      "after-save-before-ack saved Event",
+    );
+    assertSameSnapshot(
+      preRestart.saved,
+      scenarioRecord.saved,
+      "after-save-before-ack saved snapshot",
+    );
+    assertSameSnapshot(
+      preRestart.pending,
+      scenarioRecord.pending,
+      "after-save-before-ack pending row",
+    );
+    assertFullState(scenarioRecord.after, "after-save-before-ack recovered state");
     assert(
       original.id === result.eventId &&
         (result.eventSha256 === undefined || original.sha256 === result.eventSha256),

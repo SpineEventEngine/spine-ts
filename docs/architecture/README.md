@@ -789,9 +789,10 @@ and continues independent targets; applications may choose an immediate repeat
 of failed processing or deliberate terminal discard. A successful handler with
 failed acknowledgement gets finite acknowledgement-only retries. The supervisor
 rescans pending shards every 10 seconds by default, separately from the
-60-second stale-session threshold and delivery server processing timeout. It
-adds no persisted attempts, quarantine, receipts, markers, or dead-letter
-storage. Callback snapshots copy `Date` values
+60-second stale-session threshold and the configurable Delivery server processing
+timeout, which is disabled by default. These [recovery timers](../../packages/delivery-server/REFERENCE.md#recovery-timers)
+do not guarantee a delivery or takeover deadline. It adds no persisted attempts,
+quarantine, receipts, markers, or dead-letter storage. Callback snapshots copy `Date` values
 and `Any.value` bytes. The package exposes no raw worker callback API; replay
 stays behind validated endpoints. Local posting handoffs cover command rows,
 projection subscriber rows, and process-manager event rows. Command

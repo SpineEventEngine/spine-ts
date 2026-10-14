@@ -67,6 +67,11 @@ single-process choices.
 
 ### Multi-process app
 
+Shared Delivery is recommended when running multiple application processes.
+The single-process example above, including its SQL storage modes, uses local
+Delivery and needs no shared server. Database-only multi-process Delivery has
+local notifications; missed work may wait for periodic recovery.
+
 From the repository root, start the complete local demonstration with:
 
 ```bash
@@ -101,7 +106,12 @@ For example, `TODO_PROCESS_COUNT=3 TODO_DELIVERY_SHARD_COUNT=2` starts three
 complete app replicas with two Delivery shards. The launcher waits for the
 Coordinator's ready message and owns shutdown: normal exit, `Ctrl-C`, `SIGTERM`,
 and partial startup all stop only the processes and emulator container it made.
-The Datastore emulator holds data only while its container runs.
+The Datastore emulator holds data only while its container runs. The simple
+Delivery server also keeps its Inbox only in memory: restarting it can lose
+accepted pending Commands even if application business state survives in a
+separate store. Shared Delivery coordinates processes; it does not make that
+Inbox durable. See the separate [recovery timers](../../packages/delivery-server/REFERENCE.md#recovery-timers);
+the default 10-second scan is not a delivery or worker-takeover deadline.
 It observes the emulator's ready log, the Delivery server's exact
 `Delivery server listening at …` message, and the Coordinator ready message;
 if Delivery or the Coordinator exits before its message, the launcher reports

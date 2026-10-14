@@ -791,3 +791,15 @@ Fresh matrix `4f95f36a-4cbe-4456-a0e8-c0f1c3d632bf` stopped after case 6 (Postgr
 ## Final bounded prose correction
 
 Root applies the accepted documentation inventory while gateway implementation proceeds independently: one canonical timer explanation, explicit default-disabled server takeover timeout, temporary process-local duplicate suppression, and accepted pending Inbox loss on Delivery restart despite SQL business-state persistence. Existing Coordinator port prose already permits zero and requires no correction. These are scope-preserving documentation edits; no stronger recovery/durability claim or migration contract. Final documentation review remains pending.
+
+## Crash matrix final fixture reservation
+
+After clean scoped review, resume the existing mechanical matrix function with its immutable explicit `gpt-6-luna` / `low` profile. Run all 32 cases on the corrected frozen business runtime. Implementer confirms no generation/build or process-fixture edits until the reservation is released; gateway source and unit-test work may proceed independently. Retain exact source/dist provenance and stop at first failure with complete cleanup evidence. Do not repeat the 80-run accepted baseline. Runtime metadata is unavailable.
+
+Root also applies the already-inventoried example recommendation prose, preserving local Message Board React and single-process Todo SQL exceptions and teaching modes. Launcher variables, launch commands, and claims of eight-process verification wait for implementation and live evidence.
+
+Documentation audience check and changed-file format/diff checks pass. Source `examples/message-board/app/src/gateway-server.ts` uses publicAccess BrowserServer with process-local bindings; correct Distributed Message Board's stale durable-subscription claim and its reference's two-process wording to the actual two nodes with two replicas each. Launcher changes and live example evidence remain pending.
+
+## Crash collector partial-boundary correction
+
+Fresh session `9ccbe658-06c5-48dc-ad9e-027038c8b81f` stopped after one PASS because the collector required all five states at the intentionally partial pre-acknowledgement snapshot. Case `34a25bac2c0c46d995e494b3e9de8a18` itself passed at the corrected fixture commit, and cleanup is confirmed. Accept a deterministic collector-only correction requiring committed Project and selected Planning, original Event integrity and exact saved/pending evidence at that boundary; full business state is still mandatory after restart. Existing Luna/low function validates saved positive and corrupted selected-state negative cases, then freezes for commit/push before another matrix. No runtime build or fixture edit.

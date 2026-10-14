@@ -502,3 +502,11 @@ The test-only gate correction is frozen after focused PostgreSQL 16 controls and
 ## Nonblocking crash gate accepted
 
 Both scoped reviewer reports are clean. Explicit model/reasoning fields and immutable configured Sol/medium roles match the assignments; actual runtime introspection unavailable. All five generated domain handlers await the selected gate, including Create in the expected volatile-loss case. Final PostgreSQL 16/eight-process acknowledgement evidence places the trigger 99 ms after entry and proves one old/one fresh Planning entry. Previous invalid placement remains failed evidence. Accept the test-only correction; full matrix remains pending and no 80-run business baseline repetition is required for this fixture-only change.
+
+## Final prose inventory correction review
+
+After changed-file format/diff and documentation-audience checks, dispatch the existing documentation completeness concern with explicit `gpt-6-luna` / `medium`. Review only the uncommitted twelve guide/reference files named in the assignment against the accepted inventory and current code. No API signatures or snippets changed, so API review is N/A for this prose-only slice; behavioral claims also receive final task reliability review. This is not final whole-task documentation acceptance, because transport/launcher evidence remains in progress. Desktop explicit profiles supported; runtime introspection unavailable.
+
+Accept the prose review's P2 omission: name `DeliverySupervisorOptions.staleMs` and `ShardedWorkRegistryOptions.leaseMs` beside their default values in the canonical timer section. The deterministic source-backed correction changes no behavior or interface and does not reopen a reviewer lane. All other scoped claims/links were clean. Explicit Luna/medium profile matches; runtime introspection unavailable. Final task-wide documentation and reliability review remain pending.
+
+The collector-only assertion correction passes audit of the real partial snapshot and rejects a disposable copy with selected Planning state removed. Full final state and exact Event/pending evidence remain required; source/fixture/runtime are unchanged. Accept as deterministic verification alignment with no new specialist wave. Explicit existing Luna/low mechanical profile matches. New matrix waits for the gateway build window.

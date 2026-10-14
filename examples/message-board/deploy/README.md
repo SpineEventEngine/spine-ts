@@ -28,7 +28,11 @@ Gateway admits this example's requests from their request actor and creates
 process-local subscription bindings. A Gateway restart makes the browser
 reconnect, query the current board, replace its local copy, and then resume live
 updates. The supplied simple delivery server is in-memory and not highly
-available.
+available. Shared Delivery is recommended for multiple application processes,
+but restarting this simple server can lose accepted pending Commands despite
+separately persisted business state. Gateway query recovery does not restore
+lost Inbox work. See [Delivery restart limits](../../../packages/delivery-server/README.md)
+and the separate [recovery timers](../../../packages/delivery-server/REFERENCE.md#recovery-timers).
 
 For the smaller runnable development topology of exactly two identical
 applications and one Gateway, use

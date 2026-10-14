@@ -91,6 +91,10 @@ const transport = createRouterTransport((router) => {
 void transport;
 ```
 
+The example explicitly enables a 30-second processing timeout. The default is
+zero, which disables automatic takeover. The application recovery scan and
+stale-session threshold are separate [recovery timers](REFERENCE.md#recovery-timers).
+
 The standalone listener exposes Inbox, InboxRead, Shard, Admin, and gRPC health services.
 It binds only to the loopback address by default. An explicit non-loopback host
 is a caller-selected trusted-network deployment and should not be exposed
@@ -98,7 +102,13 @@ directly to the public Internet.
 
 ## ⚠️ In-memory means temporary
 
-State disappears when the process stops. The server has no durable mode, TLS,
+State disappears when the process stops, including accepted pending Commands.
+Using PostgreSQL or another durable store for application business state does
+not persist this server's Inbox. After restart, saved business state can remain
+while accepted pending work is lost. Shared Delivery coordinates application
+processes but does not make this in-memory server durable.
+
+The server has no durable mode, TLS,
 authentication, authorization, configuration reload, health watch stream, or
 administration UI. A pending row is not an attempt-history or quarantine
 record. Its default loopback listener is for development; a wider listener

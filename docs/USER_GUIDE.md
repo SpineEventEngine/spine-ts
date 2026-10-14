@@ -540,9 +540,15 @@ downstream effects idempotent. The framework does not add attempt history,
 quarantine records, scheduled retry policy, or exactly-once side effects.
 Local and remote delivery removes a pending duplicate when its signal ID and
 typed Inbox target match a delivered row in the current page or a recent local
-delivery remembered by the bounded cache. The same signal may still reach a
-different target, and a newly created signal with a different ID is not
-suppressed merely because its payload is equal.
+delivery remembered by the bounded cache. This process-local cache holds at most
+1,000 identities and disappears on restart. Suppression is temporary: after the
+relevant delivered rows and cache entries are gone, replay may execute the same
+recipient again. Cleaning SQL Inbox rows alone may still leave a cache entry
+that suppresses replay; cleanup does not guarantee repetition. Neither mechanism
+provides exactly-once execution or durable storage for the simple in-memory
+Delivery server. The same signal may still reach a different target, and a newly
+created signal with a different ID is not suppressed merely because its payload
+is equal.
 
 Continue with the [server reference](../packages/server/REFERENCE.md) for
 framework and server contracts.

@@ -47,6 +47,21 @@ MiB. Capacity is finite: an operation that would exceed retained messages,
 bytes, or shards fails atomically with `RESOURCE_EXHAUSTED`; it is not partially
 accepted or silently shortened.
 
+## Recovery timers
+
+The application `DeliverySupervisor` scans for pending work every 10 seconds by
+default; its `recoveryMs` option retains an explicit override. This scan is
+separate from the supervisor's default 60-second stale-session threshold
+(`staleMs`) and `ShardedWorkRegistry`'s default 30-second SQL lease (`leaseMs`).
+The in-memory Delivery server uses a separate processing timeout: `processingTimeoutSeconds` on the listener, or
+`processingTimeoutMs` on `InMemoryDelivery`. Its default is zero, which disables
+automatic pickup takeover; applications may configure a positive timeout.
+
+A scan can encounter a busy shard, an unexpired session, unavailable storage, or
+failed processing. Request deadlines, retry delays, and shutdown bounds also
+have separate responsibilities. A 10-second scan interval therefore guarantees
+neither delivery within 10 seconds nor worker takeover within 10 seconds.
+
 ## Delivery semantics
 
 Mutations pass a FIFO admission boundary with 100 waiting slots. Aborting before

@@ -1,0 +1,20 @@
+{
+  "status": "FAIL",
+  "mode": "audit-only",
+  "runId": "dae11edf2f6c1c52d72bd473e671015a",
+  "auditedAt": "2026-10-14T02:16:09.135Z",
+  "config": {
+    "provider": "postgres16",
+    "processes": 2,
+    "scenario": "after-save-before-ack",
+    "requireColdRepair": true
+  },
+  "configuredProfile": {
+    "model": "gpt-6-luna",
+    "reasoning": "low",
+    "runtimeMetadata": "not exposed by this execution surface"
+  },
+  "audit": null,
+  "failure": "Error: saved pre-ack state did not commit Project and the selected Planning handler",
+  "note": "Validates saved run artifacts and their self-contained hashes; launches no processes or database operations."
+}

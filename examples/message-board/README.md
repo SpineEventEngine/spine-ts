@@ -55,7 +55,9 @@ Open [http://127.0.0.1:5173](http://127.0.0.1:5173), enter a username and a
 message, and post it to `general`. Command+Enter on macOS, or Control+Enter
 elsewhere, posts; plain Enter adds a line. Stop either process with `Ctrl-C`.
 
-For the local multi-process mode, run:
+Shared Delivery is recommended for multiple application processes. The local
+React single-process mode above needs no shared Delivery server. For the local
+multi-process mode, run:
 
 ```bash
 examples/message-board/scripts/start-local-multi-process.sh
@@ -237,9 +239,13 @@ application topology, not an additional unary request route.
 Application code selects and manages its storage. The public browser Gateway
 creates process-local subscription bindings. Operators configure TLS,
 image distribution, network policy, and production delivery infrastructure.
-The reference simple delivery server is in-memory and not highly available;
-after a Gateway restart the browser reconnects, queries the current board, and
-then continues listening.
+The reference simple Delivery server is in-memory and not highly available.
+Restarting it can lose accepted pending Commands even when saved application
+business state survives in a separate store. A Gateway restart has a different
+effect: the browser reconnects, queries the current board, and then continues
+listening. That query does not recover Commands lost from the Delivery Inbox.
+See the separate [recovery timers](../../packages/delivery-server/REFERENCE.md#recovery-timers);
+a 10-second scan does not guarantee delivery or worker takeover within 10 seconds.
 
 ### Build local images
 

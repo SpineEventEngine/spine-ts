@@ -108,7 +108,7 @@ field `(column)` only when a read model needs it for filtering or sorting. The
 [storage guide](../../packages/storage/README.md) explains the shared query
 contract: `RecordQuery<I>` statically types IDs, while query mapping and
 validation are provider-specific. The provider guides explain the physical
-layout and migration.
+layout and schema requirements.
 
 ## 🧪 Run the example tests
 
@@ -121,7 +121,10 @@ pnpm vitest run \
 
 ## ⚠️ What this example does not prove
 
-It uses in-memory storage and loopback networking. Its latency numbers are
+This local teaching mode uses in-memory storage, local Delivery, and loopback
+networking. For a multi-process application, use shared Delivery; see the
+[Distributed Message Board](../distributed-message-board/README.md) topology.
+Its latency numbers are
 local diagnostics, not a production benchmark or service-level objective. It
 does not configure authentication, persistence, deployment, monitoring, or a
 multi-machine transport.
