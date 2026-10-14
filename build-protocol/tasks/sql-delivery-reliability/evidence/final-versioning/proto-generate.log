@@ -1,0 +1,22 @@
+$ node scripts/proto-workflow.mjs generate
+Verified 51 Spine proto source file checksums.
+Authored Proto style checks passed.
+Example Proto quality checks passed.
+Rejection source naming checks passed.
+Verified 55 frozen descriptor files against normalized digest 0844be5a0c588717932dc09da4d3fdc62c945a4f82be9bbb4e4d3d4814e42c3b.
+file:///Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/proto-tools/node_modules/.cache/spine-proto-tools-bootstrap-UWqNb6/index.js:131
+        throw new Error(`spine-proto: ${name}: ${message}`);
+              ^
+
+Error: spine-proto: @spine-event-engine/example-message-board-model: manifest packageVersion must match package.json version
+    at Object.fail (file:///Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/proto-tools/node_modules/.cache/spine-proto-tools-bootstrap-UWqNb6/index.js:131:15)
+    at Object.manifestFromPackage (file:///Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/proto-tools/node_modules/.cache/spine-proto-tools-bootstrap-UWqNb6/index.js:206:32)
+    at read (file:///Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/proto-tools/node_modules/.cache/spine-proto-tools-bootstrap-UWqNb6/index.js:521:37)
+    at Object.resolveNode (file:///Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/proto-tools/node_modules/.cache/spine-proto-tools-bootstrap-UWqNb6/model/model-graph.js:63:34)
+    at Object.resolve (file:///Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/proto-tools/node_modules/.cache/spine-proto-tools-bootstrap-UWqNb6/model/model-graph.js:85:33)
+    at Object.compose (file:///Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/proto-tools/node_modules/.cache/spine-proto-tools-bootstrap-UWqNb6/generation/generator.js:331:36)
+    at file:///Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/proto-tools/node_modules/.cache/spine-proto-tools-bootstrap-UWqNb6/cli/spine-proto-bootstrap.js:27:21
+
+Node.js v24.18.0
+Failed to publish generated output: MessageBoard model registry composition failed
+[ELIFECYCLE] Command failed with exit code 1.

@@ -1,6 +1,6 @@
 # Remaining acceptance gaps
 
-Current status after the SQL transport lifecycle and retained-server takeover matrices. This replaces
+Current status after implementation, live verification, review and versioning. This replaces
 the earlier preparation inventory; historical gaps are preserved in Git history.
 The complete task remains active. Use ACCEPTANCE.md for the full requirement map
 and the measured artifacts for bounded claims.
@@ -61,10 +61,16 @@ burst are verified. All accepted reviewer findings, including final security, ar
 resolved. Application resources and all four exact task SQL containers are removed;
 see `evidence/live-examples/README.md` and `evidence/databases-final-cleanup.json`.
 
-- Commit and push the common unused version-only update, then separately update
-  internal pins/lockfile and repeat dependency audits.
-- Run the mandatory cheap preflight and the converged `verify:release` profile;
-  address any failures and record exact final coverage/check results.
+Version-only commit `7f66e7749` and separate workspace pins/lock commit
+`ec40b81e7` are pushed. All 31 workspace versions use snapshot.23; 55 workspace
+references are aligned. Both final dependency audits are clean.
+
+- Resolve the complete full-suite regression batch: 37 failed tests and one
+  unhandled error from release attempt four. The 5,320 passing tests do not
+  establish final acceptance. Confirm environmental reruns, repair stale
+  fixtures/inventories and any genuine behavior defects, then repeat preflight
+  and the full release profile. Global coverage is not yet available.
+  See `evidence/final-release/verify-release-4-result.md`.
 - Commit and push final evidence, confirm exact remote SHA and clean worktree.
   No PR is authorized; PR-only CI remains an explicit verification limitation.
 

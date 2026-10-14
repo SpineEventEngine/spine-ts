@@ -1,0 +1,150 @@
+{
+  "baseline": "HEAD before version metadata correction",
+  "targetPackageVersion": "2.0.0-snapshot.23",
+  "mismatchedManifestsAfterGeneration": 0,
+  "changedProtoManifests": [
+    {
+      "path": "examples/message-board/model/spine-proto-manifest.json",
+      "packageVersion": {
+        "before": "2.0.0-snapshot.22",
+        "after": "2.0.0-snapshot.23"
+      },
+      "generationId": {
+        "before": "80527cdbc35efd4d02b95783c09d9a2a11efc96a784a2282b184bba383208816",
+        "after": "20425c7b-dff6-432e-9b5c-c1d7bfbcb8db"
+      }
+    },
+    {
+      "path": "examples/orders/spine-proto-manifest.json",
+      "packageVersion": {
+        "before": "2.0.0-snapshot.22",
+        "after": "2.0.0-snapshot.23"
+      },
+      "generationId": {
+        "before": "a48d11358f21116f291168308f33380d009e5c827354aa02dc34c1f038fd032b",
+        "after": "883acf5e-169b-4fa2-b176-407e2272c6cd"
+      }
+    },
+    {
+      "path": "examples/projects/spine-proto-manifest.json",
+      "packageVersion": {
+        "before": "2.0.0-snapshot.22",
+        "after": "2.0.0-snapshot.23"
+      },
+      "generationId": {
+        "before": "d4b5cd0ba0b17449271bf65a8caf600e3c0d428d7d85667a32070a649b193a47",
+        "after": "ee756957-2301-4af0-838e-836f69133296"
+      }
+    },
+    {
+      "path": "examples/todo/spine-proto-manifest.json",
+      "packageVersion": {
+        "before": "2.0.0-snapshot.22",
+        "after": "2.0.0-snapshot.23"
+      },
+      "generationId": {
+        "before": "ea0b6918e546ee3a3eb41ce683f36ae562d49227b5c4cc774034a24db90d78b9",
+        "after": "2b06376f-8f5e-4d97-a1f7-61d81da2e004"
+      }
+    },
+    {
+      "path": "packages/core/test-fixtures/spine-proto-manifest.json",
+      "packageVersion": {
+        "before": "2.0.0-snapshot.22",
+        "after": "2.0.0-snapshot.23"
+      },
+      "generationId": {
+        "before": "02b90df7-3169-494a-b307-a25938284163",
+        "after": "f734c32a-0c42-40c3-9f6e-f5ce67e3be99"
+      }
+    },
+    {
+      "path": "packages/proto/spine-proto-manifest.json",
+      "packageVersion": {
+        "before": "2.0.0-snapshot.22",
+        "after": "2.0.0-snapshot.23"
+      },
+      "generationId": {
+        "before": "08d4ba91-cdc0-4683-8b6a-9296dd82613e",
+        "after": "d9a9440c-9057-4c43-ad07-7d719fd88d14"
+      }
+    },
+    {
+      "path": "packages/server/test-fixtures/spine-proto-manifest.json",
+      "packageVersion": {
+        "before": "2.0.0-snapshot.22",
+        "after": "2.0.0-snapshot.23"
+      },
+      "generationId": {
+        "before": "5b461b86-4375-4f07-91b9-9667c3e09453",
+        "after": "c1f85ac0-6b05-420b-89fd-e58bb6e00eec"
+      }
+    },
+    {
+      "path": "packages/server-blackbox-tests/spine-proto-manifest.json",
+      "packageVersion": {
+        "before": "2.0.0-snapshot.22",
+        "after": "2.0.0-snapshot.23"
+      },
+      "generationId": {
+        "before": "b4f4d1cd-27d7-41ee-bbc8-a31069da04b1",
+        "after": "b0638e57-b865-4f2f-98d0-2d85b749d32b"
+      }
+    },
+    {
+      "path": "packages/testing/test-fixtures/spine-proto-manifest.json",
+      "packageVersion": {
+        "before": "2.0.0-snapshot.22",
+        "after": "2.0.0-snapshot.23"
+      },
+      "generationId": {
+        "before": "8791a599-76e2-4505-9295-516bd257f333",
+        "after": "1fc1e521-aae6-47b3-9773-4692e85d3ef0"
+      }
+    }
+  ],
+  "changedTrackedGenerationMarkers": [
+    {
+      "path": "examples/message-board/model/generated/.spine-proto-generation.json",
+      "generationId": {
+        "before": "80527cdbc35efd4d02b95783c09d9a2a11efc96a784a2282b184bba383208816",
+        "after": "20425c7b-dff6-432e-9b5c-c1d7bfbcb8db"
+      }
+    },
+    {
+      "path": "examples/orders/generated/.spine-proto-generation.json",
+      "generationId": {
+        "before": "a48d11358f21116f291168308f33380d009e5c827354aa02dc34c1f038fd032b",
+        "after": "883acf5e-169b-4fa2-b176-407e2272c6cd"
+      }
+    },
+    {
+      "path": "examples/projects/generated/.spine-proto-generation.json",
+      "generationId": {
+        "before": "d4b5cd0ba0b17449271bf65a8caf600e3c0d428d7d85667a32070a649b193a47",
+        "after": "ee756957-2301-4af0-838e-836f69133296"
+      }
+    },
+    {
+      "path": "examples/todo/generated/.spine-proto-generation.json",
+      "generationId": {
+        "before": "ea0b6918e546ee3a3eb41ce683f36ae562d49227b5c4cc774034a24db90d78b9",
+        "after": "2b06376f-8f5e-4d97-a1f7-61d81da2e004"
+      }
+    },
+    {
+      "path": "packages/proto/generated/.spine-proto-generation.json",
+      "generationId": {
+        "before": "08d4ba91-cdc0-4683-8b6a-9296dd82613e",
+        "after": "d9a9440c-9057-4c43-ad07-7d719fd88d14"
+      }
+    }
+  ],
+  "otherGeneratedOrRuntimeFilesChangedByGeneration": [],
+  "checks": {
+    "spineArtifactWriterExit": 0,
+    "packageModelGenerateExit": 0,
+    "workspaceProtoGenerateExit": 0,
+    "protoCheckGeneratedCurrentExit": 0
+  }
+}

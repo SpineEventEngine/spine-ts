@@ -1,0 +1,171 @@
+
+===== check-node =====
+$ node scripts/check-node-version.mjs
+exit=0
+
+===== format-check =====
+$ node scripts/format-files.mjs --check
+Checking formatting...
+[warn] build-protocol/tasks/sql-delivery-reliability/evidence/failed-run-triage-8cfa18b18f9e40958bc5855b50b962c7.md
+[warn] build-protocol/tasks/sql-delivery-reliability/evidence/final-harness-reliability-rereview.md
+[warn] build-protocol/tasks/sql-delivery-reliability/evidence/managed-documentation-review.md
+[warn] build-protocol/tasks/sql-delivery-reliability/evidence/status-checkpoint.md
+[warn] build-protocol/tasks/sql-delivery-reliability/evidence/transport-project4-barrier.md
+[warn] Code style issues found in 5 files. Run Prettier with --write to fix.
+[ELIFECYCLE] Command failed with exit code 1.
+exit=1
+
+===== diffcheck =====
+exit=0
+
+===== tooling-typecheck =====
+$ tsc --noEmit -p tsconfig.eslint.json
+exit=0
+
+===== cleanup-lint =====
+$ node scripts/check-cleanup-rules.mjs
+Cleanup enforcement checks passed.
+exit=0
+
+===== tsdoc-lint =====
+$ node scripts/check-tsdoc.mjs
+class-member-spacing: examples/orders/src/load-runner.ts :: member@154
+class-member-spacing: examples/orders/src/load-runner.ts :: member@245
+class-member-spacing: examples/orders/src/load-runner.ts :: member@246
+class-member-spacing: examples/orders/src/load-runner.ts :: member@247
+class-member-spacing: examples/orders/src/load-runner.ts :: member@248
+class-member-spacing: examples/orders/src/load-runner.ts :: member@249
+class-member-spacing: examples/projects/src/load-runner.ts :: member@180
+class-member-spacing: examples/projects/src/load-runner.ts :: member@181
+class-member-spacing: examples/projects/src/load-runner.ts :: member@182
+class-member-spacing: examples/projects/src/load-runner.ts :: member@183
+class-member-spacing: examples/projects/src/load-runner.ts :: member@184
+class-member-spacing: examples/projects/src/load-runner.ts :: member@185
+missing-param: examples/orders/src/load-runner.ts :: DatastoreOrdersLoadRun.classifyFailures(settled)(settled)
+missing-param: examples/orders/src/load-runner.ts :: DatastoreOrdersLoadRun.constructor(options)(options)
+missing-param: examples/orders/src/load-runner.ts :: DatastoreOrdersLoadRun.runUser(index)(index)
+missing-param: examples/orders/src/load-runner.ts :: DatastoreOrdersLoadRun.summarize(settled,elapsedMs)(elapsedMs)
+missing-param: examples/orders/src/load-runner.ts :: DatastoreOrdersLoadRun.summarize(settled,elapsedMs)(settled)
+missing-param: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.cleanup(iterator)(iterator)
+missing-param: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.constructor(baseUrl,index,timeoutMs,session)(baseUrl)
+missing-param: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.constructor(baseUrl,index,timeoutMs,session)(index)
+missing-param: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.constructor(baseUrl,index,timeoutMs,session)(session)
+missing-param: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.constructor(baseUrl,index,timeoutMs,session)(timeoutMs)
+missing-param: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.ignoreCancellation(promise)(promise)
+missing-param: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.isCorrelated(update)(update)
+missing-param: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.isVisible(response)(response)
+missing-param: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.postCommand(submittedAt)(submittedAt)
+missing-param: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.readSubscription(firstUpdate)(firstUpdate)
+missing-param: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.waitForVisibility(startedAt)(startedAt)
+missing-param: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.withTimeout(promise,label,timeoutMs,controller)(controller)
+missing-param: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.withTimeout(promise,label,timeoutMs,controller)(label)
+missing-param: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.withTimeout(promise,label,timeoutMs,controller)(promise)
+missing-param: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.withTimeout(promise,label,timeoutMs,controller)(timeoutMs)
+missing-param: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.cleanup(iterator)(iterator)
+missing-param: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.constructor(baseUrl,index,visibilityTimeoutMs)(baseUrl)
+missing-param: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.constructor(baseUrl,index,visibilityTimeoutMs)(index)
+missing-param: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.constructor(baseUrl,index,visibilityTimeoutMs)(visibilityTimeoutMs)
+missing-param: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.ignoreCancellation(promise)(promise)
+missing-param: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.isCorrelated(update)(update)
+missing-param: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.postCommand(submittedAt)(submittedAt)
+missing-param: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.readSubscription(firstUpdate)(firstUpdate)
+missing-param: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.waitForVisibility(startedAt)(startedAt)
+missing-param: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.withTimeout(promise,label,timeoutMs)(label)
+missing-param: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.withTimeout(promise,label,timeoutMs)(promise)
+missing-param: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.withTimeout(promise,label,timeoutMs)(timeoutMs)
+missing-returns: examples/orders/src/load-runner.ts :: DatastoreOrdersLoadRun.classifyFailures(settled)
+missing-returns: examples/orders/src/load-runner.ts :: DatastoreOrdersLoadRun.execute()
+missing-returns: examples/orders/src/load-runner.ts :: DatastoreOrdersLoadRun.runUser(index)
+missing-returns: examples/orders/src/load-runner.ts :: DatastoreOrdersLoadRun.settleUsers()
+missing-returns: examples/orders/src/load-runner.ts :: DatastoreOrdersLoadRun.summarize(settled,elapsedMs)
+missing-returns: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.cleanup(iterator)
+missing-returns: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.command()
+missing-returns: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.execute()
+missing-returns: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.ignoreCancellation(promise)
+missing-returns: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.isCorrelated(update)
+missing-returns: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.isVisible(response)
+missing-returns: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.postCommand(submittedAt)
+missing-returns: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.query()
+missing-returns: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.readQuery()
+missing-returns: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.readSubscription(firstUpdate)
+missing-returns: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.startSubscription()
+missing-returns: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.target()
+missing-returns: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.topic()
+missing-returns: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.waitForVisibility(startedAt)
+missing-returns: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.withTimeout(promise,label,timeoutMs,controller)
+missing-returns: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.cleanup(iterator)
+missing-returns: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.createCommand()
+missing-returns: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.createQuery()
+missing-returns: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.createTarget()
+missing-returns: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.createTopic()
+missing-returns: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.execute()
+missing-returns: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.ignoreCancellation(promise)
+missing-returns: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.isCorrelated(update)
+missing-returns: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.postCommand(submittedAt)
+missing-returns: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.readSubscription(firstUpdate)
+missing-returns: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.startSubscription()
+missing-returns: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.waitForVisibility(startedAt)
+missing-returns: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.withTimeout(promise,label,timeoutMs)
+missing-summary: examples/orders/src/load-runner.ts :: DatastoreOrdersLoadRun.classifyFailures(settled)
+missing-summary: examples/orders/src/load-runner.ts :: DatastoreOrdersLoadRun.constructor(options)
+missing-summary: examples/orders/src/load-runner.ts :: DatastoreOrdersLoadRun.execute()
+missing-summary: examples/orders/src/load-runner.ts :: DatastoreOrdersLoadRun.runUser(index)
+missing-summary: examples/orders/src/load-runner.ts :: DatastoreOrdersLoadRun.settleUsers()
+missing-summary: examples/orders/src/load-runner.ts :: DatastoreOrdersLoadRun.summarize(settled,elapsedMs)
+missing-summary: examples/orders/src/load-runner.ts :: DatastoreOrdersLoadRun:ClassDeclaration
+missing-summary: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.cleanup(iterator)
+missing-summary: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.command()
+missing-summary: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.constructor(baseUrl,index,timeoutMs,session)
+missing-summary: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.execute()
+missing-summary: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.ignoreCancellation(promise)
+missing-summary: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.isCorrelated(update)
+missing-summary: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.isVisible(response)
+missing-summary: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.postCommand(submittedAt)
+missing-summary: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.query()
+missing-summary: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.readQuery()
+missing-summary: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.readSubscription(firstUpdate)
+missing-summary: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.startSubscription()
+missing-summary: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.target()
+missing-summary: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.topic()
+missing-summary: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.waitForVisibility(startedAt)
+missing-summary: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun.withTimeout(promise,label,timeoutMs,controller)
+missing-summary: examples/orders/src/load-runner.ts :: DatastoreOrdersUserRun:ClassDeclaration
+missing-summary: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.cleanup(iterator)
+missing-summary: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.constructor(baseUrl,index,visibilityTimeoutMs)
+missing-summary: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.createCommand()
+missing-summary: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.createQuery()
+missing-summary: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.createTarget()
+missing-summary: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.createTopic()
+missing-summary: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.execute()
+missing-summary: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.ignoreCancellation(promise)
+missing-summary: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.isCorrelated(update)
+missing-summary: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.postCommand(submittedAt)
+missing-summary: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.readSubscription(firstUpdate)
+missing-summary: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.startSubscription()
+missing-summary: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.waitForVisibility(startedAt)
+missing-summary: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad.withTimeout(promise,label,timeoutMs)
+missing-summary: examples/projects/src/load-runner.ts :: ProjectManagementUserLoad:ClassDeclaration
+missing-type-param: examples/orders/src/load-runner.ts :: withTimeout@434<T>
+missing-type-param: examples/projects/src/load-runner.ts :: withTimeout@370<T>
+tsdoc-block-opener: packages/server-blackbox-tests/test-fixtures/project-subscription-wait.mjs :: block@18
+[ELIFECYCLE] Command failed with exit code 1.
+exit=1
+
+===== copyright-lint =====
+$ node scripts/check-copyright.mjs
+exit=0
+
+===== api-docs =====
+$ node scripts/check-api-docs.mjs
+[info] json generated at /var/folders/b7/lgl3q0z57xj72fjjjj_wd9n80000gq/T/spine-typedoc-json-tR9oWB/api.json
+[info] html generated at /var/folders/b7/lgl3q0z57xj72fjjjj_wd9n80000gq/T/spine-typedoc-json-tR9oWB/reference
+TypeDoc JSON includes 100 expected @spine-event-engine/proto exports, 17 exact generated integration Proto exports, 109 expected @spine-event-engine/auth exports, 35 expected @spine-event-engine/core exports, 7 exact @spine-event-engine/core/codegen exports, 27 expected @spine-event-engine/client-node exports, 3 exact @spine-event-engine/client-node/codegen exports, 22 expected @spine-event-engine/client-web exports, 13 expected @spine-event-engine/client-react exports, 22 expected @spine-event-engine/delivery-client exports, 5 expected @spine-event-engine/delivery-server exports, 10 expected @spine-event-engine/deployment exports, 13 expected @spine-event-engine/deployment-gce exports, 6 expected @spine-event-engine/deployment-gke exports, 240 expected @spine-event-engine/server exports, 39 expected @spine-event-engine/storage exports, 23 documented and 23 declared @spine-event-engine/storage/provider exports, 7 expected @spine-event-engine/transport exports, 5 expected @spine-event-engine/testing exports.
+exit=0
+
+===== docs-audience =====
+$ node scripts/check-doc-audience.mjs
+exit=0
+
+===== snippets =====
+$ node docs/check-typescript-snippets.mjs
+exit=0

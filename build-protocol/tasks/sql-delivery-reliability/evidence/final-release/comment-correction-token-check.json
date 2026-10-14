@@ -1,0 +1,17 @@
+{
+  "disposition": "Inconclusive preliminary scanner comparison: context-free scanning does not correctly rescan template literals. Superseded by compiler emission comparison in comment-correction-emit-check.json.",
+  "rows": [
+    {
+      "path": "examples/orders/src/load-runner.ts",
+      "unchanged": false
+    },
+    {
+      "path": "examples/projects/src/load-runner.ts",
+      "unchanged": false
+    },
+    {
+      "path": "packages/server-blackbox-tests/test-fixtures/project-subscription-wait.mjs",
+      "unchanged": true
+    }
+  ]
+}

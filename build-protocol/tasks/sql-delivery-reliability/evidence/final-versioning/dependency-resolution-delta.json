@@ -1,0 +1,28 @@
+{
+  "baseline": "7f66e7749:pnpm-lock.yaml",
+  "current": "working-tree pnpm-lock.yaml after pnpm 11.9.0 install",
+  "lockfile_sha256": "208f8a77f22da9858c4d143f50b43de09f81036ef065c1d87d7b6ea8d97ffcd3",
+  "importers": {
+    "total": 31,
+    "changed": 20,
+    "changes": "Only dependencies/devDependencies importer specifier records changed for the 55 fixed workspace-package pins. No importer additions or removals."
+  },
+  "package_resolutions": {
+    "added": 0,
+    "removed": 0,
+    "changed": 0
+  },
+  "snapshots": {
+    "added": 0,
+    "removed": 0,
+    "changed": 0
+  },
+  "external_dependency_upgrade": false,
+  "separately_published_non_workspace_dependency": {
+    "name": "@spine-event-engine/validation",
+    "manifest_specifier": "2.0.0-snapshot.7",
+    "registry_snapshot_7": 200,
+    "registry_snapshot_23": 404,
+    "action": "Preserved at snapshot.7; it is not a workspace package and snapshot.23 is unpublished."
+  }
+}

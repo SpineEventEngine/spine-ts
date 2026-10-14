@@ -1,0 +1,17 @@
+{
+  "method": "TypeScript transpileModule ESNext, removeComments, omit blank output lines",
+  "rows": [
+    {
+      "path": "packages/server/src/server/managed-server-application.ts",
+      "unchanged": true
+    },
+    {
+      "path": "packages/deployment/src/internal/backend-membership-kernel.ts",
+      "unchanged": true
+    },
+    {
+      "path": "packages/auth/src/subscriptions/index.ts",
+      "unchanged": true
+    }
+  ]
+}

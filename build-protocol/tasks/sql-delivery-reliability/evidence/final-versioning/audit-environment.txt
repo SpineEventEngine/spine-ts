@@ -1,0 +1,10 @@
+Role/function: orchestrator-dispatched package/version verification and mechanical dependency audit.
+Configured profile recorded for this function: gpt-6-luna / medium. Runtime model introspection is unavailable; the explicit dispatch/profile record is the available evidence.
+Date: 2026-10-14
+Node: v24.18.0
+pnpm: 11.9.0
+Corepack: 0.35.0
+Lockfile: pnpm-lock.yaml
+SHA-256: 208f8a77f22da9858c4d143f50b43de09f81036ef065c1d87d7b6ea8d97ffcd3
+Audit commands ran after the local pnpm installation refreshed workspace state; neither command disabled verifyDepsBeforeRun.
+The temporary pnpm store used for installation was scoped inside the worktree and removed after installation. The resulting node_modules state remains available to the parent verification steps.

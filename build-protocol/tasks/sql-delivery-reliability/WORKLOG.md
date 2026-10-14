@@ -1076,3 +1076,141 @@ without printing secret values, and amend only the unpublished local checkpoint.
 The rejected original is not official branch history. Package version fields
 remain separately unstaged. Targeted final-security evidence review is required
 before retrying publication; the runtime/source review is unchanged.
+
+Sanitized example/security checkpoint d6a6a3d5d passed targeted evidence review
+and was pushed successfully. No known credential pattern remains in the
+reachable candidate or task evidence. The rejected unpublished object may
+remain in local shared Git objects/reflogs; do not rewrite or garbage-collect
+shared history. The captured credential should be rotated by its administrator.
+
+Version-only commit 7f66e7749 updates all 31 workspace top-level versions to
+registry-verified unused 2.0.0-snapshot.23. Separate pin/lock commit ec40b81e7
+updates 55 workspace references across 20 manifests and was pushed immediately.
+The earlier inventory of 56 included external validation snapshot.7, which is
+not a workspace package and remains unchanged. Resolution/snapshot sets are
+unchanged; final lock SHA256 is
+208f8a77f22da9858c4d143f50b43de09f81036ef065c1d87d7b6ea8d97ffcd3.
+Both final vulnerability audits pass with no known vulnerabilities. Accepted
+package-verification dispatch used explicit gpt-6-luna / medium; runtime
+introspection unavailable.
+
+Dispatch final mechanical verification as an orchestrator-dispatched function
+with explicit gpt-6-luna / low. Scope: complete cheap preflight, then one
+verify:release run on the converged versioned tree; write only task evidence.
+Existing focused behavior, live SQL/process/transport/example and review
+evidence remains applicable. Do not start new services or alter production
+code. Persist scripts-first failures for the existing implementation context.
+Progress approximately 97%; estimated 0.5–1.5 hours for final gates, any bounded
+corrections, records and push.
+
+Final preflight attempt one completed on ec40b81e7: eight checks pass, formatting
+and TSDoc fail. No release profile ran. Complete deterministic batch is recorded
+in evidence/final-release/preflight.log: five Markdown evidence files need
+formatting; Orders/Projects load runners need required summaries/tags/member
+spacing; project-subscription-wait.mjs has a malformed documentation opener.
+Return this complete batch to the existing explicit Sol/medium implementation
+context. Scope is comments/format only, no behavioral changes. After focused
+checks, repeat the entire cheap preflight before the release profile. The
+Luna/low mechanical dispatch fields match; runtime introspection unavailable.
+
+Comment/format correction passes TSDoc, focused Prettier, tooling typecheck,
+focused ESLint and diff checks. Parent compiler emission comparison confirms
+identical JavaScript after removing comments/blank output lines for all three
+source files. Preliminary context-free scanner comparison was inconclusive
+because it did not rescan template literals; retained with that disposition.
+No runtime behavior changed, so existing live verification remains applicable.
+Deterministic comments/format corrections do not reopen specialist review.
+Repeat the full preflight, then run the release profile if clean.
+
+Comment-only correction f2387e164 pushed successfully. Repeated complete
+preflight passes all ten cheap checks and three focused suites (13 tests);
+evidence/final-release/preflight-2.md records exact commands and scope. The
+release profile has now started on this corrected versioned tree. No code
+changes are permitted during the gate. Remaining work is release-wide coverage,
+final records and remote synchronization; PR-only CI remains unavailable without
+an authorized pull request.
+
+First release attempt fails during Proto generation before any release tests:
+package.json versions are snapshot.23 but checked model manifests still declare
+snapshot.22. Full failure and provenance are in final-release/verify-release.log.
+Return this deterministic version-specific metadata correction to the existing
+explicit Luna/medium package verification function: align all workspace model
+manifest packageVersion fields through the supported workflow and regenerate
+required provenance, with no runtime contracts or external dependencies changed.
+Record changed metadata and run focused generation checks. Then repeat complete
+preflight before another release attempt.
+
+Version metadata correction completes through canonical writers: framework
+Proto manifest, Message Board model package generation, then workspace
+proto:generate and proto:check-generated:current all pass. All nine model
+manifest versions match snapshot.23; five tracked generation markers refreshed.
+Only these 14 metadata files changed; no runtime/test statements or lockfile
+changes. First focused generation failure is retained with successful retry.
+Accept existing explicit Luna/medium package dispatch; no substantive contract
+change or specialist review reopening. Commit/push metadata separately and
+repeat the full cheap preflight before the second release attempt.
+
+Second release attempt passes generation/build but fails ESLint before tests.
+The linter scans the task's disposable Playwright Python environment under
+evidence/runtime-tmp plus six authored verification scripts. Move only this
+confirmed task-local temporary tree to node_modules/.cache/sql-delivery-runtime-tmp
+(an existing standard lint-excluded dependency/cache location), preserving it
+locally. Future TMPDIR points there. Do not change lint policy or production
+coverage. Mechanical function will classify the complete authored-script batch
+for the existing Sol/medium implementation context. Full ESLint joins the next
+preflight before another release attempt.
+
+Release lint triage confirms 6,585 generated-tool errors and five warnings,
+plus 17 authored-evidence errors across six scripts; no production diagnostics.
+The existing Sol/medium implementer added explicit node:url/node:timers imports
+and meaningful catch comments only. All six syntax checks, focused ESLint and
+diff checks pass. Existing measurements remain the observations of their
+recorded script/source hashes; current scripts preserve the same behavior.
+No live rerun or specialist reopening is needed for deterministic imports/comments.
+Commit and push this correction, then repeat the complete preflight including
+full ESLint before the next release attempt.
+
+Third release attempt reaches logging containment after generation, build,
+formatting, docs and Proto consistency pass. Remaining dependency and release
+readiness checks also pass when collected independently (97 imports, 55 assets,
+457 links). No release tests ran. Complete batch: ten catch sites in managed
+application, backend membership and authenticated subscriptions need containment
+disposition, plus one stale managed-replica closed-IPC boundary. Return to the
+existing explicit Sol/medium implementation context to inspect actual handling
+and evidence before annotation; do not silence genuine processing failures.
+Full deterministic generated gates now join the cheap preflight before another
+expensive attempt. Estimated remaining work revised to 1–2 hours for this batch,
+preflight, global tests/coverage, final records and push.
+
+Containment correction accepted with exact runtime emit unchanged in all three
+source files. Ten sites have justified dispositions and existing behavior tests;
+one stale marker is rebound. The logging checker and 215 affected tests pass,
+along with focused ESLint, tooling typecheck, format and diff checks. Marker/
+manifest-only correction 6ee3272d8 is committed for immediate push. No runtime
+review lane is reopened. Repeat all deterministic checks and the cheap preflight
+before the fourth release attempt; retain earlier failures in evidence.
+
+Expanded preflight five passes all deterministic generated gates at 6ee3272d8:
+format/diff/tooling/full ESLint, cleanup/TSDoc/copyright/time, API/audience/snippets,
+Proto lint/current output, containment, production dependencies and release
+readiness. Recent 215/215 focused lifecycle tests and unchanged compiler output
+support the marker-only correction; they were not needlessly replayed. The
+fourth release profile has started. All previous failed attempts remain
+evidence; none ran release-wide tests or coverage.
+
+Release four completes its full test run with 5,320 passed, 37 failed, three
+skipped tests across 303 passed/17 failed/one skipped files and one unhandled
+ConnectError. No global coverage artifact was emitted. Raw log/exit retained.
+The complete assertion batch is returned to the existing Sol/medium implementer.
+Temporary checkout placement under node_modules demonstrably breaks Node TS
+stripping and contributes generator/path isolation failures; future ephemeral
+TMPDIR is .worktrees/sql-delivery-tmp inside this worktree, while retained
+Playwright/tool caches remain under node_modules/.cache. Do not move work
+outside the mandatory isolation or weaken package-boundary checks.
+Other failures include stale removed-cleanup/export/source-count expectations,
+new blackbox build-output inventory, six sibling implementation-tree imports,
+subscription fixtures/readiness and intentionally propagated Inbox/query
+failures. Establish each actual cause before updating code/tests; retain
+independent writes, original Event repair and failed-processing pending semantics.
+Progress approximately 95%, estimated 1–3 hours for this complete correction
+batch, relevant review, full preflight/release tests/coverage and final pushes.

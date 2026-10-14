@@ -874,3 +874,28 @@ without printing secret values, and amend only the unpublished local checkpoint.
 The rejected original is not official branch history. Package version fields
 remain separately unstaged. Targeted final-security evidence review is required
 before retrying publication; the runtime/source review is unchanged.
+
+Targeted artifact review accepted the sanitized current candidate: the process
+record contains only eight topology keys, matching reachable HEAD; bounded
+credential-pattern and full-environment scans are clean. The original rejected
+unpublished object may remain in local shared Git objects/reflogs. No bypass,
+shared history rewrite or garbage collection was performed. Sanitized checkpoint
+d6a6a3d5d was pushed successfully. Final security Sol/high profile remained
+explicit and correct; source security dispositions are unchanged.
+
+Package verification completed with explicit Luna/medium dispatch. All 31
+workspace versions use the common unused snapshot.23, committed independently
+from 55 workspace dependency references and lockfile importer changes. External
+validation snapshot.7 is deliberately retained; it is not a workspace package.
+No external package-resolution or snapshot changes occurred. Both fresh audits
+pass. Final mechanical verification uses explicit Luna/low and writes evidence
+only after the mandatory preflight.
+
+Final full-suite evidence adds a new mechanical correction batch despite clean
+targeted reviews: 37 failed tests, one unhandled error, no global coverage.
+Complete assertions and environment classification are in
+evidence/final-release/verify-release-4-result.md. The existing Sol/medium
+implementation context is responsible for all confirmed fixes. No prior review
+is treated as overriding a failing required check. Reopen only substantively
+affected concerns after focused correction; do not restore superseded delivery
+or cross-record atomicity guarantees to satisfy stale tests.
