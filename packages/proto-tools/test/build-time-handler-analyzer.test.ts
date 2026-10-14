@@ -2524,6 +2524,9 @@ function standaloneContractProgram(fileName: string, source: string): ts.Program
   });
 }
 
+// Reuse only parsed on-disk declarations; every virtual fixture keeps a fresh Program and source.
+const declarationSources = new Map<string, ts.SourceFile>();
+
 function programWithSources(
   rootFileName: string,
   sources: Record<string, string>,
@@ -2559,6 +2562,7 @@ function programWithSources(
   const originalReadFile = host.readFile.bind(host);
   const originalFileExists = host.fileExists.bind(host);
   const originalDirectoryExists = host.directoryExists?.bind(host);
+  const originalGetSourceFile = host.getSourceFile.bind(host);
   const virtualSources = new Map(
     Object.entries(sources).map(([name, text]) => [resolve(name), text]),
   );
@@ -2570,6 +2574,29 @@ function programWithSources(
   host.directoryExists = (requested) =>
     [...virtualSources.keys()].some((file) => file.startsWith(`${resolve(requested)}${sep}`)) ||
     originalDirectoryExists?.(requested) === true;
+  host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
+    const path = resolve(fileName);
+    if (!fileName.endsWith(".d.ts") || virtualSources.has(path) || shouldCreateNewSourceFile)
+      return originalGetSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
+    const key = [
+      path,
+      typeof languageVersion === "number" ? languageVersion : languageVersion.languageVersion,
+      typeof languageVersion === "number" ? undefined : languageVersion.impliedNodeFormat,
+      typeof languageVersion === "number" ? undefined : languageVersion.jsDocParsingMode,
+      compilerChecked,
+      strictNullChecks,
+    ].join("\0");
+    const cached = declarationSources.get(key);
+    if (cached !== undefined) return cached;
+    const source = originalGetSourceFile(
+      fileName,
+      languageVersion,
+      onError,
+      shouldCreateNewSourceFile,
+    );
+    if (source !== undefined) declarationSources.set(key, source);
+    return source;
+  };
 
   return ts.createProgram([rootFileName, ...Object.keys(sources)], options, host);
 }

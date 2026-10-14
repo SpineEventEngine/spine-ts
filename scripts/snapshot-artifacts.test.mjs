@@ -15,6 +15,7 @@ import {
   assertNativeConsumerDependencyClosure,
   assertConsumerIsolation,
   isContainedRelative,
+  packBuiltFrameworkArtifacts,
   proveExactTarballConsumer,
   proveNativeServerTarballConsumer,
 } from "./snapshot-artifacts.mjs";
@@ -264,11 +265,14 @@ describe("snapshot artifact containment", () => {
   it("installs, compiles, and imports a native server consumer without auth or compiler packages", () => {
     const root = mkdtempSync(join(tmpdir(), "spine-native-server-consumer-"));
     try {
+      const run = (command, args, cwd) => runBoundedCommand(command, args, cwd, 60_000);
+      const packages = packBuiltFrameworkArtifacts({ root: repoRoot, destination: root, run });
       expect(() =>
         proveNativeServerTarballConsumer({
           root: repoRoot,
           destination: root,
-          run: (command, args, cwd) => runBoundedCommand(command, args, cwd, 60_000),
+          packages,
+          run,
         }),
       ).not.toThrow();
     } finally {
@@ -320,21 +324,16 @@ describe("snapshot artifact containment", () => {
   it("installs, compiles, imports, and executes all exact framework tarballs", () => {
     const root = mkdtempSync(join(tmpdir(), "spine-exact-tarball-consumer-"));
     try {
-      let browserConsumerSource;
+      const run = (command, args, cwd) => runBoundedCommand(command, args, cwd, 60_000);
+      const packages = packBuiltFrameworkArtifacts({ root: repoRoot, destination: root, run });
       expect(() =>
         proveExactTarballConsumer({
           root: repoRoot,
           destination: root,
-          run: (command, args, cwd) => {
-            if (args.at(-1) === "tsconfig.json")
-              browserConsumerSource = readFileSync(join(cwd, "index.ts"), "utf8");
-            runBoundedCommand(command, args, cwd, 60_000);
-          },
+          packages,
+          run,
         }),
       ).not.toThrow();
-      expect(browserConsumerSource).toContain('from "@spine-event-engine/server/browser"');
-      expect(browserConsumerSource).toContain('import "@spine-event-engine/auth"');
-      expect(browserConsumerSource).toContain("fetch(`${browser.baseUrl}/auth/probe`)");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

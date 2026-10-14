@@ -12,6 +12,7 @@
  * the License.
  */
 
+import assert from "node:assert/strict";
 import { expect, it } from "vitest";
 
 import { isStudioIpcCommand, validateStudioIpc } from "../src/trusted/studio-ipc.js";
@@ -128,8 +129,8 @@ it("copies exact editor bytes beyond the former Markdown cap", () => {
   expect(edited?.markdown).toEqual(new Uint8Array([35, 32, 65, 10]));
   const large = new Uint8Array(1_000_001);
   const accepted = validateStudioIpc("edit", { id, version: {}, markdown: large });
-  expect(accepted?.markdown).toEqual(large);
-  expect(accepted?.markdown).not.toBe(large);
+  assert.deepStrictEqual(accepted?.markdown, large);
+  expect(accepted.markdown).not.toBe(large);
 });
 
 it("refuses malformed identifiers and evidence positions before privileged actions", () => {

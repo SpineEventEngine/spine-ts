@@ -141,25 +141,6 @@ describe("@spine-event-engine/example-todo", () => {
     await expect(createTodoContext()).resolves.toBeDefined();
   });
 
-  it("loads generated handler metadata into the bounded context", async () => {
-    const context = await createTodoContext();
-
-    expect([...context.commandBus().acceptedCommandTypes()].sort()).toEqual(
-      [
-        TypeUrls.derive(CreateTaskSchema),
-        TypeUrls.derive(RenameTaskSchema),
-        TypeUrls.derive(CompleteTaskSchema),
-        TypeUrls.derive(ReopenTaskSchema),
-        TypeUrls.derive(AssignTaskSchema),
-        TypeUrls.derive(ReassignTaskSchema),
-        TypeUrls.derive(UnassignTaskSchema),
-      ].sort(),
-    );
-    expect(
-      context.registeredRepositories().map((repository) => repository.entityType.name),
-    ).toEqual(["TaskAggregate", "TaskListProjection", "TaskAssigneeProjection"]);
-  });
-
   it("uses the application-selected storage factory", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const createRecordStorage = vi.spyOn(storageFactory, "createRecordStorage");

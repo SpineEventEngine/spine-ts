@@ -2190,15 +2190,6 @@ describe("proto-workflow", () => {
       expect(readFileSync(manifest.target, "utf8")).toBe("previous\n");
   });
 
-  it("includes Todo in the root atomic publication boundary without restoring it as a legacy generator", () => {
-    expect(generatedTargets.map((target) => target.displayPath)).not.toContain(
-      "examples/todo/generated",
-    );
-    expect(atomicGeneratedTargets.map((target) => target.displayPath)).toContain(
-      "examples/todo/generated",
-    );
-  });
-
   it("publishes Todo output and both manifests in the root transaction", () => {
     const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
     const rootGenerated = join(repoRoot, "packages/proto/generated");

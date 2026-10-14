@@ -8415,3 +8415,82 @@ artificial call-count assertions. Reviewer dispatch was explicit Sol/medium;
 actual runtime metadata unavailable. Commit/push this test and disposition, then
 run mandatory preflight and the final release profile against the frozen commit.
 Documentation/API/security concerns are unchanged by this test-only correction.
+
+### CI duration and test necessity — 14 October 2026
+
+Standard bounded build/test milestone, continuing the existing feature branch.
+Fresh origin/master remains 658da1cddd; worktree starts clean at d7dfa10f8.
+Latest exact-commit Build run 38548902404 is green (verify and trial); preceding
+38545522531 failed solely on branch coverage and is already superseded. Current
+Security run is green. Recheck any newly appearing failure while progressing.
+
+Acceptance: reduce measured CI test duration; remove demonstrably redundant or
+artificial tests with the retained behavior identified; preserve meaningful
+regression coverage, current thresholds, package installation/consumer checks,
+and full release gates. No new runtime/public contract or arbitrary limits.
+Baseline CI test duration 1,069.21s, individual test bodies sum 841.72s; overall
+verify job about 27 minutes. Raw CI log and sorted timing inventory are in /tmp.
+Classify expensive setup before editing; no wholesale deletion for speed.
+
+Desktop supports explicit required child profiles. Initial independent read-only
+assignments: performance/reliability reviewer Sol/medium for setup costs and safe
+execution improvements; style/maintainability reviewer Sol/medium for redundant
+or artificial tests. Both dispatch explicitly, fork none, no children, disjoint
+concerns. One bounded implementer will receive their combined findings. Selected
+final profile verify:release because shared verification tooling is in scope.
+
+Read-only investigation accepted: five test files account for 421 of 842 body
+seconds. The costly clean root build and clean bootstrap prove distinct required
+behaviors and remain. Remove only the redundant package-bin packed-presence test
+(the external installed consumer executes the shim), static Todo target-membership
+test (atomic publication/target inventory cases retain the contract), and three
+consumer-source substring assertions (compiled/executed consumer remains).
+Large semantic test deletion is not justified by the evidence.
+
+Existing implementer assignment, explicit configured Sol/medium from its original
+dispatch, one writer for test/setup/verification changes. Preserve unrelated edits
+and do not spawn children. Investigate removal of the release one-worker override
+using resource/fixture isolation evidence, plus measured compiler fixture setup
+reuse. Retain clean installation/build, failure semantics, coverage thresholds and
+package-consumer evidence. Do not weaken freshness validation or redesign generation
+for a secondary speedup. Run bounded timing experiments before converged full gate.
+Reviewer configured profiles matched explicit Sol/medium dispatch; actual runtime
+metadata was not exposed. Parent retains task-log edits only.
+
+Implementation removes four duplicate/static tests and consumer-source substring
+assertions, while preserving installed-consumer execution, all seven Todo command
+behaviors, exact generation inventories and atomic publication. Exhaustive million-
+position precision and million-byte IPC checks retain their inputs with cheaper
+assertions. Compiler fixtures reuse only parsed on-disk declarations; virtual
+fixtures and Programs remain separate. Release tests use default worker allocation.
+Two live-checkout build paths were removed from parallel tests: a pure packing
+helper consumes artifacts from the generated gate; standalone release packing
+retains its build-first behavior. Private clean-build fixtures remain unchanged.
+
+Final concern-specific review wave: existing performance/reliability reviewer,
+explicit Sol/medium, checks cache isolation and parallel artifact safety; existing
+style/maintainability reviewer, explicit Sol/medium, checks removed-test contracts
+and assertion quality. New TypeScript/API-docs reviewer, explicit Sol/medium and
+fork none, checks the internal packing helper declaration and its narrow TSDoc
+claims, also covering documentation completeness. No child agents or memory use.
+No public framework API, serialized contract, authentication, permission, or
+production runtime change; a new security review is not relevant to this delta.
+Actual child runtime metadata is unavailable; configured profiles are recorded.
+
+Final review wave passed without actionable findings. Performance/reliability
+confirmed removal of live build writes and separation of virtual compiler
+fixtures; style confirmed retained behavioral coverage for every deletion;
+TypeScript/API-docs confirmed matching declarations and explicit prebuilt-input
+requirements, with the release CLI still using build-first packing. Documentation
+completeness is covered by that narrow review. All three configured profiles were
+explicit Sol/medium; actual runtime metadata was unavailable.
+
+Preflight passed: tooling typecheck, configured changed-file ESLint, cleanup,
+TSDoc, formatting and diff checks. The declaration file is outside existing
+ESLint patterns but was checked by tooling, TSDoc and formatting. Focused tests
+passed: analyzer 78, Todo/IPC/package metadata 67, retained Proto publication 2,
+and the final concurrent four installed-consumer cases. Timing experiments show
+analyzer 12.17s to 5.22s and exhaustive microsecond case 5.50s to 1.34s locally.
+Concurrent batches passed 439 and 487 tests; final packed consumers passed in
+31.75s. These are local measurements, not a CI estimate. Commit/push this frozen
+delta, then run one full verify:release and require exact-commit CI success.
