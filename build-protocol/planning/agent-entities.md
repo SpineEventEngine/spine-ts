@@ -8516,3 +8516,37 @@ Sol/medium performance/reliability and style/test-quality reviewers independentl
 confirmed equivalent real history and unchanged behavioral coverage, no findings.
 No docs or API claims changed in this correction. Push the correction and repeat
 full verification once; require the final commit's GitHub verification and trial.
+
+Full local verification passed at 47b7fe82c: 6,306 passed, one skipped; branch
+coverage unchanged at 90.00%, total command 367.88s, test phase 112.96s, clean
+worktree. GitHub run of preceding 178b201d5 then exposed two hosted-load failures:
+Todo beforeAll module import exceeded 30s, and the provider SDK stream fixture
+delivered its oversized chunk via a 75ms timer before the assertion observed it.
+Test phase was 630.30s versus baseline 1,069.21s, but failed results are not accepted.
+Same explicit Sol/medium implementer receives both confirmed findings together;
+replace wall-time-dependent setup with correct module initialization and explicit
+stream coordination. Also inspect the Todo missing-registry test's live rename
+against parallel package readers and isolate any shared mutation. Preserve real
+regression behavior and existing thresholds/timeouts. Cancel superseded pending CI
+47b7fe82c to avoid spending another full run on these now-known fixture defects.
+
+Hosted-fixture correction removes Todo's duplicated setup-only handler analysis
+and fresh TypeScript emit; canonical generated-output comparison and clean TS
+build remain authoritative, and all real Todo behavior remains exercised. Module
+loading and built-file presence are ordinary test initialization. Missing-registry
+recovery now uses a private copied build with cleanup covering setup/import, so
+parallel package reads cannot observe a renamed live file. SDK SSE overflow is
+released explicitly after attaching the rejection matcher, replacing the 75ms
+race. Final concurrent Todo/SDK/installed-consumer checks pass 85/85 in 29.66s;
+tooling, ESLint, cleanup, TSDoc, formatting and diff checks pass. Existing explicit
+Sol/medium performance/reliability and style reviewers receive this complete
+correction batch for narrow re-review. No public docs/API/runtime change.
+
+Both narrow re-reviews passed with no findings: real registry failure/recovery
+and SDK-wrapped SSE overflow remain covered, without shared build mutations or
+wall-clock scheduling dependencies. Scoped Todo coverage in a temporary output
+directory matched prior full-run todo-app.ts coverage (181/182 lines, 47/51
+branches) and hit the shared BoundedContext missing-registry error path. Prior
+full coverage output was preserved. Commit/push these test-only corrections,
+repeat full verification once using explicit Luna/low mechanical dispatch, and
+require final-commit CI verification and publication trial to pass.

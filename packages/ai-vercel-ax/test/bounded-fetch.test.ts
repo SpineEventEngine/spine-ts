@@ -93,14 +93,15 @@ describe("bounded provider fetch", () => {
   it("surfaces an SDK-wrapped read error when valid SSE exceeds the admitted raw byte ceiling", async () => {
     const accepted =
       'data: {"type":"response.in_progress","response":{"id":"fixture","created_at":1,"model":"fixture"}}\n\n';
+    let sendOversized!: () => void;
     const response = new Response(
       new ReadableStream<Uint8Array>({
         start(controller) {
           controller.enqueue(encoder.encode(accepted));
-          setTimeout(() => {
+          sendOversized = () => {
             controller.enqueue(encoder.encode(`: ${"x".repeat(33_000)}\n\n`));
             controller.close();
-          }, 75);
+          };
         },
       }),
       { status: 200, headers: { "content-type": "text/event-stream" } },
@@ -116,17 +117,18 @@ describe("bounded provider fetch", () => {
       prompt: [{ role: "user", content: [{ type: "text", text: "fixture" }] }],
     });
     const reader = stream.getReader();
-    await expect(
-      (async () => {
-        for (;;) {
-          if ((await reader.read()).done) return;
-        }
-      })(),
-    ).rejects.toMatchObject({
+    const readToEnd = (async () => {
+      for (;;) {
+        if ((await reader.read()).done) return;
+      }
+    })();
+    const rejection = expect(readToEnd).rejects.toMatchObject({
       name: "AI_APICallError",
       statusCode: 200,
       cause: { message: "Provider transport response byte limit exceeded" },
     });
+    sendOversized();
+    await rejection;
   });
   it("is inert until admission and permits one dispatch for one ticket", async () => {
     const h = harness();
