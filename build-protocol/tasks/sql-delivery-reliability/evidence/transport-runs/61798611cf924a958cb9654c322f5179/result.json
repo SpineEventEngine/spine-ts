@@ -1,0 +1,162 @@
+{
+  "status": "PASS",
+  "result": {
+    "provider": "postgres16",
+    "protocol": "native",
+    "scenario": "partial-activation-failure",
+    "deliveryMode": "db-only",
+    "database": "sqlrel_sub_61798611cf924a958cb9654c322f5179",
+    "terminalName": "ConnectError",
+    "terminalMessage": "[unavailable] injected partial child Activate failure",
+    "counters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 2,
+      "cancel": 3,
+      "cancelFaults": 1,
+      "cancelSuccesses": 2,
+      "streamFaults": 0,
+      "iterators": 0
+    },
+    "secondaryCounters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 0,
+      "cancel": 3,
+      "iterators": 0
+    },
+    "subscriptionTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-9307d681-e002-4c3a-9bcd-e3e3a2a23d6f"
+      },
+      {
+        "operation": "activate",
+        "id": "s-9307d681-e002-4c3a-9bcd-e3e3a2a23d6f"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-9307d681-e002-4c3a-9bcd-e3e3a2a23d6f"
+      },
+      {
+        "operation": "cancel-failed",
+        "id": "s-9307d681-e002-4c3a-9bcd-e3e3a2a23d6f"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-9307d681-e002-4c3a-9bcd-e3e3a2a23d6f"
+      },
+      {
+        "operation": "cancel-succeeded",
+        "id": "s-9307d681-e002-4c3a-9bcd-e3e3a2a23d6f"
+      },
+      {
+        "operation": "subscribe",
+        "id": "s-185fd143-af5b-4384-ad42-42a174438c91"
+      },
+      {
+        "operation": "activate",
+        "id": "s-185fd143-af5b-4384-ad42-42a174438c91"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-185fd143-af5b-4384-ad42-42a174438c91"
+      },
+      {
+        "operation": "cancel-succeeded",
+        "id": "s-185fd143-af5b-4384-ad42-42a174438c91"
+      }
+    ],
+    "secondaryTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-754f5729-85e2-4b39-b231-f2c3bf342933"
+      },
+      {
+        "operation": "activate",
+        "id": "s-754f5729-85e2-4b39-b231-f2c3bf342933"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-754f5729-85e2-4b39-b231-f2c3bf342933"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-754f5729-85e2-4b39-b231-f2c3bf342933"
+      },
+      {
+        "operation": "subscribe",
+        "id": "s-61827fe5-50e4-4681-8a7f-7ee7f2328c25"
+      },
+      {
+        "operation": "activate",
+        "id": "s-61827fe5-50e4-4681-8a7f-7ee7f2328c25"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-61827fe5-50e4-4681-8a7f-7ee7f2328c25"
+      }
+    ],
+    "entries": []
+  },
+  "counters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 2,
+    "cancel": 3,
+    "cancelFaults": 1,
+    "cancelSuccesses": 2,
+    "streamFaults": 0,
+    "iterators": 0
+  },
+  "secondaryCounters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 0,
+    "cancel": 3,
+    "iterators": 0
+  },
+  "entries": [],
+  "subscriptionTrace": [
+    {
+      "operation": "subscribe",
+      "id": "s-9307d681-e002-4c3a-9bcd-e3e3a2a23d6f"
+    },
+    {
+      "operation": "activate",
+      "id": "s-9307d681-e002-4c3a-9bcd-e3e3a2a23d6f"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-9307d681-e002-4c3a-9bcd-e3e3a2a23d6f"
+    },
+    {
+      "operation": "cancel-failed",
+      "id": "s-9307d681-e002-4c3a-9bcd-e3e3a2a23d6f"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-9307d681-e002-4c3a-9bcd-e3e3a2a23d6f"
+    },
+    {
+      "operation": "cancel-succeeded",
+      "id": "s-9307d681-e002-4c3a-9bcd-e3e3a2a23d6f"
+    },
+    {
+      "operation": "subscribe",
+      "id": "s-185fd143-af5b-4384-ad42-42a174438c91"
+    },
+    {
+      "operation": "activate",
+      "id": "s-185fd143-af5b-4384-ad42-42a174438c91"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-185fd143-af5b-4384-ad42-42a174438c91"
+    },
+    {
+      "operation": "cancel-succeeded",
+      "id": "s-185fd143-af5b-4384-ad42-42a174438c91"
+    }
+  ]
+}

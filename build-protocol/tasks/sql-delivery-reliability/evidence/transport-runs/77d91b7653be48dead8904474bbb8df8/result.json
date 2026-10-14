@@ -1,0 +1,158 @@
+{
+  "status": "PASS",
+  "result": {
+    "provider": "postgres18",
+    "protocol": "connect",
+    "scenario": "partial-activation-failure",
+    "deliveryMode": "db-only",
+    "database": "sqlrel_sub_77d91b7653be48dead8904474bbb8df8",
+    "terminalName": "ConnectError",
+    "terminalMessage": "[unavailable] injected partial child Activate failure",
+    "counters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 2,
+      "cancel": 3,
+      "cancelFaults": 1,
+      "cancelSuccesses": 2,
+      "streamFaults": 0,
+      "iterators": 0
+    },
+    "secondaryCounters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 0,
+      "cancel": 2,
+      "iterators": 0
+    },
+    "subscriptionTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-2b9a4b41-c230-4bdf-a343-2d3e756176d7"
+      },
+      {
+        "operation": "activate",
+        "id": "s-2b9a4b41-c230-4bdf-a343-2d3e756176d7"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-2b9a4b41-c230-4bdf-a343-2d3e756176d7"
+      },
+      {
+        "operation": "cancel-failed",
+        "id": "s-2b9a4b41-c230-4bdf-a343-2d3e756176d7"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-2b9a4b41-c230-4bdf-a343-2d3e756176d7"
+      },
+      {
+        "operation": "cancel-succeeded",
+        "id": "s-2b9a4b41-c230-4bdf-a343-2d3e756176d7"
+      },
+      {
+        "operation": "subscribe",
+        "id": "s-4af90d9c-577a-4e0f-8058-97068118c466"
+      },
+      {
+        "operation": "activate",
+        "id": "s-4af90d9c-577a-4e0f-8058-97068118c466"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-4af90d9c-577a-4e0f-8058-97068118c466"
+      },
+      {
+        "operation": "cancel-succeeded",
+        "id": "s-4af90d9c-577a-4e0f-8058-97068118c466"
+      }
+    ],
+    "secondaryTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-c1fa9ddc-95b3-4bd2-9c18-ac6c87b4def6"
+      },
+      {
+        "operation": "activate",
+        "id": "s-c1fa9ddc-95b3-4bd2-9c18-ac6c87b4def6"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-c1fa9ddc-95b3-4bd2-9c18-ac6c87b4def6"
+      },
+      {
+        "operation": "subscribe",
+        "id": "s-ea061aca-912f-4e32-ac5b-27ef9e70d207"
+      },
+      {
+        "operation": "activate",
+        "id": "s-ea061aca-912f-4e32-ac5b-27ef9e70d207"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-ea061aca-912f-4e32-ac5b-27ef9e70d207"
+      }
+    ],
+    "entries": []
+  },
+  "counters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 2,
+    "cancel": 3,
+    "cancelFaults": 1,
+    "cancelSuccesses": 2,
+    "streamFaults": 0,
+    "iterators": 0
+  },
+  "secondaryCounters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 0,
+    "cancel": 2,
+    "iterators": 0
+  },
+  "entries": [],
+  "subscriptionTrace": [
+    {
+      "operation": "subscribe",
+      "id": "s-2b9a4b41-c230-4bdf-a343-2d3e756176d7"
+    },
+    {
+      "operation": "activate",
+      "id": "s-2b9a4b41-c230-4bdf-a343-2d3e756176d7"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-2b9a4b41-c230-4bdf-a343-2d3e756176d7"
+    },
+    {
+      "operation": "cancel-failed",
+      "id": "s-2b9a4b41-c230-4bdf-a343-2d3e756176d7"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-2b9a4b41-c230-4bdf-a343-2d3e756176d7"
+    },
+    {
+      "operation": "cancel-succeeded",
+      "id": "s-2b9a4b41-c230-4bdf-a343-2d3e756176d7"
+    },
+    {
+      "operation": "subscribe",
+      "id": "s-4af90d9c-577a-4e0f-8058-97068118c466"
+    },
+    {
+      "operation": "activate",
+      "id": "s-4af90d9c-577a-4e0f-8058-97068118c466"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-4af90d9c-577a-4e0f-8058-97068118c466"
+    },
+    {
+      "operation": "cancel-succeeded",
+      "id": "s-4af90d9c-577a-4e0f-8058-97068118c466"
+    }
+  ]
+}

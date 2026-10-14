@@ -1,0 +1,12 @@
+startedAt=2026-10-14T03:51:13.796Z
+command=pnpm exec vitest run --config vitest.infrastructure.config.ts packages/server-blackbox-tests/test/project-subscription-transports.integration.test.ts
+case={"provider":"postgres18","protocol":"grpc-web","scenario":"duplicate-ack-terminal","deliveryMode":"shared-memory"}
+stdout:
+stdout:  RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+stdout:
+stdout:
+stdout:  Test Files  1 passed (1)
+stdout:       Tests  1 passed (1)
+stdout:    Start at  04:51:14
+stdout:    Duration  562ms (transform 17ms, setup 0ms, import 22ms, tests 430ms, environment 0ms)
+stdout:

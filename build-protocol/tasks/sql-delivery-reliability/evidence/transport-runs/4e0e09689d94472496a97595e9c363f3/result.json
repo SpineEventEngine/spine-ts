@@ -1,0 +1,162 @@
+{
+  "status": "PASS",
+  "result": {
+    "provider": "mariadb114",
+    "protocol": "native",
+    "scenario": "partial-activation-failure",
+    "deliveryMode": "shared-memory",
+    "database": "sqlrel_sub_4e0e09689d94472496a97595e9c363f3",
+    "terminalName": "ConnectError",
+    "terminalMessage": "[unavailable] injected partial child Activate failure",
+    "counters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 2,
+      "cancel": 3,
+      "cancelFaults": 1,
+      "cancelSuccesses": 2,
+      "streamFaults": 0,
+      "iterators": 0
+    },
+    "secondaryCounters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 0,
+      "cancel": 3,
+      "iterators": 0
+    },
+    "subscriptionTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-d736d077-275a-4c92-8768-b28d1dc9f6e9"
+      },
+      {
+        "operation": "activate",
+        "id": "s-d736d077-275a-4c92-8768-b28d1dc9f6e9"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-d736d077-275a-4c92-8768-b28d1dc9f6e9"
+      },
+      {
+        "operation": "cancel-failed",
+        "id": "s-d736d077-275a-4c92-8768-b28d1dc9f6e9"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-d736d077-275a-4c92-8768-b28d1dc9f6e9"
+      },
+      {
+        "operation": "cancel-succeeded",
+        "id": "s-d736d077-275a-4c92-8768-b28d1dc9f6e9"
+      },
+      {
+        "operation": "subscribe",
+        "id": "s-9f820fa7-a60f-43a8-b2d0-871fffbf03d9"
+      },
+      {
+        "operation": "activate",
+        "id": "s-9f820fa7-a60f-43a8-b2d0-871fffbf03d9"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-9f820fa7-a60f-43a8-b2d0-871fffbf03d9"
+      },
+      {
+        "operation": "cancel-succeeded",
+        "id": "s-9f820fa7-a60f-43a8-b2d0-871fffbf03d9"
+      }
+    ],
+    "secondaryTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-0afaaeb9-4726-4e2c-b146-5129d5e168a4"
+      },
+      {
+        "operation": "activate",
+        "id": "s-0afaaeb9-4726-4e2c-b146-5129d5e168a4"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-0afaaeb9-4726-4e2c-b146-5129d5e168a4"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-0afaaeb9-4726-4e2c-b146-5129d5e168a4"
+      },
+      {
+        "operation": "subscribe",
+        "id": "s-3aae892f-93c6-4eb9-aa09-fd6e76f4f581"
+      },
+      {
+        "operation": "activate",
+        "id": "s-3aae892f-93c6-4eb9-aa09-fd6e76f4f581"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-3aae892f-93c6-4eb9-aa09-fd6e76f4f581"
+      }
+    ],
+    "entries": []
+  },
+  "counters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 2,
+    "cancel": 3,
+    "cancelFaults": 1,
+    "cancelSuccesses": 2,
+    "streamFaults": 0,
+    "iterators": 0
+  },
+  "secondaryCounters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 0,
+    "cancel": 3,
+    "iterators": 0
+  },
+  "entries": [],
+  "subscriptionTrace": [
+    {
+      "operation": "subscribe",
+      "id": "s-d736d077-275a-4c92-8768-b28d1dc9f6e9"
+    },
+    {
+      "operation": "activate",
+      "id": "s-d736d077-275a-4c92-8768-b28d1dc9f6e9"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-d736d077-275a-4c92-8768-b28d1dc9f6e9"
+    },
+    {
+      "operation": "cancel-failed",
+      "id": "s-d736d077-275a-4c92-8768-b28d1dc9f6e9"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-d736d077-275a-4c92-8768-b28d1dc9f6e9"
+    },
+    {
+      "operation": "cancel-succeeded",
+      "id": "s-d736d077-275a-4c92-8768-b28d1dc9f6e9"
+    },
+    {
+      "operation": "subscribe",
+      "id": "s-9f820fa7-a60f-43a8-b2d0-871fffbf03d9"
+    },
+    {
+      "operation": "activate",
+      "id": "s-9f820fa7-a60f-43a8-b2d0-871fffbf03d9"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-9f820fa7-a60f-43a8-b2d0-871fffbf03d9"
+    },
+    {
+      "operation": "cancel-succeeded",
+      "id": "s-9f820fa7-a60f-43a8-b2d0-871fffbf03d9"
+    }
+  ]
+}

@@ -1,0 +1,162 @@
+{
+  "status": "PASS",
+  "result": {
+    "provider": "mysql84",
+    "protocol": "native",
+    "scenario": "partial-activation-failure",
+    "deliveryMode": "shared-memory",
+    "database": "sqlrel_sub_ee6575aebb384c7e9504c1256624f102",
+    "terminalName": "ConnectError",
+    "terminalMessage": "[unavailable] injected partial child Activate failure",
+    "counters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 2,
+      "cancel": 3,
+      "cancelFaults": 1,
+      "cancelSuccesses": 2,
+      "streamFaults": 0,
+      "iterators": 0
+    },
+    "secondaryCounters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 0,
+      "cancel": 3,
+      "iterators": 0
+    },
+    "subscriptionTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-e2c3e45e-c73b-4eae-ae06-eeae78a3fc75"
+      },
+      {
+        "operation": "activate",
+        "id": "s-e2c3e45e-c73b-4eae-ae06-eeae78a3fc75"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-e2c3e45e-c73b-4eae-ae06-eeae78a3fc75"
+      },
+      {
+        "operation": "cancel-failed",
+        "id": "s-e2c3e45e-c73b-4eae-ae06-eeae78a3fc75"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-e2c3e45e-c73b-4eae-ae06-eeae78a3fc75"
+      },
+      {
+        "operation": "cancel-succeeded",
+        "id": "s-e2c3e45e-c73b-4eae-ae06-eeae78a3fc75"
+      },
+      {
+        "operation": "subscribe",
+        "id": "s-735f5a9d-a0dc-4b08-a705-6fd1166f6d94"
+      },
+      {
+        "operation": "activate",
+        "id": "s-735f5a9d-a0dc-4b08-a705-6fd1166f6d94"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-735f5a9d-a0dc-4b08-a705-6fd1166f6d94"
+      },
+      {
+        "operation": "cancel-succeeded",
+        "id": "s-735f5a9d-a0dc-4b08-a705-6fd1166f6d94"
+      }
+    ],
+    "secondaryTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-6ad3affc-55b9-478a-bcf1-e1cfa50e2fc4"
+      },
+      {
+        "operation": "activate",
+        "id": "s-6ad3affc-55b9-478a-bcf1-e1cfa50e2fc4"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-6ad3affc-55b9-478a-bcf1-e1cfa50e2fc4"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-6ad3affc-55b9-478a-bcf1-e1cfa50e2fc4"
+      },
+      {
+        "operation": "subscribe",
+        "id": "s-872cab67-cfd4-4de1-b4f0-c8dd0938c72d"
+      },
+      {
+        "operation": "activate",
+        "id": "s-872cab67-cfd4-4de1-b4f0-c8dd0938c72d"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-872cab67-cfd4-4de1-b4f0-c8dd0938c72d"
+      }
+    ],
+    "entries": []
+  },
+  "counters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 2,
+    "cancel": 3,
+    "cancelFaults": 1,
+    "cancelSuccesses": 2,
+    "streamFaults": 0,
+    "iterators": 0
+  },
+  "secondaryCounters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 0,
+    "cancel": 3,
+    "iterators": 0
+  },
+  "entries": [],
+  "subscriptionTrace": [
+    {
+      "operation": "subscribe",
+      "id": "s-e2c3e45e-c73b-4eae-ae06-eeae78a3fc75"
+    },
+    {
+      "operation": "activate",
+      "id": "s-e2c3e45e-c73b-4eae-ae06-eeae78a3fc75"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-e2c3e45e-c73b-4eae-ae06-eeae78a3fc75"
+    },
+    {
+      "operation": "cancel-failed",
+      "id": "s-e2c3e45e-c73b-4eae-ae06-eeae78a3fc75"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-e2c3e45e-c73b-4eae-ae06-eeae78a3fc75"
+    },
+    {
+      "operation": "cancel-succeeded",
+      "id": "s-e2c3e45e-c73b-4eae-ae06-eeae78a3fc75"
+    },
+    {
+      "operation": "subscribe",
+      "id": "s-735f5a9d-a0dc-4b08-a705-6fd1166f6d94"
+    },
+    {
+      "operation": "activate",
+      "id": "s-735f5a9d-a0dc-4b08-a705-6fd1166f6d94"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-735f5a9d-a0dc-4b08-a705-6fd1166f6d94"
+    },
+    {
+      "operation": "cancel-succeeded",
+      "id": "s-735f5a9d-a0dc-4b08-a705-6fd1166f6d94"
+    }
+  ]
+}

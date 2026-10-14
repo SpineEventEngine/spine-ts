@@ -92,6 +92,9 @@ assert.ok(
     "coordinator-fanout-fault",
     "coordinator-retry-exhaustion",
     "coordinator-retry-cancel",
+    "partial-activation-failure",
+    "cancel-publication-race",
+    "duplicate-ack-terminal",
   ].includes(scenario),
 );
 assert.ok(["db-only", "shared-memory"].includes(deliveryMode));
@@ -160,8 +163,13 @@ let result;
 const sessions = new Set();
 const entries = [];
 const subscriptionTrace = [];
+const secondaryTrace = [];
+const serverEventTrace = [];
 const gate = Promise.withResolvers();
 const entered = Promise.withResolvers();
+const failSecondary = Promise.withResolvers();
+const cancelEntered = Promise.withResolvers();
+const finishCancel = Promise.withResolvers();
 const termination = Promise.withResolvers();
 void termination.promise.catch(() => undefined);
 process.once("SIGTERM", () => termination.reject(new Error("Transport fixture received SIGTERM.")));
@@ -240,6 +248,22 @@ try {
                 try {
                   let first = true;
                   for await (const update of implementation.activate(subscription)) {
+                    if (
+                      scenario === "cancel-publication-race" &&
+                      update.update.case === "eventUpdates"
+                    ) {
+                      for (const event of update.update.value.event) {
+                        const message = AnyMessages.unpack(event.message, ProjectCreatedSchema);
+                        serverEventTrace.push({
+                          subscriptionId: subscription.id?.value,
+                          eventId: event.id?.value,
+                          projectNumber: message?.project?.number,
+                          sha256: createHash("sha256")
+                            .update(toBinary(EventSchema, event))
+                            .digest("hex"),
+                        });
+                      }
+                    }
                     const firstResponse = first;
                     if (first) {
                       first = false;
@@ -248,6 +272,7 @@ try {
                       counters.ackReleased++;
                     }
                     yield update;
+                    if (firstResponse && scenario === "duplicate-ack-terminal") yield update;
                     if (
                       firstResponse &&
                       ([
@@ -282,12 +307,28 @@ try {
               cancel: async (subscription) => {
                 counters.cancel++;
                 subscriptionTrace.push({ operation: "cancel", id: subscription.id?.value });
+                if (scenario === "cancel-publication-race" && counters.cancel === 1) {
+                  cancelEntered.resolve();
+                  await finishCancel.promise;
+                }
+                if (scenario === "partial-activation-failure" && counters.cancelFaults === 0) {
+                  counters.cancelFaults++;
+                  subscriptionTrace.push({
+                    operation: "cancel-failed",
+                    id: subscription.id?.value,
+                  });
+                  throw new ConnectError("injected partial cleanup failure", Code.Unavailable);
+                }
                 if (scenario === "cancel-retry" && counters.cancelFaults === 0) {
                   counters.cancelFaults++;
                   throw new ConnectError("injected transient Cancel failure", Code.Unavailable);
                 }
                 const response = await implementation.cancel(subscription);
                 counters.cancelSuccesses++;
+                subscriptionTrace.push({
+                  operation: "cancel-succeeded",
+                  id: subscription.id?.value,
+                });
                 return response;
               },
             });
@@ -307,7 +348,11 @@ try {
   assert.ok(address && typeof address !== "string");
   const endpoint = `http://127.0.0.1:${String(address.port)}`;
   let secondaryEndpoint;
-  if (["child-fanout-fault", "coordinator-fanout-fault"].includes(scenario)) {
+  if (
+    ["child-fanout-fault", "coordinator-fanout-fault", "partial-activation-failure"].includes(
+      scenario,
+    )
+  ) {
     secondaryServer = http2.createServer(
       connectNodeAdapter({
         routes: (router) =>
@@ -318,12 +363,22 @@ try {
                 ...implementation,
                 subscribe: async (topic) => {
                   secondaryCounters.subscribe++;
-                  return implementation.subscribe(topic);
+                  const accepted = await implementation.subscribe(topic);
+                  secondaryTrace.push({ operation: "subscribe", id: accepted.id?.value });
+                  return accepted;
                 },
                 activate: async function* (subscription) {
                   secondaryCounters.activate++;
+                  secondaryTrace.push({ operation: "activate", id: subscription.id?.value });
                   secondaryCounters.iterators++;
                   try {
+                    if (scenario === "partial-activation-failure") {
+                      await failSecondary.promise;
+                      throw new ConnectError(
+                        "injected partial child Activate failure",
+                        Code.Unavailable,
+                      );
+                    }
                     let first = true;
                     for await (const update of implementation.activate(subscription)) {
                       if (first) {
@@ -338,6 +393,7 @@ try {
                 },
                 cancel: async (subscription) => {
                   secondaryCounters.cancel++;
+                  secondaryTrace.push({ operation: "cancel", id: subscription.id?.value });
                   return implementation.cancel(subscription);
                 },
               });
@@ -363,6 +419,7 @@ try {
       "coordinator-fanout-fault",
       "coordinator-retry-exhaustion",
       "coordinator-retry-cancel",
+      "partial-activation-failure",
     ].includes(scenario)
   ) {
     const membersList = [
@@ -410,8 +467,8 @@ try {
       clock: { now: () => create(TimestampSchema) },
     });
   }
-  if (protocol !== "native" && scenario === "stream-reconnect") {
-    streamProxy = await streamFaultProxy(browser.baseUrl, counters);
+  if (protocol !== "native" && ["stream-reconnect", "duplicate-ack-terminal"].includes(scenario)) {
+    streamProxy = await streamFaultProxy(browser.baseUrl, counters, scenario);
   }
   const browserEndpoint = streamProxy?.baseUrl ?? browser?.baseUrl;
   const retryOptions = [
@@ -419,11 +476,12 @@ try {
     "child-retry-cancel",
     "coordinator-retry-exhaustion",
     "coordinator-retry-cancel",
+    "partial-activation-failure",
   ].includes(scenario)
     ? {
         subscriptions: {
           retryPolicy: {
-            maxAttempts: 2,
+            maxAttempts: scenario === "partial-activation-failure" ? 1 : 2,
             maxElapsedMs: 5_000,
             delayMs: () =>
               ["child-retry-cancel", "coordinator-retry-cancel"].includes(scenario) ? 500 : 50,
@@ -463,7 +521,75 @@ try {
   );
   await bounded(entered.promise, 10_000, "server Activate entry");
   assert.equal(activated, false, "Readiness must remain pending before the wire ACK.");
-  if (scenario === "pending-cancel") {
+  if (scenario === "partial-activation-failure") {
+    await waitUntil(
+      () => secondaryCounters.activate === 1,
+      5_000,
+      "second child Activate entry",
+      termination.promise,
+    );
+    assert.equal(activated, false);
+    assert.equal(counters.ackReleased, 0);
+    failSecondary.resolve();
+    gate.resolve();
+    const terminal = await bounded(activationResult, 10_000, "failed child activation");
+    assert.ok(terminal instanceof ConnectError);
+    assert.equal(terminal.code, Code.Unavailable);
+    assert.match(terminal.message, /injected partial child Activate failure/u);
+    assert.equal(counters.cancelFaults, 1);
+    await bounded(subscription.cancel(), 10_000, "same-handle partial cleanup retry");
+    await waitUntil(
+      () => counters.cancel >= 1 && counters.iterators === 0 && secondaryCounters.iterators === 0,
+      5_000,
+      "partial child activation cleanup",
+      termination.promise,
+    );
+    assert.equal(counters.subscribe, 2, "One configured retry remains finite.");
+    assert.equal(secondaryCounters.subscribe, counters.subscribe);
+    assert.equal(counters.activate, counters.subscribe);
+    assert.equal(secondaryCounters.activate, counters.subscribe);
+    assert.equal(counters.cancelSuccesses, counters.subscribe);
+    assert.equal(counters.cancel, 3, "The failed Cancel is retried on the same handle.");
+    const primarySubscriptions = subscriptionTrace
+      .filter((item) => item.operation === "subscribe")
+      .map((item) => item.id);
+    const primarySucceeded = subscriptionTrace
+      .filter((item) => item.operation === "cancel-succeeded")
+      .map((item) => item.id);
+    const primaryFailed = subscriptionTrace
+      .filter((item) => item.operation === "cancel-failed")
+      .map((item) => item.id);
+    assert.equal(new Set(primarySubscriptions).size, 2);
+    assert.deepEqual(primarySucceeded.sort(), [...primarySubscriptions].sort());
+    assert.deepEqual(primaryFailed, [primarySubscriptions[0]]);
+    const secondarySubscriptions = secondaryTrace
+      .filter((item) => item.operation === "subscribe")
+      .map((item) => item.id);
+    const secondaryCancels = secondaryTrace
+      .filter((item) => item.operation === "cancel")
+      .map((item) => item.id);
+    assert.equal(new Set(secondarySubscriptions).size, 2);
+    assert.ok(
+      secondarySubscriptions.every((id) => secondaryCancels.includes(id)),
+      "Every admitted secondary child must receive Cancel.",
+    );
+    assert.ok(secondaryCancels.length >= 2 && secondaryCancels.length <= 3);
+    assert.equal(entries.length, 0);
+    result = {
+      provider: providerName,
+      protocol,
+      scenario,
+      deliveryMode,
+      database,
+      terminalName: terminal.name,
+      terminalMessage: terminal.message,
+      counters,
+      secondaryCounters,
+      subscriptionTrace,
+      secondaryTrace,
+      entries,
+    };
+  } else if (scenario === "pending-cancel") {
     const updates = subscription.updates[Symbol.asyncIterator]();
     const next = updates.next();
     const cancellation = subscription.cancel();
@@ -513,7 +639,36 @@ try {
     }
     gate.resolve();
     await bounded(activation, 10_000, "validated client activation ACK");
-    if (["child-retry-exhaustion", "coordinator-retry-exhaustion"].includes(scenario)) {
+    if (scenario === "duplicate-ack-terminal") {
+      const updates = subscription.updates[Symbol.asyncIterator]();
+      const terminal = await bounded(
+        updates.next().then(
+          () => undefined,
+          (error) => error,
+        ),
+        5_000,
+        "duplicate wire ACK protocol error",
+      );
+      assert.ok(terminal instanceof Error);
+      assert.equal(terminal.name, "ClientProtocolError");
+      await bounded(subscription.cancel(), 10_000, "terminal subscription cancellation");
+      assert.equal(counters.subscribe, 1);
+      assert.equal(counters.activate, 1);
+      assert.equal(counters.ackReleased, 1);
+      assert.equal(counters.cancelSuccesses, 1);
+      assert.equal(entries.length, 0);
+      result = {
+        provider: providerName,
+        protocol,
+        scenario,
+        deliveryMode,
+        database,
+        terminalName: terminal.name,
+        terminalMessage: terminal.message,
+        counters,
+        entries,
+      };
+    } else if (["child-retry-exhaustion", "coordinator-retry-exhaustion"].includes(scenario)) {
       const updates = subscription.updates[Symbol.asyncIterator]();
       const terminal = await bounded(
         updates.next().then(
@@ -737,7 +892,120 @@ try {
       assert.equal(state?.id?.organization?.code, organization);
       assert.equal(state?.id?.number, 1);
       assert.equal(state?.name, "transport-roadmap");
-      if (scenario === "concurrent-teardown") {
+      if (scenario === "cancel-publication-race") {
+        const beforeCancelUpdate = bounded(updates.next(), 15_000, "Event before Cancel");
+        const secondIds = projectWorkflowIds(organization, 2);
+        const beforeCancelPost = await client
+          .asGuest()
+          .post(
+            CreateProjectSchema,
+            create(CreateProjectSchema, { project: secondIds.project, name: "earlier-roadmap" }),
+          );
+        assert.equal(beforeCancelPost.kind, "ok");
+        const earlier = await beforeCancelUpdate;
+        assert.equal(earlier.done, false);
+        assert.equal(earlier.value.kind, "update");
+        assert.equal(earlier.value.update.update.case, "eventUpdates");
+        assert.equal(earlier.value.update.update.value.event.length, 1);
+        const earlierEvent = earlier.value.update.update.value.event[0];
+        assert.ok(earlierEvent?.id?.value);
+        assert.notEqual(earlierEvent.id.value, event.id.value);
+        const earlierPayload = AnyMessages.unpack(earlierEvent.message, ProjectCreatedSchema);
+        assert.equal(earlierPayload?.project?.number, 2);
+        assert.equal(earlierPayload?.name, "earlier-roadmap");
+
+        const cancellation = subscription.cancel();
+        await bounded(cancelEntered.promise, 5_000, "server Cancel held before removal");
+        const thirdIds = projectWorkflowIds(organization, 3);
+        const duringCancelPost = await client
+          .asGuest()
+          .post(
+            CreateProjectSchema,
+            create(CreateProjectSchema, { project: thirdIds.project, name: "racing-roadmap" }),
+          );
+        assert.equal(duringCancelPost.kind, "ok");
+        await waitUntil(
+          () => serverEventTrace.some((item) => item.projectNumber === 3),
+          5_000,
+          "racing Event yielded by server before Cancel removal",
+          termination.promise,
+        );
+        const racingEvents = serverEventTrace.filter((item) => item.projectNumber === 3);
+        assert.equal(racingEvents.length, 1);
+        assert.ok(racingEvents[0].eventId);
+        assert.equal(
+          racingEvents[0].subscriptionId,
+          subscriptionTrace.find((item) => item.operation === "subscribe")?.id,
+        );
+        assert.match(racingEvents[0].sha256, /^[0-9a-f]{64}$/u);
+        assert.equal((await bounded(updates.next(), 2_000, "updates during Cancel")).done, true);
+        finishCancel.resolve();
+        await bounded(cancellation, 10_000, "held Cancel completion");
+        assert.equal((await bounded(updates.next(), 2_000, "updates after Cancel")).done, true);
+        const cancelledId = subscriptionTrace.find((item) => item.operation === "subscribe")?.id;
+        assert.ok(cancelledId);
+        const observer = await client.asGuest().createSubscription(
+          create(TopicSchema, {
+            id: create(TopicIdSchema, { value: `observer-${database}` }),
+            target: create(TargetSchema, {
+              type: TypeUrls.derive(ProjectCreatedSchema),
+              criterion: { case: "includeAll", value: true },
+            }),
+          }),
+          { kind: "event" },
+        );
+        await bounded(observer.activate(), 10_000, "post-Cancel observer readiness");
+        const observedFourth = bounded(
+          observer.updates[Symbol.asyncIterator]().next(),
+          15_000,
+          "Project 4 observed after Cancel",
+        );
+        const fourthIds = projectWorkflowIds(organization, 4);
+        const afterCancelPost = await client
+          .asGuest()
+          .post(
+            CreateProjectSchema,
+            create(CreateProjectSchema, { project: fourthIds.project, name: "later-roadmap" }),
+          );
+        assert.equal(afterCancelPost.kind, "ok");
+        const fourthUpdate = await observedFourth;
+        assert.equal(fourthUpdate.done, false);
+        assert.equal(fourthUpdate.value.kind, "update");
+        assert.equal(fourthUpdate.value.update.update.case, "eventUpdates");
+        assert.equal(fourthUpdate.value.update.update.value.event.length, 1);
+        const fourthEvent = fourthUpdate.value.update.update.value.event[0];
+        assert.ok(fourthEvent?.id?.value);
+        assert.equal(
+          AnyMessages.unpack(fourthEvent.message, ProjectCreatedSchema)?.project?.number,
+          4,
+        );
+        await bounded(observer.cancel(), 10_000, "observer cancellation");
+        await bounded(entitySubscription.cancel(), 10_000, "Entity subscription cancellation");
+        await waitUntil(
+          () => entries.filter((entry) => entry.method === "create").length === 4,
+          5_000,
+          "four Project Command handler entries",
+          termination.promise,
+        );
+        const admittedIds = subscriptionTrace
+          .filter((item) => item.operation === "subscribe")
+          .map((item) => item.id);
+        const removedIds = subscriptionTrace
+          .filter((item) => item.operation === "cancel-succeeded")
+          .map((item) => item.id);
+        assert.deepEqual(removedIds.sort(), [...admittedIds].sort());
+        assert.equal(new Set(admittedIds).size, 3);
+        const fourthYields = serverEventTrace.filter((item) => item.projectNumber === 4);
+        assert.equal(fourthYields.length, 1);
+        assert.equal(fourthYields[0].eventId, fourthEvent.id.value);
+        assert.notEqual(fourthYields[0].subscriptionId, cancelledId);
+        assert.equal(
+          serverEventTrace.filter(
+            (item) => item.projectNumber === 4 && item.subscriptionId === cancelledId,
+          ).length,
+          0,
+        );
+      } else if (scenario === "concurrent-teardown") {
         const cancellation = subscription.cancel();
         const duplicateCancellation = subscription.cancel();
         const entityCancellation = entitySubscription.cancel();
@@ -795,7 +1063,10 @@ try {
         assert.deepEqual(cancelled.sort(), subscribed.sort());
       }
       assert.equal(counters.iterators, 0);
-      assert.equal(entries.filter((entry) => entry.method === "create").length, 1);
+      assert.equal(
+        entries.filter((entry) => entry.method === "create").length,
+        scenario === "cancel-publication-race" ? 4 : 1,
+      );
       result = {
         provider: providerName,
         protocol,
@@ -809,6 +1080,7 @@ try {
         counters,
         entries,
         subscriptionTrace,
+        serverEventTrace,
       };
     }
   }
@@ -816,6 +1088,8 @@ try {
   failure = error;
 } finally {
   gate.resolve();
+  failSecondary.resolve();
+  finishCancel.resolve();
   const cleanup = [];
   let databaseDropped = false;
   for (const action of [
@@ -885,8 +1159,9 @@ async function bounded(work, durationMs, label, cleanup = false) {
   }
 }
 
-async function streamFaultProxy(backendBaseUrl, counters) {
+async function streamFaultProxy(backendBaseUrl, counters, fault) {
   const sockets = new Set();
+  let injected = false;
   const proxy = http.createServer((incoming, outgoing) => {
     const target = new URL(incoming.url, backendBaseUrl);
     const forwarded = http.request(target, {
@@ -895,12 +1170,12 @@ async function streamFaultProxy(backendBaseUrl, counters) {
     });
     forwarded.on("response", (response) => {
       outgoing.writeHead(response.statusCode, response.headers);
-      if (!target.pathname.endsWith("/Activate") || counters.streamFaults !== 0) {
+      if (!target.pathname.endsWith("/Activate") || injected) {
         response.pipe(outgoing);
         return;
       }
       let firstFrame = Buffer.alloc(0);
-      response.on("data", (chunk) => {
+      const onData = (chunk) => {
         firstFrame = Buffer.concat([firstFrame, chunk]);
         if (firstFrame.length < 5) return;
         const frameLength = firstFrame.readUInt32BE(1);
@@ -911,13 +1186,24 @@ async function streamFaultProxy(backendBaseUrl, counters) {
         }
         if (firstFrame.length < 5 + frameLength) return;
         response.pause();
-        outgoing.write(firstFrame.subarray(0, 5 + frameLength));
-        counters.streamFaults++;
-        setTimeout(() => {
-          response.destroy();
-          outgoing.destroy();
-        }, 10);
-      });
+        injected = true;
+        const ackFrame = firstFrame.subarray(0, 5 + frameLength);
+        outgoing.write(ackFrame);
+        if (fault === "duplicate-ack-terminal") {
+          outgoing.write(ackFrame);
+          response.off("data", onData);
+          outgoing.write(firstFrame.subarray(5 + frameLength));
+          response.pipe(outgoing);
+          response.resume();
+        } else {
+          counters.streamFaults++;
+          setTimeout(() => {
+            response.destroy();
+            outgoing.destroy();
+          }, 10);
+        }
+      };
+      response.on("data", onData);
       response.on("end", () => outgoing.end());
       response.on("error", () => outgoing.destroy());
     });

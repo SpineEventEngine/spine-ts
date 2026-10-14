@@ -1,0 +1,78 @@
+{
+  "status": "PASS",
+  "result": {
+    "provider": "postgres16",
+    "protocol": "connect",
+    "scenario": "partial-activation-failure",
+    "deliveryMode": "db-only",
+    "database": "sqlrel_sub_0dcf0df330f64f1380ce472bbc2b3f13",
+    "terminalName": "ConnectError",
+    "terminalMessage": "[unavailable] injected partial child Activate failure",
+    "counters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 2,
+      "cancel": 3,
+      "cancelFaults": 1,
+      "cancelSuccesses": 2,
+      "streamFaults": 0,
+      "iterators": 0
+    },
+    "secondaryCounters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 0,
+      "cancel": 3,
+      "iterators": 0
+    },
+    "entries": []
+  },
+  "counters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 2,
+    "cancel": 3,
+    "cancelFaults": 1,
+    "cancelSuccesses": 2,
+    "streamFaults": 0,
+    "iterators": 0
+  },
+  "secondaryCounters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 0,
+    "cancel": 3,
+    "iterators": 0
+  },
+  "entries": [],
+  "subscriptionTrace": [
+    {
+      "operation": "subscribe",
+      "id": "s-19b8ad19-20a6-44e5-9e9e-3b2417a42a7b"
+    },
+    {
+      "operation": "activate",
+      "id": "s-19b8ad19-20a6-44e5-9e9e-3b2417a42a7b"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-19b8ad19-20a6-44e5-9e9e-3b2417a42a7b"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-19b8ad19-20a6-44e5-9e9e-3b2417a42a7b"
+    },
+    {
+      "operation": "subscribe",
+      "id": "s-a0e6eeb3-076e-413f-a824-fab3f57bede6"
+    },
+    {
+      "operation": "activate",
+      "id": "s-a0e6eeb3-076e-413f-a824-fab3f57bede6"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-a0e6eeb3-076e-413f-a824-fab3f57bede6"
+    }
+  ]
+}

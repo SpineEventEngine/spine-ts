@@ -688,3 +688,123 @@ is N/A because no runtime/exported contract changes, and parent documentation
 retains the measured-window/schema-cost limits. Final public prose review remains
 separate. Checkpoint this accepted slice while unrelated transport assertions
 and example source continue.
+
+## Targeted final transport correction validation
+
+The same implementation context reports six PostgreSQL/shared controls green
+for exact primary admitted-ID cleanup/original error preservation and exact
+server-observed racing Event plus removal. After scoped static checks, freeze
+only the two affected transport fixture/wrapper files. Resume the existing
+mechanical function with its explicit immutable Luna/low profile for 48 affected
+engine/protocol/mode rows in a new correction artifact namespace; preserve the
+original 72-row wrapper and evidence. Resume the existing reliability reviewer
+with its explicit immutable Sol/medium profile, confined to the accepted race
+and cleanup findings. Both original dispatch fields were explicit, actual
+runtime introspection unavailable. No style rereview for the deterministic ID
+assertions, no duplicate-ACK/idle rerun and no runtime/public-contract change.
+Collect the bounded rereview before any further correction batch. Example source
+and prose may continue independently; coordinate any build against the short
+matrix's recorded-runtime reservation.
+
+Targeted reliability rereview resolves primary admitted-ID/error preservation and
+the exact Project 3 server Activate observation before held Cancel is released.
+Accept one narrow remaining P2: the Project 4 no-yield assertion currently follows
+Command handler entry without a publication/delivery barrier, so late work can
+escape the negative check. Return it to the same implementer after the current
+frozen matrix completes; retain its exact positive Project 3 and cleanup evidence.
+Use an actual publication/removal observation or live control subscriber, not an
+arbitrary sleep or Command Ack inference. Only the cancellation-race scenario
+needs the subsequent affected 24-row rerun; primary cleanup remains accepted
+when its current 24 rows pass. Targeted review stays confined to this timing
+assertion. This is test evidence correction, not a production behavior change.
+
+The corrected transport matrix completed 48/48 with exact primary cleanup IDs,
+original errors, held-Cancel Event IDs/hashes and final removals; all temporary
+databases were dropped with no remaining sessions. Accept the 24 partial-cleanup
+rows. Preserve the race rows with their current narrower barrier claim. The
+remaining Project 4 assertion correction is now dispatched to the same explicit
+Sol/medium implementer; both source and dist reservations are released.
+
+Dispatch the existing documentation concern using explicit gpt-6-luna / medium
+for the final public documentation delta and example guidance. Read-only review
+of claims, supported limitations, timers, volatile Delivery, known-ID Event repair,
+independent writes and deployment exceptions; no broad historical roadmap audit.
+Mechanical evidence is already persisted. Example live execution is pending and
+must remain labelled pending. Runtime introspection is unavailable; explicit
+configured profile and dispatch fields satisfy the acceptance gate.
+
+Final documentation review is clean for the public delta, including example
+configuration and explicit recovery limits. Its configured Luna/medium profile
+matches the explicit dispatch. It does not substitute for pending live example
+execution.
+
+Example review wave: dispatch existing TypeScript/API, performance/reliability
+and style/maintainability concerns sequentially where platform capacity requires,
+all with explicit gpt-6-sol / medium. Scope is the uncommitted example slice
+(ACK-aware loads, project-ID TaskCreated routes, isolated launch/Compose settings,
+related tests and acceptance drivers), not accepted framework runtime slices.
+Collect the complete wave before one correction batch. Documentation is clean.
+Runtime introspection unavailable; confirm explicit dispatch/profile on acceptance.
+
+The final race correction uses a separate, acknowledged ProjectCreated observer
+to receive Project 4, then checks its exact Event ID and absence from the canceled
+subscription ID. Four PostgreSQL controls and scoped static checks pass. Resume
+the existing reliability reviewer with its originally explicit Sol/medium
+profile for this assertion only. A live example launcher build is in progress;
+the 24-row matrix waits until that build reservation ends.
+
+Targeted Project 4 reliability rereview is clean. The canceled registration is
+removed before its Cancel resolves; a separately activated Event observer then
+receives Project 4 with the exact traced Event ID, and the canceled ID has no
+Project 4 trace. The accepted timing finding is resolved within the measured
+same-process server-iterator scope. Explicit Sol/medium profile matches; no
+new runtime or wire contract. The 24 affected real-transport rows remain due
+after the live example build finishes.
+
+Example review wave complete: documentation and TypeScript/API are clean.
+Style reports two confirmed test defects; reliability reports three confirmed
+launcher/acceptance-driver defects. All explicit profiles match their assignments.
+Accept one correction batch for the same Sol/medium implementation context:
+verify the first task at the project key before posting the second; replace
+port != 8090 with valid nonzero selection and unconditional child cleanup;
+bound burst post/query/close work with partial outcome evidence; derive exact
+projection counts from observed rows and reject duplicate run IDs; ensure local
+launchers terminate actual app/Vite processes with bounded shutdown and prove
+port reuse after interrupt. The unbounded test helper is P2 in task context
+(reviewer called it P1); it is not a production service availability defect.
+Live launcher execution is paused after its current preliminary observation
+until corrections. No framework runtime change or new contract is required.
+Targeted reliability rereview will cover launcher/driver corrections; deterministic
+assertion corrections need no new style/API/documentation wave unless semantics
+change. Full example review is not reopened.
+
+The live-example function confirms its current build completed and no further
+dist writes until release. Resume the existing transport mechanical function
+with its explicitly dispatched immutable Luna/low profile for only 24
+cancel-publication-race rows. Preserve old matrices, record a fresh namespace
+with final observer Event-ID/registration assertions and all cleanup/hash audits.
+The two transport files and compiled output are frozen for this run; independent
+example script/test fixes continue without generation/build.
+
+Live single-process browser execution exposed one additional confirmed example
+configuration defect: a custom UI port reaches Vite but the local application
+still permits only the default 5173 origin, causing Read/Subscribe CORS failures.
+Evidence: live-examples/message-board-single/browser-live/result.json. Add exact
+origin propagation through supported local app configuration and a regression
+to the same correction batch; no wildcard CORS workaround. Prior API/docs clean
+review did not establish this live propagation. Targeted API/reliability review
+covers this change after the matrix releases the build reservation. The exact
+preliminary launcher/app/Vite processes and ports were cleaned after this failure.
+
+Final publication-barrier transport matrix accepted: 24/24 (six per engine),
+unique run IDs/databases, all dropped, zero sessions/errors/unrun cases and
+stable recorded source/dist hashes. The separate observer receives Project 4
+and its Event ID matches the server trace by the passing fixture assertion;
+the trace excludes the canceled subscription ID and all three registrations
+are removed. Exact observed evidence and receipt-assertion provenance are in
+evidence/transport-publication-barrier-matrix/summary.json. Explicit Luna/low
+profile matches the assignment. Combined with accepted partial-cleanup and
+duplicate-ACK rows, all required extra fault scenarios are closed. Reliability
+and style findings resolved; no changed public runtime contract. Build
+reservation released. Checkpoint and immediately push this accepted slice;
+example corrections and final security/release gates remain active.

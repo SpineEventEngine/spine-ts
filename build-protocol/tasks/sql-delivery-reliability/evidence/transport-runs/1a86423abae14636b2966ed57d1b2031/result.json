@@ -1,0 +1,55 @@
+{
+  "status": "PASS",
+  "result": {
+    "provider": "postgres16",
+    "protocol": "connect",
+    "scenario": "duplicate-ack-terminal",
+    "deliveryMode": "db-only",
+    "database": "sqlrel_sub_1a86423abae14636b2966ed57d1b2031",
+    "terminalName": "ClientProtocolError",
+    "terminalMessage": "Client protocol error: subscription stream sent a duplicate activation ACK.",
+    "counters": {
+      "subscribe": 1,
+      "activate": 1,
+      "ackReleased": 1,
+      "cancel": 1,
+      "cancelFaults": 0,
+      "cancelSuccesses": 1,
+      "streamFaults": 0,
+      "iterators": 0
+    },
+    "entries": []
+  },
+  "counters": {
+    "subscribe": 1,
+    "activate": 1,
+    "ackReleased": 1,
+    "cancel": 1,
+    "cancelFaults": 0,
+    "cancelSuccesses": 1,
+    "streamFaults": 0,
+    "iterators": 0
+  },
+  "secondaryCounters": {
+    "subscribe": 0,
+    "activate": 0,
+    "ackReleased": 0,
+    "cancel": 0,
+    "iterators": 0
+  },
+  "entries": [],
+  "subscriptionTrace": [
+    {
+      "operation": "subscribe",
+      "id": "s-04048261-46de-4f81-9393-67653d9a4fb1"
+    },
+    {
+      "operation": "activate",
+      "id": "s-04048261-46de-4f81-9393-67653d9a4fb1"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-04048261-46de-4f81-9393-67653d9a4fb1"
+    }
+  ]
+}

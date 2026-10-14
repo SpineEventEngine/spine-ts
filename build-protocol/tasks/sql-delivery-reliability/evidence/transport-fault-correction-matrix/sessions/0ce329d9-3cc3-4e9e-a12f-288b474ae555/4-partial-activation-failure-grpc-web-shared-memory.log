@@ -1,0 +1,12 @@
+startedAt=2026-10-14T04:09:00.059Z
+command=pnpm exec vitest run --config vitest.infrastructure.config.ts packages/server-blackbox-tests/test/project-subscription-transports.integration.test.ts
+case={"provider":"mysql84","protocol":"grpc-web","scenario":"partial-activation-failure","deliveryMode":"shared-memory"}
+stdout:
+stdout:  RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+stdout:
+stdout:
+stdout:  Test Files  1 passed (1)
+stdout:       Tests  1 passed (1)
+   Start at  05:09:00
+stdout:    Duration  624ms (transform 16ms, setup 0ms, import 22ms, tests 498ms, environment 0ms)
+stdout:

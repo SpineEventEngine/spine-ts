@@ -1,0 +1,104 @@
+{
+  "status": "PASS",
+  "result": {
+    "provider": "mysql84",
+    "protocol": "connect",
+    "scenario": "partial-activation-failure",
+    "deliveryMode": "db-only",
+    "database": "sqlrel_sub_4ebbe76f99794fc19b1bf3975dcc4d79",
+    "terminalName": "ConnectError",
+    "terminalMessage": "[unavailable] injected partial child Activate failure",
+    "counters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 2,
+      "cancel": 3,
+      "cancelFaults": 1,
+      "cancelSuccesses": 2,
+      "streamFaults": 0,
+      "iterators": 0
+    },
+    "secondaryCounters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 0,
+      "cancel": 2,
+      "iterators": 0
+    },
+    "secondaryTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-f439590c-54f9-4228-bd2f-25eb6ec0ceab"
+      },
+      {
+        "operation": "activate",
+        "id": "s-f439590c-54f9-4228-bd2f-25eb6ec0ceab"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-f439590c-54f9-4228-bd2f-25eb6ec0ceab"
+      },
+      {
+        "operation": "subscribe",
+        "id": "s-7af7e84a-40cd-4e43-a70a-8baed0a597bc"
+      },
+      {
+        "operation": "activate",
+        "id": "s-7af7e84a-40cd-4e43-a70a-8baed0a597bc"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-7af7e84a-40cd-4e43-a70a-8baed0a597bc"
+      }
+    ],
+    "entries": []
+  },
+  "counters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 2,
+    "cancel": 3,
+    "cancelFaults": 1,
+    "cancelSuccesses": 2,
+    "streamFaults": 0,
+    "iterators": 0
+  },
+  "secondaryCounters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 0,
+    "cancel": 2,
+    "iterators": 0
+  },
+  "entries": [],
+  "subscriptionTrace": [
+    {
+      "operation": "subscribe",
+      "id": "s-25918c5b-0c99-46a2-ba11-091fdc96784b"
+    },
+    {
+      "operation": "activate",
+      "id": "s-25918c5b-0c99-46a2-ba11-091fdc96784b"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-25918c5b-0c99-46a2-ba11-091fdc96784b"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-25918c5b-0c99-46a2-ba11-091fdc96784b"
+    },
+    {
+      "operation": "subscribe",
+      "id": "s-f47f5eaa-7aab-4cba-8ca4-6f75e70990b7"
+    },
+    {
+      "operation": "activate",
+      "id": "s-f47f5eaa-7aab-4cba-8ca4-6f75e70990b7"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-f47f5eaa-7aab-4cba-8ca4-6f75e70990b7"
+    }
+  ]
+}

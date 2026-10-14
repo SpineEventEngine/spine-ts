@@ -1,0 +1,158 @@
+{
+  "status": "PASS",
+  "result": {
+    "provider": "mariadb114",
+    "protocol": "grpc-web",
+    "scenario": "partial-activation-failure",
+    "deliveryMode": "db-only",
+    "database": "sqlrel_sub_763ebef30ea04e3cb08fc0c77dc2d994",
+    "terminalName": "ConnectError",
+    "terminalMessage": "[unavailable] injected partial child Activate failure",
+    "counters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 2,
+      "cancel": 3,
+      "cancelFaults": 1,
+      "cancelSuccesses": 2,
+      "streamFaults": 0,
+      "iterators": 0
+    },
+    "secondaryCounters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 0,
+      "cancel": 2,
+      "iterators": 0
+    },
+    "subscriptionTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-f193c408-ea17-4252-872f-084fedabe161"
+      },
+      {
+        "operation": "activate",
+        "id": "s-f193c408-ea17-4252-872f-084fedabe161"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-f193c408-ea17-4252-872f-084fedabe161"
+      },
+      {
+        "operation": "cancel-failed",
+        "id": "s-f193c408-ea17-4252-872f-084fedabe161"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-f193c408-ea17-4252-872f-084fedabe161"
+      },
+      {
+        "operation": "cancel-succeeded",
+        "id": "s-f193c408-ea17-4252-872f-084fedabe161"
+      },
+      {
+        "operation": "subscribe",
+        "id": "s-b6b23cff-0b72-473b-ad0e-0a9225837bc0"
+      },
+      {
+        "operation": "activate",
+        "id": "s-b6b23cff-0b72-473b-ad0e-0a9225837bc0"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-b6b23cff-0b72-473b-ad0e-0a9225837bc0"
+      },
+      {
+        "operation": "cancel-succeeded",
+        "id": "s-b6b23cff-0b72-473b-ad0e-0a9225837bc0"
+      }
+    ],
+    "secondaryTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-fa20bade-a83d-4f41-bc9d-e2d7b0c09f2e"
+      },
+      {
+        "operation": "activate",
+        "id": "s-fa20bade-a83d-4f41-bc9d-e2d7b0c09f2e"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-fa20bade-a83d-4f41-bc9d-e2d7b0c09f2e"
+      },
+      {
+        "operation": "subscribe",
+        "id": "s-0f6b6835-4731-4a5b-b5d4-ec44538e109c"
+      },
+      {
+        "operation": "activate",
+        "id": "s-0f6b6835-4731-4a5b-b5d4-ec44538e109c"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-0f6b6835-4731-4a5b-b5d4-ec44538e109c"
+      }
+    ],
+    "entries": []
+  },
+  "counters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 2,
+    "cancel": 3,
+    "cancelFaults": 1,
+    "cancelSuccesses": 2,
+    "streamFaults": 0,
+    "iterators": 0
+  },
+  "secondaryCounters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 0,
+    "cancel": 2,
+    "iterators": 0
+  },
+  "entries": [],
+  "subscriptionTrace": [
+    {
+      "operation": "subscribe",
+      "id": "s-f193c408-ea17-4252-872f-084fedabe161"
+    },
+    {
+      "operation": "activate",
+      "id": "s-f193c408-ea17-4252-872f-084fedabe161"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-f193c408-ea17-4252-872f-084fedabe161"
+    },
+    {
+      "operation": "cancel-failed",
+      "id": "s-f193c408-ea17-4252-872f-084fedabe161"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-f193c408-ea17-4252-872f-084fedabe161"
+    },
+    {
+      "operation": "cancel-succeeded",
+      "id": "s-f193c408-ea17-4252-872f-084fedabe161"
+    },
+    {
+      "operation": "subscribe",
+      "id": "s-b6b23cff-0b72-473b-ad0e-0a9225837bc0"
+    },
+    {
+      "operation": "activate",
+      "id": "s-b6b23cff-0b72-473b-ad0e-0a9225837bc0"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-b6b23cff-0b72-473b-ad0e-0a9225837bc0"
+    },
+    {
+      "operation": "cancel-succeeded",
+      "id": "s-b6b23cff-0b72-473b-ad0e-0a9225837bc0"
+    }
+  ]
+}

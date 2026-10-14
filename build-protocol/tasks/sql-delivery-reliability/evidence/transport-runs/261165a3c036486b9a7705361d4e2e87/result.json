@@ -1,0 +1,162 @@
+{
+  "status": "PASS",
+  "result": {
+    "provider": "postgres16",
+    "protocol": "native",
+    "scenario": "partial-activation-failure",
+    "deliveryMode": "shared-memory",
+    "database": "sqlrel_sub_261165a3c036486b9a7705361d4e2e87",
+    "terminalName": "ConnectError",
+    "terminalMessage": "[unavailable] injected partial child Activate failure",
+    "counters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 2,
+      "cancel": 3,
+      "cancelFaults": 1,
+      "cancelSuccesses": 2,
+      "streamFaults": 0,
+      "iterators": 0
+    },
+    "secondaryCounters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 0,
+      "cancel": 3,
+      "iterators": 0
+    },
+    "subscriptionTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-fa5f8ab6-4b37-4c44-b171-6d9c4bd4b5b2"
+      },
+      {
+        "operation": "activate",
+        "id": "s-fa5f8ab6-4b37-4c44-b171-6d9c4bd4b5b2"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-fa5f8ab6-4b37-4c44-b171-6d9c4bd4b5b2"
+      },
+      {
+        "operation": "cancel-failed",
+        "id": "s-fa5f8ab6-4b37-4c44-b171-6d9c4bd4b5b2"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-fa5f8ab6-4b37-4c44-b171-6d9c4bd4b5b2"
+      },
+      {
+        "operation": "cancel-succeeded",
+        "id": "s-fa5f8ab6-4b37-4c44-b171-6d9c4bd4b5b2"
+      },
+      {
+        "operation": "subscribe",
+        "id": "s-ab494e76-a0c7-4ff9-99a6-b21e94f621bd"
+      },
+      {
+        "operation": "activate",
+        "id": "s-ab494e76-a0c7-4ff9-99a6-b21e94f621bd"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-ab494e76-a0c7-4ff9-99a6-b21e94f621bd"
+      },
+      {
+        "operation": "cancel-succeeded",
+        "id": "s-ab494e76-a0c7-4ff9-99a6-b21e94f621bd"
+      }
+    ],
+    "secondaryTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-eb75ba38-e843-4b69-ac9b-06d2c4cac904"
+      },
+      {
+        "operation": "activate",
+        "id": "s-eb75ba38-e843-4b69-ac9b-06d2c4cac904"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-eb75ba38-e843-4b69-ac9b-06d2c4cac904"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-eb75ba38-e843-4b69-ac9b-06d2c4cac904"
+      },
+      {
+        "operation": "subscribe",
+        "id": "s-2b92e771-5da6-40d0-9468-8b46eb63a1e8"
+      },
+      {
+        "operation": "activate",
+        "id": "s-2b92e771-5da6-40d0-9468-8b46eb63a1e8"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-2b92e771-5da6-40d0-9468-8b46eb63a1e8"
+      }
+    ],
+    "entries": []
+  },
+  "counters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 2,
+    "cancel": 3,
+    "cancelFaults": 1,
+    "cancelSuccesses": 2,
+    "streamFaults": 0,
+    "iterators": 0
+  },
+  "secondaryCounters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 0,
+    "cancel": 3,
+    "iterators": 0
+  },
+  "entries": [],
+  "subscriptionTrace": [
+    {
+      "operation": "subscribe",
+      "id": "s-fa5f8ab6-4b37-4c44-b171-6d9c4bd4b5b2"
+    },
+    {
+      "operation": "activate",
+      "id": "s-fa5f8ab6-4b37-4c44-b171-6d9c4bd4b5b2"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-fa5f8ab6-4b37-4c44-b171-6d9c4bd4b5b2"
+    },
+    {
+      "operation": "cancel-failed",
+      "id": "s-fa5f8ab6-4b37-4c44-b171-6d9c4bd4b5b2"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-fa5f8ab6-4b37-4c44-b171-6d9c4bd4b5b2"
+    },
+    {
+      "operation": "cancel-succeeded",
+      "id": "s-fa5f8ab6-4b37-4c44-b171-6d9c4bd4b5b2"
+    },
+    {
+      "operation": "subscribe",
+      "id": "s-ab494e76-a0c7-4ff9-99a6-b21e94f621bd"
+    },
+    {
+      "operation": "activate",
+      "id": "s-ab494e76-a0c7-4ff9-99a6-b21e94f621bd"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-ab494e76-a0c7-4ff9-99a6-b21e94f621bd"
+    },
+    {
+      "operation": "cancel-succeeded",
+      "id": "s-ab494e76-a0c7-4ff9-99a6-b21e94f621bd"
+    }
+  ]
+}

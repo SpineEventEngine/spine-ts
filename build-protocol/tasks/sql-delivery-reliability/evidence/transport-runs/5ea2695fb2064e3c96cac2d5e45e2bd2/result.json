@@ -1,0 +1,108 @@
+{
+  "status": "PASS",
+  "result": {
+    "provider": "mysql84",
+    "protocol": "native",
+    "scenario": "partial-activation-failure",
+    "deliveryMode": "db-only",
+    "database": "sqlrel_sub_5ea2695fb2064e3c96cac2d5e45e2bd2",
+    "terminalName": "ConnectError",
+    "terminalMessage": "[unavailable] injected partial child Activate failure",
+    "counters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 2,
+      "cancel": 3,
+      "cancelFaults": 1,
+      "cancelSuccesses": 2,
+      "streamFaults": 0,
+      "iterators": 0
+    },
+    "secondaryCounters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 0,
+      "cancel": 3,
+      "iterators": 0
+    },
+    "secondaryTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-21d0c0b7-9f9a-4851-997a-39ed4b85904d"
+      },
+      {
+        "operation": "activate",
+        "id": "s-21d0c0b7-9f9a-4851-997a-39ed4b85904d"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-21d0c0b7-9f9a-4851-997a-39ed4b85904d"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-21d0c0b7-9f9a-4851-997a-39ed4b85904d"
+      },
+      {
+        "operation": "subscribe",
+        "id": "s-1bd720c1-0a90-4d66-a10f-44bcdedb5583"
+      },
+      {
+        "operation": "activate",
+        "id": "s-1bd720c1-0a90-4d66-a10f-44bcdedb5583"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-1bd720c1-0a90-4d66-a10f-44bcdedb5583"
+      }
+    ],
+    "entries": []
+  },
+  "counters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 2,
+    "cancel": 3,
+    "cancelFaults": 1,
+    "cancelSuccesses": 2,
+    "streamFaults": 0,
+    "iterators": 0
+  },
+  "secondaryCounters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 0,
+    "cancel": 3,
+    "iterators": 0
+  },
+  "entries": [],
+  "subscriptionTrace": [
+    {
+      "operation": "subscribe",
+      "id": "s-f471e911-0c59-47c6-8f24-5a0dba81bb0c"
+    },
+    {
+      "operation": "activate",
+      "id": "s-f471e911-0c59-47c6-8f24-5a0dba81bb0c"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-f471e911-0c59-47c6-8f24-5a0dba81bb0c"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-f471e911-0c59-47c6-8f24-5a0dba81bb0c"
+    },
+    {
+      "operation": "subscribe",
+      "id": "s-b1d6e7fe-5429-4f4f-89c5-493a12f54998"
+    },
+    {
+      "operation": "activate",
+      "id": "s-b1d6e7fe-5429-4f4f-89c5-493a12f54998"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-b1d6e7fe-5429-4f4f-89c5-493a12f54998"
+    }
+  ]
+}

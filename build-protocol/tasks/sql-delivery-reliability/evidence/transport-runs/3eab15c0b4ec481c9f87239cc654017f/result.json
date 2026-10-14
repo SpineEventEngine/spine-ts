@@ -1,0 +1,48 @@
+{
+  "status": "FAIL",
+  "counters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 2,
+    "cancel": 2,
+    "cancelFaults": 0,
+    "cancelSuccesses": 2,
+    "streamFaults": 0,
+    "iterators": 0
+  },
+  "secondaryCounters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 0,
+    "cancel": 2,
+    "iterators": 0
+  },
+  "entries": [],
+  "subscriptionTrace": [
+    {
+      "operation": "subscribe",
+      "id": "s-f76c1f8e-f00d-4512-8575-3154c4efc0bb"
+    },
+    {
+      "operation": "activate",
+      "id": "s-f76c1f8e-f00d-4512-8575-3154c4efc0bb"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-f76c1f8e-f00d-4512-8575-3154c4efc0bb"
+    },
+    {
+      "operation": "subscribe",
+      "id": "s-cd2ba7e6-ea41-44ca-81c1-79643437405f"
+    },
+    {
+      "operation": "activate",
+      "id": "s-cd2ba7e6-ea41-44ca-81c1-79643437405f"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-cd2ba7e6-ea41-44ca-81c1-79643437405f"
+    }
+  ],
+  "error": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\n2 !== 1\n"
+}

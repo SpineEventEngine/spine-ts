@@ -1,0 +1,55 @@
+{
+  "status": "PASS",
+  "result": {
+    "provider": "mysql84",
+    "protocol": "connect",
+    "scenario": "duplicate-ack-terminal",
+    "deliveryMode": "db-only",
+    "database": "sqlrel_sub_7a539949a5d047fea3dc245d962fe360",
+    "terminalName": "ClientProtocolError",
+    "terminalMessage": "Client protocol error: subscription stream sent a duplicate activation ACK.",
+    "counters": {
+      "subscribe": 1,
+      "activate": 1,
+      "ackReleased": 1,
+      "cancel": 1,
+      "cancelFaults": 0,
+      "cancelSuccesses": 1,
+      "streamFaults": 0,
+      "iterators": 0
+    },
+    "entries": []
+  },
+  "counters": {
+    "subscribe": 1,
+    "activate": 1,
+    "ackReleased": 1,
+    "cancel": 1,
+    "cancelFaults": 0,
+    "cancelSuccesses": 1,
+    "streamFaults": 0,
+    "iterators": 0
+  },
+  "secondaryCounters": {
+    "subscribe": 0,
+    "activate": 0,
+    "ackReleased": 0,
+    "cancel": 0,
+    "iterators": 0
+  },
+  "entries": [],
+  "subscriptionTrace": [
+    {
+      "operation": "subscribe",
+      "id": "s-11f9985d-2e86-4efe-bb6a-9048030ac8c4"
+    },
+    {
+      "operation": "activate",
+      "id": "s-11f9985d-2e86-4efe-bb6a-9048030ac8c4"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-11f9985d-2e86-4efe-bb6a-9048030ac8c4"
+    }
+  ]
+}

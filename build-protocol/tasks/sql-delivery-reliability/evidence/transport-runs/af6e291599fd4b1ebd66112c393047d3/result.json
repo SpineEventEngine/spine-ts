@@ -1,0 +1,162 @@
+{
+  "status": "PASS",
+  "result": {
+    "provider": "postgres16",
+    "protocol": "native",
+    "scenario": "partial-activation-failure",
+    "deliveryMode": "db-only",
+    "database": "sqlrel_sub_af6e291599fd4b1ebd66112c393047d3",
+    "terminalName": "ConnectError",
+    "terminalMessage": "[unavailable] injected partial child Activate failure",
+    "counters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 2,
+      "cancel": 3,
+      "cancelFaults": 1,
+      "cancelSuccesses": 2,
+      "streamFaults": 0,
+      "iterators": 0
+    },
+    "secondaryCounters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 0,
+      "cancel": 3,
+      "iterators": 0
+    },
+    "subscriptionTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-e2183a3d-13d7-4bb2-8bb1-905a220e6247"
+      },
+      {
+        "operation": "activate",
+        "id": "s-e2183a3d-13d7-4bb2-8bb1-905a220e6247"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-e2183a3d-13d7-4bb2-8bb1-905a220e6247"
+      },
+      {
+        "operation": "cancel-failed",
+        "id": "s-e2183a3d-13d7-4bb2-8bb1-905a220e6247"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-e2183a3d-13d7-4bb2-8bb1-905a220e6247"
+      },
+      {
+        "operation": "cancel-succeeded",
+        "id": "s-e2183a3d-13d7-4bb2-8bb1-905a220e6247"
+      },
+      {
+        "operation": "subscribe",
+        "id": "s-ad4c7bad-bcab-42e5-9213-05c5f6886fab"
+      },
+      {
+        "operation": "activate",
+        "id": "s-ad4c7bad-bcab-42e5-9213-05c5f6886fab"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-ad4c7bad-bcab-42e5-9213-05c5f6886fab"
+      },
+      {
+        "operation": "cancel-succeeded",
+        "id": "s-ad4c7bad-bcab-42e5-9213-05c5f6886fab"
+      }
+    ],
+    "secondaryTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-e3996bf9-51d5-44d2-bd07-f844b90f535b"
+      },
+      {
+        "operation": "activate",
+        "id": "s-e3996bf9-51d5-44d2-bd07-f844b90f535b"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-e3996bf9-51d5-44d2-bd07-f844b90f535b"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-e3996bf9-51d5-44d2-bd07-f844b90f535b"
+      },
+      {
+        "operation": "subscribe",
+        "id": "s-074551d5-2836-4189-bb5c-b8de2db9c8ce"
+      },
+      {
+        "operation": "activate",
+        "id": "s-074551d5-2836-4189-bb5c-b8de2db9c8ce"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-074551d5-2836-4189-bb5c-b8de2db9c8ce"
+      }
+    ],
+    "entries": []
+  },
+  "counters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 2,
+    "cancel": 3,
+    "cancelFaults": 1,
+    "cancelSuccesses": 2,
+    "streamFaults": 0,
+    "iterators": 0
+  },
+  "secondaryCounters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 0,
+    "cancel": 3,
+    "iterators": 0
+  },
+  "entries": [],
+  "subscriptionTrace": [
+    {
+      "operation": "subscribe",
+      "id": "s-e2183a3d-13d7-4bb2-8bb1-905a220e6247"
+    },
+    {
+      "operation": "activate",
+      "id": "s-e2183a3d-13d7-4bb2-8bb1-905a220e6247"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-e2183a3d-13d7-4bb2-8bb1-905a220e6247"
+    },
+    {
+      "operation": "cancel-failed",
+      "id": "s-e2183a3d-13d7-4bb2-8bb1-905a220e6247"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-e2183a3d-13d7-4bb2-8bb1-905a220e6247"
+    },
+    {
+      "operation": "cancel-succeeded",
+      "id": "s-e2183a3d-13d7-4bb2-8bb1-905a220e6247"
+    },
+    {
+      "operation": "subscribe",
+      "id": "s-ad4c7bad-bcab-42e5-9213-05c5f6886fab"
+    },
+    {
+      "operation": "activate",
+      "id": "s-ad4c7bad-bcab-42e5-9213-05c5f6886fab"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-ad4c7bad-bcab-42e5-9213-05c5f6886fab"
+    },
+    {
+      "operation": "cancel-succeeded",
+      "id": "s-ad4c7bad-bcab-42e5-9213-05c5f6886fab"
+    }
+  ]
+}

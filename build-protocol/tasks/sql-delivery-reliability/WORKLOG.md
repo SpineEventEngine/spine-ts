@@ -977,3 +977,53 @@ example source/configuration/docs while verification proceeds. Both dispatch
 fields must be explicit; runtime introspection unavailable. Final test-harness
 review follows static/evidence convergence; existing accepted runtime concerns
 are not reopened solely by new controls.
+
+Accepted idle SQL checkpoint pushed as `3aad8c639` (full SHA in Git history).
+All sixteen rows, raw captures and bounded source assessment are durable. The
+seventy-two original transport passes need the two accepted assertion corrections
+before those two scenario gaps close; their duplicate-ACK case remains accepted.
+
+The current example build passes and both ten-user Orders/Projects loads report
+ten accepted Commands, ten query-visible states, ten domain updates and no failed
+users. The focused suite initially passed 21/23, with two TaskAssignment checks
+failing. An attempted example correction changed nine TaskCreated projection rows
+to task keys and made the Project file green, but the parent rejected that change
+before acceptance: read_models.proto expressly defines TaskList and counter IDs
+as project identifiers. Green tests cannot justify changing the declared domain.
+The same Sol/medium implementer is restoring those field meanings and using the
+existing custom Event-routing seam according to each read model's Proto contract.
+No new runtime API, domain redesign, migration or replacement identifier type is
+authorized by this bounded correction. Add a project-keyed regression and rerun
+the focused suite; the temporary task-keyed green result is not accepted evidence.
+
+Corrected transport matrix completed 48/48 across four engines, three real
+transports and two Delivery modes. Exact primary cleanup IDs and original errors
+are accepted; the held-Cancel Event is observed with its original ID and bytes
+hash. All databases dropped, zero sessions/errors and stable recorded hashes.
+One targeted timing assertion remains for publication after cancellation; only
+its 24 rows will repeat. Dist reservation released for the bounded correction
+and live example preparation. Progress approximately 89%, 2–4 hours remaining
+for this assertion, live examples/browser checks, final reviews and release gate.
+
+Example source is frozen and compiled application output is ready. Focused
+Orders/Projects checks pass 24/24, each ten-user live load has zero failures,
+and launcher/topology checks pass 13/13. Dispatch a mechanical live-execution
+function with explicit gpt-6-luna / low, responsible only for task evidence
+and isolated runtime resources: all five examples, Message Board eight
+processes/eight shards and 32 concurrent Commands, and both React modes with
+two independent browsers. Production corrections remain with the existing
+Sol/medium implementer. Runtime introspection unavailable; dispatch fields
+are explicit. Coordinate builds against the next short transport reservation.
+
+Final publication-barrier transport matrix accepted: 24/24 (six per engine),
+unique run IDs/databases, all dropped, zero sessions/errors/unrun cases and
+stable recorded source/dist hashes. The separate observer receives Project 4
+and its Event ID matches the server trace by the passing fixture assertion;
+the trace excludes the canceled subscription ID and all three registrations
+are removed. Exact observed evidence and receipt-assertion provenance are in
+evidence/transport-publication-barrier-matrix/summary.json. Explicit Luna/low
+profile matches the assignment. Combined with accepted partial-cleanup and
+duplicate-ACK rows, all required extra fault scenarios are closed. Reliability
+and style findings resolved; no changed public runtime contract. Build
+reservation released. Checkpoint and immediately push this accepted slice;
+example corrections and final security/release gates remain active.

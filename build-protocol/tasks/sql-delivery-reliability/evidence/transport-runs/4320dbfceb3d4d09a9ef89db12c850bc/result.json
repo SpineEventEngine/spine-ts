@@ -1,0 +1,55 @@
+{
+  "status": "PASS",
+  "result": {
+    "provider": "mariadb114",
+    "protocol": "grpc-web",
+    "scenario": "duplicate-ack-terminal",
+    "deliveryMode": "shared-memory",
+    "database": "sqlrel_sub_4320dbfceb3d4d09a9ef89db12c850bc",
+    "terminalName": "ClientProtocolError",
+    "terminalMessage": "Client protocol error: subscription stream sent a duplicate activation ACK.",
+    "counters": {
+      "subscribe": 1,
+      "activate": 1,
+      "ackReleased": 1,
+      "cancel": 1,
+      "cancelFaults": 0,
+      "cancelSuccesses": 1,
+      "streamFaults": 0,
+      "iterators": 0
+    },
+    "entries": []
+  },
+  "counters": {
+    "subscribe": 1,
+    "activate": 1,
+    "ackReleased": 1,
+    "cancel": 1,
+    "cancelFaults": 0,
+    "cancelSuccesses": 1,
+    "streamFaults": 0,
+    "iterators": 0
+  },
+  "secondaryCounters": {
+    "subscribe": 0,
+    "activate": 0,
+    "ackReleased": 0,
+    "cancel": 0,
+    "iterators": 0
+  },
+  "entries": [],
+  "subscriptionTrace": [
+    {
+      "operation": "subscribe",
+      "id": "s-829922a4-7cdc-4533-a1c0-a27a4a969c76"
+    },
+    {
+      "operation": "activate",
+      "id": "s-829922a4-7cdc-4533-a1c0-a27a4a969c76"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-829922a4-7cdc-4533-a1c0-a27a4a969c76"
+    }
+  ]
+}

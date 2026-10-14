@@ -1,0 +1,162 @@
+{
+  "status": "PASS",
+  "result": {
+    "provider": "mysql84",
+    "protocol": "grpc-web",
+    "scenario": "partial-activation-failure",
+    "deliveryMode": "shared-memory",
+    "database": "sqlrel_sub_b6ea33b5697c4506be78011c6f7bf694",
+    "terminalName": "ConnectError",
+    "terminalMessage": "[unavailable] injected partial child Activate failure",
+    "counters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 2,
+      "cancel": 3,
+      "cancelFaults": 1,
+      "cancelSuccesses": 2,
+      "streamFaults": 0,
+      "iterators": 0
+    },
+    "secondaryCounters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 0,
+      "cancel": 3,
+      "iterators": 0
+    },
+    "subscriptionTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-c7d67116-c00f-4c5b-a366-e56d65bde6af"
+      },
+      {
+        "operation": "activate",
+        "id": "s-c7d67116-c00f-4c5b-a366-e56d65bde6af"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-c7d67116-c00f-4c5b-a366-e56d65bde6af"
+      },
+      {
+        "operation": "cancel-failed",
+        "id": "s-c7d67116-c00f-4c5b-a366-e56d65bde6af"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-c7d67116-c00f-4c5b-a366-e56d65bde6af"
+      },
+      {
+        "operation": "cancel-succeeded",
+        "id": "s-c7d67116-c00f-4c5b-a366-e56d65bde6af"
+      },
+      {
+        "operation": "subscribe",
+        "id": "s-44a65fa8-ff1c-4a79-8954-229a5f828d6f"
+      },
+      {
+        "operation": "activate",
+        "id": "s-44a65fa8-ff1c-4a79-8954-229a5f828d6f"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-44a65fa8-ff1c-4a79-8954-229a5f828d6f"
+      },
+      {
+        "operation": "cancel-succeeded",
+        "id": "s-44a65fa8-ff1c-4a79-8954-229a5f828d6f"
+      }
+    ],
+    "secondaryTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-2fefc432-9f55-4368-8c97-ab812b2b98df"
+      },
+      {
+        "operation": "activate",
+        "id": "s-2fefc432-9f55-4368-8c97-ab812b2b98df"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-2fefc432-9f55-4368-8c97-ab812b2b98df"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-2fefc432-9f55-4368-8c97-ab812b2b98df"
+      },
+      {
+        "operation": "subscribe",
+        "id": "s-5a386a72-767f-4952-948a-e29c57cad398"
+      },
+      {
+        "operation": "activate",
+        "id": "s-5a386a72-767f-4952-948a-e29c57cad398"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-5a386a72-767f-4952-948a-e29c57cad398"
+      }
+    ],
+    "entries": []
+  },
+  "counters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 2,
+    "cancel": 3,
+    "cancelFaults": 1,
+    "cancelSuccesses": 2,
+    "streamFaults": 0,
+    "iterators": 0
+  },
+  "secondaryCounters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 0,
+    "cancel": 3,
+    "iterators": 0
+  },
+  "entries": [],
+  "subscriptionTrace": [
+    {
+      "operation": "subscribe",
+      "id": "s-c7d67116-c00f-4c5b-a366-e56d65bde6af"
+    },
+    {
+      "operation": "activate",
+      "id": "s-c7d67116-c00f-4c5b-a366-e56d65bde6af"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-c7d67116-c00f-4c5b-a366-e56d65bde6af"
+    },
+    {
+      "operation": "cancel-failed",
+      "id": "s-c7d67116-c00f-4c5b-a366-e56d65bde6af"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-c7d67116-c00f-4c5b-a366-e56d65bde6af"
+    },
+    {
+      "operation": "cancel-succeeded",
+      "id": "s-c7d67116-c00f-4c5b-a366-e56d65bde6af"
+    },
+    {
+      "operation": "subscribe",
+      "id": "s-44a65fa8-ff1c-4a79-8954-229a5f828d6f"
+    },
+    {
+      "operation": "activate",
+      "id": "s-44a65fa8-ff1c-4a79-8954-229a5f828d6f"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-44a65fa8-ff1c-4a79-8954-229a5f828d6f"
+    },
+    {
+      "operation": "cancel-succeeded",
+      "id": "s-44a65fa8-ff1c-4a79-8954-229a5f828d6f"
+    }
+  ]
+}

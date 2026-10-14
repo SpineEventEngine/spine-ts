@@ -112,6 +112,9 @@ test("real SQL and selected transport preserve subscription readiness and exact 
     "coordinator-fanout-fault",
     "coordinator-retry-exhaustion",
     "coordinator-retry-cancel",
+    "partial-activation-failure",
+    "cancel-publication-race",
+    "duplicate-ack-terminal",
   ]).toContain(scenario);
   expect(["db-only", "shared-memory"]).toContain(deliveryMode);
   const stdout = await runTransport([provider, protocol, scenario, deliveryMode]);
@@ -140,6 +143,7 @@ test("real SQL and selected transport preserve subscription readiness and exact 
       cancel: number;
       iterators: number;
     };
+    secondaryTrace?: readonly { operation: string; id: string }[];
     coordinator?: { endpoint: string; childActivations: number };
   };
   expect(result).toMatchObject({
@@ -149,25 +153,35 @@ test("real SQL and selected transport preserve subscription readiness and exact 
     scenario,
     deliveryMode,
     counters: {
-      ackReleased: ["pending-cancel", "child-retry-cancel", "coordinator-retry-cancel"].includes(
-        scenario,
-      )
+      ackReleased: [
+        "pending-cancel",
+        "child-retry-cancel",
+        "coordinator-retry-cancel",
+        "duplicate-ack-terminal",
+      ].includes(scenario)
         ? 1
-        : ["stream-reconnect", "child-retry-exhaustion", "coordinator-retry-exhaustion"].includes(
-              scenario,
-            )
+        : [
+              "stream-reconnect",
+              "child-retry-exhaustion",
+              "coordinator-retry-exhaustion",
+              "cancel-publication-race",
+            ].includes(scenario)
           ? 3
           : 2,
-      cancelFaults: scenario === "cancel-retry" ? 1 : 0,
+      cancelFaults: ["cancel-retry", "partial-activation-failure"].includes(scenario) ? 1 : 0,
       cancelSuccesses: [
         "pending-cancel",
         "child-retry-cancel",
         "coordinator-retry-cancel",
+        "duplicate-ack-terminal",
       ].includes(scenario)
         ? 1
-        : ["stream-reconnect", "child-retry-exhaustion", "coordinator-retry-exhaustion"].includes(
-              scenario,
-            )
+        : [
+              "stream-reconnect",
+              "child-retry-exhaustion",
+              "coordinator-retry-exhaustion",
+              "cancel-publication-race",
+            ].includes(scenario)
           ? 3
           : 2,
       streamFaults: [
@@ -194,6 +208,8 @@ test("real SQL and selected transport preserve subscription readiness and exact 
       "child-retry-cancel",
       "coordinator-retry-exhaustion",
       "coordinator-retry-cancel",
+      "partial-activation-failure",
+      "duplicate-ack-terminal",
     ].includes(scenario)
   ) {
     expect(result.eventId).toBeUndefined();
@@ -201,6 +217,24 @@ test("real SQL and selected transport preserve subscription readiness and exact 
       expect(result.coordinator?.childActivations).toBe(
         scenario === "coordinator-retry-exhaustion" ? 3 : 1,
       );
+    if (scenario === "partial-activation-failure")
+      expect(result.secondaryCounters).toMatchObject({
+        subscribe: 2,
+        activate: 2,
+        ackReleased: 0,
+        iterators: 0,
+      });
+    if (scenario === "partial-activation-failure") {
+      expect(result.secondaryCounters?.cancel).toBeGreaterThanOrEqual(2);
+      expect(result.secondaryCounters?.cancel).toBeLessThanOrEqual(3);
+      const accepted =
+        result.secondaryTrace?.filter((item) => item.operation === "subscribe") ?? [];
+      const canceled = result.secondaryTrace?.filter((item) => item.operation === "cancel") ?? [];
+      expect(accepted).toHaveLength(2);
+      expect(accepted.every((item) => canceled.some((candidate) => candidate.id === item.id))).toBe(
+        true,
+      );
+    }
   } else if (
     [
       "child-stream-fault",

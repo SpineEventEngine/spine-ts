@@ -1,0 +1,84 @@
+{
+  "status": "FAIL",
+  "counters": {
+    "subscribe": 5,
+    "activate": 5,
+    "ackReleased": 5,
+    "cancel": 5,
+    "cancelFaults": 0,
+    "cancelSuccesses": 5,
+    "streamFaults": 0,
+    "iterators": 0
+  },
+  "secondaryCounters": {
+    "subscribe": 0,
+    "activate": 0,
+    "ackReleased": 0,
+    "cancel": 0,
+    "iterators": 0
+  },
+  "entries": [],
+  "subscriptionTrace": [
+    {
+      "operation": "subscribe",
+      "id": "s-85456f83-a9fb-4785-bda5-87d0504d68f1"
+    },
+    {
+      "operation": "activate",
+      "id": "s-85456f83-a9fb-4785-bda5-87d0504d68f1"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-85456f83-a9fb-4785-bda5-87d0504d68f1"
+    },
+    {
+      "operation": "subscribe",
+      "id": "s-a93dffd2-4a76-40a4-870d-44965e72322e"
+    },
+    {
+      "operation": "activate",
+      "id": "s-a93dffd2-4a76-40a4-870d-44965e72322e"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-a93dffd2-4a76-40a4-870d-44965e72322e"
+    },
+    {
+      "operation": "subscribe",
+      "id": "s-62fcbb5a-f04f-4762-8b9f-93f37956c268"
+    },
+    {
+      "operation": "activate",
+      "id": "s-62fcbb5a-f04f-4762-8b9f-93f37956c268"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-62fcbb5a-f04f-4762-8b9f-93f37956c268"
+    },
+    {
+      "operation": "subscribe",
+      "id": "s-f1e31d26-2597-4e23-8a45-7f900bfcd8bb"
+    },
+    {
+      "operation": "activate",
+      "id": "s-f1e31d26-2597-4e23-8a45-7f900bfcd8bb"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-f1e31d26-2597-4e23-8a45-7f900bfcd8bb"
+    },
+    {
+      "operation": "subscribe",
+      "id": "s-2a6599a7-6f22-44e0-84e4-addf45f8e073"
+    },
+    {
+      "operation": "activate",
+      "id": "s-2a6599a7-6f22-44e0-84e4-addf45f8e073"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-2a6599a7-6f22-44e0-84e4-addf45f8e073"
+    }
+  ],
+  "error": "Error: Timed out waiting for duplicate wire ACK protocol error."
+}

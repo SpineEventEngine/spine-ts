@@ -1,0 +1,1229 @@
+{
+  "status": "PASS",
+  "sessionId": "ff481782-fd3f-46e2-8b83-f41fcaf76ff8",
+  "provider": "mysql84",
+  "worktree": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts",
+  "configuredProfile": {
+    "model": "gpt-6-luna",
+    "reasoning": "low",
+    "runtimeMetadata": "not exposed by this execution surface"
+  },
+  "command": "pnpm exec vitest run --config vitest.infrastructure.config.ts packages/server-blackbox-tests/test/project-subscription-transports.integration.test.ts",
+  "execution": "sequential, fail-fast; one exact Vitest process group per configuration",
+  "expectedCaseCount": 6,
+  "startedAt": "2026-10-14T04:19:57.023Z",
+  "launch": {
+    "sourceSha256": {
+      "packages/server-blackbox-tests/package.json": "ac7bb9233e7dd6c82d9320d81f4c8503328a4811d912b9517f60654fb5e3e2c6",
+      "packages/server-blackbox-tests/test-fixtures/project-subscription-transport.mjs": "169d92d4a50b360746b77a7286517e7b5585d5c6ba9bd55f3a8542b840579c83",
+      "packages/server-blackbox-tests/test-fixtures/project-subscription-wait.mjs": "f06a514e2b925ed42f1340fbd87db73e26072718eb568817ffc9ee097f7e8885",
+      "packages/server-blackbox-tests/test/project-subscription-transports.integration.test.ts": "2b4c34d4e2096c0becf755b67079b727129514acab807932d466aa59bee13232",
+      "packages/server-blackbox-tests/test-fixtures/project-workflow.ts": "8ed152a6fd0a88224cccfcd9ff219695a41a8dc38eeab75192081dbb90cc8bc4",
+      "packages/auth/src/gateway/dynamic-subscription-creator.ts": "7d6f461807b1610bd2033b7e94b368b01608d5a9240bf32cd8c91dbb25b5d498",
+      "packages/auth/src/gateway/dynamic-unary-forwarder.ts": "a3a76407fbacb78ecfb79ed9b8436647280d556067e7f0a550a8941e462729d9",
+      "packages/deployment/src/internal/backend-membership-kernel.ts": "1b26c61468a5d667784be7eb53bcdf2b8a165d2a6b1210b61e49dc8f064bd0c0"
+    },
+    "distSha256": {
+      "packages/server-blackbox-tests/dist/test-fixtures/project-workflow.js": "4369473fd7b246124d422e05e94aad97320161f6d18838eaa364d8616001b985",
+      "packages/server/dist/index.js": "6bf9c9a8c971afc87de534107af1a935953f89a0607193ed3576e2b3def1909e",
+      "packages/server/dist/browser/index.js": "408b3cf4068f99542d9a01219ac1c251096746e172845f82abafaafca0cd0e07",
+      "packages/server/dist/browser/browser-server.js": "8b5ed0a6d503af04fe806549cc0b5ac2c4e6c60f1b35f7ee779a36c8443810cc",
+      "packages/server/dist/browser/durable-subscription-bindings.js": "8378a58cad104a61b2c13a6f808f3b328af8673f5e7076cd91182a8969884dcc",
+      "packages/server/dist/server/node-coordinator.js": "8e5c5194dc8a3f36430e9f547cafd00d90dab4463209c8375ded885079abbb62",
+      "packages/auth/dist/gateway/dynamic-subscription-creator.js": "9fd4cdadacd3c1670f28a848448d16797b64e8d509b0be3b6b97ec818d23085b",
+      "packages/auth/dist/gateway/dynamic-unary-forwarder.js": "8840d7ad5c74617b8cf66fe05d0aae40b4ff9514d0a5435e33e515075ebde7ba",
+      "packages/deployment/dist/internal/backend-membership-kernel.js": "6ab8c5c3ba0b2541954af16dcf07e4e38cb771bd6888829fed3ee1a226bcf50d",
+      "packages/proto/dist/src/index.js": "3b16144d721808f5ed8d458be542064c5323575247cf1b7e6d325b038adaeaa2",
+      "packages/storage-postgres/dist/index.js": "84a8658d25708fd1bf4d2b0fd7b1bd678966fd089b9b8e6908df1b1005ad3139",
+      "packages/storage-mysql/dist/index.js": "1e344dd9d6163df30cabbcb6dec296cde324a3f74a9d185ea29c40a28862da74",
+      "packages/client-node/dist/index.js": "0d165190867682c2ffe00467affb4e0bf7bbf0d9c3a92bb31a56be9bfbd3c2f3",
+      "packages/client-web/dist/index.js": "f5207a268787d49974351129c0a25287b71e603ced7ce068ab502350e079c370",
+      "packages/delivery-server/dist/index.js": "b8b79d6f88a3f7f4dd0461062a09dc519e98c84387ae01360b4245acd23b5d08"
+    }
+  },
+  "cases": [
+    {
+      "index": 1,
+      "config": {
+        "provider": "mysql84",
+        "protocol": "native",
+        "scenario": "cancel-publication-race",
+        "deliveryMode": "db-only"
+      },
+      "command": {
+        "executable": "pnpm",
+        "argv": [
+          "exec",
+          "vitest",
+          "run",
+          "--config",
+          "vitest.infrastructure.config.ts",
+          "packages/server-blackbox-tests/test/project-subscription-transports.integration.test.ts"
+        ]
+      },
+      "environment": {
+        "SPINE_TS_TRANSPORT_PROVIDER": "mysql84",
+        "SPINE_TS_TRANSPORT_PROTOCOL": "native",
+        "SPINE_TS_TRANSPORT_SCENARIO": "cancel-publication-race",
+        "SPINE_TS_TRANSPORT_DELIVERY_MODE": "db-only"
+      },
+      "startedAt": "2026-10-14T04:19:57.025Z",
+      "log": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/transport-publication-barrier-matrix/sessions/ff481782-fd3f-46e2-8b83-f41fcaf76ff8/1-cancel-publication-race-native-db-only.log",
+      "fixtureSha256": "169d92d4a50b360746b77a7286517e7b5585d5c6ba9bd55f3a8542b840579c83",
+      "configuredProfile": {
+        "model": "gpt-6-luna",
+        "reasoning": "low",
+        "runtimeMetadata": "not exposed by this execution surface"
+      },
+      "pnpmPid": 99622,
+      "processGroupId": 99622,
+      "endedAt": "2026-10-14T04:19:59.270Z",
+      "gitHeadAtCase": "3aad8c639e47465ed9d37c8376760e3b9b0f8302",
+      "exit": {
+        "code": 0,
+        "signal": null
+      },
+      "runId": "123cb571308b4c3e8679ee22a2fdeedc",
+      "database": "sqlrel_sub_123cb571308b4c3e8679ee22a2fdeedc",
+      "resourceArtifacts": {
+        "packages/server-blackbox-tests/dist/test-fixtures/project-workflow.js": "4369473fd7b246124d422e05e94aad97320161f6d18838eaa364d8616001b985",
+        "packages/server/dist/index.js": "6bf9c9a8c971afc87de534107af1a935953f89a0607193ed3576e2b3def1909e",
+        "packages/server/dist/server/node-coordinator.js": "8e5c5194dc8a3f36430e9f547cafd00d90dab4463209c8375ded885079abbb62",
+        "packages/deployment/dist/internal/backend-membership-kernel.js": "6ab8c5c3ba0b2541954af16dcf07e4e38cb771bd6888829fed3ee1a226bcf50d",
+        "packages/proto/dist/src/index.js": "3b16144d721808f5ed8d458be542064c5323575247cf1b7e6d325b038adaeaa2",
+        "packages/storage-postgres/dist/index.js": "84a8658d25708fd1bf4d2b0fd7b1bd678966fd089b9b8e6908df1b1005ad3139",
+        "packages/storage-mysql/dist/index.js": "1e344dd9d6163df30cabbcb6dec296cde324a3f74a9d185ea29c40a28862da74",
+        "packages/client-node/dist/index.js": "0d165190867682c2ffe00467affb4e0bf7bbf0d9c3a92bb31a56be9bfbd3c2f3",
+        "packages/client-web/dist/index.js": "f5207a268787d49974351129c0a25287b71e603ced7ce068ab502350e079c370",
+        "packages/delivery-server/dist/index.js": "b8b79d6f88a3f7f4dd0461062a09dc519e98c84387ae01360b4245acd23b5d08"
+      },
+      "result": {
+        "status": "PASS",
+        "counters": {
+          "subscribe": 3,
+          "activate": 3,
+          "ackReleased": 3,
+          "cancel": 3,
+          "cancelFaults": 0,
+          "cancelSuccesses": 3,
+          "streamFaults": 0,
+          "iterators": 0
+        },
+        "secondaryCounters": {
+          "subscribe": 0,
+          "activate": 0,
+          "ackReleased": 0,
+          "cancel": 0,
+          "iterators": 0
+        },
+        "handlerEntryCount": 20,
+        "serverEventTrace": [
+          {
+            "subscriptionId": "s-65200407-2ab5-4502-98e0-d1d8e8eeea2c",
+            "eventId": "92c2b3db-a43d-4dbb-8c09-5d0fb3da2246",
+            "projectNumber": 1,
+            "sha256": "a1edaa1c64155ea39159000f42323d4ef85e778465e0c1791bf9eaab4fd45cd5"
+          },
+          {
+            "subscriptionId": "s-65200407-2ab5-4502-98e0-d1d8e8eeea2c",
+            "eventId": "28a22cb3-bac5-4549-8dd8-3d993e02f8cb",
+            "projectNumber": 2,
+            "sha256": "827bad707a26d47b25029518824951f1cc9c9f8c21b0ba351bd6764da54249a1"
+          },
+          {
+            "subscriptionId": "s-65200407-2ab5-4502-98e0-d1d8e8eeea2c",
+            "eventId": "aec55520-1d24-4b27-8fdd-791c018d5be6",
+            "projectNumber": 3,
+            "sha256": "36f6369ac3e19fb764756f84a14eab2d6691417ce66fcab3236573036c12514e"
+          },
+          {
+            "subscriptionId": "s-a0b38c09-2bdf-417c-96d2-4aea1611119a",
+            "eventId": "7aedb9ff-4afe-42d9-a1a5-7fa3b686bb26",
+            "projectNumber": 4,
+            "sha256": "308f3af806a6a95a2f6941e5ffc84375e78359db736ca314ade2046f53927856"
+          }
+        ],
+        "eventId": "92c2b3db-a43d-4dbb-8c09-5d0fb3da2246",
+        "observerSubscriptionId": "s-a0b38c09-2bdf-417c-96d2-4aea1611119a",
+        "subscriptionTrace": [
+          {
+            "operation": "subscribe",
+            "id": "s-65200407-2ab5-4502-98e0-d1d8e8eeea2c"
+          },
+          {
+            "operation": "activate",
+            "id": "s-65200407-2ab5-4502-98e0-d1d8e8eeea2c"
+          },
+          {
+            "operation": "subscribe",
+            "id": "s-0efe0c44-9f37-4f10-a38f-5a9c07dd3b8a"
+          },
+          {
+            "operation": "activate",
+            "id": "s-0efe0c44-9f37-4f10-a38f-5a9c07dd3b8a"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-65200407-2ab5-4502-98e0-d1d8e8eeea2c"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-65200407-2ab5-4502-98e0-d1d8e8eeea2c"
+          },
+          {
+            "operation": "subscribe",
+            "id": "s-a0b38c09-2bdf-417c-96d2-4aea1611119a"
+          },
+          {
+            "operation": "activate",
+            "id": "s-a0b38c09-2bdf-417c-96d2-4aea1611119a"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-a0b38c09-2bdf-417c-96d2-4aea1611119a"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-a0b38c09-2bdf-417c-96d2-4aea1611119a"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-0efe0c44-9f37-4f10-a38f-5a9c07dd3b8a"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-0efe0c44-9f37-4f10-a38f-5a9c07dd3b8a"
+          }
+        ]
+      },
+      "scenarioEvidence": {
+        "canceledSubscriptionId": "s-65200407-2ab5-4502-98e0-d1d8e8eeea2c",
+        "observerSubscriptionId": "s-a0b38c09-2bdf-417c-96d2-4aea1611119a",
+        "project3EventWhileCancelHeld": {
+          "subscriptionId": "s-65200407-2ab5-4502-98e0-d1d8e8eeea2c",
+          "eventId": "aec55520-1d24-4b27-8fdd-791c018d5be6",
+          "projectNumber": 3,
+          "sha256": "36f6369ac3e19fb764756f84a14eab2d6691417ce66fcab3236573036c12514e"
+        },
+        "project4EventReceivedByObserver": {
+          "eventId": "7aedb9ff-4afe-42d9-a1a5-7fa3b686bb26",
+          "sha256": "308f3af806a6a95a2f6941e5ffc84375e78359db736ca314ade2046f53927856",
+          "serverTraceSubscriptionId": "s-a0b38c09-2bdf-417c-96d2-4aea1611119a",
+          "observerSubscriptionId": "s-a0b38c09-2bdf-417c-96d2-4aea1611119a",
+          "eventIdMatchesObserverReceipt": true,
+          "fixtureReceiptAssertion": "Vitest PASS requires the separately activated observer's actual Project 4 Event ID to equal this server trace Event ID"
+        },
+        "project4YieldsForCanceledSubscription": 0,
+        "admittedSubscriptionIds": [
+          "s-65200407-2ab5-4502-98e0-d1d8e8eeea2c",
+          "s-0efe0c44-9f37-4f10-a38f-5a9c07dd3b8a",
+          "s-a0b38c09-2bdf-417c-96d2-4aea1611119a"
+        ],
+        "successfulCancelIds": [
+          "s-65200407-2ab5-4502-98e0-d1d8e8eeea2c",
+          "s-a0b38c09-2bdf-417c-96d2-4aea1611119a",
+          "s-0efe0c44-9f37-4f10-a38f-5a9c07dd3b8a"
+        ],
+        "fixtureAssertions": "Project 3 yielded before held Cancel completes; no update during/after Cancel; post-Cancel observer receives Project 4; Project 4 is excluded from the canceled subscription; all three admitted subscriptions are removed"
+      },
+      "cleanup": {
+        "databaseDropped": true,
+        "remainingSessions": 0,
+        "errors": []
+      },
+      "status": "PASS",
+      "durationMs": 2245
+    },
+    {
+      "index": 2,
+      "config": {
+        "provider": "mysql84",
+        "protocol": "native",
+        "scenario": "cancel-publication-race",
+        "deliveryMode": "shared-memory"
+      },
+      "command": {
+        "executable": "pnpm",
+        "argv": [
+          "exec",
+          "vitest",
+          "run",
+          "--config",
+          "vitest.infrastructure.config.ts",
+          "packages/server-blackbox-tests/test/project-subscription-transports.integration.test.ts"
+        ]
+      },
+      "environment": {
+        "SPINE_TS_TRANSPORT_PROVIDER": "mysql84",
+        "SPINE_TS_TRANSPORT_PROTOCOL": "native",
+        "SPINE_TS_TRANSPORT_SCENARIO": "cancel-publication-race",
+        "SPINE_TS_TRANSPORT_DELIVERY_MODE": "shared-memory"
+      },
+      "startedAt": "2026-10-14T04:19:59.287Z",
+      "log": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/transport-publication-barrier-matrix/sessions/ff481782-fd3f-46e2-8b83-f41fcaf76ff8/2-cancel-publication-race-native-shared-memory.log",
+      "fixtureSha256": "169d92d4a50b360746b77a7286517e7b5585d5c6ba9bd55f3a8542b840579c83",
+      "configuredProfile": {
+        "model": "gpt-6-luna",
+        "reasoning": "low",
+        "runtimeMetadata": "not exposed by this execution surface"
+      },
+      "pnpmPid": 99651,
+      "processGroupId": 99651,
+      "endedAt": "2026-10-14T04:20:01.699Z",
+      "gitHeadAtCase": "3aad8c639e47465ed9d37c8376760e3b9b0f8302",
+      "exit": {
+        "code": 0,
+        "signal": null
+      },
+      "runId": "74c4a3c40093458b8c03248976b1ed43",
+      "database": "sqlrel_sub_74c4a3c40093458b8c03248976b1ed43",
+      "resourceArtifacts": {
+        "packages/server-blackbox-tests/dist/test-fixtures/project-workflow.js": "4369473fd7b246124d422e05e94aad97320161f6d18838eaa364d8616001b985",
+        "packages/server/dist/index.js": "6bf9c9a8c971afc87de534107af1a935953f89a0607193ed3576e2b3def1909e",
+        "packages/server/dist/server/node-coordinator.js": "8e5c5194dc8a3f36430e9f547cafd00d90dab4463209c8375ded885079abbb62",
+        "packages/deployment/dist/internal/backend-membership-kernel.js": "6ab8c5c3ba0b2541954af16dcf07e4e38cb771bd6888829fed3ee1a226bcf50d",
+        "packages/proto/dist/src/index.js": "3b16144d721808f5ed8d458be542064c5323575247cf1b7e6d325b038adaeaa2",
+        "packages/storage-postgres/dist/index.js": "84a8658d25708fd1bf4d2b0fd7b1bd678966fd089b9b8e6908df1b1005ad3139",
+        "packages/storage-mysql/dist/index.js": "1e344dd9d6163df30cabbcb6dec296cde324a3f74a9d185ea29c40a28862da74",
+        "packages/client-node/dist/index.js": "0d165190867682c2ffe00467affb4e0bf7bbf0d9c3a92bb31a56be9bfbd3c2f3",
+        "packages/client-web/dist/index.js": "f5207a268787d49974351129c0a25287b71e603ced7ce068ab502350e079c370",
+        "packages/delivery-server/dist/index.js": "b8b79d6f88a3f7f4dd0461062a09dc519e98c84387ae01360b4245acd23b5d08"
+      },
+      "result": {
+        "status": "PASS",
+        "counters": {
+          "subscribe": 3,
+          "activate": 3,
+          "ackReleased": 3,
+          "cancel": 3,
+          "cancelFaults": 0,
+          "cancelSuccesses": 3,
+          "streamFaults": 0,
+          "iterators": 0
+        },
+        "secondaryCounters": {
+          "subscribe": 0,
+          "activate": 0,
+          "ackReleased": 0,
+          "cancel": 0,
+          "iterators": 0
+        },
+        "handlerEntryCount": 20,
+        "serverEventTrace": [
+          {
+            "subscriptionId": "s-171fb13e-e113-4feb-a031-eb6bf7dcbd87",
+            "eventId": "94f31fa6-2eff-4b88-8eda-79afd4440783",
+            "projectNumber": 1,
+            "sha256": "93f3d708dc44b8a6ace2a65091a71019e059daee3275bbbca5a243348fd26de2"
+          },
+          {
+            "subscriptionId": "s-171fb13e-e113-4feb-a031-eb6bf7dcbd87",
+            "eventId": "352ab3fb-2516-4f33-8dfc-79b48b1de783",
+            "projectNumber": 2,
+            "sha256": "527cd36daaa3c556aa509d66b0a7e25319a08ae831fdd2c9d1e03995e7b82736"
+          },
+          {
+            "subscriptionId": "s-171fb13e-e113-4feb-a031-eb6bf7dcbd87",
+            "eventId": "a714f262-a251-4f48-ae66-6026eb124576",
+            "projectNumber": 3,
+            "sha256": "f0c02bc08b48d044a4b564c10a7887e0987c007a3baba8ae14e73d422c77f4a7"
+          },
+          {
+            "subscriptionId": "s-3fbf241d-b596-469f-8475-70c8d24c2c1e",
+            "eventId": "d08598cf-1f69-4b41-97d6-b25f9b1bc5ec",
+            "projectNumber": 4,
+            "sha256": "fb1898d91ba7b4b7ec9986282af150634ebc5a6ecf05dea41de4f3f7b75161d5"
+          }
+        ],
+        "eventId": "94f31fa6-2eff-4b88-8eda-79afd4440783",
+        "observerSubscriptionId": "s-3fbf241d-b596-469f-8475-70c8d24c2c1e",
+        "subscriptionTrace": [
+          {
+            "operation": "subscribe",
+            "id": "s-171fb13e-e113-4feb-a031-eb6bf7dcbd87"
+          },
+          {
+            "operation": "activate",
+            "id": "s-171fb13e-e113-4feb-a031-eb6bf7dcbd87"
+          },
+          {
+            "operation": "subscribe",
+            "id": "s-bf54c7a1-ee16-4488-b1a9-0ee5c13c056a"
+          },
+          {
+            "operation": "activate",
+            "id": "s-bf54c7a1-ee16-4488-b1a9-0ee5c13c056a"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-171fb13e-e113-4feb-a031-eb6bf7dcbd87"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-171fb13e-e113-4feb-a031-eb6bf7dcbd87"
+          },
+          {
+            "operation": "subscribe",
+            "id": "s-3fbf241d-b596-469f-8475-70c8d24c2c1e"
+          },
+          {
+            "operation": "activate",
+            "id": "s-3fbf241d-b596-469f-8475-70c8d24c2c1e"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-3fbf241d-b596-469f-8475-70c8d24c2c1e"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-3fbf241d-b596-469f-8475-70c8d24c2c1e"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-bf54c7a1-ee16-4488-b1a9-0ee5c13c056a"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-bf54c7a1-ee16-4488-b1a9-0ee5c13c056a"
+          }
+        ]
+      },
+      "scenarioEvidence": {
+        "canceledSubscriptionId": "s-171fb13e-e113-4feb-a031-eb6bf7dcbd87",
+        "observerSubscriptionId": "s-3fbf241d-b596-469f-8475-70c8d24c2c1e",
+        "project3EventWhileCancelHeld": {
+          "subscriptionId": "s-171fb13e-e113-4feb-a031-eb6bf7dcbd87",
+          "eventId": "a714f262-a251-4f48-ae66-6026eb124576",
+          "projectNumber": 3,
+          "sha256": "f0c02bc08b48d044a4b564c10a7887e0987c007a3baba8ae14e73d422c77f4a7"
+        },
+        "project4EventReceivedByObserver": {
+          "eventId": "d08598cf-1f69-4b41-97d6-b25f9b1bc5ec",
+          "sha256": "fb1898d91ba7b4b7ec9986282af150634ebc5a6ecf05dea41de4f3f7b75161d5",
+          "serverTraceSubscriptionId": "s-3fbf241d-b596-469f-8475-70c8d24c2c1e",
+          "observerSubscriptionId": "s-3fbf241d-b596-469f-8475-70c8d24c2c1e",
+          "eventIdMatchesObserverReceipt": true,
+          "fixtureReceiptAssertion": "Vitest PASS requires the separately activated observer's actual Project 4 Event ID to equal this server trace Event ID"
+        },
+        "project4YieldsForCanceledSubscription": 0,
+        "admittedSubscriptionIds": [
+          "s-171fb13e-e113-4feb-a031-eb6bf7dcbd87",
+          "s-bf54c7a1-ee16-4488-b1a9-0ee5c13c056a",
+          "s-3fbf241d-b596-469f-8475-70c8d24c2c1e"
+        ],
+        "successfulCancelIds": [
+          "s-171fb13e-e113-4feb-a031-eb6bf7dcbd87",
+          "s-3fbf241d-b596-469f-8475-70c8d24c2c1e",
+          "s-bf54c7a1-ee16-4488-b1a9-0ee5c13c056a"
+        ],
+        "fixtureAssertions": "Project 3 yielded before held Cancel completes; no update during/after Cancel; post-Cancel observer receives Project 4; Project 4 is excluded from the canceled subscription; all three admitted subscriptions are removed"
+      },
+      "cleanup": {
+        "databaseDropped": true,
+        "remainingSessions": 0,
+        "errors": []
+      },
+      "status": "PASS",
+      "durationMs": 2412
+    },
+    {
+      "index": 3,
+      "config": {
+        "provider": "mysql84",
+        "protocol": "grpc-web",
+        "scenario": "cancel-publication-race",
+        "deliveryMode": "db-only"
+      },
+      "command": {
+        "executable": "pnpm",
+        "argv": [
+          "exec",
+          "vitest",
+          "run",
+          "--config",
+          "vitest.infrastructure.config.ts",
+          "packages/server-blackbox-tests/test/project-subscription-transports.integration.test.ts"
+        ]
+      },
+      "environment": {
+        "SPINE_TS_TRANSPORT_PROVIDER": "mysql84",
+        "SPINE_TS_TRANSPORT_PROTOCOL": "grpc-web",
+        "SPINE_TS_TRANSPORT_SCENARIO": "cancel-publication-race",
+        "SPINE_TS_TRANSPORT_DELIVERY_MODE": "db-only"
+      },
+      "startedAt": "2026-10-14T04:20:01.716Z",
+      "log": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/transport-publication-barrier-matrix/sessions/ff481782-fd3f-46e2-8b83-f41fcaf76ff8/3-cancel-publication-race-grpc-web-db-only.log",
+      "fixtureSha256": "169d92d4a50b360746b77a7286517e7b5585d5c6ba9bd55f3a8542b840579c83",
+      "configuredProfile": {
+        "model": "gpt-6-luna",
+        "reasoning": "low",
+        "runtimeMetadata": "not exposed by this execution surface"
+      },
+      "pnpmPid": 99678,
+      "processGroupId": 99678,
+      "endedAt": "2026-10-14T04:20:04.230Z",
+      "gitHeadAtCase": "3aad8c639e47465ed9d37c8376760e3b9b0f8302",
+      "exit": {
+        "code": 0,
+        "signal": null
+      },
+      "runId": "f7b068aa591e4a69bdf6cd8ee5e5a6f9",
+      "database": "sqlrel_sub_f7b068aa591e4a69bdf6cd8ee5e5a6f9",
+      "resourceArtifacts": {
+        "packages/server-blackbox-tests/dist/test-fixtures/project-workflow.js": "4369473fd7b246124d422e05e94aad97320161f6d18838eaa364d8616001b985",
+        "packages/server/dist/index.js": "6bf9c9a8c971afc87de534107af1a935953f89a0607193ed3576e2b3def1909e",
+        "packages/server/dist/server/node-coordinator.js": "8e5c5194dc8a3f36430e9f547cafd00d90dab4463209c8375ded885079abbb62",
+        "packages/deployment/dist/internal/backend-membership-kernel.js": "6ab8c5c3ba0b2541954af16dcf07e4e38cb771bd6888829fed3ee1a226bcf50d",
+        "packages/proto/dist/src/index.js": "3b16144d721808f5ed8d458be542064c5323575247cf1b7e6d325b038adaeaa2",
+        "packages/storage-postgres/dist/index.js": "84a8658d25708fd1bf4d2b0fd7b1bd678966fd089b9b8e6908df1b1005ad3139",
+        "packages/storage-mysql/dist/index.js": "1e344dd9d6163df30cabbcb6dec296cde324a3f74a9d185ea29c40a28862da74",
+        "packages/client-node/dist/index.js": "0d165190867682c2ffe00467affb4e0bf7bbf0d9c3a92bb31a56be9bfbd3c2f3",
+        "packages/client-web/dist/index.js": "f5207a268787d49974351129c0a25287b71e603ced7ce068ab502350e079c370",
+        "packages/delivery-server/dist/index.js": "b8b79d6f88a3f7f4dd0461062a09dc519e98c84387ae01360b4245acd23b5d08"
+      },
+      "result": {
+        "status": "PASS",
+        "counters": {
+          "subscribe": 3,
+          "activate": 3,
+          "ackReleased": 3,
+          "cancel": 3,
+          "cancelFaults": 0,
+          "cancelSuccesses": 3,
+          "streamFaults": 0,
+          "iterators": 0
+        },
+        "secondaryCounters": {
+          "subscribe": 0,
+          "activate": 0,
+          "ackReleased": 0,
+          "cancel": 0,
+          "iterators": 0
+        },
+        "handlerEntryCount": 20,
+        "serverEventTrace": [
+          {
+            "subscriptionId": "s-7c046704-5545-40d4-aff4-0f8d98f99e79",
+            "eventId": "743eed5f-8c88-442a-b261-bb5d0feb17e9",
+            "projectNumber": 1,
+            "sha256": "21e2a06afcf51294be5a706ddb22f78913cebaa082c774593fcd96d58fbe5df6"
+          },
+          {
+            "subscriptionId": "s-7c046704-5545-40d4-aff4-0f8d98f99e79",
+            "eventId": "5e34b905-d5ab-4fb6-9ef7-c08bb5f3d35d",
+            "projectNumber": 2,
+            "sha256": "f92cce5602e8e7cb82a0ce9f7da89b9fe213bb159f576bca36e047214b41489d"
+          },
+          {
+            "subscriptionId": "s-7c046704-5545-40d4-aff4-0f8d98f99e79",
+            "eventId": "ef7443cd-1793-499d-8b88-ccd160510dd6",
+            "projectNumber": 3,
+            "sha256": "67b234b7833147a4b675e675bd6436632b26473273b5514e146bfa6e39cbd771"
+          },
+          {
+            "subscriptionId": "s-c2659ed1-4577-4237-8b5d-e08880eef970",
+            "eventId": "293c1ddd-3ee1-4351-b023-c5612db2b17c",
+            "projectNumber": 4,
+            "sha256": "4f869bfeda6ef94f3c86a4de0b7d622e81969d641d0388e47309b3fae308f3d8"
+          }
+        ],
+        "eventId": "743eed5f-8c88-442a-b261-bb5d0feb17e9",
+        "observerSubscriptionId": "s-c2659ed1-4577-4237-8b5d-e08880eef970",
+        "subscriptionTrace": [
+          {
+            "operation": "subscribe",
+            "id": "s-7c046704-5545-40d4-aff4-0f8d98f99e79"
+          },
+          {
+            "operation": "activate",
+            "id": "s-7c046704-5545-40d4-aff4-0f8d98f99e79"
+          },
+          {
+            "operation": "subscribe",
+            "id": "s-3b0a2d3f-0d8e-4415-8352-fcc21ad75be7"
+          },
+          {
+            "operation": "activate",
+            "id": "s-3b0a2d3f-0d8e-4415-8352-fcc21ad75be7"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-7c046704-5545-40d4-aff4-0f8d98f99e79"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-7c046704-5545-40d4-aff4-0f8d98f99e79"
+          },
+          {
+            "operation": "subscribe",
+            "id": "s-c2659ed1-4577-4237-8b5d-e08880eef970"
+          },
+          {
+            "operation": "activate",
+            "id": "s-c2659ed1-4577-4237-8b5d-e08880eef970"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-c2659ed1-4577-4237-8b5d-e08880eef970"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-c2659ed1-4577-4237-8b5d-e08880eef970"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-3b0a2d3f-0d8e-4415-8352-fcc21ad75be7"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-3b0a2d3f-0d8e-4415-8352-fcc21ad75be7"
+          }
+        ]
+      },
+      "scenarioEvidence": {
+        "canceledSubscriptionId": "s-7c046704-5545-40d4-aff4-0f8d98f99e79",
+        "observerSubscriptionId": "s-c2659ed1-4577-4237-8b5d-e08880eef970",
+        "project3EventWhileCancelHeld": {
+          "subscriptionId": "s-7c046704-5545-40d4-aff4-0f8d98f99e79",
+          "eventId": "ef7443cd-1793-499d-8b88-ccd160510dd6",
+          "projectNumber": 3,
+          "sha256": "67b234b7833147a4b675e675bd6436632b26473273b5514e146bfa6e39cbd771"
+        },
+        "project4EventReceivedByObserver": {
+          "eventId": "293c1ddd-3ee1-4351-b023-c5612db2b17c",
+          "sha256": "4f869bfeda6ef94f3c86a4de0b7d622e81969d641d0388e47309b3fae308f3d8",
+          "serverTraceSubscriptionId": "s-c2659ed1-4577-4237-8b5d-e08880eef970",
+          "observerSubscriptionId": "s-c2659ed1-4577-4237-8b5d-e08880eef970",
+          "eventIdMatchesObserverReceipt": true,
+          "fixtureReceiptAssertion": "Vitest PASS requires the separately activated observer's actual Project 4 Event ID to equal this server trace Event ID"
+        },
+        "project4YieldsForCanceledSubscription": 0,
+        "admittedSubscriptionIds": [
+          "s-7c046704-5545-40d4-aff4-0f8d98f99e79",
+          "s-3b0a2d3f-0d8e-4415-8352-fcc21ad75be7",
+          "s-c2659ed1-4577-4237-8b5d-e08880eef970"
+        ],
+        "successfulCancelIds": [
+          "s-7c046704-5545-40d4-aff4-0f8d98f99e79",
+          "s-c2659ed1-4577-4237-8b5d-e08880eef970",
+          "s-3b0a2d3f-0d8e-4415-8352-fcc21ad75be7"
+        ],
+        "fixtureAssertions": "Project 3 yielded before held Cancel completes; no update during/after Cancel; post-Cancel observer receives Project 4; Project 4 is excluded from the canceled subscription; all three admitted subscriptions are removed"
+      },
+      "cleanup": {
+        "databaseDropped": true,
+        "remainingSessions": 0,
+        "errors": []
+      },
+      "status": "PASS",
+      "durationMs": 2514
+    },
+    {
+      "index": 4,
+      "config": {
+        "provider": "mysql84",
+        "protocol": "grpc-web",
+        "scenario": "cancel-publication-race",
+        "deliveryMode": "shared-memory"
+      },
+      "command": {
+        "executable": "pnpm",
+        "argv": [
+          "exec",
+          "vitest",
+          "run",
+          "--config",
+          "vitest.infrastructure.config.ts",
+          "packages/server-blackbox-tests/test/project-subscription-transports.integration.test.ts"
+        ]
+      },
+      "environment": {
+        "SPINE_TS_TRANSPORT_PROVIDER": "mysql84",
+        "SPINE_TS_TRANSPORT_PROTOCOL": "grpc-web",
+        "SPINE_TS_TRANSPORT_SCENARIO": "cancel-publication-race",
+        "SPINE_TS_TRANSPORT_DELIVERY_MODE": "shared-memory"
+      },
+      "startedAt": "2026-10-14T04:20:04.246Z",
+      "log": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/transport-publication-barrier-matrix/sessions/ff481782-fd3f-46e2-8b83-f41fcaf76ff8/4-cancel-publication-race-grpc-web-shared-memory.log",
+      "fixtureSha256": "169d92d4a50b360746b77a7286517e7b5585d5c6ba9bd55f3a8542b840579c83",
+      "configuredProfile": {
+        "model": "gpt-6-luna",
+        "reasoning": "low",
+        "runtimeMetadata": "not exposed by this execution surface"
+      },
+      "pnpmPid": 99707,
+      "processGroupId": 99707,
+      "endedAt": "2026-10-14T04:20:06.625Z",
+      "gitHeadAtCase": "3aad8c639e47465ed9d37c8376760e3b9b0f8302",
+      "exit": {
+        "code": 0,
+        "signal": null
+      },
+      "runId": "fa70fcc8afff4174a1bac6e570cbd466",
+      "database": "sqlrel_sub_fa70fcc8afff4174a1bac6e570cbd466",
+      "resourceArtifacts": {
+        "packages/server-blackbox-tests/dist/test-fixtures/project-workflow.js": "4369473fd7b246124d422e05e94aad97320161f6d18838eaa364d8616001b985",
+        "packages/server/dist/index.js": "6bf9c9a8c971afc87de534107af1a935953f89a0607193ed3576e2b3def1909e",
+        "packages/server/dist/server/node-coordinator.js": "8e5c5194dc8a3f36430e9f547cafd00d90dab4463209c8375ded885079abbb62",
+        "packages/deployment/dist/internal/backend-membership-kernel.js": "6ab8c5c3ba0b2541954af16dcf07e4e38cb771bd6888829fed3ee1a226bcf50d",
+        "packages/proto/dist/src/index.js": "3b16144d721808f5ed8d458be542064c5323575247cf1b7e6d325b038adaeaa2",
+        "packages/storage-postgres/dist/index.js": "84a8658d25708fd1bf4d2b0fd7b1bd678966fd089b9b8e6908df1b1005ad3139",
+        "packages/storage-mysql/dist/index.js": "1e344dd9d6163df30cabbcb6dec296cde324a3f74a9d185ea29c40a28862da74",
+        "packages/client-node/dist/index.js": "0d165190867682c2ffe00467affb4e0bf7bbf0d9c3a92bb31a56be9bfbd3c2f3",
+        "packages/client-web/dist/index.js": "f5207a268787d49974351129c0a25287b71e603ced7ce068ab502350e079c370",
+        "packages/delivery-server/dist/index.js": "b8b79d6f88a3f7f4dd0461062a09dc519e98c84387ae01360b4245acd23b5d08"
+      },
+      "result": {
+        "status": "PASS",
+        "counters": {
+          "subscribe": 3,
+          "activate": 3,
+          "ackReleased": 3,
+          "cancel": 3,
+          "cancelFaults": 0,
+          "cancelSuccesses": 3,
+          "streamFaults": 0,
+          "iterators": 0
+        },
+        "secondaryCounters": {
+          "subscribe": 0,
+          "activate": 0,
+          "ackReleased": 0,
+          "cancel": 0,
+          "iterators": 0
+        },
+        "handlerEntryCount": 20,
+        "serverEventTrace": [
+          {
+            "subscriptionId": "s-85b63073-ddbb-4e10-9991-e72db0914ff8",
+            "eventId": "1f359a64-e0b6-4043-962d-6f1544ea8432",
+            "projectNumber": 1,
+            "sha256": "2c99b73aca799ab0dce8f9dcbbbcbd037473878d4894e8aebe562e047534200a"
+          },
+          {
+            "subscriptionId": "s-85b63073-ddbb-4e10-9991-e72db0914ff8",
+            "eventId": "e7090992-5d00-480e-9d50-61ab8b58657b",
+            "projectNumber": 2,
+            "sha256": "ec02c6d9acf2ad35f3fa30cbae32fd34eb159c79263d2ca37071463c625ceb45"
+          },
+          {
+            "subscriptionId": "s-85b63073-ddbb-4e10-9991-e72db0914ff8",
+            "eventId": "8b614b4a-96a9-4fab-87be-89b8d2510deb",
+            "projectNumber": 3,
+            "sha256": "85eb8b043ce08b1d3d190eab5b6074a7b2952c5428b53e861ef6da70a4883f1f"
+          },
+          {
+            "subscriptionId": "s-f794dcb0-8a03-46d4-8586-018c0de94c14",
+            "eventId": "976e854e-671f-4c71-814e-d5ee153801d9",
+            "projectNumber": 4,
+            "sha256": "3aeb38fa0028be2c2e281daba3af6fc9a0e5dab651061947359e6def45c94500"
+          }
+        ],
+        "eventId": "1f359a64-e0b6-4043-962d-6f1544ea8432",
+        "observerSubscriptionId": "s-f794dcb0-8a03-46d4-8586-018c0de94c14",
+        "subscriptionTrace": [
+          {
+            "operation": "subscribe",
+            "id": "s-85b63073-ddbb-4e10-9991-e72db0914ff8"
+          },
+          {
+            "operation": "activate",
+            "id": "s-85b63073-ddbb-4e10-9991-e72db0914ff8"
+          },
+          {
+            "operation": "subscribe",
+            "id": "s-df68ab1b-d0b0-498e-a424-1bbf9d389765"
+          },
+          {
+            "operation": "activate",
+            "id": "s-df68ab1b-d0b0-498e-a424-1bbf9d389765"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-85b63073-ddbb-4e10-9991-e72db0914ff8"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-85b63073-ddbb-4e10-9991-e72db0914ff8"
+          },
+          {
+            "operation": "subscribe",
+            "id": "s-f794dcb0-8a03-46d4-8586-018c0de94c14"
+          },
+          {
+            "operation": "activate",
+            "id": "s-f794dcb0-8a03-46d4-8586-018c0de94c14"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-f794dcb0-8a03-46d4-8586-018c0de94c14"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-f794dcb0-8a03-46d4-8586-018c0de94c14"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-df68ab1b-d0b0-498e-a424-1bbf9d389765"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-df68ab1b-d0b0-498e-a424-1bbf9d389765"
+          }
+        ]
+      },
+      "scenarioEvidence": {
+        "canceledSubscriptionId": "s-85b63073-ddbb-4e10-9991-e72db0914ff8",
+        "observerSubscriptionId": "s-f794dcb0-8a03-46d4-8586-018c0de94c14",
+        "project3EventWhileCancelHeld": {
+          "subscriptionId": "s-85b63073-ddbb-4e10-9991-e72db0914ff8",
+          "eventId": "8b614b4a-96a9-4fab-87be-89b8d2510deb",
+          "projectNumber": 3,
+          "sha256": "85eb8b043ce08b1d3d190eab5b6074a7b2952c5428b53e861ef6da70a4883f1f"
+        },
+        "project4EventReceivedByObserver": {
+          "eventId": "976e854e-671f-4c71-814e-d5ee153801d9",
+          "sha256": "3aeb38fa0028be2c2e281daba3af6fc9a0e5dab651061947359e6def45c94500",
+          "serverTraceSubscriptionId": "s-f794dcb0-8a03-46d4-8586-018c0de94c14",
+          "observerSubscriptionId": "s-f794dcb0-8a03-46d4-8586-018c0de94c14",
+          "eventIdMatchesObserverReceipt": true,
+          "fixtureReceiptAssertion": "Vitest PASS requires the separately activated observer's actual Project 4 Event ID to equal this server trace Event ID"
+        },
+        "project4YieldsForCanceledSubscription": 0,
+        "admittedSubscriptionIds": [
+          "s-85b63073-ddbb-4e10-9991-e72db0914ff8",
+          "s-df68ab1b-d0b0-498e-a424-1bbf9d389765",
+          "s-f794dcb0-8a03-46d4-8586-018c0de94c14"
+        ],
+        "successfulCancelIds": [
+          "s-85b63073-ddbb-4e10-9991-e72db0914ff8",
+          "s-f794dcb0-8a03-46d4-8586-018c0de94c14",
+          "s-df68ab1b-d0b0-498e-a424-1bbf9d389765"
+        ],
+        "fixtureAssertions": "Project 3 yielded before held Cancel completes; no update during/after Cancel; post-Cancel observer receives Project 4; Project 4 is excluded from the canceled subscription; all three admitted subscriptions are removed"
+      },
+      "cleanup": {
+        "databaseDropped": true,
+        "remainingSessions": 0,
+        "errors": []
+      },
+      "status": "PASS",
+      "durationMs": 2379
+    },
+    {
+      "index": 5,
+      "config": {
+        "provider": "mysql84",
+        "protocol": "connect",
+        "scenario": "cancel-publication-race",
+        "deliveryMode": "db-only"
+      },
+      "command": {
+        "executable": "pnpm",
+        "argv": [
+          "exec",
+          "vitest",
+          "run",
+          "--config",
+          "vitest.infrastructure.config.ts",
+          "packages/server-blackbox-tests/test/project-subscription-transports.integration.test.ts"
+        ]
+      },
+      "environment": {
+        "SPINE_TS_TRANSPORT_PROVIDER": "mysql84",
+        "SPINE_TS_TRANSPORT_PROTOCOL": "connect",
+        "SPINE_TS_TRANSPORT_SCENARIO": "cancel-publication-race",
+        "SPINE_TS_TRANSPORT_DELIVERY_MODE": "db-only"
+      },
+      "startedAt": "2026-10-14T04:20:06.643Z",
+      "log": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/transport-publication-barrier-matrix/sessions/ff481782-fd3f-46e2-8b83-f41fcaf76ff8/5-cancel-publication-race-connect-db-only.log",
+      "fixtureSha256": "169d92d4a50b360746b77a7286517e7b5585d5c6ba9bd55f3a8542b840579c83",
+      "configuredProfile": {
+        "model": "gpt-6-luna",
+        "reasoning": "low",
+        "runtimeMetadata": "not exposed by this execution surface"
+      },
+      "pnpmPid": 99734,
+      "processGroupId": 99734,
+      "endedAt": "2026-10-14T04:20:08.993Z",
+      "gitHeadAtCase": "3aad8c639e47465ed9d37c8376760e3b9b0f8302",
+      "exit": {
+        "code": 0,
+        "signal": null
+      },
+      "runId": "e2fc118e3a5c4dbe9a5ba9aa7301dbb8",
+      "database": "sqlrel_sub_e2fc118e3a5c4dbe9a5ba9aa7301dbb8",
+      "resourceArtifacts": {
+        "packages/server-blackbox-tests/dist/test-fixtures/project-workflow.js": "4369473fd7b246124d422e05e94aad97320161f6d18838eaa364d8616001b985",
+        "packages/server/dist/index.js": "6bf9c9a8c971afc87de534107af1a935953f89a0607193ed3576e2b3def1909e",
+        "packages/server/dist/server/node-coordinator.js": "8e5c5194dc8a3f36430e9f547cafd00d90dab4463209c8375ded885079abbb62",
+        "packages/deployment/dist/internal/backend-membership-kernel.js": "6ab8c5c3ba0b2541954af16dcf07e4e38cb771bd6888829fed3ee1a226bcf50d",
+        "packages/proto/dist/src/index.js": "3b16144d721808f5ed8d458be542064c5323575247cf1b7e6d325b038adaeaa2",
+        "packages/storage-postgres/dist/index.js": "84a8658d25708fd1bf4d2b0fd7b1bd678966fd089b9b8e6908df1b1005ad3139",
+        "packages/storage-mysql/dist/index.js": "1e344dd9d6163df30cabbcb6dec296cde324a3f74a9d185ea29c40a28862da74",
+        "packages/client-node/dist/index.js": "0d165190867682c2ffe00467affb4e0bf7bbf0d9c3a92bb31a56be9bfbd3c2f3",
+        "packages/client-web/dist/index.js": "f5207a268787d49974351129c0a25287b71e603ced7ce068ab502350e079c370",
+        "packages/delivery-server/dist/index.js": "b8b79d6f88a3f7f4dd0461062a09dc519e98c84387ae01360b4245acd23b5d08"
+      },
+      "result": {
+        "status": "PASS",
+        "counters": {
+          "subscribe": 3,
+          "activate": 3,
+          "ackReleased": 3,
+          "cancel": 3,
+          "cancelFaults": 0,
+          "cancelSuccesses": 3,
+          "streamFaults": 0,
+          "iterators": 0
+        },
+        "secondaryCounters": {
+          "subscribe": 0,
+          "activate": 0,
+          "ackReleased": 0,
+          "cancel": 0,
+          "iterators": 0
+        },
+        "handlerEntryCount": 20,
+        "serverEventTrace": [
+          {
+            "subscriptionId": "s-182cf110-a39d-42d2-aa41-b0506b0a011f",
+            "eventId": "e20d054f-01bd-4dd2-a351-813561497af1",
+            "projectNumber": 1,
+            "sha256": "614df083a162da527c540963b3a0e85884d05a87be3b0fa2feb9b7a1c0d399d6"
+          },
+          {
+            "subscriptionId": "s-182cf110-a39d-42d2-aa41-b0506b0a011f",
+            "eventId": "b7c4c1ff-654a-4414-9e63-f8c3aba0d327",
+            "projectNumber": 2,
+            "sha256": "2c8c8e491133fe38428e3624422b3e88e7deeecd1f7f161abb2ed1b6471996b7"
+          },
+          {
+            "subscriptionId": "s-182cf110-a39d-42d2-aa41-b0506b0a011f",
+            "eventId": "1031e35f-6e6c-480d-863c-849966755d4d",
+            "projectNumber": 3,
+            "sha256": "5c761fdd74534c2122408afd50bd6e1992e2e633c721c2d0f042670257776f6b"
+          },
+          {
+            "subscriptionId": "s-7ea5cb93-5c58-460b-b8ab-7bb7c73f3d35",
+            "eventId": "b479050a-86e1-43da-86f1-aaec09ba0818",
+            "projectNumber": 4,
+            "sha256": "ae1f9835cfa3474cc0bd5535c4a71da859fda8cdacb4927a64b47802d6673619"
+          }
+        ],
+        "eventId": "e20d054f-01bd-4dd2-a351-813561497af1",
+        "observerSubscriptionId": "s-7ea5cb93-5c58-460b-b8ab-7bb7c73f3d35",
+        "subscriptionTrace": [
+          {
+            "operation": "subscribe",
+            "id": "s-182cf110-a39d-42d2-aa41-b0506b0a011f"
+          },
+          {
+            "operation": "activate",
+            "id": "s-182cf110-a39d-42d2-aa41-b0506b0a011f"
+          },
+          {
+            "operation": "subscribe",
+            "id": "s-8191a9aa-2635-4f0b-ab54-58df94124163"
+          },
+          {
+            "operation": "activate",
+            "id": "s-8191a9aa-2635-4f0b-ab54-58df94124163"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-182cf110-a39d-42d2-aa41-b0506b0a011f"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-182cf110-a39d-42d2-aa41-b0506b0a011f"
+          },
+          {
+            "operation": "subscribe",
+            "id": "s-7ea5cb93-5c58-460b-b8ab-7bb7c73f3d35"
+          },
+          {
+            "operation": "activate",
+            "id": "s-7ea5cb93-5c58-460b-b8ab-7bb7c73f3d35"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-7ea5cb93-5c58-460b-b8ab-7bb7c73f3d35"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-7ea5cb93-5c58-460b-b8ab-7bb7c73f3d35"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-8191a9aa-2635-4f0b-ab54-58df94124163"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-8191a9aa-2635-4f0b-ab54-58df94124163"
+          }
+        ]
+      },
+      "scenarioEvidence": {
+        "canceledSubscriptionId": "s-182cf110-a39d-42d2-aa41-b0506b0a011f",
+        "observerSubscriptionId": "s-7ea5cb93-5c58-460b-b8ab-7bb7c73f3d35",
+        "project3EventWhileCancelHeld": {
+          "subscriptionId": "s-182cf110-a39d-42d2-aa41-b0506b0a011f",
+          "eventId": "1031e35f-6e6c-480d-863c-849966755d4d",
+          "projectNumber": 3,
+          "sha256": "5c761fdd74534c2122408afd50bd6e1992e2e633c721c2d0f042670257776f6b"
+        },
+        "project4EventReceivedByObserver": {
+          "eventId": "b479050a-86e1-43da-86f1-aaec09ba0818",
+          "sha256": "ae1f9835cfa3474cc0bd5535c4a71da859fda8cdacb4927a64b47802d6673619",
+          "serverTraceSubscriptionId": "s-7ea5cb93-5c58-460b-b8ab-7bb7c73f3d35",
+          "observerSubscriptionId": "s-7ea5cb93-5c58-460b-b8ab-7bb7c73f3d35",
+          "eventIdMatchesObserverReceipt": true,
+          "fixtureReceiptAssertion": "Vitest PASS requires the separately activated observer's actual Project 4 Event ID to equal this server trace Event ID"
+        },
+        "project4YieldsForCanceledSubscription": 0,
+        "admittedSubscriptionIds": [
+          "s-182cf110-a39d-42d2-aa41-b0506b0a011f",
+          "s-8191a9aa-2635-4f0b-ab54-58df94124163",
+          "s-7ea5cb93-5c58-460b-b8ab-7bb7c73f3d35"
+        ],
+        "successfulCancelIds": [
+          "s-182cf110-a39d-42d2-aa41-b0506b0a011f",
+          "s-7ea5cb93-5c58-460b-b8ab-7bb7c73f3d35",
+          "s-8191a9aa-2635-4f0b-ab54-58df94124163"
+        ],
+        "fixtureAssertions": "Project 3 yielded before held Cancel completes; no update during/after Cancel; post-Cancel observer receives Project 4; Project 4 is excluded from the canceled subscription; all three admitted subscriptions are removed"
+      },
+      "cleanup": {
+        "databaseDropped": true,
+        "remainingSessions": 0,
+        "errors": []
+      },
+      "status": "PASS",
+      "durationMs": 2350
+    },
+    {
+      "index": 6,
+      "config": {
+        "provider": "mysql84",
+        "protocol": "connect",
+        "scenario": "cancel-publication-race",
+        "deliveryMode": "shared-memory"
+      },
+      "command": {
+        "executable": "pnpm",
+        "argv": [
+          "exec",
+          "vitest",
+          "run",
+          "--config",
+          "vitest.infrastructure.config.ts",
+          "packages/server-blackbox-tests/test/project-subscription-transports.integration.test.ts"
+        ]
+      },
+      "environment": {
+        "SPINE_TS_TRANSPORT_PROVIDER": "mysql84",
+        "SPINE_TS_TRANSPORT_PROTOCOL": "connect",
+        "SPINE_TS_TRANSPORT_SCENARIO": "cancel-publication-race",
+        "SPINE_TS_TRANSPORT_DELIVERY_MODE": "shared-memory"
+      },
+      "startedAt": "2026-10-14T04:20:09.009Z",
+      "log": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/transport-publication-barrier-matrix/sessions/ff481782-fd3f-46e2-8b83-f41fcaf76ff8/6-cancel-publication-race-connect-shared-memory.log",
+      "fixtureSha256": "169d92d4a50b360746b77a7286517e7b5585d5c6ba9bd55f3a8542b840579c83",
+      "configuredProfile": {
+        "model": "gpt-6-luna",
+        "reasoning": "low",
+        "runtimeMetadata": "not exposed by this execution surface"
+      },
+      "pnpmPid": 99766,
+      "processGroupId": 99766,
+      "endedAt": "2026-10-14T04:20:11.327Z",
+      "gitHeadAtCase": "3aad8c639e47465ed9d37c8376760e3b9b0f8302",
+      "exit": {
+        "code": 0,
+        "signal": null
+      },
+      "runId": "65e04336e4464f8fb4890f99a7c7693b",
+      "database": "sqlrel_sub_65e04336e4464f8fb4890f99a7c7693b",
+      "resourceArtifacts": {
+        "packages/server-blackbox-tests/dist/test-fixtures/project-workflow.js": "4369473fd7b246124d422e05e94aad97320161f6d18838eaa364d8616001b985",
+        "packages/server/dist/index.js": "6bf9c9a8c971afc87de534107af1a935953f89a0607193ed3576e2b3def1909e",
+        "packages/server/dist/server/node-coordinator.js": "8e5c5194dc8a3f36430e9f547cafd00d90dab4463209c8375ded885079abbb62",
+        "packages/deployment/dist/internal/backend-membership-kernel.js": "6ab8c5c3ba0b2541954af16dcf07e4e38cb771bd6888829fed3ee1a226bcf50d",
+        "packages/proto/dist/src/index.js": "3b16144d721808f5ed8d458be542064c5323575247cf1b7e6d325b038adaeaa2",
+        "packages/storage-postgres/dist/index.js": "84a8658d25708fd1bf4d2b0fd7b1bd678966fd089b9b8e6908df1b1005ad3139",
+        "packages/storage-mysql/dist/index.js": "1e344dd9d6163df30cabbcb6dec296cde324a3f74a9d185ea29c40a28862da74",
+        "packages/client-node/dist/index.js": "0d165190867682c2ffe00467affb4e0bf7bbf0d9c3a92bb31a56be9bfbd3c2f3",
+        "packages/client-web/dist/index.js": "f5207a268787d49974351129c0a25287b71e603ced7ce068ab502350e079c370",
+        "packages/delivery-server/dist/index.js": "b8b79d6f88a3f7f4dd0461062a09dc519e98c84387ae01360b4245acd23b5d08"
+      },
+      "result": {
+        "status": "PASS",
+        "counters": {
+          "subscribe": 3,
+          "activate": 3,
+          "ackReleased": 3,
+          "cancel": 3,
+          "cancelFaults": 0,
+          "cancelSuccesses": 3,
+          "streamFaults": 0,
+          "iterators": 0
+        },
+        "secondaryCounters": {
+          "subscribe": 0,
+          "activate": 0,
+          "ackReleased": 0,
+          "cancel": 0,
+          "iterators": 0
+        },
+        "handlerEntryCount": 20,
+        "serverEventTrace": [
+          {
+            "subscriptionId": "s-57270629-1686-4205-b6f0-8d12e129489c",
+            "eventId": "5bca2f90-ed67-4de9-82ee-e9c5d5a953ff",
+            "projectNumber": 1,
+            "sha256": "2847d7063e5d65ae39c4442f7547639a0c8f73682415d441b38933bbe46017d1"
+          },
+          {
+            "subscriptionId": "s-57270629-1686-4205-b6f0-8d12e129489c",
+            "eventId": "ebe3b8d2-091f-48d5-b6fa-cbcbd28a3d10",
+            "projectNumber": 2,
+            "sha256": "2643c3c1a140677531f7628cdb74c4e9cd8f3b39a51ad232fdd1436c4359e7b4"
+          },
+          {
+            "subscriptionId": "s-57270629-1686-4205-b6f0-8d12e129489c",
+            "eventId": "6c29bbb8-e329-448a-ab42-cdf6990624d2",
+            "projectNumber": 3,
+            "sha256": "b6bdae94a9dc2a99f45bb4349c1d39019323518fcf2cf57cade4160fc9f898d4"
+          },
+          {
+            "subscriptionId": "s-8ff6f0b1-72a5-4efc-90c6-dd14e5607425",
+            "eventId": "1998a1bb-3f16-4034-aafb-3c766fdff86f",
+            "projectNumber": 4,
+            "sha256": "138c44d5809b16089236a909365289c3f6e9a87490f20258e1b1564f69fc2608"
+          }
+        ],
+        "eventId": "5bca2f90-ed67-4de9-82ee-e9c5d5a953ff",
+        "observerSubscriptionId": "s-8ff6f0b1-72a5-4efc-90c6-dd14e5607425",
+        "subscriptionTrace": [
+          {
+            "operation": "subscribe",
+            "id": "s-57270629-1686-4205-b6f0-8d12e129489c"
+          },
+          {
+            "operation": "activate",
+            "id": "s-57270629-1686-4205-b6f0-8d12e129489c"
+          },
+          {
+            "operation": "subscribe",
+            "id": "s-9805ad6e-b8e2-488c-bdc9-7563b2ad19b1"
+          },
+          {
+            "operation": "activate",
+            "id": "s-9805ad6e-b8e2-488c-bdc9-7563b2ad19b1"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-57270629-1686-4205-b6f0-8d12e129489c"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-57270629-1686-4205-b6f0-8d12e129489c"
+          },
+          {
+            "operation": "subscribe",
+            "id": "s-8ff6f0b1-72a5-4efc-90c6-dd14e5607425"
+          },
+          {
+            "operation": "activate",
+            "id": "s-8ff6f0b1-72a5-4efc-90c6-dd14e5607425"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-8ff6f0b1-72a5-4efc-90c6-dd14e5607425"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-8ff6f0b1-72a5-4efc-90c6-dd14e5607425"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-9805ad6e-b8e2-488c-bdc9-7563b2ad19b1"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-9805ad6e-b8e2-488c-bdc9-7563b2ad19b1"
+          }
+        ]
+      },
+      "scenarioEvidence": {
+        "canceledSubscriptionId": "s-57270629-1686-4205-b6f0-8d12e129489c",
+        "observerSubscriptionId": "s-8ff6f0b1-72a5-4efc-90c6-dd14e5607425",
+        "project3EventWhileCancelHeld": {
+          "subscriptionId": "s-57270629-1686-4205-b6f0-8d12e129489c",
+          "eventId": "6c29bbb8-e329-448a-ab42-cdf6990624d2",
+          "projectNumber": 3,
+          "sha256": "b6bdae94a9dc2a99f45bb4349c1d39019323518fcf2cf57cade4160fc9f898d4"
+        },
+        "project4EventReceivedByObserver": {
+          "eventId": "1998a1bb-3f16-4034-aafb-3c766fdff86f",
+          "sha256": "138c44d5809b16089236a909365289c3f6e9a87490f20258e1b1564f69fc2608",
+          "serverTraceSubscriptionId": "s-8ff6f0b1-72a5-4efc-90c6-dd14e5607425",
+          "observerSubscriptionId": "s-8ff6f0b1-72a5-4efc-90c6-dd14e5607425",
+          "eventIdMatchesObserverReceipt": true,
+          "fixtureReceiptAssertion": "Vitest PASS requires the separately activated observer's actual Project 4 Event ID to equal this server trace Event ID"
+        },
+        "project4YieldsForCanceledSubscription": 0,
+        "admittedSubscriptionIds": [
+          "s-57270629-1686-4205-b6f0-8d12e129489c",
+          "s-9805ad6e-b8e2-488c-bdc9-7563b2ad19b1",
+          "s-8ff6f0b1-72a5-4efc-90c6-dd14e5607425"
+        ],
+        "successfulCancelIds": [
+          "s-57270629-1686-4205-b6f0-8d12e129489c",
+          "s-8ff6f0b1-72a5-4efc-90c6-dd14e5607425",
+          "s-9805ad6e-b8e2-488c-bdc9-7563b2ad19b1"
+        ],
+        "fixtureAssertions": "Project 3 yielded before held Cancel completes; no update during/after Cancel; post-Cancel observer receives Project 4; Project 4 is excluded from the canceled subscription; all three admitted subscriptions are removed"
+      },
+      "cleanup": {
+        "databaseDropped": true,
+        "remainingSessions": 0,
+        "errors": []
+      },
+      "status": "PASS",
+      "durationMs": 2318
+    }
+  ],
+  "end": {
+    "sourceSha256": {
+      "packages/server-blackbox-tests/package.json": "ac7bb9233e7dd6c82d9320d81f4c8503328a4811d912b9517f60654fb5e3e2c6",
+      "packages/server-blackbox-tests/test-fixtures/project-subscription-transport.mjs": "169d92d4a50b360746b77a7286517e7b5585d5c6ba9bd55f3a8542b840579c83",
+      "packages/server-blackbox-tests/test-fixtures/project-subscription-wait.mjs": "f06a514e2b925ed42f1340fbd87db73e26072718eb568817ffc9ee097f7e8885",
+      "packages/server-blackbox-tests/test/project-subscription-transports.integration.test.ts": "2b4c34d4e2096c0becf755b67079b727129514acab807932d466aa59bee13232",
+      "packages/server-blackbox-tests/test-fixtures/project-workflow.ts": "8ed152a6fd0a88224cccfcd9ff219695a41a8dc38eeab75192081dbb90cc8bc4",
+      "packages/auth/src/gateway/dynamic-subscription-creator.ts": "7d6f461807b1610bd2033b7e94b368b01608d5a9240bf32cd8c91dbb25b5d498",
+      "packages/auth/src/gateway/dynamic-unary-forwarder.ts": "a3a76407fbacb78ecfb79ed9b8436647280d556067e7f0a550a8941e462729d9",
+      "packages/deployment/src/internal/backend-membership-kernel.ts": "1b26c61468a5d667784be7eb53bcdf2b8a165d2a6b1210b61e49dc8f064bd0c0"
+    },
+    "distSha256": {
+      "packages/server-blackbox-tests/dist/test-fixtures/project-workflow.js": "4369473fd7b246124d422e05e94aad97320161f6d18838eaa364d8616001b985",
+      "packages/server/dist/index.js": "6bf9c9a8c971afc87de534107af1a935953f89a0607193ed3576e2b3def1909e",
+      "packages/server/dist/browser/index.js": "408b3cf4068f99542d9a01219ac1c251096746e172845f82abafaafca0cd0e07",
+      "packages/server/dist/browser/browser-server.js": "8b5ed0a6d503af04fe806549cc0b5ac2c4e6c60f1b35f7ee779a36c8443810cc",
+      "packages/server/dist/browser/durable-subscription-bindings.js": "8378a58cad104a61b2c13a6f808f3b328af8673f5e7076cd91182a8969884dcc",
+      "packages/server/dist/server/node-coordinator.js": "8e5c5194dc8a3f36430e9f547cafd00d90dab4463209c8375ded885079abbb62",
+      "packages/auth/dist/gateway/dynamic-subscription-creator.js": "9fd4cdadacd3c1670f28a848448d16797b64e8d509b0be3b6b97ec818d23085b",
+      "packages/auth/dist/gateway/dynamic-unary-forwarder.js": "8840d7ad5c74617b8cf66fe05d0aae40b4ff9514d0a5435e33e515075ebde7ba",
+      "packages/deployment/dist/internal/backend-membership-kernel.js": "6ab8c5c3ba0b2541954af16dcf07e4e38cb771bd6888829fed3ee1a226bcf50d",
+      "packages/proto/dist/src/index.js": "3b16144d721808f5ed8d458be542064c5323575247cf1b7e6d325b038adaeaa2",
+      "packages/storage-postgres/dist/index.js": "84a8658d25708fd1bf4d2b0fd7b1bd678966fd089b9b8e6908df1b1005ad3139",
+      "packages/storage-mysql/dist/index.js": "1e344dd9d6163df30cabbcb6dec296cde324a3f74a9d185ea29c40a28862da74",
+      "packages/client-node/dist/index.js": "0d165190867682c2ffe00467affb4e0bf7bbf0d9c3a92bb31a56be9bfbd3c2f3",
+      "packages/client-web/dist/index.js": "f5207a268787d49974351129c0a25287b71e603ced7ce068ab502350e079c370",
+      "packages/delivery-server/dist/index.js": "b8b79d6f88a3f7f4dd0461062a09dc519e98c84387ae01360b4245acd23b5d08"
+    }
+  },
+  "endedAt": "2026-10-14T04:20:11.345Z",
+  "unrunCases": []
+}

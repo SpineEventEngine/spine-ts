@@ -47,18 +47,19 @@ and the measured artifacts for bounded claims.
   share the same recorded source/runtime hashes. Same-process backend fanout
   remains distinguished from OS-managed application restart.
 
+The final post-Cancel publication barrier passes all 24 affected configurations;
+its targeted reliability review is clean. A separate observer receives the exact
+Event while the canceled subscription has no matching server yield. All three
+registrations are removed, databases dropped, zero sessions/errors, stable
+recorded hashes. Together with the accepted 24 partial-cleanup and 24 duplicate-ACK
+rows, this closes the three additional transport fault scenarios.
+
 ## Remaining work
 
-- Resolve the two accepted transport-harness assertion findings: exact primary
-  admitted-ID cleanup/error preservation, and exact server-side publication
-  during the held Cancel race. Rerun the 48 affected configurations and obtain
-  targeted reliability review of the race evidence. The 16 idle cases and 24
-  duplicate-ACK cases remain accepted; the original 72-row grid retains its
-  narrower recorded assertions and does not prove the missing observations.
-- Correct Orders/Projects load examples to distinguish readiness ACKs from
-  actual business updates; finish coherent isolated launcher ports/images,
-  explicit process/shard counts and eight/eight verification. Execute all five
-  examples and both required React UI modes, preserving local exceptions.
+- Finish accepted example corrections for precise two-task assertions, bounded
+  RPC/launcher shutdown, duplicate-row accounting and custom local browser origin.
+  Orders/Projects ACK-aware loads pass. Execute the remaining live examples,
+  eight-process/eight-shard burst and both React modes, preserving local exceptions.
 - Review upcoming transport and example changes with the relevant existing
   concerns; refresh final documentation and all four concern dispositions using
   accepted bounded reviews rather than repeating converged slices.

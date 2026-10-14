@@ -1,0 +1,162 @@
+{
+  "status": "PASS",
+  "result": {
+    "provider": "mysql84",
+    "protocol": "connect",
+    "scenario": "partial-activation-failure",
+    "deliveryMode": "shared-memory",
+    "database": "sqlrel_sub_13264aff1cba4007bd5ae52cda5d6bf5",
+    "terminalName": "ConnectError",
+    "terminalMessage": "[unavailable] injected partial child Activate failure",
+    "counters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 2,
+      "cancel": 3,
+      "cancelFaults": 1,
+      "cancelSuccesses": 2,
+      "streamFaults": 0,
+      "iterators": 0
+    },
+    "secondaryCounters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 0,
+      "cancel": 3,
+      "iterators": 0
+    },
+    "subscriptionTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-c3435824-c355-43d1-ad87-35257180faf1"
+      },
+      {
+        "operation": "activate",
+        "id": "s-c3435824-c355-43d1-ad87-35257180faf1"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-c3435824-c355-43d1-ad87-35257180faf1"
+      },
+      {
+        "operation": "cancel-failed",
+        "id": "s-c3435824-c355-43d1-ad87-35257180faf1"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-c3435824-c355-43d1-ad87-35257180faf1"
+      },
+      {
+        "operation": "cancel-succeeded",
+        "id": "s-c3435824-c355-43d1-ad87-35257180faf1"
+      },
+      {
+        "operation": "subscribe",
+        "id": "s-8af230cb-1233-4e84-9e93-8d02bd7a4a29"
+      },
+      {
+        "operation": "activate",
+        "id": "s-8af230cb-1233-4e84-9e93-8d02bd7a4a29"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-8af230cb-1233-4e84-9e93-8d02bd7a4a29"
+      },
+      {
+        "operation": "cancel-succeeded",
+        "id": "s-8af230cb-1233-4e84-9e93-8d02bd7a4a29"
+      }
+    ],
+    "secondaryTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-f5065d37-a5fa-4ff7-b142-6cea2bc2eec9"
+      },
+      {
+        "operation": "activate",
+        "id": "s-f5065d37-a5fa-4ff7-b142-6cea2bc2eec9"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-f5065d37-a5fa-4ff7-b142-6cea2bc2eec9"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-f5065d37-a5fa-4ff7-b142-6cea2bc2eec9"
+      },
+      {
+        "operation": "subscribe",
+        "id": "s-2b402d81-1043-4646-9f15-0a66c5d9147e"
+      },
+      {
+        "operation": "activate",
+        "id": "s-2b402d81-1043-4646-9f15-0a66c5d9147e"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-2b402d81-1043-4646-9f15-0a66c5d9147e"
+      }
+    ],
+    "entries": []
+  },
+  "counters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 2,
+    "cancel": 3,
+    "cancelFaults": 1,
+    "cancelSuccesses": 2,
+    "streamFaults": 0,
+    "iterators": 0
+  },
+  "secondaryCounters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 0,
+    "cancel": 3,
+    "iterators": 0
+  },
+  "entries": [],
+  "subscriptionTrace": [
+    {
+      "operation": "subscribe",
+      "id": "s-c3435824-c355-43d1-ad87-35257180faf1"
+    },
+    {
+      "operation": "activate",
+      "id": "s-c3435824-c355-43d1-ad87-35257180faf1"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-c3435824-c355-43d1-ad87-35257180faf1"
+    },
+    {
+      "operation": "cancel-failed",
+      "id": "s-c3435824-c355-43d1-ad87-35257180faf1"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-c3435824-c355-43d1-ad87-35257180faf1"
+    },
+    {
+      "operation": "cancel-succeeded",
+      "id": "s-c3435824-c355-43d1-ad87-35257180faf1"
+    },
+    {
+      "operation": "subscribe",
+      "id": "s-8af230cb-1233-4e84-9e93-8d02bd7a4a29"
+    },
+    {
+      "operation": "activate",
+      "id": "s-8af230cb-1233-4e84-9e93-8d02bd7a4a29"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-8af230cb-1233-4e84-9e93-8d02bd7a4a29"
+    },
+    {
+      "operation": "cancel-succeeded",
+      "id": "s-8af230cb-1233-4e84-9e93-8d02bd7a4a29"
+    }
+  ]
+}

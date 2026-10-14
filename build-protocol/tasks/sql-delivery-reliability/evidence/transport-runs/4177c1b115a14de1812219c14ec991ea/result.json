@@ -1,0 +1,52 @@
+{
+  "status": "FAIL",
+  "counters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 2,
+    "cancel": 3,
+    "cancelFaults": 1,
+    "cancelSuccesses": 2,
+    "streamFaults": 0,
+    "iterators": 0
+  },
+  "secondaryCounters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 0,
+    "cancel": 3,
+    "iterators": 0
+  },
+  "entries": [],
+  "subscriptionTrace": [
+    {
+      "operation": "subscribe",
+      "id": "s-24b54747-175a-4b0a-ad89-e0225b10b854"
+    },
+    {
+      "operation": "activate",
+      "id": "s-24b54747-175a-4b0a-ad89-e0225b10b854"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-24b54747-175a-4b0a-ad89-e0225b10b854"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-24b54747-175a-4b0a-ad89-e0225b10b854"
+    },
+    {
+      "operation": "subscribe",
+      "id": "s-92974ec2-3b43-4834-b5cb-f19670918b95"
+    },
+    {
+      "operation": "activate",
+      "id": "s-92974ec2-3b43-4834-b5cb-f19670918b95"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-92974ec2-3b43-4834-b5cb-f19670918b95"
+    }
+  ],
+  "error": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\n3 !== 2\n"
+}

@@ -1,0 +1,162 @@
+{
+  "status": "PASS",
+  "result": {
+    "provider": "postgres18",
+    "protocol": "native",
+    "scenario": "partial-activation-failure",
+    "deliveryMode": "shared-memory",
+    "database": "sqlrel_sub_99ff6ca0417e4892824cd4f786b05b12",
+    "terminalName": "ConnectError",
+    "terminalMessage": "[unavailable] injected partial child Activate failure",
+    "counters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 2,
+      "cancel": 3,
+      "cancelFaults": 1,
+      "cancelSuccesses": 2,
+      "streamFaults": 0,
+      "iterators": 0
+    },
+    "secondaryCounters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 0,
+      "cancel": 3,
+      "iterators": 0
+    },
+    "subscriptionTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-9c6232c3-ccaa-420e-85d1-9487a8134686"
+      },
+      {
+        "operation": "activate",
+        "id": "s-9c6232c3-ccaa-420e-85d1-9487a8134686"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-9c6232c3-ccaa-420e-85d1-9487a8134686"
+      },
+      {
+        "operation": "cancel-failed",
+        "id": "s-9c6232c3-ccaa-420e-85d1-9487a8134686"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-9c6232c3-ccaa-420e-85d1-9487a8134686"
+      },
+      {
+        "operation": "cancel-succeeded",
+        "id": "s-9c6232c3-ccaa-420e-85d1-9487a8134686"
+      },
+      {
+        "operation": "subscribe",
+        "id": "s-f64b939c-af44-478e-8edb-b91cc6078cb5"
+      },
+      {
+        "operation": "activate",
+        "id": "s-f64b939c-af44-478e-8edb-b91cc6078cb5"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-f64b939c-af44-478e-8edb-b91cc6078cb5"
+      },
+      {
+        "operation": "cancel-succeeded",
+        "id": "s-f64b939c-af44-478e-8edb-b91cc6078cb5"
+      }
+    ],
+    "secondaryTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-4a5461f9-0c9e-41a2-9b88-4db8f916b9ff"
+      },
+      {
+        "operation": "activate",
+        "id": "s-4a5461f9-0c9e-41a2-9b88-4db8f916b9ff"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-4a5461f9-0c9e-41a2-9b88-4db8f916b9ff"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-4a5461f9-0c9e-41a2-9b88-4db8f916b9ff"
+      },
+      {
+        "operation": "subscribe",
+        "id": "s-fbd89b34-7939-407e-9eec-61ec5e710c69"
+      },
+      {
+        "operation": "activate",
+        "id": "s-fbd89b34-7939-407e-9eec-61ec5e710c69"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-fbd89b34-7939-407e-9eec-61ec5e710c69"
+      }
+    ],
+    "entries": []
+  },
+  "counters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 2,
+    "cancel": 3,
+    "cancelFaults": 1,
+    "cancelSuccesses": 2,
+    "streamFaults": 0,
+    "iterators": 0
+  },
+  "secondaryCounters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 0,
+    "cancel": 3,
+    "iterators": 0
+  },
+  "entries": [],
+  "subscriptionTrace": [
+    {
+      "operation": "subscribe",
+      "id": "s-9c6232c3-ccaa-420e-85d1-9487a8134686"
+    },
+    {
+      "operation": "activate",
+      "id": "s-9c6232c3-ccaa-420e-85d1-9487a8134686"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-9c6232c3-ccaa-420e-85d1-9487a8134686"
+    },
+    {
+      "operation": "cancel-failed",
+      "id": "s-9c6232c3-ccaa-420e-85d1-9487a8134686"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-9c6232c3-ccaa-420e-85d1-9487a8134686"
+    },
+    {
+      "operation": "cancel-succeeded",
+      "id": "s-9c6232c3-ccaa-420e-85d1-9487a8134686"
+    },
+    {
+      "operation": "subscribe",
+      "id": "s-f64b939c-af44-478e-8edb-b91cc6078cb5"
+    },
+    {
+      "operation": "activate",
+      "id": "s-f64b939c-af44-478e-8edb-b91cc6078cb5"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-f64b939c-af44-478e-8edb-b91cc6078cb5"
+    },
+    {
+      "operation": "cancel-succeeded",
+      "id": "s-f64b939c-af44-478e-8edb-b91cc6078cb5"
+    }
+  ]
+}

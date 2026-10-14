@@ -1,0 +1,2081 @@
+{
+  "status": "PASS",
+  "sessionId": "b13b0927-84e3-4045-b826-14e532c3a724",
+  "provider": "postgres16",
+  "worktree": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts",
+  "configuredProfile": {
+    "model": "gpt-6-luna",
+    "reasoning": "low",
+    "runtimeMetadata": "not exposed by this execution surface"
+  },
+  "command": "pnpm exec vitest run --config vitest.infrastructure.config.ts packages/server-blackbox-tests/test/project-subscription-transports.integration.test.ts",
+  "execution": "sequential, fail-fast; one exact Vitest process group per configuration",
+  "expectedCaseCount": 12,
+  "startedAt": "2026-10-14T04:07:55.819Z",
+  "launch": {
+    "sourceSha256": {
+      "packages/server-blackbox-tests/package.json": "ac7bb9233e7dd6c82d9320d81f4c8503328a4811d912b9517f60654fb5e3e2c6",
+      "packages/server-blackbox-tests/test-fixtures/project-subscription-transport.mjs": "bab8801711155ad6a42e683d2be394db2d8802e32f0ec4be7b03bf653992c3b8",
+      "packages/server-blackbox-tests/test-fixtures/project-subscription-wait.mjs": "f06a514e2b925ed42f1340fbd87db73e26072718eb568817ffc9ee097f7e8885",
+      "packages/server-blackbox-tests/test/project-subscription-transports.integration.test.ts": "34a7153a887d9a5e0cd7146a82c0445956c37653462c3be05ac417e124f29021",
+      "packages/server-blackbox-tests/test-fixtures/project-workflow.ts": "8ed152a6fd0a88224cccfcd9ff219695a41a8dc38eeab75192081dbb90cc8bc4",
+      "packages/auth/src/gateway/dynamic-subscription-creator.ts": "7d6f461807b1610bd2033b7e94b368b01608d5a9240bf32cd8c91dbb25b5d498",
+      "packages/auth/src/gateway/dynamic-unary-forwarder.ts": "a3a76407fbacb78ecfb79ed9b8436647280d556067e7f0a550a8941e462729d9",
+      "packages/deployment/src/internal/backend-membership-kernel.ts": "1b26c61468a5d667784be7eb53bcdf2b8a165d2a6b1210b61e49dc8f064bd0c0"
+    },
+    "distSha256": {
+      "packages/server-blackbox-tests/dist/test-fixtures/project-workflow.js": "4369473fd7b246124d422e05e94aad97320161f6d18838eaa364d8616001b985",
+      "packages/server/dist/index.js": "6bf9c9a8c971afc87de534107af1a935953f89a0607193ed3576e2b3def1909e",
+      "packages/server/dist/browser/index.js": "408b3cf4068f99542d9a01219ac1c251096746e172845f82abafaafca0cd0e07",
+      "packages/server/dist/browser/browser-server.js": "8b5ed0a6d503af04fe806549cc0b5ac2c4e6c60f1b35f7ee779a36c8443810cc",
+      "packages/server/dist/browser/durable-subscription-bindings.js": "8378a58cad104a61b2c13a6f808f3b328af8673f5e7076cd91182a8969884dcc",
+      "packages/server/dist/server/node-coordinator.js": "8e5c5194dc8a3f36430e9f547cafd00d90dab4463209c8375ded885079abbb62",
+      "packages/auth/dist/gateway/dynamic-subscription-creator.js": "9fd4cdadacd3c1670f28a848448d16797b64e8d509b0be3b6b97ec818d23085b",
+      "packages/auth/dist/gateway/dynamic-unary-forwarder.js": "8840d7ad5c74617b8cf66fe05d0aae40b4ff9514d0a5435e33e515075ebde7ba",
+      "packages/deployment/dist/internal/backend-membership-kernel.js": "6ab8c5c3ba0b2541954af16dcf07e4e38cb771bd6888829fed3ee1a226bcf50d",
+      "packages/proto/dist/src/index.js": "3b16144d721808f5ed8d458be542064c5323575247cf1b7e6d325b038adaeaa2",
+      "packages/storage-postgres/dist/index.js": "84a8658d25708fd1bf4d2b0fd7b1bd678966fd089b9b8e6908df1b1005ad3139",
+      "packages/storage-mysql/dist/index.js": "1e344dd9d6163df30cabbcb6dec296cde324a3f74a9d185ea29c40a28862da74",
+      "packages/client-node/dist/index.js": "0d165190867682c2ffe00467affb4e0bf7bbf0d9c3a92bb31a56be9bfbd3c2f3",
+      "packages/client-web/dist/index.js": "f5207a268787d49974351129c0a25287b71e603ced7ce068ab502350e079c370",
+      "packages/delivery-server/dist/index.js": "b8b79d6f88a3f7f4dd0461062a09dc519e98c84387ae01360b4245acd23b5d08"
+    }
+  },
+  "cases": [
+    {
+      "index": 1,
+      "config": {
+        "provider": "postgres16",
+        "protocol": "native",
+        "scenario": "partial-activation-failure",
+        "deliveryMode": "db-only"
+      },
+      "command": {
+        "executable": "pnpm",
+        "argv": [
+          "exec",
+          "vitest",
+          "run",
+          "--config",
+          "vitest.infrastructure.config.ts",
+          "packages/server-blackbox-tests/test/project-subscription-transports.integration.test.ts"
+        ]
+      },
+      "environment": {
+        "SPINE_TS_TRANSPORT_PROVIDER": "postgres16",
+        "SPINE_TS_TRANSPORT_PROTOCOL": "native",
+        "SPINE_TS_TRANSPORT_SCENARIO": "partial-activation-failure",
+        "SPINE_TS_TRANSPORT_DELIVERY_MODE": "db-only"
+      },
+      "startedAt": "2026-10-14T04:07:55.820Z",
+      "log": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/transport-fault-correction-matrix/sessions/b13b0927-84e3-4045-b826-14e532c3a724/1-partial-activation-failure-native-db-only.log",
+      "fixtureSha256": "bab8801711155ad6a42e683d2be394db2d8802e32f0ec4be7b03bf653992c3b8",
+      "configuredProfile": {
+        "model": "gpt-6-luna",
+        "reasoning": "low",
+        "runtimeMetadata": "not exposed by this execution surface"
+      },
+      "pnpmPid": 36079,
+      "processGroupId": 36079,
+      "endedAt": "2026-10-14T04:07:56.985Z",
+      "gitHeadAtCase": "3aad8c639e47465ed9d37c8376760e3b9b0f8302",
+      "exit": {
+        "code": 0,
+        "signal": null
+      },
+      "runId": "62d9fdcd8b7840c39f6bcb829a2fcd9c",
+      "database": "sqlrel_sub_62d9fdcd8b7840c39f6bcb829a2fcd9c",
+      "resourceArtifacts": {
+        "packages/server-blackbox-tests/dist/test-fixtures/project-workflow.js": "4369473fd7b246124d422e05e94aad97320161f6d18838eaa364d8616001b985",
+        "packages/server/dist/index.js": "6bf9c9a8c971afc87de534107af1a935953f89a0607193ed3576e2b3def1909e",
+        "packages/server/dist/server/node-coordinator.js": "8e5c5194dc8a3f36430e9f547cafd00d90dab4463209c8375ded885079abbb62",
+        "packages/deployment/dist/internal/backend-membership-kernel.js": "6ab8c5c3ba0b2541954af16dcf07e4e38cb771bd6888829fed3ee1a226bcf50d",
+        "packages/proto/dist/src/index.js": "3b16144d721808f5ed8d458be542064c5323575247cf1b7e6d325b038adaeaa2",
+        "packages/storage-postgres/dist/index.js": "84a8658d25708fd1bf4d2b0fd7b1bd678966fd089b9b8e6908df1b1005ad3139",
+        "packages/storage-mysql/dist/index.js": "1e344dd9d6163df30cabbcb6dec296cde324a3f74a9d185ea29c40a28862da74",
+        "packages/client-node/dist/index.js": "0d165190867682c2ffe00467affb4e0bf7bbf0d9c3a92bb31a56be9bfbd3c2f3",
+        "packages/client-web/dist/index.js": "f5207a268787d49974351129c0a25287b71e603ced7ce068ab502350e079c370",
+        "packages/delivery-server/dist/index.js": "b8b79d6f88a3f7f4dd0461062a09dc519e98c84387ae01360b4245acd23b5d08"
+      },
+      "result": {
+        "status": "PASS",
+        "counters": {
+          "subscribe": 2,
+          "activate": 2,
+          "ackReleased": 2,
+          "cancel": 3,
+          "cancelFaults": 1,
+          "cancelSuccesses": 2,
+          "streamFaults": 0,
+          "iterators": 0
+        },
+        "secondaryCounters": {
+          "subscribe": 2,
+          "activate": 2,
+          "ackReleased": 0,
+          "cancel": 2,
+          "iterators": 0
+        },
+        "handlerEntryCount": 0,
+        "secondaryTrace": [
+          {
+            "operation": "subscribe",
+            "id": "s-b6e22ef2-ed7f-4889-834f-5df2906ef875"
+          },
+          {
+            "operation": "activate",
+            "id": "s-b6e22ef2-ed7f-4889-834f-5df2906ef875"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-b6e22ef2-ed7f-4889-834f-5df2906ef875"
+          },
+          {
+            "operation": "subscribe",
+            "id": "s-212e88f1-ef9a-4797-882e-50b3ec182f26"
+          },
+          {
+            "operation": "activate",
+            "id": "s-212e88f1-ef9a-4797-882e-50b3ec182f26"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-212e88f1-ef9a-4797-882e-50b3ec182f26"
+          }
+        ],
+        "subscriptionTrace": [
+          {
+            "operation": "subscribe",
+            "id": "s-7f82f956-06e9-48a1-822e-e33aec8e0890"
+          },
+          {
+            "operation": "activate",
+            "id": "s-7f82f956-06e9-48a1-822e-e33aec8e0890"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-7f82f956-06e9-48a1-822e-e33aec8e0890"
+          },
+          {
+            "operation": "cancel-failed",
+            "id": "s-7f82f956-06e9-48a1-822e-e33aec8e0890"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-7f82f956-06e9-48a1-822e-e33aec8e0890"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-7f82f956-06e9-48a1-822e-e33aec8e0890"
+          },
+          {
+            "operation": "subscribe",
+            "id": "s-9b2646f7-9e7e-4b71-b6a5-9d68a5612de1"
+          },
+          {
+            "operation": "activate",
+            "id": "s-9b2646f7-9e7e-4b71-b6a5-9d68a5612de1"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-9b2646f7-9e7e-4b71-b6a5-9d68a5612de1"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-9b2646f7-9e7e-4b71-b6a5-9d68a5612de1"
+          }
+        ]
+      },
+      "scenarioEvidence": {
+        "primarySubscribeIds": [
+          "s-7f82f956-06e9-48a1-822e-e33aec8e0890",
+          "s-9b2646f7-9e7e-4b71-b6a5-9d68a5612de1"
+        ],
+        "failedCancelIds": [
+          "s-7f82f956-06e9-48a1-822e-e33aec8e0890"
+        ],
+        "successfulCancelIds": [
+          "s-7f82f956-06e9-48a1-822e-e33aec8e0890",
+          "s-9b2646f7-9e7e-4b71-b6a5-9d68a5612de1"
+        ],
+        "terminalUnavailableError": {
+          "name": "ConnectError",
+          "message": "[unavailable] injected partial child Activate failure"
+        },
+        "injectedCancelError": {
+          "type": "ConnectError",
+          "code": "Unavailable",
+          "message": "injected partial cleanup failure",
+          "sourceSha256": "bab8801711155ad6a42e683d2be394db2d8802e32f0ec4be7b03bf653992c3b8"
+        }
+      },
+      "cleanup": {
+        "databaseDropped": true,
+        "remainingSessions": 0,
+        "errors": []
+      },
+      "status": "PASS",
+      "durationMs": 1165
+    },
+    {
+      "index": 2,
+      "config": {
+        "provider": "postgres16",
+        "protocol": "native",
+        "scenario": "partial-activation-failure",
+        "deliveryMode": "shared-memory"
+      },
+      "command": {
+        "executable": "pnpm",
+        "argv": [
+          "exec",
+          "vitest",
+          "run",
+          "--config",
+          "vitest.infrastructure.config.ts",
+          "packages/server-blackbox-tests/test/project-subscription-transports.integration.test.ts"
+        ]
+      },
+      "environment": {
+        "SPINE_TS_TRANSPORT_PROVIDER": "postgres16",
+        "SPINE_TS_TRANSPORT_PROTOCOL": "native",
+        "SPINE_TS_TRANSPORT_SCENARIO": "partial-activation-failure",
+        "SPINE_TS_TRANSPORT_DELIVERY_MODE": "shared-memory"
+      },
+      "startedAt": "2026-10-14T04:07:57.000Z",
+      "log": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/transport-fault-correction-matrix/sessions/b13b0927-84e3-4045-b826-14e532c3a724/2-partial-activation-failure-native-shared-memory.log",
+      "fixtureSha256": "bab8801711155ad6a42e683d2be394db2d8802e32f0ec4be7b03bf653992c3b8",
+      "configuredProfile": {
+        "model": "gpt-6-luna",
+        "reasoning": "low",
+        "runtimeMetadata": "not exposed by this execution surface"
+      },
+      "pnpmPid": 36109,
+      "processGroupId": 36109,
+      "endedAt": "2026-10-14T04:07:58.207Z",
+      "gitHeadAtCase": "3aad8c639e47465ed9d37c8376760e3b9b0f8302",
+      "exit": {
+        "code": 0,
+        "signal": null
+      },
+      "runId": "f9cd32af7ec84a24bec4447df05c0fd9",
+      "database": "sqlrel_sub_f9cd32af7ec84a24bec4447df05c0fd9",
+      "resourceArtifacts": {
+        "packages/server-blackbox-tests/dist/test-fixtures/project-workflow.js": "4369473fd7b246124d422e05e94aad97320161f6d18838eaa364d8616001b985",
+        "packages/server/dist/index.js": "6bf9c9a8c971afc87de534107af1a935953f89a0607193ed3576e2b3def1909e",
+        "packages/server/dist/server/node-coordinator.js": "8e5c5194dc8a3f36430e9f547cafd00d90dab4463209c8375ded885079abbb62",
+        "packages/deployment/dist/internal/backend-membership-kernel.js": "6ab8c5c3ba0b2541954af16dcf07e4e38cb771bd6888829fed3ee1a226bcf50d",
+        "packages/proto/dist/src/index.js": "3b16144d721808f5ed8d458be542064c5323575247cf1b7e6d325b038adaeaa2",
+        "packages/storage-postgres/dist/index.js": "84a8658d25708fd1bf4d2b0fd7b1bd678966fd089b9b8e6908df1b1005ad3139",
+        "packages/storage-mysql/dist/index.js": "1e344dd9d6163df30cabbcb6dec296cde324a3f74a9d185ea29c40a28862da74",
+        "packages/client-node/dist/index.js": "0d165190867682c2ffe00467affb4e0bf7bbf0d9c3a92bb31a56be9bfbd3c2f3",
+        "packages/client-web/dist/index.js": "f5207a268787d49974351129c0a25287b71e603ced7ce068ab502350e079c370",
+        "packages/delivery-server/dist/index.js": "b8b79d6f88a3f7f4dd0461062a09dc519e98c84387ae01360b4245acd23b5d08"
+      },
+      "result": {
+        "status": "PASS",
+        "counters": {
+          "subscribe": 2,
+          "activate": 2,
+          "ackReleased": 2,
+          "cancel": 3,
+          "cancelFaults": 1,
+          "cancelSuccesses": 2,
+          "streamFaults": 0,
+          "iterators": 0
+        },
+        "secondaryCounters": {
+          "subscribe": 2,
+          "activate": 2,
+          "ackReleased": 0,
+          "cancel": 2,
+          "iterators": 0
+        },
+        "handlerEntryCount": 0,
+        "secondaryTrace": [
+          {
+            "operation": "subscribe",
+            "id": "s-b554948d-c09f-4979-bb84-6f66004fcd06"
+          },
+          {
+            "operation": "activate",
+            "id": "s-b554948d-c09f-4979-bb84-6f66004fcd06"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-b554948d-c09f-4979-bb84-6f66004fcd06"
+          },
+          {
+            "operation": "subscribe",
+            "id": "s-fe480c69-f928-4f5d-b23e-c00daf4a0e52"
+          },
+          {
+            "operation": "activate",
+            "id": "s-fe480c69-f928-4f5d-b23e-c00daf4a0e52"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-fe480c69-f928-4f5d-b23e-c00daf4a0e52"
+          }
+        ],
+        "subscriptionTrace": [
+          {
+            "operation": "subscribe",
+            "id": "s-5b02652e-e33a-4973-84a6-38542944cdc6"
+          },
+          {
+            "operation": "activate",
+            "id": "s-5b02652e-e33a-4973-84a6-38542944cdc6"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-5b02652e-e33a-4973-84a6-38542944cdc6"
+          },
+          {
+            "operation": "cancel-failed",
+            "id": "s-5b02652e-e33a-4973-84a6-38542944cdc6"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-5b02652e-e33a-4973-84a6-38542944cdc6"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-5b02652e-e33a-4973-84a6-38542944cdc6"
+          },
+          {
+            "operation": "subscribe",
+            "id": "s-de99f30d-f944-43ae-9c55-b52a7c30add5"
+          },
+          {
+            "operation": "activate",
+            "id": "s-de99f30d-f944-43ae-9c55-b52a7c30add5"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-de99f30d-f944-43ae-9c55-b52a7c30add5"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-de99f30d-f944-43ae-9c55-b52a7c30add5"
+          }
+        ]
+      },
+      "scenarioEvidence": {
+        "primarySubscribeIds": [
+          "s-5b02652e-e33a-4973-84a6-38542944cdc6",
+          "s-de99f30d-f944-43ae-9c55-b52a7c30add5"
+        ],
+        "failedCancelIds": [
+          "s-5b02652e-e33a-4973-84a6-38542944cdc6"
+        ],
+        "successfulCancelIds": [
+          "s-5b02652e-e33a-4973-84a6-38542944cdc6",
+          "s-de99f30d-f944-43ae-9c55-b52a7c30add5"
+        ],
+        "terminalUnavailableError": {
+          "name": "ConnectError",
+          "message": "[unavailable] injected partial child Activate failure"
+        },
+        "injectedCancelError": {
+          "type": "ConnectError",
+          "code": "Unavailable",
+          "message": "injected partial cleanup failure",
+          "sourceSha256": "bab8801711155ad6a42e683d2be394db2d8802e32f0ec4be7b03bf653992c3b8"
+        }
+      },
+      "cleanup": {
+        "databaseDropped": true,
+        "remainingSessions": 0,
+        "errors": []
+      },
+      "status": "PASS",
+      "durationMs": 1207
+    },
+    {
+      "index": 3,
+      "config": {
+        "provider": "postgres16",
+        "protocol": "grpc-web",
+        "scenario": "partial-activation-failure",
+        "deliveryMode": "db-only"
+      },
+      "command": {
+        "executable": "pnpm",
+        "argv": [
+          "exec",
+          "vitest",
+          "run",
+          "--config",
+          "vitest.infrastructure.config.ts",
+          "packages/server-blackbox-tests/test/project-subscription-transports.integration.test.ts"
+        ]
+      },
+      "environment": {
+        "SPINE_TS_TRANSPORT_PROVIDER": "postgres16",
+        "SPINE_TS_TRANSPORT_PROTOCOL": "grpc-web",
+        "SPINE_TS_TRANSPORT_SCENARIO": "partial-activation-failure",
+        "SPINE_TS_TRANSPORT_DELIVERY_MODE": "db-only"
+      },
+      "startedAt": "2026-10-14T04:07:58.223Z",
+      "log": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/transport-fault-correction-matrix/sessions/b13b0927-84e3-4045-b826-14e532c3a724/3-partial-activation-failure-grpc-web-db-only.log",
+      "fixtureSha256": "bab8801711155ad6a42e683d2be394db2d8802e32f0ec4be7b03bf653992c3b8",
+      "configuredProfile": {
+        "model": "gpt-6-luna",
+        "reasoning": "low",
+        "runtimeMetadata": "not exposed by this execution surface"
+      },
+      "pnpmPid": 36138,
+      "processGroupId": 36138,
+      "endedAt": "2026-10-14T04:07:59.364Z",
+      "gitHeadAtCase": "3aad8c639e47465ed9d37c8376760e3b9b0f8302",
+      "exit": {
+        "code": 0,
+        "signal": null
+      },
+      "runId": "526a819503a949a9a19fd04fbf236e07",
+      "database": "sqlrel_sub_526a819503a949a9a19fd04fbf236e07",
+      "resourceArtifacts": {
+        "packages/server-blackbox-tests/dist/test-fixtures/project-workflow.js": "4369473fd7b246124d422e05e94aad97320161f6d18838eaa364d8616001b985",
+        "packages/server/dist/index.js": "6bf9c9a8c971afc87de534107af1a935953f89a0607193ed3576e2b3def1909e",
+        "packages/server/dist/server/node-coordinator.js": "8e5c5194dc8a3f36430e9f547cafd00d90dab4463209c8375ded885079abbb62",
+        "packages/deployment/dist/internal/backend-membership-kernel.js": "6ab8c5c3ba0b2541954af16dcf07e4e38cb771bd6888829fed3ee1a226bcf50d",
+        "packages/proto/dist/src/index.js": "3b16144d721808f5ed8d458be542064c5323575247cf1b7e6d325b038adaeaa2",
+        "packages/storage-postgres/dist/index.js": "84a8658d25708fd1bf4d2b0fd7b1bd678966fd089b9b8e6908df1b1005ad3139",
+        "packages/storage-mysql/dist/index.js": "1e344dd9d6163df30cabbcb6dec296cde324a3f74a9d185ea29c40a28862da74",
+        "packages/client-node/dist/index.js": "0d165190867682c2ffe00467affb4e0bf7bbf0d9c3a92bb31a56be9bfbd3c2f3",
+        "packages/client-web/dist/index.js": "f5207a268787d49974351129c0a25287b71e603ced7ce068ab502350e079c370",
+        "packages/delivery-server/dist/index.js": "b8b79d6f88a3f7f4dd0461062a09dc519e98c84387ae01360b4245acd23b5d08"
+      },
+      "result": {
+        "status": "PASS",
+        "counters": {
+          "subscribe": 2,
+          "activate": 2,
+          "ackReleased": 2,
+          "cancel": 3,
+          "cancelFaults": 1,
+          "cancelSuccesses": 2,
+          "streamFaults": 0,
+          "iterators": 0
+        },
+        "secondaryCounters": {
+          "subscribe": 2,
+          "activate": 2,
+          "ackReleased": 0,
+          "cancel": 3,
+          "iterators": 0
+        },
+        "handlerEntryCount": 0,
+        "secondaryTrace": [
+          {
+            "operation": "subscribe",
+            "id": "s-6e2900ad-db17-4932-b292-2c830bdeb530"
+          },
+          {
+            "operation": "activate",
+            "id": "s-6e2900ad-db17-4932-b292-2c830bdeb530"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-6e2900ad-db17-4932-b292-2c830bdeb530"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-6e2900ad-db17-4932-b292-2c830bdeb530"
+          },
+          {
+            "operation": "subscribe",
+            "id": "s-8719bb86-022c-471b-bd6e-df39bcdad510"
+          },
+          {
+            "operation": "activate",
+            "id": "s-8719bb86-022c-471b-bd6e-df39bcdad510"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-8719bb86-022c-471b-bd6e-df39bcdad510"
+          }
+        ],
+        "subscriptionTrace": [
+          {
+            "operation": "subscribe",
+            "id": "s-4bc91aa7-abdc-415f-beda-658010f12512"
+          },
+          {
+            "operation": "activate",
+            "id": "s-4bc91aa7-abdc-415f-beda-658010f12512"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-4bc91aa7-abdc-415f-beda-658010f12512"
+          },
+          {
+            "operation": "cancel-failed",
+            "id": "s-4bc91aa7-abdc-415f-beda-658010f12512"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-4bc91aa7-abdc-415f-beda-658010f12512"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-4bc91aa7-abdc-415f-beda-658010f12512"
+          },
+          {
+            "operation": "subscribe",
+            "id": "s-9df4a2d2-56bd-46c2-87e6-44bbe2a5eb10"
+          },
+          {
+            "operation": "activate",
+            "id": "s-9df4a2d2-56bd-46c2-87e6-44bbe2a5eb10"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-9df4a2d2-56bd-46c2-87e6-44bbe2a5eb10"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-9df4a2d2-56bd-46c2-87e6-44bbe2a5eb10"
+          }
+        ]
+      },
+      "scenarioEvidence": {
+        "primarySubscribeIds": [
+          "s-4bc91aa7-abdc-415f-beda-658010f12512",
+          "s-9df4a2d2-56bd-46c2-87e6-44bbe2a5eb10"
+        ],
+        "failedCancelIds": [
+          "s-4bc91aa7-abdc-415f-beda-658010f12512"
+        ],
+        "successfulCancelIds": [
+          "s-4bc91aa7-abdc-415f-beda-658010f12512",
+          "s-9df4a2d2-56bd-46c2-87e6-44bbe2a5eb10"
+        ],
+        "terminalUnavailableError": {
+          "name": "ConnectError",
+          "message": "[unavailable] injected partial child Activate failure"
+        },
+        "injectedCancelError": {
+          "type": "ConnectError",
+          "code": "Unavailable",
+          "message": "injected partial cleanup failure",
+          "sourceSha256": "bab8801711155ad6a42e683d2be394db2d8802e32f0ec4be7b03bf653992c3b8"
+        }
+      },
+      "cleanup": {
+        "databaseDropped": true,
+        "remainingSessions": 0,
+        "errors": []
+      },
+      "status": "PASS",
+      "durationMs": 1141
+    },
+    {
+      "index": 4,
+      "config": {
+        "provider": "postgres16",
+        "protocol": "grpc-web",
+        "scenario": "partial-activation-failure",
+        "deliveryMode": "shared-memory"
+      },
+      "command": {
+        "executable": "pnpm",
+        "argv": [
+          "exec",
+          "vitest",
+          "run",
+          "--config",
+          "vitest.infrastructure.config.ts",
+          "packages/server-blackbox-tests/test/project-subscription-transports.integration.test.ts"
+        ]
+      },
+      "environment": {
+        "SPINE_TS_TRANSPORT_PROVIDER": "postgres16",
+        "SPINE_TS_TRANSPORT_PROTOCOL": "grpc-web",
+        "SPINE_TS_TRANSPORT_SCENARIO": "partial-activation-failure",
+        "SPINE_TS_TRANSPORT_DELIVERY_MODE": "shared-memory"
+      },
+      "startedAt": "2026-10-14T04:07:59.384Z",
+      "log": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/transport-fault-correction-matrix/sessions/b13b0927-84e3-4045-b826-14e532c3a724/4-partial-activation-failure-grpc-web-shared-memory.log",
+      "fixtureSha256": "bab8801711155ad6a42e683d2be394db2d8802e32f0ec4be7b03bf653992c3b8",
+      "configuredProfile": {
+        "model": "gpt-6-luna",
+        "reasoning": "low",
+        "runtimeMetadata": "not exposed by this execution surface"
+      },
+      "pnpmPid": 36163,
+      "processGroupId": 36163,
+      "endedAt": "2026-10-14T04:08:00.519Z",
+      "gitHeadAtCase": "3aad8c639e47465ed9d37c8376760e3b9b0f8302",
+      "exit": {
+        "code": 0,
+        "signal": null
+      },
+      "runId": "d9536a435624463e8ae4ce8ab6b8c23e",
+      "database": "sqlrel_sub_d9536a435624463e8ae4ce8ab6b8c23e",
+      "resourceArtifacts": {
+        "packages/server-blackbox-tests/dist/test-fixtures/project-workflow.js": "4369473fd7b246124d422e05e94aad97320161f6d18838eaa364d8616001b985",
+        "packages/server/dist/index.js": "6bf9c9a8c971afc87de534107af1a935953f89a0607193ed3576e2b3def1909e",
+        "packages/server/dist/server/node-coordinator.js": "8e5c5194dc8a3f36430e9f547cafd00d90dab4463209c8375ded885079abbb62",
+        "packages/deployment/dist/internal/backend-membership-kernel.js": "6ab8c5c3ba0b2541954af16dcf07e4e38cb771bd6888829fed3ee1a226bcf50d",
+        "packages/proto/dist/src/index.js": "3b16144d721808f5ed8d458be542064c5323575247cf1b7e6d325b038adaeaa2",
+        "packages/storage-postgres/dist/index.js": "84a8658d25708fd1bf4d2b0fd7b1bd678966fd089b9b8e6908df1b1005ad3139",
+        "packages/storage-mysql/dist/index.js": "1e344dd9d6163df30cabbcb6dec296cde324a3f74a9d185ea29c40a28862da74",
+        "packages/client-node/dist/index.js": "0d165190867682c2ffe00467affb4e0bf7bbf0d9c3a92bb31a56be9bfbd3c2f3",
+        "packages/client-web/dist/index.js": "f5207a268787d49974351129c0a25287b71e603ced7ce068ab502350e079c370",
+        "packages/delivery-server/dist/index.js": "b8b79d6f88a3f7f4dd0461062a09dc519e98c84387ae01360b4245acd23b5d08"
+      },
+      "result": {
+        "status": "PASS",
+        "counters": {
+          "subscribe": 2,
+          "activate": 2,
+          "ackReleased": 2,
+          "cancel": 3,
+          "cancelFaults": 1,
+          "cancelSuccesses": 2,
+          "streamFaults": 0,
+          "iterators": 0
+        },
+        "secondaryCounters": {
+          "subscribe": 2,
+          "activate": 2,
+          "ackReleased": 0,
+          "cancel": 3,
+          "iterators": 0
+        },
+        "handlerEntryCount": 0,
+        "secondaryTrace": [
+          {
+            "operation": "subscribe",
+            "id": "s-6ed9baac-65ea-4cb2-aa15-6b9204d4bd69"
+          },
+          {
+            "operation": "activate",
+            "id": "s-6ed9baac-65ea-4cb2-aa15-6b9204d4bd69"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-6ed9baac-65ea-4cb2-aa15-6b9204d4bd69"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-6ed9baac-65ea-4cb2-aa15-6b9204d4bd69"
+          },
+          {
+            "operation": "subscribe",
+            "id": "s-696a04a8-8a06-498b-8cdc-4fc0e48d1403"
+          },
+          {
+            "operation": "activate",
+            "id": "s-696a04a8-8a06-498b-8cdc-4fc0e48d1403"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-696a04a8-8a06-498b-8cdc-4fc0e48d1403"
+          }
+        ],
+        "subscriptionTrace": [
+          {
+            "operation": "subscribe",
+            "id": "s-f9a1d90e-dd51-46c8-bf0a-6d33d9c57a5d"
+          },
+          {
+            "operation": "activate",
+            "id": "s-f9a1d90e-dd51-46c8-bf0a-6d33d9c57a5d"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-f9a1d90e-dd51-46c8-bf0a-6d33d9c57a5d"
+          },
+          {
+            "operation": "cancel-failed",
+            "id": "s-f9a1d90e-dd51-46c8-bf0a-6d33d9c57a5d"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-f9a1d90e-dd51-46c8-bf0a-6d33d9c57a5d"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-f9a1d90e-dd51-46c8-bf0a-6d33d9c57a5d"
+          },
+          {
+            "operation": "subscribe",
+            "id": "s-830fe576-1542-49c8-855e-8edbcadd4bcf"
+          },
+          {
+            "operation": "activate",
+            "id": "s-830fe576-1542-49c8-855e-8edbcadd4bcf"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-830fe576-1542-49c8-855e-8edbcadd4bcf"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-830fe576-1542-49c8-855e-8edbcadd4bcf"
+          }
+        ]
+      },
+      "scenarioEvidence": {
+        "primarySubscribeIds": [
+          "s-f9a1d90e-dd51-46c8-bf0a-6d33d9c57a5d",
+          "s-830fe576-1542-49c8-855e-8edbcadd4bcf"
+        ],
+        "failedCancelIds": [
+          "s-f9a1d90e-dd51-46c8-bf0a-6d33d9c57a5d"
+        ],
+        "successfulCancelIds": [
+          "s-f9a1d90e-dd51-46c8-bf0a-6d33d9c57a5d",
+          "s-830fe576-1542-49c8-855e-8edbcadd4bcf"
+        ],
+        "terminalUnavailableError": {
+          "name": "ConnectError",
+          "message": "[unavailable] injected partial child Activate failure"
+        },
+        "injectedCancelError": {
+          "type": "ConnectError",
+          "code": "Unavailable",
+          "message": "injected partial cleanup failure",
+          "sourceSha256": "bab8801711155ad6a42e683d2be394db2d8802e32f0ec4be7b03bf653992c3b8"
+        }
+      },
+      "cleanup": {
+        "databaseDropped": true,
+        "remainingSessions": 0,
+        "errors": []
+      },
+      "status": "PASS",
+      "durationMs": 1135
+    },
+    {
+      "index": 5,
+      "config": {
+        "provider": "postgres16",
+        "protocol": "connect",
+        "scenario": "partial-activation-failure",
+        "deliveryMode": "db-only"
+      },
+      "command": {
+        "executable": "pnpm",
+        "argv": [
+          "exec",
+          "vitest",
+          "run",
+          "--config",
+          "vitest.infrastructure.config.ts",
+          "packages/server-blackbox-tests/test/project-subscription-transports.integration.test.ts"
+        ]
+      },
+      "environment": {
+        "SPINE_TS_TRANSPORT_PROVIDER": "postgres16",
+        "SPINE_TS_TRANSPORT_PROTOCOL": "connect",
+        "SPINE_TS_TRANSPORT_SCENARIO": "partial-activation-failure",
+        "SPINE_TS_TRANSPORT_DELIVERY_MODE": "db-only"
+      },
+      "startedAt": "2026-10-14T04:08:00.532Z",
+      "log": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/transport-fault-correction-matrix/sessions/b13b0927-84e3-4045-b826-14e532c3a724/5-partial-activation-failure-connect-db-only.log",
+      "fixtureSha256": "bab8801711155ad6a42e683d2be394db2d8802e32f0ec4be7b03bf653992c3b8",
+      "configuredProfile": {
+        "model": "gpt-6-luna",
+        "reasoning": "low",
+        "runtimeMetadata": "not exposed by this execution surface"
+      },
+      "pnpmPid": 36191,
+      "processGroupId": 36191,
+      "endedAt": "2026-10-14T04:08:01.666Z",
+      "gitHeadAtCase": "3aad8c639e47465ed9d37c8376760e3b9b0f8302",
+      "exit": {
+        "code": 0,
+        "signal": null
+      },
+      "runId": "df2e0610742e44c1be40ffb5c94ebfee",
+      "database": "sqlrel_sub_df2e0610742e44c1be40ffb5c94ebfee",
+      "resourceArtifacts": {
+        "packages/server-blackbox-tests/dist/test-fixtures/project-workflow.js": "4369473fd7b246124d422e05e94aad97320161f6d18838eaa364d8616001b985",
+        "packages/server/dist/index.js": "6bf9c9a8c971afc87de534107af1a935953f89a0607193ed3576e2b3def1909e",
+        "packages/server/dist/server/node-coordinator.js": "8e5c5194dc8a3f36430e9f547cafd00d90dab4463209c8375ded885079abbb62",
+        "packages/deployment/dist/internal/backend-membership-kernel.js": "6ab8c5c3ba0b2541954af16dcf07e4e38cb771bd6888829fed3ee1a226bcf50d",
+        "packages/proto/dist/src/index.js": "3b16144d721808f5ed8d458be542064c5323575247cf1b7e6d325b038adaeaa2",
+        "packages/storage-postgres/dist/index.js": "84a8658d25708fd1bf4d2b0fd7b1bd678966fd089b9b8e6908df1b1005ad3139",
+        "packages/storage-mysql/dist/index.js": "1e344dd9d6163df30cabbcb6dec296cde324a3f74a9d185ea29c40a28862da74",
+        "packages/client-node/dist/index.js": "0d165190867682c2ffe00467affb4e0bf7bbf0d9c3a92bb31a56be9bfbd3c2f3",
+        "packages/client-web/dist/index.js": "f5207a268787d49974351129c0a25287b71e603ced7ce068ab502350e079c370",
+        "packages/delivery-server/dist/index.js": "b8b79d6f88a3f7f4dd0461062a09dc519e98c84387ae01360b4245acd23b5d08"
+      },
+      "result": {
+        "status": "PASS",
+        "counters": {
+          "subscribe": 2,
+          "activate": 2,
+          "ackReleased": 2,
+          "cancel": 3,
+          "cancelFaults": 1,
+          "cancelSuccesses": 2,
+          "streamFaults": 0,
+          "iterators": 0
+        },
+        "secondaryCounters": {
+          "subscribe": 2,
+          "activate": 2,
+          "ackReleased": 0,
+          "cancel": 2,
+          "iterators": 0
+        },
+        "handlerEntryCount": 0,
+        "secondaryTrace": [
+          {
+            "operation": "subscribe",
+            "id": "s-4eda2bdb-2a98-42f6-a213-ac5b71988cb3"
+          },
+          {
+            "operation": "activate",
+            "id": "s-4eda2bdb-2a98-42f6-a213-ac5b71988cb3"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-4eda2bdb-2a98-42f6-a213-ac5b71988cb3"
+          },
+          {
+            "operation": "subscribe",
+            "id": "s-f7248116-56fe-4a98-a4f3-4c1a06898611"
+          },
+          {
+            "operation": "activate",
+            "id": "s-f7248116-56fe-4a98-a4f3-4c1a06898611"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-f7248116-56fe-4a98-a4f3-4c1a06898611"
+          }
+        ],
+        "subscriptionTrace": [
+          {
+            "operation": "subscribe",
+            "id": "s-149a44fe-0f1b-4803-9e7a-870e2eb70058"
+          },
+          {
+            "operation": "activate",
+            "id": "s-149a44fe-0f1b-4803-9e7a-870e2eb70058"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-149a44fe-0f1b-4803-9e7a-870e2eb70058"
+          },
+          {
+            "operation": "cancel-failed",
+            "id": "s-149a44fe-0f1b-4803-9e7a-870e2eb70058"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-149a44fe-0f1b-4803-9e7a-870e2eb70058"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-149a44fe-0f1b-4803-9e7a-870e2eb70058"
+          },
+          {
+            "operation": "subscribe",
+            "id": "s-060c2b75-fac0-47f1-9fd8-9ebe2f8da13a"
+          },
+          {
+            "operation": "activate",
+            "id": "s-060c2b75-fac0-47f1-9fd8-9ebe2f8da13a"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-060c2b75-fac0-47f1-9fd8-9ebe2f8da13a"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-060c2b75-fac0-47f1-9fd8-9ebe2f8da13a"
+          }
+        ]
+      },
+      "scenarioEvidence": {
+        "primarySubscribeIds": [
+          "s-149a44fe-0f1b-4803-9e7a-870e2eb70058",
+          "s-060c2b75-fac0-47f1-9fd8-9ebe2f8da13a"
+        ],
+        "failedCancelIds": [
+          "s-149a44fe-0f1b-4803-9e7a-870e2eb70058"
+        ],
+        "successfulCancelIds": [
+          "s-149a44fe-0f1b-4803-9e7a-870e2eb70058",
+          "s-060c2b75-fac0-47f1-9fd8-9ebe2f8da13a"
+        ],
+        "terminalUnavailableError": {
+          "name": "ConnectError",
+          "message": "[unavailable] injected partial child Activate failure"
+        },
+        "injectedCancelError": {
+          "type": "ConnectError",
+          "code": "Unavailable",
+          "message": "injected partial cleanup failure",
+          "sourceSha256": "bab8801711155ad6a42e683d2be394db2d8802e32f0ec4be7b03bf653992c3b8"
+        }
+      },
+      "cleanup": {
+        "databaseDropped": true,
+        "remainingSessions": 0,
+        "errors": []
+      },
+      "status": "PASS",
+      "durationMs": 1134
+    },
+    {
+      "index": 6,
+      "config": {
+        "provider": "postgres16",
+        "protocol": "connect",
+        "scenario": "partial-activation-failure",
+        "deliveryMode": "shared-memory"
+      },
+      "command": {
+        "executable": "pnpm",
+        "argv": [
+          "exec",
+          "vitest",
+          "run",
+          "--config",
+          "vitest.infrastructure.config.ts",
+          "packages/server-blackbox-tests/test/project-subscription-transports.integration.test.ts"
+        ]
+      },
+      "environment": {
+        "SPINE_TS_TRANSPORT_PROVIDER": "postgres16",
+        "SPINE_TS_TRANSPORT_PROTOCOL": "connect",
+        "SPINE_TS_TRANSPORT_SCENARIO": "partial-activation-failure",
+        "SPINE_TS_TRANSPORT_DELIVERY_MODE": "shared-memory"
+      },
+      "startedAt": "2026-10-14T04:08:01.684Z",
+      "log": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/transport-fault-correction-matrix/sessions/b13b0927-84e3-4045-b826-14e532c3a724/6-partial-activation-failure-connect-shared-memory.log",
+      "fixtureSha256": "bab8801711155ad6a42e683d2be394db2d8802e32f0ec4be7b03bf653992c3b8",
+      "configuredProfile": {
+        "model": "gpt-6-luna",
+        "reasoning": "low",
+        "runtimeMetadata": "not exposed by this execution surface"
+      },
+      "pnpmPid": 36218,
+      "processGroupId": 36218,
+      "endedAt": "2026-10-14T04:08:02.819Z",
+      "gitHeadAtCase": "3aad8c639e47465ed9d37c8376760e3b9b0f8302",
+      "exit": {
+        "code": 0,
+        "signal": null
+      },
+      "runId": "5e00f901121b46f98e69b838242ab6bc",
+      "database": "sqlrel_sub_5e00f901121b46f98e69b838242ab6bc",
+      "resourceArtifacts": {
+        "packages/server-blackbox-tests/dist/test-fixtures/project-workflow.js": "4369473fd7b246124d422e05e94aad97320161f6d18838eaa364d8616001b985",
+        "packages/server/dist/index.js": "6bf9c9a8c971afc87de534107af1a935953f89a0607193ed3576e2b3def1909e",
+        "packages/server/dist/server/node-coordinator.js": "8e5c5194dc8a3f36430e9f547cafd00d90dab4463209c8375ded885079abbb62",
+        "packages/deployment/dist/internal/backend-membership-kernel.js": "6ab8c5c3ba0b2541954af16dcf07e4e38cb771bd6888829fed3ee1a226bcf50d",
+        "packages/proto/dist/src/index.js": "3b16144d721808f5ed8d458be542064c5323575247cf1b7e6d325b038adaeaa2",
+        "packages/storage-postgres/dist/index.js": "84a8658d25708fd1bf4d2b0fd7b1bd678966fd089b9b8e6908df1b1005ad3139",
+        "packages/storage-mysql/dist/index.js": "1e344dd9d6163df30cabbcb6dec296cde324a3f74a9d185ea29c40a28862da74",
+        "packages/client-node/dist/index.js": "0d165190867682c2ffe00467affb4e0bf7bbf0d9c3a92bb31a56be9bfbd3c2f3",
+        "packages/client-web/dist/index.js": "f5207a268787d49974351129c0a25287b71e603ced7ce068ab502350e079c370",
+        "packages/delivery-server/dist/index.js": "b8b79d6f88a3f7f4dd0461062a09dc519e98c84387ae01360b4245acd23b5d08"
+      },
+      "result": {
+        "status": "PASS",
+        "counters": {
+          "subscribe": 2,
+          "activate": 2,
+          "ackReleased": 2,
+          "cancel": 3,
+          "cancelFaults": 1,
+          "cancelSuccesses": 2,
+          "streamFaults": 0,
+          "iterators": 0
+        },
+        "secondaryCounters": {
+          "subscribe": 2,
+          "activate": 2,
+          "ackReleased": 0,
+          "cancel": 3,
+          "iterators": 0
+        },
+        "handlerEntryCount": 0,
+        "secondaryTrace": [
+          {
+            "operation": "subscribe",
+            "id": "s-50db5027-b8dc-4d56-a164-ee892aafe5bc"
+          },
+          {
+            "operation": "activate",
+            "id": "s-50db5027-b8dc-4d56-a164-ee892aafe5bc"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-50db5027-b8dc-4d56-a164-ee892aafe5bc"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-50db5027-b8dc-4d56-a164-ee892aafe5bc"
+          },
+          {
+            "operation": "subscribe",
+            "id": "s-26892d83-2c0b-442a-ae27-c8ebb4e17f3e"
+          },
+          {
+            "operation": "activate",
+            "id": "s-26892d83-2c0b-442a-ae27-c8ebb4e17f3e"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-26892d83-2c0b-442a-ae27-c8ebb4e17f3e"
+          }
+        ],
+        "subscriptionTrace": [
+          {
+            "operation": "subscribe",
+            "id": "s-338aded9-c1ca-4bbd-96f3-679cf818d04c"
+          },
+          {
+            "operation": "activate",
+            "id": "s-338aded9-c1ca-4bbd-96f3-679cf818d04c"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-338aded9-c1ca-4bbd-96f3-679cf818d04c"
+          },
+          {
+            "operation": "cancel-failed",
+            "id": "s-338aded9-c1ca-4bbd-96f3-679cf818d04c"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-338aded9-c1ca-4bbd-96f3-679cf818d04c"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-338aded9-c1ca-4bbd-96f3-679cf818d04c"
+          },
+          {
+            "operation": "subscribe",
+            "id": "s-1225e6b8-8cb7-48c8-b04f-b78da0743db3"
+          },
+          {
+            "operation": "activate",
+            "id": "s-1225e6b8-8cb7-48c8-b04f-b78da0743db3"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-1225e6b8-8cb7-48c8-b04f-b78da0743db3"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-1225e6b8-8cb7-48c8-b04f-b78da0743db3"
+          }
+        ]
+      },
+      "scenarioEvidence": {
+        "primarySubscribeIds": [
+          "s-338aded9-c1ca-4bbd-96f3-679cf818d04c",
+          "s-1225e6b8-8cb7-48c8-b04f-b78da0743db3"
+        ],
+        "failedCancelIds": [
+          "s-338aded9-c1ca-4bbd-96f3-679cf818d04c"
+        ],
+        "successfulCancelIds": [
+          "s-338aded9-c1ca-4bbd-96f3-679cf818d04c",
+          "s-1225e6b8-8cb7-48c8-b04f-b78da0743db3"
+        ],
+        "terminalUnavailableError": {
+          "name": "ConnectError",
+          "message": "[unavailable] injected partial child Activate failure"
+        },
+        "injectedCancelError": {
+          "type": "ConnectError",
+          "code": "Unavailable",
+          "message": "injected partial cleanup failure",
+          "sourceSha256": "bab8801711155ad6a42e683d2be394db2d8802e32f0ec4be7b03bf653992c3b8"
+        }
+      },
+      "cleanup": {
+        "databaseDropped": true,
+        "remainingSessions": 0,
+        "errors": []
+      },
+      "status": "PASS",
+      "durationMs": 1135
+    },
+    {
+      "index": 7,
+      "config": {
+        "provider": "postgres16",
+        "protocol": "native",
+        "scenario": "cancel-publication-race",
+        "deliveryMode": "db-only"
+      },
+      "command": {
+        "executable": "pnpm",
+        "argv": [
+          "exec",
+          "vitest",
+          "run",
+          "--config",
+          "vitest.infrastructure.config.ts",
+          "packages/server-blackbox-tests/test/project-subscription-transports.integration.test.ts"
+        ]
+      },
+      "environment": {
+        "SPINE_TS_TRANSPORT_PROVIDER": "postgres16",
+        "SPINE_TS_TRANSPORT_PROTOCOL": "native",
+        "SPINE_TS_TRANSPORT_SCENARIO": "cancel-publication-race",
+        "SPINE_TS_TRANSPORT_DELIVERY_MODE": "db-only"
+      },
+      "startedAt": "2026-10-14T04:08:02.834Z",
+      "log": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/transport-fault-correction-matrix/sessions/b13b0927-84e3-4045-b826-14e532c3a724/7-cancel-publication-race-native-db-only.log",
+      "fixtureSha256": "bab8801711155ad6a42e683d2be394db2d8802e32f0ec4be7b03bf653992c3b8",
+      "configuredProfile": {
+        "model": "gpt-6-luna",
+        "reasoning": "low",
+        "runtimeMetadata": "not exposed by this execution surface"
+      },
+      "pnpmPid": 36245,
+      "processGroupId": 36245,
+      "endedAt": "2026-10-14T04:08:05.328Z",
+      "gitHeadAtCase": "3aad8c639e47465ed9d37c8376760e3b9b0f8302",
+      "exit": {
+        "code": 0,
+        "signal": null
+      },
+      "runId": "0ba3a076b3ca4799abae9dbd63844f9c",
+      "database": "sqlrel_sub_0ba3a076b3ca4799abae9dbd63844f9c",
+      "resourceArtifacts": {
+        "packages/server-blackbox-tests/dist/test-fixtures/project-workflow.js": "4369473fd7b246124d422e05e94aad97320161f6d18838eaa364d8616001b985",
+        "packages/server/dist/index.js": "6bf9c9a8c971afc87de534107af1a935953f89a0607193ed3576e2b3def1909e",
+        "packages/server/dist/server/node-coordinator.js": "8e5c5194dc8a3f36430e9f547cafd00d90dab4463209c8375ded885079abbb62",
+        "packages/deployment/dist/internal/backend-membership-kernel.js": "6ab8c5c3ba0b2541954af16dcf07e4e38cb771bd6888829fed3ee1a226bcf50d",
+        "packages/proto/dist/src/index.js": "3b16144d721808f5ed8d458be542064c5323575247cf1b7e6d325b038adaeaa2",
+        "packages/storage-postgres/dist/index.js": "84a8658d25708fd1bf4d2b0fd7b1bd678966fd089b9b8e6908df1b1005ad3139",
+        "packages/storage-mysql/dist/index.js": "1e344dd9d6163df30cabbcb6dec296cde324a3f74a9d185ea29c40a28862da74",
+        "packages/client-node/dist/index.js": "0d165190867682c2ffe00467affb4e0bf7bbf0d9c3a92bb31a56be9bfbd3c2f3",
+        "packages/client-web/dist/index.js": "f5207a268787d49974351129c0a25287b71e603ced7ce068ab502350e079c370",
+        "packages/delivery-server/dist/index.js": "b8b79d6f88a3f7f4dd0461062a09dc519e98c84387ae01360b4245acd23b5d08"
+      },
+      "result": {
+        "status": "PASS",
+        "counters": {
+          "subscribe": 2,
+          "activate": 2,
+          "ackReleased": 2,
+          "cancel": 2,
+          "cancelFaults": 0,
+          "cancelSuccesses": 2,
+          "streamFaults": 0,
+          "iterators": 0
+        },
+        "secondaryCounters": {
+          "subscribe": 0,
+          "activate": 0,
+          "ackReleased": 0,
+          "cancel": 0,
+          "iterators": 0
+        },
+        "handlerEntryCount": 20,
+        "serverEventTrace": [
+          {
+            "subscriptionId": "s-7c671b6b-eb4b-42d2-9407-a06e6d7b571f",
+            "eventId": "4c9da5e1-5c8b-42d5-b9cd-ac6ae5b4ee5e",
+            "projectNumber": 1,
+            "sha256": "87faf9a565f8bc94625b793291925e4bc4deb9d47f85644cb14859e68f82a4e8"
+          },
+          {
+            "subscriptionId": "s-7c671b6b-eb4b-42d2-9407-a06e6d7b571f",
+            "eventId": "668aa0de-61bf-4e1f-9b71-e66dbc339984",
+            "projectNumber": 2,
+            "sha256": "8892dec0defd85804d5f90ee772814f4395f53d555da809bee60e9bd84318066"
+          },
+          {
+            "subscriptionId": "s-7c671b6b-eb4b-42d2-9407-a06e6d7b571f",
+            "eventId": "6095d45b-7b0f-4e31-afe9-3feaf459578e",
+            "projectNumber": 3,
+            "sha256": "3a5540b127b78a88f20f2ed101b87abfb0ff61ed98ad851285720877550bfad8"
+          }
+        ],
+        "eventId": "4c9da5e1-5c8b-42d5-b9cd-ac6ae5b4ee5e",
+        "subscriptionTrace": [
+          {
+            "operation": "subscribe",
+            "id": "s-7c671b6b-eb4b-42d2-9407-a06e6d7b571f"
+          },
+          {
+            "operation": "activate",
+            "id": "s-7c671b6b-eb4b-42d2-9407-a06e6d7b571f"
+          },
+          {
+            "operation": "subscribe",
+            "id": "s-e00dbb5b-a3f7-432a-9c0d-54df31d0756a"
+          },
+          {
+            "operation": "activate",
+            "id": "s-e00dbb5b-a3f7-432a-9c0d-54df31d0756a"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-7c671b6b-eb4b-42d2-9407-a06e6d7b571f"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-7c671b6b-eb4b-42d2-9407-a06e6d7b571f"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-e00dbb5b-a3f7-432a-9c0d-54df31d0756a"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-e00dbb5b-a3f7-432a-9c0d-54df31d0756a"
+          }
+        ]
+      },
+      "scenarioEvidence": {
+        "primarySubscribeIds": [
+          "s-7c671b6b-eb4b-42d2-9407-a06e6d7b571f",
+          "s-e00dbb5b-a3f7-432a-9c0d-54df31d0756a"
+        ],
+        "successfulCancelIds": [
+          "s-7c671b6b-eb4b-42d2-9407-a06e6d7b571f",
+          "s-e00dbb5b-a3f7-432a-9c0d-54df31d0756a"
+        ],
+        "project3Event": {
+          "subscriptionId": "s-7c671b6b-eb4b-42d2-9407-a06e6d7b571f",
+          "eventId": "6095d45b-7b0f-4e31-afe9-3feaf459578e",
+          "projectNumber": 3,
+          "sha256": "3a5540b127b78a88f20f2ed101b87abfb0ff61ed98ad851285720877550bfad8"
+        },
+        "exactProject1EventId": "4c9da5e1-5c8b-42d5-b9cd-ac6ae5b4ee5e",
+        "fixtureAssertions": "Cancel held through Project 3 Event yield; no updates during/after Cancel; Project 4 Event excluded; all admitted subscriptions finally removed"
+      },
+      "cleanup": {
+        "databaseDropped": true,
+        "remainingSessions": 0,
+        "errors": []
+      },
+      "status": "PASS",
+      "durationMs": 2494
+    },
+    {
+      "index": 8,
+      "config": {
+        "provider": "postgres16",
+        "protocol": "native",
+        "scenario": "cancel-publication-race",
+        "deliveryMode": "shared-memory"
+      },
+      "command": {
+        "executable": "pnpm",
+        "argv": [
+          "exec",
+          "vitest",
+          "run",
+          "--config",
+          "vitest.infrastructure.config.ts",
+          "packages/server-blackbox-tests/test/project-subscription-transports.integration.test.ts"
+        ]
+      },
+      "environment": {
+        "SPINE_TS_TRANSPORT_PROVIDER": "postgres16",
+        "SPINE_TS_TRANSPORT_PROTOCOL": "native",
+        "SPINE_TS_TRANSPORT_SCENARIO": "cancel-publication-race",
+        "SPINE_TS_TRANSPORT_DELIVERY_MODE": "shared-memory"
+      },
+      "startedAt": "2026-10-14T04:08:05.346Z",
+      "log": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/transport-fault-correction-matrix/sessions/b13b0927-84e3-4045-b826-14e532c3a724/8-cancel-publication-race-native-shared-memory.log",
+      "fixtureSha256": "bab8801711155ad6a42e683d2be394db2d8802e32f0ec4be7b03bf653992c3b8",
+      "configuredProfile": {
+        "model": "gpt-6-luna",
+        "reasoning": "low",
+        "runtimeMetadata": "not exposed by this execution surface"
+      },
+      "pnpmPid": 36516,
+      "processGroupId": 36516,
+      "endedAt": "2026-10-14T04:08:07.976Z",
+      "gitHeadAtCase": "3aad8c639e47465ed9d37c8376760e3b9b0f8302",
+      "exit": {
+        "code": 0,
+        "signal": null
+      },
+      "runId": "168fa581b8b84791957b24dace3c2a06",
+      "database": "sqlrel_sub_168fa581b8b84791957b24dace3c2a06",
+      "resourceArtifacts": {
+        "packages/server-blackbox-tests/dist/test-fixtures/project-workflow.js": "4369473fd7b246124d422e05e94aad97320161f6d18838eaa364d8616001b985",
+        "packages/server/dist/index.js": "6bf9c9a8c971afc87de534107af1a935953f89a0607193ed3576e2b3def1909e",
+        "packages/server/dist/server/node-coordinator.js": "8e5c5194dc8a3f36430e9f547cafd00d90dab4463209c8375ded885079abbb62",
+        "packages/deployment/dist/internal/backend-membership-kernel.js": "6ab8c5c3ba0b2541954af16dcf07e4e38cb771bd6888829fed3ee1a226bcf50d",
+        "packages/proto/dist/src/index.js": "3b16144d721808f5ed8d458be542064c5323575247cf1b7e6d325b038adaeaa2",
+        "packages/storage-postgres/dist/index.js": "84a8658d25708fd1bf4d2b0fd7b1bd678966fd089b9b8e6908df1b1005ad3139",
+        "packages/storage-mysql/dist/index.js": "1e344dd9d6163df30cabbcb6dec296cde324a3f74a9d185ea29c40a28862da74",
+        "packages/client-node/dist/index.js": "0d165190867682c2ffe00467affb4e0bf7bbf0d9c3a92bb31a56be9bfbd3c2f3",
+        "packages/client-web/dist/index.js": "f5207a268787d49974351129c0a25287b71e603ced7ce068ab502350e079c370",
+        "packages/delivery-server/dist/index.js": "b8b79d6f88a3f7f4dd0461062a09dc519e98c84387ae01360b4245acd23b5d08"
+      },
+      "result": {
+        "status": "PASS",
+        "counters": {
+          "subscribe": 2,
+          "activate": 2,
+          "ackReleased": 2,
+          "cancel": 2,
+          "cancelFaults": 0,
+          "cancelSuccesses": 2,
+          "streamFaults": 0,
+          "iterators": 0
+        },
+        "secondaryCounters": {
+          "subscribe": 0,
+          "activate": 0,
+          "ackReleased": 0,
+          "cancel": 0,
+          "iterators": 0
+        },
+        "handlerEntryCount": 20,
+        "serverEventTrace": [
+          {
+            "subscriptionId": "s-d7c44469-69f0-4549-9a03-9901602734da",
+            "eventId": "0210bacf-b8e6-415f-8be3-f5d56803a1bd",
+            "projectNumber": 1,
+            "sha256": "fd2304af590dd89b35fda81362f1e842397f0aa587246bf01578c15eb28a21cc"
+          },
+          {
+            "subscriptionId": "s-d7c44469-69f0-4549-9a03-9901602734da",
+            "eventId": "66bb983c-0b06-4df3-8c1c-7bbc03d907cb",
+            "projectNumber": 2,
+            "sha256": "d2e9150748c7749f3a03bc68aa820e4a865d1457860c382470c7a45c378bd3e7"
+          },
+          {
+            "subscriptionId": "s-d7c44469-69f0-4549-9a03-9901602734da",
+            "eventId": "3359dfa5-fc54-45a8-bd29-0090f44e2be6",
+            "projectNumber": 3,
+            "sha256": "8897153fe3d2da57fc8499150c00c9b503bd52825a3384314306e9b1e39035a1"
+          }
+        ],
+        "eventId": "0210bacf-b8e6-415f-8be3-f5d56803a1bd",
+        "subscriptionTrace": [
+          {
+            "operation": "subscribe",
+            "id": "s-d7c44469-69f0-4549-9a03-9901602734da"
+          },
+          {
+            "operation": "activate",
+            "id": "s-d7c44469-69f0-4549-9a03-9901602734da"
+          },
+          {
+            "operation": "subscribe",
+            "id": "s-1db635df-0838-4f66-a2d3-c7aeaefe7250"
+          },
+          {
+            "operation": "activate",
+            "id": "s-1db635df-0838-4f66-a2d3-c7aeaefe7250"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-d7c44469-69f0-4549-9a03-9901602734da"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-d7c44469-69f0-4549-9a03-9901602734da"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-1db635df-0838-4f66-a2d3-c7aeaefe7250"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-1db635df-0838-4f66-a2d3-c7aeaefe7250"
+          }
+        ]
+      },
+      "scenarioEvidence": {
+        "primarySubscribeIds": [
+          "s-d7c44469-69f0-4549-9a03-9901602734da",
+          "s-1db635df-0838-4f66-a2d3-c7aeaefe7250"
+        ],
+        "successfulCancelIds": [
+          "s-d7c44469-69f0-4549-9a03-9901602734da",
+          "s-1db635df-0838-4f66-a2d3-c7aeaefe7250"
+        ],
+        "project3Event": {
+          "subscriptionId": "s-d7c44469-69f0-4549-9a03-9901602734da",
+          "eventId": "3359dfa5-fc54-45a8-bd29-0090f44e2be6",
+          "projectNumber": 3,
+          "sha256": "8897153fe3d2da57fc8499150c00c9b503bd52825a3384314306e9b1e39035a1"
+        },
+        "exactProject1EventId": "0210bacf-b8e6-415f-8be3-f5d56803a1bd",
+        "fixtureAssertions": "Cancel held through Project 3 Event yield; no updates during/after Cancel; Project 4 Event excluded; all admitted subscriptions finally removed"
+      },
+      "cleanup": {
+        "databaseDropped": true,
+        "remainingSessions": 0,
+        "errors": []
+      },
+      "status": "PASS",
+      "durationMs": 2630
+    },
+    {
+      "index": 9,
+      "config": {
+        "provider": "postgres16",
+        "protocol": "grpc-web",
+        "scenario": "cancel-publication-race",
+        "deliveryMode": "db-only"
+      },
+      "command": {
+        "executable": "pnpm",
+        "argv": [
+          "exec",
+          "vitest",
+          "run",
+          "--config",
+          "vitest.infrastructure.config.ts",
+          "packages/server-blackbox-tests/test/project-subscription-transports.integration.test.ts"
+        ]
+      },
+      "environment": {
+        "SPINE_TS_TRANSPORT_PROVIDER": "postgres16",
+        "SPINE_TS_TRANSPORT_PROTOCOL": "grpc-web",
+        "SPINE_TS_TRANSPORT_SCENARIO": "cancel-publication-race",
+        "SPINE_TS_TRANSPORT_DELIVERY_MODE": "db-only"
+      },
+      "startedAt": "2026-10-14T04:08:07.991Z",
+      "log": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/transport-fault-correction-matrix/sessions/b13b0927-84e3-4045-b826-14e532c3a724/9-cancel-publication-race-grpc-web-db-only.log",
+      "fixtureSha256": "bab8801711155ad6a42e683d2be394db2d8802e32f0ec4be7b03bf653992c3b8",
+      "configuredProfile": {
+        "model": "gpt-6-luna",
+        "reasoning": "low",
+        "runtimeMetadata": "not exposed by this execution surface"
+      },
+      "pnpmPid": 36546,
+      "processGroupId": 36546,
+      "endedAt": "2026-10-14T04:08:10.462Z",
+      "gitHeadAtCase": "3aad8c639e47465ed9d37c8376760e3b9b0f8302",
+      "exit": {
+        "code": 0,
+        "signal": null
+      },
+      "runId": "4ca776f3029041dd92a954597ea39b4e",
+      "database": "sqlrel_sub_4ca776f3029041dd92a954597ea39b4e",
+      "resourceArtifacts": {
+        "packages/server-blackbox-tests/dist/test-fixtures/project-workflow.js": "4369473fd7b246124d422e05e94aad97320161f6d18838eaa364d8616001b985",
+        "packages/server/dist/index.js": "6bf9c9a8c971afc87de534107af1a935953f89a0607193ed3576e2b3def1909e",
+        "packages/server/dist/server/node-coordinator.js": "8e5c5194dc8a3f36430e9f547cafd00d90dab4463209c8375ded885079abbb62",
+        "packages/deployment/dist/internal/backend-membership-kernel.js": "6ab8c5c3ba0b2541954af16dcf07e4e38cb771bd6888829fed3ee1a226bcf50d",
+        "packages/proto/dist/src/index.js": "3b16144d721808f5ed8d458be542064c5323575247cf1b7e6d325b038adaeaa2",
+        "packages/storage-postgres/dist/index.js": "84a8658d25708fd1bf4d2b0fd7b1bd678966fd089b9b8e6908df1b1005ad3139",
+        "packages/storage-mysql/dist/index.js": "1e344dd9d6163df30cabbcb6dec296cde324a3f74a9d185ea29c40a28862da74",
+        "packages/client-node/dist/index.js": "0d165190867682c2ffe00467affb4e0bf7bbf0d9c3a92bb31a56be9bfbd3c2f3",
+        "packages/client-web/dist/index.js": "f5207a268787d49974351129c0a25287b71e603ced7ce068ab502350e079c370",
+        "packages/delivery-server/dist/index.js": "b8b79d6f88a3f7f4dd0461062a09dc519e98c84387ae01360b4245acd23b5d08"
+      },
+      "result": {
+        "status": "PASS",
+        "counters": {
+          "subscribe": 2,
+          "activate": 2,
+          "ackReleased": 2,
+          "cancel": 2,
+          "cancelFaults": 0,
+          "cancelSuccesses": 2,
+          "streamFaults": 0,
+          "iterators": 0
+        },
+        "secondaryCounters": {
+          "subscribe": 0,
+          "activate": 0,
+          "ackReleased": 0,
+          "cancel": 0,
+          "iterators": 0
+        },
+        "handlerEntryCount": 20,
+        "serverEventTrace": [
+          {
+            "subscriptionId": "s-e8d6b621-f279-4a9a-a922-aa54115a86ac",
+            "eventId": "56a164fd-1887-4bdf-bd26-9473d919e272",
+            "projectNumber": 1,
+            "sha256": "bb8d415ee3262bc034a18e9c63c851a305e63ffa06a305441e5413d0556f7821"
+          },
+          {
+            "subscriptionId": "s-e8d6b621-f279-4a9a-a922-aa54115a86ac",
+            "eventId": "ac56ca33-0d2e-4a46-8f8d-885fb96bba99",
+            "projectNumber": 2,
+            "sha256": "fad1be36cfad3791dd0d0db0ef70f65f313f041d0ec87a4654c77560729bbf24"
+          },
+          {
+            "subscriptionId": "s-e8d6b621-f279-4a9a-a922-aa54115a86ac",
+            "eventId": "d94bc841-d313-4fdb-b3a9-1f87cb379535",
+            "projectNumber": 3,
+            "sha256": "5a71eb4903b118de3687d365610501c8bf248ac1d336b92a349fb89c739acad1"
+          }
+        ],
+        "eventId": "56a164fd-1887-4bdf-bd26-9473d919e272",
+        "subscriptionTrace": [
+          {
+            "operation": "subscribe",
+            "id": "s-e8d6b621-f279-4a9a-a922-aa54115a86ac"
+          },
+          {
+            "operation": "activate",
+            "id": "s-e8d6b621-f279-4a9a-a922-aa54115a86ac"
+          },
+          {
+            "operation": "subscribe",
+            "id": "s-cb9e8f41-d2e9-483f-ad86-9bf71b97164c"
+          },
+          {
+            "operation": "activate",
+            "id": "s-cb9e8f41-d2e9-483f-ad86-9bf71b97164c"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-e8d6b621-f279-4a9a-a922-aa54115a86ac"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-e8d6b621-f279-4a9a-a922-aa54115a86ac"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-cb9e8f41-d2e9-483f-ad86-9bf71b97164c"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-cb9e8f41-d2e9-483f-ad86-9bf71b97164c"
+          }
+        ]
+      },
+      "scenarioEvidence": {
+        "primarySubscribeIds": [
+          "s-e8d6b621-f279-4a9a-a922-aa54115a86ac",
+          "s-cb9e8f41-d2e9-483f-ad86-9bf71b97164c"
+        ],
+        "successfulCancelIds": [
+          "s-e8d6b621-f279-4a9a-a922-aa54115a86ac",
+          "s-cb9e8f41-d2e9-483f-ad86-9bf71b97164c"
+        ],
+        "project3Event": {
+          "subscriptionId": "s-e8d6b621-f279-4a9a-a922-aa54115a86ac",
+          "eventId": "d94bc841-d313-4fdb-b3a9-1f87cb379535",
+          "projectNumber": 3,
+          "sha256": "5a71eb4903b118de3687d365610501c8bf248ac1d336b92a349fb89c739acad1"
+        },
+        "exactProject1EventId": "56a164fd-1887-4bdf-bd26-9473d919e272",
+        "fixtureAssertions": "Cancel held through Project 3 Event yield; no updates during/after Cancel; Project 4 Event excluded; all admitted subscriptions finally removed"
+      },
+      "cleanup": {
+        "databaseDropped": true,
+        "remainingSessions": 0,
+        "errors": []
+      },
+      "status": "PASS",
+      "durationMs": 2471
+    },
+    {
+      "index": 10,
+      "config": {
+        "provider": "postgres16",
+        "protocol": "grpc-web",
+        "scenario": "cancel-publication-race",
+        "deliveryMode": "shared-memory"
+      },
+      "command": {
+        "executable": "pnpm",
+        "argv": [
+          "exec",
+          "vitest",
+          "run",
+          "--config",
+          "vitest.infrastructure.config.ts",
+          "packages/server-blackbox-tests/test/project-subscription-transports.integration.test.ts"
+        ]
+      },
+      "environment": {
+        "SPINE_TS_TRANSPORT_PROVIDER": "postgres16",
+        "SPINE_TS_TRANSPORT_PROTOCOL": "grpc-web",
+        "SPINE_TS_TRANSPORT_SCENARIO": "cancel-publication-race",
+        "SPINE_TS_TRANSPORT_DELIVERY_MODE": "shared-memory"
+      },
+      "startedAt": "2026-10-14T04:08:10.480Z",
+      "log": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/transport-fault-correction-matrix/sessions/b13b0927-84e3-4045-b826-14e532c3a724/10-cancel-publication-race-grpc-web-shared-memory.log",
+      "fixtureSha256": "bab8801711155ad6a42e683d2be394db2d8802e32f0ec4be7b03bf653992c3b8",
+      "configuredProfile": {
+        "model": "gpt-6-luna",
+        "reasoning": "low",
+        "runtimeMetadata": "not exposed by this execution surface"
+      },
+      "pnpmPid": 36575,
+      "processGroupId": 36575,
+      "endedAt": "2026-10-14T04:08:12.945Z",
+      "gitHeadAtCase": "3aad8c639e47465ed9d37c8376760e3b9b0f8302",
+      "exit": {
+        "code": 0,
+        "signal": null
+      },
+      "runId": "564fff44979f474ab04b67a4e6495cc1",
+      "database": "sqlrel_sub_564fff44979f474ab04b67a4e6495cc1",
+      "resourceArtifacts": {
+        "packages/server-blackbox-tests/dist/test-fixtures/project-workflow.js": "4369473fd7b246124d422e05e94aad97320161f6d18838eaa364d8616001b985",
+        "packages/server/dist/index.js": "6bf9c9a8c971afc87de534107af1a935953f89a0607193ed3576e2b3def1909e",
+        "packages/server/dist/server/node-coordinator.js": "8e5c5194dc8a3f36430e9f547cafd00d90dab4463209c8375ded885079abbb62",
+        "packages/deployment/dist/internal/backend-membership-kernel.js": "6ab8c5c3ba0b2541954af16dcf07e4e38cb771bd6888829fed3ee1a226bcf50d",
+        "packages/proto/dist/src/index.js": "3b16144d721808f5ed8d458be542064c5323575247cf1b7e6d325b038adaeaa2",
+        "packages/storage-postgres/dist/index.js": "84a8658d25708fd1bf4d2b0fd7b1bd678966fd089b9b8e6908df1b1005ad3139",
+        "packages/storage-mysql/dist/index.js": "1e344dd9d6163df30cabbcb6dec296cde324a3f74a9d185ea29c40a28862da74",
+        "packages/client-node/dist/index.js": "0d165190867682c2ffe00467affb4e0bf7bbf0d9c3a92bb31a56be9bfbd3c2f3",
+        "packages/client-web/dist/index.js": "f5207a268787d49974351129c0a25287b71e603ced7ce068ab502350e079c370",
+        "packages/delivery-server/dist/index.js": "b8b79d6f88a3f7f4dd0461062a09dc519e98c84387ae01360b4245acd23b5d08"
+      },
+      "result": {
+        "status": "PASS",
+        "counters": {
+          "subscribe": 2,
+          "activate": 2,
+          "ackReleased": 2,
+          "cancel": 2,
+          "cancelFaults": 0,
+          "cancelSuccesses": 2,
+          "streamFaults": 0,
+          "iterators": 0
+        },
+        "secondaryCounters": {
+          "subscribe": 0,
+          "activate": 0,
+          "ackReleased": 0,
+          "cancel": 0,
+          "iterators": 0
+        },
+        "handlerEntryCount": 20,
+        "serverEventTrace": [
+          {
+            "subscriptionId": "s-2a3bce00-d8e7-4e3c-be5f-285a57d91152",
+            "eventId": "9532db1b-e207-43e7-8186-0d8657421d38",
+            "projectNumber": 1,
+            "sha256": "ced42eb039103fd7087275d470d80801513f695b9560b268c9d05faae4abbccb"
+          },
+          {
+            "subscriptionId": "s-2a3bce00-d8e7-4e3c-be5f-285a57d91152",
+            "eventId": "d5b308ec-3786-40fb-87ef-9804c984df47",
+            "projectNumber": 2,
+            "sha256": "dab16d99c3d28ab02ecd30265a0db9fd93332fc0b82a8526697d3e670bfec341"
+          },
+          {
+            "subscriptionId": "s-2a3bce00-d8e7-4e3c-be5f-285a57d91152",
+            "eventId": "e12cc2d4-78e1-4aa4-bf86-de0c400f9387",
+            "projectNumber": 3,
+            "sha256": "2c6e0119028ce5e600f6caba2f98c15ca4550a18c3cbcf9eee6f4d4e83caf398"
+          }
+        ],
+        "eventId": "9532db1b-e207-43e7-8186-0d8657421d38",
+        "subscriptionTrace": [
+          {
+            "operation": "subscribe",
+            "id": "s-2a3bce00-d8e7-4e3c-be5f-285a57d91152"
+          },
+          {
+            "operation": "activate",
+            "id": "s-2a3bce00-d8e7-4e3c-be5f-285a57d91152"
+          },
+          {
+            "operation": "subscribe",
+            "id": "s-87c43f20-ce3c-4055-aed8-9a8da66123b3"
+          },
+          {
+            "operation": "activate",
+            "id": "s-87c43f20-ce3c-4055-aed8-9a8da66123b3"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-2a3bce00-d8e7-4e3c-be5f-285a57d91152"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-2a3bce00-d8e7-4e3c-be5f-285a57d91152"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-87c43f20-ce3c-4055-aed8-9a8da66123b3"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-87c43f20-ce3c-4055-aed8-9a8da66123b3"
+          }
+        ]
+      },
+      "scenarioEvidence": {
+        "primarySubscribeIds": [
+          "s-2a3bce00-d8e7-4e3c-be5f-285a57d91152",
+          "s-87c43f20-ce3c-4055-aed8-9a8da66123b3"
+        ],
+        "successfulCancelIds": [
+          "s-2a3bce00-d8e7-4e3c-be5f-285a57d91152",
+          "s-87c43f20-ce3c-4055-aed8-9a8da66123b3"
+        ],
+        "project3Event": {
+          "subscriptionId": "s-2a3bce00-d8e7-4e3c-be5f-285a57d91152",
+          "eventId": "e12cc2d4-78e1-4aa4-bf86-de0c400f9387",
+          "projectNumber": 3,
+          "sha256": "2c6e0119028ce5e600f6caba2f98c15ca4550a18c3cbcf9eee6f4d4e83caf398"
+        },
+        "exactProject1EventId": "9532db1b-e207-43e7-8186-0d8657421d38",
+        "fixtureAssertions": "Cancel held through Project 3 Event yield; no updates during/after Cancel; Project 4 Event excluded; all admitted subscriptions finally removed"
+      },
+      "cleanup": {
+        "databaseDropped": true,
+        "remainingSessions": 0,
+        "errors": []
+      },
+      "status": "PASS",
+      "durationMs": 2465
+    },
+    {
+      "index": 11,
+      "config": {
+        "provider": "postgres16",
+        "protocol": "connect",
+        "scenario": "cancel-publication-race",
+        "deliveryMode": "db-only"
+      },
+      "command": {
+        "executable": "pnpm",
+        "argv": [
+          "exec",
+          "vitest",
+          "run",
+          "--config",
+          "vitest.infrastructure.config.ts",
+          "packages/server-blackbox-tests/test/project-subscription-transports.integration.test.ts"
+        ]
+      },
+      "environment": {
+        "SPINE_TS_TRANSPORT_PROVIDER": "postgres16",
+        "SPINE_TS_TRANSPORT_PROTOCOL": "connect",
+        "SPINE_TS_TRANSPORT_SCENARIO": "cancel-publication-race",
+        "SPINE_TS_TRANSPORT_DELIVERY_MODE": "db-only"
+      },
+      "startedAt": "2026-10-14T04:08:12.961Z",
+      "log": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/transport-fault-correction-matrix/sessions/b13b0927-84e3-4045-b826-14e532c3a724/11-cancel-publication-race-connect-db-only.log",
+      "fixtureSha256": "bab8801711155ad6a42e683d2be394db2d8802e32f0ec4be7b03bf653992c3b8",
+      "configuredProfile": {
+        "model": "gpt-6-luna",
+        "reasoning": "low",
+        "runtimeMetadata": "not exposed by this execution surface"
+      },
+      "pnpmPid": 36602,
+      "processGroupId": 36602,
+      "endedAt": "2026-10-14T04:08:15.423Z",
+      "gitHeadAtCase": "3aad8c639e47465ed9d37c8376760e3b9b0f8302",
+      "exit": {
+        "code": 0,
+        "signal": null
+      },
+      "runId": "67fdd14d88674b2788d583a5d9422b36",
+      "database": "sqlrel_sub_67fdd14d88674b2788d583a5d9422b36",
+      "resourceArtifacts": {
+        "packages/server-blackbox-tests/dist/test-fixtures/project-workflow.js": "4369473fd7b246124d422e05e94aad97320161f6d18838eaa364d8616001b985",
+        "packages/server/dist/index.js": "6bf9c9a8c971afc87de534107af1a935953f89a0607193ed3576e2b3def1909e",
+        "packages/server/dist/server/node-coordinator.js": "8e5c5194dc8a3f36430e9f547cafd00d90dab4463209c8375ded885079abbb62",
+        "packages/deployment/dist/internal/backend-membership-kernel.js": "6ab8c5c3ba0b2541954af16dcf07e4e38cb771bd6888829fed3ee1a226bcf50d",
+        "packages/proto/dist/src/index.js": "3b16144d721808f5ed8d458be542064c5323575247cf1b7e6d325b038adaeaa2",
+        "packages/storage-postgres/dist/index.js": "84a8658d25708fd1bf4d2b0fd7b1bd678966fd089b9b8e6908df1b1005ad3139",
+        "packages/storage-mysql/dist/index.js": "1e344dd9d6163df30cabbcb6dec296cde324a3f74a9d185ea29c40a28862da74",
+        "packages/client-node/dist/index.js": "0d165190867682c2ffe00467affb4e0bf7bbf0d9c3a92bb31a56be9bfbd3c2f3",
+        "packages/client-web/dist/index.js": "f5207a268787d49974351129c0a25287b71e603ced7ce068ab502350e079c370",
+        "packages/delivery-server/dist/index.js": "b8b79d6f88a3f7f4dd0461062a09dc519e98c84387ae01360b4245acd23b5d08"
+      },
+      "result": {
+        "status": "PASS",
+        "counters": {
+          "subscribe": 2,
+          "activate": 2,
+          "ackReleased": 2,
+          "cancel": 2,
+          "cancelFaults": 0,
+          "cancelSuccesses": 2,
+          "streamFaults": 0,
+          "iterators": 0
+        },
+        "secondaryCounters": {
+          "subscribe": 0,
+          "activate": 0,
+          "ackReleased": 0,
+          "cancel": 0,
+          "iterators": 0
+        },
+        "handlerEntryCount": 20,
+        "serverEventTrace": [
+          {
+            "subscriptionId": "s-9fd12d8b-bf6e-4a48-b08a-25eca1128cc9",
+            "eventId": "52fd4a75-31fa-4dae-a38a-b96674e2a783",
+            "projectNumber": 1,
+            "sha256": "7f6252cec0538965a1a64902b80380f545b01cf43efb04f70f299faa4c900ab6"
+          },
+          {
+            "subscriptionId": "s-9fd12d8b-bf6e-4a48-b08a-25eca1128cc9",
+            "eventId": "171a4c8f-4670-4883-b64c-0522e8b5789d",
+            "projectNumber": 2,
+            "sha256": "a44a8a531169f8424fe7cdfb75407a3b36f474d80b3367c9a881f1b2c9684615"
+          },
+          {
+            "subscriptionId": "s-9fd12d8b-bf6e-4a48-b08a-25eca1128cc9",
+            "eventId": "fcf1a541-8c83-449d-a71a-08096e924371",
+            "projectNumber": 3,
+            "sha256": "c51760f10a1d95d77e08d15b75edd8b75df722094b1bf8a72a6ecf7a3cc14f18"
+          }
+        ],
+        "eventId": "52fd4a75-31fa-4dae-a38a-b96674e2a783",
+        "subscriptionTrace": [
+          {
+            "operation": "subscribe",
+            "id": "s-9fd12d8b-bf6e-4a48-b08a-25eca1128cc9"
+          },
+          {
+            "operation": "activate",
+            "id": "s-9fd12d8b-bf6e-4a48-b08a-25eca1128cc9"
+          },
+          {
+            "operation": "subscribe",
+            "id": "s-cf88624d-d7e1-4da7-8cb9-d428b24ef09e"
+          },
+          {
+            "operation": "activate",
+            "id": "s-cf88624d-d7e1-4da7-8cb9-d428b24ef09e"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-9fd12d8b-bf6e-4a48-b08a-25eca1128cc9"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-9fd12d8b-bf6e-4a48-b08a-25eca1128cc9"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-cf88624d-d7e1-4da7-8cb9-d428b24ef09e"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-cf88624d-d7e1-4da7-8cb9-d428b24ef09e"
+          }
+        ]
+      },
+      "scenarioEvidence": {
+        "primarySubscribeIds": [
+          "s-9fd12d8b-bf6e-4a48-b08a-25eca1128cc9",
+          "s-cf88624d-d7e1-4da7-8cb9-d428b24ef09e"
+        ],
+        "successfulCancelIds": [
+          "s-9fd12d8b-bf6e-4a48-b08a-25eca1128cc9",
+          "s-cf88624d-d7e1-4da7-8cb9-d428b24ef09e"
+        ],
+        "project3Event": {
+          "subscriptionId": "s-9fd12d8b-bf6e-4a48-b08a-25eca1128cc9",
+          "eventId": "fcf1a541-8c83-449d-a71a-08096e924371",
+          "projectNumber": 3,
+          "sha256": "c51760f10a1d95d77e08d15b75edd8b75df722094b1bf8a72a6ecf7a3cc14f18"
+        },
+        "exactProject1EventId": "52fd4a75-31fa-4dae-a38a-b96674e2a783",
+        "fixtureAssertions": "Cancel held through Project 3 Event yield; no updates during/after Cancel; Project 4 Event excluded; all admitted subscriptions finally removed"
+      },
+      "cleanup": {
+        "databaseDropped": true,
+        "remainingSessions": 0,
+        "errors": []
+      },
+      "status": "PASS",
+      "durationMs": 2462
+    },
+    {
+      "index": 12,
+      "config": {
+        "provider": "postgres16",
+        "protocol": "connect",
+        "scenario": "cancel-publication-race",
+        "deliveryMode": "shared-memory"
+      },
+      "command": {
+        "executable": "pnpm",
+        "argv": [
+          "exec",
+          "vitest",
+          "run",
+          "--config",
+          "vitest.infrastructure.config.ts",
+          "packages/server-blackbox-tests/test/project-subscription-transports.integration.test.ts"
+        ]
+      },
+      "environment": {
+        "SPINE_TS_TRANSPORT_PROVIDER": "postgres16",
+        "SPINE_TS_TRANSPORT_PROTOCOL": "connect",
+        "SPINE_TS_TRANSPORT_SCENARIO": "cancel-publication-race",
+        "SPINE_TS_TRANSPORT_DELIVERY_MODE": "shared-memory"
+      },
+      "startedAt": "2026-10-14T04:08:15.441Z",
+      "log": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/transport-fault-correction-matrix/sessions/b13b0927-84e3-4045-b826-14e532c3a724/12-cancel-publication-race-connect-shared-memory.log",
+      "fixtureSha256": "bab8801711155ad6a42e683d2be394db2d8802e32f0ec4be7b03bf653992c3b8",
+      "configuredProfile": {
+        "model": "gpt-6-luna",
+        "reasoning": "low",
+        "runtimeMetadata": "not exposed by this execution surface"
+      },
+      "pnpmPid": 36630,
+      "processGroupId": 36630,
+      "endedAt": "2026-10-14T04:08:17.969Z",
+      "gitHeadAtCase": "3aad8c639e47465ed9d37c8376760e3b9b0f8302",
+      "exit": {
+        "code": 0,
+        "signal": null
+      },
+      "runId": "c7beb44192234375990caf6d01785541",
+      "database": "sqlrel_sub_c7beb44192234375990caf6d01785541",
+      "resourceArtifacts": {
+        "packages/server-blackbox-tests/dist/test-fixtures/project-workflow.js": "4369473fd7b246124d422e05e94aad97320161f6d18838eaa364d8616001b985",
+        "packages/server/dist/index.js": "6bf9c9a8c971afc87de534107af1a935953f89a0607193ed3576e2b3def1909e",
+        "packages/server/dist/server/node-coordinator.js": "8e5c5194dc8a3f36430e9f547cafd00d90dab4463209c8375ded885079abbb62",
+        "packages/deployment/dist/internal/backend-membership-kernel.js": "6ab8c5c3ba0b2541954af16dcf07e4e38cb771bd6888829fed3ee1a226bcf50d",
+        "packages/proto/dist/src/index.js": "3b16144d721808f5ed8d458be542064c5323575247cf1b7e6d325b038adaeaa2",
+        "packages/storage-postgres/dist/index.js": "84a8658d25708fd1bf4d2b0fd7b1bd678966fd089b9b8e6908df1b1005ad3139",
+        "packages/storage-mysql/dist/index.js": "1e344dd9d6163df30cabbcb6dec296cde324a3f74a9d185ea29c40a28862da74",
+        "packages/client-node/dist/index.js": "0d165190867682c2ffe00467affb4e0bf7bbf0d9c3a92bb31a56be9bfbd3c2f3",
+        "packages/client-web/dist/index.js": "f5207a268787d49974351129c0a25287b71e603ced7ce068ab502350e079c370",
+        "packages/delivery-server/dist/index.js": "b8b79d6f88a3f7f4dd0461062a09dc519e98c84387ae01360b4245acd23b5d08"
+      },
+      "result": {
+        "status": "PASS",
+        "counters": {
+          "subscribe": 2,
+          "activate": 2,
+          "ackReleased": 2,
+          "cancel": 2,
+          "cancelFaults": 0,
+          "cancelSuccesses": 2,
+          "streamFaults": 0,
+          "iterators": 0
+        },
+        "secondaryCounters": {
+          "subscribe": 0,
+          "activate": 0,
+          "ackReleased": 0,
+          "cancel": 0,
+          "iterators": 0
+        },
+        "handlerEntryCount": 20,
+        "serverEventTrace": [
+          {
+            "subscriptionId": "s-73a181ad-d7ed-4c8c-bda2-82223ebf24d9",
+            "eventId": "8348d0a6-10a0-4b81-be10-7b612d2a4929",
+            "projectNumber": 1,
+            "sha256": "6c731f230e38d32e77e6895ff0c4f35011d85f8c89b1a6ae94203baf5bb08245"
+          },
+          {
+            "subscriptionId": "s-73a181ad-d7ed-4c8c-bda2-82223ebf24d9",
+            "eventId": "e00ed609-c7df-42bb-bd56-666e49fa6264",
+            "projectNumber": 2,
+            "sha256": "82982922e0ddd9cf064509e0290dd932dac0d44cfe769423a727449a35e27a7e"
+          },
+          {
+            "subscriptionId": "s-73a181ad-d7ed-4c8c-bda2-82223ebf24d9",
+            "eventId": "2cb1889d-80fe-47e2-9ab9-1d88b47e1e0a",
+            "projectNumber": 3,
+            "sha256": "02927661da8deca70fa670ac4a1a544f47a454b2f983a6b7fdf7f138e0b05c72"
+          }
+        ],
+        "eventId": "8348d0a6-10a0-4b81-be10-7b612d2a4929",
+        "subscriptionTrace": [
+          {
+            "operation": "subscribe",
+            "id": "s-73a181ad-d7ed-4c8c-bda2-82223ebf24d9"
+          },
+          {
+            "operation": "activate",
+            "id": "s-73a181ad-d7ed-4c8c-bda2-82223ebf24d9"
+          },
+          {
+            "operation": "subscribe",
+            "id": "s-9680ac16-d7f3-4c6e-ab7b-335a4198210b"
+          },
+          {
+            "operation": "activate",
+            "id": "s-9680ac16-d7f3-4c6e-ab7b-335a4198210b"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-73a181ad-d7ed-4c8c-bda2-82223ebf24d9"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-73a181ad-d7ed-4c8c-bda2-82223ebf24d9"
+          },
+          {
+            "operation": "cancel",
+            "id": "s-9680ac16-d7f3-4c6e-ab7b-335a4198210b"
+          },
+          {
+            "operation": "cancel-succeeded",
+            "id": "s-9680ac16-d7f3-4c6e-ab7b-335a4198210b"
+          }
+        ]
+      },
+      "scenarioEvidence": {
+        "primarySubscribeIds": [
+          "s-73a181ad-d7ed-4c8c-bda2-82223ebf24d9",
+          "s-9680ac16-d7f3-4c6e-ab7b-335a4198210b"
+        ],
+        "successfulCancelIds": [
+          "s-73a181ad-d7ed-4c8c-bda2-82223ebf24d9",
+          "s-9680ac16-d7f3-4c6e-ab7b-335a4198210b"
+        ],
+        "project3Event": {
+          "subscriptionId": "s-73a181ad-d7ed-4c8c-bda2-82223ebf24d9",
+          "eventId": "2cb1889d-80fe-47e2-9ab9-1d88b47e1e0a",
+          "projectNumber": 3,
+          "sha256": "02927661da8deca70fa670ac4a1a544f47a454b2f983a6b7fdf7f138e0b05c72"
+        },
+        "exactProject1EventId": "8348d0a6-10a0-4b81-be10-7b612d2a4929",
+        "fixtureAssertions": "Cancel held through Project 3 Event yield; no updates during/after Cancel; Project 4 Event excluded; all admitted subscriptions finally removed"
+      },
+      "cleanup": {
+        "databaseDropped": true,
+        "remainingSessions": 0,
+        "errors": []
+      },
+      "status": "PASS",
+      "durationMs": 2528
+    }
+  ],
+  "end": {
+    "sourceSha256": {
+      "packages/server-blackbox-tests/package.json": "ac7bb9233e7dd6c82d9320d81f4c8503328a4811d912b9517f60654fb5e3e2c6",
+      "packages/server-blackbox-tests/test-fixtures/project-subscription-transport.mjs": "bab8801711155ad6a42e683d2be394db2d8802e32f0ec4be7b03bf653992c3b8",
+      "packages/server-blackbox-tests/test-fixtures/project-subscription-wait.mjs": "f06a514e2b925ed42f1340fbd87db73e26072718eb568817ffc9ee097f7e8885",
+      "packages/server-blackbox-tests/test/project-subscription-transports.integration.test.ts": "34a7153a887d9a5e0cd7146a82c0445956c37653462c3be05ac417e124f29021",
+      "packages/server-blackbox-tests/test-fixtures/project-workflow.ts": "8ed152a6fd0a88224cccfcd9ff219695a41a8dc38eeab75192081dbb90cc8bc4",
+      "packages/auth/src/gateway/dynamic-subscription-creator.ts": "7d6f461807b1610bd2033b7e94b368b01608d5a9240bf32cd8c91dbb25b5d498",
+      "packages/auth/src/gateway/dynamic-unary-forwarder.ts": "a3a76407fbacb78ecfb79ed9b8436647280d556067e7f0a550a8941e462729d9",
+      "packages/deployment/src/internal/backend-membership-kernel.ts": "1b26c61468a5d667784be7eb53bcdf2b8a165d2a6b1210b61e49dc8f064bd0c0"
+    },
+    "distSha256": {
+      "packages/server-blackbox-tests/dist/test-fixtures/project-workflow.js": "4369473fd7b246124d422e05e94aad97320161f6d18838eaa364d8616001b985",
+      "packages/server/dist/index.js": "6bf9c9a8c971afc87de534107af1a935953f89a0607193ed3576e2b3def1909e",
+      "packages/server/dist/browser/index.js": "408b3cf4068f99542d9a01219ac1c251096746e172845f82abafaafca0cd0e07",
+      "packages/server/dist/browser/browser-server.js": "8b5ed0a6d503af04fe806549cc0b5ac2c4e6c60f1b35f7ee779a36c8443810cc",
+      "packages/server/dist/browser/durable-subscription-bindings.js": "8378a58cad104a61b2c13a6f808f3b328af8673f5e7076cd91182a8969884dcc",
+      "packages/server/dist/server/node-coordinator.js": "8e5c5194dc8a3f36430e9f547cafd00d90dab4463209c8375ded885079abbb62",
+      "packages/auth/dist/gateway/dynamic-subscription-creator.js": "9fd4cdadacd3c1670f28a848448d16797b64e8d509b0be3b6b97ec818d23085b",
+      "packages/auth/dist/gateway/dynamic-unary-forwarder.js": "8840d7ad5c74617b8cf66fe05d0aae40b4ff9514d0a5435e33e515075ebde7ba",
+      "packages/deployment/dist/internal/backend-membership-kernel.js": "6ab8c5c3ba0b2541954af16dcf07e4e38cb771bd6888829fed3ee1a226bcf50d",
+      "packages/proto/dist/src/index.js": "3b16144d721808f5ed8d458be542064c5323575247cf1b7e6d325b038adaeaa2",
+      "packages/storage-postgres/dist/index.js": "84a8658d25708fd1bf4d2b0fd7b1bd678966fd089b9b8e6908df1b1005ad3139",
+      "packages/storage-mysql/dist/index.js": "1e344dd9d6163df30cabbcb6dec296cde324a3f74a9d185ea29c40a28862da74",
+      "packages/client-node/dist/index.js": "0d165190867682c2ffe00467affb4e0bf7bbf0d9c3a92bb31a56be9bfbd3c2f3",
+      "packages/client-web/dist/index.js": "f5207a268787d49974351129c0a25287b71e603ced7ce068ab502350e079c370",
+      "packages/delivery-server/dist/index.js": "b8b79d6f88a3f7f4dd0461062a09dc519e98c84387ae01360b4245acd23b5d08"
+    }
+  },
+  "endedAt": "2026-10-14T04:08:17.985Z",
+  "unrunCases": []
+}

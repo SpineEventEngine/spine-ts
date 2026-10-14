@@ -1,0 +1,420 @@
+{
+  "status": "PASS",
+  "result": {
+    "provider": "postgres18",
+    "protocol": "connect",
+    "scenario": "cancel-publication-race",
+    "deliveryMode": "shared-memory",
+    "database": "sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c",
+    "endpoint": "http://127.0.0.1:54530",
+    "browserEndpoint": "http://127.0.0.1:54531",
+    "eventId": "4bb2fb1f-ec50-412b-9715-0f9e8caff3b3",
+    "stateId": {
+      "$typeName": "spine.server.testing.ProjectId",
+      "number": 1,
+      "organization": {
+        "$typeName": "spine.server.testing.OrganizationId",
+        "code": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c"
+      }
+    },
+    "counters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 2,
+      "cancel": 2,
+      "cancelFaults": 0,
+      "cancelSuccesses": 2,
+      "streamFaults": 0,
+      "iterators": 0
+    },
+    "entries": [
+      {
+        "method": "create",
+        "receiver": "Project",
+        "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:1",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+        "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAE="
+      },
+      {
+        "method": "planning",
+        "receiver": "ProjectPlanning",
+        "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:1",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+        "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAE="
+      },
+      {
+        "method": "staffing",
+        "receiver": "ProjectStaffing",
+        "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:1",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+        "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAE="
+      },
+      {
+        "method": "portfolio",
+        "receiver": "Portfolio",
+        "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:1",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+        "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAE="
+      },
+      {
+        "method": "projection",
+        "receiver": "ProjectProjection",
+        "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:1",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+        "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAE="
+      },
+      {
+        "method": "create",
+        "receiver": "Project",
+        "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:2",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+        "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAI="
+      },
+      {
+        "method": "planning",
+        "receiver": "ProjectPlanning",
+        "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:2",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+        "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAI="
+      },
+      {
+        "method": "staffing",
+        "receiver": "ProjectStaffing",
+        "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:2",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+        "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAI="
+      },
+      {
+        "method": "portfolio",
+        "receiver": "Portfolio",
+        "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:2",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+        "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAI="
+      },
+      {
+        "method": "projection",
+        "receiver": "ProjectProjection",
+        "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:2",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+        "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAI="
+      },
+      {
+        "method": "create",
+        "receiver": "Project",
+        "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:3",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+        "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAM="
+      },
+      {
+        "method": "planning",
+        "receiver": "ProjectPlanning",
+        "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:3",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+        "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAM="
+      },
+      {
+        "method": "staffing",
+        "receiver": "ProjectStaffing",
+        "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:3",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+        "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAM="
+      },
+      {
+        "method": "portfolio",
+        "receiver": "Portfolio",
+        "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:3",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+        "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAM="
+      },
+      {
+        "method": "projection",
+        "receiver": "ProjectProjection",
+        "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:3",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+        "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAM="
+      },
+      {
+        "method": "create",
+        "receiver": "Project",
+        "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:4",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+        "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAQ="
+      },
+      {
+        "method": "planning",
+        "receiver": "ProjectPlanning",
+        "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:4",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+        "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAQ="
+      },
+      {
+        "method": "staffing",
+        "receiver": "ProjectStaffing",
+        "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:4",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+        "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAQ="
+      },
+      {
+        "method": "portfolio",
+        "receiver": "Portfolio",
+        "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:4",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+        "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAQ="
+      },
+      {
+        "method": "projection",
+        "receiver": "ProjectProjection",
+        "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:4",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+        "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAQ="
+      }
+    ],
+    "subscriptionTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-5533910e-c2c0-45a0-ab6f-8c399a7fe6aa"
+      },
+      {
+        "operation": "activate",
+        "id": "s-5533910e-c2c0-45a0-ab6f-8c399a7fe6aa"
+      },
+      {
+        "operation": "subscribe",
+        "id": "s-2518901a-ddd2-46be-930c-f3cbbac9dda9"
+      },
+      {
+        "operation": "activate",
+        "id": "s-2518901a-ddd2-46be-930c-f3cbbac9dda9"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-5533910e-c2c0-45a0-ab6f-8c399a7fe6aa"
+      },
+      {
+        "operation": "cancel-succeeded",
+        "id": "s-5533910e-c2c0-45a0-ab6f-8c399a7fe6aa"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-2518901a-ddd2-46be-930c-f3cbbac9dda9"
+      },
+      {
+        "operation": "cancel-succeeded",
+        "id": "s-2518901a-ddd2-46be-930c-f3cbbac9dda9"
+      }
+    ],
+    "serverEventTrace": [
+      {
+        "subscriptionId": "s-5533910e-c2c0-45a0-ab6f-8c399a7fe6aa",
+        "eventId": "4bb2fb1f-ec50-412b-9715-0f9e8caff3b3",
+        "projectNumber": 1,
+        "sha256": "05e90224aa9bd0daeab4e84bd1dfa2fde1c330d1ff4ae719c0b01725c1249b70"
+      },
+      {
+        "subscriptionId": "s-5533910e-c2c0-45a0-ab6f-8c399a7fe6aa",
+        "eventId": "b13feb31-f0bd-4366-b0ba-1719b4948b26",
+        "projectNumber": 2,
+        "sha256": "fab5c2d3c7efeb9cd1e597d1cf1c7c1aec561439be537b4387fbf34956b7ae20"
+      },
+      {
+        "subscriptionId": "s-5533910e-c2c0-45a0-ab6f-8c399a7fe6aa",
+        "eventId": "b9555732-c65a-4f66-a7f6-3e82714ab4be",
+        "projectNumber": 3,
+        "sha256": "a6522ff8ae4f20ed4c5ec7703adff542d2314a23b20c288f418806e47430b9eb"
+      }
+    ]
+  },
+  "counters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 2,
+    "cancel": 2,
+    "cancelFaults": 0,
+    "cancelSuccesses": 2,
+    "streamFaults": 0,
+    "iterators": 0
+  },
+  "secondaryCounters": {
+    "subscribe": 0,
+    "activate": 0,
+    "ackReleased": 0,
+    "cancel": 0,
+    "iterators": 0
+  },
+  "entries": [
+    {
+      "method": "create",
+      "receiver": "Project",
+      "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+      "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAE="
+    },
+    {
+      "method": "planning",
+      "receiver": "ProjectPlanning",
+      "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+      "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAE="
+    },
+    {
+      "method": "staffing",
+      "receiver": "ProjectStaffing",
+      "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+      "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAE="
+    },
+    {
+      "method": "portfolio",
+      "receiver": "Portfolio",
+      "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+      "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAE="
+    },
+    {
+      "method": "projection",
+      "receiver": "ProjectProjection",
+      "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+      "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAE="
+    },
+    {
+      "method": "create",
+      "receiver": "Project",
+      "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:2",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+      "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAI="
+    },
+    {
+      "method": "planning",
+      "receiver": "ProjectPlanning",
+      "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:2",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+      "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAI="
+    },
+    {
+      "method": "staffing",
+      "receiver": "ProjectStaffing",
+      "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:2",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+      "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAI="
+    },
+    {
+      "method": "portfolio",
+      "receiver": "Portfolio",
+      "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:2",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+      "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAI="
+    },
+    {
+      "method": "projection",
+      "receiver": "ProjectProjection",
+      "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:2",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+      "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAI="
+    },
+    {
+      "method": "create",
+      "receiver": "Project",
+      "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:3",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+      "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAM="
+    },
+    {
+      "method": "planning",
+      "receiver": "ProjectPlanning",
+      "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:3",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+      "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAM="
+    },
+    {
+      "method": "staffing",
+      "receiver": "ProjectStaffing",
+      "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:3",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+      "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAM="
+    },
+    {
+      "method": "portfolio",
+      "receiver": "Portfolio",
+      "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:3",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+      "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAM="
+    },
+    {
+      "method": "projection",
+      "receiver": "ProjectProjection",
+      "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:3",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+      "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAM="
+    },
+    {
+      "method": "create",
+      "receiver": "Project",
+      "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:4",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+      "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAQ="
+    },
+    {
+      "method": "planning",
+      "receiver": "ProjectPlanning",
+      "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:4",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+      "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAQ="
+    },
+    {
+      "method": "staffing",
+      "receiver": "ProjectStaffing",
+      "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:4",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+      "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAQ="
+    },
+    {
+      "method": "portfolio",
+      "receiver": "Portfolio",
+      "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:4",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+      "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAQ="
+    },
+    {
+      "method": "projection",
+      "receiver": "ProjectProjection",
+      "correlation": "subscription-sqlrel_sub_5fab4de9822f4b288eb3d8c4f0ac0b0c:4",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+      "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzVmYWI0ZGU5ODIyZjRiMjg4ZWIzZDhjNGYwYWMwYjBjEAQ="
+    }
+  ],
+  "subscriptionTrace": [
+    {
+      "operation": "subscribe",
+      "id": "s-5533910e-c2c0-45a0-ab6f-8c399a7fe6aa"
+    },
+    {
+      "operation": "activate",
+      "id": "s-5533910e-c2c0-45a0-ab6f-8c399a7fe6aa"
+    },
+    {
+      "operation": "subscribe",
+      "id": "s-2518901a-ddd2-46be-930c-f3cbbac9dda9"
+    },
+    {
+      "operation": "activate",
+      "id": "s-2518901a-ddd2-46be-930c-f3cbbac9dda9"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-5533910e-c2c0-45a0-ab6f-8c399a7fe6aa"
+    },
+    {
+      "operation": "cancel-succeeded",
+      "id": "s-5533910e-c2c0-45a0-ab6f-8c399a7fe6aa"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-2518901a-ddd2-46be-930c-f3cbbac9dda9"
+    },
+    {
+      "operation": "cancel-succeeded",
+      "id": "s-2518901a-ddd2-46be-930c-f3cbbac9dda9"
+    }
+  ]
+}

@@ -1,0 +1,162 @@
+{
+  "status": "PASS",
+  "result": {
+    "provider": "postgres18",
+    "protocol": "grpc-web",
+    "scenario": "partial-activation-failure",
+    "deliveryMode": "db-only",
+    "database": "sqlrel_sub_e628c9a17d564021bc376ce0343a811f",
+    "terminalName": "ConnectError",
+    "terminalMessage": "[unavailable] injected partial child Activate failure",
+    "counters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 2,
+      "cancel": 3,
+      "cancelFaults": 1,
+      "cancelSuccesses": 2,
+      "streamFaults": 0,
+      "iterators": 0
+    },
+    "secondaryCounters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 0,
+      "cancel": 3,
+      "iterators": 0
+    },
+    "subscriptionTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-bc0e08fa-39fe-4ee8-ada0-2997195f1b33"
+      },
+      {
+        "operation": "activate",
+        "id": "s-bc0e08fa-39fe-4ee8-ada0-2997195f1b33"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-bc0e08fa-39fe-4ee8-ada0-2997195f1b33"
+      },
+      {
+        "operation": "cancel-failed",
+        "id": "s-bc0e08fa-39fe-4ee8-ada0-2997195f1b33"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-bc0e08fa-39fe-4ee8-ada0-2997195f1b33"
+      },
+      {
+        "operation": "cancel-succeeded",
+        "id": "s-bc0e08fa-39fe-4ee8-ada0-2997195f1b33"
+      },
+      {
+        "operation": "subscribe",
+        "id": "s-fdee4cd7-8495-4e11-8299-87e7f06bd173"
+      },
+      {
+        "operation": "activate",
+        "id": "s-fdee4cd7-8495-4e11-8299-87e7f06bd173"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-fdee4cd7-8495-4e11-8299-87e7f06bd173"
+      },
+      {
+        "operation": "cancel-succeeded",
+        "id": "s-fdee4cd7-8495-4e11-8299-87e7f06bd173"
+      }
+    ],
+    "secondaryTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-44df3766-94b4-43d6-acc8-8c3858b7846f"
+      },
+      {
+        "operation": "activate",
+        "id": "s-44df3766-94b4-43d6-acc8-8c3858b7846f"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-44df3766-94b4-43d6-acc8-8c3858b7846f"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-44df3766-94b4-43d6-acc8-8c3858b7846f"
+      },
+      {
+        "operation": "subscribe",
+        "id": "s-41061128-24b6-4468-813f-9ff8730ca6f2"
+      },
+      {
+        "operation": "activate",
+        "id": "s-41061128-24b6-4468-813f-9ff8730ca6f2"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-41061128-24b6-4468-813f-9ff8730ca6f2"
+      }
+    ],
+    "entries": []
+  },
+  "counters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 2,
+    "cancel": 3,
+    "cancelFaults": 1,
+    "cancelSuccesses": 2,
+    "streamFaults": 0,
+    "iterators": 0
+  },
+  "secondaryCounters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 0,
+    "cancel": 3,
+    "iterators": 0
+  },
+  "entries": [],
+  "subscriptionTrace": [
+    {
+      "operation": "subscribe",
+      "id": "s-bc0e08fa-39fe-4ee8-ada0-2997195f1b33"
+    },
+    {
+      "operation": "activate",
+      "id": "s-bc0e08fa-39fe-4ee8-ada0-2997195f1b33"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-bc0e08fa-39fe-4ee8-ada0-2997195f1b33"
+    },
+    {
+      "operation": "cancel-failed",
+      "id": "s-bc0e08fa-39fe-4ee8-ada0-2997195f1b33"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-bc0e08fa-39fe-4ee8-ada0-2997195f1b33"
+    },
+    {
+      "operation": "cancel-succeeded",
+      "id": "s-bc0e08fa-39fe-4ee8-ada0-2997195f1b33"
+    },
+    {
+      "operation": "subscribe",
+      "id": "s-fdee4cd7-8495-4e11-8299-87e7f06bd173"
+    },
+    {
+      "operation": "activate",
+      "id": "s-fdee4cd7-8495-4e11-8299-87e7f06bd173"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-fdee4cd7-8495-4e11-8299-87e7f06bd173"
+    },
+    {
+      "operation": "cancel-succeeded",
+      "id": "s-fdee4cd7-8495-4e11-8299-87e7f06bd173"
+    }
+  ]
+}

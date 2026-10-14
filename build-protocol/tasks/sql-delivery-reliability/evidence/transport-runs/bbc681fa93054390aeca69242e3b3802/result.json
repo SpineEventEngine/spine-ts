@@ -1,0 +1,158 @@
+{
+  "status": "PASS",
+  "result": {
+    "provider": "mysql84",
+    "protocol": "native",
+    "scenario": "partial-activation-failure",
+    "deliveryMode": "db-only",
+    "database": "sqlrel_sub_bbc681fa93054390aeca69242e3b3802",
+    "terminalName": "ConnectError",
+    "terminalMessage": "[unavailable] injected partial child Activate failure",
+    "counters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 2,
+      "cancel": 3,
+      "cancelFaults": 1,
+      "cancelSuccesses": 2,
+      "streamFaults": 0,
+      "iterators": 0
+    },
+    "secondaryCounters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 0,
+      "cancel": 2,
+      "iterators": 0
+    },
+    "subscriptionTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-5c4dd2fc-872a-400c-b0fa-f60fdf2a763f"
+      },
+      {
+        "operation": "activate",
+        "id": "s-5c4dd2fc-872a-400c-b0fa-f60fdf2a763f"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-5c4dd2fc-872a-400c-b0fa-f60fdf2a763f"
+      },
+      {
+        "operation": "cancel-failed",
+        "id": "s-5c4dd2fc-872a-400c-b0fa-f60fdf2a763f"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-5c4dd2fc-872a-400c-b0fa-f60fdf2a763f"
+      },
+      {
+        "operation": "cancel-succeeded",
+        "id": "s-5c4dd2fc-872a-400c-b0fa-f60fdf2a763f"
+      },
+      {
+        "operation": "subscribe",
+        "id": "s-bfd47f1f-fd03-47aa-8b00-b086b0cbb238"
+      },
+      {
+        "operation": "activate",
+        "id": "s-bfd47f1f-fd03-47aa-8b00-b086b0cbb238"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-bfd47f1f-fd03-47aa-8b00-b086b0cbb238"
+      },
+      {
+        "operation": "cancel-succeeded",
+        "id": "s-bfd47f1f-fd03-47aa-8b00-b086b0cbb238"
+      }
+    ],
+    "secondaryTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-21f2c606-a315-4973-b101-66dffd9a76b7"
+      },
+      {
+        "operation": "activate",
+        "id": "s-21f2c606-a315-4973-b101-66dffd9a76b7"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-21f2c606-a315-4973-b101-66dffd9a76b7"
+      },
+      {
+        "operation": "subscribe",
+        "id": "s-14375530-aff4-45aa-9a6f-e760b1287ce3"
+      },
+      {
+        "operation": "activate",
+        "id": "s-14375530-aff4-45aa-9a6f-e760b1287ce3"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-14375530-aff4-45aa-9a6f-e760b1287ce3"
+      }
+    ],
+    "entries": []
+  },
+  "counters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 2,
+    "cancel": 3,
+    "cancelFaults": 1,
+    "cancelSuccesses": 2,
+    "streamFaults": 0,
+    "iterators": 0
+  },
+  "secondaryCounters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 0,
+    "cancel": 2,
+    "iterators": 0
+  },
+  "entries": [],
+  "subscriptionTrace": [
+    {
+      "operation": "subscribe",
+      "id": "s-5c4dd2fc-872a-400c-b0fa-f60fdf2a763f"
+    },
+    {
+      "operation": "activate",
+      "id": "s-5c4dd2fc-872a-400c-b0fa-f60fdf2a763f"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-5c4dd2fc-872a-400c-b0fa-f60fdf2a763f"
+    },
+    {
+      "operation": "cancel-failed",
+      "id": "s-5c4dd2fc-872a-400c-b0fa-f60fdf2a763f"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-5c4dd2fc-872a-400c-b0fa-f60fdf2a763f"
+    },
+    {
+      "operation": "cancel-succeeded",
+      "id": "s-5c4dd2fc-872a-400c-b0fa-f60fdf2a763f"
+    },
+    {
+      "operation": "subscribe",
+      "id": "s-bfd47f1f-fd03-47aa-8b00-b086b0cbb238"
+    },
+    {
+      "operation": "activate",
+      "id": "s-bfd47f1f-fd03-47aa-8b00-b086b0cbb238"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-bfd47f1f-fd03-47aa-8b00-b086b0cbb238"
+    },
+    {
+      "operation": "cancel-succeeded",
+      "id": "s-bfd47f1f-fd03-47aa-8b00-b086b0cbb238"
+    }
+  ]
+}

@@ -1,0 +1,162 @@
+{
+  "status": "PASS",
+  "result": {
+    "provider": "postgres16",
+    "protocol": "grpc-web",
+    "scenario": "partial-activation-failure",
+    "deliveryMode": "shared-memory",
+    "database": "sqlrel_sub_d9536a435624463e8ae4ce8ab6b8c23e",
+    "terminalName": "ConnectError",
+    "terminalMessage": "[unavailable] injected partial child Activate failure",
+    "counters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 2,
+      "cancel": 3,
+      "cancelFaults": 1,
+      "cancelSuccesses": 2,
+      "streamFaults": 0,
+      "iterators": 0
+    },
+    "secondaryCounters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 0,
+      "cancel": 3,
+      "iterators": 0
+    },
+    "subscriptionTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-f9a1d90e-dd51-46c8-bf0a-6d33d9c57a5d"
+      },
+      {
+        "operation": "activate",
+        "id": "s-f9a1d90e-dd51-46c8-bf0a-6d33d9c57a5d"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-f9a1d90e-dd51-46c8-bf0a-6d33d9c57a5d"
+      },
+      {
+        "operation": "cancel-failed",
+        "id": "s-f9a1d90e-dd51-46c8-bf0a-6d33d9c57a5d"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-f9a1d90e-dd51-46c8-bf0a-6d33d9c57a5d"
+      },
+      {
+        "operation": "cancel-succeeded",
+        "id": "s-f9a1d90e-dd51-46c8-bf0a-6d33d9c57a5d"
+      },
+      {
+        "operation": "subscribe",
+        "id": "s-830fe576-1542-49c8-855e-8edbcadd4bcf"
+      },
+      {
+        "operation": "activate",
+        "id": "s-830fe576-1542-49c8-855e-8edbcadd4bcf"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-830fe576-1542-49c8-855e-8edbcadd4bcf"
+      },
+      {
+        "operation": "cancel-succeeded",
+        "id": "s-830fe576-1542-49c8-855e-8edbcadd4bcf"
+      }
+    ],
+    "secondaryTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-6ed9baac-65ea-4cb2-aa15-6b9204d4bd69"
+      },
+      {
+        "operation": "activate",
+        "id": "s-6ed9baac-65ea-4cb2-aa15-6b9204d4bd69"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-6ed9baac-65ea-4cb2-aa15-6b9204d4bd69"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-6ed9baac-65ea-4cb2-aa15-6b9204d4bd69"
+      },
+      {
+        "operation": "subscribe",
+        "id": "s-696a04a8-8a06-498b-8cdc-4fc0e48d1403"
+      },
+      {
+        "operation": "activate",
+        "id": "s-696a04a8-8a06-498b-8cdc-4fc0e48d1403"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-696a04a8-8a06-498b-8cdc-4fc0e48d1403"
+      }
+    ],
+    "entries": []
+  },
+  "counters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 2,
+    "cancel": 3,
+    "cancelFaults": 1,
+    "cancelSuccesses": 2,
+    "streamFaults": 0,
+    "iterators": 0
+  },
+  "secondaryCounters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 0,
+    "cancel": 3,
+    "iterators": 0
+  },
+  "entries": [],
+  "subscriptionTrace": [
+    {
+      "operation": "subscribe",
+      "id": "s-f9a1d90e-dd51-46c8-bf0a-6d33d9c57a5d"
+    },
+    {
+      "operation": "activate",
+      "id": "s-f9a1d90e-dd51-46c8-bf0a-6d33d9c57a5d"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-f9a1d90e-dd51-46c8-bf0a-6d33d9c57a5d"
+    },
+    {
+      "operation": "cancel-failed",
+      "id": "s-f9a1d90e-dd51-46c8-bf0a-6d33d9c57a5d"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-f9a1d90e-dd51-46c8-bf0a-6d33d9c57a5d"
+    },
+    {
+      "operation": "cancel-succeeded",
+      "id": "s-f9a1d90e-dd51-46c8-bf0a-6d33d9c57a5d"
+    },
+    {
+      "operation": "subscribe",
+      "id": "s-830fe576-1542-49c8-855e-8edbcadd4bcf"
+    },
+    {
+      "operation": "activate",
+      "id": "s-830fe576-1542-49c8-855e-8edbcadd4bcf"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-830fe576-1542-49c8-855e-8edbcadd4bcf"
+    },
+    {
+      "operation": "cancel-succeeded",
+      "id": "s-830fe576-1542-49c8-855e-8edbcadd4bcf"
+    }
+  ]
+}

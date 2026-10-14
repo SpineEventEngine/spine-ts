@@ -1,0 +1,162 @@
+{
+  "status": "PASS",
+  "result": {
+    "provider": "postgres18",
+    "protocol": "grpc-web",
+    "scenario": "partial-activation-failure",
+    "deliveryMode": "shared-memory",
+    "database": "sqlrel_sub_70b448f21c004de3b452a664c9d2065d",
+    "terminalName": "ConnectError",
+    "terminalMessage": "[unavailable] injected partial child Activate failure",
+    "counters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 2,
+      "cancel": 3,
+      "cancelFaults": 1,
+      "cancelSuccesses": 2,
+      "streamFaults": 0,
+      "iterators": 0
+    },
+    "secondaryCounters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 0,
+      "cancel": 3,
+      "iterators": 0
+    },
+    "subscriptionTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-eb94d356-559c-499c-bf65-4d95cc3aa3f0"
+      },
+      {
+        "operation": "activate",
+        "id": "s-eb94d356-559c-499c-bf65-4d95cc3aa3f0"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-eb94d356-559c-499c-bf65-4d95cc3aa3f0"
+      },
+      {
+        "operation": "cancel-failed",
+        "id": "s-eb94d356-559c-499c-bf65-4d95cc3aa3f0"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-eb94d356-559c-499c-bf65-4d95cc3aa3f0"
+      },
+      {
+        "operation": "cancel-succeeded",
+        "id": "s-eb94d356-559c-499c-bf65-4d95cc3aa3f0"
+      },
+      {
+        "operation": "subscribe",
+        "id": "s-81da38de-8cb8-49eb-8681-0358ef762c18"
+      },
+      {
+        "operation": "activate",
+        "id": "s-81da38de-8cb8-49eb-8681-0358ef762c18"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-81da38de-8cb8-49eb-8681-0358ef762c18"
+      },
+      {
+        "operation": "cancel-succeeded",
+        "id": "s-81da38de-8cb8-49eb-8681-0358ef762c18"
+      }
+    ],
+    "secondaryTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-27a423f2-7528-44d5-bd94-00e47976ed26"
+      },
+      {
+        "operation": "activate",
+        "id": "s-27a423f2-7528-44d5-bd94-00e47976ed26"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-27a423f2-7528-44d5-bd94-00e47976ed26"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-27a423f2-7528-44d5-bd94-00e47976ed26"
+      },
+      {
+        "operation": "subscribe",
+        "id": "s-50d63aa6-d76a-45fa-b99f-3c7eaa33cfc7"
+      },
+      {
+        "operation": "activate",
+        "id": "s-50d63aa6-d76a-45fa-b99f-3c7eaa33cfc7"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-50d63aa6-d76a-45fa-b99f-3c7eaa33cfc7"
+      }
+    ],
+    "entries": []
+  },
+  "counters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 2,
+    "cancel": 3,
+    "cancelFaults": 1,
+    "cancelSuccesses": 2,
+    "streamFaults": 0,
+    "iterators": 0
+  },
+  "secondaryCounters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 0,
+    "cancel": 3,
+    "iterators": 0
+  },
+  "entries": [],
+  "subscriptionTrace": [
+    {
+      "operation": "subscribe",
+      "id": "s-eb94d356-559c-499c-bf65-4d95cc3aa3f0"
+    },
+    {
+      "operation": "activate",
+      "id": "s-eb94d356-559c-499c-bf65-4d95cc3aa3f0"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-eb94d356-559c-499c-bf65-4d95cc3aa3f0"
+    },
+    {
+      "operation": "cancel-failed",
+      "id": "s-eb94d356-559c-499c-bf65-4d95cc3aa3f0"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-eb94d356-559c-499c-bf65-4d95cc3aa3f0"
+    },
+    {
+      "operation": "cancel-succeeded",
+      "id": "s-eb94d356-559c-499c-bf65-4d95cc3aa3f0"
+    },
+    {
+      "operation": "subscribe",
+      "id": "s-81da38de-8cb8-49eb-8681-0358ef762c18"
+    },
+    {
+      "operation": "activate",
+      "id": "s-81da38de-8cb8-49eb-8681-0358ef762c18"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-81da38de-8cb8-49eb-8681-0358ef762c18"
+    },
+    {
+      "operation": "cancel-succeeded",
+      "id": "s-81da38de-8cb8-49eb-8681-0358ef762c18"
+    }
+  ]
+}

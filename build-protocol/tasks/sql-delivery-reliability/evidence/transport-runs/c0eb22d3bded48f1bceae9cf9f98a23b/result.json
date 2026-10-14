@@ -1,0 +1,162 @@
+{
+  "status": "PASS",
+  "result": {
+    "provider": "mariadb114",
+    "protocol": "grpc-web",
+    "scenario": "partial-activation-failure",
+    "deliveryMode": "shared-memory",
+    "database": "sqlrel_sub_c0eb22d3bded48f1bceae9cf9f98a23b",
+    "terminalName": "ConnectError",
+    "terminalMessage": "[unavailable] injected partial child Activate failure",
+    "counters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 2,
+      "cancel": 3,
+      "cancelFaults": 1,
+      "cancelSuccesses": 2,
+      "streamFaults": 0,
+      "iterators": 0
+    },
+    "secondaryCounters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 0,
+      "cancel": 3,
+      "iterators": 0
+    },
+    "subscriptionTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-923ee247-b850-4309-85e0-23217cdee3e2"
+      },
+      {
+        "operation": "activate",
+        "id": "s-923ee247-b850-4309-85e0-23217cdee3e2"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-923ee247-b850-4309-85e0-23217cdee3e2"
+      },
+      {
+        "operation": "cancel-failed",
+        "id": "s-923ee247-b850-4309-85e0-23217cdee3e2"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-923ee247-b850-4309-85e0-23217cdee3e2"
+      },
+      {
+        "operation": "cancel-succeeded",
+        "id": "s-923ee247-b850-4309-85e0-23217cdee3e2"
+      },
+      {
+        "operation": "subscribe",
+        "id": "s-0fd1848d-87b5-4f5e-8a67-867bdef5af27"
+      },
+      {
+        "operation": "activate",
+        "id": "s-0fd1848d-87b5-4f5e-8a67-867bdef5af27"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-0fd1848d-87b5-4f5e-8a67-867bdef5af27"
+      },
+      {
+        "operation": "cancel-succeeded",
+        "id": "s-0fd1848d-87b5-4f5e-8a67-867bdef5af27"
+      }
+    ],
+    "secondaryTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-7a3eb5b8-a8df-4fb7-abb9-91c0b21da5e9"
+      },
+      {
+        "operation": "activate",
+        "id": "s-7a3eb5b8-a8df-4fb7-abb9-91c0b21da5e9"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-7a3eb5b8-a8df-4fb7-abb9-91c0b21da5e9"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-7a3eb5b8-a8df-4fb7-abb9-91c0b21da5e9"
+      },
+      {
+        "operation": "subscribe",
+        "id": "s-c28304e4-f137-410a-9fac-61f3ccea78e5"
+      },
+      {
+        "operation": "activate",
+        "id": "s-c28304e4-f137-410a-9fac-61f3ccea78e5"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-c28304e4-f137-410a-9fac-61f3ccea78e5"
+      }
+    ],
+    "entries": []
+  },
+  "counters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 2,
+    "cancel": 3,
+    "cancelFaults": 1,
+    "cancelSuccesses": 2,
+    "streamFaults": 0,
+    "iterators": 0
+  },
+  "secondaryCounters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 0,
+    "cancel": 3,
+    "iterators": 0
+  },
+  "entries": [],
+  "subscriptionTrace": [
+    {
+      "operation": "subscribe",
+      "id": "s-923ee247-b850-4309-85e0-23217cdee3e2"
+    },
+    {
+      "operation": "activate",
+      "id": "s-923ee247-b850-4309-85e0-23217cdee3e2"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-923ee247-b850-4309-85e0-23217cdee3e2"
+    },
+    {
+      "operation": "cancel-failed",
+      "id": "s-923ee247-b850-4309-85e0-23217cdee3e2"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-923ee247-b850-4309-85e0-23217cdee3e2"
+    },
+    {
+      "operation": "cancel-succeeded",
+      "id": "s-923ee247-b850-4309-85e0-23217cdee3e2"
+    },
+    {
+      "operation": "subscribe",
+      "id": "s-0fd1848d-87b5-4f5e-8a67-867bdef5af27"
+    },
+    {
+      "operation": "activate",
+      "id": "s-0fd1848d-87b5-4f5e-8a67-867bdef5af27"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-0fd1848d-87b5-4f5e-8a67-867bdef5af27"
+    },
+    {
+      "operation": "cancel-succeeded",
+      "id": "s-0fd1848d-87b5-4f5e-8a67-867bdef5af27"
+    }
+  ]
+}
