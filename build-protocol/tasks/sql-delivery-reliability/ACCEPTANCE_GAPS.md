@@ -2,7 +2,7 @@
 
 Current status after implementation, live verification, review and versioning. This replaces
 the earlier preparation inventory; historical gaps are preserved in Git history.
-The complete task remains active. Use ACCEPTANCE.md for the full requirement map
+The authorized task is complete and ready for human review. Use ACCEPTANCE.md for the full requirement map
 and the measured artifacts for bounded claims.
 
 ## Closed live verification areas
@@ -54,25 +54,40 @@ registrations are removed, databases dropped, zero sessions/errors, stable
 recorded hashes. Together with the accepted 24 partial-cleanup and 24 duplicate-ACK
 rows, this closes the three additional transport fault scenarios.
 
-## Remaining work
+## Completion and external verification limit
 
 All five example families, local/shared React modes and the eight-process/eight-shard
 burst are verified. All accepted reviewer findings, including final security, are
-resolved. Application resources and all four exact task SQL containers are removed;
-see `evidence/live-examples/README.md` and `evidence/databases-final-cleanup.json`.
+resolved for the published candidate. Application resources and all four exact task
+SQL containers are removed; see `evidence/live-examples/README.md` and
+`evidence/databases-final-cleanup.json`.
 
 Version-only commit `7f66e7749` and separate workspace pins/lock commit
 `ec40b81e7` are pushed. All 31 workspace versions use snapshot.23; 55 workspace
-references are aligned. Both final dependency audits are clean.
+references are aligned. Final freshness checks confirm the version is unused for
+all 19 published packages and official tags. Clean dependency audits match the lock.
 
-- Close the global branch coverage gap: release attempt five passes all 5,357
-  executed tests with three skipped and no unhandled error, but branch coverage
-  is 89.83% against the 90% requirement. The other three coverage thresholds pass.
-  Add meaningful focused branch tests, complete scoped review, then repeat the
-  full preflight and release profile. Earlier functional regressions are resolved.
-  See `evidence/final-release/verify-release-5-result.md`.
-- Commit and push final evidence, confirm exact remote SHA and clean worktree.
-  No PR is authorized; PR-only CI remains an explicit verification limitation.
+The final full local release gate passes at code checkpoint
+`f98d3845375b8abba345320f4954842dee6f2ee0`: 5,391 tests pass, three are skipped,
+no unhandled error, and every coverage threshold passes. Coverage is 93.30%
+statements, 90.15% branches, 92.97% functions and 94.50% lines. The prior
+functional and branch-coverage gaps are closed. See
+`evidence/final-release/verify-release-6-result.md`; its captured aggregate does
+not identify the three skipped tests. Real SQL acceptance is recorded separately.
+
+There is no remaining implementation or local verification blocker. Required
+PR-only CI cannot run without an authorized pull request; no PR was created and
+no CI trigger was changed. The feature branch and final evidence are published,
+with the final remote SHA and clean status checked after the closure commit.
 
 No automatic discovery of interrupted Event publication, durable simple shared
 Inbox, exactly-once delivery, or ten-second delivery/takeover deadline is claimed.
+Known-ID repair may repeat a successful recipient after deduplication retention.
+Independent writes may leave a visible completed prefix. Bounded shutdown does
+not forcibly stop application code or SQL already executing. Idle-SQL observations
+are short measurements, not a production-capacity proof.
+
+The earlier rejected environment-log checkpoint was sanitized before successful
+publication. Its rejected local Git object may still retain the captured GitHub
+token; credential rotation remains recommended. The shared Git object store was
+not rewritten or garbage-collected. See the security/redaction records.

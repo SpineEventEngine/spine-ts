@@ -980,3 +980,12 @@ thresholds or exclusions changed. Final unused-version freshness and audit
 applicability are confirmed. Commit/push this reviewed correction and proceed
 with the existing explicit Luna/low mechanical function: all preflight gates,
 then one complete release profile. Projected coverage is not final acceptance.
+
+Final release verification passes all tests and coverage thresholds at f98d38453.
+The existing explicit Luna/low mechanical function retained its expected profile;
+runtime metadata is unavailable. All accepted findings and four canonical concern
+dispositions plus final security are resolved for the published candidate. The
+final closure diff changes only task/status/decision records and measured evidence;
+no source or public behavior changed. Deterministic format, whitespace, audience,
+relative-link and credential-pattern checks close this record-only update without
+reopening runtime reviews. PR-only CI remains disclosed; no PR is authorized.

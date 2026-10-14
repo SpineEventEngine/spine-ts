@@ -1,6 +1,6 @@
 # SQL delivery and subscription reliability
 
-Status: active. Risk: high (persistence, concurrency, delivery and subscription lifecycle, public contracts).
+Status: complete for the authorized implementation, local verification, review and feature-branch publication; ready for human review. PR-only CI awaits an authorized pull request. Risk: high (persistence, concurrency, delivery and subscription lifecycle, public contracts).
 Baseline: freshly fetched official origin/master, 658da1cdddcb8fd40f9205b1c200abc3a58dd62e.
 Branch: sql-delivery-subscription-reliability.
 Worktree: /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts.
@@ -47,3 +47,25 @@ Session catalog inspected. Read using-git-worktrees, test-driven-development, ve
 - Implementation: existing implementer role; gpt-6-sol, medium, explicit dispatch; initial scope STS-02 diagnostics and safe public errors with regression tests, then subsequent bounded slices in same context.
 
 - Mechanical setup/scanning function: orchestrator-dispatched default agent, gpt-6-luna, medium, explicit dispatch. Dedicated database provisioning, existing test inventory and evidence only; no runtime edits.
+
+## Final acceptance
+
+The full release gate passes at code checkpoint
+`f98d3845375b8abba345320f4954842dee6f2ee0`: 321 files and 5,391 tests pass,
+one file and three tests are skipped, and no unhandled error is reported.
+Coverage passes all thresholds: 93.30% statements, 90.15% branches, 92.97%
+functions and 94.50% lines. The final test-only correction adds 53 covered
+branches without changing production code, thresholds or exclusions.
+
+All accepted specialist and final security findings are resolved for the
+published candidate. Real SQL/process/transport and example evidence remains
+applicable; final runtime provenance is recorded. All task application and SQL
+resources were cleaned up. Snapshot.23 remains unused across all 19 published
+packages; all 31 workspace manifests use it, and clean audits match the lock.
+See [acceptance](ACCEPTANCE.md), [verification limits](ACCEPTANCE_GAPS.md) and
+[final release result](evidence/final-release/verify-release-6-result.md).
+
+The official feature branch is published; the orchestrator checks the final
+record-only endpoint against the remote after its push. No pull request or
+merge is authorized. PR-based CI remains a disclosed external verification
+step. No legacy compatibility or application data migration was introduced.

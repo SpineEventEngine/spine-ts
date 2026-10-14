@@ -1,6 +1,6 @@
 # Spine TS Project Completion Plan
 
-## Active SQL Delivery And Subscription Task
+## Completed SQL Delivery And Subscription Task
 
 The author has authorized [SQL delivery and subscription reliability](tasks/sql-delivery-reliability/TASK.md)
 on `sql-delivery-subscription-reliability` from freshly fetched official master
@@ -9,8 +9,12 @@ and DEL-01–05, including independent SQL operations, direct cleanup, concurren
 Command reliability, saved-Event repair, subscription lifecycle, recovery timers
 and accurate multiprocess examples. D-0129 records the human direction that
 supersedes historical cross-record transaction and rollback cleanup guarantees.
-Implementation, live verification and review remain in progress. No PR is
-authorized. Earlier completion records below describe their historical tasks.
+Implementation, real SQL/process/transport verification, examples and all accepted
+reviews are complete. The full local release gate at `f98d38453` passes 5,391
+tests with three skipped, no unhandled error, and all coverage thresholds
+(branches 90.15%). The official feature branch is published with snapshot.23.
+No PR is authorized; PR-only CI remains pending that human action. Earlier
+completion records below describe their historical tasks.
 
 ## Current Repository Workflow
 

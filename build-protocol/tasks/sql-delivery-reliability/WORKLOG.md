@@ -1267,3 +1267,24 @@ and scoped reliability review are clean; production and coverage configuration
 are unchanged. Projected branch coverage is 90.16% with the previous denominator,
 subject to the full release gate. Snapshot.23 is still unused for all 19
 published packages and official tags; current lock hash matches clean audits.
+
+Final local release acceptance: verify:release exits 0 at f98d3845375b8abba345320f4954842dee6f2ee0.
+321 files/5,391 tests pass; one file/three tests skip; no unhandled error.
+Coverage: statements 93.30%, branches 90.15%, functions 92.97%, lines 94.50%.
+All 17 fresh preflight checks pass. Runtime source and lock provenance are
+unchanged from the prior full functional pass; 53 additional tested branches
+close the coverage gap. Existing explicit Luna/low mechanical profile matches;
+no runtime metadata is exposed. The test processes exited normally.
+
+Task, acceptance, gap, decision and project completion records now reflect the
+complete authorized work. Final edits only record verified outcomes and limits;
+run record-format/diff/audience/link checks before committing and pushing them.
+No PR, merge, master write, or unrelated resource cleanup was performed.
+The final remote endpoint and clean worktree are checked after publication,
+without another self-referential record-only commit. PR-based CI remains pending.
+
+Final record checks pass: repository format, diff whitespace, documentation
+audience, and release readiness (97 imports, 55 assets, 475 relative links).
+The measured full release result remains unchanged. Skip identities are not
+emitted by its captured aggregate; plausible source guards are not promoted
+to established attribution. Final artifact credential-pattern scan is clean.
