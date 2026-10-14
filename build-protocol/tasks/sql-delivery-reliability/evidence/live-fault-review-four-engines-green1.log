@@ -1,0 +1,44 @@
+PROVIDER postgres16 postgres
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  01:26:44
+   Duration  1.99s (transform 774ms, setup 0ms, import 1.02s, tests 851ms, environment 0ms)
+
+EXIT postgres16 0
+PROVIDER postgres18 postgres
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  01:26:46
+   Duration  2.18s (transform 836ms, setup 0ms, import 1.08s, tests 989ms, environment 0ms)
+
+EXIT postgres18 0
+PROVIDER mysql84 mysql
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  01:26:49
+   Duration  1.43s (transform 535ms, setup 0ms, import 753ms, tests 563ms, environment 0ms)
+
+EXIT mysql84 0
+PROVIDER mariadb114 mariadb
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  01:26:51
+   Duration  1.63s (transform 657ms, setup 0ms, import 875ms, tests 652ms, environment 0ms)
+
+EXIT mariadb114 0

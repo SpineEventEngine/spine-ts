@@ -1,0 +1,22 @@
+PROVIDER mysql84 mysql
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  01:21:12
+   Duration  1.43s (transform 508ms, setup 0ms, import 716ms, tests 607ms, environment 0ms)
+
+EXIT mysql84 0
+PROVIDER mariadb114 mariadb
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  01:21:14
+   Duration  1.18s (transform 481ms, setup 0ms, import 681ms, tests 397ms, environment 0ms)
+
+EXIT mariadb114 0

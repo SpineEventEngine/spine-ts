@@ -29,6 +29,8 @@ const expectedInfrastructureFiles = [
   "packages/storage-postgres/test/postgresql-integration.test.ts",
   "packages/storage-mysql/test/mysql-integration.test.ts",
   "packages/server/test/delivery/inbox-provider-cleanup.test.ts",
+  "packages/server/test/delivery/inbox-provider-faults.integration.test.ts",
+  "packages/server-blackbox-tests/test/project-process-matrix.integration.test.ts",
 ];
 
 describe("stable CI test inventory", () => {
@@ -66,6 +68,7 @@ describe("stable CI test inventory", () => {
       /^node scripts\/mysql\.mjs && SPINE_TS_INBOX_PROVIDER=mysql pnpm /u,
     );
     expect(mysql.scripts["test:mysql"]).toContain("inbox-provider-cleanup.test.ts");
+    expect(mysql.scripts["test:mysql"]).toContain("inbox-provider-faults.integration.test.ts");
 
     const postgres = JSON.parse(readFileSync(join(root, "packages/storage-postgres/package.json")));
     expect(postgres.scripts["test:postgresql"]).toMatch(
@@ -73,6 +76,9 @@ describe("stable CI test inventory", () => {
     );
     expect(postgres.scripts["test:postgresql"]).toContain("vitest.infrastructure.config.ts");
     expect(postgres.scripts["test:postgresql"]).toContain("postgresql-integration.test.ts");
+    expect(postgres.scripts["test:postgresql"]).toContain(
+      "inbox-provider-faults.integration.test.ts",
+    );
     expect(postgres.scripts["test:postgresql:16"]).toMatch(
       /^SPINE_TS_POSTGRESQL_EXPECTED_MAJOR=16 pnpm test:postgresql$/u,
     );

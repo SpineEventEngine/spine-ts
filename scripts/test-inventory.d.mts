@@ -18,6 +18,9 @@
 export declare const infrastructureTestFiles: readonly [
   "packages/storage-datastore/test/datastore-cloud.test.ts",
   "packages/storage-datastore/test/datastore-emulator.test.ts",
+  "packages/storage-postgres/test/postgresql-integration.test.ts",
   "packages/storage-mysql/test/mysql-integration.test.ts",
   "packages/server/test/delivery/inbox-provider-cleanup.test.ts",
+  "packages/server/test/delivery/inbox-provider-faults.integration.test.ts",
+  "packages/server-blackbox-tests/test/project-process-matrix.integration.test.ts",
 ];

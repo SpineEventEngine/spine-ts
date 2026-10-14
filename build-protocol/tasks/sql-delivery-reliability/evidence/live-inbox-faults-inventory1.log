@@ -1,0 +1,39 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ scripts/stable-ci-suite.test.mjs (4 tests | 1 failed) 232ms
+     × keeps the exact external-provider files outside the ordinary Vitest suite 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  scripts/stable-ci-suite.test.mjs > stable CI test inventory > keeps the exact external-provider files outside the ordinary Vitest suite
+AssertionError: expected [ …(7) ] to deeply equal [ …(5) ]
+
+- Expected
++ Received
+
+@@ -2,6 +2,8 @@
+    "packages/storage-datastore/test/datastore-cloud.test.ts",
+    "packages/storage-datastore/test/datastore-emulator.test.ts",
+    "packages/storage-postgres/test/postgresql-integration.test.ts",
+    "packages/storage-mysql/test/mysql-integration.test.ts",
+    "packages/server/test/delivery/inbox-provider-cleanup.test.ts",
++   "packages/server/test/delivery/inbox-provider-faults.integration.test.ts",
++   "packages/server-blackbox-tests/test/project-process-matrix.integration.test.ts",
+  ]
+
+ ❯ scripts/stable-ci-suite.test.mjs:36:37
+     34| describe("stable CI test inventory", () => {
+     35|   it("keeps the exact external-provider files outside the ordinary Vit…
+     36|     expect(infrastructureTestFiles).toEqual(expectedInfrastructureFile…
+       |                                     ^
+     37|     expect(new Set(infrastructureTestFiles).size).toBe(infrastructureT…
+     38|     for (const file of infrastructureTestFiles) {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 passed (4)
+   Start at  01:22:00
+   Duration  436ms (transform 22ms, setup 0ms, import 98ms, tests 232ms, environment 0ms)

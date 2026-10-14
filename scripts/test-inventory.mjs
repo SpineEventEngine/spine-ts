@@ -24,5 +24,6 @@ export const infrastructureTestFiles = Object.freeze([
   "packages/storage-postgres/test/postgresql-integration.test.ts",
   "packages/storage-mysql/test/mysql-integration.test.ts",
   "packages/server/test/delivery/inbox-provider-cleanup.test.ts",
+  "packages/server/test/delivery/inbox-provider-faults.integration.test.ts",
   "packages/server-blackbox-tests/test/project-process-matrix.integration.test.ts",
 ]);

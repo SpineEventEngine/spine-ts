@@ -486,3 +486,36 @@ Next: reserve compiled output, repeat PG16 eight-process shared 80/burst16 with
 graceful worker restart and exact ID/handler audit; on success launch fresh full
 80-case baseline then five historical-labelled workloads. Stop on first failure
 and retain final correlated Inbox/worker evidence.
+
+Checkpoint 13b6aa722 committed and pushed immediately to official origin feature
+branch. No PR or master mutation. Evidence caches were excluded from staging;
+completed log trailing whitespace normalized before staged diff check passed.
+
+Mechanical workload verification resumes in existing orchestrator-dispatched
+function /root/mechanical_matrix, original explicit gpt-6-luna / low retained.
+First scope: stopped PG16 eight-process shared Delivery 80/burst16 plus graceful
+worker recreation, exact persisted audit and verified cleanup. Use only built
+worktree packages and task DB services. No implementation or generation, no
+blind retry on failure. Compiled output is reserved until the function reports
+completion; source-only independent test work may continue. Expected profile
+fields were explicit in original dispatch; runtime metadata unavailable.
+
+Selected instrumented repeat passed tests 3/3 and persisted-artifact audit: run
+2196e9767ae04e208867ca95be3b2591, log and audit prefix
+retry-postgres16-p8-shared-80-16-20261014T002225Z. This proves the new repeat succeeds;
+it does not establish the causal link between old partial projections and the
+separately reproduced paging defect. Same explicit Luna/low mechanical function
+authorized to continue fresh full80 baseline, fail-fast, then all five historical
+labels with exact per-run artifact audits. Dist reservation stays active; no builds
+or code/runtime patches during runs. Historical control16 means32 total/burst16.
+
+While process verification and bounded test corrections run, reuse mechanical
+read-only fixture analysis context with explicit original gpt-6-luna / low to map
+exact process-crash and saved-Event repair control seams in the current compiled
+Project fixture. This is test analysis, not a new role or architecture pass.
+Scope excludes repeated general fault inventory: identify concrete new test-only
+files/actions, gates and supported API calls needed for deterministic worker death,
+commit-before-ack and Delivery-server volatile Inbox loss, original saved Event
+known-ID repair after app OS restart, including SQL row selectors and typed IDs.
+No source edits, tests, builds, processes or database calls. Runtime metadata
+unavailable; original explicit profile retained.

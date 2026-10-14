@@ -346,3 +346,46 @@ entries remain uncommitted while acceptance expands; they are not part of this
 checkpoint. The failed process workload must still be repeated, then the full
 baseline and historical labels; no causal attribution from the separate paging
 reproduction alone.
+
+## Live SQL Delivery fault acceptance review
+
+Frozen six-case/provider test-only slice uses real SQL Inbox/registry and public
+DeliveryBuilder behavior. PG16/18 and MySQL/Maria each6/6; deterministic inventory
+4/4, typecheck/ESLint/format/diff pass. Existing reliability and style reviewers
+are dispatched with their original explicit gpt-6-sol / medium profiles. Read-only
+concerns: meaningful failed/pending vs successful/ack distinctions, exact counts,
+real trigger/cause boundaries and cleanup; fixtures/type semantics, maintainability
+and opt-in inventory conventions. Runtime metadata unavailable. No builds/database
+work while matrix reserves output/services.
+
+Public API review N/A: no production or exported contract change; tests exercise
+existing ports and provider opt-in scripts. Documentation reviewer N/A: no user
+claims changed; implementation ledger explicitly limits this to one OS process,
+controlled deadlock-class errors and no crash/admission proof. Parent checks those
+limits against evidence. Security remains final-release gate. Collect both relevant
+concerns before one accepted correction batch.
+
+Live-fault review wave complete. Two accepted P2 corrections, one shared by both
+reviewers: monitor callback assertions must become observations asserted outside
+Delivery's exception containment; fixture cleanup must attempt each independent
+factory/SQL/database/admin cleanup even when an earlier close fails, then report
+failures. FailedReception exposes no phase field; the rejected redispatch action
+is the supported acknowledgement-path proof once asserted outside the callback.
+The existing Sol/medium implementer receives one batch, source-only until current
+matrix reservation permits verification. Style/reliability profiles accepted with
+original explicit fields and unavailable runtime metadata.
+
+Live fault correction freeze: controlled cleanup RED then GREEN, all four providers
+7/7 in live-fault-review-four-engines-green1.log. Typecheck/ESLint/format/diff final
+logs clean. Same reliability reviewer targeted again under existing explicit
+Sol/medium profile to inspect both resolved findings only. Parent deterministic
+style check confirms callback only captures code/repeat outcome; all cause/message/
+length assertions now execute after run outside containment. Style issue resolved
+without reopening the full lane. No production code changed.
+
+Targeted live-fault reliability re-review is clean: callback facts are asserted
+after run; resource release attempts factory close, SQL end, exact UUID DROP and
+admin end independently and reports all failures. New regression injects both
+early failures and proves DROP. All4 providers7/7 and static checks pass. Original
+explicit Sol/medium review profile accepted; no reviewer runs. Test-only slice
+converged and ready for its separate commit/push.

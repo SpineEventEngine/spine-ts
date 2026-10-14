@@ -1,0 +1,25 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/server/test/delivery/inbox-provider-faults.integration.test.ts (7 tests | 1 failed | 6 skipped) 3ms
+     × attempts exact database removal after both factory and SQL connection close fail 2ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/test/delivery/inbox-provider-faults.integration.test.ts > live SQL Inbox delivery faults > attempts exact database removal after both factory and SQL connection close fail
+ReferenceError: releaseSqlResources is not defined
+ ❯ packages/server/test/delivery/inbox-provider-faults.integration.test.ts:59:22
+     57|     const connectionFailure = new Error("connection close failed");
+     58|     const database = `sqlrel_delivery_${"a".repeat(32)}`;
+     59|     const failures = await releaseSqlResources({
+       |                      ^
+     60|       factory: {
+     61|         close: () => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 skipped (7)
+   Start at  01:26:18
+   Duration  836ms (transform 518ms, setup 0ms, import 728ms, tests 3ms, environment 0ms)
