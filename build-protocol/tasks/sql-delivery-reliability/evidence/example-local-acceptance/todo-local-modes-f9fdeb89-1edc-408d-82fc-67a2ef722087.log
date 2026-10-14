@@ -1,0 +1,6 @@
+memory: endpoint=http://127.0.0.1:50240 database=none exit=0
+memory smoke stdout: to-do smoke ok: smoke-83ccef7a-38db-44ff-b397-4cbef7397727 (Smoke task)
+mysql: endpoint=http://127.0.0.1:50245 database=todo_example_53430fac2fc143d6b13cedda21cdadf8 exit=0
+mysql smoke stdout: to-do smoke ok: smoke-4e18b14a-7272-4c1f-baf9-5cb898dbe1a8 (Smoke task)
+postgresql: endpoint=http://127.0.0.1:50251 database=todo_example_853dc127903c48f88308ab3bd8713fb9 exit=0
+postgresql smoke stdout: to-do smoke ok: smoke-b8b0e8bb-f0b5-4e14-9bfa-54a9e689605c (Smoke task)

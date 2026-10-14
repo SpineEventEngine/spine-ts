@@ -611,3 +611,77 @@ subscription consumers against the new activation acknowledgement and enumerate
 only concrete affected example call sites. This is read-only triage, not a second
 implementation stream. Record findings in the example evidence directory; no
 builds or tests by this scanner. Runtime profile introspection is unavailable.
+
+Orders/Projects triage is accepted as read-only evidence under the original
+explicit Luna/low profile. Orders' failure is confirmed by its detailed log;
+Projects has the same source assumption, but its log does not expose per-user
+exceptions. Zero summary counters count completed workflows and must not be
+interpreted as independently failed Command acknowledgements or queries. Both
+existing topology tests accept any first stream item, including the readiness
+acknowledgement, without proving a domain update. Corrections are queued for the
+single implementer after the current slice.
+
+Next independent mechanical analysis uses the same explicit Luna/low function:
+resolve exact reusable public construction and existing SQL tracing seams for
+live recovery-clock acceptance. RECOVERY_CONFIGURATION already captures the
+behavior and JVM comparison; do not repeat it or make a design decision. Produce
+only a bounded fixture recipe for no-override/override missed notifications,
+late writes around release, idle SQL at two/eight processes, and the separate
+stale-session/server timeout observations. No tests, builds, service actions or
+source changes. Runtime metadata is unavailable.
+
+Independent local example execution completed under the original explicit
+Luna/low profile. Todo memory, PostgreSQL 16.15 and MySQL 8.4.10 each acknowledged
+one CreateTask and returned its state through a query; servers closed and unique
+SQL databases were dropped. The initial PostgreSQL helper URL-selection error is
+preserved separately; corrected helper checks pass syntax, formatting and ESLint.
+Orders and Projects each report ten failed workflows. Orders' detailed exceptions
+occur after acknowledgement/query visibility, at subscription correlation;
+Projects' summary alone cannot establish its actual submitted Command count.
+The existing implementer has the source-backed correction batch queued.
+
+Crash evidence remains provisional until the focused review and final matrix.
+The strengthened PostgreSQL partial-publication run
+3488d943822048d4a7acb507979647f4 proves a delivered Planning recipient and saved
+Planning state before crash, three rejected Staffing inserts, a completed
+original Command, and all five states after known-ID repair by fresh processes.
+Exactly one entry per handler and unchanged original Event bytes were observed.
+Earlier runs that lacked completed-prefix or final-projection proof remain
+narrower evidence, not acceptance for the strengthened case.
+
+The diagnostic evidence checkpoint 07c25baf4 was committed and immediately pushed
+to the official feature branch. No pull request was created.
+
+The completed mechanical execution function (original explicit gpt-6-luna / low)
+is next assigned a bounded live saved-Event API boundary probe. Reuse the existing
+external-event-repair evidence style and current built public APIs, with fresh
+SQL namespaces on all four dedicated servers. Check known missing IDs, tenant
+isolation, already-aborted cancellation and cancellation between requested IDs;
+retain exact saved Event bytes and explicit outcomes. This does not replace the
+OS-process restart or recipient Inbox deduplication acceptance. Scripts/results
+only under task evidence, no production/test-suite edits or runtime transforms.
+No build reservation is requested; record actual loaded module hashes and report
+if the implementer changes affected runtime behavior. Runtime metadata unavailable.
+
+Acknowledgement-crash diagnosis found a test false negative, not a runtime defect:
+the recovered DELIVERED row could expire and be deleted before polling observed
+it. Repository retention is 30 seconds; acquisition/recovery timers are separate.
+Corrected PostgreSQL run e8bc0b550b43484fa89d0da1e3327004 records exact pending row
+after every old worker is dead, then a committed AFTER UPDATE audit row for the
+fresh-process acknowledgement. Planning entered twice across the crash gap
+(one successful pre-crash invocation and one fresh-process replay); Create entered
+once and original Event bytes remained unchanged. This at-least-once crash
+behavior is distinct from same-run acknowledgement retries that do not redispatch.
+No production correction was needed for this diagnosed test failure.
+
+The strengthened volatile-Delivery loss run 66fb20c866124ed78274f63f693ca1ed
+observes all five seed states, two received OK Command acknowledgements, exact
+pending second Command and actual handler entry, then kills Delivery and apps.
+After fresh processes and 12 seconds, seed SQL state and Event bytes persist;
+the pending Command and all its effects are absent. This is an explicit
+non-durability result, not successful recovery of the lost Command.
+
+Recovery-clock fixture analysis completed under the existing explicit Luna/low
+profile, with no execution. Its recipe identifies exact public port gates,
+separate component-level override coverage, and the UUID database mismatch in
+existing SQL tracing. No new public configuration contract is assumed.
