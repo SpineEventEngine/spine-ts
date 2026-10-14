@@ -367,7 +367,9 @@ it("does not return an in-flight history page after account sign-out", async () 
   const read = service.History({ id: draftId, category: "all", pageSize: 20 }, {
     browser,
   } as RequestContext);
-  await vi.waitFor(() => { expect(studio.history).toHaveBeenCalledOnce(); });
+  await vi.waitFor(() => {
+    expect(studio.history).toHaveBeenCalledOnce();
+  });
   pending.resolve({ items: [{ conversationRecord: { id: { value: "private" } } }] });
   await expect(read).rejects.toThrow("Activity could not be loaded");
 });
