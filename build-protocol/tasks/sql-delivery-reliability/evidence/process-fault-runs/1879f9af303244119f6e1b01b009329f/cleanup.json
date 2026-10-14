@@ -1,0 +1,16 @@
+{
+  "databaseDropped": true,
+  "exits": [
+    {
+      "pid": 24323,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 24324,
+      "code": 0,
+      "signal": null
+    }
+  ],
+  "errors": []
+}

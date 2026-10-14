@@ -1,0 +1,108 @@
+startedAt=2026-10-14T01:55:27.723Z
+command=pnpm --filter @spine-event-engine/server-blackbox-tests test:process-faults
+case={"provider":"postgres16","processes":8,"scenario":"after-save-before-ack","requireColdRepair":true,"requireKillObservation":true}
+stderr: $ pnpm exec vitest --root ../.. --config vitest.infrastructure.config.ts run packages/server-blackbox-tests/test/project-process-faults.integration.test.ts
+stdout:
+stdout:  RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+stdout:
+stdout:  ❯ packages/server-blackbox-tests/test/project-process-faults.integration.test.ts (2 tests | 1 failed) 52933ms
+stdout:    × selected OS-process fault preserves its measured persistence boundary 52371ms
+stderr:
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+stderr:  FAIL  packages/server-blackbox-tests/test/project-process-faults.integration.test.ts > selected OS-process fault preserves its measured persistence boundary
+stderr: Error: Fault driver 27792 exited 1/null; expired=false; cleanup={
+  "databaseDropped": true,
+  "exits": [
+    {
+      "pid": 28415,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 28416,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 28417,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 28418,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 28419,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 28420,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 28421,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 28422,
+      "code": 0,
+      "signal": null
+    }
+  ],
+  "errors": []
+}
+
+stdout:
+FAULT_RESOURCE {"runId":"771d4ad07f3e4ccf88ea115881485c3e","database":"sqlrel_fault_771d4ad07f3e4ccf88ea115881485c3e","evidencePath":"/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/process-fault-runs/771d4ad07f3e4ccf88ea115881485c3e"}
+
+stderr:
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Crash before acknowledgement may replay the handler once.
+
+3 !== 2
+
+    at afterSaveBeforeAck (file:///Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server-blackbox-tests/test-fixtures/project-process-faults.mjs:623:10)
+    at async file:///Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server-blackbox-tests/test-fixtures/project-process-faults.mjs:185:11 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 3,
+  expected: 2,
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v24.18.0
+
+stderr:  ❯ afterSaveBeforeAck packages/server-blackbox-tests/test-fixtures/project-process-faults.mjs:623:10
+stderr:  ❯ runIsolatedFaultDriver packages/server-blackbox-tests/test/project-process-faults.integration.test.ts:137:13
+stderr:     135|       await escalate().catch(() => undefined);
+    136|       const cleanup = await cleanupState(stdout);
+    137|       throw new Error(
+       |             ^
+    138|         `Fault driver ${String(pid)} exited ${String(exit?.code)}/${St…
+    139|           `expired=${String(deadline.expired)}; cleanup=${cleanup}\nst…
+stderr:  ❯ packages/server-blackbox-tests/test/project-process-faults.integration.test.ts:185:18
+
+stderr: ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+stdout:
+stdout:  Test Files  1 failed (1)
+stdout:       Tests  1 failed | 1 passed (2)
+stdout:    Start at  02:55:28
+stdout:    Duration  53.07s (transform 19ms, setup 0ms, import 24ms, tests 52.93s, environment 0ms)
+stdout:
+stdout: /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server-blackbox-tests:
+[ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL] @spine-event-engine/server-blackbox-tests@2.0.0-snapshot.22 test:process-faults: `pnpm exec vitest --root ../.. --config vitest.infrastructure.config.ts run packages/server-blackbox-tests/test/project-process-faults.integration.test.ts`
+Exit status 1
+endedAt=2026-10-14T01:56:21.638Z
+exit=1/null
+exitDetails={"code":1,"signal":null,"timedOut":false,"timeoutSignal":null,"escalated":false,"groupExists":false}
