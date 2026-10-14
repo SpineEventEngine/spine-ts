@@ -943,3 +943,40 @@ evidence is narrowed to logical delivery without child attribution. No runtime
 statement changed; all scoped concerns are converged. Proceed with fresh full
 preflight and release verification using the existing explicit Luna/low
 mechanical function. The complete task remains active until that gate passes.
+
+The next full release passes every executed test with no unhandled error but
+fails the 90% global branch threshold at 89.83%. Preserve all prior accepted
+reviews. The existing explicitly configured Sol/medium implementation function
+adds behavior-focused tests after Luna/low mechanically inventories missed
+branches in changed runtime files. Coverage thresholds, source inclusion and
+production semantics stay unchanged unless an actual defect is demonstrated.
+Review only substantively affected test reliability concerns after focused
+evidence and static convergence; do not reopen unaffected API/style/docs lanes.
+
+While coverage tests converge, reuse the existing explicit Luna/medium package
+verification function for a final read-only freshness check: snapshot.23 must
+still be unused across all published workspace packages and official tags;
+confirm the current lock hash still matches the clean audits. No version edits,
+installation or source writes are dispatched. Runtime introspection unavailable;
+the original explicit configured profile is retained.
+
+Coverage-only review plan: after focused/static convergence, reuse the existing
+performance/reliability reviewer with explicit Sol/medium for the test diff
+from eda2063b4. Check meaningful failure/cancellation assertions, domain-correct
+fixtures, deterministic cleanup and the differential coverage evidence. API
+and documentation concerns are N/A for this bounded correction: no public
+contract, declaration, runtime or user guidance changes. Style concerns receive
+the deterministic test/lint audit plus the focused review's assertion-quality
+check; no production structure or new runtime abstraction changed. Prior
+specialist/security dispositions remain applicable. Preserve the coverage
+threshold and source set. Current task records now accurately state that all
+functional tests pass and the global branch gate remains outstanding.
+
+The coverage-only reliability review is clean. The same existing reviewer
+retained explicit Sol/medium configuration; runtime metadata is unavailable.
+Five files pass 204 tests and static checks, with 53 exact newly covered branch
+keys versus the saved full release report. No production statements, coverage
+thresholds or exclusions changed. Final unused-version freshness and audit
+applicability are confirmed. Commit/push this reviewed correction and proceed
+with the existing explicit Luna/low mechanical function: all preflight gates,
+then one complete release profile. Projected coverage is not final acceptance.

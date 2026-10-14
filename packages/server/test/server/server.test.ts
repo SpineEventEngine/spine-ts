@@ -75,7 +75,7 @@ import {
 } from "../../src/browser/index.js";
 import { browserServerTestAccess as BrowserServer } from "../../src/browser/browser-server.js";
 import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
-import { runningServerAccess } from "../../src/server/server.js";
+import { runningServerAccess, serverBuilderAccess } from "../../src/server/server.js";
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
 import { attachDurableSubscriptionCleanup } from "../../src/browser/durable-subscription-bindings.js";
 import { EnvironmentTests } from "../../src/server/environment.js";
@@ -137,6 +137,15 @@ function openCombined(native: Server, options: BrowserServerOptions) {
 }
 
 describe("Server", () => {
+  it("recognizes only exact IPv4 and IPv6 loopback hosts for browser composition", () => {
+    for (const host of ["127.0.0.1", "127.12.34.255", "::1", "::ffff:127.0.0.1"]) {
+      expect(serverBuilderAccess.isLoopback(Server.atPort(0, { host }))).toBe(true);
+    }
+    for (const host of ["0.0.0.0", "192.168.1.1", "127.0.0.256", "127.0.0.1.example"]) {
+      expect(serverBuilderAccess.isLoopback(Server.atPort(0, { host }))).toBe(false);
+    }
+  });
+
   it("rejects a public native builder before it starts browser composition", async () => {
     const native = Server.atPort(0, { host: "0.0.0.0" });
 

@@ -1251,3 +1251,19 @@ this correction. Package importer audit is clean; no external resolutions
 changed. Task records and raw evidence are retained. Full preflight/release
 coverage remain due; no claim of final acceptance yet. New evidence credential
 pattern scan found no matching paths before publication.
+
+Release attempt five passes 320 files and 5,357 tests, with one file/three tests
+skipped and no unhandled error. Its exit is 1 because branch coverage is 89.83%
+(14,776/16,448), below 90%; statements 93.16%, functions 92.97%, lines 94.38%
+pass. This is not final acceptance. Mechanical changed-runtime coverage
+classification precedes targeted meaningful failure-path tests by the same
+explicit Sol/medium implementation context. No exclusions or threshold changes
+are authorized. Run required static/focused checks before any scoped review,
+then fresh complete preflight and the full gate after convergence.
+
+Coverage correction converged: five test files, 204 passing focused tests, 53
+new branch obligations measured against the full-run baseline. Static checks
+and scoped reliability review are clean; production and coverage configuration
+are unchanged. Projected branch coverage is 90.16% with the previous denominator,
+subject to the full release gate. Snapshot.23 is still unused for all 19
+published packages and official tags; current lock hash matches clean audits.

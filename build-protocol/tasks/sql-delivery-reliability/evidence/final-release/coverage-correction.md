@@ -1,0 +1,9 @@
+# Release branch-coverage correction
+
+The release5 verification completed all 5,357 executed tests but missed the 90% branch gate: 14,776/16,448 (89.83%). This is the RED baseline in `verify-release-5.log`. The correction changes tests only. The existing implementer profile was explicitly dispatched as `gpt-6-sol` with `medium` reasoning; this execution surface does not expose runtime model metadata for independent introspection.
+
+Focused behavior additions cover local Message Board port and UI-origin validation, cancellation of subscription activation with non-Error reasons, malformed remote delivery values and monotonic read deadlines, terminal stream cleanup failures, exact remote Inbox removal eligibility, loopback host admission, and bounded/continued ordering of diverse in-memory storage identities. The Inbox signal fixtures use generated Todo Command, Event, state, and identifier schemas for their respective roles; malformed wire tests intentionally supply invalid protocol values.
+
+Five focused files passed, 204/204 tests (`coverage-focused-tests.log`). Differential LCOV against the saved release5 baseline identifies **53 previously uncovered production branches** now exercised: local launcher 14, browser Client 9, delivery codec 15, remote Inbox adapter 2, server host check 1, and memory record ordering 12. `coverage-differential.json` lists the exact LCOV branch keys. At the unchanged release5 denominator, the projected result is 14,829/16,448 = **90.16%**. The selected-only coverage run (`coverage-selected.log`, exit 1 in `coverage-selected.exit`) is not the release gate: Vitest applies the workspace 90% thresholds to only these five test files. Full-suite coverage and any denominator changes remain for the orchestrator's release rerun.
+
+`pnpm typecheck:tooling`, focused ESLint, focused Prettier, and `git diff --check` passed; their outputs are saved beside this report. No production code, coverage threshold, or exclusion changed.

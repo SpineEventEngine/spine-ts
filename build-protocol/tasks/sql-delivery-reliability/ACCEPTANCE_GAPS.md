@@ -65,12 +65,12 @@ Version-only commit `7f66e7749` and separate workspace pins/lock commit
 `ec40b81e7` are pushed. All 31 workspace versions use snapshot.23; 55 workspace
 references are aligned. Both final dependency audits are clean.
 
-- Resolve the complete full-suite regression batch: 37 failed tests and one
-  unhandled error from release attempt four. The 5,320 passing tests do not
-  establish final acceptance. Confirm environmental reruns, repair stale
-  fixtures/inventories and any genuine behavior defects, then repeat preflight
-  and the full release profile. Global coverage is not yet available.
-  See `evidence/final-release/verify-release-4-result.md`.
+- Close the global branch coverage gap: release attempt five passes all 5,357
+  executed tests with three skipped and no unhandled error, but branch coverage
+  is 89.83% against the 90% requirement. The other three coverage thresholds pass.
+  Add meaningful focused branch tests, complete scoped review, then repeat the
+  full preflight and release profile. Earlier functional regressions are resolved.
+  See `evidence/final-release/verify-release-5-result.md`.
 - Commit and push final evidence, confirm exact remote SHA and clean worktree.
   No PR is authorized; PR-only CI remains an explicit verification limitation.
 

@@ -6030,7 +6030,7 @@ See [the Time task](planning/spine-time-task.md) and
 
 ## D-0129: Independent SQL Operations And Direct Delivery Cleanup
 
-Date: 2026-10-13. Status: accepted human direction; implementation in progress.
+Date: 2026-10-13. Status: accepted human direction; implemented; final release verification pending.
 
 The framework author supersedes the cross-record database transaction promises
 in D-0114, D-0123 and the historical atomic Entity-save briefs for this task.
@@ -6066,7 +6066,7 @@ Implementation and acceptance: [task ledger](tasks/sql-delivery-reliability/TASK
 
 ## D-0130: Bounded Context Shutdown Preserving Dispatch Order
 
-Date: 2026-10-13. Status: accepted architecture clarification; implementation in progress.
+Date: 2026-10-13. Status: accepted architecture clarification; implemented; final release verification pending.
 
 Known-ID Event repair exposed an unbounded context shutdown wait: a recipient
 that never settles remains in the EventBus and publisher drains. Returning early
@@ -6108,7 +6108,7 @@ scheduling contracts. The focused acceptance cases and profile evidence are in
 
 ## D-0131: Finite Managed Process Shutdown
 
-Date: 2026-10-14. Status: accepted targeted architecture clarification; implementation in progress.
+Date: 2026-10-14. Status: accepted targeted architecture clarification; implemented; final release verification pending.
 
 Managed shutdown must drain admitted Delivery and preserve final subscription
 updates, then cancel child subscriptions while their listeners remain reachable.
@@ -6179,7 +6179,7 @@ Detailed contract, JVM/provenance evidence and acceptance: [paging analysis](tas
 
 ## D-0133: Observable Backend Subscription Stream Failure
 
-Date: 2026-10-14. Status: accepted bounded lifecycle correction; implementation pending.
+Date: 2026-10-14. Status: accepted bounded lifecycle correction; implemented; final release verification pending.
 
 A ready logical subscription cannot remain silently open after a required backend child stream unexpectedly fails or ends. Fixed-backend gateways have no later discovery event that necessarily recreates that child. Propagate the first unexpected current-child rejection or EOF through the existing logical activation result, even after readiness has completed. Fence subsequent updates and starts for that activation and dispose its children through existing bounded cleanup. Intentional cancellation, member replacement/removal, and stale generations do not become terminal failures.
 

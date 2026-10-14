@@ -20,6 +20,7 @@ import {
   SubscriptionIdSchema,
   SubscriptionSchema,
   SubscriptionUpdateSchema,
+  type SubscriptionUpdate,
   TargetSchema,
   type Subscription,
   type Topic,
@@ -32,6 +33,9 @@ const connect = vi.hoisted(() => ({
   iterators: [] as AsyncIterator<unknown>[],
   cancel: vi.fn(() => Promise.resolve()),
   read: vi.fn(() => Promise.resolve({ response: { status: { status: { case: "ok" } } } })),
+  holdAck: false,
+  ackOverride: undefined as SubscriptionUpdate | undefined,
+  ackStarted: vi.fn(),
 }));
 
 vi.mock("@connectrpc/connect", () => ({
@@ -52,14 +56,20 @@ vi.mock("@connectrpc/connect", () => ({
           next: () => {
             if (!acknowledged) {
               acknowledged = true;
+              if (connect.holdAck) {
+                connect.ackStarted();
+                return new Promise<IteratorResult<unknown>>(() => undefined);
+              }
               return Promise.resolve({
                 done: false,
-                value: create(SubscriptionUpdateSchema, {
-                  subscription: wire as Subscription,
-                  response: create(ResponseSchema, {
-                    status: create(StatusSchema, { status: { case: "ok", value: {} } }),
+                value:
+                  connect.ackOverride ??
+                  create(SubscriptionUpdateSchema, {
+                    subscription: wire as Subscription,
+                    response: create(ResponseSchema, {
+                      status: create(StatusSchema, { status: { case: "ok", value: {} } }),
+                    }),
                   }),
-                }),
               });
             }
             return source.next();
@@ -73,7 +83,7 @@ vi.mock("@connectrpc/connect", () => ({
   }),
 }));
 
-import { Client } from "../src/index.js";
+import { Client, ClientProtocolError } from "../src/index.js";
 
 describe("Client iterator disposal", () => {
   beforeEach(() => {
@@ -82,6 +92,9 @@ describe("Client iterator disposal", () => {
     connect.cancel.mockClear();
     connect.read.mockReset();
     connect.read.mockResolvedValue({ response: { status: { status: { case: "ok" } } } });
+    connect.holdAck = false;
+    connect.ackOverride = undefined;
+    connect.ackStarted.mockClear();
   });
 
   it("settles cancellation when iterator return rejects after a non-cooperative next", async () => {
@@ -221,6 +234,131 @@ describe("Client iterator disposal", () => {
     await client.close();
     for (const iteratorReturn of returns) expect(iteratorReturn).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    { description: "string", reason: "caller stopped", message: "caller stopped" },
+    { description: "number", reason: 17, message: "17" },
+    { description: "boolean", reason: false, message: "false" },
+    { description: "bigint", reason: 19n, message: "19" },
+    { description: "object", reason: { stopped: true }, message: "operation aborted." },
+  ])("turns a $description activation abort into a terminal Error", async ({ reason, message }) => {
+    connect.iterator = {
+      next: () => new Promise<IteratorResult<unknown>>(() => undefined),
+      return: () => Promise.resolve({ done: true, value: undefined }),
+    };
+    connect.holdAck = true;
+    const caller = new AbortController();
+    const client = Client.usingTransport({ transport: {} as Transport });
+    const subscription = await client.asGuest().createSubscription(create(TopicSchema), {
+      kind: "event",
+    });
+    const activation = subscription.activate({ signal: caller.signal });
+    void activation.catch(() => undefined);
+    await vi.waitFor(() => {
+      expect(connect.ackStarted).toHaveBeenCalledTimes(1);
+    });
+    caller.abort(reason);
+    await expect(activation).rejects.toThrow(message);
+    await expect(client.close()).resolves.toBeUndefined();
+    expect(connect.cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("terminates a failed stream when a dynamic retry policy returns an invalid delay", async () => {
+    connect.iterator = {
+      next: () => Promise.reject(new Error("stream disconnected")),
+      return: () => Promise.resolve({ done: true, value: undefined }),
+    };
+    const delayMs = vi.fn().mockReturnValueOnce(1).mockReturnValue(0);
+    const client = Client.usingTransport(
+      { transport: {} as Transport },
+      {
+        subscriptions: {
+          retryPolicy: { maxAttempts: 1, maxElapsedMs: 1_000, delayMs },
+          scheduler: { now: () => 0, wait: () => Promise.resolve() },
+        },
+      },
+    );
+    const subscription = await client.asGuest().createSubscription(create(TopicSchema), {
+      kind: "event",
+    });
+    const updates = subscription.updates[Symbol.asyncIterator]();
+    await subscription.activate();
+
+    await expect(updates.next()).rejects.toThrow("retry delay must be a positive safe integer");
+    expect(connect.cancel).toHaveBeenCalledTimes(1);
+    await client.close();
+  });
+
+  it("preserves a stream failure when terminal remote cleanup also fails", async () => {
+    connect.iterator = {
+      next: () => Promise.reject(new ClientProtocolError("stream response invalid")),
+      return: () => Promise.resolve({ done: true, value: undefined }),
+    };
+    connect.cancel.mockRejectedValueOnce(new Error("remote cleanup failed"));
+    const client = Client.usingTransport(
+      { transport: {} as Transport },
+      {
+        subscriptions: {
+          retryPolicy: { maxAttempts: 1, maxElapsedMs: 1_000, delayMs: () => 1 },
+          scheduler: { now: () => 0, wait: () => Promise.resolve() },
+        },
+      },
+    );
+    const subscription = await client.asGuest().createSubscription(create(TopicSchema), {
+      kind: "event",
+    });
+    const updates = subscription.updates[Symbol.asyncIterator]();
+    await subscription.activate();
+
+    await expect(updates.next()).rejects.toThrow("stream response invalid");
+    expect(connect.cancel).toHaveBeenCalledTimes(1);
+    await client.close();
+  });
+
+  it.each([
+    {
+      description: "mismatched subscription ID",
+      response: create(SubscriptionUpdateSchema, {
+        subscription: create(SubscriptionSchema, {
+          id: create(SubscriptionIdSchema, { value: "different" }),
+          topic: create(TopicSchema),
+        }),
+        response: create(ResponseSchema, {
+          status: create(StatusSchema, { status: { case: "ok", value: {} } }),
+        }),
+      }),
+      message: "ACK ID does not match",
+    },
+    {
+      description: "non-OK response",
+      response: create(SubscriptionUpdateSchema, {
+        subscription: create(SubscriptionSchema, {
+          id: create(SubscriptionIdSchema, { value: "wire" }),
+          topic: create(TopicSchema),
+        }),
+        response: create(ResponseSchema, {
+          status: create(StatusSchema, { status: { case: "error", value: {} } }),
+        }),
+      }),
+      message: "activation ACK",
+    },
+  ])(
+    "rejects a $description before exposing subscription readiness",
+    async ({ response, message }) => {
+      connect.ackOverride = response;
+      connect.iterator = {
+        next: () => new Promise<IteratorResult<unknown>>(() => undefined),
+        return: () => Promise.resolve({ done: true, value: undefined }),
+      };
+      const client = Client.usingTransport({ transport: {} as Transport });
+      const subscription = await client.asGuest().createSubscription(create(TopicSchema), {
+        kind: "event",
+      });
+      await expect(subscription.activate()).rejects.toThrow(message);
+      expect(connect.cancel).toHaveBeenCalledTimes(1);
+      await client.close();
+    },
+  );
 });
 
 function requireReturn(
