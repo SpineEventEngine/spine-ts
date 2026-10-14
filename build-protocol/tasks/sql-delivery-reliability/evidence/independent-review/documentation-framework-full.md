@@ -14,24 +14,24 @@ No additional concrete contradiction was found in the remaining framework files 
 
 ## Per-file full-content coverage and disposition
 
-| Path | Complete ranges read | Disposition |
-| --- | --- | --- |
-| `AGENTS.md` | 1–173 | Repository instructions; no milestone behavior claim. |
-| `CONTRIBUTING.md` | 1–49 | Contribution/release workflow; no changed runtime claim. |
-| `README.md` | 1–165 | Current product overview and entry links; no changed-contract contradiction found. |
-| `REFERENCE.md` | 1–80 | Agent/repository guide; no changed-contract contradiction found. |
-| `build-protocol/BUILD_PROTOCOL.md` | 1–801 | Development procedure; retained task-history/procedure text classified as such, not product behavior. |
-| `build-protocol/CODE_QUALITY.md` | 1–246 | Standards and documentation rules; no milestone runtime claim. |
-| `build-protocol/PROJECT_COMPLETION_PLAN.md` | 1–1578 | Current completion/status sections and explicitly historical packets read; historical packet requirements were not treated as current runtime. No additional behavior finding. |
-| `build-protocol/TECHNICAL_SPEC.md` | 1–432 | Current reliability contract claims checked; no additional contradiction found. |
-| `docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md` | 1–475 | Full guide; readiness diagram finding above. Other subscription recovery, cancellation, and gateway limits were consistent with the reviewed references. |
-| `docs/T-0046-datastore-remediation-plan.md` | 1–138 | Explicitly historical/superseded; current Datastore mapping summary does not contradict the relevant bounded-query contract. Archived proposal text excluded from findings. |
-| `docs/USER_GUIDE.md` | 1–604 | Full end-user workflow read; no additional concrete contradiction found. Delivery and persistence limitations are stated, with detailed contracts linked. |
-| `docs/api/README.md` | 1–1178 | Full public API index read; direct `DeliverySupervisor.close()` contract omission above. Its paging, repair, timer, error-privacy, persistence, and managed/context shutdown claims were checked. |
-| `docs/architecture/README.md` | 1–844 | Full runtime/architecture notes read; current delivery, recovery, paging, persistence, and shutdown boundaries checked; no additional concrete contradiction found. |
-| `docs/firestore-storage-extension-analysis.md` | 1–169 | Explicitly historical/superseded proposal; current Datastore outcome summary classified as current and consistent with provider contract. Archived proposal text excluded. |
-| `docs/project-management-load-test-plan.md` | 1–65 | Task specification with “implementation not started” status; unrelated to this milestone's changed behavior. |
-| `docs/release-publishing.md` | 1–264 | Release procedure; no milestone runtime claim. |
-| `docs/spine-ts-extra-concepts-vs-core-jvm.md` | 1–14 | Comparative implementation boundary; no changed-contract contradiction found. |
+| Path                                           | Complete ranges read | Disposition                                                                                                                                                                                       |
+| ---------------------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AGENTS.md`                                    | 1–173                | Repository instructions; no milestone behavior claim.                                                                                                                                             |
+| `CONTRIBUTING.md`                              | 1–49                 | Contribution/release workflow; no changed runtime claim.                                                                                                                                          |
+| `README.md`                                    | 1–165                | Current product overview and entry links; no changed-contract contradiction found.                                                                                                                |
+| `REFERENCE.md`                                 | 1–80                 | Agent/repository guide; no changed-contract contradiction found.                                                                                                                                  |
+| `build-protocol/BUILD_PROTOCOL.md`             | 1–801                | Development procedure; retained task-history/procedure text classified as such, not product behavior.                                                                                             |
+| `build-protocol/CODE_QUALITY.md`               | 1–246                | Standards and documentation rules; no milestone runtime claim.                                                                                                                                    |
+| `build-protocol/PROJECT_COMPLETION_PLAN.md`    | 1–1578               | Current completion/status sections and explicitly historical packets read; historical packet requirements were not treated as current runtime. No additional behavior finding.                    |
+| `build-protocol/TECHNICAL_SPEC.md`             | 1–432                | Current reliability contract claims checked; no additional contradiction found.                                                                                                                   |
+| `docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md`  | 1–475                | Full guide; readiness diagram finding above. Other subscription recovery, cancellation, and gateway limits were consistent with the reviewed references.                                          |
+| `docs/T-0046-datastore-remediation-plan.md`    | 1–138                | Explicitly historical/superseded; current Datastore mapping summary does not contradict the relevant bounded-query contract. Archived proposal text excluded from findings.                       |
+| `docs/USER_GUIDE.md`                           | 1–604                | Full end-user workflow read; no additional concrete contradiction found. Delivery and persistence limitations are stated, with detailed contracts linked.                                         |
+| `docs/api/README.md`                           | 1–1178               | Full public API index read; direct `DeliverySupervisor.close()` contract omission above. Its paging, repair, timer, error-privacy, persistence, and managed/context shutdown claims were checked. |
+| `docs/architecture/README.md`                  | 1–844                | Full runtime/architecture notes read; current delivery, recovery, paging, persistence, and shutdown boundaries checked; no additional concrete contradiction found.                               |
+| `docs/firestore-storage-extension-analysis.md` | 1–169                | Explicitly historical/superseded proposal; current Datastore outcome summary classified as current and consistent with provider contract. Archived proposal text excluded.                        |
+| `docs/project-management-load-test-plan.md`    | 1–65                 | Task specification with “implementation not started” status; unrelated to this milestone's changed behavior.                                                                                      |
+| `docs/release-publishing.md`                   | 1–264                | Release procedure; no milestone runtime claim.                                                                                                                                                    |
+| `docs/spine-ts-extra-concepts-vs-core-jvm.md`  | 1–14                 | Comparative implementation boundary; no changed-contract contradiction found.                                                                                                                     |
 
 Focused source evidence included the actual browser activation contract in `packages/client-web/REFERENCE.md` and `docs/api/README.md`; `DeliverySupervisor.close()` and `DeliverySupervisorCloseOptions` in `packages/server/src/delivery/delivery-supervisor.ts`; paged delivery in `packages/server/src/delivery/delivery.ts`; and delivered-row cleanup in `packages/server/src/delivery/inbox-storage.ts`. The current package references and TSDoc were used to cross-check public behavior. No docs or source were edited by this review.

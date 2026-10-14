@@ -21,40 +21,40 @@ No other P1/P2 documentation contradictions or concrete omissions were confirmed
 
 All files below were read in full. “No finding” means no concrete current TypeScript documentation defect in the assigned remit was confirmed.
 
-| # | File | Status |
-|---:|---|---|
-| 1 | `compatibility-tests/jvm/README.md` | No finding |
-| 2 | `examples/distributed-message-board/README.md` | No finding |
-| 3 | `examples/distributed-message-board/REFERENCE.md` | No finding |
-| 4 | `examples/message-board/README.md` | No finding |
-| 5 | `examples/message-board/REFERENCE.md` | No finding |
-| 6 | `examples/message-board/app/README.md` | P2 finding above |
-| 7 | `examples/message-board/app/REFERENCE.md` | No finding |
-| 8 | `examples/message-board/deploy/README.md` | No finding |
-| 9 | `examples/message-board/deploy/REFERENCE.md` | No finding |
-| 10 | `examples/message-board/deploy/container/README.md` | No finding |
-| 11 | `examples/message-board/deploy/container/readme.test.mjs` | No finding |
-| 12 | `examples/message-board/model/README.md` | No finding |
-| 13 | `examples/message-board/model/REFERENCE.md` | No finding |
-| 14 | `examples/message-board/web/README.md` | No finding |
-| 15 | `examples/message-board/web/REFERENCE.md` | No finding |
-| 16 | `examples/orders/README.md` | No finding |
-| 17 | `examples/orders/REFERENCE.md` | No finding |
-| 18 | `examples/projects/README.md` | No finding |
-| 19 | `examples/projects/REFERENCE.md` | No finding |
-| 20 | `examples/todo/README.md` | No finding |
-| 21 | `examples/todo/REFERENCE.md` | No finding |
-| 22 | `examples/todo/USER_GUIDE.md` | No finding |
-| 23 | `interop/envoy/README.md` | No finding |
-| 24 | `scripts/fixtures/hidden-snippet-context.md` | No finding |
-| 25 | `scripts/fixtures/invalid-built-declaration-snippet.md` | No finding |
-| 26 | `scripts/fixtures/missing-snippet-context.md` | Intentional missing-context fixture; no finding |
-| 27 | `scripts/fixtures/valid-built-declaration-snippet.md` | No finding |
-| 28 | `scripts/fixtures/visible-snippet-context.md` | No finding |
-| 29 | `spine-jvm-docs/README.md` | No finding |
-| 30 | `spine-jvm-docs/spine-client-api-queries-subscriptions-and-tests.md` | No finding |
-| 31 | `spine-jvm-docs/spine-domain-model-and-signals.md` | No finding |
-| 32 | `spine-jvm-docs/spine-entities-repositories-and-state.md` | Historical research; no current TS claim finding |
-| 33 | `spine-jvm-docs/spine-routing-dispatch-and-delivery.md` | Historical research; no current TS claim finding |
-| 34 | `spine-jvm-docs/spine-server-runtime-and-bounded-context.md` | No finding |
-| 35 | `spine-jvm-docs/spine-validation-storage-observability-and-support.md` | No finding |
+|   # | File                                                                   | Status                                           |
+| --: | ---------------------------------------------------------------------- | ------------------------------------------------ |
+|   1 | `compatibility-tests/jvm/README.md`                                    | No finding                                       |
+|   2 | `examples/distributed-message-board/README.md`                         | No finding                                       |
+|   3 | `examples/distributed-message-board/REFERENCE.md`                      | No finding                                       |
+|   4 | `examples/message-board/README.md`                                     | No finding                                       |
+|   5 | `examples/message-board/REFERENCE.md`                                  | No finding                                       |
+|   6 | `examples/message-board/app/README.md`                                 | P2 finding above                                 |
+|   7 | `examples/message-board/app/REFERENCE.md`                              | No finding                                       |
+|   8 | `examples/message-board/deploy/README.md`                              | No finding                                       |
+|   9 | `examples/message-board/deploy/REFERENCE.md`                           | No finding                                       |
+|  10 | `examples/message-board/deploy/container/README.md`                    | No finding                                       |
+|  11 | `examples/message-board/deploy/container/readme.test.mjs`              | No finding                                       |
+|  12 | `examples/message-board/model/README.md`                               | No finding                                       |
+|  13 | `examples/message-board/model/REFERENCE.md`                            | No finding                                       |
+|  14 | `examples/message-board/web/README.md`                                 | No finding                                       |
+|  15 | `examples/message-board/web/REFERENCE.md`                              | No finding                                       |
+|  16 | `examples/orders/README.md`                                            | No finding                                       |
+|  17 | `examples/orders/REFERENCE.md`                                         | No finding                                       |
+|  18 | `examples/projects/README.md`                                          | No finding                                       |
+|  19 | `examples/projects/REFERENCE.md`                                       | No finding                                       |
+|  20 | `examples/todo/README.md`                                              | No finding                                       |
+|  21 | `examples/todo/REFERENCE.md`                                           | No finding                                       |
+|  22 | `examples/todo/USER_GUIDE.md`                                          | No finding                                       |
+|  23 | `interop/envoy/README.md`                                              | No finding                                       |
+|  24 | `scripts/fixtures/hidden-snippet-context.md`                           | No finding                                       |
+|  25 | `scripts/fixtures/invalid-built-declaration-snippet.md`                | No finding                                       |
+|  26 | `scripts/fixtures/missing-snippet-context.md`                          | Intentional missing-context fixture; no finding  |
+|  27 | `scripts/fixtures/valid-built-declaration-snippet.md`                  | No finding                                       |
+|  28 | `scripts/fixtures/visible-snippet-context.md`                          | No finding                                       |
+|  29 | `spine-jvm-docs/README.md`                                             | No finding                                       |
+|  30 | `spine-jvm-docs/spine-client-api-queries-subscriptions-and-tests.md`   | No finding                                       |
+|  31 | `spine-jvm-docs/spine-domain-model-and-signals.md`                     | No finding                                       |
+|  32 | `spine-jvm-docs/spine-entities-repositories-and-state.md`              | Historical research; no current TS claim finding |
+|  33 | `spine-jvm-docs/spine-routing-dispatch-and-delivery.md`                | Historical research; no current TS claim finding |
+|  34 | `spine-jvm-docs/spine-server-runtime-and-bounded-context.md`           | No finding                                       |
+|  35 | `spine-jvm-docs/spine-validation-storage-observability-and-support.md` | No finding                                       |
