@@ -1,0 +1,51 @@
+{
+  "databaseDropped": true,
+  "workerExits": [
+    {
+      "pid": 75514,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 75515,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 75516,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 75517,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 75518,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 75519,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 75520,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 75521,
+      "code": 0,
+      "signal": null
+    }
+  ],
+  "deliveryExit": {
+    "pid": 75494,
+    "code": 0,
+    "signal": null
+  },
+  "errors": []
+}

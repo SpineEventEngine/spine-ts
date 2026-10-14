@@ -1,0 +1,193 @@
+{
+  "status": "PASS",
+  "runId": "d451e728dbab4fd6839eb123fee87266",
+  "provider": "mysql84",
+  "mode": "db-only",
+  "database": "sqlrel_matrix_d451e728dbab4fd6839eb123fee87266",
+  "processes": 8,
+  "configuredShards": 8,
+  "total": 32,
+  "burst": 32,
+  "restart": true,
+  "pids": [
+    80755,
+    80756,
+    80757,
+    80758,
+    80759,
+    80760,
+    80761,
+    80762
+  ],
+  "endpoints": [
+    "http://127.0.0.1:62411",
+    "http://127.0.0.1:62414",
+    "http://127.0.0.1:62410",
+    "http://127.0.0.1:62412",
+    "http://127.0.0.1:62415",
+    "http://127.0.0.1:62413",
+    "http://127.0.0.1:62409",
+    "http://127.0.0.1:62416"
+  ],
+  "artifacts": [
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server-blackbox-tests/dist/test-fixtures/project-workflow.js",
+      "sha256": "d0dcb0136f8a8db03a7939b639625020e812b2019194ec20f8ad785a92d2bd52"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server-blackbox-tests/dist/generated/spine/server/testing/project_workflow_pb.js",
+      "sha256": "b5e6d882578f431085d42b84e5fefb9d948880867e34c3c1b83c2b96d36c371b"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/dist/index.js",
+      "sha256": "6bf9c9a8c971afc87de534107af1a935953f89a0607193ed3576e2b3def1909e"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/proto/dist/src/index.js",
+      "sha256": "3b16144d721808f5ed8d458be542064c5323575247cf1b7e6d325b038adaeaa2"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/core/dist/index.js",
+      "sha256": "64a74877641ebde82dab6e2c69577ba9cf246009adfd76f74173502d0b03b916"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage/dist/index.js",
+      "sha256": "df614e0461342a5bc52377ed64200cdb3307f669b74cfd0340d587d17b2d55c7"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage-postgres/dist/index.js",
+      "sha256": "84a8658d25708fd1bf4d2b0fd7b1bd678966fd089b9b8e6908df1b1005ad3139"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage-mysql/dist/index.js",
+      "sha256": "1e344dd9d6163df30cabbcb6dec296cde324a3f74a9d185ea29c40a28862da74"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/delivery-client/dist/index.js",
+      "sha256": "1e69a8d6b4ad6584f804baf8746d9d937b0e173a589cb52fba98735aeac22140"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/delivery-server/dist/index.js",
+      "sha256": "b8b79d6f88a3f7f4dd0461062a09dc519e98c84387ae01360b4245acd23b5d08"
+    }
+  ],
+  "commandCount": 32,
+  "eventCount": 32,
+  "eventLedgerSha256": "8096c80ce311c5a703e0ec7e6bf53de1aeb30a3db23504ce1167ddbbc41b4fd5",
+  "entryCount": 160,
+  "entryMethods": [
+    "create",
+    "planning",
+    "staffing",
+    "portfolio",
+    "projection"
+  ],
+  "stateCopies": 8,
+  "restartResult": {
+    "priorExits": [
+      {
+        "pid": 80755,
+        "code": 0,
+        "signal": null
+      },
+      {
+        "pid": 80756,
+        "code": 0,
+        "signal": null
+      },
+      {
+        "pid": 80757,
+        "code": 0,
+        "signal": null
+      },
+      {
+        "pid": 80758,
+        "code": 0,
+        "signal": null
+      },
+      {
+        "pid": 80759,
+        "code": 0,
+        "signal": null
+      },
+      {
+        "pid": 80760,
+        "code": 0,
+        "signal": null
+      },
+      {
+        "pid": 80761,
+        "code": 0,
+        "signal": null
+      },
+      {
+        "pid": 80762,
+        "code": 0,
+        "signal": null
+      }
+    ],
+    "newPids": [
+      81358,
+      81359,
+      81360,
+      81361,
+      81362,
+      81363,
+      81364,
+      81365
+    ],
+    "newCommandId": "ecd53240-a807-49d6-899d-2a46a1912220",
+    "newEventId": "7c19e049-488f-447d-afe7-102f3b21bad3",
+    "newEventSha256": "4e43811bf010009f8a3bc8a21bd8f2d423486c44a1fd2c2a3ce253c104183800",
+    "newEventBinaryBase64": "CiYKJDdjMTllMDQ5LTQ4OGYtNDQ3ZC1hZmU3LTEwMmYzYjIxYmFkMxKnAQo9dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0Q3JlYXRlZBJmCikKJ21hdHJpeC1kNDUxZTcyOGRiYWI0ZmQ2ODM5ZWIxMjNmZWU4NzI2NhItCikKJ21hdHJpeC1kNDUxZTcyOGRiYWI0ZmQ2ODM5ZWIxMjNmZWU4NzI2NhAhGgpyb2FkbWFwLTMzGpwCCgkIvpq71gYQ6AcaaQo4dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0SWQSLQopCidtYXRyaXgtZDQ1MWU3MjhkYmFiNGZkNjgzOWViMTIzZmVlODcyNjYQISIAcqEBCowBCkwKInR5cGUuc3BpbmUuaW8vc3BpbmUuY29yZS5Db21tYW5kSWQSJgokZWNkNTMyNDAtYTgwNy00OWQ2LTg5OWQtMmE0NmExOTEyMjIwEjx0eXBlLnNwaW5lLnNlcnZlci50ZXN0aW5nL3NwaW5lLnNlcnZlci50ZXN0aW5nLkNyZWF0ZVByb2plY3QaEBIOCgxtYXRyaXgtYWN0b3I=",
+    "newRecipientEntries": [
+      {
+        "method": "create",
+        "receiver": "Project",
+        "correlation": "matrix-d451e728dbab4fd6839eb123fee87266:33",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+        "recipientIdBase64": "CikKJ21hdHJpeC1kNDUxZTcyOGRiYWI0ZmQ2ODM5ZWIxMjNmZWU4NzI2NhAh",
+        "pid": 81358,
+        "at": 1791937853991
+      },
+      {
+        "method": "portfolio",
+        "receiver": "Portfolio",
+        "correlation": "matrix-d451e728dbab4fd6839eb123fee87266:33",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+        "recipientIdBase64": "CikKJ21hdHJpeC1kNDUxZTcyOGRiYWI0ZmQ2ODM5ZWIxMjNmZWU4NzI2NhAh",
+        "pid": 81358,
+        "at": 1791937854045
+      },
+      {
+        "method": "projection",
+        "receiver": "ProjectProjection",
+        "correlation": "matrix-d451e728dbab4fd6839eb123fee87266:33",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+        "recipientIdBase64": "CikKJ21hdHJpeC1kNDUxZTcyOGRiYWI0ZmQ2ODM5ZWIxMjNmZWU4NzI2NhAh",
+        "pid": 81358,
+        "at": 1791937854080
+      },
+      {
+        "method": "planning",
+        "receiver": "ProjectPlanning",
+        "correlation": "matrix-d451e728dbab4fd6839eb123fee87266:33",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+        "recipientIdBase64": "CikKJ21hdHJpeC1kNDUxZTcyOGRiYWI0ZmQ2ODM5ZWIxMjNmZWU4NzI2NhAh",
+        "pid": 81358,
+        "at": 1791937854093
+      },
+      {
+        "method": "staffing",
+        "receiver": "ProjectStaffing",
+        "correlation": "matrix-d451e728dbab4fd6839eb123fee87266:33",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+        "recipientIdBase64": "CikKJ21hdHJpeC1kNDUxZTcyOGRiYWI0ZmQ2ODM5ZWIxMjNmZWU4NzI2NhAh",
+        "pid": 81358,
+        "at": 1791937854157
+      }
+    ],
+    "retainedEventCount": 32,
+    "entryCountAfterRestart": 165
+  }
+}

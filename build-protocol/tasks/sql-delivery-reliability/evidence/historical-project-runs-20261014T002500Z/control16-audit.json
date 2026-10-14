@@ -1,0 +1,90 @@
+{
+  "status": "PASS",
+  "mode": "audit-only",
+  "runId": "08fbb3f2e38c4fcea30e6bd2ddd20b6b",
+  "auditedAt": "2026-10-14T00:34:46.639Z",
+  "config": {
+    "provider": "mysql84",
+    "processes": 8,
+    "mode": "shared-memory",
+    "total": 32,
+    "burst": 16,
+    "restart": true
+  },
+  "checks": {
+    "commands": 33,
+    "admissions": 32,
+    "events": 32,
+    "entries": 165,
+    "originalEntries": 160,
+    "restartEntries": 5,
+    "entryLedgerSha256": "cce6e68bb0abee0d6a944fa504420ae3851a929d5a0b7eab3b29866ed1d1110b",
+    "commandLedgerSha256": "1811a4274433ea0e1e9a37506ee86baac5249fa0c56a154fc8344ff948913992",
+    "eventLedgerSha256": "981f1e57573d228bab68953595216c9f7e36c6f06e129bade091a574e599e948",
+    "uniquePids": [
+      96257,
+      96258,
+      96259,
+      96260,
+      96261,
+      96262,
+      96263,
+      96264
+    ],
+    "restartPids": [
+      96275,
+      96276,
+      96277,
+      96278,
+      96279,
+      96280,
+      96281,
+      96282
+    ],
+    "databaseDropped": true,
+    "cleanupErrors": [],
+    "artifactHashes": [
+      {
+        "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server-blackbox-tests/dist/test-fixtures/project-workflow.js",
+        "sha256": "d0dcb0136f8a8db03a7939b639625020e812b2019194ec20f8ad785a92d2bd52"
+      },
+      {
+        "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server-blackbox-tests/dist/generated/spine/server/testing/project_workflow_pb.js",
+        "sha256": "b5e6d882578f431085d42b84e5fefb9d948880867e34c3c1b83c2b96d36c371b"
+      },
+      {
+        "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/dist/index.js",
+        "sha256": "6bf9c9a8c971afc87de534107af1a935953f89a0607193ed3576e2b3def1909e"
+      },
+      {
+        "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/proto/dist/src/index.js",
+        "sha256": "3b16144d721808f5ed8d458be542064c5323575247cf1b7e6d325b038adaeaa2"
+      },
+      {
+        "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/core/dist/index.js",
+        "sha256": "64a74877641ebde82dab6e2c69577ba9cf246009adfd76f74173502d0b03b916"
+      },
+      {
+        "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage/dist/index.js",
+        "sha256": "df614e0461342a5bc52377ed64200cdb3307f669b74cfd0340d587d17b2d55c7"
+      },
+      {
+        "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage-postgres/dist/index.js",
+        "sha256": "84a8658d25708fd1bf4d2b0fd7b1bd678966fd089b9b8e6908df1b1005ad3139"
+      },
+      {
+        "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage-mysql/dist/index.js",
+        "sha256": "1e344dd9d6163df30cabbcb6dec296cde324a3f74a9d185ea29c40a28862da74"
+      },
+      {
+        "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/delivery-client/dist/index.js",
+        "sha256": "1e69a8d6b4ad6584f804baf8746d9d937b0e173a589cb52fba98735aeac22140"
+      },
+      {
+        "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/delivery-server/dist/index.js",
+        "sha256": "b8b79d6f88a3f7f4dd0461062a09dc519e98c84387ae01360b4245acd23b5d08"
+      }
+    ]
+  },
+  "note": "Validates persisted artifacts only; launches no test, app, Delivery, or database processes."
+}

@@ -1,0 +1,21 @@
+{
+  "databaseDropped": true,
+  "workerExits": [
+    {
+      "pid": 88150,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 88151,
+      "code": 0,
+      "signal": null
+    }
+  ],
+  "deliveryExit": {
+    "pid": 87892,
+    "code": 0,
+    "signal": null
+  },
+  "errors": []
+}

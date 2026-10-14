@@ -1,0 +1,46 @@
+{
+  "databaseDropped": true,
+  "workerExits": [
+    {
+      "pid": 61970,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 61971,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 61972,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 61973,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 61974,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 61975,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 61976,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 61977,
+      "code": 0,
+      "signal": null
+    }
+  ],
+  "errors": []
+}

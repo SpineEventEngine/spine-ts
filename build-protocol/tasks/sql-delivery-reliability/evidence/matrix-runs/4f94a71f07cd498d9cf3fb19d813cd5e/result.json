@@ -1,0 +1,145 @@
+{
+  "status": "PASS",
+  "runId": "4f94a71f07cd498d9cf3fb19d813cd5e",
+  "provider": "mysql84",
+  "mode": "db-only",
+  "database": "sqlrel_matrix_4f94a71f07cd498d9cf3fb19d813cd5e",
+  "processes": 2,
+  "configuredShards": 2,
+  "total": 80,
+  "burst": 16,
+  "restart": true,
+  "pids": [
+    75625,
+    75626
+  ],
+  "endpoints": [
+    "http://127.0.0.1:61385",
+    "http://127.0.0.1:61384"
+  ],
+  "artifacts": [
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server-blackbox-tests/dist/test-fixtures/project-workflow.js",
+      "sha256": "d0dcb0136f8a8db03a7939b639625020e812b2019194ec20f8ad785a92d2bd52"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server-blackbox-tests/dist/generated/spine/server/testing/project_workflow_pb.js",
+      "sha256": "b5e6d882578f431085d42b84e5fefb9d948880867e34c3c1b83c2b96d36c371b"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/dist/index.js",
+      "sha256": "6bf9c9a8c971afc87de534107af1a935953f89a0607193ed3576e2b3def1909e"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/proto/dist/src/index.js",
+      "sha256": "3b16144d721808f5ed8d458be542064c5323575247cf1b7e6d325b038adaeaa2"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/core/dist/index.js",
+      "sha256": "64a74877641ebde82dab6e2c69577ba9cf246009adfd76f74173502d0b03b916"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage/dist/index.js",
+      "sha256": "df614e0461342a5bc52377ed64200cdb3307f669b74cfd0340d587d17b2d55c7"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage-postgres/dist/index.js",
+      "sha256": "84a8658d25708fd1bf4d2b0fd7b1bd678966fd089b9b8e6908df1b1005ad3139"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage-mysql/dist/index.js",
+      "sha256": "1e344dd9d6163df30cabbcb6dec296cde324a3f74a9d185ea29c40a28862da74"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/delivery-client/dist/index.js",
+      "sha256": "1e69a8d6b4ad6584f804baf8746d9d937b0e173a589cb52fba98735aeac22140"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/delivery-server/dist/index.js",
+      "sha256": "b8b79d6f88a3f7f4dd0461062a09dc519e98c84387ae01360b4245acd23b5d08"
+    }
+  ],
+  "commandCount": 80,
+  "eventCount": 80,
+  "eventLedgerSha256": "bf3f9299be766f1ed0163242984c6a8e23bf39ae199b869026bcbe7aa768ec4f",
+  "entryCount": 400,
+  "entryMethods": [
+    "create",
+    "planning",
+    "staffing",
+    "portfolio",
+    "projection"
+  ],
+  "stateCopies": 2,
+  "restartResult": {
+    "priorExits": [
+      {
+        "pid": 75625,
+        "code": 0,
+        "signal": null
+      },
+      {
+        "pid": 75626,
+        "code": 0,
+        "signal": null
+      }
+    ],
+    "newPids": [
+      75963,
+      75964
+    ],
+    "newCommandId": "18ef0bec-3bad-4112-b238-5202cb84aea8",
+    "newEventId": "2fe88db3-bfa1-4f15-9cd6-61b6da829eaf",
+    "newEventSha256": "f94947eb1e5c459868765aee8a60d52c6cdb36f8282288475f69a515d6fd0092",
+    "newEventBinaryBase64": "CiYKJDJmZTg4ZGIzLWJmYTEtNGYxNS05Y2Q2LTYxYjZkYTgyOWVhZhKnAQo9dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0Q3JlYXRlZBJmCikKJ21hdHJpeC00Zjk0YTcxZjA3Y2Q0OThkOWNmM2ZiMTlkODEzY2Q1ZRItCikKJ21hdHJpeC00Zjk0YTcxZjA3Y2Q0OThkOWNmM2ZiMTlkODEzY2Q1ZRBRGgpyb2FkbWFwLTgxGp8CCgwI3Zm71gYQqKLp2wEaaQo4dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0SWQSLQopCidtYXRyaXgtNGY5NGE3MWYwN2NkNDk4ZDljZjNmYjE5ZDgxM2NkNWUQUSIAcqEBCowBCkwKInR5cGUuc3BpbmUuaW8vc3BpbmUuY29yZS5Db21tYW5kSWQSJgokMThlZjBiZWMtM2JhZC00MTEyLWIyMzgtNTIwMmNiODRhZWE4Ejx0eXBlLnNwaW5lLnNlcnZlci50ZXN0aW5nL3NwaW5lLnNlcnZlci50ZXN0aW5nLkNyZWF0ZVByb2plY3QaEBIOCgxtYXRyaXgtYWN0b3I=",
+    "newRecipientEntries": [
+      {
+        "method": "create",
+        "receiver": "Project",
+        "correlation": "matrix-4f94a71f07cd498d9cf3fb19d813cd5e:81",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+        "recipientIdBase64": "CikKJ21hdHJpeC00Zjk0YTcxZjA3Y2Q0OThkOWNmM2ZiMTlkODEzY2Q1ZRBR",
+        "pid": 75963,
+        "at": 1791937757451
+      },
+      {
+        "method": "portfolio",
+        "receiver": "Portfolio",
+        "correlation": "matrix-4f94a71f07cd498d9cf3fb19d813cd5e:81",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+        "recipientIdBase64": "CikKJ21hdHJpeC00Zjk0YTcxZjA3Y2Q0OThkOWNmM2ZiMTlkODEzY2Q1ZRBR",
+        "pid": 75963,
+        "at": 1791937757521
+      },
+      {
+        "method": "planning",
+        "receiver": "ProjectPlanning",
+        "correlation": "matrix-4f94a71f07cd498d9cf3fb19d813cd5e:81",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+        "recipientIdBase64": "CikKJ21hdHJpeC00Zjk0YTcxZjA3Y2Q0OThkOWNmM2ZiMTlkODEzY2Q1ZRBR",
+        "pid": 75963,
+        "at": 1791937757560
+      },
+      {
+        "method": "projection",
+        "receiver": "ProjectProjection",
+        "correlation": "matrix-4f94a71f07cd498d9cf3fb19d813cd5e:81",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+        "recipientIdBase64": "CikKJ21hdHJpeC00Zjk0YTcxZjA3Y2Q0OThkOWNmM2ZiMTlkODEzY2Q1ZRBR",
+        "pid": 75963,
+        "at": 1791937757577
+      },
+      {
+        "method": "staffing",
+        "receiver": "ProjectStaffing",
+        "correlation": "matrix-4f94a71f07cd498d9cf3fb19d813cd5e:81",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+        "recipientIdBase64": "CikKJ21hdHJpeC00Zjk0YTcxZjA3Y2Q0OThkOWNmM2ZiMTlkODEzY2Q1ZRBR",
+        "pid": 75963,
+        "at": 1791937757705
+      }
+    ],
+    "retainedEventCount": 80,
+    "entryCountAfterRestart": 405
+  }
+}

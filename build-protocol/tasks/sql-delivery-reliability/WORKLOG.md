@@ -519,3 +519,64 @@ commit-before-ack and Delivery-server volatile Inbox loss, original saved Event
 known-ID repair after app OS restart, including SQL row selectors and typed IDs.
 No source edits, tests, builds, processes or database calls. Runtime metadata
 unavailable; original explicit profile retained.
+
+Live fault acceptance checkpoint0ec64d7f1 committed and immediately pushed to
+official origin feature branch. Dist/runtime fixture inputs stayed unchanged
+while full process baseline runs.
+
+Next bounded implementation assignment remains existing implementer with original
+explicit gpt-6-sol / medium profile. Scope: process-only fault fixtures/driver and
+opt-in tests for worker death before effect, successful save before acknowledgement,
+partial saved-Event publication plus exact-ID repair after all app OS processes
+restart, and shared in-memory Delivery crash/loss boundary. Use the concrete
+read-only seam map; source-only new files until matrix releases existing fixture
+inputs and dist. No new production APIs, outbox, transaction coordination, broad
+Event scan or runtime source transforms. Exact typed identities, admission IDs,
+handler entries, saved bytes, database/resource records and bounded cleanup are
+acceptance invariants. Estimate1–2 hours for implementation/live checks/review;
+uncertainties are provider trigger targeting and process timing, not a new design
+contract. Scanner accepted under original explicit Luna/low profile, runtime
+metadata unavailable, no execution.
+
+Remaining diagnostic identity acceptance is dispatched as a bounded mechanical
+probe to existing explicit Luna/low function. It may write one task evidence script
+and result only, importing current built provider errors modules and recording
+module hashes. Check each already-classified PostgreSQL/MySQL error is returned
+by object identity with original cause unchanged, plus raw driver Error wrapping
+retains cause identity and safe outer message. No production edits, builds, database
+access or new runtime patch. Prior real-driver/public Ack evidence remains separate.
+
+Built-provider normalization identity probe passed34 assertions, all8 classified
+error instances retain identity and cause; raw Error/object/undefined controls
+retain exact cause with safe outer message. Current built-module hashes and command
+are in error-normalization-identity.result.json/.log; syntax check passed. Explicit
+Luna/low function accepted with unavailable runtime introspection. This is internal
+normalizer-boundary evidence, not another real-service or driver run.
+
+Full baseline session707f9e28-90e3-49e7-b56f-a16eeaa020e6 status PASS. Parent
+independently summed summary.json:16 topologies,80 runs,3,920 Commands including
+worker restart,3,840 initial admissions,19,600 handler entries,80 dropped databases,
+zero cleanup errors. Existing mechanical function proceeds through five authorised
+historical-labelled workloads with individual exact audits. Dist/worker reservation
+remains until its explicit completion. No further full baseline rerun is needed
+without a relevant runtime change or unresolved failure.
+
+Read-only transport fixture concretization is assigned to existing explicit
+Luna/low mechanical analysis function while process faults are implemented.
+TRANSPORT_PLAN already defines behavior/matrix; do not repeat that inventory.
+Resolve exact current supported service/binding construction for real SQL-backed
+SubscriptionService under native, gRPC-Web and Connect, including deterministic
+Activate/Cancel gates and actual active-registration observation. No new production
+hooks or API are assumed. Artifact-only write, no builds/tests/services/database
+actions; actual runtime profile introspection unavailable.
+
+Full baseline and historical acceptance complete. All five historical-labelled
+workloads pass: base32, control16, fixed32, replay80 on MySQL8.4, maria80 on
+MariaDB11.4. All use eight application processes/eight configured Entity shards,
+shared Delivery, and graceful app recreation; exact audits and cleanup pass.
+The historical label mapping is not original identifier-byte equivalence or
+a reproduction of the old operating-system scheduling. Parent verified all80
+baseline artifact-hash sets match and all five audit statuses are PASS, and saved
+baseline-historical-acceptance-summary.json. Mechanical function released the
+dist/worker reservation; implementer is authorized for worker seams/build/live
+crash cases. Original explicit Luna/low profile accepted, runtime metadata absent.

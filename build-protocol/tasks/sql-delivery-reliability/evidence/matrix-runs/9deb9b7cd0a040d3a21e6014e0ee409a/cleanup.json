@@ -1,0 +1,46 @@
+{
+  "databaseDropped": true,
+  "workerExits": [
+    {
+      "pid": 61183,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 61184,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 61185,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 61186,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 61187,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 61188,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 61189,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 61190,
+      "code": 0,
+      "signal": null
+    }
+  ],
+  "errors": []
+}

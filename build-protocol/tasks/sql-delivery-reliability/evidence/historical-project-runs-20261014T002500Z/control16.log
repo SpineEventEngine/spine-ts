@@ -1,0 +1,12 @@
+COMMAND: env TMPDIR=/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/runtime-tmp SPINE_TS_MATRIX_PROVIDER=mysql84 SPINE_TS_MATRIX_PROCESSES=8 SPINE_TS_MATRIX_MODE=shared-memory SPINE_TS_MATRIX_TOTAL=32 SPINE_TS_MATRIX_BURST=16 SPINE_TS_MATRIX_RESTART=1 SPINE_TS_MATRIX_HISTORICAL=control16 pnpm --dir packages/server-blackbox-tests test:matrix
+EXIT_CODE: 0
+STDOUT_STDERR (merged):
+$ pnpm exec vitest --root ../.. --config vitest.infrastructure.config.ts run packages/server-blackbox-tests/test/project-process-matrix.integration.test.ts
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  01:34:36
+   Duration  4.38s (transform 18ms, setup 0ms, import 28ms, tests 4.24s, environment 0ms)
