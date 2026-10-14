@@ -490,3 +490,15 @@ Style is clean. Accept the reliability P2: the helper and independent matrix aud
 ## Crash-boundary assertion correction accepted
 
 Reliability-only re-review is clean: the delivered-plus-pending ambiguity is rejected by both helper and matrix audit; all 16 focused tests pass and the saved p8 positive replay passes the stricter classifier. Prior style review remains clean. Both reviewer profiles match their explicit immutable Sol/medium dispatches; actual runtime introspection is unavailable. No production runtime changed. Commit/push the frozen assertion correction and relaunch the 32-case matrix; do not repeat the accepted 80-run baseline.
+
+## Gateway lifecycle architecture acceptance
+
+Accept the bounded decision in D-0133 and `evidence/gateway-child-stream-recovery-decision.md`. Existing requirements-splitter profile was explicitly `gpt-6-astra` / `high`; actual runtime metadata unavailable and no mismatch. The real child-fault trace plus static fixed-backend lifecycle establishes the block. No human decision is required. Existing Sol/medium implementer applies the minimal private lifetime-failure mechanism after completing the current test-gate correction; no server retry loop or new API. Required scoped kernel, managed relay, and real browser regressions precede relevant specialist review.
+
+## Nonblocking crash gate review dispatch
+
+The test-only gate correction is frozen after focused PostgreSQL 16 controls and deterministic preflight. Dispatch existing reliability and style concerns with explicit `gpt-6-sol` / `medium` profiles. Review only the three changed process fixture files, phase observations, and accepted outcomes; transport work remains in progress and excluded. No production behavior or public API changed, so API and broad documentation concerns are N/A for this bounded correction. Human ledger remains binding: count actual handlers, distinguish processing from acknowledgement, and preserve expected volatile Inbox loss. Desktop supports the explicit profiles; runtime introspection is unavailable. Collect both reports before corrections.
+
+## Nonblocking crash gate accepted
+
+Both scoped reviewer reports are clean. Explicit model/reasoning fields and immutable configured Sol/medium roles match the assignments; actual runtime introspection unavailable. All five generated domain handlers await the selected gate, including Create in the expected volatile-loss case. Final PostgreSQL 16/eight-process acknowledgement evidence places the trigger 99 ms after entry and proves one old/one fresh Planning entry. Previous invalid placement remains failed evidence. Accept the test-only correction; full matrix remains pending and no 80-run business baseline repetition is required for this fixture-only change.

@@ -6176,3 +6176,17 @@ The reproduced paging defect is not yet proof of the earlier workload failure's
 cause. Repeat that workload with captured Inbox/state/error evidence.
 
 Detailed contract, JVM/provenance evidence and acceptance: [paging analysis](tasks/sql-delivery-reliability/evidence/remote-paging-boundary.md).
+
+## D-0133: Observable Backend Subscription Stream Failure
+
+Date: 2026-10-14. Status: accepted bounded lifecycle correction; implementation pending.
+
+A ready logical subscription cannot remain silently open after a required backend child stream unexpectedly fails or ends. Fixed-backend gateways have no later discovery event that necessarily recreates that child. Propagate the first unexpected current-child rejection or EOF through the existing logical activation result, even after readiness has completed. Fence subsequent updates and starts for that activation and dispose its children through existing bounded cleanup. Intentional cancellation, member replacement/removal, and stale generations do not become terminal failures.
+
+Keep readiness distinct from activation lifetime with private state. Preserve original internal causes and safe public errors. Cleanup cannot await its own child promise, hide a retained failure behind an abort race, or overlap duplicate disposal. Failed cleanup remains observable and retryable. Apply the shared-kernel correction to BrowserServer and managed NodeCoordinator, including nested relays and generic activation without ACK callbacks.
+
+Use the high-level Client's existing bounded Cancel, delay, Subscribe, and readiness sequence. Do not add a server retry scheduler, new public API or wire contract, persistence, automatic Event replay, or a new retry budget. Entity resynchronization and Event gap notices retain their existing meaning; healthy sibling streams can be interrupted while the logical subscription recovers. Already delivered updates are not rolled back.
+
+The demonstrated fixed-backend child failure and a separate client-facing transport cut are distinct regressions. Both require evidence, as do cancellation races, late-joining children, cleanup failure, stale generations, and managed relays. The existing client classifier retries Errors except ClientProtocolError; this correction does not claim status-code-specific permanent-error filtering.
+
+Detailed evidence, implementation constraints, and JVM guardrails: [gateway child-stream decision](tasks/sql-delivery-reliability/evidence/gateway-child-stream-recovery-decision.md).

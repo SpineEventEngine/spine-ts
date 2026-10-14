@@ -498,6 +498,7 @@ async function beforeEffect(settings) {
 }
 
 async function afterSaveBeforeAck(settings) {
+  const timeline = [];
   const gated = expectedEntry("planning", 1);
   const releaseFile = resolve(dir, "release-planning");
   settings.handlerGate = { ...gated, releaseFile, timeoutMs: 10_000 };
@@ -525,7 +526,9 @@ async function afterSaveBeforeAck(settings) {
     );
   });
   await installAckBlock(pending.messageId);
+  timeline.push({ phase: "ack-trigger-installed", at: Date.now() });
   await writeFile(releaseFile, "release\n");
+  timeline.push({ phase: "handler-released", at: Date.now() });
   const saved = await until(
     "committed Planning state before acknowledgement",
     async () => {
@@ -535,15 +538,20 @@ async function afterSaveBeforeAck(settings) {
       const row = completeInboxRows(inbox, count).find(
         (candidate) => candidate.messageId === pending.messageId,
       );
-      return row?.status === "TO_DELIVER" ? { observation, row } : undefined;
+      return row?.status === "TO_DELIVER" ? { observation, row, inbox } : undefined;
     },
     15_000,
   );
+  timeline.push({ phase: "saved-pending-observed", at: Date.now() });
+  const entriesBeforeKill = await entries();
   const killed = workers.find((worker) => worker.pid === entered.pid);
   assert.ok(killed);
+  timeline.push({ phase: "first-kill-requested", at: Date.now(), pid: killed.pid });
   await killAndConfirm(killed);
+  timeline.push({ phase: "first-kill-confirmed", at: Date.now(), pid: killed.pid });
   const survivors = workers.filter((worker) => worker !== killed);
   await Promise.all(survivors.map((worker) => killAndConfirm(worker)));
+  timeline.push({ phase: "all-old-workers-exited", at: Date.now() });
   const attempts = await ackAttempts();
   assert.ok(attempts >= 1, "The selected SQL acknowledgement trigger must have run.");
   const preRestartStatus = await rawInboxStatus(pending.messageId);
@@ -558,6 +566,8 @@ async function afterSaveBeforeAck(settings) {
         saved,
         attempts,
         preRestartStatus,
+        timeline,
+        entriesBeforeKill,
         oldPids: ready.map((worker) => worker.pid),
         entries: await entries(),
       },

@@ -1,0 +1,46 @@
+{
+  "databaseDropped": true,
+  "exits": [
+    {
+      "pid": 54623,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 54624,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 54625,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 54626,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 54627,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 54628,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 54629,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 54630,
+      "code": 0,
+      "signal": null
+    }
+  ],
+  "errors": []
+}

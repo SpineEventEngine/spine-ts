@@ -179,14 +179,14 @@ function handlersFor<Instance extends object, Schema extends GenMessage<Message>
  * The entry callback must synchronously persist its record when used for crash evidence.
  *
  * @param name Names this diagnostic context.
- * @param onEntry Records each actual handler entry.
+ * @param onEntry Records each actual handler entry and may hold a selected handler before its effect.
  * @param storageFactory Persists records in the selected test database.
  * @param shards Selects the delivery shard count.
  * @returns The configured bounded context.
  */
 export function projectWorkflow(
   name: string,
-  onEntry: (entry: ProjectHandlerEntry) => void,
+  onEntry: (entry: ProjectHandlerEntry) => void | Promise<void>,
   storageFactory?: StorageFactory,
   shards = 1,
 ): BoundedContext {
@@ -199,10 +199,10 @@ export function projectWorkflow(
     /**
      * Handles the domain CreateProject Command and produces its original Event.
      */
-    create(command: CreateProject): ProjectCreated {
+    async create(command: CreateProject): Promise<ProjectCreated> {
       const project = command.project;
       if (project?.organization === undefined) throw new Error("ProjectId is required.");
-      recordEntry({
+      await recordEntry({
         method: "create",
         receiver: "Project",
         correlation: projectCorrelation(project),
@@ -227,9 +227,9 @@ export function projectWorkflow(
     /**
      * Records a planning handler entry and its resulting state.
      */
-    react(event: ProjectCreated): void {
+    async react(event: ProjectCreated): Promise<void> {
       if (event.project === undefined) throw new Error("ProjectCreated requires a ProjectId.");
-      recordEntry({
+      await recordEntry({
         method: "planning",
         receiver: "ProjectPlanning",
         correlation: projectCorrelation(event.project),
@@ -247,9 +247,9 @@ export function projectWorkflow(
     /**
      * Records a staffing handler entry and its resulting state.
      */
-    react(event: ProjectCreated): void {
+    async react(event: ProjectCreated): Promise<void> {
       if (event.project === undefined) throw new Error("ProjectCreated requires a ProjectId.");
-      recordEntry({
+      await recordEntry({
         method: "staffing",
         receiver: "ProjectStaffing",
         correlation: projectCorrelation(event.project),
@@ -267,9 +267,9 @@ export function projectWorkflow(
     /**
      * Records a portfolio projection entry and its resulting state.
      */
-    subscribe(event: ProjectCreated): void {
+    async subscribe(event: ProjectCreated): Promise<void> {
       if (event.project === undefined) throw new Error("ProjectCreated requires a ProjectId.");
-      recordEntry({
+      await recordEntry({
         method: "portfolio",
         receiver: "Portfolio",
         correlation: projectCorrelation(event.project),
@@ -287,9 +287,9 @@ export function projectWorkflow(
     /**
      * Records a Project projection entry and its resulting state.
      */
-    subscribe(event: ProjectCreated): void {
+    async subscribe(event: ProjectCreated): Promise<void> {
       if (event.project === undefined) throw new Error("ProjectCreated requires a ProjectId.");
-      recordEntry({
+      await recordEntry({
         method: "projection",
         receiver: "ProjectProjection",
         correlation: projectCorrelation(event.project),

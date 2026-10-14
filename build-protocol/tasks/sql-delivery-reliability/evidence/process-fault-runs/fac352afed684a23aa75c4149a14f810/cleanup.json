@@ -1,0 +1,46 @@
+{
+  "databaseDropped": true,
+  "exits": [
+    {
+      "pid": 44737,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 44738,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 44739,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 44740,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 44741,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 44742,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 44743,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 44744,
+      "code": 0,
+      "signal": null
+    }
+  ],
+  "errors": []
+}

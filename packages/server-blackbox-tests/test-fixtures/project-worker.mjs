@@ -16,6 +16,7 @@ import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import process from "node:process";
+import { setTimeout } from "node:timers";
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
 import { create, equals, toBinary } from "@bufbuild/protobuf";
@@ -146,12 +147,18 @@ async function start(request) {
         entry.recipientIdBase64 === gate.recipientIdBase64
       ) {
         const deadline = Date.now() + Math.min(gate.timeoutMs, 10_000);
-        const pause = new Int32Array(new SharedArrayBuffer(4));
-        while (!existsSync(gate.releaseFile) && Date.now() < deadline) {
-          Atomics.wait(pause, 0, 0, 25);
-        }
-        if (!existsSync(gate.releaseFile))
-          throw new Error(`Project fault gate expired for ${entry.correlation}.`);
+        return new Promise((resolve, reject) => {
+          const check = () => {
+            if (existsSync(gate.releaseFile)) {
+              resolve(undefined);
+            } else if (Date.now() >= deadline) {
+              reject(new Error(`Project fault gate expired for ${entry.correlation}.`));
+            } else {
+              setTimeout(check, 25);
+            }
+          };
+          check();
+        });
       }
     },
     factory,
