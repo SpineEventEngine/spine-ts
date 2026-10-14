@@ -61,7 +61,7 @@ sessions. A positive server processing timeout alone does not shorten the
 supervisor's stale-session threshold.
 
 A scan can encounter a busy shard, an unexpired session, unavailable storage, or
-failed processing. Request deadlines, retry delays, and shutdown bounds also
+failed processing. Request deadlines, retry delays, and Delivery shutdown bounds also
 have separate responsibilities. A 10-second scan interval therefore guarantees
 neither delivery within 10 seconds nor worker takeover within 10 seconds.
 
@@ -72,10 +72,10 @@ admission commits nothing. Admission is the linearization point: once admitted,
 the synchronous mutation can commit even if the caller aborts or loses its
 response.
 
-The copied JVM Inbox page RPC remains strict after a supplied timestamp. The
-authored TS `InboxReadService.ReadPage` continues after the exact receive-time,
-version, and message-ID tuple in unsigned UTF-8 byte order, including after a
-cursor row is removed. Reads are live and do not promise a snapshot across pages.
+The JVM `InboxService.FindManyInShard` page RPC uses an exclusive timestamp
+bound. Reads are live and do not promise a snapshot across pages. Distinct
+received timestamps permit continued paging; a full page ending in tied times
+is reported as unsafe continuation.
 Automatic pickup takeover requires elapsed time
 strictly greater than `processingTimeoutMs`; manual expiration accepts elapsed
 time greater than or equal to the supplied interval. Release is not

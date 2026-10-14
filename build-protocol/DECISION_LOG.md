@@ -6050,11 +6050,11 @@ post-delete lease/deadline checks, rollback and cross-record cleanup machinery.
 
 Infrastructure processing failures remain visible and pending or explicitly
 terminal; they must not be silently marked successful. Successful processing
-followed by acknowledgement failure is a distinct case. Failed publication is
-retried from the original saved Event without re-executing a successful Command.
-Finite live retries and explicit known-ID repair do not promise automatic
-discovery of interrupted publications or exactly-once recipient processing.
-No blind historical replay or new durable persistence contract is authorized.
+followed by acknowledgement failure is a distinct case. Failed Event publication
+is reported after one attempt and does not rerun a successful Command. A saved
+Event does not authorize automatic republication;
+no publication repair API, historical replay, or new durable persistence
+contract is authorized.
 
 The default recovery scan becomes ten seconds, independently of stale-session
 and server-processing timers. Shared Delivery is recommended for multiprocess
@@ -6062,113 +6062,16 @@ applications, with the explicit local-example exceptions in the task ledger.
 The supplied in-memory Delivery server remains non-durable; SQL business-state
 storage does not persist its Inbox.
 
-## D-0130: Bounded Context Shutdown Preserving Dispatch Order
+## D-0131: Managed Process Close Ordering
 
-Date: 2026-10-13. Status: accepted architecture clarification; implemented, reviewed and release-verified.
+Date: 2026-10-14. Status: accepted cleanup ordering; deadline policy withdrawn by the framework author.
 
-Known-ID Event repair exposed an unbounded context shutdown wait: a recipient
-that never settles remains in the EventBus and publisher drains. Returning early
-from repair alone cannot bound context close. The task requires cancellation and
-shutdown bounds while preserving ordinary dispatch ordering.
-
-Configure one context shutdown deadline with
-`BoundedContextBuilder.withShutdownTimeout(milliseconds)`, default 5,000 ms.
-Validate a positive safe integer within the timer range. The first close start
-creates the deadline, including split server close phases; drains and cleanup
-share its remaining time. This is separate from delivery recovery, stale-session
-and server-processing timers.
-
-Before expiry, drain admitted ordinary follow-ups while refusing external
-admission and cancelling repair. At expiry, terminally fence bus/publisher intake
-and queued execution, settle framework-facing waits, and report a timeout through
-AggregateError. Repeated close retains that terminal timeout outcome. Independent
-cleanup is still attempted, with no wait extending the shared deadline. Preserve
-retry behavior for unrelated cleanup failures.
-
-Caller cancellation propagates into stored-Event dispatch, with checks before
-queued work, between recipients and before notifications. Keep the raw FIFO queue
-tail attached to the actual running callback; never release it or start a retry
-because an outward cancellation race settled first. Cancellation after an attempt
-starts may leave partial effects. Report attempted counts and truthful cancelled
-outcomes; never label uncertain admission successful.
-
-A deadline cannot terminate already-entered application code or SQL. Those calls
-may settle later, including failure after resources close. Observe their late
-settlement and prevent subsequent framework continuations from starting work.
-Do not promise rollback, forced termination or guaranteed reclamation of a
-permanently blocked external resource. Server cleanup must continue after a
-context-drain error and aggregate failures; this does not introduce a new deadline
-for unrelated network or Delivery teardown.
-
-This changes lifecycle behavior and adds configuration, not persistence or runtime
-scheduling contracts.
-
-## D-0131: Finite Managed Process Shutdown
-
-Date: 2026-10-14. Status: accepted targeted architecture clarification; implemented, reviewed and release-verified.
-
-Managed shutdown must drain admitted Delivery and preserve final subscription
-updates, then cancel child subscriptions while their listeners remain reachable.
-Closing child listeners first causes cleanup failure. A two-phase private
-handoff fixes ordering but requires a finite bound even when a connected parent
-never releases the child. The existing one-second IPC acknowledgement grace
-cannot serve as a business-work deadline; the context deadline in D-0130 starts
-after Delivery detachment and remains independently scoped.
-
-Add optional ManagedServerApplicationOptions.shutdownTimeoutMs, default30000ms,
-validated as a positive safe integer no greater than2147483647. The first close
-starts one graceful deadline across all managed phases and cleanup retries.
-Do not extend it at phase transitions or duplicate close. Existing one-second
-acknowledgement and process-control graces remain separate; normal reaping can
-add at most3000ms and post-deadline TERM/KILL/reaping at most2000ms, concurrently
-across children. These values are unrelated to Delivery recovery or takeover.
-
-Stop new unary, Subscribe and Activate admission synchronously while keeping
-existing relays and Cancel usable. Drain actual admitted work, cancel relays,
-then release final child close. A pre-deadline relay-cleanup failure remains
-retryable with the same drained listeners and pending operations. Do not repeat
-completed phases or overlap raw cleanup. Private IPC conveys remaining budget;
-child deadlines can only move earlier. No legacy IPC fallback is required.
-
-Parent timeout closes its network independently of stuck reconciliation and
-terminates only recorded managed children. An independent actual-child watchdog
-also bounds a connected silent parent; it reports failure and exits nonzero
-after bounded force cleanup. Never terminate the embedding parent. Timeout or
-force remains a terminal failure for repeated close, even if process reaping
-succeeds. Attempt independent cleanup, observe late failures and preserve the
-initiating error. No successful drain or acknowledgement is fabricated.
-
-Forced termination may interrupt effects before Inbox acknowledgement. Entered
-SQL can still settle; there is no rollback, exactly-once guarantee or new
-persistence contract. Existing persistent unacknowledged Delivery remains
-subject to at-least-once recovery. No general Server/Delivery timeout API or
-new lifecycle subsystem is introduced. JVM orderly/force shutdown is a design
-guardrail, not proof of a matching Node IPC contract or timeout default.
-
-## D-0132: Exact Remote Inbox Continuation
-
-Date: 2026-10-14. Status: accepted bounded public-contract correction; implemented, reviewed and release-verified.
-
-Timestamp-only continuation cannot traverse arbitrary equal-time Inbox rows.
-A real-wire reproduction with 101 rows repeatedly rejects a full 100-row page while
-all rows remain stored. Preserve exact copied JVM Protobuf source/descriptor
-provenance and add one authored spine.delivery.InboxReadService.ReadPage RPC.
-Its cursor contains receive timestamp, version and message ID; seek strictly
-after that tuple without loading the cursor record. Use deterministic UTF-8
-ordinal ID ordering, existing 1,000-row and 4 MiB caps, and domain validation.
-
-DeliveryClient.readPage and RemoteInbox require this endpoint with no fallback.
-Keep sinceWhen as a mutually exclusive genuine first-read filter. Filtering
-advances on the final raw row and the whole RemoteInbox read shares one finite
-cancellation/deadline budget. Deleted cursor records and status updates cannot
-prevent continuation. Unsupported RPC is actionable and non-retryable within
-the read; no sticky capability cache or new error hierarchy is needed.
-
-This live read is not a snapshot: concurrent insertions behind the cursor await
-a later fresh scan. No timestamp rewriting, migration, outbox, persistence
-subsystem, cross-record transaction or stronger delivery/durability guarantee.
-The reproduced paging defect is not yet proof of the earlier workload failure's
-cause. Repeat that workload with captured Inbox/state/error evidence.
+Managed shutdown drains admitted Delivery and preserves final subscription
+updates. The Coordinator cancels child subscriptions while their listeners
+remain reachable, then releases final child close. A failed relay cleanup is
+observable and retryable. Existing IPC acknowledgement and process reaping
+graces handle missing process responses independently of application work.
+There is no total managed shutdown deadline or child watchdog.
 
 ## D-0133: Observable Backend Subscription Stream Failure
 

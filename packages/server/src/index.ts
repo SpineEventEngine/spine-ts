@@ -23,8 +23,6 @@ export {
   type ContextSpecSnapshot,
   type ReadCatchUpOptions,
   type ReadCatchUpResult,
-  type RepublishEventsOptions,
-  type RepublishEventResult,
   type EventEndpoint,
   type GeneratedRepositoryOptions,
   type TenantMode,

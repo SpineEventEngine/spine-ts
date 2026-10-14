@@ -27,14 +27,8 @@ import { EventDispatcherRegistry } from "./event-dispatcher-registry.js";
 import type { EventDispatcher } from "./event-dispatcher.js";
 import { emitServerError } from "../server/server-log.js";
 
-const storedDispatchers = new WeakMap<
-  EventBus,
-  (event: Event, signal?: AbortSignal) => Promise<void>
->();
-const storedFollowUpDispatchers = new WeakMap<
-  EventBus,
-  (event: Event, signal?: AbortSignal) => Promise<void>
->();
+const storedDispatchers = new WeakMap<EventBus, (event: Event) => Promise<void>>();
+const storedFollowUpDispatchers = new WeakMap<EventBus, (event: Event) => Promise<void>>();
 const followUpPosters = new WeakMap<EventBus, (event: Event) => Promise<void>>();
 
 /**
@@ -55,12 +49,10 @@ const eventSchemaLists = new WeakMap<EventBus, () => readonly MessageSchema[]>()
 const eventSchemaRegistrars = new WeakMap<EventBus, (schemas: Iterable<MessageSchema>) => void>();
 const dispatcherUnregistrars = new WeakMap<EventBus, (dispatcher: EventDispatcher) => void>();
 const eventSchemaFinders = new WeakMap<EventBus, (typeUrl: string) => MessageSchema | undefined>();
-const storedEventValidators = new WeakMap<EventBus, (event: Event) => void>();
 const eventBusCloseStarters = new WeakMap<EventBus, () => void>();
 const eventBusDrainers = new WeakMap<EventBus, () => Promise<void>>();
 const eventBusCloseFinishers = new WeakMap<EventBus, () => Promise<void>>();
 const eventBusAborters = new WeakMap<EventBus, () => void>();
-const eventBusTerminalClosers = new WeakMap<EventBus, () => void>();
 const eventBusWorkCounters = new WeakMap<EventBus, () => number>();
 const forgettingBus: unique symbol = Symbol("forgetting-bus");
 const forgettingBuses = new WeakSet<EventBus>();
@@ -100,26 +92,17 @@ interface EventBusAccess {
    * Dispatches one already-stored Event without another append.
    * @param eventBus Target bus.
    * @param event Captured Event envelope.
-   * @param signal Optional cancellation before later recipient effects.
    * @returns Completion after recipient dispatch.
    */
-  postStored(eventBus: EventBus, event: Event, signal?: AbortSignal): Promise<void>;
-
-  /**
-   * Validates a captured Event against its registered bus role before storage.
-   * @param eventBus Target domain or System bus.
-   * @param event Captured Event envelope.
-   */
-  validateStored(eventBus: EventBus, event: Event): void;
+  postStored(eventBus: EventBus, event: Event): Promise<void>;
 
   /**
    * Queues an already-stored Event as a trusted follow-up.
    * @param eventBus Target bus.
    * @param event Captured Event envelope.
-   * @param signal Optional cancellation before later recipient effects.
    * @returns Completion after recipient dispatch.
    */
-  postStoredFollowUp(eventBus: EventBus, event: Event, signal?: AbortSignal): Promise<void>;
+  postStoredFollowUp(eventBus: EventBus, event: Event): Promise<void>;
 
   /**
    * Queues a produced Event after active bus work.
@@ -203,12 +186,6 @@ interface EventBusAccess {
   abortClose(eventBus: EventBus): void;
 
   /**
-   * Stops queued callbacks after a context deadline.
-   * @param eventBus Target bus.
-   */
-  terminalClose(eventBus: EventBus): void;
-
-  /**
    * Returns admitted Event work count for drain stability.
    * @param eventBus Target bus.
    * @returns Number of accepted work items.
@@ -270,8 +247,8 @@ export class EventBus {
 
     this.#eventStore = ownedStore === forgettingBus ? undefined : ownedStore;
     this.#started = this.#runtime.start();
-    storedDispatchers.set(this, (event, signal) => this.#postStored(event, signal));
-    storedFollowUpDispatchers.set(this, (event, signal) => this.#postStoredFollowUp(event, signal));
+    storedDispatchers.set(this, (event) => this.#postStored(event));
+    storedFollowUpDispatchers.set(this, (event) => this.#postStoredFollowUp(event));
     followUpPosters.set(this, (event) => this.#postFollowUp(event));
     exclusiveWorkers.set(this, (work) => this.#runExclusive(work));
     subscriberRegistrars.set(this, (typeUrl, subscriber) => this.#subscribe(typeUrl, subscriber));
@@ -283,9 +260,6 @@ export class EventBus {
       this.#registry.unregister(dispatcher);
     });
     eventSchemaFinders.set(this, (typeUrl) => this.#registry.schema(typeUrl));
-    storedEventValidators.set(this, (event) => {
-      this.#validateStoredEvent(event);
-    });
     this.#registerCloseHooks();
 
     for (const dispatcher of dispatchers) {
@@ -304,9 +278,6 @@ export class EventBus {
     eventBusCloseFinishers.set(this, () => this.#finishClose());
     eventBusAborters.set(this, () => {
       this.#abortClose();
-    });
-    eventBusTerminalClosers.set(this, () => {
-      this.#terminalClose();
     });
     eventBusWorkCounters.set(this, () => this.#acceptedWorkCount);
   }
@@ -386,15 +357,6 @@ export class EventBus {
     }
   }
 
-  /**
-   * Fences later queued work after the context shutdown deadline.
-   */
-  #terminalClose(): void {
-    this.#intakeState = "closed";
-    runtimeAccess.abortClose(this.#runtime);
-    this.#clearSubscribers();
-  }
-
   async #dispatch(event: Event): Promise<void> {
     const typeUrl = event.message?.typeUrl;
 
@@ -425,17 +387,17 @@ export class EventBus {
     await this.#deliverAccepted(stored, acceptedDispatchers);
   }
 
-  #postStored(event: Event, signal?: AbortSignal): Promise<void> {
+  #postStored(event: Event): Promise<void> {
     const accepted = clone(EventSchema, event);
 
     if (this.#intakeState === "closed") {
       return Promise.reject(new ServerRuntimeStateError("enqueue", "closed"));
     }
 
-    return this.#runExclusive(() => this.#dispatchStored(accepted, signal));
+    return this.#runExclusive(() => this.#dispatchStored(accepted));
   }
 
-  #postStoredFollowUp(event: Event, signal?: AbortSignal): Promise<void> {
+  #postStoredFollowUp(event: Event): Promise<void> {
     const accepted = clone(EventSchema, event);
 
     if (this.#intakeState === "closed") {
@@ -444,7 +406,7 @@ export class EventBus {
 
     this.#acceptedWorkCount++;
     return this.#started.then(() =>
-      runtimeAccess.enqueueFollowUp(this.#runtime, () => this.#dispatchStored(accepted, signal)),
+      runtimeAccess.enqueueFollowUp(this.#runtime, () => this.#dispatchStored(accepted)),
     );
   }
 
@@ -461,8 +423,7 @@ export class EventBus {
     );
   }
 
-  async #dispatchStored(event: Event, signal?: AbortSignal): Promise<void> {
-    EventBus.#checkStoredDispatch(signal, this.#intakeState);
+  async #dispatchStored(event: Event): Promise<void> {
     const typeUrl = event.message?.typeUrl;
 
     if (typeUrl === undefined || typeUrl === "") {
@@ -471,45 +432,34 @@ export class EventBus {
 
     const dispatchers = this.#registry.find(typeUrl, event.context?.external === true);
     this.#validate(event, typeUrl);
-    const accepted = await this.#accept(event, dispatchers, signal);
+    const accepted = await this.#accept(event, dispatchers);
 
-    await this.#deliverAccepted(event, accepted, signal);
+    await this.#deliverAccepted(event, accepted);
   }
 
   /**
-   * Delivers accepted recipients in order and suppresses notification after cancellation.
+   * Delivers accepted recipients in order before notification.
    *
    * @param event Event to notify after successful dispatch.
    * @param accepted Recipients admitted for this Event.
-   * @param signal Optional stored-dispatch cancellation.
    * @returns Completion after all recipients and notification.
    */
   async #deliverAccepted(
     event: Event,
     accepted: readonly AcceptedEventDispatcher[],
-    signal?: AbortSignal,
   ): Promise<void> {
     for (const { dispatcher, event: acceptedEvent } of accepted) {
-      EventBus.#checkStoredDispatch(signal, this.#intakeState);
       await dispatcher.dispatch(acceptedEvent);
     }
-    EventBus.#checkStoredDispatch(signal, this.#intakeState);
     this.#notify(event);
-  }
-
-  static #checkStoredDispatch(signal: AbortSignal | undefined, state: EventBusIntakeState): void {
-    if (signal?.aborted) throw signal.reason ?? new Error("Stored dispatch cancelled.");
-    if (state === "closed") throw new ServerRuntimeStateError("enqueue", "closed");
   }
 
   async #accept(
     event: Event,
     dispatchers: readonly EventDispatcher[],
-    signal?: AbortSignal,
   ): Promise<readonly AcceptedEventDispatcher[]> {
     const accepted: AcceptedEventDispatcher[] = [];
     for (const dispatcher of dispatchers) {
-      EventBus.#checkStoredDispatch(signal, this.#intakeState);
       const acceptedEvent = clone(EventSchema, event);
       await dispatcher.accept?.(acceptedEvent);
       accepted.push(Object.freeze({ dispatcher, event: acceptedEvent }));
@@ -534,18 +484,6 @@ export class EventBus {
     }
 
     Validate.check(schema, message);
-  }
-
-  /**
-   * Validates an Event before independent persistence or stored dispatch.
-   *
-   * @param event Captured Event envelope.
-   */
-  #validateStoredEvent(event: Event): void {
-    const typeUrl = event.message?.typeUrl;
-    if (typeUrl === undefined || typeUrl === "")
-      throw new Error("EventBus requires event.message.typeUrl.");
-    this.#validate(event, typeUrl);
   }
 
   /**
@@ -814,31 +752,24 @@ export const eventBusAccess: EventBusAccess = Object.freeze({
     return EventBusRoles.createSystem(eventStore, dispatchers);
   },
 
-  postStored(eventBus: EventBus, event: Event, signal?: AbortSignal): Promise<void> {
+  postStored(eventBus: EventBus, event: Event): Promise<void> {
     const postStored = storedDispatchers.get(eventBus);
 
     if (postStored === undefined) {
       throw new TypeError("Stored event dispatch requires an EventBus instance.");
     }
 
-    return postStored(event, signal);
+    return postStored(event);
   },
 
-  validateStored(eventBus: EventBus, event: Event): void {
-    const validate = storedEventValidators.get(eventBus);
-    if (validate === undefined)
-      throw new TypeError("Stored event validation requires an EventBus instance.");
-    validate(event);
-  },
-
-  postStoredFollowUp(eventBus: EventBus, event: Event, signal?: AbortSignal): Promise<void> {
+  postStoredFollowUp(eventBus: EventBus, event: Event): Promise<void> {
     const postStoredFollowUp = storedFollowUpDispatchers.get(eventBus);
 
     if (postStoredFollowUp === undefined) {
       throw new TypeError("Stored follow-up event dispatch requires an EventBus instance.");
     }
 
-    return postStoredFollowUp(event, signal);
+    return postStoredFollowUp(event);
   },
 
   postFollowUp(eventBus: EventBus, event: Event): Promise<void> {
@@ -946,13 +877,6 @@ export const eventBusAccess: EventBusAccess = Object.freeze({
     if (abortClose === undefined)
       throw new TypeError("Event-bus close coordination requires an EventBus instance.");
     abortClose();
-  },
-
-  terminalClose(eventBus: EventBus): void {
-    const terminalClose = eventBusTerminalClosers.get(eventBus);
-    if (terminalClose === undefined)
-      throw new TypeError("Event-bus terminal close requires an EventBus instance.");
-    terminalClose();
   },
 
   acceptedWorkCount(eventBus: EventBus): number {

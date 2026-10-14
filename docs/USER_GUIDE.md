@@ -542,9 +542,10 @@ Local and remote delivery removes a pending duplicate when its signal ID and
 typed Inbox target match a delivered row in the current page or a recent local
 delivery remembered by the bounded cache. This process-local cache holds at most
 1,000 identities and disappears on restart. Suppression is temporary: after the
-relevant delivered rows and cache entries are gone, replay may execute the same
-recipient again. Cleaning SQL Inbox rows alone may still leave a cache entry
-that suppresses replay; cleanup does not guarantee repetition. Neither mechanism
+relevant delivered rows and cache entries are gone, a later Inbox delivery may
+execute the same recipient again. Cleaning SQL Inbox rows alone may still leave
+a cache entry that suppresses Inbox delivery; cleanup does not guarantee
+repetition. Neither mechanism
 provides exactly-once execution or durable storage for the simple in-memory
 Delivery server. The same signal may still reach a different target, and a newly
 created signal with a different ID is not suppressed merely because its payload

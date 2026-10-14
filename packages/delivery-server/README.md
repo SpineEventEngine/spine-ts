@@ -71,11 +71,7 @@ delivery server's transitive dependencies.
 ```ts
 import { createRouterTransport } from "@connectrpc/connect";
 import { InMemoryDelivery } from "@spine-event-engine/delivery-server";
-import {
-  InboxReadService,
-  InboxService,
-  ShardService,
-} from "@spine-event-engine/proto/delivery-server";
+import { InboxService, ShardService } from "@spine-event-engine/proto/delivery-server";
 
 const delivery = InMemoryDelivery.create({
   processingTimeoutMs: 30_000,
@@ -85,7 +81,6 @@ const delivery = InMemoryDelivery.create({
 });
 const transport = createRouterTransport((router) => {
   router.service(InboxService, delivery.inbox);
-  router.service(InboxReadService, delivery.inboxRead);
   router.service(ShardService, delivery.shards);
 });
 void transport;
@@ -96,7 +91,7 @@ zero, which disables timeout-based takeover during shard pickup. The application
 supervisor can still release stale sessions. Its recovery scan and
 stale-session threshold are separate [recovery timers](REFERENCE.md#recovery-timers).
 
-The standalone listener exposes Inbox, InboxRead, Shard, Admin, and gRPC health services.
+The standalone listener exposes Inbox, Shard, Admin, and gRPC health services.
 It binds only to the loopback address by default. An explicit non-loopback host
 is a caller-selected trusted-network deployment and should not be exposed
 directly to the public Internet.

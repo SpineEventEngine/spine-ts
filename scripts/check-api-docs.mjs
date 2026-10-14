@@ -603,8 +603,6 @@ const expectedServerExports = [
   "ReadCatchUpOptions",
   "ReadCatchUpResult",
   "RejectionDeclaration",
-  "RepublishEventResult",
-  "RepublishEventsOptions",
   "AlreadyPickedUp",
   "Delivery",
   "DeliveryBuilder",

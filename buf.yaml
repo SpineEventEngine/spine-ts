@@ -28,7 +28,6 @@ lint:
       - packages/proto/proto/spine/delivery/admin/admin_service.proto
     PACKAGE_SAME_DIRECTORY:
       - packages/proto/proto/spine/delivery/admin/admin_service.proto
-      - packages/proto/proto/spine/delivery/inbox_read.proto
       - packages/proto/proto/spine/delivery/commands.proto
       - packages/proto/proto/spine/delivery/events.proto
       - packages/proto/proto/spine/delivery/message_delivery.proto
@@ -36,7 +35,6 @@ lint:
       - packages/proto/proto/spine/delivery/rejections.proto
     PACKAGE_SAME_JAVA_MULTIPLE_FILES:
       - packages/proto/proto/spine/delivery/admin/admin_service.proto
-      - packages/proto/proto/spine/delivery/inbox_read.proto
       - packages/proto/proto/spine/delivery/commands.proto
       - packages/proto/proto/spine/delivery/events.proto
       - packages/proto/proto/spine/delivery/message_delivery.proto

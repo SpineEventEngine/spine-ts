@@ -14,7 +14,8 @@
 
 import { Time } from "@spine-event-engine/core/time";
 import { randomUUID } from "node:crypto";
-import type { Timestamp } from "@bufbuild/protobuf/wkt";
+import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
+import { create } from "@bufbuild/protobuf";
 
 import type {
   DeliveryInbox,
@@ -46,6 +47,7 @@ interface RemoteInboxPage {
   readonly messages: readonly InboxMessage[];
   readonly complete: boolean;
   readonly last: InboxMessage | undefined;
+  readonly unsafeContinuation: boolean;
 }
 
 /**
@@ -174,21 +176,28 @@ export class RemoteInbox implements DeliveryInbox {
       readonly timeoutMs: number;
     },
   ): Promise<RemoteInboxPage> {
-    const pageSize = Math.min(1_000, limit);
+    const pageSize = after === undefined ? limit : Math.min(1_000, limit + 1);
     const page = await RemoteInbox.#awaitPage(
       this.client.readPage(shardIndex, {
         pageSize,
         signal: options.signal,
         timeoutMs: options.timeoutMs,
-        ...(after === undefined ? {} : { after }),
+        ...(after === undefined ? {} : { sinceWhen: RemoteValues.pageAnchor(after.whenReceived) }),
       }),
       options.signal,
     );
+    const start = after === undefined ? 0 : RemoteValues.exactAfter(page, after);
     const last = page.at(-1);
+    const prior = page.at(-2);
     return {
-      messages: page,
+      messages: page.slice(start),
       complete: page.length < pageSize,
       last,
+      unsafeContinuation:
+        page.length === pageSize &&
+        prior !== undefined &&
+        last !== undefined &&
+        RemoteValues.sameTime(prior.whenReceived, last.whenReceived),
     };
   }
 
@@ -215,7 +224,8 @@ export class RemoteInbox implements DeliveryInbox {
         if (result.length === limit) return Object.freeze(result);
       }
       if (page.complete) return Object.freeze(result);
-      if (page.last === undefined) throw new DeliveryProtocolError();
+      if (page.last === undefined) throw new DeliveryPagingError();
+      if (page.unsafeContinuation) throw new DeliveryPagingError();
       after = {
         messageId: page.last.id.value,
         whenReceived: page.last.whenReceived,
@@ -601,6 +611,18 @@ const RemoteValues = Object.freeze({
   },
 
   /**
+   * Reads from the nanosecond before an exact continuation time.
+   * @param value Last received timestamp.
+   * @returns Exclusive JVM query bound that includes the cursor row.
+   */
+  pageAnchor(value: Timestamp): Timestamp {
+    if (value.seconds === -62_135_596_800n && value.nanos === 0) throw new DeliveryPagingError();
+    return value.nanos === 0
+      ? create(TimestampSchema, { seconds: value.seconds - 1n, nanos: 999_999_999 })
+      : create(TimestampSchema, { seconds: value.seconds, nanos: value.nanos - 1 });
+  },
+
+  /**
    * Compares two receive times at nanosecond precision.
    * @param left The first receive time.
    * @param right The second receive time.
@@ -630,6 +652,23 @@ const RemoteValues = Object.freeze({
    */
   sameWorker(left: DeliveryWorkerId, right: DeliveryWorkerId): boolean {
     return left.nodeId === right.nodeId && left.value === right.value;
+  },
+
+  /**
+   * Finds a continuation row returned by the JVM timestamp query.
+   * @param page Returned page.
+   * @param after Previous row identity.
+   * @returns Position after the previous row.
+   */
+  exactAfter(page: readonly InboxMessage[], after: NonNullable<InboxReadOptions["after"]>): number {
+    const exact = page.findIndex(
+      (message) =>
+        message.id.value === after.messageId &&
+        RemoteValues.sameTime(message.whenReceived, after.whenReceived) &&
+        message.version === after.version,
+    );
+    if (exact < 0) throw new DeliveryPagingError();
+    return exact + 1;
   },
 
   /**

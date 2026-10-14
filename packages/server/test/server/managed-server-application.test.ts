@@ -17,8 +17,6 @@ import { EventEmitter } from "node:events";
 import { fork, type ChildProcess } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { create } from "@bufbuild/protobuf";
-import { timestampFromDate } from "@bufbuild/protobuf/wkt";
-import { Time } from "@spine-event-engine/core/time";
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
 import {
@@ -946,7 +944,7 @@ describe("ManagedServerApplication", () => {
     await vi.waitFor(() => {
       expect(fakeSend(child)).toHaveBeenCalledWith({ type: "finish-close" }, expect.any(Function));
     });
-    expect(clock.delays).toEqual([30_000, 1_000, 1_000]);
+    expect(clock.delays).toEqual([1_000, 1_000]);
 
     clock.advance(1_000);
     await closing;
@@ -955,65 +953,17 @@ describe("ManagedServerApplication", () => {
     ]);
   });
 
-  it("bounds a connected child that never receives final relay release", async () => {
+  it("waits for relay cancellation before releasing child close", async () => {
     const clock = new FakeClock();
     const child = fakeChild(1);
+    const releaseRelay = Promise.withResolvers<undefined>();
+    const closeSubscriptions = vi.fn(() => releaseRelay.promise);
     let incarnation = "";
     const coordinator = new ManagedServerCoordinator(
       {
         processCount: 1,
         moduleUrl: import.meta.url,
         createServer: () => Promise.reject(new Error("unused")),
-        shutdownTimeoutMs: 200,
-      },
-      {
-        clock,
-        spawn: (_url, _slot, value) => {
-          incarnation = value;
-          return child;
-        },
-      },
-    );
-    const starting = coordinator.start();
-    child.emit("message", {
-      type: "ready",
-      slot: "0",
-      incarnation,
-      endpoint: "http://127.0.0.1:1",
-    });
-    const handle = await starting;
-    fakeSend(child).mockImplementation((message: { readonly type?: string }) => {
-      if (message.type === "close") {
-        child.emit("message", { type: "draining", slot: "0", incarnation });
-        child.emit("message", { type: "delivery-drained", slot: "0", incarnation });
-      }
-      return true;
-    });
-    const closing = handle.close();
-    await vi.waitFor(() => {
-      expect(fakeSend(child)).toHaveBeenCalledWith({ type: "finish-close" }, expect.any(Function));
-    });
-    clock.advance(200);
-    await Promise.resolve();
-    clock.advance(1_000);
-    await expect(closing).rejects.toThrow("shutdown deadline");
-    expect((child as ChildProcess & { readonly killCalls: readonly string[] }).killCalls).toContain(
-      "SIGTERM",
-    );
-    await expect(handle.close()).rejects.toThrow("shutdown deadline");
-  });
-
-  it("forces network and child cleanup when relay cancellation never settles", async () => {
-    const clock = new FakeClock();
-    const child = fakeChild(1);
-    const forceNetworkClose = vi.fn(() => Promise.resolve());
-    let incarnation = "";
-    const coordinator = new ManagedServerCoordinator(
-      {
-        processCount: 1,
-        moduleUrl: import.meta.url,
-        createServer: () => Promise.reject(new Error("unused")),
-        shutdownTimeoutMs: 200,
       },
       {
         clock,
@@ -1024,8 +974,8 @@ describe("ManagedServerApplication", () => {
         openCoordinator: () =>
           Promise.resolve({
             beginDrain: () => Promise.resolve(),
-            closeSubscriptions: () => new Promise<void>(() => undefined),
-            forceNetworkClose,
+            closeSubscriptions,
+            close: () => Promise.resolve(),
           } as unknown as NodeCoordinator),
       },
     );
@@ -1041,29 +991,28 @@ describe("ManagedServerApplication", () => {
       if (message.type === "close") {
         child.emit("message", { type: "draining", slot: "0", incarnation });
         child.emit("message", { type: "delivery-drained", slot: "0", incarnation });
+      } else if (message.type === "finish-close") {
+        child.emit("message", { type: "closed", slot: "0", incarnation });
+        child.emit("exit");
       }
       return true;
     });
     const closing = handle.close();
     await vi.waitFor(() => {
-      expect(fakeSend(child)).toHaveBeenCalledWith(
-        expect.objectContaining({ type: "close" }),
-        expect.any(Function),
-      );
+      expect(closeSubscriptions).toHaveBeenCalledOnce();
     });
-    clock.advance(200);
-    await Promise.resolve();
-    expect(forceNetworkClose).toHaveBeenCalledOnce();
-    expect((child as ChildProcess & { readonly killCalls: readonly string[] }).killCalls).toContain(
-      "SIGTERM",
-    );
-    await expect(closing).rejects.toThrow("shutdown deadline");
+    clock.advance(30_001);
     expect(
       fakeSend(child).mock.calls.map(([message]) => (message as { type: string }).type),
-    ).not.toContain("finish-close");
+    ).toEqual(["close"]);
+    releaseRelay.resolve(undefined);
+    await expect(closing).resolves.toBeUndefined();
+    expect(
+      fakeSend(child).mock.calls.map(([message]) => (message as { type: string }).type),
+    ).toEqual(["close", "finish-close"]);
   });
 
-  it("retries relay cleanup before the original deadline without repeating the child drain", async () => {
+  it("retries relay cleanup without repeating the child drain", async () => {
     const clock = new FakeClock();
     const child = fakeChild(1);
     const relayCleanup = vi
@@ -1076,7 +1025,6 @@ describe("ManagedServerApplication", () => {
         processCount: 1,
         moduleUrl: import.meta.url,
         createServer: () => Promise.reject(new Error("unused")),
-        shutdownTimeoutMs: 500,
       },
       {
         clock,
@@ -1121,8 +1069,6 @@ describe("ManagedServerApplication", () => {
     expect(
       fakeSend(child).mock.calls.map(([message]) => (message as { type: string }).type),
     ).toEqual(["close", "finish-close"]);
-    // One 500 ms timer is the cohort deadline; the other bounds its first child acknowledgement.
-    expect(clock.delays.filter((delay) => delay === 500)).toHaveLength(2);
   });
 
   it("waits for the exact replacement subscription before activating Delivery", async () => {
@@ -1618,7 +1564,7 @@ describe("ManagedServerApplication", () => {
       await starting;
       onMessage({ type: "ignored" }, undefined);
       expect(close).not.toHaveBeenCalled();
-      onMessage({ type: "close", remainingMs: 30_000 }, undefined);
+      onMessage({ type: "close" }, undefined);
       await vi.waitFor(() => {
         expect(send).toHaveBeenCalledWith(
           expect.objectContaining({ type: "delivery-drained" }),
@@ -1672,7 +1618,7 @@ describe("ManagedServerApplication", () => {
       });
       managedMessageListener(priorMessages)({ type: "activate" }, undefined);
       await starting;
-      managedMessageListener(priorMessages)({ type: "close", remainingMs: 30_000 }, undefined);
+      managedMessageListener(priorMessages)({ type: "close" }, undefined);
       await vi.waitFor(() => {
         expect(send).toHaveBeenCalledWith(
           expect.objectContaining({ type: "delivery-drained" }),
@@ -1700,145 +1646,6 @@ describe("ManagedServerApplication", () => {
       else process.env.SPINE_MANAGED_SERVER_CHILD = priorChild;
     }
   });
-
-  it("does not extend an accepted child close deadline after wall-clock rollback", async () => {
-    const priorChild = process.env.SPINE_MANAGED_SERVER_CHILD;
-    const priorSend = Object.getOwnPropertyDescriptor(process, "send");
-    const priorConnected = Object.getOwnPropertyDescriptor(process, "connected");
-    const priorDisconnect = Object.getOwnPropertyDescriptor(process, "disconnect");
-    const priorMessages = new Set(process.listeners("message"));
-    const priorDisconnects = new Set(process.listeners("disconnect"));
-    let wall = Date.now();
-    const previousTime = Time.setProvider({
-      currentTime: () => timestampFromDate(new Date(wall)),
-      monotonicTime: () => performance.now(),
-    });
-    const send = vi.fn((_message: unknown, callback: (error: Error | null) => void) => {
-      callback(null);
-      return true;
-    });
-    Object.defineProperty(process, "send", { configurable: true, value: send });
-    Object.defineProperty(process, "connected", { configurable: true, value: true });
-    Object.defineProperty(process, "disconnect", { configurable: true, value: vi.fn() });
-    process.env.SPINE_MANAGED_SERVER_CHILD = "true";
-    try {
-      const starting = ManagedServerApplication.run({
-        processCount: 1,
-        port: 0,
-        moduleUrl: import.meta.url,
-        createServer: () => Promise.resolve(localRunningServer(() => Promise.resolve())),
-      });
-      await vi.waitFor(() => {
-        expect(send).toHaveBeenCalled();
-      });
-      const onMessage = managedMessageListener(priorMessages);
-      onMessage({ type: "activate" }, undefined);
-      const handle = await starting;
-      onMessage({ type: "close", remainingMs: 50 }, undefined);
-      wall -= 60_000;
-      onMessage({ type: "close", remainingMs: 500 }, undefined);
-      process.env.SPINE_MANAGED_SERVER_CHILD = "false";
-      await vi.waitFor(
-        () => {
-          expect(send).toHaveBeenCalledWith(
-            expect.objectContaining({ type: "close-failed" }),
-            expect.any(Function),
-          );
-        },
-        { timeout: 300 },
-      );
-      await expect(handle.close()).rejects.toThrow("deadline expired");
-    } finally {
-      Time.setProvider(previousTime);
-      if (priorSend === undefined) delete (process as { send?: unknown }).send;
-      else Object.defineProperty(process, "send", priorSend);
-      if (priorConnected === undefined) delete (process as { connected?: unknown }).connected;
-      else Object.defineProperty(process, "connected", priorConnected);
-      if (priorDisconnect === undefined) delete (process as { disconnect?: unknown }).disconnect;
-      else Object.defineProperty(process, "disconnect", priorDisconnect);
-      for (const listener of process.listeners("message"))
-        if (!priorMessages.has(listener)) process.off("message", listener);
-      for (const listener of process.listeners("disconnect"))
-        if (!priorDisconnects.has(listener)) process.off("disconnect", listener);
-      if (priorChild === undefined) delete process.env.SPINE_MANAGED_SERVER_CHILD;
-      else process.env.SPINE_MANAGED_SERVER_CHILD = priorChild;
-    }
-  });
-
-  it.each(["message", "disconnect"] as const)(
-    "contains a failed child close triggered by private %s and permits explicit retry",
-    async (trigger) => {
-      const priorChild = process.env.SPINE_MANAGED_SERVER_CHILD;
-      const priorSend = Object.getOwnPropertyDescriptor(process, "send");
-      const priorConnected = Object.getOwnPropertyDescriptor(process, "connected");
-      const priorDisconnect = Object.getOwnPropertyDescriptor(process, "disconnect");
-      const priorMessages = new Set(process.listeners("message"));
-      const priorDisconnects = new Set(process.listeners("disconnect"));
-      const send = vi.fn((_message: unknown, callback: (error: Error | null) => void) => {
-        callback(null);
-        return true;
-      });
-      const disconnect = vi.fn();
-      Object.defineProperty(process, "send", { configurable: true, value: send });
-      Object.defineProperty(process, "connected", { configurable: true, value: true });
-      Object.defineProperty(process, "disconnect", { configurable: true, value: disconnect });
-      process.env.SPINE_MANAGED_SERVER_CHILD = "true";
-      const close = vi
-        .fn<() => Promise<void>>()
-        .mockRejectedValueOnce(new Error("event close failed"))
-        .mockResolvedValueOnce(undefined);
-      const unhandled = vi.fn();
-      process.once("unhandledRejection", unhandled);
-      try {
-        const starting = ManagedServerApplication.run({
-          processCount: 1,
-          port: 50_051,
-          moduleUrl: import.meta.url,
-          createServer: () => Promise.resolve(localRunningServer(close)),
-        });
-        await vi.waitFor(() => {
-          expect(send).toHaveBeenCalled();
-        });
-        managedMessageListener(priorMessages)({ type: "activate" }, undefined);
-        const handle = await starting;
-        if (trigger === "message") {
-          managedMessageListener(priorMessages)({ type: "close", remainingMs: 30_000 }, undefined);
-          await vi.waitFor(() => {
-            expect(send).toHaveBeenCalledWith(
-              expect.objectContaining({ type: "delivery-drained" }),
-              expect.any(Function),
-            );
-          });
-          managedMessageListener(priorMessages)({ type: "finish-close" }, undefined);
-        } else {
-          const onDisconnect = managedDisconnectListener(priorDisconnects);
-          onDisconnect();
-          process.off("disconnect", onDisconnect);
-        }
-        await new Promise((resolve) => setImmediate(resolve));
-        expect(unhandled).not.toHaveBeenCalled();
-        await expect(handle.close()).resolves.toBeUndefined();
-        expect(close).toHaveBeenCalledTimes(2);
-        expect(disconnect).toHaveBeenCalledOnce();
-      } finally {
-        process.off("unhandledRejection", unhandled);
-        if (priorSend === undefined) delete (process as { send?: unknown }).send;
-        else Object.defineProperty(process, "send", priorSend);
-        if (priorConnected === undefined) delete (process as { connected?: unknown }).connected;
-        else Object.defineProperty(process, "connected", priorConnected);
-        if (priorDisconnect === undefined) delete (process as { disconnect?: unknown }).disconnect;
-        else Object.defineProperty(process, "disconnect", priorDisconnect);
-        for (const listener of process.listeners("message")) {
-          if (!priorMessages.has(listener)) process.off("message", listener);
-        }
-        for (const listener of process.listeners("disconnect")) {
-          if (!priorDisconnects.has(listener)) process.off("disconnect", listener);
-        }
-        if (priorChild === undefined) delete process.env.SPINE_MANAGED_SERVER_CHILD;
-        else process.env.SPINE_MANAGED_SERVER_CHILD = priorChild;
-      }
-    },
-  );
 
   it("closes local assembly when a marked child has no parent IPC", async () => {
     const priorChild = process.env.SPINE_MANAGED_SERVER_CHILD;
@@ -1926,17 +1733,6 @@ describe("ManagedServerApplication", () => {
     }
   }, 20_000);
 
-  it("honors the parent's longer managed deadline with a default-configured child", async () => {
-    const managed = await ManagedServerApplication.run({
-      processCount: 1,
-      port: 0,
-      shutdownTimeoutMs: 60_000,
-      moduleUrl: new URL("./managed-server-application-child.mjs", import.meta.url).href,
-      createServer: () => Promise.reject(new Error("Parent must not assemble a child.")),
-    });
-    await expect(managed.close()).resolves.toBeUndefined();
-  }, 20_000);
-
   it("rejects a persistent normal Server registry before a managed child reports READY", async () => {
     const child = managedRegistryChild();
     const messages: unknown[] = [];
@@ -1988,34 +1784,13 @@ describe("ManagedServerApplication", () => {
     const exited = childExit(child);
     try {
       await ready;
-      child.send({ type: "close", remainingMs: 30_000 });
+      child.send({ type: "close" });
       await expect(exited).resolves.toMatchObject({ code: 0 });
     } finally {
       if (child.exitCode === null) child.kill("SIGKILL");
       await exited;
     }
   }, 20_000);
-
-  it("exits a managed child when its connected parent never releases final close", async () => {
-    const child = managedRegistryChild("memory");
-    const stderr = childStderr(child);
-    const ready = new Promise<void>((resolve) => {
-      child.on("message", (message: { readonly type?: string }) => {
-        if (message.type === "synchronizing") child.send({ type: "activate" });
-        else if (message.type === "ready") resolve();
-      });
-    });
-    const exited = childExit(child);
-    try {
-      await ready;
-      child.send({ type: "close", remainingMs: 50 });
-      await expect(exited).resolves.toMatchObject({ code: 1 });
-      expect(stderr.text()).not.toContain("UnhandledPromiseRejection");
-    } finally {
-      if (child.exitCode === null) child.kill("SIGKILL");
-      await exited;
-    }
-  }, 10_000);
 
   it("does not block readiness when a child writes verbose standard output", async () => {
     const priorVerbose = process.env.SPINE_MANAGED_SERVER_VERBOSE;
@@ -2209,40 +1984,6 @@ describe("ManagedServerApplication", () => {
           }),
         ).rejects.toThrow("Managed server Coordinator port");
         expect(createServer).not.toHaveBeenCalled();
-      } finally {
-        if (priorChild === undefined) delete process.env.SPINE_MANAGED_SERVER_CHILD;
-        else process.env.SPINE_MANAGED_SERVER_CHILD = priorChild;
-      }
-    },
-  );
-  it.each([0, -1, 1.5, Number.POSITIVE_INFINITY, 2_147_483_648])(
-    "rejects invalid managed shutdown timeout %s before child assembly",
-    async (shutdownTimeoutMs) => {
-      const priorChild = process.env.SPINE_MANAGED_SERVER_CHILD;
-      process.env.SPINE_MANAGED_SERVER_CHILD = "true";
-      const createServer = vi.fn(() =>
-        Promise.resolve(localRunningServer(() => Promise.resolve())),
-      );
-      try {
-        await expect(
-          ManagedServerApplication.start({
-            processCount: 1,
-            port: 0,
-            moduleUrl: import.meta.url,
-            createServer,
-            shutdownTimeoutMs,
-          }),
-        ).rejects.toThrow("shutdownTimeoutMs");
-        expect(createServer).not.toHaveBeenCalled();
-        expect(
-          () =>
-            new ManagedServerCoordinator({
-              processCount: 1,
-              moduleUrl: import.meta.url,
-              createServer,
-              shutdownTimeoutMs,
-            }),
-        ).toThrow("shutdownTimeoutMs");
       } finally {
         if (priorChild === undefined) delete process.env.SPINE_MANAGED_SERVER_CHILD;
         else process.env.SPINE_MANAGED_SERVER_CHILD = priorChild;

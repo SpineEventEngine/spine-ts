@@ -17,13 +17,12 @@ import type { ServiceImpl } from "@connectrpc/connect";
 import {
   AdminService,
   InboxService,
-  InboxReadService,
   ShardService,
 } from "@spine-event-engine/proto/delivery-server";
 
 import { AdminPublisher } from "../admin/admin-service.js";
 import { InMemoryDeliveryState } from "../core/in-memory-delivery-state.js";
-import { InboxHandlers, InboxReadHandlers } from "../core/inbox-service.js";
+import { InboxHandlers } from "../core/inbox-service.js";
 import { MutationAdmission } from "../core/mutation-admission.js";
 import { ShardHandlers } from "../core/shard-service.js";
 import { DEFAULT_DELIVERY_STATE_LIMITS } from "../core/limits.js";
@@ -39,11 +38,6 @@ export interface DeliveryAssembly {
    * Provides Inbox handlers backed by the shared delivery state.
    */
   readonly inbox: ServiceImpl<typeof InboxService>;
-
-  /**
-   * Provides exact-cursor Inbox page reads.
-   */
-  readonly inboxRead: ServiceImpl<typeof InboxReadService>;
 
   /**
    * Provides Shard handlers backed by the shared delivery state.
@@ -101,7 +95,6 @@ export const DeliveryAssembly: Readonly<{
       inbox: InboxHandlers.create(state, admission, (shard, delta) => {
         admin.recordMessageTransition(shard, delta);
       }),
-      inboxRead: InboxReadHandlers.create(state),
       shards: ShardHandlers.create(
         state,
         admission,

@@ -3940,47 +3940,6 @@ describe("repository signal routing", () => {
     expect(observed[0]).toMatch(/.+/);
   });
 
-  it("repairs an Aggregate reactor output after stored publication exhaustion", async () => {
-    ProjectRegistrationReactorAggregate.reset();
-    const factory = new InMemoryStorageFactory();
-    const received: Uint8Array[] = [];
-    let available = false;
-    const context = BoundedContext.singleTenant("Tasks")
-      .add(createGeneratedReactorRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [ProjectRegisteredSchema],
-        dispatch: (event) => {
-          received.push(toBinary(EventSchema, event));
-          if (!available) throw new Error("reactor recipient unavailable");
-          return Promise.resolve();
-        },
-      })
-      .withStorageFactory(factory)
-      .build();
-    const store = new EventStore({ name: "Tasks", multitenant: false }, factory);
-
-    await context.eventBus().post(createProjectCreated("reactor-source-fault", "reactor-fault"));
-    await waitForCondition(() => received.length === 3);
-    const saved = await store.read();
-    const produced = saved.find(
-      (event) => event.message?.typeUrl === TypeUrls.derive(ProjectRegisteredSchema),
-    );
-    if (produced?.id?.value === undefined) throw new Error("Expected the reactor Event ID.");
-    expect(ProjectRegistrationReactorAggregate.argumentCounts).toEqual([2]);
-    await expect(context.stand().read(ProjectStateSchema, "reactor-fault")).resolves.toMatchObject({
-      id: "reactor-fault",
-    });
-
-    available = true;
-    await expect(context.republishEvents({ eventIds: [produced.id.value] })).resolves.toMatchObject(
-      [{ eventId: produced.id.value, status: "ADMITTED" }],
-    );
-    expect(received).toHaveLength(4);
-    for (const bytes of received) expect(bytes).toEqual(received[0]);
-    expect(ProjectRegistrationReactorAggregate.argumentCounts).toEqual([2]);
-    expect(await store.read()).toEqual(saved);
-  });
-
   it("retries a failed state-only Aggregate reaction without exposing or duplicating state", async () => {
     const factory = new FailingSourceDiagnosticStorageFactory();
     const repository = createCountingReactorRepository();
@@ -7982,46 +7941,6 @@ describe("repository signal routing", () => {
     expect(await eventStore.read()).toEqual([]);
   });
 
-  it("repairs a completed Process Manager Command output by its original Event ID", async () => {
-    RoutingProcessManager.reset();
-    const factory = new InMemoryStorageFactory();
-    const received: Uint8Array[] = [];
-    let available = false;
-    const context = BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerAssignRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [ProjectCreatedSchema],
-        dispatch: (event) => {
-          received.push(toBinary(EventSchema, event));
-          if (!available) throw new Error("recipient unavailable");
-          return Promise.resolve();
-        },
-      })
-      .withStorageFactory(factory)
-      .build();
-    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
-
-    await context.commandBus().post(createAggregateCommand("command-pm-repair", "pm-repair"));
-    await waitForCondition(() => received.length === 3);
-    const [stored] = await eventStore.read();
-    if (stored?.id?.value === undefined) throw new Error("Expected the produced Event ID.");
-    expect(RoutingProcessManager.commandCalls).toBe(1);
-    await expect(context.stand().read(ProjectQueueStateSchema, "pm-repair")).resolves.toMatchObject(
-      {
-        id: "pm-repair",
-      },
-    );
-
-    available = true;
-    await expect(context.republishEvents({ eventIds: [stored.id.value] })).resolves.toMatchObject([
-      { eventId: stored.id.value, status: "ADMITTED" },
-    ]);
-    expect(received).toHaveLength(4);
-    for (const bytes of received) expect(bytes).toEqual(received[0]);
-    expect(RoutingProcessManager.commandCalls).toBe(1);
-    expect(await eventStore.read()).toEqual([stored]);
-  });
-
   it("copies the full pre-dispatch Process Manager Version to produced Events", async () => {
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
@@ -9073,19 +8992,17 @@ describe("repository signal routing", () => {
   });
 
   it.each([false, true])(
-    "keeps System Event publication separate from domain repair when persistence is %s",
+    "keeps System Event publication separate from domain storage when persistence is %s",
     async (persist) => {
       RoutingProcessManager.reset();
       const factory = new InMemoryStorageFactory();
       const received: SpineEvent[] = [];
-      let available = false;
       let builder = BoundedContext.singleTenant("Tasks")
         .add(createProcessManagerAssignRepository())
         .addEventDispatcher({
           messageSchemas: () => [CommandDispatchedToHandlerSchema],
           dispatch: (event) => {
             received.push(event);
-            if (!available) throw new Error("System diagnostic recipient unavailable");
             return Promise.resolve();
           },
         })
@@ -9103,8 +9020,8 @@ describe("repository signal routing", () => {
         await context
           .commandBus()
           .post(createAggregateCommand("command-system-fault", "pm-system-fault"));
-        await waitForCondition(() => received.length === 3);
-        expect(received).toHaveLength(3);
+        await waitForCondition(() => received.length === 1);
+        expect(received).toHaveLength(1);
         const first = received[0];
         if (first === undefined) throw new Error("Expected a dispatched System Event.");
         for (const event of received)
@@ -9118,88 +9035,13 @@ describe("repository signal routing", () => {
         expect(
           await domainStore.read({ ids: [create(EventIdSchema, { value: systemId })] }),
         ).toEqual([]);
-        if (persist) {
-          expect(matched[0]).toEqual(received[0]);
-          available = true;
-          await expect(context.republishEvents({ eventIds: [systemId] })).resolves.toMatchObject([
-            { eventId: systemId, status: "ADMITTED" },
-          ]);
-          const domain = (await domainStore.read())[0];
-          const domainId = domain?.id?.value;
-          if (domainId === undefined) throw new Error("Expected a stored domain Event ID.");
-          await expect(
-            context.republishEvents({ eventIds: [systemId, domainId] }),
-          ).resolves.toMatchObject([
-            { eventId: systemId, status: "ADMITTED" },
-            { eventId: domainId, status: "ADMITTED" },
-          ]);
-          const callsBeforeCollision = received.length;
-          await domainStore.append(createProjectCreated(systemId, "collision-target"));
-          await expect(context.republishEvents({ eventIds: [systemId] })).resolves.toMatchObject([
-            { eventId: systemId, status: "FAILED", attempts: 0 },
-          ]);
-          expect(received).toHaveLength(callsBeforeCollision);
-        }
+        if (persist) expect(matched[0]).toEqual(received[0]);
         expect(RoutingProcessManager.commandCalls).toBe(1);
       } finally {
         await context.close();
       }
     },
   );
-
-  it("repairs a persisted System Event from a fresh forgetting context without rerunning its Command", async () => {
-    RoutingProcessManager.reset();
-    const factory = new InMemoryStorageFactory();
-    const first = BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerAssignRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [CommandDispatchedToHandlerSchema],
-        dispatch: () => Promise.resolve(),
-      })
-      .withStorageFactory(factory)
-      .persistSystemEvents()
-      .build();
-    const stored = new EventStore(
-      { name: "Tasks_System", multitenant: false },
-      factory,
-      new StorageGroup("spine_system_events"),
-    );
-    let systemId: string;
-    try {
-      await first.commandBus().post(createAggregateCommand("command-system-restart", "pm-restart"));
-      const saved = (await stored.read()).find(
-        (event) => event.message?.typeUrl === TypeUrls.derive(CommandDispatchedToHandlerSchema),
-      );
-      if (saved?.id?.value === undefined) throw new Error("Expected a saved System Event ID.");
-      systemId = saved.id.value;
-    } finally {
-      await first.close();
-    }
-
-    const replayed: SpineEvent[] = [];
-    const second = BoundedContext.singleTenant("Tasks")
-      .addEventDispatcher({
-        messageSchemas: () => [CommandDispatchedToHandlerSchema],
-        dispatch: (event) => {
-          replayed.push(event);
-          return Promise.resolve();
-        },
-      })
-      .withStorageFactory(factory)
-      .build();
-    try {
-      await expect(second.republishEvents({ eventIds: [systemId] })).resolves.toMatchObject([
-        { eventId: systemId, status: "ADMITTED" },
-      ]);
-      expect(replayed).toHaveLength(1);
-      expect(replayed[0]?.id?.value).toBe(systemId);
-      expect(RoutingProcessManager.commandCalls).toBe(1);
-      expect(await stored.read()).not.toHaveLength(0);
-    } finally {
-      await second.close();
-      stored.close();
-    }
-  });
 
   it("does not append a domain Event passed to persisted System publication", async () => {
     const factory = new InMemoryStorageFactory();
@@ -9230,75 +9072,55 @@ describe("repository signal routing", () => {
       await boundedContextAccess.postSystemEvent(context, missingPayload);
       expect(await stored.read()).toEqual([]);
       expect(received).toEqual([]);
-      await expect(
-        context.republishEvents({ eventIds: ["not-a-system-event"] }),
-      ).resolves.toMatchObject([
-        { eventId: "not-a-system-event", status: "NOT_FOUND", attempts: 0 },
-      ]);
     } finally {
       await context.close();
       stored.close();
     }
   });
 
-  it.each([1, 3])(
-    "retries a produced System Event append %s time(s) before truthful dispatch or exhaustion",
-    async (failures) => {
-      RoutingProcessManager.reset();
-      const factory = new FailingProcessManagerProducedEventFactory(
-        TypeUrls.derive(CommandDispatchedToHandlerSchema),
-        "spine_system_events",
-        failures,
-      );
-      const received: SpineEvent[] = [];
-      const context = BoundedContext.singleTenant("Tasks")
-        .add(createProcessManagerAssignRepository())
-        .addEventDispatcher({
-          messageSchemas: () => [CommandDispatchedToHandlerSchema],
-          dispatch: (event) => {
-            received.push(event);
-            return Promise.resolve();
-          },
-        })
-        .withStorageFactory(factory)
-        .persistSystemEvents()
-        .build();
-      const stored = new EventStore(
-        { name: "Tasks_System", multitenant: false },
-        factory,
-        new StorageGroup("spine_system_events"),
-      );
-      try {
-        await context
-          .commandBus()
-          .post(
-            createAggregateCommand(
-              `command-system-${String(failures)}`,
-              `pm-system-${String(failures)}`,
-            ),
-          );
-        await withTimeout(factory.failed, "first System append failure");
-        await waitForCondition(() =>
-          failures === 1 ? received.length === 1 : factory.failedEvents.length === 3,
-        );
-        const saved = (await stored.read()).filter(
+  it("does not retry a failed System Event append", async () => {
+    RoutingProcessManager.reset();
+    const factory = new FailingProcessManagerProducedEventFactory(
+      TypeUrls.derive(CommandDispatchedToHandlerSchema),
+      "spine_system_events",
+      1,
+    );
+    const received: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerAssignRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [CommandDispatchedToHandlerSchema],
+        dispatch: (event) => {
+          received.push(event);
+          return Promise.resolve();
+        },
+      })
+      .withStorageFactory(factory)
+      .persistSystemEvents()
+      .build();
+    const stored = new EventStore(
+      { name: "Tasks_System", multitenant: false },
+      factory,
+      new StorageGroup("spine_system_events"),
+    );
+    try {
+      await context
+        .commandBus()
+        .post(createAggregateCommand("command-system-fault", "pm-system-fault"));
+      await withTimeout(factory.failed, "System append failure");
+      await context.close();
+      expect(factory.failedEvents).toHaveLength(1);
+      expect(received).toHaveLength(0);
+      expect(
+        (await stored.read()).filter(
           (event) => event.message?.typeUrl === TypeUrls.derive(CommandDispatchedToHandlerSchema),
-        );
-        expect(RoutingProcessManager.commandCalls).toBe(1);
-        await expect(
-          context.stand().read(ProjectQueueStateSchema, `pm-system-${String(failures)}`),
-        ).resolves.toBeDefined();
-        expect(saved).toHaveLength(failures === 1 ? 1 : 0);
-        expect(received).toHaveLength(failures === 1 ? 1 : 0);
-        for (const bytes of factory.failedEvents) expect(bytes).toEqual(factory.failedEvents[0]);
-        if (failures === 1 && saved[0] !== undefined)
-          expect(toBinary(EventSchema, saved[0])).toEqual(factory.failedEvents[0]);
-      } finally {
-        await context.close();
-        stored.close();
-      }
-    },
-  );
+        ),
+      ).toHaveLength(0);
+      expect(RoutingProcessManager.commandCalls).toBe(1);
+    } finally {
+      stored.close();
+    }
+  });
 
   it("does not emit reactor diagnostics without a matched reactor", async () => {
     const diagnostics: SpineEvent[] = [];
@@ -9610,50 +9432,6 @@ describe("repository signal routing", () => {
       context.stand().read(ProjectQueueStateSchema, "pm-event-fault"),
     ).resolves.toBeUndefined();
     expect(await eventStore.read()).toEqual([source]);
-  });
-
-  it("repairs a completed Process Manager Event reaction output without rerunning its handler", async () => {
-    RoutingProcessManager.reset();
-    const factory = new InMemoryStorageFactory();
-    const received: Uint8Array[] = [];
-    let available = false;
-    const context = BoundedContext.singleTenant("Tasks")
-      .add(createProcessManagerEventProducingRepository())
-      .addEventDispatcher({
-        messageSchemas: () => [ProjectRegisteredSchema],
-        dispatch: (event) => {
-          received.push(toBinary(EventSchema, event));
-          if (!available) throw new Error("recipient unavailable");
-          return Promise.resolve();
-        },
-      })
-      .withStorageFactory(factory)
-      .build();
-    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
-    const source = createProjectCreated("event-pm-repair-source", "pm-event-repair");
-
-    await context.eventBus().post(source);
-    await waitForCondition(() => received.length === 3);
-    const stored = await eventStore.read();
-    const produced = stored.find(
-      (event) => event.message?.typeUrl === TypeUrls.derive(ProjectRegisteredSchema),
-    );
-    if (produced?.id?.value === undefined) throw new Error("Expected the produced Event ID.");
-    expect(RoutingProcessManager.eventCalls).toBe(1);
-    await expect(
-      context.stand().read(ProjectQueueStateSchema, "pm-event-repair"),
-    ).resolves.toMatchObject({
-      id: "pm-event-repair",
-    });
-
-    available = true;
-    await expect(context.republishEvents({ eventIds: [produced.id.value] })).resolves.toMatchObject(
-      [{ eventId: produced.id.value, status: "ADMITTED" }],
-    );
-    expect(received).toHaveLength(4);
-    for (const bytes of received) expect(bytes).toEqual(received[0]);
-    expect(RoutingProcessManager.eventCalls).toBe(1);
-    expect(await eventStore.read()).toEqual(stored);
   });
 
   it("rejects blank source event ids before process-manager event reactions mutate state", async () => {
@@ -16317,7 +16095,7 @@ describe("Projection state-update routing", () => {
     try {
       await boundedContextAccess.postSystemEvent(context, createStateChangedEvent("source"));
       const entries = StateObservingProjection.subscriberCalls;
-      expect(entries).toBe(3);
+      expect(entries).toBe(1);
       expect(StateObservingProjection.receivedIds).toEqual(Array(entries).fill("source"));
       await expect(storage.readCurrent("target")).resolves.toBeUndefined();
       await expect(storage.readStates("target")).resolves.toEqual([]);

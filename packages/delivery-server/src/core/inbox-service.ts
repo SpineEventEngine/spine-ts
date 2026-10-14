@@ -24,8 +24,6 @@ import { Code, ConnectError, type ServiceImpl } from "@connectrpc/connect";
 import { CommandSchema, EventSchema } from "@spine-event-engine/proto";
 import {
   InboxService,
-  InboxReadService,
-  type ReadInboxPage,
   OptionalInboxMessageSchema,
   PageOfMessagesSchema,
 } from "@spine-event-engine/proto/delivery-server";
@@ -81,75 +79,6 @@ export const InboxHandlers: Readonly<{
       findManyInShard: InboxOperations.findManyInShard(state),
       newestMessageToDeliver: InboxOperations.newestMessageToDeliver(state),
     }),
-});
-
-/**
- * Provides exact-cursor Inbox read handlers over the shared delivery state.
- */
-export const InboxReadHandlers: Readonly<{
-  /**
-   * Creates a bounded cursor read handler.
-   * @param state Stores Inbox messages served by the handler.
-   * @returns The cursor read service implementation.
-   */
-  create: (state: InMemoryDeliveryState) => ServiceImpl<typeof InboxReadService>;
-}> = Object.freeze({
-  create: (state: InMemoryDeliveryState): ServiceImpl<typeof InboxReadService> =>
-    Object.freeze({
-      readPage: (request) => {
-        const shard = InboxReadPages.validate(request);
-        const after = request.after;
-        const message = [...state.messages.values()]
-          .filter(
-            (value) =>
-              value.id?.index !== undefined &&
-              DeliveryShards.key(value.id.index) === DeliveryShards.key(shard),
-          )
-          .filter((value) =>
-            after !== undefined
-              ? InboxMessages.after(value, after)
-              : request.sinceWhen === undefined || InboxTime.compare(value, request.sinceWhen) > 0,
-          )
-          .sort(InboxMessages.compare)
-          .slice(0, request.pageSize)
-          .map(DeliveryMessages.copy);
-        return InboxResponses.bounded(
-          PageOfMessagesSchema,
-          { message },
-          "Delivery page exceeds the 4 MiB response limit; request a smaller page.",
-        );
-      },
-    }),
-});
-
-/**
- * Validates authored cursor reads before selecting shared Inbox rows.
- */
-const InboxReadPages = Object.freeze({
-  /**
-   * Validates page bounds and position fields.
-   * @param request Holds the authored page request.
-   * @returns The validated shard.
-   */
-  validate(request: ReadInboxPage): ShardIndex {
-    const shard = InboxShards.required(request.shard);
-    if (!Number.isInteger(request.pageSize) || request.pageSize < 1 || request.pageSize > 1_000)
-      throw InboxResponses.invalid("Delivery page size must be between 1 and 1000.");
-    if (request.after !== undefined && request.sinceWhen !== undefined)
-      throw InboxResponses.invalid("Delivery page has conflicting positions.");
-    if (request.sinceWhen !== undefined && !InboxTime.valid(request.sinceWhen))
-      throw InboxResponses.invalid("Delivery page timestamp is invalid.");
-    const after = request.after;
-    if (
-      after !== undefined &&
-      (after.whenReceived === undefined ||
-        !InboxTime.valid(after.whenReceived) ||
-        after.version < 0 ||
-        after.messageId.trim().length === 0)
-    )
-      throw InboxResponses.invalid("Delivery cursor is invalid.");
-    return shard;
-  },
 });
 
 const InboxOperations = {
@@ -343,21 +272,6 @@ const InboxMessages: Readonly<{
   compare: (left: InboxMessage, right: InboxMessage) => number;
 
   /**
-   * Determines whether a message follows the supplied exact cursor.
-   * @param message Holds the candidate Inbox row.
-   * @param cursor Holds the exclusive cursor tuple.
-   * @returns Whether the row follows the cursor.
-   */
-  after: (
-    message: InboxMessage,
-    cursor: {
-      readonly whenReceived?: { readonly seconds: bigint; readonly nanos: number } | undefined;
-      readonly version: number;
-      readonly messageId: string;
-    },
-  ) => boolean;
-
-  /**
    * Validates an Inbox payload.
    *
    * @param message Holds the Inbox message whose payload is checked.
@@ -418,12 +332,6 @@ const InboxMessages: Readonly<{
     const version = left.version - right.version;
     if (version !== 0) return version;
     return InboxIds.compare(left.id?.uuid ?? "", right.id?.uuid ?? "");
-  },
-  after: (message, cursor): boolean => {
-    const received = InboxTime.compare(message, cursor.whenReceived);
-    if (received !== 0) return received > 0;
-    if (message.version !== cursor.version) return message.version > cursor.version;
-    return InboxIds.compare(message.id?.uuid ?? "", cursor.messageId) > 0;
   },
   validPayload: (message: InboxMessage): boolean => {
     const payload = message.payload;

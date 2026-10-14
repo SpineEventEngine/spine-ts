@@ -403,8 +403,7 @@ export class DeliverySupervisor {
    * Stops admission and source activity, waits one bounded active-work grace phase, then fences runs.
    * A separate release-cleanup phase uses the same bound. Cleanup failure takes precedence over
    * an active-work timeout; incomplete cleanup is retained for a later close retry. After both
-   * bounded phases, entered work may still keep close pending indefinitely. Context and managed
-   * server shutdown use separate deadlines.
+   * bounded phases, entered work may still keep close pending indefinitely.
    *
    * @param options Close controls; `graceMs` defaults to 30000 milliseconds per phase.
    * @returns A promise that settles after close cleanup completes.

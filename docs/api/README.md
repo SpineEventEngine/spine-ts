@@ -84,20 +84,11 @@ remote/shared Delivery directly. DRAINING stops accepting new unary calls and sh
 retains subscription relays through active work, and closes the child after the
 final updates. The application selects its Delivery service and shard strategy;
 managed mode does not choose them or check where they came from.
-Managed close uses one configurable 30-second-default graceful deadline from
-the first close attempt across Delivery drain, relay cancellation, and final
-child close. Expiry reports failure and starts bounded process cleanup; an
-entered effect may still complete, so pending Delivery can repeat after restart.
-
-Direct `DeliverySupervisor.close({ graceMs })` has a different timing contract.
-`graceMs` defaults to 30,000 ms and bounds active-work grace and release cleanup
-separately. After those phases, close still awaits entered work that has not
-settled, so `graceMs` is not a hard total close deadline. Context and
-managed-server deadlines are separate controls.
-Each context has a separate shutdown deadline (default five seconds) starting
-when its own close begins; that deadline may end graceful context work earlier.
-Graceful child exit may add up to three seconds, while TERM/KILL and reaping
-after managed expiry may add up to two seconds.
+Managed close drains Delivery, cancels subscription relays while child listeners
+remain reachable, and then completes child close. Failed cleanup remains
+observable and retryable. Private IPC acknowledgement and process reaping have
+separate bounded graces. Direct `DeliverySupervisor.close({ graceMs })` retains
+its active-work and release-cleanup bounds; these are Delivery policies.
 
 The reference includes entry points for `@spine-event-engine/client-web`,
 `@spine-event-engine/client-node`, `@spine-event-engine/delivery-client`, and
@@ -309,7 +300,7 @@ tenant-safe replay in multitenant contexts, and resolves only after that
 received row is marked delivered. Process-manager event rows use
 `REACT_UPON_EVENT`, projection subscriber rows use `UPDATE_SUBSCRIBER`, both
 store the original `Event` envelope, and both replay only the routed row target
-before the transaction and `Stand` update. Before handler code runs, replay
+before the independent persistence steps and `Stand` update. Before handler code runs, replay
 validates the row label, pending `TO_DELIVER` status, tenant, payload/schema,
 target type URL, and routed target ID.
 Pending and delivered `InboxMessage` rows are stored directly. Shard ownership
@@ -356,47 +347,13 @@ Projection repository, entity IDs, or a starting time. It does not return a
 catch-up operation ID or implement durable progress, overlap admission, live
 event coordination, delivery jobs, schedulers, inbox lifecycle, retries,
 restart, resumption, or transport topology.
-`BoundedContext.republishEvents({eventIds, tenantId?, signal?})` is a separate
-bounded repair call for 1–100 distinct IDs known by the caller to belong to
-completed Entity saves or persisted System Events. It performs exact tenant-scoped reads and returns
-ordered admitted, failed, missing, or cancelled outcomes. An Event row alone
-does not prove the Entity save completed because its records are written
-independently. Admission does not guarantee current recipient completion;
-repeated recipients may observe the same Event again. No historical scan or
-automatic recovery discovery is provided. Each known-ID repair makes up to
-three actual bus dispatch attempts using the same stored envelope and ID,
-with 100 milliseconds between failed attempts unless caller cancellation or
-terminal context closure stops them. The attempt count does not prove
-recipient completion; partial effects may repeat.
-Persisted System Events use a separate fixed storage group. Repair reads both
-groups by exact ID, uses the corresponding
-bus, and fails without dispatch if the same ID appears in both. Context names
-are diagnostic labels, not storage namespaces. A forgotten System Event that
-was never persisted cannot be repaired by ID; a fresh forgetting-mode context
-can repair one that a previous context saved.
-Normal publication of an Event from a completed Entity save makes up to three
-actual dispatch attempts with the same captured Event envelope and ID, waiting
-100 milliseconds between failed attempts unless caller cancellation or terminal
-context closure stops them, before
-reporting exhaustion internally. Those attempts do not rerun the successful
-Command handler, and accepted Command posting does not promise publication or
-recipient completion. Partial recipient effects can repeat across attempts;
-an exhausted Event remains available for explicit known-ID repair. This finite
-normal-Event retry does not apply to the independent typed rejection-event
-posting described above.
-System Events use finite delayed recipient retries in either persistence mode.
-With persistence enabled, they are validated and appended before recipients
-run. Transient append and dispatch failures use the same three-attempt budget and
-100-millisecond spacing. If append never succeeds, there is no stored Event
-for later repair.
-`BoundedContextBuilder.withShutdownTimeout(milliseconds)` sets one shared
-deadline for context draining and cleanup (default 5,000 ms). A close first
-stops external work and repair, but allows accepted framework follow-ups during
-grace. At expiry it fences queued work and rejects with an `AggregateError`;
-repeated close returns the same terminal outcome. Already-entered application
-or storage effects may still finish after that deadline. This budget starts
-when context close begins, including a server's split close, and does not bound
-the server's separate network or Delivery teardown.
+Committed Entity, reactor, Process Manager, and System Events receive one
+first-publication attempt. A failed recipient or System append is reported
+through existing diagnostics and does not schedule another publication. Inbox
+processing and acknowledgement recovery remain separate Delivery behavior.
+`BoundedContext.close()` drains accepted work and aggregates cleanup failures;
+a failed cleanup may be retried.
+
 Server exports also include the abstract `Entity`, `TransactionalEntity`,
 `Aggregate`, `Projection`, `ProcessManager`, `EntityFamily`,
 `TransactionalEntityScopeError`, `EntityScopeReason`,
@@ -591,8 +548,7 @@ Shared facilities remain open when a server closes. Network or context-intake
 close failure is a hard gate: delivery detach and dependency cleanup do not begin
 until a later `close()` retry completes that step. After the hard gate,
 remaining phases are attempted in order; failures are combined, and a later
-close retries only unfinished cleanup except for a terminal context shutdown
-timeout. The API deliberately hides private child
+close retries only unfinished cleanup. The API deliberately hides private child
 listener details, worker/process supervision, durable scheduling, and Java-style
 delivery-topology configuration; it intentionally exposes this one JVM-style
 global process environment configuration.

@@ -22,7 +22,6 @@ const known = new Set([
   "",
   "grpc.health.v1.Health",
   "spine.delivery.InboxService",
-  "spine.delivery.InboxReadService",
   "spine.delivery.ShardService",
   "spine.delivery.AdminService",
 ]);

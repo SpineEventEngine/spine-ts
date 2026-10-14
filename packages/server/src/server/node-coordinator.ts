@@ -14,7 +14,7 @@
 
 import * as http2 from "node:http2";
 import { randomUUID } from "node:crypto";
-import type { AddressInfo, Socket } from "node:net";
+import type { AddressInfo } from "node:net";
 
 import { clone, create, equals, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
@@ -234,8 +234,6 @@ export class NodeCoordinator {
 
   readonly #sessions: Set<http2.ServerHttp2Session>;
 
-  readonly #sockets: Set<Socket>;
-
   readonly #stopMembers: readonly (() => void)[];
 
   readonly #cancellations = new Map<string, Promise<void>>();
@@ -278,14 +276,12 @@ export class NodeCoordinator {
    * @param server The HTTP/2 server.
    * @param address The listening address.
    * @param sessions Tracked HTTP/2 sessions.
-   * @param sockets Tracked TCP connections, including those without a session.
    */
   private constructor(
     options: NodeCoordinatorOptions,
     server: http2.Http2Server,
     address: AddressInfo,
     sessions: Set<http2.ServerHttp2Session>,
-    sockets: Set<Socket>,
   ) {
     this.#members = options.members;
     this.#unaryKernel = new BackendMembershipKernel(NodeCoordinatorValues.unaryKernelOptions());
@@ -294,7 +290,6 @@ export class NodeCoordinator {
     );
     this.#server = server;
     this.#sessions = sessions;
-    this.#sockets = sockets;
     this.host = address.address;
     this.port = address.port;
     this.baseUrl = `http://${NodeCoordinatorValues.formatHostForUrl(this.host)}:${this.port.toString()}`;
@@ -323,7 +318,6 @@ export class NodeCoordinator {
     // eslint-disable-next-line prefer-const -- routes capture the Coordinator before the listener exists.
     let coordinator: NodeCoordinator;
     const sessions = new Set<http2.ServerHttp2Session>();
-    const sockets = new Set<Socket>();
     const server = http2.createServer(
       connectNodeAdapter({
         routes: (router) => {
@@ -347,9 +341,9 @@ export class NodeCoordinator {
         writeMaxBytes,
       }),
     );
-    this.#trackConnections(server, sessions, sockets);
+    this.#trackSessions(server, sessions);
     const address = await NodeCoordinatorValues.listen(server, host, port);
-    coordinator = new NodeCoordinator(options, server, address, sessions, sockets);
+    coordinator = new NodeCoordinator(options, server, address, sessions);
     await coordinator.#reconcile();
     return coordinator;
   }
@@ -379,24 +373,15 @@ export class NodeCoordinator {
   }
 
   /**
-   * Tracks sessions and sockets so deadline cleanup can destroy both.
+   * Tracks HTTP/2 sessions for normal listener cleanup.
    *
    * @param server The private Coordinator listener.
    * @param sessions Receives active HTTP/2 sessions.
-   * @param sockets Receives active TCP sockets.
    */
-  static #trackConnections(
-    server: http2.Http2Server,
-    sessions: Set<http2.ServerHttp2Session>,
-    sockets: Set<Socket>,
-  ): void {
+  static #trackSessions(server: http2.Http2Server, sessions: Set<http2.ServerHttp2Session>): void {
     server.on("session", (session) => {
       sessions.add(session);
       session.once("close", () => sessions.delete(session));
-    });
-    server.on("connection", (socket: Socket) => {
-      sockets.add(socket);
-      socket.once("close", () => sockets.delete(socket));
     });
   }
 
@@ -411,29 +396,6 @@ export class NodeCoordinator {
       throw error;
     });
     return this.#close;
-  }
-
-  /**
-   * Closes tracked HTTP/2 resources independently of membership reconciliation.
-   *
-   * @returns Completion after the tracked network handles close.
-   */
-  forceNetworkClose(): Promise<void> {
-    this.#draining = true;
-    for (const stop of this.#stopMembers) stop();
-    for (const pending of this.#pendingActivations.values()) clearTimeout(pending.timer);
-    this.#pendingActivations.clear();
-    // Start both kernel abort paths even if membership reconciliation is stalled.
-    void Promise.resolve()
-      .then(() => this.#unaryKernel.close())
-      .catch(() => undefined);
-    void Promise.resolve()
-      .then(() => this.#subscriptionKernel.close())
-      .catch(() => undefined);
-    for (const session of this.#sessions) session.destroy();
-    for (const socket of this.#sockets) socket.destroy();
-    this.#networkClose ??= NodeCoordinatorValues.closeServer(this.#server);
-    return this.#networkClose;
   }
 
   /**

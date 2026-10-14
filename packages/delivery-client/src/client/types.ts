@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { ShardIndex, type InboxReadContinuation } from "@spine-event-engine/server";
+import { ShardIndex } from "@spine-event-engine/server";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 
 /**
@@ -141,7 +141,7 @@ export class DeliveryProtocolError extends Error {
 }
 
 /**
- * Raised when a local caller supplies an offset unsupported by remote cursor paging.
+ * Raised when a local read position cannot be continued through JVM timestamp paging.
  */
 export class DeliveryPagingError extends Error {
   // prettier-ignore
@@ -150,7 +150,7 @@ export class DeliveryPagingError extends Error {
    * Creates an error for an unsupported local remote-read offset.
    */
   constructor() {
-    super("Remote Inbox reads do not support an offset; use an exact cursor.");
+    super("Remote Inbox cannot continue safely from the supplied page position.");
     this.name = "DeliveryPagingError";
   }
 }
@@ -317,7 +317,7 @@ export interface DeliveryFindOneOptions {
 }
 
 /**
- * A bounded read page request with exact Inbox cursor continuation.
+ * A bounded read page request through the JVM timestamp protocol.
  */
 export interface DeliveryReadPageOptions extends DeliveryFindOneOptions {
   // prettier-ignore
@@ -326,11 +326,6 @@ export interface DeliveryReadPageOptions extends DeliveryFindOneOptions {
    * Continues a timestamp-ordered page after this precise received time.
    */
   readonly sinceWhen?: Timestamp;
-
-  /**
-   * Continues after an exact receive-time, version, and message-ID tuple.
-   */
-  readonly after?: InboxReadContinuation;
 
   /**
    * Limits messages requested for this page.

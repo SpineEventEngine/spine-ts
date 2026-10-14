@@ -84,9 +84,6 @@ async function handle(request) {
       return inspect(request);
     case "inspectDelivery":
       return inspectDelivery();
-    case "republish":
-      if (context === undefined) throw new Error("Worker is not ready.");
-      return context.republishEvents({ eventIds: request.eventIds });
     case "close":
       await close();
       return { closed: true };

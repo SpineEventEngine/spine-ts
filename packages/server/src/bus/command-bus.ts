@@ -32,7 +32,6 @@ const commandBusCloseStarters = new WeakMap<CommandBus, () => void>();
 const commandBusDrainers = new WeakMap<CommandBus, () => Promise<void>>();
 const commandBusCloseFinishers = new WeakMap<CommandBus, () => Promise<void>>();
 const commandBusAborters = new WeakMap<CommandBus, () => void>();
-const commandBusTerminalClosers = new WeakMap<CommandBus, () => void>();
 const commandBusWorkCounters = new WeakMap<CommandBus, () => number>();
 
 interface CommandBusAccess {
@@ -77,12 +76,6 @@ interface CommandBusAccess {
    * @param commandBus Target bus.
    */
   abortClose(commandBus: CommandBus): void;
-
-  /**
-   * Stops queued Command callbacks after a context deadline.
-   * @param commandBus Target bus.
-   */
-  terminalClose(commandBus: CommandBus): void;
 
   /**
    * Returns accepted Command work count for drain stability.
@@ -131,9 +124,6 @@ export class CommandBus {
     commandBusCloseFinishers.set(this, () => this.#finishClose());
     commandBusAborters.set(this, () => {
       this.#abortClose();
-    });
-    commandBusTerminalClosers.set(this, () => {
-      this.#terminalClose();
     });
     commandBusWorkCounters.set(this, () => this.#acceptedWorkCount);
 
@@ -237,14 +227,6 @@ export class CommandBus {
     this.#beginClose();
     void this.#started.then(() => this.#runtime.close()).catch(() => undefined);
     this.#intakeState = "closed";
-  }
-
-  /**
-   * Fences queued work after the context shutdown deadline.
-   */
-  #terminalClose(): void {
-    this.#intakeState = "closed";
-    runtimeAccess.abortClose(this.#runtime);
   }
 
   async #closeOnce(): Promise<void> {
@@ -353,13 +335,6 @@ export const commandBusAccess: CommandBusAccess = Object.freeze({
     }
 
     abortClose();
-  },
-
-  terminalClose(commandBus: CommandBus): void {
-    const terminalClose = commandBusTerminalClosers.get(commandBus);
-    if (terminalClose === undefined)
-      throw new TypeError("Command-bus terminal close requires a CommandBus instance.");
-    terminalClose();
   },
 
   acceptedWorkCount(commandBus: CommandBus): number {

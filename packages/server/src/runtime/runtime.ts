@@ -154,9 +154,6 @@ export class SingleProcessServerRuntime implements ServerRuntimeLifecycle {
   constructor() {
     followUpEnqueuers.set(this, (work) => this.#enqueueFollowUp(work));
     runtimeDrainers.set(this, () => this.#drain());
-    runtimeAborters.set(this, () => {
-      this.#abortClose();
-    });
   }
 
   /**
@@ -264,14 +261,6 @@ export class SingleProcessServerRuntime implements ServerRuntimeLifecycle {
     this.#state = "closed";
   }
 
-  /**
-   * Fences queued callbacks without detaching the raw FIFO tail.
-   */
-  #abortClose(): void {
-    this.#state = "closed";
-    this.#closePromise = Promise.resolve();
-  }
-
   async #drain(): Promise<void> {
     let observedTail: Promise<void>;
 
@@ -297,12 +286,6 @@ interface RuntimeAccess {
    * @returns Completion after the current tail settles.
    */
   drain(runtime: SingleProcessServerRuntime): Promise<void>;
-
-  /**
-   * Stops queued work after a context deadline.
-   * @param runtime Target queue.
-   */
-  abortClose(runtime: SingleProcessServerRuntime): void;
 }
 
 const followUpEnqueuers = new WeakMap<
@@ -310,7 +293,6 @@ const followUpEnqueuers = new WeakMap<
   (work: ServerRuntimeWork) => Promise<void>
 >();
 const runtimeDrainers = new WeakMap<SingleProcessServerRuntime, () => Promise<void>>();
-const runtimeAborters = new WeakMap<SingleProcessServerRuntime, () => void>();
 
 /**
  * Provides package-owned authority for framework follow-up work.
@@ -336,11 +318,6 @@ export const runtimeAccess: RuntimeAccess = Object.freeze({
     }
 
     return drain();
-  },
-  abortClose(runtime: SingleProcessServerRuntime): void {
-    const abortClose = runtimeAborters.get(runtime);
-    if (abortClose === undefined) throw new TypeError("Runtime close requires a runtime instance.");
-    abortClose();
   },
 });
 

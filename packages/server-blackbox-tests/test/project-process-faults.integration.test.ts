@@ -175,12 +175,7 @@ test("selected OS-process fault preserves its measured persistence boundary", as
   const scenario = required("SPINE_TS_FAULT_SCENARIO");
   const processes = Number(required("SPINE_TS_FAULT_PROCESSES"));
   expect([2, 8]).toContain(processes);
-  expect([
-    "before-effect",
-    "after-save-before-ack",
-    "partial-publication-repair",
-    "shared-volatile-loss",
-  ]).toContain(scenario);
+  expect(["before-effect", "after-save-before-ack", "shared-volatile-loss"]).toContain(scenario);
 
   const stdout = await runIsolatedFaultDriver([driver, provider, scenario, String(processes)]);
   const identity = resourceIdentity(stdout);

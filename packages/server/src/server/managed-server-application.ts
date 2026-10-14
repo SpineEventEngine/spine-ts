@@ -33,8 +33,6 @@ const maximumRestartDelayMs = 30_000;
 const healthyReadyMs = 60_000;
 const closeGraceMs = 1_000;
 const closeKillMs = 1_000;
-const defaultShutdownTimeoutMs = 30_000;
-const maximumShutdownTimeoutMs = 2_147_483_647;
 const endpointMaximumBytes = 256;
 const handleMembers = new WeakMap<ManagedServerApplicationHandle, ManagedServerCoordinator>();
 const managedTestRegistries = new WeakMap<RunningServer, readonly InMemorySubscriptionRegistry[]>();
@@ -163,15 +161,6 @@ export interface ManagedServerApplicationOptions {
    * Configures bounded private process replacement.
    */
   readonly restart?: ManagedServerRestartOptions;
-
-  /**
-   * Limits total graceful managed shutdown from the first close start.
-   *
-   * Accepts an integer from 1 through 2,147,483,647 milliseconds and defaults
-   * to 30 seconds. Graceful child exit can add up to three seconds; after expiry,
-   * forced TERM/KILL and reaping can add up to two seconds.
-   */
-  readonly shutdownTimeoutMs?: number;
 }
 
 /**
@@ -189,8 +178,7 @@ export interface ManagedServerApplicationHandle {
 
   /**
    * Closes managed children after draining admitted work and cancelling relays
-   * within the shared shutdown deadline. A cleanup failure before expiry can be
-   * retried; expiry remains a terminal failure even after force cleanup.
+   * before child listeners close. A cleanup failure can be retried.
    *
    * @returns Completion after managed child cleanup succeeds.
    */
@@ -264,7 +252,6 @@ const ManagedServerValues = Object.freeze({
       throw new Error("Managed server processCount must be a positive safe integer.");
     }
     ManagedServerCoordinatorValues.coordinatorPort(options.port);
-    ManagedServerCoordinatorValues.shutdownTimeout(options.shutdownTimeoutMs);
     if (process.env[childMarker] === "true") return ManagedServerValues.child(options);
     return ManagedServerValues.parent(options, manageProcessSignals);
   },
@@ -291,7 +278,7 @@ const ManagedServerValues = Object.freeze({
       }
       throw error;
     }
-    return new ManagedChildLifecycle(server, options.shutdownTimeoutMs).start();
+    return new ManagedChildLifecycle(server).start();
   },
 
   /**
@@ -387,18 +374,6 @@ class ManagedChildLifecycle {
 
   readonly #server: RunningServer;
 
-  readonly #shutdownTimeoutMs: number;
-
-  #parentShutdownRemainingMs: number | undefined;
-
-  readonly #deadlineReached = ManagedServerCoordinatorValues.deferred<undefined>();
-
-  #deadlineAt: number | undefined;
-
-  #deadlineTimer: ReturnType<typeof setTimeout> | undefined;
-
-  #shutdownFailure: Error | undefined;
-
   #activated = false;
 
   #waitForParentClose = false;
@@ -409,11 +384,9 @@ class ManagedChildLifecycle {
    * Creates the lifecycle around an assembled child server.
    *
    * @param server The already assembled and synchronized child server.
-   * @param shutdownTimeoutMs Total graceful child shutdown budget.
    */
-  constructor(server: RunningServer, shutdownTimeoutMs: number | undefined) {
+  constructor(server: RunningServer) {
     this.#server = server;
-    this.#shutdownTimeoutMs = ManagedServerCoordinatorValues.shutdownTimeout(shutdownTimeoutMs);
   }
 
   /**
@@ -455,48 +428,11 @@ class ManagedChildLifecycle {
    * @returns The shared close attempt; a failed attempt may be retried.
    */
   close(): Promise<void> {
-    if (this.#shutdownFailure !== undefined) return Promise.reject(this.#shutdownFailure);
-    this.#beginDeadline(this.#parentShutdownRemainingMs ?? this.#shutdownTimeoutMs);
-    this.#closing ??= Promise.race([
-      this.#closeOnce(),
-      this.#deadlineReached.promise.then(() => {
-        throw this.#shutdownFailure ?? new Error("Managed child shutdown deadline expired.");
-      }),
-    ]).then(
-      () => {
-        if (this.#shutdownFailure !== undefined) throw this.#shutdownFailure;
-        clearTimeout(this.#deadlineTimer);
-      },
-      (error: unknown) => {
-        if (this.#shutdownFailure === undefined) this.#closing = undefined;
-        throw error;
-      },
-    );
+    this.#closing ??= this.#closeOnce().catch((error: unknown) => {
+      this.#closing = undefined;
+      throw error;
+    });
     return this.#closing;
-  }
-
-  /**
-   * Starts or tightens the child budget using the parent's remaining time.
-   *
-   * @param remainingMs Remaining graceful time supplied by the parent or local policy.
-   */
-  #beginDeadline(remainingMs: number): void {
-    const candidate = Time.monotonicTime() + remainingMs;
-    if (this.#deadlineAt !== undefined && this.#deadlineAt <= candidate) return;
-    clearTimeout(this.#deadlineTimer);
-    this.#deadlineAt = candidate;
-    this.#deadlineTimer = setTimeout(() => {
-      this.#shutdownFailure = new Error("Managed child shutdown deadline expired.");
-      this.#deadlineReached.resolve(undefined);
-      this.#serverCloseRelease.resolve(undefined);
-      this.#activation.resolve(undefined);
-      // spine-log-boundary: server.managed_child_deadline_ipc_observer
-      void this.#notify("close-failed").catch(() => undefined);
-      // spine-log-boundary: server.managed_child_deadline_close_observer
-      void this.#server.close().catch(() => undefined);
-      if (process.channel !== undefined && process.env[childMarker] === "true")
-        setTimeout(() => process.exit(1), closeKillMs);
-    }, remainingMs);
   }
 
   /**
@@ -508,9 +444,7 @@ class ManagedChildLifecycle {
   async #closeOnce(): Promise<void> {
     try {
       await this.#drainDelivery();
-      this.#assertBeforeSuccess();
       await this.#closeServerAfterRelayCleanup();
-      this.#assertBeforeSuccess();
       // spine-log-boundary: server.managed_replica_closed_ipc
       await this.#notify("closed").catch(() => undefined);
       this.#disconnect();
@@ -519,14 +453,6 @@ class ManagedChildLifecycle {
       await this.#notify("close-failed").catch(() => undefined);
       throw error;
     }
-  }
-
-  /**
-   *
-   * Rejects a late child continuation before it reports graceful success.
-   */
-  #assertBeforeSuccess(): void {
-    if (this.#shutdownFailure !== undefined) throw this.#shutdownFailure;
   }
 
   /**
@@ -554,7 +480,6 @@ class ManagedChildLifecycle {
     // spine-log-boundary: server.managed_replica_delivery_drained_ipc
     void this.#notify("delivery-drained").catch(() => undefined);
     if (this.#waitForParentClose) await this.#serverCloseRelease.promise;
-    if (this.#shutdownFailure !== undefined) throw this.#shutdownFailure;
     await this.#server.close();
   }
 
@@ -584,24 +509,12 @@ class ManagedChildLifecycle {
    *
    * @param message The private parent frame.
    */
-  readonly #onMessage = (message: {
-    readonly type?: string;
-    readonly remainingMs?: unknown;
-  }): void => {
+  readonly #onMessage = (message: { readonly type?: string }): void => {
     if (message.type === "activate" && !this.#activated) {
       this.#activated = true;
       environmentDeliveryWorkerAccess.activateManagedChild();
       this.#activation.resolve(undefined);
     } else if (message.type === "close") {
-      if (
-        typeof message.remainingMs !== "number" ||
-        !Number.isSafeInteger(message.remainingMs) ||
-        message.remainingMs < 1 ||
-        message.remainingMs > 2_147_483_647
-      )
-        return;
-      this.#parentShutdownRemainingMs = message.remainingMs;
-      this.#beginDeadline(message.remainingMs);
       this.#waitForParentClose = true;
       ManagedServerValues.closeFromEvent(() => this.close());
     } else if (message.type === "finish-close") {
@@ -779,21 +692,7 @@ export class ManagedServerCoordinator {
 
   readonly #dependencies: ManagedServerCoordinatorDependencies;
 
-  readonly #shutdownTimeoutMs: number;
-
-  readonly #deadlineReached = ManagedServerCoordinatorValues.deferred<undefined>();
-
-  #deadlineAt: number | undefined;
-
-  #deadlineTimer: unknown;
-
-  #shutdownPhase = "starting";
-
-  #shutdownFailure: Error | undefined;
-
   #terminalChildFailure: unknown;
-
-  #forcedCleanup: Promise<void> | undefined;
 
   #drainStart: Promise<void> | undefined;
 
@@ -831,9 +730,6 @@ export class ManagedServerCoordinator {
     this.#options = options;
     this.#dependencies = dependencies;
     this.#restart = ManagedServerCoordinatorValues.restart(options);
-    this.#shutdownTimeoutMs = ManagedServerCoordinatorValues.shutdownTimeout(
-      options.shutdownTimeoutMs,
-    );
     this.#slots = Array.from({ length: options.processCount }, (_, slot) => ({
       slot,
       failures: 0,
@@ -1184,39 +1080,18 @@ export class ManagedServerCoordinator {
   close(): Promise<void> {
     const closing = this.#close;
     if (closing !== undefined) return closing;
-    if (this.#shutdownFailure !== undefined) return Promise.reject(this.#shutdownFailure);
-    this.#startShutdownDeadline();
-    const close = this.#closeWithinDeadline();
+    const close = this.#closeGracefully();
     this.#close = close;
     void close.then(undefined, () => {
-      if (this.#close === close && this.#shutdownFailure === undefined) this.#close = undefined;
+      if (this.#close === close) this.#close = undefined;
     });
     return close;
   }
 
   /**
-   * Starts one absolute deadline on the first managed close attempt.
+   * Stops replacement starts and awaits all cleanup phases.
    */
-  #startShutdownDeadline(): void {
-    if (this.#deadlineAt !== undefined) return;
-    const clock = this.#dependencies.clock;
-    this.#deadlineAt = clock.now() + this.#shutdownTimeoutMs;
-    this.#deadlineTimer = clock.setTimeout(() => {
-      this.#shutdownFailure = new Error(
-        `Managed shutdown deadline expired during ${this.#shutdownPhase}.`,
-      );
-      this.#deadlineReached.resolve(undefined);
-      // spine-log-boundary: server.managed_force_cleanup_observer
-      void this.#forceCleanup().catch(() => undefined);
-    }, this.#shutdownTimeoutMs);
-  }
-
-  /**
-   * Runs one graceful attempt while retaining the original shutdown deadline.
-   *
-   * @returns Completion after all graceful phases settle.
-   */
-  async #closeWithinDeadline(): Promise<void> {
+  async #closeGracefully(): Promise<void> {
     this.#closing = true;
     this.#removeSignalHandlers();
     for (const slot of this.#slots) {
@@ -1224,69 +1099,7 @@ export class ManagedServerCoordinator {
         this.#dependencies.clock.clearTimeout(slot.replacementTimer);
       slot.replacementTimer = undefined;
     }
-    const graceful = this.#drainAndCloseReplicas();
-    try {
-      await Promise.race([
-        graceful,
-        this.#deadlineReached.promise.then(() => {
-          throw this.#shutdownFailure ?? new Error("Managed shutdown deadline expired.");
-        }),
-      ]);
-      if (this.#shutdownFailure !== undefined) throw this.#shutdownFailure;
-      this.#dependencies.clock.clearTimeout(this.#deadlineTimer);
-    } catch (error) {
-      if (this.#shutdownFailure === undefined) throw error;
-      try {
-        await this.#forceCleanup();
-      } catch (forceError) {
-        throw new AggregateError([this.#shutdownFailure, forceError], "Managed shutdown failed.");
-      }
-      throw this.#shutdownFailure;
-    }
-  }
-
-  /**
-   * Forces the parent listener and recorded children after terminal expiry.
-   *
-   * @returns The shared force-cleanup attempt.
-   */
-  #forceCleanup(): Promise<void> {
-    this.#forcedCleanup ??= this.#forceCleanupOnce();
-    return this.#forcedCleanup;
-  }
-
-  /**
-   * Runs independent bounded force operations without awaiting graceful phases.
-   *
-   * @returns Completion after bounded network and child termination.
-   */
-  async #forceCleanupOnce(): Promise<void> {
-    const network = this.#nodeCoordinator?.forceNetworkClose();
-    const replicas = [
-      ...this.#slots.flatMap((slot) => (slot.replica === undefined ? [] : [slot.replica])),
-      ...this.#retired,
-    ];
-    const terminations = replicas.map((replica) =>
-      ManagedServerCoordinatorValues.terminate(
-        replica.child,
-        this.#dependencies.clock,
-        undefined,
-        false,
-      ),
-    );
-    const pending = Promise.allSettled([network, ...terminations]);
-    if (
-      !(await ManagedServerCoordinatorValues.within(
-        pending,
-        closeKillMs * 2,
-        this.#dependencies.clock,
-      ))
-    )
-      throw new Error("Managed force cleanup did not settle after SIGKILL.");
-    const results = await pending;
-    const failures: unknown[] = [];
-    for (const result of results) if (result.status === "rejected") failures.push(result.reason);
-    if (failures.length > 0) throw new AggregateError(failures, "Managed force cleanup failed.");
+    await this.#drainAndCloseReplicas();
   }
 
   /**
@@ -1295,7 +1108,6 @@ export class ManagedServerCoordinator {
    * @returns Completion after Coordinator and child cleanup attempts settle.
    */
   async #drainAndCloseReplicas(): Promise<void> {
-    this.#shutdownPhase = "Delivery drain";
     this.#drainStart ??= this.#nodeCoordinator?.beginDrain() ?? Promise.resolve();
     const closing = new Error("Managed application is closing before subscription installed.");
     for (const slot of this.#slots)
@@ -1309,11 +1121,7 @@ export class ManagedServerCoordinator {
     ];
     const children = Promise.allSettled(childCloses);
     await this.#awaitDeliveryDrains(replicas, children);
-    this.#assertBeforeGracefulPhase();
-    this.#shutdownPhase = "subscription relay cleanup";
     await this.#nodeCoordinator?.closeSubscriptions();
-    this.#assertBeforeGracefulPhase();
-    this.#shutdownPhase = "final child close";
     for (const replica of replicas) {
       if (replica.child.connected) replica.child.send({ type: "finish-close" }, () => undefined);
     }
@@ -1355,13 +1163,6 @@ export class ManagedServerCoordinator {
   }
 
   /**
-   * Prevents a late parent continuation from advancing after terminal expiry.
-   */
-  #assertBeforeGracefulPhase(): void {
-    if (this.#shutdownFailure !== undefined) throw this.#shutdownFailure;
-  }
-
-  /**
    * Closes the current replica through the bounded child shutdown procedure.
    *
    * @param replica The child incarnation associated with the event.
@@ -1371,9 +1172,7 @@ export class ManagedServerCoordinator {
     if (replica === undefined) return Promise.resolve();
     if (replica.closePromise !== undefined) return replica.closePromise;
     replica.closeFailure = undefined;
-    const close = ManagedServerCoordinatorValues.close(replica, this.#dependencies.clock, () =>
-      this.#remainingShutdownMs(),
-    );
+    const close = ManagedServerCoordinatorValues.close(replica, this.#dependencies.clock);
     replica.closePromise = close;
     void close.then(
       () => {
@@ -1392,20 +1191,6 @@ export class ManagedServerCoordinator {
       })
       .catch(() => undefined);
     return close;
-  }
-
-  /**
-   * Returns the original managed budget remaining for private child handoff.
-   *
-   * @returns Positive remaining graceful milliseconds.
-   */
-  #remainingShutdownMs(): number {
-    const deadline = this.#deadlineAt;
-    if (deadline === undefined || this.#shutdownFailure !== undefined)
-      throw this.#shutdownFailure ?? new Error("Managed shutdown has not started.");
-    const remaining = Math.ceil(deadline - this.#dependencies.clock.now());
-    if (remaining < 1) throw new Error("Managed shutdown deadline expired before child handoff.");
-    return remaining;
   }
 
   /**
@@ -1820,18 +1605,6 @@ const ManagedServerCoordinatorValues = Object.freeze({
     return value;
   },
 
-  /**
-   * Validates the one total graceful managed shutdown budget.
-   *
-   * @param value The configured duration, or undefined for the default.
-   * @returns The positive bounded duration in milliseconds.
-   */
-  shutdownTimeout(value: number | undefined): number {
-    const duration = value ?? defaultShutdownTimeoutMs;
-    if (!Number.isSafeInteger(duration) || duration < 1 || duration > maximumShutdownTimeoutMs)
-      throw new Error("Managed server shutdownTimeoutMs must be a positive bounded safe integer.");
-    return duration;
-  },
   dependencies: {
     clock: {
       now: () => Time.monotonicTime(),
@@ -2022,13 +1795,11 @@ const ManagedServerCoordinatorValues = Object.freeze({
    *
    * @param replica The replica to close, if still present.
    * @param clock The clock and timer adapter for bounded waits.
-   * @param remainingMs Reads the original managed deadline's remaining duration.
    * @returns Completion after the child exits or a shutdown error is reported.
    */
   async close(
     replica: ReplicaRecord | undefined,
     clock: ManagedServerCoordinatorDependencies["clock"],
-    remainingMs: () => number,
   ): Promise<void> {
     if (replica === undefined) return;
     replica.expectedExit = true;
@@ -2046,13 +1817,7 @@ const ManagedServerCoordinatorValues = Object.freeze({
     };
     replica.closeAttempt = closeAttempt;
     try {
-      await ManagedServerCoordinatorValues.awaitChildClose(
-        child,
-        closeAttempt,
-        exited,
-        clock,
-        remainingMs,
-      );
+      await ManagedServerCoordinatorValues.awaitChildClose(child, closeAttempt, exited, clock);
     } catch (error) {
       replica.forcedFailure = closeAttempt.forcedFailure;
       throw error;
@@ -2068,7 +1833,6 @@ const ManagedServerCoordinatorValues = Object.freeze({
    * @param closeAttempt Tracks the child's IPC phase acknowledgements.
    * @param exited Resolves when the child exits.
    * @param clock Supplies bounded shutdown timers.
-   * @param remainingMs Reads the original managed deadline's remaining duration.
    * @returns Completion after the child has exited or close failed.
    */
   async awaitChildClose(
@@ -2076,28 +1840,20 @@ const ManagedServerCoordinatorValues = Object.freeze({
     closeAttempt: ReplicaCloseAttempt,
     exited: Promise<void>,
     clock: ManagedServerCoordinatorDependencies["clock"],
-    remainingMs: () => number,
   ): Promise<void> {
-    if (child.connected) child.send({ type: "close", remainingMs: remainingMs() }, () => undefined);
+    if (child.connected) child.send({ type: "close" }, () => undefined);
     const observation = Promise.race([
       closeAttempt.acknowledged.promise.then(() => "acknowledged" as const),
       exited.then(() => "exited" as const),
     ]);
-    if (
-      !(await ManagedServerCoordinatorValues.within(
-        observation,
-        Math.min(closeGraceMs, remainingMs()),
-        clock,
-      ))
-    ) {
-      remainingMs();
+    if (!(await ManagedServerCoordinatorValues.within(observation, closeGraceMs, clock))) {
       await this.missingDrainAck(child, closeAttempt, exited, clock);
     }
     if ((await observation) === "exited") {
       this.verifyExitedDrain(closeAttempt);
       return;
     }
-    await ManagedServerCoordinatorValues.awaitChildOutcome(closeAttempt, exited, remainingMs);
+    await ManagedServerCoordinatorValues.awaitChildOutcome(closeAttempt, exited);
     await ManagedServerCoordinatorValues.terminate(child, clock, exited);
   },
 
@@ -2141,21 +1897,15 @@ const ManagedServerCoordinatorValues = Object.freeze({
    *
    * @param closeAttempt Tracks the child's close notifications.
    * @param exited Resolves when the child process exits.
-   * @param remainingMs Reads the original managed deadline's remaining duration.
    * @returns Completion after the child's final close fact.
    */
-  async awaitChildOutcome(
-    closeAttempt: ReplicaCloseAttempt,
-    exited: Promise<void>,
-    remainingMs: () => number,
-  ): Promise<void> {
+  async awaitChildOutcome(closeAttempt: ReplicaCloseAttempt, exited: Promise<void>): Promise<void> {
     await Promise.race([
       closeAttempt.outcome.promise,
       exited.then(() => {
         throw new Error("Managed child exited before graceful close completed.");
       }),
     ]);
-    remainingMs();
   },
 
   /**

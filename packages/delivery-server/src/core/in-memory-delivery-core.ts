@@ -14,13 +14,9 @@
 
 import { Time } from "@spine-event-engine/core/time";
 import type { ServiceImpl } from "@connectrpc/connect";
-import {
-  InboxReadService,
-  InboxService,
-  ShardService,
-} from "@spine-event-engine/proto/delivery-server";
+import { InboxService, ShardService } from "@spine-event-engine/proto/delivery-server";
 
-import { InboxHandlers, InboxReadHandlers } from "./inbox-service.js";
+import { InboxHandlers } from "./inbox-service.js";
 import { InMemoryDeliveryState } from "./in-memory-delivery-state.js";
 import { MutationAdmission } from "./mutation-admission.js";
 import { ShardHandlers } from "./shard-service.js";
@@ -71,11 +67,6 @@ export interface DeliveryCore {
   readonly inbox: ServiceImpl<typeof InboxService>;
 
   /**
-   * Serves exact-cursor Inbox page reads.
-   */
-  readonly inboxRead: ServiceImpl<typeof InboxReadService>;
-
-  /**
    * Serves Shard RPCs.
    */
   readonly shards: ServiceImpl<typeof ShardService>;
@@ -114,7 +105,6 @@ export const InMemoryDelivery: Readonly<{
     const now = options.now ?? (() => Time.currentTimeMillis());
     return Object.freeze({
       inbox: InboxHandlers.create(state, admission),
-      inboxRead: InboxReadHandlers.create(state),
       shards: ShardHandlers.create(state, admission, now, timeout),
     });
   },

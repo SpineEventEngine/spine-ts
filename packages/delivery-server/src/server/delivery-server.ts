@@ -22,7 +22,6 @@ import {
   AdminService,
   Health,
   InboxService,
-  InboxReadService,
   ShardService,
 } from "@spine-event-engine/proto/delivery-server";
 import { HealthHandlers } from "../health/health-service.js";
@@ -248,7 +247,6 @@ export class DeliveryServer {
       connectNodeAdapter({
         routes: (router) => {
           router.service(InboxService, core.inbox);
-          router.service(InboxReadService, core.inboxRead);
           router.service(ShardService, core.shards);
           router.service(AdminService, core.admin);
           router.service(

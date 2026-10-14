@@ -19,7 +19,7 @@ import { ShardIndex } from "@spine-event-engine/server";
 import {
   OptionalInboxMessageSchema,
   PageOfMessagesSchema,
-  ReadInboxPageSchema,
+  ReadMessagesSinceTimeSchema,
 } from "@spine-event-engine/proto/delivery-server";
 import {
   InboxMessageIdSchema,
@@ -34,7 +34,6 @@ import {
   MAX_DELIVERY_BATCH_MESSAGES,
 } from "../src/index.js";
 import { domainMessage, message, transport } from "./shared-fixtures.js";
-import { DeliveryMessageCodec } from "../src/wire/codec.js";
 
 describe("DeliveryClient RPC and lifecycle", () => {
   it("validates and retains a caller-owned bounded page size", () => {
@@ -131,11 +130,11 @@ describe("DeliveryClient RPC and lifecycle", () => {
     expect(page[0]?.whenReceived.nanos).toBe(0);
 
     expect(fake.unary).toHaveBeenLastCalledWith(
-      expect.objectContaining({ name: "ReadPage" }),
+      expect.objectContaining({ name: "FindManyInShard" }),
       expect.anything(),
       30_000,
       undefined,
-      create(ReadInboxPageSchema, {
+      create(ReadMessagesSinceTimeSchema, {
         shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
         pageSize: 2,
       }),
@@ -155,64 +154,6 @@ describe("DeliveryClient RPC and lifecycle", () => {
     await expect(
       DeliveryClient.usingTransport(fake.transport, { pageSize: 1 }).readPage(ShardIndex.single()),
     ).rejects.toBeInstanceOf(DeliveryProtocolError);
-  });
-
-  it("rejects unordered, repeated, and wrong-shard cursor pages", async () => {
-    const fake = transport();
-    const client = DeliveryClient.usingTransport(fake.transport, { pageSize: 2 });
-    const cursor = {
-      messageId: "b",
-      whenReceived: create(TimestampSchema, { seconds: 1n }),
-      version: 2n,
-    };
-    const command = (id: string) => DeliveryMessageCodec.encode(domainMessage(id));
-    for (const rows of [
-      [command("b")],
-      [command("d"), command("c")],
-      [
-        create(InboxMessageSchema, {
-          ...command("c"),
-          id: create(InboxMessageIdSchema, {
-            uuid: "c",
-            index: create(ShardIndexSchema, { index: 0, ofTotal: 2 }),
-          }),
-        }),
-      ],
-    ]) {
-      fake.reply(create(PageOfMessagesSchema, { message: rows }));
-      await expect(client.readPage(ShardIndex.single(), { after: cursor })).rejects.toBeInstanceOf(
-        DeliveryProtocolError,
-      );
-    }
-    fake.reply(create(PageOfMessagesSchema, { message: [command("earlier-time")] }));
-    await expect(
-      client.readPage(ShardIndex.single(), {
-        after: { ...cursor, whenReceived: create(TimestampSchema, { seconds: 2n }) },
-      }),
-    ).rejects.toBeInstanceOf(DeliveryProtocolError);
-    fake.reply(create(PageOfMessagesSchema, { message: [command("earlier-version")] }));
-    await expect(
-      client.readPage(ShardIndex.single(), {
-        after: { ...cursor, version: 3n },
-      }),
-    ).rejects.toBeInstanceOf(DeliveryProtocolError);
-    expect(fake.unary).toHaveBeenCalledTimes(5);
-  });
-
-  it("rejects a repeated message ID even when its later tuple increases", async () => {
-    const fake = transport();
-    const client = DeliveryClient.usingTransport(fake.transport, { pageSize: 2 });
-    const first = DeliveryMessageCodec.encode(domainMessage("same-id"));
-    const later = create(InboxMessageSchema, {
-      ...first,
-      whenReceived: create(TimestampSchema, { seconds: 2n }),
-    });
-    fake.reply(create(PageOfMessagesSchema, { message: [first, later] }));
-
-    await expect(client.readPage(ShardIndex.single())).rejects.toBeInstanceOf(
-      DeliveryProtocolError,
-    );
-    expect(fake.unary).toHaveBeenCalledTimes(1);
   });
 
   it("normalizes an invalid peer timestamp with the original decoding cause", async () => {
@@ -235,54 +176,14 @@ describe("DeliveryClient RPC and lifecycle", () => {
     expect(fake.unary).toHaveBeenCalledTimes(1);
   });
 
-  it("rejects a response at the exclusive timestamp lower bound", async () => {
+  it("rejects invalid time, shard, and page bounds before transport", async () => {
     const fake = transport();
     const client = DeliveryClient.usingTransport(fake.transport);
-    fake.reply(
-      create(PageOfMessagesSchema, {
-        message: [DeliveryMessageCodec.encode(domainMessage("at-bound"))],
-      }),
-    );
-    await expect(
-      client.readPage(ShardIndex.single(), {
-        sinceWhen: create(TimestampSchema, { seconds: 1n }),
-      }),
-    ).rejects.toBeInstanceOf(DeliveryProtocolError);
-  });
-
-  it("reports a required cursor endpoint once without retrying or a legacy fallback", async () => {
-    const fake = transport();
-    const client = DeliveryClient.usingTransport(fake.transport, { readRetries: 5 });
-    const missing = new ConnectError("missing", Code.Unimplemented);
-    fake.fail(missing);
-    await expect(client.readPage(ShardIndex.single())).rejects.toMatchObject({
-      message: "Delivery endpoint requires InboxReadService.ReadPage.",
-      cause: missing,
-    });
-    expect(fake.unary).toHaveBeenCalledTimes(1);
-  });
-
-  it("rejects invalid cursor, time, shard, and page bounds before transport", async () => {
-    const fake = transport();
-    const client = DeliveryClient.usingTransport(fake.transport);
-    const whenReceived = create(TimestampSchema, { seconds: 1n });
-    for (const after of [
-      { messageId: " ", whenReceived, version: 0n },
-      { messageId: "a", whenReceived, version: -1n },
-      { messageId: "a", whenReceived, version: 2_147_483_648n },
-      {
-        messageId: "a",
-        whenReceived: create(TimestampSchema, { seconds: 253_402_300_800n }),
-        version: 0n,
-      },
-    ])
-      await expect(client.readPage(ShardIndex.single(), { after })).rejects.toThrow();
     await expect(client.readPage(ShardIndex.single(), { pageSize: 0 })).rejects.toThrow();
     await expect(client.readPage({} as ShardIndex)).rejects.toThrow();
     await expect(
       client.readPage(ShardIndex.single(), {
-        after: { messageId: "a", whenReceived, version: 0n },
-        sinceWhen: whenReceived,
+        sinceWhen: create(TimestampSchema, { seconds: 253_402_300_800n }),
       }),
     ).rejects.toThrow();
     expect(fake.unary).not.toHaveBeenCalled();
@@ -709,11 +610,11 @@ describe("DeliveryClient RPC and lifecycle", () => {
       }),
     ).resolves.toEqual([]);
     expect(fake.unary).toHaveBeenLastCalledWith(
-      expect.objectContaining({ name: "ReadPage" }),
+      expect.objectContaining({ name: "FindManyInShard" }),
       expect.anything(),
       30_000,
       undefined,
-      create(ReadInboxPageSchema, {
+      create(ReadMessagesSinceTimeSchema, {
         shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
         pageSize: 1,
         sinceWhen: { seconds: -1n, nanos: 999_000_000 },

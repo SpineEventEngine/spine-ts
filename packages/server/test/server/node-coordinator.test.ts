@@ -25,7 +25,6 @@ import {
   type DynamicUnaryClient,
 } from "@spine-event-engine/auth";
 import { ApplicationNode } from "@spine-event-engine/deployment";
-import { BackendMembershipKernel } from "@spine-event-engine/deployment/spi/backend-membership";
 import { AnyMessages } from "@spine-event-engine/core";
 import { SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS } from "@spine-event-engine/core/spi/subscription-lifecycle";
 import {
@@ -946,38 +945,6 @@ describe("NodeCoordinator", () => {
     expect(coordinator.close()).toBe(first);
     members.set([]);
     await expect(first).resolves.toBeUndefined();
-  });
-
-  it("starts both kernel close paths when forced network close overtakes stalled reconciliation", async () => {
-    const members = new TestReadyMembers([]);
-    const coordinator = await NodeCoordinator.open({ members, port: 0 });
-    let release: (() => void) | undefined;
-    let entered: (() => void) | undefined;
-    const held = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const started = new Promise<void>((resolve) => {
-      entered = resolve;
-    });
-    Object.assign(members, {
-      onRelaySynchronized: () => {
-        entered?.();
-        return held;
-      },
-    });
-    members.set([]);
-    await started;
-    const close = vi.spyOn(BackendMembershipKernel.prototype, "close");
-    try {
-      await coordinator.forceNetworkClose();
-      await vi.waitFor(() => {
-        expect(close).toHaveBeenCalledTimes(2);
-      });
-    } finally {
-      release?.();
-      close.mockRestore();
-      await coordinator.close();
-    }
   });
 
   it("clears pending activation deadlines during close", async () => {

@@ -15,11 +15,7 @@
 import { Code, ConnectError, createRouterTransport } from "@connectrpc/connect";
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  InboxReadService,
-  InboxService,
-  ShardService,
-} from "@spine-event-engine/proto/delivery-server";
+import { InboxService, ShardService } from "@spine-event-engine/proto/delivery-server";
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { create } from "@bufbuild/protobuf";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
@@ -35,7 +31,6 @@ describe("in-memory delivery core response loss", () => {
     const client = DeliveryClient.usingTransport(
       createRouterTransport((router) => {
         router.service(InboxService, core.inbox);
-        router.service(InboxReadService, core.inboxRead);
       }),
     );
     const inbox = new RemoteInbox(client);
@@ -77,7 +72,6 @@ describe("in-memory delivery core response loss", () => {
     const client = DeliveryClient.usingTransport(
       createRouterTransport((router) => {
         router.service(InboxService, core.inbox);
-        router.service(InboxReadService, core.inboxRead);
       }),
     );
     const inbox = new RemoteInbox(client);
@@ -115,7 +109,6 @@ describe("in-memory delivery core response loss", () => {
     const client = DeliveryClient.usingTransport(
       createRouterTransport((router) => {
         router.service(InboxService, core.inbox);
-        router.service(InboxReadService, core.inboxRead);
       }),
     );
     const inbox = new RemoteInbox(client);
@@ -167,7 +160,6 @@ describe("in-memory delivery core response loss", () => {
     const client = DeliveryClient.usingTransport(
       createRouterTransport((router) => {
         router.service(InboxService, core.inbox);
-        router.service(InboxReadService, core.inboxRead);
       }),
     );
     const inbox = new RemoteInbox(client);
@@ -223,7 +215,6 @@ describe("in-memory delivery core response loss", () => {
     const client = DeliveryClient.usingTransport(
       createRouterTransport((router) => {
         router.service(InboxService, core.inbox);
-        router.service(InboxReadService, core.inboxRead);
       }),
     );
     const inbox = new RemoteInbox(client);
@@ -272,7 +263,6 @@ describe("in-memory delivery core response loss", () => {
     const client = DeliveryClient.usingTransport(
       createRouterTransport((router) => {
         router.service(InboxService, core.inbox);
-        router.service(InboxReadService, core.inboxRead);
       }),
     );
     const inbox = new RemoteInbox(client);
@@ -325,7 +315,6 @@ describe("in-memory delivery core response loss", () => {
     const normal = DeliveryClient.usingTransport(
       createRouterTransport((router) => {
         router.service(InboxService, core.inbox);
-        router.service(InboxReadService, core.inboxRead);
       }),
     );
     const pending = domainMessage("lost-delivered");
@@ -369,7 +358,6 @@ describe("in-memory delivery core response loss", () => {
     const core = InMemoryDelivery.create();
     const initial = createRouterTransport((router) => {
       router.service(InboxService, core.inbox);
-      router.service(InboxReadService, core.inboxRead);
     });
     const message = domainMessage("remove");
     await DeliveryClient.usingTransport(initial).writeOne(message);

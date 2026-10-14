@@ -726,17 +726,11 @@ inspect CPU availability and does not constrain the application's independently
 chosen `DeliveryStrategy` or shard count. Direct `Server.run()` and browser
 hosting remain independent of managed Node deployment.
 
-Managed close has one configurable `shutdownTimeoutMs` for all graceful phases,
-defaulting to 30 seconds from the first close attempt. Delivery drains before
-subscription relay cancellation; child listeners remain available while
-cancellation can be retried within that same budget. Final child close follows
-successful relay cleanup. A graceful child exit may add up to three seconds.
-An expired budget reports failure and starts bounded network and recorded-child
-termination; forced TERM/KILL and reaping may add up to two seconds. Each context
-also has a separate configured shutdown deadline (default five seconds) starting
-when that context begins closing, so it may end its graceful work earlier.
-Forced shutdown can interrupt an entered handler or SQL
-operation, leaving pending Delivery eligible for at-least-once recovery.
+Managed close drains Delivery before cancelling subscription relays. Child listeners
+remain available through relay cancellation, and final child close follows relay
+cleanup. A failed cleanup phase can be retried. Private child acknowledgement
+and process reaping retain their finite process-control graces. A permanently
+blocked application effect can keep explicit close pending.
 
 If no child is READY, Command and Query return gRPC `UNAVAILABLE`. The
 Coordinator does not enter application intake and does not retry the selected
@@ -904,8 +898,7 @@ retry of unknown remote mutations.
 Direct `DeliverySupervisor.close({ graceMs })` stops new admission and source
 activity. Its `graceMs` defaults to 30,000 ms and bounds active-work grace and
 release cleanup separately. After those waits, close may still await entered
-work that has not settled; it is not a hard total close deadline. Context close
-and managed-server shutdown have separate deadlines described below.
+work that has not settled; it is not a hard total close deadline.
 
 Each Inbox read is bounded to one page. That bound does not limit the total
 pending work: an active drain continues from the last row read until that scan
@@ -945,50 +938,14 @@ enqueued remote row on that shard may wait for the next rescan; other shards
 continue, and other processes may each attempt the failed row before applying
 local suppression. This timing is not a delivery deadline.
 
-`BoundedContextBuilder.withShutdownTimeout(milliseconds)` configures one
-deadline for the built context's drain and cleanup (default 5,000 ms). New
-external work and Event repair stop at close; accepted ordinary framework
-follow-ups may finish during grace. When the deadline expires, queued work is
-fenced and close rejects with an `AggregateError`. Repeated context close
-returns that terminal result. Already-entered handler or storage effects may
-settle later; the timeout does not roll them back or bound separate server
-network and Delivery teardown.
-
-`BoundedContext.republishEvents({eventIds, tenantId?, signal?})` re-admits at
-most 100 exact known committed Event IDs in order to current recipients. For
-domain Events, the caller must know the corresponding Entity save completed;
-an Event row alone cannot prove it because Entity records are written
-independently. Outcomes distinguish admission, missing IDs, failure, and cancellation. Admission does
-not guarantee recipient completion, and a recipient may run more than once.
-Each known-ID repair makes up to three actual bus dispatch attempts using the
-unchanged stored Event envelope and ID, with 100 milliseconds between failed
-attempts unless caller cancellation or terminal context closure stops them.
-The reported attempt count does not prove recipient completion; partial
-recipient effects may repeat.
-Persisted System Events use a separate fixed storage group; the context name
-does not select that group. Repair reads both
-domain and System groups by exact ID and dispatches through the matching bus.
-If the same ID exists in both groups, repair reports failure without dispatch.
-An Event never saved because System persistence was disabled cannot be repaired
-after it is forgotten; a new forgetting-mode context can still repair a System
-Event previously saved in that group.
-For normal Events from completed Entity saves, the internal publisher makes up
-to three actual dispatch attempts with the same captured envelope and Event ID,
-waiting 100 milliseconds between failed attempts unless caller cancellation or
-terminal context closure stops them.
-This also applies to saved Process Manager outputs and reactor follow-up Events.
-It reports exhaustion internally without rerunning the successful Command
-handler; Command acceptance does not promise publication or recipient
-completion. Earlier recipient effects can repeat on a later attempt, and an
-exhausted saved Event remains eligible for explicit known-ID repair. This
-finite retry does not change the independent typed rejection-event posting
-behavior described above.
-System publication uses finite delayed recipient retries in both persistence
-modes. With persistence enabled, it validates the registered System schema and
-idempotently appends the captured envelope before dispatch. Transient append
-or dispatch failures share the three-attempt budget and 100-millisecond delay;
-exhaustion is reported internally with the original Event ID. A failed append
-leaves no repairable Event unless an earlier attempt stored it.
+`BoundedContext.close()` stops external admission, drains accepted framework
+work, and then closes buses, subscriptions, Stands, and repository bindings.
+Cleanup failures are aggregated and may be retried. A committed Entity Event,
+reactor or Process Manager Event, and System Event receives one first-publication
+attempt; a contained failure is logged and does not schedule publication again.
+Persisted System Events use a separate fixed storage group. Command acceptance
+alone does not promise recipient completion. Processing retries for Inbox rows
+and acknowledgement recovery remain separate Delivery behavior.
 
 `Environment` resolves the Node `local` or `production` profile once from
 `NODE_ENV`. `ServerEnvironment` resolves configured facilities once for that

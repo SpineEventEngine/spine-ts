@@ -27,7 +27,6 @@ import { SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import {
   AdminService,
   InboxService,
-  InboxReadService,
   ShardService,
 } from "@spine-event-engine/proto/delivery-server";
 import { SignalMetadata } from "@spine-event-engine/server";
@@ -430,7 +429,6 @@ class GatedDeliveryListener {
       connectNodeAdapter({
         routes: (router) => {
           router.service(InboxService, this.#assembly.inbox);
-          router.service(InboxReadService, this.#assembly.inboxRead);
           router.service(ShardService, this.#assembly.shards);
           router.service(AdminService, {
             ...this.#assembly.admin,

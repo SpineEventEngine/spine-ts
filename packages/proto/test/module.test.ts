@@ -104,7 +104,7 @@ describe("spineProtoModule", () => {
       dependencies: [],
       moduleExport: "spineProtoModule",
     });
-    expect(manifest.protoFiles).toHaveLength(51);
+    expect(manifest.protoFiles).toHaveLength(50);
     expect(manifest.generationId).toEqual(expect.stringMatching(/\S/u));
     expect(
       JSON.parse(

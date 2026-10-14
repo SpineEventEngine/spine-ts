@@ -398,13 +398,10 @@ Process Managers also expose protected `select()` reads of Entity state.
 One Server resolves each queried Entity type to its registered context and
 rejects duplicate type registrations. Queries preserve the handler's effective
 tenant, reject incompatible destinations before reading, and require query
-visibility for foreign targets. Routes are installed before recovery. Shutdown
-normally drains accepted handlers across contexts before closing target read-sides.
-Each context has one configurable shutdown deadline (5 seconds by default):
-after it expires, queued work is fenced and close reports the timeout while
-already-entered effects may still settle. The server continues independent
-cleanup after a context drain failure. The context deadline begins after the
-server's separate network and Delivery teardown.
+visibility for foreign targets. Routes are installed before recovery. The server
+drains accepted handlers across contexts before closing target
+read-sides, and continues independent cleanup after a context drain failure.
+An entered application effect can keep explicit close pending.
 See the [query contract](../../packages/server/REFERENCE.md#handler-routing-and-operations)
 for the single-tenant identity and the limits of eventually consistent reads.
 Aggregates and Process Managers provide protected Event-history reads backed

@@ -2441,6 +2441,30 @@ describe("BoundedContext assembly", () => {
     expect(storageFactory.storages.every((storage) => !storage.isOpen())).toBe(true);
   });
 
+  it("waits for an entered Stand close without imposing a context deadline", async () => {
+    vi.useFakeTimers();
+    const release = Promise.withResolvers<undefined>();
+    const closeStand = vi.spyOn(Stand.prototype, "close").mockImplementation(() => release.promise);
+    const context = BoundedContext.singleTenant("Tasks").build();
+    try {
+      const close = context.close();
+      await vi.advanceTimersByTimeAsync(5_001);
+      let settled = false;
+      void close
+        .finally(() => {
+          settled = true;
+        })
+        .catch(() => undefined);
+      await Promise.resolve();
+      expect(settled).toBe(false);
+      release.resolve(undefined);
+      await expect(close).resolves.toBeUndefined();
+    } finally {
+      closeStand.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it("closes Stand before the registry without an internal tenant-record storage", async () => {
     const order: string[] = [];
     const storageFactory = new OrderedStorageFactory(order);

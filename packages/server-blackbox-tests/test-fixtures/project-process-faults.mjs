@@ -23,16 +23,14 @@ import { relative, resolve } from "node:path";
 import process from "node:process";
 import { clearTimeout, setTimeout } from "node:timers";
 import { fileURLToPath, URL } from "node:url";
-import { create, toBinary } from "@bufbuild/protobuf";
-import { AnyMessages, StringifierRegistry, TypeRegistry, TypeUrls } from "@spine-event-engine/core";
-import { InboxIdSchema } from "@spine-event-engine/proto/delivery";
+import { toBinary } from "@bufbuild/protobuf";
+import { TypeUrls } from "@spine-event-engine/core";
 import { classifyCrashReplay, completeInboxRows } from "./project-process-fault-observations.mjs";
 import {
   PlanningIdSchema,
   PortfolioStateSchema,
   ProjectIdSchema,
   ProjectProjectionStateSchema,
-  StaffingIdSchema,
   StaffingStateSchema,
 } from "../dist/generated/spine/server/testing/project_workflow_pb.js";
 import { projectWorkflowIds } from "../dist/test-fixtures/project-workflow.js";
@@ -48,7 +46,6 @@ assert.ok(
   [
     "before-effect",
     "after-save-before-ack",
-    "partial-publication-repair",
     "shared-volatile-loss",
   ].includes(scenario),
 );
@@ -142,7 +139,6 @@ let delivery;
 let deliveryReady;
 let sql;
 let ackFaultInstalled = false;
-let insertFaultInstalled = false;
 let databaseCreated = false;
 let result;
 let cleanup;
@@ -181,9 +177,7 @@ try {
       ? await beforeEffect(settings)
       : scenario === "after-save-before-ack"
         ? await afterSaveBeforeAck(settings)
-        : scenario === "partial-publication-repair"
-          ? await partialPublicationRepair(settings)
-          : await sharedVolatileLoss(settings);
+        : await sharedVolatileLoss(settings);
   result = {
     status: "PASS",
     scenario,
@@ -247,13 +241,6 @@ try {
       await dropAckBlock();
     } catch (error) {
       errors.push(`ack trigger removal: ${String(error)}`);
-    }
-  }
-  if (insertFaultInstalled) {
-    try {
-      await dropInsertFault();
-    } catch (error) {
-      errors.push(`insert trigger removal: ${String(error)}`);
     }
   }
   try {
@@ -782,361 +769,6 @@ async function dropAckBlock() {
     await sql.query("DROP SEQUENCE IF EXISTS fault_ack_attempts");
   } else {
     await sql.query("DROP TABLE IF EXISTS fault_ack_attempts");
-  }
-}
-
-async function partialPublicationRepair(settings) {
-  const target = projectWorkflowIds(organization, 1).staffing;
-  const typedTarget = {
-    targetIdTypeUrl: TypeUrls.derive(StaffingIdSchema),
-    targetIdBase64: Buffer.from(toBinary(StaffingIdSchema, target)).toString("base64"),
-  };
-  const ready = await startWorkers(settings, "initial");
-  await installInsertFault(target);
-  await post(workers[0], 1);
-  const partial = await until(
-    "saved Event and partial recipient admission",
-    async () => {
-      const snapshot = await request(workers[0], "inspect", { numbers: [1] });
-      const original = snapshot.events.find((event) => event.number === 1);
-      if (original === undefined) return undefined;
-      const inbox = await request(workers[0], "inspectDelivery");
-      const rows = completeInboxRows(inbox, count);
-      const prefix = rows.filter((row) => row.signalId === original.id);
-      if (prefix.length === 0 || (await insertAttempts()) === 0) return undefined;
-      assert.ok(
-        prefix.every(
-          (row) =>
-            row.targetIdTypeUrl !== typedTarget.targetIdTypeUrl ||
-            row.targetIdBase64 !== typedTarget.targetIdBase64,
-        ),
-      );
-      return { snapshot, original, prefix };
-    },
-    30_000,
-  );
-  assert.ok(partial.original.binaryBase64 && partial.original.sha256);
-  await writeFile(
-    resolve(dir, "partial-before-exhaustion.json"),
-    `${JSON.stringify(partial, null, 2)}\n`,
-  );
-  const exhausted = await until(
-    "finite insert exhaustion, settled Command, and completed Planning prefix",
-    async () => {
-      const failedInsertAttempts = await insertAttempts();
-      if (failedInsertAttempts < 3) return undefined;
-      const snapshot = await request(workers[0], "inspect", { numbers: [1] });
-      if (!snapshot.projects[0].states.planning || snapshot.projects[0].states.staffing)
-        return undefined;
-      const inbox = await request(workers[0], "inspectDelivery");
-      const rows = completeInboxRows(inbox, count);
-      const commandRows = rows.filter((row) => row.signalId === commandIds[0]);
-      const prefix = rows.find(
-        (row) =>
-          row.signalId === partial.original.id &&
-          row.targetIdTypeUrl === TypeUrls.derive(PlanningIdSchema),
-      );
-      if (commandRows.some((row) => row.status === "TO_DELIVER") || prefix?.status !== "DELIVERED")
-        return undefined;
-      assert.ok(
-        rows.every(
-          (row) =>
-            row.signalId !== partial.original.id ||
-            row.targetIdTypeUrl !== typedTarget.targetIdTypeUrl ||
-            row.targetIdBase64 !== typedTarget.targetIdBase64,
-        ),
-      );
-      return { failedInsertAttempts, commandRows, prefix, snapshot };
-    },
-    15_000,
-  );
-  const { failedInsertAttempts } = exhausted;
-  await writeFile(
-    resolve(dir, "publication-exhaustion.json"),
-    `${JSON.stringify(exhausted, null, 2)}\n`,
-  );
-  await dropInsertFault();
-  insertFaultInstalled = false;
-  await Promise.all(workers.map((worker) => killAndConfirm(worker)));
-  workers.length = 0;
-  const restarted = await startWorkers(settings, "restarted");
-  assert.ok(restarted.every((worker) => !ready.some((old) => old.pid === worker.pid)));
-  const repairs = await Promise.all(
-    Array.from({ length: 8 }, (_, index) =>
-      request(workers[index % workers.length], "republish", {
-        eventIds: [partial.original.id],
-      }),
-    ),
-  );
-  for (const repair of repairs)
-    assert.deepEqual(
-      repair.map((outcome) => [outcome.eventId, outcome.status]),
-      [[partial.original.id, "ADMITTED"]],
-    );
-  const after = await until(
-    "repaired complete Project workflow",
-    async () => {
-      const observation = await request(workers[0], "inspect", { numbers: [1] });
-      return Object.values(observation.projects[0].states).every(Boolean) ? observation : undefined;
-    },
-    30_000,
-  );
-  const retained = after.events.find((event) => event.number === 1);
-  assert.equal(retained?.id, partial.original.id);
-  assert.equal(retained?.binaryBase64, partial.original.binaryBase64);
-  assert.equal(retained?.sha256, partial.original.sha256);
-  const allEntries = await entries();
-  for (const method of ["create", "planning", "staffing", "portfolio", "projection"])
-    assert.equal(allEntries.filter((entry) => entry.method === method).length, 1);
-  assert.ok(
-    allEntries.some(
-      (entry) =>
-        entry.method === "staffing" &&
-        entry.correlation === `${organization}:1` &&
-        entry.recipientTypeUrl === typedTarget.targetIdTypeUrl &&
-        entry.recipientIdBase64 === typedTarget.targetIdBase64,
-    ),
-  );
-  let latestInbox;
-  let deliveredRecipients;
-  try {
-    deliveredRecipients = await until(
-      "four distinct delivered original Event recipients before cleanup",
-      async () => {
-        latestInbox = await request(workers[0], "inspectDelivery");
-        const rows = completeInboxRows(latestInbox, count).filter(
-          (row) => row.signalId === partial.original.id,
-        );
-        const delivered = rows.filter((row) => row.status === "DELIVERED");
-        const distinct = new Set(
-          delivered.map((row) => `${row.targetIdTypeUrl}:${row.targetIdBase64}`),
-        );
-        return distinct.size === 4 ? { rows, delivered } : undefined;
-      },
-      15_000,
-    );
-  } catch (error) {
-    await writeFile(
-      resolve(dir, "retained-recipient-diagnostic.json"),
-      `${JSON.stringify({ error: String(error), latestInbox, entries: await entries() }, null, 2)}\n`,
-    );
-    throw error;
-  }
-  let latestCleanupInbox;
-  let cleaned;
-  const cleanupTrace = [];
-  let lastCleanupTrace = 0;
-  try {
-    cleaned = await until(
-      "runtime cleanup of all original Event recipient rows",
-      async () => {
-        latestCleanupInbox = await request(workers[0], "inspectDelivery");
-        const rows = completeInboxRows(latestCleanupInbox, count).filter(
-          (row) => row.signalId === partial.original.id,
-        );
-        if (Date.now() - lastCleanupTrace >= 5_000) {
-          cleanupTrace.push({ at: Date.now(), rows, source: latestCleanupInbox.observations });
-          lastCleanupTrace = Date.now();
-        }
-        return rows.length === 0 ? { inbox: latestCleanupInbox, at: Date.now() } : undefined;
-      },
-      65_000,
-      250,
-    );
-  } catch (error) {
-    await writeFile(
-      resolve(dir, "post-cleanup-diagnostic.json"),
-      `${JSON.stringify({ error: String(error), deliveredRecipients, cleanupTrace, latestCleanupInbox, entries: await entries() }, null, 2)}\n`,
-    );
-    throw error;
-  }
-  const beforePostCleanupRepair = {
-    at: Date.now(),
-    entries: await entries(),
-    state: await request(workers[0], "inspect", { numbers: [1] }),
-    inbox: await request(workers[0], "inspectDelivery"),
-  };
-  await writeFile(
-    resolve(dir, "before-post-cleanup-repair.json"),
-    `${JSON.stringify(beforePostCleanupRepair, null, 2)}\n`,
-  );
-  const beforeColdRestartPids = workers.map((worker) => worker.pid);
-  await Promise.all(workers.map((worker) => killAndConfirm(worker)));
-  workers.length = 0;
-  const postCleanupWorkers = await startWorkers(settings, "post-cleanup");
-  assert.ok(postCleanupWorkers.every((worker) => !beforeColdRestartPids.includes(worker.pid)));
-  const repairStartedAt = Date.now();
-  const postCleanupReplay = await request(workers[0], "republish", {
-    eventIds: [partial.original.id],
-  });
-  const repairEndedAt = Date.now();
-  assert.deepEqual(
-    postCleanupReplay.map((outcome) => [outcome.eventId, outcome.status]),
-    [[partial.original.id, "ADMITTED"]],
-  );
-  const replayTrace = [];
-  let lastReplayTrace = 0;
-  let replayEntries;
-  let settledInbox;
-  const methods = ["planning", "staffing", "portfolio", "projection"];
-  const initialCounts = methods.map(
-    (method) => beforePostCleanupRepair.entries.filter((entry) => entry.method === method).length,
-  );
-  try {
-    replayEntries = await until(
-      "resolution of post-cleanup Event receipts",
-      async () => {
-        const observed = await entries();
-        const counts = methods.map(
-          (method) => observed.filter((entry) => entry.method === method).length,
-        );
-        assert.ok(counts.every((value, index) => value <= initialCounts[index] + 1));
-        const inbox = await request(workers[0], "inspectDelivery");
-        const rows = completeInboxRows(inbox, count).filter(
-          (row) => row.signalId === partial.original.id,
-        );
-        if (Date.now() - lastReplayTrace >= 2_000 || replayTrace.length === 0) {
-          replayTrace.push({ at: Date.now(), inbox, counts, entries: observed });
-          lastReplayTrace = Date.now();
-        }
-        if (rows.some((row) => row.status === "TO_DELIVER")) return undefined;
-        if (!counts.every((value, index) => value === initialCounts[index] + 1)) return undefined;
-        settledInbox = inbox;
-        return observed;
-      },
-      30_000,
-    );
-  } catch (error) {
-    await writeFile(
-      resolve(dir, "post-replay-diagnostic.json"),
-      `${JSON.stringify({ error: String(error), deliveredRecipients, cleanupTrace, cleaned, beforePostCleanupRepair, beforeColdRestartPids, postCleanupPids: postCleanupWorkers.map((worker) => worker.pid), repairStartedAt, repairEndedAt, postCleanupReplay, replayTrace, entries: await entries(), state: await request(workers[0], "inspect", { numbers: [1] }) }, null, 2)}\n`,
-    );
-    throw error;
-  }
-  assert.equal(replayEntries.filter((entry) => entry.method === "create").length, 1);
-  const finalCounts = methods.map(
-    (method) => replayEntries.filter((entry) => entry.method === method).length,
-  );
-  const resolvedRows = completeInboxRows(settledInbox, count).filter(
-    (row) => row.signalId === partial.original.id,
-  );
-  assert.equal(resolvedRows.length, 4);
-  assert.equal(
-    new Set(resolvedRows.map((row) => `${row.targetIdTypeUrl}:${row.targetIdBase64}`)).size,
-    4,
-  );
-  assert.ok(resolvedRows.every((row) => row.status === "DELIVERED"));
-  const afterReplay = await request(workers[0], "inspect", { numbers: [1] });
-  assert.ok(Object.values(afterReplay.projects[0].states).every(Boolean));
-  const replayedEvent = afterReplay.events.find((event) => event.number === 1);
-  assert.equal(replayedEvent?.id, partial.original.id);
-  assert.equal(replayedEvent?.binaryBase64, partial.original.binaryBase64);
-  assert.equal(replayedEvent?.sha256, partial.original.sha256);
-  await writeFile(
-    resolve(dir, "partial-publication-repair.json"),
-    `${JSON.stringify(
-      {
-        acknowledgedCommandIds: commandIds,
-        partial,
-        exhausted,
-        failedInsertAttempts,
-        restartPids: restarted.map((worker) => worker.pid),
-        repairs,
-        after,
-        entries: allEntries,
-        deliveredRecipients,
-        cleanupTrace,
-        cleaned,
-        beforePostCleanupRepair,
-        beforeColdRestartPids,
-        postCleanupPids: postCleanupWorkers.map((worker) => worker.pid),
-        repairStartedAt,
-        repairEndedAt,
-        postCleanupReplay,
-        replayTrace,
-        initialCounts,
-        finalCounts,
-        resolvedRows,
-        afterReplay,
-        replayEntries,
-      },
-      null,
-      2,
-    )}\n`,
-  );
-  return {
-    eventId: partial.original.id,
-    eventSha256: partial.original.sha256,
-    failedInsertAttempts,
-    repairs,
-    postCleanupReplay,
-  };
-}
-
-async function installInsertFault(target) {
-  const stringifiers = new StringifierRegistry();
-  stringifiers.setTypeRegistry(new TypeRegistry([StaffingIdSchema]));
-  const encoded = stringifiers.forMessage(InboxIdSchema).toString(
-    create(InboxIdSchema, {
-      entityId: { id: AnyMessages.pack(StaffingIdSchema, target) },
-      typeUrl: TypeUrls.derive(StaffingStateSchema),
-    }),
-  );
-  const hex = Buffer.from(encoded, "utf8").toString("hex");
-  const comparison = postgres
-    ? `convert_from(decode('${hex}', 'hex'), 'UTF8')`
-    : `CONVERT(UNHEX('${hex}') USING utf8mb4)`;
-  if (postgres) {
-    await sql.query("CREATE SEQUENCE fault_insert_attempts");
-    await sql.query(`CREATE FUNCTION fail_fault_insert() RETURNS trigger LANGUAGE plpgsql AS $$
-      BEGIN
-        IF NEW.inbox_id = ${comparison} THEN
-          PERFORM nextval('fault_insert_attempts');
-          RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'task injected target admission fault';
-        END IF;
-        RETURN NEW;
-      END $$`);
-    await sql.query(`CREATE TRIGGER fail_fault_insert BEFORE INSERT ON "${inboxTable}"
-      FOR EACH ROW EXECUTE FUNCTION fail_fault_insert()`);
-  } else {
-    await sql.query(
-      "CREATE TABLE fault_insert_attempts(id integer PRIMARY KEY, attempts integer NOT NULL) ENGINE=MyISAM",
-    );
-    await sql.query("INSERT INTO fault_insert_attempts VALUES (1, 0)");
-    await sql.query(`CREATE TRIGGER fail_fault_insert BEFORE INSERT ON \`${inboxTable}\` FOR EACH ROW
-      BEGIN
-        IF NEW.inbox_id = ${comparison} THEN
-          UPDATE fault_insert_attempts SET attempts = attempts + 1 WHERE id = 1;
-          SIGNAL SQLSTATE '45000' SET MYSQL_ERRNO = 1644,
-            MESSAGE_TEXT = 'task injected target admission fault';
-        END IF;
-      END`);
-  }
-  insertFaultInstalled = true;
-}
-
-async function insertAttempts() {
-  const result = await sql.query(
-    postgres
-      ? "SELECT last_value AS attempts FROM fault_insert_attempts"
-      : "SELECT attempts FROM fault_insert_attempts",
-  );
-  const rows = postgres ? result.rows : result[0];
-  return Number(rows[0]?.attempts ?? 0);
-}
-
-async function dropInsertFault() {
-  if (!insertFaultInstalled) return;
-  await sql.query(
-    postgres
-      ? `DROP TRIGGER IF EXISTS fail_fault_insert ON "${inboxTable}"`
-      : "DROP TRIGGER IF EXISTS fail_fault_insert",
-  );
-  if (postgres) {
-    await sql.query("DROP FUNCTION IF EXISTS fail_fault_insert()");
-    await sql.query("DROP SEQUENCE IF EXISTS fault_insert_attempts");
-  } else {
-    await sql.query("DROP TABLE IF EXISTS fault_insert_attempts");
   }
 }
 

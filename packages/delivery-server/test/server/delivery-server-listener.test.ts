@@ -23,7 +23,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   AdminService,
   Health,
-  InboxReadService,
   InboxService,
   ShardService,
 } from "@spine-event-engine/proto/delivery-server";
@@ -43,7 +42,7 @@ afterEach(async () => {
 });
 
 describe("DeliveryServer listener", () => {
-  it("registers Inbox, InboxRead, Shard, Admin, and Health on an ephemeral loopback bind", async () => {
+  it("registers Inbox, Shard, Admin, and Health on an ephemeral loopback bind", async () => {
     const server = tracked(new DeliveryServer({ host: "127.0.0.1", port: 0 }));
     await expect(Promise.all([server.start(), server.start()])).resolves.toEqual([server, server]);
     expect(server.port).toBeGreaterThan(0);
@@ -60,40 +59,20 @@ describe("DeliveryServer listener", () => {
       ).rejects.toMatchObject({
         code: Code.InvalidArgument,
       });
-      const reads = createClient(InboxReadService, transport);
       await expect(
-        reads.readPage({
+        createClient(InboxService, transport).findManyInShard({
           shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
           pageSize: 1,
         }),
       ).resolves.toMatchObject({ message: [] });
       await expect(
-        reads.readPage({
+        createClient(InboxService, transport).findManyInShard({
           shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
           pageSize: 0,
         }),
       ).rejects.toMatchObject({ code: Code.InvalidArgument });
       await expect(
-        reads.readPage({
-          shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
-          pageSize: 1,
-          after: { messageId: "", version: 0 },
-        }),
-      ).rejects.toMatchObject({ code: Code.InvalidArgument });
-      await expect(
-        reads.readPage({
-          shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
-          pageSize: 1,
-          sinceWhen: create(TimestampSchema, { seconds: 1n }),
-          after: {
-            messageId: "a",
-            version: 0,
-            whenReceived: create(TimestampSchema, { seconds: 1n }),
-          },
-        }),
-      ).rejects.toMatchObject({ code: Code.InvalidArgument });
-      await expect(
-        reads.readPage({
+        createClient(InboxService, transport).findManyInShard({
           shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
           pageSize: 1,
           sinceWhen: create(TimestampSchema, { seconds: 253_402_300_800n }),

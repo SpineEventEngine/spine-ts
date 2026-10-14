@@ -20,11 +20,10 @@ import type { ILogLayer } from "loglayer";
 
 import { clone, create, getOption, hasOption, type Message } from "@bufbuild/protobuf";
 import type { Any } from "@bufbuild/protobuf/wkt";
-import { Time, TypeUrls, type MessageSchema } from "@spine-event-engine/core";
+import { TypeUrls, type MessageSchema } from "@spine-event-engine/core";
 import {
   EventSchema,
   EventContextSchema,
-  EventIdSchema,
   BoundedContextNameSchema,
   TenantIdSchema,
   type Command,
@@ -430,47 +429,6 @@ export interface ReadCatchUpOptions {
 }
 
 /**
- * Selects exact committed Event IDs for bounded, process-local repair.
- */
-export interface RepublishEventsOptions {
-  /**
-   * IDs from completed Entity saves or persisted System Events, in dispatch order;
-   * 1–100 distinct non-blank IDs.
-   */
-  readonly eventIds: readonly string[];
-
-  /**
-   * Required for a multitenant context and rejected for a single-tenant context.
-   */
-  readonly tenantId?: TenantId;
-
-  /**
-   * Stops unattempted IDs and further dispatch attempts when aborted.
-   */
-  readonly signal?: AbortSignal;
-}
-
-/**
- * Outcome for one exact stored Event ID. Admission does not imply recipient completion.
- */
-export interface RepublishEventResult {
-  /**
-   * Requested Event ID.
-   */
-  readonly eventId: string;
-
-  /**
-   * Exact-read and dispatch outcome.
-   */
-  readonly status: "ADMITTED" | "FAILED" | "NOT_FOUND" | "CANCELLED";
-
-  /**
-   * Number of dispatch attempts, excluding the exact storage read.
-   */
-  readonly attempts: number;
-}
-
-/**
  * Summary from one legacy-named local read-side reset/replay run.
  *
  * The replay boundary covers only already-stored events routed to registered
@@ -519,29 +477,6 @@ export class BoundedContextNameError extends Error {
     this.name = "BoundedContextNameError";
     this.value = value;
     Object.setPrototypeOf(this, new.target.prototype);
-  }
-}
-
-/**
- * Identifies the context phase that exhausted its shared shutdown budget.
- */
-class ContextShutdownTimeoutError extends Error {
-  // prettier-ignore
-
-  /**
-   * Stable internal timeout code.
-   */
-  readonly code = "SHUTDOWN_TIMEOUT";
-
-  /**
-   * Creates a timeout error without application or provider details.
-   *
-   * @param contextName Context entering terminal shutdown.
-   * @param phase Close phase that reached the deadline.
-   */
-  constructor(contextName: string, phase: string) {
-    super(`BoundedContext ${contextName} shutdown timed out during ${phase}.`);
-    this.name = "ContextShutdownTimeoutError";
   }
 }
 
@@ -805,11 +740,6 @@ interface BoundedContextAssembly {
   readonly deliveryStrategy: DeliveryStrategy;
 
   /**
-   * Maximum time in milliseconds for the complete context shutdown.
-   */
-  readonly shutdownTimeoutMs: number;
-
-  /**
    * Proof of framework-controlled construction.
    */
   readonly token: FrameworkConstructionToken;
@@ -873,12 +803,6 @@ export class BoundedContext {
 
   readonly #deliveryStrategy: DeliveryStrategy;
 
-  readonly #shutdownTimeoutMs: number;
-
-  #shutdownDeadline = Number.POSITIVE_INFINITY;
-
-  #shutdownTimedOut = false;
-
   readonly #registeredRepositories: RegistrationSnapshot[] = [];
 
   readonly #repositoryViews = new Set<RepositoryView>();
@@ -890,10 +814,6 @@ export class BoundedContext {
   readonly #systemStand: Stand;
 
   readonly #subscriptionRuntime: SubscriptionRuntime;
-
-  readonly #repairInFlight = new Set<Promise<readonly RepublishEventResult[]>>();
-
-  readonly #repairCloseController = new AbortController();
 
   #closed: Promise<void> | undefined;
 
@@ -924,7 +844,6 @@ export class BoundedContext {
     this.#subscriptionRuntime = input.subscriptionRuntime;
     this.#storageFactory = input.storageFactory;
     this.#deliveryStrategy = ContextParts.snapshotDeliveryStrategy(input.deliveryStrategy);
-    this.#shutdownTimeoutMs = input.shutdownTimeoutMs;
     this.#commandEndpoint = Object.freeze({
       acceptedCommandTypes: () => this.#commandBus.acceptedCommandTypes(),
       post: (command: Command) => this.#commandBus.post(command),
@@ -980,9 +899,7 @@ export class BoundedContext {
     eventSubscribers.set(this, (typeUrl, subscriber) =>
       eventBusAccess.subscribe(this.#eventBus, typeUrl, subscriber),
     );
-    systemEventPosters.set(this, (event) =>
-      this.#publisher.publishSystemEvent(event).then(() => undefined),
-    );
+    systemEventPosters.set(this, (event) => this.#publisher.publishSystemEvent(event));
     contextSystemPairings.set(
       this,
       ContextParts.createSystemPairing(this.#snapshot, input.systemSpec),
@@ -1217,7 +1134,7 @@ export class BoundedContext {
    * - single-tenant contexts reject `tenantId`;
    * - multitenant contexts require the exact non-blank `tenantId`;
    * - process-local sequential execution on the same EventBus runtime queue as
-   *   live event intake and stored redispatch.
+   *   live event intake.
    *
    * Unsupported boundary:
    * - Delivery jobs, schedulers, inbox lifecycle, retries, and transport
@@ -1229,149 +1146,6 @@ export class BoundedContext {
    */
   async catchUpReadSide(options: ReadCatchUpOptions = {}): Promise<ReadCatchUpResult> {
     return eventBusAccess.runExclusive(this.#eventBus, () => this.#catchUpReadSideOnce(options));
-  }
-
-  /**
-   * Admits only supplied IDs known to belong to completed Entity saves or persisted
-   * System Events. Domain Event presence alone does not prove an Entity save completed.
-   * Exact reads cover both storage families; a cross-family ID collision fails without
-   * dispatch. Existing recipients may run again, and admission does not prove processing.
-   *
-   * @param options Exact IDs, tenant scope, and optional cancellation signal.
-   * @returns Ordered per-ID outcomes without exposing storage or recipient error details.
-   */
-  async republishEvents(options: RepublishEventsOptions): Promise<readonly RepublishEventResult[]> {
-    if (closingContexts.has(this)) throw new Error("BoundedContext is closed.");
-    const ids = [...options.eventIds];
-    if (
-      ids.length < 1 ||
-      ids.length > 100 ||
-      ids.some((id) => typeof id !== "string" || id.trim() === "") ||
-      new Set(ids).size !== ids.length
-    )
-      throw new Error("Repair requires 1–100 distinct non-blank Event IDs.");
-    const storageContext = ContextParts.catchUpStorageContext(
-      this.#snapshot.spec,
-      options,
-      "Event repair",
-    );
-    const work = this.#republishEventsOnce(ids, storageContext, options.signal);
-    this.#repairInFlight.add(work);
-    void work.then(() => this.#repairInFlight.delete(work));
-    return work;
-  }
-
-  /**
-   * Reads and admits each exact ID without scanning other Events.
-   *
-   * @param ids Validated distinct IDs in caller order.
-   * @param storageContext Selected tenant-scoped storage context.
-   * @param signal Optional cancellation of remaining work.
-   * @returns Ordered safe outcomes for every requested ID.
-   */
-  async #republishEventsOnce(
-    ids: readonly string[],
-    storageContext: StorageContext,
-    signal: AbortSignal | undefined,
-  ): Promise<readonly RepublishEventResult[]> {
-    const store = new EventStore(storageContext, this.#storageFactory);
-    const systemStore = new EventStore(storageContext, this.#storageFactory, systemEventGroup);
-    const results: RepublishEventResult[] = [];
-    const cancellation =
-      signal === undefined
-        ? this.#repairCloseController.signal
-        : AbortSignal.any([signal, this.#repairCloseController.signal]);
-    try {
-      for (const eventId of ids) {
-        results.push(
-          await this.#republishOne(store, systemStore, storageContext, eventId, cancellation),
-        );
-      }
-      return Object.freeze(results);
-    } finally {
-      store.close();
-      systemStore.close();
-    }
-  }
-
-  /**
-   * Reads and admits one exact ID, containing read and recipient failures.
-   *
-   * @param store Tenant-scoped Event store.
-   * @param systemStore Tenant-scoped System Event store.
-   * @param storageContext Boundary used to verify the returned Event.
-   * @param eventId Exact requested ID.
-   * @param signal Combined caller and context-close cancellation.
-   * @returns One safe admission outcome.
-   */
-  async #republishOne(
-    store: EventStore,
-    systemStore: EventStore,
-    storageContext: StorageContext,
-    eventId: string,
-    signal: AbortSignal,
-  ): Promise<RepublishEventResult> {
-    if (signal.aborted) return { eventId, status: "CANCELLED", attempts: 0 };
-    try {
-      const found = await this.#readRepairEvents(store, eventId, signal);
-      if (found === undefined) return { eventId, status: "CANCELLED", attempts: 0 };
-      const systemFound = await this.#readRepairEvents(systemStore, eventId, signal);
-      if (systemFound === undefined) return { eventId, status: "CANCELLED", attempts: 0 };
-      const domain = found.find((candidate) => candidate.id?.value === eventId);
-      const system = systemFound.find((candidate) => candidate.id?.value === eventId);
-      if (domain !== undefined && system !== undefined)
-        throw new Error(`Event ID ${eventId} exists in both domain and System families.`);
-      const event = domain ?? system;
-      if (event === undefined) return { eventId, status: "NOT_FOUND", attempts: 0 };
-      ContextParts.validateReplayTenant(storageContext, event);
-      const outcome =
-        system === undefined
-          ? await this.#publisher.redispatchStored(event, { signal })
-          : await this.#publisher.redispatchSystemStored(event, { signal });
-      return { eventId, status: outcome.status, attempts: outcome.attempts };
-    } catch (error) {
-      this.#publisher.reportFailure(
-        "stored-event",
-        create(EventSchema, { id: create(EventIdSchema, { value: eventId }) }),
-        error,
-      );
-      return { eventId, status: "FAILED", attempts: 0 };
-    }
-  }
-
-  /**
-   * Races one exact storage read with caller cancellation and context closure.
-   * The provider query may finish later; its eventual rejection remains observed.
-   *
-   * @param store Event store for the selected tenant.
-   * @param eventId Exact requested ID.
-   * @param signal Combined caller and context-close cancellation.
-   * @returns Matching rows, or undefined when cancelled before completion.
-   */
-  async #readRepairEvents(
-    store: EventStore,
-    eventId: string,
-    signal: AbortSignal,
-  ): Promise<readonly Event[] | undefined> {
-    const closing = this.#repairCloseController.signal;
-    const isCancelled = () => signal.aborted || closing.aborted;
-    if (isCancelled()) return undefined;
-    const cancelled = Promise.withResolvers<undefined>();
-    const onAbort = () => {
-      cancelled.resolve(undefined);
-    };
-    signal.addEventListener("abort", onAbort, { once: true });
-    closing.addEventListener("abort", onAbort, { once: true });
-    try {
-      if (isCancelled()) return undefined;
-      return await Promise.race([
-        store.read({ ids: [create(EventIdSchema, { value: eventId })], limit: 1 }),
-        cancelled.promise,
-      ]);
-    } finally {
-      signal.removeEventListener("abort", onAbort);
-      closing.removeEventListener("abort", onAbort);
-    }
   }
 
   async #catchUpReadSideOnce(options: ReadCatchUpOptions): Promise<ReadCatchUpResult> {
@@ -1411,14 +1185,8 @@ export class BoundedContext {
   }
 
   /**
-   * Closes this context's buses, Stand, and repository storage and runtime bindings.
-   *
-   * One deadline begins at the first close phase. Accepted framework follow-ups
-   * may finish during grace. On timeout, queued work is fenced and repeated
-   * calls return the same terminal `AggregateError`; already-entered effects
-   * may settle later. Other cleanup failures remain retryable.
-   *
-   * @returns Completion or an aggregate of bounded close failures.
+   * Closes this context's buses, Stand, repository storage, and runtime bindings.
+   * @returns Completion or an aggregate of close failures.
    */
   close(): Promise<void> {
     this.#beginClose();
@@ -1427,13 +1195,10 @@ export class BoundedContext {
   }
 
   /**
-   * Stops external and repair admission while allowing accepted follow-ups to drain.
+   * Stops external admission while accepted follow-ups drain.
    */
   #beginClose(): void {
-    if (!Number.isFinite(this.#shutdownDeadline))
-      this.#shutdownDeadline = Time.monotonicTime() + this.#shutdownTimeoutMs;
     closingContexts.add(this);
-    this.#repairCloseController.abort(new Error("BoundedContext repair cancelled during close."));
     this.#publisher.beginClose();
     commandBusAccess.beginClose(this.#commandBus);
     eventBusAccess.beginClose(this.#eventBus);
@@ -1448,10 +1213,8 @@ export class BoundedContext {
   async #drainWork(): Promise<void> {
     this.#beginClose();
     const errors: unknown[] = [];
-    await this.#closePart("integration", () => ContextParts.closeIntegration(this), errors);
-    await this.#closePart("repair", () => Promise.all([...this.#repairInFlight]), errors);
+    await this.#closePart(() => ContextParts.closeIntegration(this), errors);
     await this.#closePart(
-      "accepted-work",
       () =>
         ContextParts.drainContextWork(
           this.#commandBus,
@@ -1472,25 +1235,17 @@ export class BoundedContext {
   async #closeOnce(): Promise<void> {
     const errors: unknown[] = [];
 
-    await this.#closePart("drain", () => this.#drainWork(), errors);
+    await this.#closePart(() => this.#drainWork(), errors);
     await this.#closeBuses(errors);
-    await this.#closePart("stand", () => this.#stand.close(), errors);
-    await this.#closePart("system-stand", () => this.#systemStand.close(), errors);
-    await this.#closePart(
-      "subscription-close",
-      () => this.#subscriptionRuntime.finishClose(),
-      errors,
-    );
-    await this.#closePart(
-      "tenant-index",
-      () => {
-        ContextParts.requireTenantIndex(this).close();
-      },
-      errors,
-    );
+    await this.#closePart(() => this.#stand.close(), errors);
+    await this.#closePart(() => this.#systemStand.close(), errors);
+    await this.#closePart(() => this.#subscriptionRuntime.finishClose(), errors);
+    await this.#closePart(() => {
+      ContextParts.requireTenantIndex(this).close();
+    }, errors);
     await this.#closeRepositories(errors);
     if (errors.length > 0) {
-      if (!this.#shutdownTimedOut) this.#closed = undefined;
+      this.#closed = undefined;
       throw new AggregateError(ContextParts.flattenErrors(errors), "BoundedContext close failed.");
     }
     ContextParts.clearContextMetadata(this);
@@ -1504,20 +1259,12 @@ export class BoundedContext {
    */
   async #closeBuses(errors: unknown[]): Promise<void> {
     this.#publisher.finishClose();
-    await this.#closePart(
-      "command-bus",
-      () => commandBusAccess.finishClose(this.#commandBus),
-      errors,
-    );
-    await this.#closePart("event-bus", () => eventBusAccess.finishClose(this.#eventBus), errors);
+    await this.#closePart(() => commandBusAccess.finishClose(this.#commandBus), errors);
+    await this.#closePart(() => eventBusAccess.finishClose(this.#eventBus), errors);
     this.#subscriptionRuntime.beginClose();
-    await this.#closePart("system-drain", () => eventBusAccess.drain(this.#systemEventBus), errors);
-    await this.#closePart("subscriptions", () => this.#subscriptionRuntime.drainClose(), errors);
-    await this.#closePart(
-      "system-bus",
-      () => eventBusAccess.finishClose(this.#systemEventBus),
-      errors,
-    );
+    await this.#closePart(() => eventBusAccess.drain(this.#systemEventBus), errors);
+    await this.#closePart(() => this.#subscriptionRuntime.drainClose(), errors);
+    await this.#closePart(() => eventBusAccess.finishClose(this.#systemEventBus), errors);
   }
 
   /**
@@ -1527,77 +1274,20 @@ export class BoundedContext {
    */
   async #closeRepositories(errors: unknown[]): Promise<void> {
     for (const repository of this.#repositoryViews) {
-      await this.#closePart(
-        "repository",
-        () => {
-          repositoryAccess.clearRuntime(repository);
-          registeredRepositories.delete(repository);
-        },
-        errors,
-      );
+      await this.#closePart(() => {
+        repositoryAccess.clearRuntime(repository);
+        registeredRepositories.delete(repository);
+      }, errors);
     }
   }
 
   /**
-   * Runs one close phase within the shared absolute deadline.
-   *
-   * @param phase Identifies a failed close phase.
-   * @param work Phase action.
-   * @param errors Collects failures while later independent actions continue.
-   * @returns Completion after the bounded phase attempt.
+   * Calls a close action and collects its failure before later cleanup.
+   * @param work Close action.
+   * @param errors Collects close failures.
    */
-  async #closePart(phase: string, work: () => unknown, errors: unknown[]): Promise<void> {
-    await ContextParts.closeContextPart(() => this.#withinShutdown(phase, work), errors);
-  }
-
-  /**
-   * Bounds only the outward wait; entered work remains on its original queue.
-   *
-   * @param phase Phase for an identifiable timeout.
-   * @param work Work to observe even if the deadline expires.
-   * @returns Phase result before the shared deadline.
-   */
-  async #withinShutdown(phase: string, work: () => unknown): Promise<unknown> {
-    const remaining = Math.max(0, this.#shutdownDeadline - Time.monotonicTime());
-    const running = Promise.resolve().then(work);
-    if (remaining === 0) {
-      this.#terminalFence();
-      void running.catch(() => undefined);
-      throw this.#shutdownTimeoutError(phase);
-    }
-    const timeout = Promise.withResolvers<never>();
-    const timer = setTimeout(() => {
-      this.#terminalFence();
-      timeout.reject(this.#shutdownTimeoutError(phase));
-    }, remaining);
-    try {
-      return await Promise.race([running, timeout.promise]);
-    } finally {
-      clearTimeout(timer);
-    }
-  }
-
-  /**
-   * Fences later queued work when the shutdown budget is exhausted.
-   */
-  #terminalFence(): void {
-    if (this.#shutdownTimedOut) return;
-    this.#shutdownTimedOut = true;
-    this.#repairCloseController.abort(new Error("Context shutdown deadline expired."));
-    this.#publisher.finishClose();
-    commandBusAccess.terminalClose(this.#commandBus);
-    eventBusAccess.terminalClose(this.#eventBus);
-    eventBusAccess.terminalClose(this.#systemEventBus);
-  }
-
-  /**
-   * Describes one exhausted close phase without exposing application data.
-   *
-   * @param phase Phase that reached the deadline.
-   * @returns Identifiable shutdown error.
-   */
-  #shutdownTimeoutError(phase: string): Error {
-    return new ContextShutdownTimeoutError(this.name.value, phase);
+  async #closePart(work: () => unknown, errors: unknown[]): Promise<void> {
+    await ContextParts.closeContextPart(work, errors);
   }
 }
 
@@ -1850,8 +1540,6 @@ export class BoundedContextBuilder {
 
   #deliveryStrategy: DeliveryStrategy = UniformAcrossAllShards.singleShard();
 
-  #shutdownTimeoutMs = 5_000;
-
   #storageFactory: StorageFactory | undefined;
 
   #subscriptionRegistry: StandSubscriptionRegistry | undefined;
@@ -2077,19 +1765,6 @@ export class BoundedContextBuilder {
   }
 
   /**
-   * Sets one shared deadline for draining and closing this context.
-   *
-   * @param milliseconds Positive shutdown budget within the Node timer range.
-   * @returns This builder for further configuration.
-   */
-  withShutdownTimeout(milliseconds: number): this {
-    if (!Number.isSafeInteger(milliseconds) || milliseconds < 1 || milliseconds > 2_147_483_647)
-      throw new RangeError("Shutdown timeout must be a positive safe timer duration.");
-    this.#shutdownTimeoutMs = milliseconds;
-    return this;
-  }
-
-  /**
    * Persists internal system events in the paired System Context storage.
    *
    * System events are forgotten by default. Enabling this option does not put
@@ -2273,7 +1948,6 @@ export class BoundedContextBuilder {
       eventBus,
       system.eventBus,
       this.#specSnapshot.name.value,
-      system.eventStore,
     );
     resources.publisher = publisher;
     return {
@@ -2385,7 +2059,6 @@ export class BoundedContextBuilder {
       storageFactory,
       repositories,
       this.#deliveryStrategy,
-      this.#shutdownTimeoutMs,
     );
   }
 
@@ -2781,7 +2454,6 @@ const ContextParts = Object.freeze({
    * @param storageFactory Storage provider.
    * @param repositories Registered repository views.
    * @param deliveryStrategy Delivery sharding strategy.
-   * @param shutdownTimeoutMs Shared context shutdown budget.
    * @returns Constructed bounded context.
    */
   createBoundedContext(
@@ -2797,7 +2469,6 @@ const ContextParts = Object.freeze({
     storageFactory: StorageFactory,
     repositories: readonly RepositoryView[],
     deliveryStrategy: DeliveryStrategy,
-    shutdownTimeoutMs: number,
   ): BoundedContext {
     return constructBoundedContext({
       snapshot: ContextParts.snapshotFor(specSnapshot),
@@ -2812,7 +2483,6 @@ const ContextParts = Object.freeze({
       storageFactory,
       repositories,
       deliveryStrategy,
-      shutdownTimeoutMs,
       token: frameworkConstructionToken,
     });
   },
@@ -2893,18 +2563,16 @@ const ContextParts = Object.freeze({
    *
    * @param specSnapshot Context configuration.
    * @param options Catch-up tenant options.
-   * @param operation Names the caller in tenant validation failures.
    * @returns Storage context for the selected scope.
    */
   catchUpStorageContext(
     specSnapshot: ContextSpecSnapshot,
     options: ReadCatchUpOptions,
-    operation = "read-side catch-up",
   ): StorageContext {
     if (!specSnapshot.multitenant) {
       if (options.tenantId !== undefined) {
         throw new Error(
-          `Single-tenant ${operation} for "${specSnapshot.name.value}" does not accept tenantId.`,
+          `Single-tenant read-side catch-up for "${specSnapshot.name.value}" does not accept tenantId.`,
         );
       }
       return Object.freeze({ name: specSnapshot.name.value, multitenant: false });
@@ -2913,7 +2581,7 @@ const ContextParts = Object.freeze({
     const tenantId = options.tenantId;
     if (tenantId === undefined) {
       throw new Error(
-        `Multitenant ${operation} for "${specSnapshot.name.value}" requires tenantId.`,
+        `Multitenant read-side catch-up for "${specSnapshot.name.value}" requires tenantId.`,
       );
     }
 

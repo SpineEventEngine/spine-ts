@@ -551,36 +551,12 @@
       "test": "packages/server/test/server/managed-server-application.test.ts"
     },
     {
-      "id": "server.managed_child_deadline_ipc_observer",
-      "source": "../../packages/server/src/server/managed-server-application.ts",
-      "operation": "managed_replica.deadline_ipc",
-      "disposition": "no-log",
-      "test": "packages/server/test/server/managed-server-application.test.ts",
-      "rationale": "The terminal deadline is retained; a failed notification to a disappeared parent does not replace that outcome."
-    },
-    {
-      "id": "server.managed_child_deadline_close_observer",
-      "source": "../../packages/server/src/server/managed-server-application.ts",
-      "operation": "managed_replica.deadline_close",
-      "disposition": "no-log",
-      "test": "packages/server/test/server/managed-server-application.test.ts",
-      "rationale": "The deadline forces child exit if close does not settle; the graceful close retains the terminal failure."
-    },
-    {
       "id": "server.managed_replica_delivery_drained_ipc",
       "source": "../../packages/server/src/server/managed-server-application.ts",
       "operation": "managed_replica.delivery_drained_ipc",
       "disposition": "no-log",
       "test": "packages/server/test/server/managed-server-application.test.ts",
-      "rationale": "A disappeared parent cannot receive the phase frame; the child deadline and disconnect path still settle close."
-    },
-    {
-      "id": "server.managed_force_cleanup_observer",
-      "source": "../../packages/server/src/server/managed-server-application.ts",
-      "operation": "managed_replica.force_cleanup",
-      "disposition": "no-log",
-      "test": "packages/server/test/server/managed-server-application.test.ts",
-      "rationale": "The timeout callback observes the shared cleanup attempt; close awaits that attempt and aggregates its failure."
+      "rationale": "A disappeared parent cannot receive the phase frame; process disconnection still settles close."
     },
     {
       "id": "server.managed_replica_close_finally_observer",
