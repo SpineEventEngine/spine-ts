@@ -44,6 +44,7 @@ on sign-out. Creation age must not change after editing a release.
 
 Show message expand controls on hover or keyboard focus. Label tool activity
 as MCP calls and results, and application events as App activity.
+Keep History and Sign out in matching, centered icon buttons at the header's right edge.
 
 Keep the addition within the example: read indexed history through the existing
 API, retain the original draft creation time separately from edit time, and

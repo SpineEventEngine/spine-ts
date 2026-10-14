@@ -260,8 +260,7 @@ button:not(:disabled):hover {
   border-bottom: 1px solid #e2e6e1;
   background: #fff;
 }
-.rs-brand,
-.rs-sign-out {
+.rs-brand {
   display: flex;
   align-items: center;
   gap: 9px;
@@ -275,7 +274,6 @@ button:not(:disabled):hover {
 .rs-sign-out svg {
   color: #123f30;
 }
-.rs-sign-out,
 .rs-back-link {
   padding: 7px 0;
   border: 0;
@@ -283,16 +281,21 @@ button:not(:disabled):hover {
   background: transparent;
   font-size: 13px;
 }
-.rs-sign-out:hover,
 .rs-back-link:hover {
   color: #0d5a3e;
   text-decoration: underline;
 }
-.rs-sign-out {
-  justify-content: flex-end;
+.rs-sign-out,
+.rs-history-trigger {
+  flex: 0 0 auto;
+  justify-content: center;
   width: 44px;
-  min-height: 44px;
+  height: 44px;
   margin-left: auto;
+  padding: 10px;
+  border: 0;
+  color: #123f30;
+  background: transparent;
 }
 .rs-dashboard {
   max-width: 1234px;
@@ -977,20 +980,8 @@ button:not(:disabled):hover {
   }
 }
 
-.rs-history-trigger {
-  width: 40px;
-  min-height: 40px;
-  margin-left: auto;
-  padding: 8px;
-  border: 0;
-  background: transparent;
-  color: #245b49;
-}
-.rs-history-trigger:hover {
-  background: #eaf3ec;
-}
 .rs-history-trigger + .rs-sign-out {
-  margin-left: 0;
+  margin-left: 4px;
 }
 .rs-history-scrim {
   position: fixed;
