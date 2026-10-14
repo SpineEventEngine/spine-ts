@@ -1,4 +1,0 @@
-Checking formatting...
-[warn] packages/delivery-client/test/client-rpc-lifecycle.test.ts
-[warn] packages/delivery-client/test/remote-inbox-direct.test.ts
-[warn] Code style issues found in 2 files. Run Prettier with --write to fix.

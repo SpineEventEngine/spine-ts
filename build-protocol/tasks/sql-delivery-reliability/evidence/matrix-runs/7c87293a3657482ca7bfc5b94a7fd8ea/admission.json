@@ -1,9 +1,0 @@
-{
-  "commandId": "20e2aa05-b25e-4872-aaef-3f20221f0701",
-  "ackStatus": {
-    "case": "ok",
-    "value": {
-      "$typeName": "google.protobuf.Empty"
-    }
-  }
-}

@@ -1,2 +1,0 @@
-02496808f1fa message-board-local-50ebfca9-818c-4d6f-9687-cd089cce67a1-datastore google/cloud-sdk:578.0.0-emulators Up About a minute 127.0.0.1:28081->8081/tcp
-edb21c0382a0 message-board-local-50ebfca9-818c-4d6f-9687-cd089cce67a1-delivery spine-ts/simple-delivery-server:sqlrel-live-1014 Up About a minute 127.0.0.1:28484->8484/tcp

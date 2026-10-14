@@ -1,5 +1,0 @@
-$ node scripts/check-tsdoc.mjs
-missing-tsdoc-blank-line: packages/server/src/bus/event-bus.ts :: block@39
-missing-type-param: packages/server/src/bus/event-bus.ts :: FunctionType@40@40<Result>
-tsdoc-block-opener: packages/server/src/bus/event-bus.ts :: block@39
-[ELIFECYCLE] Command failed with exit code 1.

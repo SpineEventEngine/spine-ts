@@ -1,7 +1,0 @@
-storage=mysql
-engine=MySQL 8.4
-container=spine-sqlrel-8327eaa2-mysql
-hostPort=63610
-database=spine_tenant_b
-listener=http://127.0.0.1:8080
-credentials=[redacted]

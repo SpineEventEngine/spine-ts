@@ -17,7 +17,7 @@ import { Buffer } from "node:buffer";
 import { execFileSync, fork } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { appendFileSync } from "node:fs";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { readFile, readdir, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { relative, resolve } from "node:path";
 import process from "node:process";
@@ -37,8 +37,9 @@ import {
 } from "../dist/generated/spine/server/testing/project_workflow_pb.js";
 import { projectWorkflowIds } from "../dist/test-fixtures/project-workflow.js";
 
+import { sqlProvider, sqlRunDirectory } from "./sql-run-config.mjs";
+
 const root = fileURLToPath(new URL("../../../", import.meta.url));
-const task = resolve(root, "build-protocol/tasks/sql-delivery-reliability");
 const providerName = process.argv[2];
 const scenario = process.argv[3];
 const count = Number(process.argv[4]);
@@ -51,13 +52,10 @@ assert.ok(
     "shared-volatile-loss",
   ].includes(scenario),
 );
-const registry = JSON.parse(await readFile(resolve(task, "evidence/databases.json"), "utf8"));
-const provider = registry.records.find((item) => item.name === providerName);
-assert.ok(provider, `Unknown task provider ${String(providerName)}.`);
+const provider = sqlProvider(providerName);
 const runId = randomUUID().replaceAll("-", "");
 const database = `sqlrel_fault_${runId}`;
-const dir = resolve(task, "evidence/process-fault-runs", runId);
-await mkdir(dir, { recursive: true });
+const dir = await sqlRunDirectory("fault");
 const identity = { runId, database, evidencePath: dir };
 await writeFile(resolve(dir, "resource.json"), `${JSON.stringify(identity, null, 2)}\n`);
 process.stdout.write(`FAULT_RESOURCE ${JSON.stringify(identity)}\n`);

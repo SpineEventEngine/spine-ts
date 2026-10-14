@@ -6062,8 +6062,6 @@ applications, with the explicit local-example exceptions in the task ledger.
 The supplied in-memory Delivery server remains non-durable; SQL business-state
 storage does not persist its Inbox.
 
-Implementation and acceptance: [task ledger](tasks/sql-delivery-reliability/TASK.md).
-
 ## D-0130: Bounded Context Shutdown Preserving Dispatch Order
 
 Date: 2026-10-13. Status: accepted architecture clarification; implemented, reviewed and release-verified.
@@ -6103,8 +6101,7 @@ context-drain error and aggregate failures; this does not introduce a new deadli
 for unrelated network or Delivery teardown.
 
 This changes lifecycle behavior and adds configuration, not persistence or runtime
-scheduling contracts. The focused acceptance cases and profile evidence are in
-[the task architecture record](tasks/sql-delivery-reliability/ARCHITECTURE.md).
+scheduling contracts.
 
 ## D-0131: Finite Managed Process Shutdown
 
@@ -6148,8 +6145,6 @@ subject to at-least-once recovery. No general Server/Delivery timeout API or
 new lifecycle subsystem is introduced. JVM orderly/force shutdown is a design
 guardrail, not proof of a matching Node IPC contract or timeout default.
 
-Implementation and acceptance: [managed shutdown analysis](tasks/sql-delivery-reliability/evidence/managed-shutdown-boundary.md).
-
 ## D-0132: Exact Remote Inbox Continuation
 
 Date: 2026-10-14. Status: accepted bounded public-contract correction; implemented, reviewed and release-verified.
@@ -6175,8 +6170,6 @@ subsystem, cross-record transaction or stronger delivery/durability guarantee.
 The reproduced paging defect is not yet proof of the earlier workload failure's
 cause. Repeat that workload with captured Inbox/state/error evidence.
 
-Detailed contract, JVM/provenance evidence and acceptance: [paging analysis](tasks/sql-delivery-reliability/evidence/remote-paging-boundary.md).
-
 ## D-0133: Observable Backend Subscription Stream Failure
 
 Date: 2026-10-14. Status: accepted bounded lifecycle correction; implemented, reviewed and release-verified.
@@ -6188,5 +6181,3 @@ Keep readiness distinct from activation lifetime with private state. Preserve or
 Use the high-level Client's existing bounded Cancel, delay, Subscribe, and readiness sequence. Do not add a server retry scheduler, new public API or wire contract, persistence, automatic Event replay, or a new retry budget. Entity resynchronization and Event gap notices retain their existing meaning; healthy sibling streams can be interrupted while the logical subscription recovers. Already delivered updates are not rolled back.
 
 The demonstrated fixed-backend child failure and a separate client-facing transport cut are distinct regressions. Both require evidence, as do cancellation races, late-joining children, cleanup failure, stale generations, and managed relays. The existing client classifier retries Errors except ClientProtocolError; this correction does not claim status-code-specific permanent-error filtering.
-
-Detailed evidence, implementation constraints, and JVM guardrails: [gateway child-stream decision](tasks/sql-delivery-reliability/evidence/gateway-child-stream-recovery-decision.md).

@@ -1,4 +1,0 @@
-Checking formatting...
-[warn] packages/server/src/delivery/delivery-builder.ts
-[warn] packages/server/src/delivery/delivery.ts
-[warn] Code style issues found in 2 files. Run Prettier with --write to fix.

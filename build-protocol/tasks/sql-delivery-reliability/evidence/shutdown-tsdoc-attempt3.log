@@ -1,3 +1,0 @@
-callable-summary: packages/server/src/bus/event-bus.ts :: EventBusAccess.runExclusive(eventBus,work)
-missing-tsdoc-blank-line: packages/server/src/bus/event-bus.ts :: block@688
-missing-tsdoc-blank-line: packages/server/src/bus/event-bus.ts :: block@697

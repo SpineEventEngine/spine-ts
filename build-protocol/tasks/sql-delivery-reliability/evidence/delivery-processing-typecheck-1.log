@@ -1,6 +1,0 @@
-packages/server/test/delivery/delivery-worker.test.ts(965,7): error TS2322: Type '(Anonymous class)' is not assignable to type 'DeliveryMonitor'.
-  The types returned by 'onReceptionFailure(...)' are incompatible between these types.
-    Type 'void' is not assignable to type 'ReceptionAction | Promise<ReceptionAction>'.
-packages/server/test/delivery/delivery-worker.test.ts(966,18): error TS2416: Property 'onReceptionFailure' in type '(Anonymous class)' is not assignable to the same property in base type 'DeliveryMonitor'.
-  Type '() => void' is not assignable to type '(reception: FailedReception) => ReceptionAction | Promise<ReceptionAction>'.
-    Type 'void' is not assignable to type 'ReceptionAction | Promise<ReceptionAction>'.

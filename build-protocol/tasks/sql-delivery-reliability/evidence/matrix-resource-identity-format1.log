@@ -1,3 +1,0 @@
-Checking formatting...
-[warn] packages/server-blackbox-tests/test/project-process-matrix.integration.test.ts
-[warn] Code style issues found in the above file. Run Prettier with --write to fix.

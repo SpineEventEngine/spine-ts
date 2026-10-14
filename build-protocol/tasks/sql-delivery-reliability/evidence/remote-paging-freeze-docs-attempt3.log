@@ -1,7 +1,0 @@
-$ pnpm docs:api:check && pnpm docs:audience:check && pnpm docs:snippets:check:generated
-$ node scripts/check-api-docs.mjs
-[info] json generated at /var/folders/b7/lgl3q0z57xj72fjjjj_wd9n80000gq/T/spine-typedoc-json-16kPqV/api.json
-[info] html generated at /var/folders/b7/lgl3q0z57xj72fjjjj_wd9n80000gq/T/spine-typedoc-json-16kPqV/reference
-TypeDoc JSON is missing expected @spine-event-engine/storage/provider exports: CleanupOperation, DeliveryCleanupInput, DeliveryCleanupStorage, DeliveryCleanupStorageFactories, DeliveryCleanupStorageFactory, cleanupOperationActive, eventStoreAccess
-[ELIFECYCLE] Command failed with exit code 1.
-[ELIFECYCLE] Command failed with exit code 1.

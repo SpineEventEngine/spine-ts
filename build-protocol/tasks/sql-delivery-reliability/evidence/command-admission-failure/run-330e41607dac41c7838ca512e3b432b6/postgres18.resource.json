@@ -1,8 +1,0 @@
-{
-  "provider": "postgres18",
-  "database": "sqlrel_admit_330e41607dac41c7838ca512",
-  "contextName": "ProjectAdmission_b01fa51ee15949f0",
-  "inboxTable": "inbox_admit_b01fa51ee15949f0",
-  "faultName": "fail_admit_b01fa51ee15949f0",
-  "counterName": "admit_attempts_b01fa51ee15949f0"
-}

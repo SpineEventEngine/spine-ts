@@ -1,2 +1,0 @@
-COMMAND   PID   USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME
-node    67882 armiol   12u  IPv4 0x23e378aea70f3c86      0t0  TCP 127.0.0.1:8080 (LISTEN)

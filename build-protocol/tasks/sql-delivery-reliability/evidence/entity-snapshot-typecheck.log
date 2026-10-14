@@ -1,3 +1,0 @@
-packages/storage/src/internal/entity-commit.ts(81,14): error TS9010: Variable must have an explicit type annotation with --isolatedDeclarations.
-packages/storage-postgres/src/postgres/entity-commit.ts(25,3): error TS2724: '"@spine-event-engine/storage/provider"' has no exported member named 'EntityCommitSnapshots'. Did you mean 'EntityCommitInput'?
-packages/storage-mysql/src/mysql/storage-factory.ts(29,3): error TS2724: '"@spine-event-engine/storage/provider"' has no exported member named 'EntityCommitSnapshots'. Did you mean 'EntityCommitInput'?

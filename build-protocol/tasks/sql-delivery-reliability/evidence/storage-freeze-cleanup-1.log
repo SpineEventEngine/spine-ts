@@ -1,6 +1,0 @@
-$ node scripts/check-cleanup-rules.mjs
-Cleanup enforcement failed: lines longer than 120 characters
-  - packages/storage-datastore/src/datastore/storage-factory.ts:79 (141)
-  - packages/storage-datastore/src/datastore/storage-factory.ts:110 (141)
-  - packages/storage-mysql/src/mysql/entity-history.ts:40 (141)
-[ELIFECYCLE] Command failed with exit code 1.

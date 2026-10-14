@@ -1,6 +1,0 @@
-$ node scripts/clean-build-outputs.mjs && tsc -b && pnpm --dir packages/proto-tools run copy:runtime && node scripts/normalize-generated-declarations.mjs
-packages/auth/src/native/index.ts(316,30): error TS2345: Argument of type 'Topic | undefined' is not assignable to parameter of type 'Topic'.
-  Type 'undefined' is not assignable to type 'Topic'.
-    Type 'undefined' is not assignable to type 'Message<"spine.client.Topic">'.
-packages/server/src/server/node-coordinator.ts(758,21): error TS2304: Cannot find name 'TopicSchema'.
-[ELIFECYCLE] Command failed with exit code 2.

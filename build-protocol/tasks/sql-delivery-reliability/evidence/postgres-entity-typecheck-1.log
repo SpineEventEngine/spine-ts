@@ -1,2 +1,0 @@
-packages/storage-postgres/src/postgres/storage-factory.ts(407,7): error TS2345: Argument of type '() => boolean' is not assignable to parameter of type 'PostgresRecordLifecycle'.
-packages/storage-postgres/src/postgres/storage-factory.ts(457,7): error TS2554: Expected 3 arguments, but got 4.

@@ -1,8 +1,0 @@
-{
-  "provider": "postgres16",
-  "database": "sqlrel_admit_a80c38f8af7d4d09a908107e",
-  "contextName": "ProjectAdmission_0b28eaa65ae34a25",
-  "inboxTable": "inbox_admit_0b28eaa65ae34a25",
-  "faultName": "fail_admit_0b28eaa65ae34a25",
-  "counterName": "admit_attempts_0b28eaa65ae34a25"
-}

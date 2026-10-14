@@ -1,5 +1,0 @@
-86145 60040 86145       01:29 Ss   bash examples/message-board/scripts/start-local-single-process.sh
-88731 86145 86145       00:40 S    node /opt/homebrew/bin/pnpm -C /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/examples/message-board/web exec vite --host 127.0.0.1 --port 25173 --strictPort
-88732 88731 86145       00:40 S    node ./node_modules/.bin/../vite/bin/vite.js --host 127.0.0.1 --port 25173 --strictPort
-92271 60040 92271       00:00 Ss   /bin/zsh -lc EVID="$PWD/build-protocol/tasks/sql-delivery-reliability/evidence/live-examples/message-board-single"; ps -Ao pid,ppid,pgid,etime,stat,command | rg 'start-local-single|vite|message-board/app/dist' > "$EVID/process-tree-before-cleanup.txt"; lsof -nP -iTCP:28090 -iTCP:25173 -sTCP:LISTEN > "$EVID/listeners-before-cleanup.txt"; cat "$EVID/process-tree-before-cleanup.txt"; cat "$EVID/listeners-before-cleanup.txt";
-92517 92271 92271       00:00 R    rg start-local-single|vite|message-board/app/dist

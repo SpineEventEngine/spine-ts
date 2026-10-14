@@ -1,7 +1,0 @@
-start=2026-10-14T04:29:29Z
-node=v24.18.0
-pnpm=11.9.0
-imageTag=sqlrel-compose-1014
-composeProject=sqlrel-compose-1014
-gatewayPort=28180
-webPort=25280

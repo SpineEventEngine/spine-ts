@@ -1,5 +1,0 @@
-$ node scripts/check-tsdoc.mjs
-missing-type-param: packages/storage-mysql/src/mysql/errors.ts :: mysqlError@38<E>
-tsdoc-block-opener: packages/server/src/services/spine-services.ts :: block@2133
-tsdoc-block-opener: packages/server/src/services/spine-services.ts :: block@2151
-[ELIFECYCLE] Command failed with exit code 1.

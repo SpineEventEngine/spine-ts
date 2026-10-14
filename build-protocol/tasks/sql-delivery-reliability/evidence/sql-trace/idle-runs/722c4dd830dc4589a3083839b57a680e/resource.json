@@ -1,8 +1,0 @@
-{
-  "runId": "722c4dd830dc4589a3083839b57a680e",
-  "database": "sqlrel_idle_722c4dd830dc4589a3083839b57a680e",
-  "evidencePath": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/sql-trace/idle-runs/722c4dd830dc4589a3083839b57a680e",
-  "providerName": "postgres18",
-  "count": 2,
-  "mode": "shared-memory"
-}

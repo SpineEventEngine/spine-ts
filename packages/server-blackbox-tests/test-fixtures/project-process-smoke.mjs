@@ -17,7 +17,7 @@ import { Buffer } from "node:buffer";
 import { createHash, randomUUID } from "node:crypto";
 import { fork } from "node:child_process";
 import { appendFileSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import process from "node:process";
@@ -33,60 +33,28 @@ import {
 } from "../dist/generated/spine/server/testing/project_workflow_pb.js";
 import { projectWorkflowIds } from "../dist/test-fixtures/project-workflow.js";
 
+import { sqlProvider, sqlRunDirectory } from "./sql-run-config.mjs";
+
 const root = fileURLToPath(new URL("../../../", import.meta.url));
-const task = resolve(root, "build-protocol/tasks/sql-delivery-reliability");
 const providerName = process.argv[2] ?? "postgres16";
 const count = Number(process.argv[3] ?? "2");
 const mode = process.argv[4] ?? "db-only";
 const total = Number(process.argv[5] ?? "1");
 const burst = Number(process.argv[6] ?? "1");
-const historicalName = process.argv
-  .slice(7)
-  .find((argument) => argument.startsWith("--historical="))
-  ?.slice(13);
 const restart = process.argv.includes("--restart");
 assert.ok([2, 8].includes(count), "The focused smoke requires 2 or 8 processes.");
 assert.ok(["db-only", "shared-memory"].includes(mode), "Unsupported Delivery mode.");
 assert.ok(Number.isSafeInteger(total) && total > 0 && total <= 80);
 assert.ok(Number.isSafeInteger(burst) && burst > 0 && burst <= 32);
-const registry = JSON.parse(await readFile(resolve(task, "evidence/databases.json"), "utf8"));
-const provider = registry.records.find((item) => item.name === providerName);
-assert.ok(provider, `Unknown task database ${providerName}.`);
+const provider = sqlProvider(providerName);
 const runId = randomUUID().replaceAll("-", "");
 const database = `sqlrel_matrix_${runId}`;
-const dir = resolve(task, "evidence/matrix-runs", runId);
-await mkdir(dir, { recursive: true });
+const dir = await sqlRunDirectory("matrix");
 const resourceIdentity = { runId, database, evidencePath: dir };
 await writeFile(resolve(dir, "resource.json"), `${JSON.stringify(resourceIdentity, null, 2)}\n`);
 process.stdout.write(`MATRIX_RESOURCE ${JSON.stringify(resourceIdentity)}\n`);
 const entryLog = resolve(dir, "entries.jsonl");
-let historicalWorkload;
-let projectNumbers = Array.from({ length: total }, (_, index) => index + 1);
-if (historicalName !== undefined) {
-  const historical = JSON.parse(
-    await readFile(resolve(task, "evidence/historical-project-workloads.json"), "utf8"),
-  );
-  const selected = historical.records.find((record) =>
-    record.source.endsWith(`/${historicalName}.json`),
-  );
-  assert.ok(selected, `Unknown historical workload ${historicalName}.`);
-  assert.equal(selected.attempted, total);
-  assert.equal(selected.burst, burst);
-  const mapped = selected.acceptedProjectIds.map((label) => {
-    const suffix = /project-(\d+)$/u.exec(label);
-    assert.ok(suffix, `Historical label has no Project index: ${label}.`);
-    return { label, number: Number(suffix[1]) + 1 };
-  });
-  assert.equal(new Set(mapped.map((item) => item.number)).size, total);
-  projectNumbers = mapped.map((item) => item.number).sort((left, right) => left - right);
-  historicalWorkload = {
-    source: `${historicalName}.json`,
-    sourceSha256: selected.sourceSha256,
-    mapping:
-      "Historical scalar label suffix N maps to current ProjectId organization=run, number=N+1; submission follows numeric order, not recorded ACK order.",
-  };
-  await writeFile(resolve(dir, "historical-mapping.json"), `${JSON.stringify(mapped, null, 2)}\n`);
-}
+const projectNumbers = Array.from({ length: total }, (_, index) => index + 1);
 const artifactPaths = [
   "packages/server-blackbox-tests/dist/test-fixtures/project-workflow.js",
   "packages/server-blackbox-tests/dist/generated/spine/server/testing/project_workflow_pb.js",
@@ -407,7 +375,6 @@ try {
     configuredShards: count,
     total,
     burst,
-    historicalWorkload,
     restart,
     pids: ready.map((item) => item.pid),
     deliveryPid: deliveryReady?.pid,

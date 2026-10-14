@@ -18,7 +18,7 @@ import { createHash, randomUUID } from "node:crypto";
 import http from "node:http";
 import http2 from "node:http2";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import process from "node:process";
@@ -65,8 +65,9 @@ import {
 import { projectWorkflow, projectWorkflowIds } from "../dist/test-fixtures/project-workflow.js";
 import { waitUntil } from "./project-subscription-wait.mjs";
 
+import { sqlProvider, sqlRunDirectory } from "./sql-run-config.mjs";
+
 const root = fileURLToPath(new URL("../../../", import.meta.url));
-const task = resolve(root, "build-protocol/tasks/sql-delivery-reliability");
 const providerName = process.argv[2];
 const protocol = process.argv[3] ?? "native";
 const scenario = process.argv[4] ?? "basic";
@@ -98,14 +99,11 @@ assert.ok(
   ].includes(scenario),
 );
 assert.ok(["db-only", "shared-memory"].includes(deliveryMode));
-const registry = JSON.parse(await readFile(resolve(task, "evidence/databases.json"), "utf8"));
-const provider = registry.records.find((record) => record.name === providerName);
-assert.ok(provider, `Unknown task SQL provider ${String(providerName)}.`);
+const provider = sqlProvider(providerName);
 const postgres = provider.engine === "postgres";
 const runId = randomUUID().replaceAll("-", "");
 const database = `sqlrel_sub_${runId}`;
-const evidencePath = resolve(task, "evidence/transport-runs", runId);
-await mkdir(evidencePath, { recursive: true });
+const evidencePath = await sqlRunDirectory("transport");
 const artifactPaths = [
   "packages/server-blackbox-tests/dist/test-fixtures/project-workflow.js",
   "packages/server/dist/index.js",

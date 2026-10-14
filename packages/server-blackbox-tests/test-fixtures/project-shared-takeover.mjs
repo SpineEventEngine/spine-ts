@@ -17,7 +17,7 @@ import { Buffer } from "node:buffer";
 import { execFileSync, fork } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { appendFileSync } from "node:fs";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { readFile, readdir, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { relative, resolve } from "node:path";
 import process from "node:process";
@@ -37,8 +37,9 @@ import {
 import { projectWorkflowIds } from "../dist/test-fixtures/project-workflow.js";
 import { classifyCrashReplay, completeInboxRows } from "./project-process-fault-observations.mjs";
 
+import { sqlProvider, sqlRunDirectory } from "./sql-run-config.mjs";
+
 const root = fileURLToPath(new URL("../../../", import.meta.url));
-const task = resolve(root, "build-protocol/tasks/sql-delivery-reliability");
 const [providerName, countText, timeoutText] = process.argv.slice(2);
 const count = Number(countText);
 const processingTimeoutSeconds = Number(timeoutText);
@@ -47,13 +48,10 @@ assert.ok(
   [0, 10].includes(processingTimeoutSeconds),
   "Processing timeout must be 0 or 10 seconds.",
 );
-const providers = JSON.parse(await readFile(resolve(task, "evidence/databases.json"), "utf8"));
-const provider = providers.records.find((candidate) => candidate.name === providerName);
-assert.ok(provider, `Unknown task SQL provider ${String(providerName)}.`);
+const provider = sqlProvider(providerName);
 const runId = randomUUID().replaceAll("-", "");
 const database = `sqlrel_takeover_${runId}`;
-const dir = resolve(task, "evidence/shared-takeover-runs", runId);
-await mkdir(dir, { recursive: true });
+const dir = await sqlRunDirectory("takeover");
 const identity = { runId, database, evidencePath: dir };
 await writeFile(resolve(dir, "resource.json"), `${JSON.stringify(identity, null, 2)}\n`);
 process.stdout.write(`TAKEOVER_RESOURCE ${JSON.stringify(identity)}\n`);

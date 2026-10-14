@@ -1,8 +1,0 @@
-Changed executable lines: 37/38; changed branch arms: 40/45
-Uncovered changed executable lines: [860]
-Uncovered changed branch arms:
-819 [('82', '0', '0')]
-859 [('95', '0', '0')]
-996 [('109', '1', '0')]
-1027 [('112', '1', '0')]
-1136 [('128', '1', '0')]

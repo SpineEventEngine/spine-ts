@@ -203,4 +203,6 @@ test("selected OS-process fault preserves its measured persistence boundary", as
   const cleanupRecord = JSON.parse(cleanup) as { databaseDropped: boolean; errors: string[] };
   expect(cleanupRecord.databaseDropped).toBe(true);
   expect(cleanupRecord.errors).toEqual([]);
+  if (identity === undefined) throw new Error("Fault driver returned no resource identity.");
+  await rm(identity.evidencePath, { recursive: true, force: true });
 }, 240_000);

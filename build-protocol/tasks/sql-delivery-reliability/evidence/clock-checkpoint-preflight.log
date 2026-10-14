@@ -1,4 +1,0 @@
-Scoped Prettier check: PASS (task records, recovery-clock reviews, selector results, capture/probe scripts, refreshed review inventory).
-Completed recovery-clock/release/review console logs normalized; SQL-trace raw measurements and JSON/JSONL untouched.
-Running git diff --check:
-git diff --check: PASS

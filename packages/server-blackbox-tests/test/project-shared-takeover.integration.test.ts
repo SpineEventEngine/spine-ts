@@ -13,7 +13,7 @@
  */
 
 import { spawn } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
 
@@ -164,4 +164,7 @@ test("selected shared Delivery worker replacement records its actual recovery cl
   };
   expect(cleanup.databaseDropped).toBe(true);
   expect(cleanup.errors).toEqual([]);
+  const identity = resourceIdentity(stdout);
+  if (identity === undefined) throw new Error("Takeover driver returned no resource identity.");
+  await rm(identity.evidencePath, { recursive: true, force: true });
 }, 150_000);

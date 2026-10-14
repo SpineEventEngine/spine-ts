@@ -1,4 +1,0 @@
-{
-  "status": "FAIL",
-  "error": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\n3 !== 2\n"
-}

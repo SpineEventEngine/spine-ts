@@ -1,8 +1,0 @@
-$ node scripts/check-tsdoc.mjs
-class-member-spacing: packages/server/src/context/local-inbox-handoff.ts :: member@101
-class-member-spacing: packages/server/src/context/local-inbox-handoff.ts :: member@102
-class-member-spacing: packages/server/src/context/local-inbox-handoff.ts :: member@103
-class-member-spacing: packages/server/src/context/local-inbox-handoff.ts :: member@104
-class-member-spacing: packages/server/src/context/local-inbox-handoff.ts :: member@105
-class-member-spacing: packages/server/src/context/local-inbox-handoff.ts :: member@106
-[ELIFECYCLE] Command failed with exit code 1.

@@ -1,9 +1,0 @@
-start=2026-10-14T04:33:41Z
-node=v24.18.0
-pnpm=11.9.0
-storage=postgresql
-engine=PostgreSQL 16.15
-container=spine-sqlrel-8327eaa2-pg16
-hostPort=63580
-database=spine_tenant_a
-listener=http://127.0.0.1:8080

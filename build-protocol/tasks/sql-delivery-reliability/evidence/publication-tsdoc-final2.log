@@ -1,9 +1,0 @@
-$ node scripts/check-tsdoc.mjs
-tsdoc-block-opener: packages/server/src/context/local-inbox-handoff.ts :: block@100
-tsdoc-block-opener: packages/server/src/context/local-inbox-handoff.ts :: block@103
-tsdoc-block-opener: packages/server/src/context/local-inbox-handoff.ts :: block@106
-tsdoc-block-opener: packages/server/src/context/local-inbox-handoff.ts :: block@109
-tsdoc-block-opener: packages/server/src/context/local-inbox-handoff.ts :: block@112
-tsdoc-block-opener: packages/server/src/context/local-inbox-handoff.ts :: block@115
-tsdoc-block-opener: packages/server/src/context/local-inbox-handoff.ts :: block@118
-[ELIFECYCLE] Command failed with exit code 1.

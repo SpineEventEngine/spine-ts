@@ -1,7 +1,0 @@
-{"command": ["node", "--check", "build-protocol/tasks/sql-delivery-reliability/evidence/external-event-repair.mjs"], "exitCode": 0}
-
-{"command": ["pnpm", "exec", "eslint", "build-protocol/tasks/sql-delivery-reliability/evidence/external-event-repair.mjs"], "exitCode": 0}
-
-{"command": ["pnpm", "exec", "prettier", "--check", "build-protocol/tasks/sql-delivery-reliability/evidence/external-event-repair.mjs"], "exitCode": 0}
-Checking formatting...
-All matched files use Prettier code style!

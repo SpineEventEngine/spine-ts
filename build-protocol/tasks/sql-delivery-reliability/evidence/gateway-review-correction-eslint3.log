@@ -1,7 +1,0 @@
-
-/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/deployment/src/internal/backend-membership-kernel.ts
-  468:25  error  void operator shouldn't be used on void; it should convey that a return value is being ignored          @typescript-eslint/no-meaningless-void-operator
-  468:30  error  Placing a void expression inside another expression is forbidden. Move it to its own statement instead  @typescript-eslint/no-confusing-void-expression
-
-✖ 2 problems (2 errors, 0 warnings)
-  1 error and 0 warnings potentially fixable with the `--fix` option.

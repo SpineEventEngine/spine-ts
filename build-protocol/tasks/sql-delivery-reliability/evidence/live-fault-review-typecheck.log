@@ -1,4 +1,0 @@
-packages/server/test/delivery/inbox-provider-faults.integration.test.ts(273,53): error TS2379: Argument of type '{ postgres: boolean; database?: string; factory: StorageFactory | undefined; sql: SqlClient | undefined; admin: SqlClient; }' is not assignable to parameter of type '{ readonly factory?: Pick<StorageFactory, "close">; readonly sql?: SqlClient; readonly admin: SqlClient; readonly database?: string; readonly postgres: boolean; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
-  Types of property 'factory' are incompatible.
-    Type 'StorageFactory | undefined' is not assignable to type 'Pick<StorageFactory, "close">'.
-      Type 'undefined' is not assignable to type 'Pick<StorageFactory, "close">'.

@@ -1,5 +1,0 @@
-Checking formatting...
-[warn] packages/auth/test/dynamic-subscription-creator.test.ts
-[warn] packages/client-web/test/client.test.ts
-[warn] packages/deployment/test/membership-kernel.test.ts
-[warn] Code style issues found in 3 files. Run Prettier with --write to fix.

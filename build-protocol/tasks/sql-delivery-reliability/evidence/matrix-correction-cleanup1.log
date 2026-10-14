@@ -1,5 +1,0 @@
-$ node scripts/check-cleanup-rules.mjs
-Cleanup enforcement failed: modified production/example callables exceed 35 physical lines
-  - packages/deployment/src/internal/backend-membership-kernel.ts:1191-1230 #disposeChild
-  - packages/server/src/server/node-coordinator.ts:318-366 open
-[ELIFECYCLE] Command failed with exit code 1.

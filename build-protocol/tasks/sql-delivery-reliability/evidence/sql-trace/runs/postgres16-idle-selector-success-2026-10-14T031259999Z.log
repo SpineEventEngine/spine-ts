@@ -1,3 +1,0 @@
-2026-10-14T03:13:00.117848626Z 2026-10-14 03:13:00.117 UTC [11152] LOG:  statement: SELECT 'sqlrel_trace_warmup_begin' AS marker
-2026-10-14T03:13:00.129555710Z 2026-10-14 03:13:00.129 UTC [11154] LOG:  statement: SELECT 'sqlrel_trace_wrapper_probe' AS marker
-2026-10-14T03:13:00.133776876Z 2026-10-14 03:13:00.133 UTC [11155] LOG:  statement: SELECT 'sqlrel_trace_capture_end' AS marker

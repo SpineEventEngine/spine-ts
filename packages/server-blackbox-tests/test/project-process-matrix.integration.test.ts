@@ -14,7 +14,7 @@
 
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -30,13 +30,11 @@ const resistantDriver = fileURLToPath(
 );
 
 async function cleanupState(stdout: string): Promise<string> {
-  const runId = /MATRIX_RESOURCE \{"runId":"([a-f0-9]{32})"/u.exec(stdout)?.[1];
-  if (runId === undefined) return "cleanup unknown; no durable resource identity";
+  const line = /MATRIX_RESOURCE (\{[^\n]+\})/u.exec(stdout)?.[1];
+  if (line === undefined) return "cleanup unknown; no durable resource identity";
   try {
-    const path = new URL(
-      `../../../build-protocol/tasks/sql-delivery-reliability/evidence/matrix-runs/${runId}/cleanup.json`,
-      import.meta.url,
-    );
+    const identity = JSON.parse(line) as { evidencePath: string };
+    const path = resolve(identity.evidencePath, "cleanup.json");
     const cleanup = JSON.parse(await readFile(path, "utf8")) as {
       databaseDropped?: boolean;
       workerExits?: { code: number | null }[];
@@ -189,20 +187,15 @@ test("the matrix watchdog kills a TERM-resistant driver and retains its diagnost
 
 test("a failed driver reports verified cleanup when its durable record is complete", async () => {
   const runId = randomUUID().replaceAll("-", "");
-  const dir = resolve(
-    root,
-    "build-protocol/tasks/sql-delivery-reliability/evidence/matrix-runs",
-    runId,
-  );
-  await mkdir(dir);
+  const dir = await mkdtemp(resolve(tmpdir(), "spine-matrix-cleanup-"));
   try {
     await writeFile(
       resolve(dir, "cleanup.json"),
       JSON.stringify({ databaseDropped: true, workerExits: [{ code: 0 }], errors: [] }),
     );
-    expect(await cleanupState(`MATRIX_RESOURCE {"runId":"${runId}"}`)).toBe(
-      "cleanup verified by durable cleanup.json",
-    );
+    expect(
+      await cleanupState(`MATRIX_RESOURCE ${JSON.stringify({ runId, evidencePath: dir })}`),
+    ).toBe("cleanup verified by durable cleanup.json");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -222,10 +215,8 @@ test("selected Project workflow process topology completes with durable cleanup"
   const mode = required("SPINE_TS_MATRIX_MODE");
   const total = required("SPINE_TS_MATRIX_TOTAL");
   const burst = required("SPINE_TS_MATRIX_BURST");
-  const historical = process.env.SPINE_TS_MATRIX_HISTORICAL;
   const restart = process.env.SPINE_TS_MATRIX_RESTART === "1";
   const args = [driver, provider, processes, mode, total, burst];
-  if (historical !== undefined) args.push(`--historical=${historical}`);
   if (restart) args.push("--restart");
 
   const stdout = await runIsolatedDriver(args);
@@ -251,10 +242,10 @@ test("selected Project workflow process topology completes with durable cleanup"
   expect(result.entryCount).toBe(Number(total) * 5);
   if (restart) expect(result.restartResult?.entryCountAfterRestart).toBe((Number(total) + 1) * 5);
 
-  const cleanupPath = new URL(
-    `../../../build-protocol/tasks/sql-delivery-reliability/evidence/matrix-runs/${result.runId}/cleanup.json`,
-    import.meta.url,
-  );
+  const resourceLine = /MATRIX_RESOURCE (\{[^\n]+\})/u.exec(stdout)?.[1];
+  if (resourceLine === undefined) throw new Error("Process matrix resource path is missing.");
+  const resource = JSON.parse(resourceLine) as { evidencePath: string };
+  const cleanupPath = resolve(resource.evidencePath, "cleanup.json");
   const cleanup = JSON.parse(await readFile(cleanupPath, "utf8")) as {
     databaseDropped: boolean;
     workerExits: { code: number | null }[];
@@ -266,4 +257,5 @@ test("selected Project workflow process topology completes with durable cleanup"
   expect(cleanup.workerExits.every((exit) => exit.code === 0)).toBe(true);
   if (mode === "shared-memory") expect(cleanup.deliveryExit?.code).toBe(0);
   expect(cleanup.errors).toEqual([]);
+  await rm(resource.evidencePath, { recursive: true, force: true });
 }, 240_000);

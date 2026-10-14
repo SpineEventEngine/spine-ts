@@ -1,2 +1,0 @@
-$ node scripts/clean-build-outputs.mjs && tsc -b && pnpm --dir packages/proto-tools run copy:runtime && node scripts/normalize-generated-declarations.mjs
-$ node scripts/copy-runtime-modules.mjs

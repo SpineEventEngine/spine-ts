@@ -1,2 +1,0 @@
-Cleanup enforcement failed: semantic name components exceed 4
-  - packages/server/src/context/bounded-context.ts:525 BoundedContextShutdownTimeoutError (5 components)

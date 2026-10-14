@@ -1,8 +1,0 @@
-$ node scripts/check-cleanup-rules.mjs
-Cleanup enforcement failed: lines longer than 120 characters
-  - packages/server-blackbox-tests/test/project-process-matrix.integration.test.ts:97 (157)
-  - packages/server-blackbox-tests/test/project-process-matrix.integration.test.ts:111 (125)
-  - packages/server/test/server/managed-server-application.test.ts:983 (129)
-Cleanup enforcement failed: modified production/example callables exceed 35 physical lines
-  - packages/server/src/server/managed-server-application.ts:1972-2009 awaitChildClose
-[ELIFECYCLE] Command failed with exit code 1.

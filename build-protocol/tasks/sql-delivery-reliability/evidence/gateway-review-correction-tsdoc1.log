@@ -1,3 +1,0 @@
-$ node scripts/check-tsdoc.mjs
-callable-summary: packages/deployment/src/internal/backend-membership-kernel.ts :: BackendMembershipKernel.activate(definition,updates,signal)
-[ELIFECYCLE] Command failed with exit code 1.

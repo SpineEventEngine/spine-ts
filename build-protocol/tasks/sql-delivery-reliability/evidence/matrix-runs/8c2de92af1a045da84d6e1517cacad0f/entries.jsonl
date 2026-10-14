@@ -1,5 +1,0 @@
-{"method":"create","receiver":"Project","correlation":"matrix-8c2de92af1a045da84d6e1517cacad0f:1","pid":97511,"at":1791930943032}
-{"method":"portfolio","receiver":"Portfolio","correlation":"matrix-8c2de92af1a045da84d6e1517cacad0f:1","pid":97511,"at":1791930943079}
-{"method":"planning","receiver":"ProjectPlanning","correlation":"matrix-8c2de92af1a045da84d6e1517cacad0f:1","pid":97511,"at":1791930943103}
-{"method":"projection","receiver":"ProjectProjection","correlation":"matrix-8c2de92af1a045da84d6e1517cacad0f:1","pid":97511,"at":1791930943118}
-{"method":"staffing","receiver":"ProjectStaffing","correlation":"matrix-8c2de92af1a045da84d6e1517cacad0f:1","pid":97511,"at":1791930943175}

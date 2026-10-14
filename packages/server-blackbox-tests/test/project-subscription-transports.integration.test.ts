@@ -13,7 +13,7 @@
  */
 
 import { spawn } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 
 import { expect, test } from "vitest";
 
@@ -269,4 +269,9 @@ test("real SQL and selected transport preserve subscription readiness and exact 
     expect(result.stateId?.number).toBe(1);
     expect(result.eventId).not.toBe("");
   }
+  const resourceLine = /TRANSPORT_RESOURCE (\{[^\n]+\})/u.exec(stdout)?.[1];
+  if (resourceLine === undefined)
+    throw new Error("Transport fixture returned no resource identity.");
+  const resource = JSON.parse(resourceLine) as { evidencePath: string };
+  await rm(resource.evidencePath, { recursive: true, force: true });
 }, 50_000);
