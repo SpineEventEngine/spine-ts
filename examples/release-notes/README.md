@@ -5,6 +5,11 @@ structured claims with committed Git evidence; the application validates those
 claims and converts an accepted proposal once to clean Markdown. You can then
 edit, preview, copy, and export the exact current document.
 
+While signed in, choose the history icon beside **Sign out** to inspect every
+release from the current session. Expand a release to read its recorded app,
+model, tool, and Event activity. **Load older** follows the history cursor;
+opening a record shows the full saved detail and a copy action.
+
 The application runs locally. Selected changes are sent to OpenAI when you
 choose to write. Drafts and history stay in memory for the backend session;
 export Markdown before quitting if you want a lasting copy. Sign in again after

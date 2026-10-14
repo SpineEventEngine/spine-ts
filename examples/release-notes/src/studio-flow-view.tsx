@@ -13,7 +13,16 @@
  */
 
 import type { ReactElement, ReactNode } from "react";
-import { ArrowLeft, ArrowRight, Check, Download, FileText, LogOut, Plus } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  Download,
+  FileText,
+  History,
+  LogOut,
+  Plus,
+} from "lucide-react";
 
 /**
  * One release shown on the in-memory session dashboard.
@@ -49,14 +58,17 @@ export interface SessionRelease {
  * Renders the fixed brand and explicit session sign-out action.
  *
  * @param signOut Requests a safe sign-out after pending work settles.
+ * @param history Opens the audit drawer when available.
  * @param disabled Whether sign-out is already in progress.
  * @returns The application header.
  */
 export const StudioTopBar = ({
   signOut,
+  history,
   disabled = false,
 }: {
   signOut: () => void;
+  history?: (() => void) | undefined;
   disabled?: boolean;
 }): ReactElement => (
   <header className="rs-topbar">
@@ -64,17 +76,46 @@ export const StudioTopBar = ({
       <FileText aria-hidden="true" size={20} />
       <span>Release Notes Studio</span>
     </div>
-    <button
-      type="button"
-      className="rs-sign-out"
-      aria-label="Sign out"
-      title="Sign out"
-      disabled={disabled}
-      onClick={signOut}
-    >
-      <LogOut aria-hidden="true" size={18} />
-    </button>
+    {history && <HistoryAction open={history} />}
+    <SignOutAction signOut={signOut} disabled={disabled} />
   </header>
+);
+
+/**
+ * Opens the signed-in history panel from the app header.
+ */
+const HistoryAction = ({ open }: { open: () => void }): ReactElement => (
+  <button
+    type="button"
+    className="rs-history-trigger"
+    aria-label="History"
+    title="History"
+    onClick={open}
+  >
+    <History aria-hidden="true" size={18} />
+  </button>
+);
+
+/**
+ * Keeps sign-out at the right edge of the app header.
+ */
+const SignOutAction = ({
+  signOut,
+  disabled,
+}: {
+  signOut: () => void;
+  disabled: boolean;
+}): ReactElement => (
+  <button
+    type="button"
+    className="rs-sign-out"
+    aria-label="Sign out"
+    title="Sign out"
+    disabled={disabled}
+    onClick={signOut}
+  >
+    <LogOut aria-hidden="true" size={18} />
+  </button>
 );
 
 /**

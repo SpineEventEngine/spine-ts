@@ -144,8 +144,10 @@ it("opens a draft through the public in-process Client with one pinned Git compa
     expect(draft.version.number).toBeGreaterThan(0);
     expect(draft.version.timestamp?.seconds).toBeTypeOf("bigint");
     expect(draft.lastEditedAt).toBeTruthy();
+    expect(draft.createdAt).toBeTruthy();
     expect((await studio.readDraft(draft.id)).version).toEqual(draft.version);
     expect((await studio.readDraft(draft.id)).lastEditedAt).toBe(draft.lastEditedAt);
+    expect((await studio.readDraft(draft.id)).createdAt).toBe(draft.createdAt);
     const retried = await studio.openDraft(
       selected.selectionId,
       "October release",
@@ -461,6 +463,7 @@ it("binds an accepted generation to its model and committed Git evidence through
       draft.version,
       new TextEncoder().encode(previousMarkdown),
     );
+    expect(editedBeforeGeneration.createdAt).toBe(draft.createdAt);
     const generation = await studio.requestGeneration(draft.id, "Explain the change");
     expect(generation).toBeTruthy();
     let staged = await studio.readDraft(draft.id);

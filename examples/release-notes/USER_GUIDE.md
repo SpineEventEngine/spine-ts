@@ -4,8 +4,8 @@ A Git log tells a maintainer what changed. It rarely explains those changes in
 language suitable for a release announcement. Release Notes Studio lets a
 maintainer select two committed revisions, ask for a draft, edit arbitrary
 Markdown, preview it, and export the exact current bytes. The validated citation
-evidence remains available through recorded history APIs, not a desktop history
-screen.
+evidence remains available through recorded history APIs and the desktop history
+drawer.
 
 The model proposes text. The application decides which proposal to accept, and
 the person decides which text to publish. There is no background generation.
@@ -356,8 +356,12 @@ patch, or file do not grant additional tools or authorize publishing.
 
 The desktop keeps the writing view focused on the current release. The recorded
 history remains available through the repository API: use the methods below to
-read all activity, writing attempts, progress, or draft changes. The desktop
-does not show internal IDs, raw JSON, or provider request bodies.
+read all activity, writing attempts, progress, or draft changes. In the desktop,
+the history icon opens a panel of separate session releases. The current release
+expands first; **Load older** follows the indexed cursor without a total cap.
+Short previews open full recorded detail, including readable provider request
+fields, in a copyable dialog. Release ages use creation time, while editor cards
+continue to show the latest content edit time.
 
 History is recorded for every Agent. There is no recording switch. Its repository
 keeps indexes for that Agent instance; the desktop does not scan all System

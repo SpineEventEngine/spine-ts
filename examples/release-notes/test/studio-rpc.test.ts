@@ -188,7 +188,13 @@ it("maps preview and native export without changing Markdown bytes", async () =>
 });
 
 it("maps history cursor and sanitizes failures before they reach the renderer", async () => {
-  const { service, browser, studio } = setup();
+  const { service, browser, studio, auth } = setup();
+  auth.status.mockResolvedValue({
+    accounts: [{ clientId: "client", email: "person@example.invalid", planEnabled: true }],
+    selectedClientId: "client",
+    pendingClientIds: [],
+    planEnabled: true,
+  });
   const ctx = { browser } as RequestContext;
   studio.history.mockResolvedValue({
     items: [{ kind: "domain", text: "Recorded" }],
@@ -312,7 +318,7 @@ it("maps session, native project selection, comparisons, and committed evidence"
 });
 
 it("routes generation admission, repeat, cancellation, phase, and optional history", async () => {
-  const { service, browser, studio } = setup();
+  const { service, browser, studio, auth } = setup();
   const ctx = { browser } as RequestContext;
   const generation = "cdfbca32-1027-4ef6-80e6-7b7178f20dcf";
   studio.requestGeneration.mockResolvedValue(generation);
@@ -331,10 +337,39 @@ it("routes generation admission, repeat, cancellation, phase, and optional histo
   expect(await service.Phase({ generation }, ctx)).toEqual({ receipt: true, phase: "running" });
   expect(studio.generationObservation).toHaveBeenCalledExactlyOnceWith(generation);
   studio.history.mockResolvedValue({ items: [], cursor: undefined });
+  auth.status.mockResolvedValue({
+    accounts: [{ clientId: "client", email: "person@example.invalid", planEnabled: true }],
+    selectedClientId: "client",
+    pendingClientIds: [],
+    planEnabled: true,
+  });
   expect(await service.History({ id: draftId, category: "all", pageSize: 1 }, ctx)).toEqual({
     itemsJson: [],
   });
   expect(studio.history).toHaveBeenCalledExactlyOnceWith(draftId, "all", 1, undefined);
+});
+
+it("rejects signed-out history reads at the trusted bridge", async () => {
+  const { service, browser, studio } = setup();
+  await expect(
+    service.History({ id: draftId, category: "all", pageSize: 20 }, { browser } as RequestContext),
+  ).rejects.toThrow();
+  expect(studio.history).not.toHaveBeenCalled();
+});
+
+it("does not return an in-flight history page after account sign-out", async () => {
+  const { service, browser, studio, auth } = setup();
+  const pending = Promise.withResolvers<{ items: unknown[] }>();
+  studio.history.mockReturnValue(pending.promise);
+  auth.status
+    .mockResolvedValueOnce({ selectedClientId: "client", planEnabled: true })
+    .mockResolvedValue({ selectedClientId: undefined, planEnabled: false });
+  const read = service.History({ id: draftId, category: "all", pageSize: 20 }, {
+    browser,
+  } as RequestContext);
+  await vi.waitFor(() => { expect(studio.history).toHaveBeenCalledOnce(); });
+  pending.resolve({ items: [{ conversationRecord: { id: { value: "private" } } }] });
+  await expect(read).rejects.toThrow("Activity could not be loaded");
 });
 
 it("returns cancellation for native export without preparing or writing Markdown", async () => {

@@ -18,6 +18,7 @@ import { ChoiceSelect } from "./choice-select.js";
 import { DashboardView, StudioTopBar, WizardFrame } from "./studio-flow-view.js";
 import { MarkdownWorkspaceView } from "./studio-markdown-view.js";
 import { StudioIpcErrors } from "./trusted/studio-ipc-errors.js";
+import { HistoryDrawer, type HistoryBridge } from "./studio-history-view.js";
 
 interface Comparison {
   readonly selectionId: string;
@@ -37,12 +38,18 @@ interface Draft {
   readonly generationStatus: string;
   readonly markdown: Uint8Array;
   readonly lastEditedAt?: string | undefined;
+  readonly createdAt?: string | undefined;
 }
 
 /**
  * Renderer-visible methods of the private trusted Studio boundary.
  */
 export interface StudioFlowBridge {
+  /**
+   * Reads one indexed page of a release's audited history.
+   */
+  history?: HistoryBridge["history"];
+
   /**
    * Reads this session.
    *
@@ -736,6 +743,7 @@ const useOperationalState = (config: FlowConfig) => {
   const [page, setPage] = useState<Page>("dashboard");
   const [draft, setDraft] = useState<Draft>();
   const [busy, setBusy] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [writingStatus, setWritingStatus] = useState("Your editor will open when it’s ready.");
   const refs = useOperationalRefs();
   const session = useSessionDrafts(config.bridge, config.onNotice);
@@ -753,6 +761,8 @@ const useOperationalState = (config: FlowConfig) => {
     setDraft,
     busy,
     setBusy,
+    historyOpen,
+    setHistoryOpen,
     writingStatus,
     setWritingStatus,
     ...refs,
@@ -1021,6 +1031,7 @@ const awaitGenerationFence = async (state: FlowState, config: FlowConfig): Promi
 
 const signOutSafely = async (state: FlowState, config: FlowConfig): Promise<void> => {
   if (state.busy) return;
+  state.setHistoryOpen(false);
   state.setBusy(true);
   try {
     if (state.page === "editor") await state.editor.flush();
@@ -1384,6 +1395,35 @@ const FlowRoute = ({
 };
 
 /**
+ * Renders session release history while the signed-in drawer is open.
+ */
+const HistoryRoute = ({
+  state,
+  config,
+  launcher,
+}: {
+  state: FlowState;
+  config: FlowConfig;
+  launcher: { current: HTMLElement | null };
+}): ReactElement | null =>
+  state.historyOpen && config.bridge.history ? (
+    <HistoryDrawer
+      releases={state.session.drafts.map((draft) => ({
+        id: draft.id,
+        title: draft.title,
+        createdAt: draft.createdAt,
+      }))}
+      currentId={state.draft?.id ?? state.session.drafts[0]?.id}
+      generatingId={state.page === "writing" ? state.draft?.id : undefined}
+      bridge={config.bridge as HistoryBridge}
+      onClose={() => {
+        state.setHistoryOpen(false);
+      }}
+      restoreFocus={launcher.current}
+    />
+  ) : null;
+
+/**
  * Renders the signed-in dashboard, Git wizard, and exact Markdown editor.
  *
  * @param config Trusted actions, account model selection, and session callbacks.
@@ -1391,6 +1431,7 @@ const FlowRoute = ({
  */
 export const StudioFlow = (config: FlowConfig): ReactElement => {
   const state = useFlowState(config);
+  const historyLauncher = useRef<HTMLElement | null>(null);
   useComparison(state, config);
   useWritingPoll(state, config);
   useEffect(() => {
@@ -1398,13 +1439,24 @@ export const StudioFlow = (config: FlowConfig): ReactElement => {
   }, [state.page]);
   return (
     <main className="rs-app">
-      <StudioTopBar
-        disabled={state.busy}
-        signOut={() => {
-          void signOutSafely(state, config);
-        }}
-      />
-      <FlowRoute state={state} config={config} />
+      <div inert={state.historyOpen}>
+        <StudioTopBar
+          disabled={state.busy}
+          history={
+            config.bridge.history
+              ? () => {
+                  historyLauncher.current = document.activeElement as HTMLElement;
+                  state.setHistoryOpen(true);
+                }
+              : undefined
+          }
+          signOut={() => {
+            void signOutSafely(state, config);
+          }}
+        />
+        <FlowRoute state={state} config={config} />
+      </div>
+      <HistoryRoute state={state} config={config} launcher={historyLauncher} />
     </main>
   );
 };

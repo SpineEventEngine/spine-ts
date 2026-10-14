@@ -395,6 +395,11 @@ message Draft {
         // Last editor change time in UTC.
         string last_edited_at = 8;
     }
+
+    // Original confirmed creation time in UTC.
+    oneof created_at_value {
+        string created_at = 9;
+    }
 }
 
 // Requests one page of draft history.

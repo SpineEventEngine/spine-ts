@@ -295,6 +295,9 @@ const StudioRpcOperations = {
     return {
       History: (request, ctx) =>
         rpc.call("history", ctx, async () => {
+          const account = await rpc.services.auth.status();
+          if (!account.planEnabled || !account.selectedClientId)
+            throw new Error("Sign in to read release history.");
           const input = validateStudioIpc("history", {
             id: request.id,
             category: request.category,
@@ -308,6 +311,9 @@ const StudioRpcOperations = {
             input.pageSize as number,
             input.cursor as string | undefined,
           );
+          const current = await rpc.services.auth.status();
+          if (!current.planEnabled || current.selectedClientId !== account.selectedClientId)
+            throw new Error("Sign in to read release history.");
           return {
             itemsJson: page.items.map((item) => JSON.stringify(item)),
             ...(page.cursor === undefined ? {} : { cursor: page.cursor }),

@@ -265,6 +265,11 @@ export interface StudioDraft {
    * Timestamp of the latest observed content change, or initial creation.
    */
   readonly lastEditedAt?: string | undefined;
+
+  /**
+   * Timestamp of the original confirmed draft state in this session.
+   */
+  readonly createdAt?: string | undefined;
 }
 
 /**
@@ -397,6 +402,11 @@ export class ReleaseStudio {
     string,
     { markdown: Uint8Array; at?: string | undefined }
   >();
+
+  /**
+   * Original confirmed Version timestamp for each session draft.
+   */
+  private readonly creationTimes = new Map<string, string>();
 
   /**
    * Latest generation identifier for each draft in this session.
@@ -879,6 +889,7 @@ export class ReleaseStudio {
     const comparison = this.comparisons.get(selectionId);
     if (!comparison) throw new Error("Release comparison is unavailable.");
     const markdown = new Uint8Array(record.state.markdown?.utf8 ?? []);
+    this.observeCreationTime(id, record.version.timestamp);
     this.observeContentTime(id, markdown, record.version.timestamp);
     return {
       id,
@@ -889,7 +900,25 @@ export class ReleaseStudio {
       generationStatus: record.state.generationStatus,
       markdown,
       lastEditedAt: this.contentTimes.get(id)?.at,
+      createdAt: this.creationTimes.get(id),
     };
+  }
+
+  /**
+   * Records the first confirmed Version timestamp separately from later edits.
+   *
+   * @param id Session draft identifier.
+   * @param stamp Timestamp of the current authoritative Version.
+   */
+  private observeCreationTime(
+    id: string,
+    stamp: MessageShape<typeof VersionSchema>["timestamp"],
+  ): void {
+    if (this.creationTimes.has(id) || !stamp) return;
+    this.creationTimes.set(
+      id,
+      new Date(Number(stamp.seconds) * 1_000 + Math.floor(stamp.nanos / 1_000_000)).toISOString(),
+    );
   }
 
   /**

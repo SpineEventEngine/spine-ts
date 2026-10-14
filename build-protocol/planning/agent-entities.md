@@ -32,3 +32,16 @@ Implemented in [PR #18](https://github.com/SpineEventEngine/spine-ts/pull/18).
 
 General physical Entity deletion remains a separate deferred task. This feature
 introduces no Agent-specific purge API.
+
+## Studio history drawer
+
+Add a signed-in-only right drawer with collapsible release sections, using the
+existing repository `fullHistory()` API and desktop bridge. Show creation age
+(`just now`, `2m ago`, `3h ago`, `6d ago`, `7mo ago`, `1y 3mo ago`), chat-style
+records, four-line previews, and centered full-content dialogs. Preserve complete
+history through cursors, refresh expanded histories, and discard pending UI reads
+on sign-out. Creation age must not change after editing a release.
+
+Keep the addition within the example: read indexed history through the existing
+API, retain the original draft creation time separately from edit time, and
+format records for display. Do not add another audit store or framework API.

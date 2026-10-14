@@ -18,8 +18,10 @@ test("opens the real signed-out Studio renderer without recalling an account", a
   await expect(page.getByRole("dialog", { name: "Welcome" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Sign in with ChatGPT" })).toBeVisible();
   await expect(page.getByRole("button", { name: "New release" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "History" })).toHaveCount(0);
 
   await page.reload();
   await expect(page.getByRole("dialog", { name: "Welcome" })).toBeVisible();
   await expect(page.getByRole("button", { name: "New release" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "History" })).toHaveCount(0);
 });

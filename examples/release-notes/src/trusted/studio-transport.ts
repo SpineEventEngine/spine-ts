@@ -90,6 +90,7 @@ export const StudioTransport = {
       generationStatus: value.generationStatus,
       markdown: Buffer.from(value.markdown),
       ...(value.lastEditedAt === undefined ? {} : { lastEditedAt: value.lastEditedAt }),
+      ...(value.createdAt === undefined ? {} : { createdAt: value.createdAt }),
     };
   },
 };
