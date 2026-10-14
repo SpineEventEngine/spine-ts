@@ -160,4 +160,3 @@ undefined
       Tests  7 failed | 24 passed (31)
    Start at  18:50:57
    Duration  698ms (transform 242ms, setup 0ms, import 451ms, tests 123ms, environment 0ms)
-

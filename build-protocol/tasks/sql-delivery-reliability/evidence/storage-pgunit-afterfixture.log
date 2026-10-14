@@ -49,4 +49,3 @@ Caused by: SyntaxError: Unexpected token 'a', "task" is not valid JSON
       Tests  1 failed | 22 passed (23)
    Start at  19:20:57
    Duration  895ms (transform 412ms, setup 0ms, import 576ms, tests 188ms, environment 0ms)
-

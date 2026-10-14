@@ -23,4 +23,3 @@ TypeError: BoundedContext.singleTenant(...).withStorageFactory(...).withShutdown
       Tests  1 failed | 7 skipped (8)
    Start at  20:23:40
    Duration  790ms (transform 477ms, setup 0ms, import 686ms, tests 3ms, environment 0ms)
-

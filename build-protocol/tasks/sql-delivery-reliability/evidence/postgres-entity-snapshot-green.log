@@ -49,4 +49,3 @@ The latest test that might've caused the error is "persists captured Entity byte
      Errors  1 error
    Start at  18:37:28
    Duration  5.49s (transform 243ms, setup 0ms, import 364ms, tests 5.00s, environment 0ms)
-

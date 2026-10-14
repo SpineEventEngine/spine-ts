@@ -40,4 +40,3 @@ AssertionError: expected [ { eventId: 'entered', …(2) }, …(1) ] to deeply eq
       Tests  1 failed | 7 passed (8)
    Start at  20:26:23
    Duration  827ms (transform 486ms, setup 0ms, import 685ms, tests 42ms, environment 0ms)
-

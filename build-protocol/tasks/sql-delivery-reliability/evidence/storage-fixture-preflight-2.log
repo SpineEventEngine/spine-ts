@@ -23,4 +23,3 @@ AssertionError: expected "vi.fn()" to be called 2 times, but got 4 times
       Tests  1 failed | 79 passed (80)
    Start at  18:58:43
    Duration  1.33s (transform 2.20s, setup 0ms, import 3.38s, tests 408ms, environment 0ms)
-

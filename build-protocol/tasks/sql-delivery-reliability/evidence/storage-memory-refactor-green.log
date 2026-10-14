@@ -30,4 +30,3 @@ AssertionError: expected [Function] to throw error matching /does not provide th
       Tests  1 failed | 25 passed (26)
    Start at  19:03:15
    Duration  462ms (transform 202ms, setup 0ms, import 306ms, tests 31ms, environment 0ms)
-

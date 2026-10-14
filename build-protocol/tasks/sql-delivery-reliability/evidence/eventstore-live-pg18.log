@@ -6,4 +6,3 @@ No test files found, exiting with code 1
 filter: packages/storage-postgres/test/postgresql-integration.test.ts
 include: packages/*/test/**/*.test.ts, examples/*/src/**/*.test.ts, examples/*/src/**/*.test.tsx, examples/*/test/**/*.test.ts, examples/*/test/**/*.test.tsx, examples/*/*/src/**/*.test.ts, examples/*/*/src/**/*.test.tsx, examples/*/*/test/**/*.test.ts, examples/*/*/test/**/*.test.tsx, scripts/**/*.test.mjs, compatibility-tests/jvm/**/*.test.mjs
 exclude:  **/node_modules/**, **/.git/**, packages/storage-datastore/test/datastore-cloud.test.ts, packages/storage-datastore/test/datastore-emulator.test.ts, packages/storage-postgres/test/postgresql-integration.test.ts, packages/storage-mysql/test/mysql-integration.test.ts, packages/server/test/delivery/inbox-provider-cleanup.test.ts
-

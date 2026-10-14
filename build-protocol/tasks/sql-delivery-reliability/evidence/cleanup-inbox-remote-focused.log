@@ -47,4 +47,3 @@ Number of calls: 1
       Tests  1 failed | 37 passed (38)
    Start at  18:44:55
    Duration  1.10s (transform 1.54s, setup 0ms, import 2.25s, tests 49ms, environment 0ms)
-

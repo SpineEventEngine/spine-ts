@@ -36,4 +36,3 @@ Serialized Error: { code: 'ER_LOCK_DEADLOCK' }
       Tests  1 failed (1)
    Start at  18:39:47
    Duration  443ms (transform 217ms, setup 0ms, import 324ms, tests 6ms, environment 0ms)
-

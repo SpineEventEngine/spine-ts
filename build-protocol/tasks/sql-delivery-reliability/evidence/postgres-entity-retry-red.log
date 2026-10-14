@@ -36,4 +36,3 @@ Serialized Error: { code: '40P01' }
       Tests  1 failed | 14 skipped (15)
    Start at  18:38:17
    Duration  454ms (transform 231ms, setup 0ms, import 342ms, tests 8ms, environment 0ms)
-

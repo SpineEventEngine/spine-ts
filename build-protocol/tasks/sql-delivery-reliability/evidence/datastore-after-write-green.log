@@ -75,4 +75,3 @@ AssertionError: expected { …(4) } to match object { state: { …(3) } }
       Tests  1 failed | 25 skipped (26)
    Start at  18:53:20
    Duration  589ms (transform 247ms, setup 0ms, import 464ms, tests 9ms, environment 0ms)
-

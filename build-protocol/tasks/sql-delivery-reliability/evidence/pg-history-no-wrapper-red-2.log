@@ -23,4 +23,3 @@ AssertionError: expected [ 'BEGIN', …(19) ] to not include 'BEGIN'
       Tests  1 failed | 28 skipped (29)
    Start at  19:11:14
    Duration  512ms (transform 265ms, setup 0ms, import 387ms, tests 8ms, environment 0ms)
-

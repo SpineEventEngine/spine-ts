@@ -30,4 +30,3 @@ AssertionError: expected Map{} to have a size of 1 but got +0
       Tests  1 failed | 30 skipped (31)
    Start at  18:50:56
    Duration  575ms (transform 240ms, setup 0ms, import 451ms, tests 8ms, environment 0ms)
-

@@ -115,4 +115,3 @@ AssertionError: expected [ 'immutable', 'cas' ] to deeply equal [ 'cas', 'immuta
       Tests  6 failed | 92 passed (98)
    Start at  17:58:49
    Duration  519ms (transform 498ms, setup 0ms, import 739ms, tests 36ms, environment 0ms)
-

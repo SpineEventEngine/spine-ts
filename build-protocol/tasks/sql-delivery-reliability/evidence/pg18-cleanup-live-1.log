@@ -35,4 +35,3 @@ TypeError: Cannot read properties of undefined (reading 'close')
       Tests  6 skipped (6)
    Start at  18:48:45
    Duration  884ms (transform 363ms, setup 0ms, import 752ms, tests 6ms, environment 0ms)
-

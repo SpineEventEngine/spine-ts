@@ -27,4 +27,3 @@ Received: "PostgreSQL record operation failed."
       Tests  1 failed | 14 skipped (15)
    Start at  18:58:35
    Duration  522ms (transform 269ms, setup 0ms, import 398ms, tests 8ms, environment 0ms)
-

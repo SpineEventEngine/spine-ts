@@ -29,4 +29,3 @@ Caused by: TypeError: Cannot read properties of undefined (reading 'kind')
       Tests  1 failed | 14 skipped (15)
    Start at  18:40:59
    Duration  928ms (transform 560ms, setup 0ms, import 814ms, tests 7ms, environment 0ms)
-

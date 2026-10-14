@@ -50,4 +50,3 @@ AssertionError: expected [ 'BEGIN', …(5) ] to not include 'ROLLBACK'
       Tests  3 failed | 95 skipped (98)
    Start at  17:58:16
    Duration  567ms (transform 567ms, setup 0ms, import 851ms, tests 15ms, environment 0ms)
-

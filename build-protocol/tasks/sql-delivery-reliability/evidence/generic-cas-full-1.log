@@ -272,4 +272,3 @@ Error: The configured database contains the retired storage layout.
       Tests  16 failed | 84 passed (100)
    Start at  18:01:31
    Duration  5.55s (transform 519ms, setup 0ms, import 762ms, tests 5.06s, environment 0ms)
-

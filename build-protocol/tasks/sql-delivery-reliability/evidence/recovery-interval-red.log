@@ -30,4 +30,3 @@ AssertionError: expected 1 to be 2 // Object.is equality
       Tests  1 failed | 44 skipped (45)
    Start at  20:11:59
    Duration  788ms (transform 478ms, setup 0ms, import 677ms, tests 8ms, environment 0ms)
-

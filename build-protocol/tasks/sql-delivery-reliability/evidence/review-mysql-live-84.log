@@ -30,4 +30,3 @@ AssertionError: expected [Function] to throw error matching /requires delivery-e
       Tests  1 failed | 14 passed (15)
    Start at  19:57:36
    Duration  12.95s (transform 215ms, setup 0ms, import 342ms, tests 12.51s, environment 0ms)
-

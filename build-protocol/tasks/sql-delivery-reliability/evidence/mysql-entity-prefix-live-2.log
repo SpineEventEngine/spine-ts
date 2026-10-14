@@ -41,4 +41,3 @@ Caused by: Error: cannot encode message google.protobuf.Any to JSON: "type.spine
       Tests  1 failed | 13 skipped (14)
    Start at  18:32:39
    Duration  633ms (transform 267ms, setup 0ms, import 447ms, tests 67ms, environment 0ms)
-

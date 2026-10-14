@@ -36,4 +36,3 @@ AssertionError: expected [ 'permanent-failure', …(6) ] to deeply equal [ 'perm
       Tests  1 failed | 47 skipped (48)
    Start at  21:02:11
    Duration  805ms (transform 492ms, setup 0ms, import 691ms, tests 14ms, environment 0ms)
-

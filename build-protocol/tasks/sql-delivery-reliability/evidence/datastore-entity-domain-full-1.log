@@ -27,4 +27,3 @@ Received: "type.spine.examples.todo/spine.examples.todo.Task"
       Tests  1 failed | 24 passed (25)
    Start at  18:52:15
    Duration  795ms (transform 258ms, setup 0ms, import 545ms, tests 138ms, environment 0ms)
-

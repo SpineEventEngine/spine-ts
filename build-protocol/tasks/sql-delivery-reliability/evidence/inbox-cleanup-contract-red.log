@@ -90,4 +90,3 @@ AssertionError: expected true to be false // Object.is equality
       Tests  4 failed | 11 passed (15)
    Start at  18:42:18
    Duration  988ms (transform 575ms, setup 0ms, import 835ms, tests 25ms, environment 0ms)
-

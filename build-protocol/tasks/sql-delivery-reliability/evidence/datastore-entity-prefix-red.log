@@ -35,4 +35,3 @@ Caused by: Error: cannot encode message google.protobuf.Any to JSON: "type.googl
       Tests  1 failed | 30 skipped (31)
    Start at  18:49:55
    Duration  679ms (transform 299ms, setup 0ms, import 545ms, tests 10ms, environment 0ms)
-

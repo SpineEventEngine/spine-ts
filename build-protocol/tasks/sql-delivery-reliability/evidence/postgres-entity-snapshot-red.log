@@ -51,4 +51,3 @@ AssertionError: expected { …(3) } to deeply equal { …(3) }
       Tests  1 failed | 13 skipped (14)
    Start at  18:37:13
    Duration  546ms (transform 279ms, setup 0ms, import 418ms, tests 9ms, environment 0ms)
-

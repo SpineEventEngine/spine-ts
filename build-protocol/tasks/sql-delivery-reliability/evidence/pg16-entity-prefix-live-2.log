@@ -24,4 +24,3 @@ error: constraint "reject_partial_diagnostic" for relation "spine_examples_todo_
       Tests  1 failed | 10 skipped (11)
    Start at  18:34:55
    Duration  481ms (transform 219ms, setup 0ms, import 334ms, tests 44ms, environment 0ms)
-

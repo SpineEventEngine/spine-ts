@@ -27,4 +27,3 @@ Received: "timed-out"
       Tests  1 failed | 7 skipped (8)
    Start at  20:24:37
    Duration  877ms (transform 469ms, setup 0ms, import 667ms, tests 112ms, environment 0ms)
-

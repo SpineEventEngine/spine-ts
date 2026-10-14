@@ -126,4 +126,3 @@ AssertionError: expected [ { …(4) }, { …(4) } ] to deeply equal [ { …(4) }
       Tests  1 failed | 14 skipped (15)
    Start at  19:17:48
    Duration  633ms (transform 301ms, setup 0ms, import 466ms, tests 51ms, environment 0ms)
-

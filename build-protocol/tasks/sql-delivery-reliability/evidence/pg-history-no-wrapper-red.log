@@ -23,4 +23,3 @@ AssertionError: expected [ 'BEGIN', …(33) ] to not include 'BEGIN'
       Tests  1 failed | 28 skipped (29)
    Start at  19:11:04
    Duration  570ms (transform 297ms, setup 0ms, import 438ms, tests 8ms, environment 0ms)
-

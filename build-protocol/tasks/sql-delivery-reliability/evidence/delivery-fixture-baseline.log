@@ -620,4 +620,3 @@ ValidationException: Message validation failed with 1 violation(s).
       Tests  39 failed | 7 passed (46)
    Start at  20:02:46
    Duration  898ms (transform 514ms, setup 0ms, import 724ms, tests 22ms, environment 0ms)
-

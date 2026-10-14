@@ -23,4 +23,3 @@ ReferenceError: RecordStorage is not defined
       Tests  1 failed | 18 skipped (19)
    Start at  19:07:59
    Duration  422ms (transform 191ms, setup 0ms, import 295ms, tests 4ms, environment 0ms)
-

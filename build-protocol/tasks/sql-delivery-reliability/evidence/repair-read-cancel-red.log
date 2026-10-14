@@ -36,4 +36,3 @@ AssertionError: expected 'timed-out' to deeply equal [ { eventId: 'paused-read',
       Tests  1 failed | 6 skipped (7)
    Start at  20:18:54
    Duration  798ms (transform 464ms, setup 0ms, import 660ms, tests 37ms, environment 0ms)
-

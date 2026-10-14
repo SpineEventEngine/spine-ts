@@ -32,4 +32,3 @@ Caused by: InboxMessageError: Inbox delivery label does not match its signal pay
       Tests  1 failed | 12 skipped (13)
    Start at  19:08:42
    Duration  920ms (transform 560ms, setup 0ms, import 801ms, tests 8ms, environment 0ms)
-

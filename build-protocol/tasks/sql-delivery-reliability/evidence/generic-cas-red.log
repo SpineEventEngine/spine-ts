@@ -37,4 +37,3 @@ AssertionError: the given combination of arguments (undefined and string) is inv
       Tests  2 failed | 98 skipped (100)
    Start at  17:59:38
    Duration  586ms (transform 604ms, setup 0ms, import 884ms, tests 13ms, environment 0ms)
-
