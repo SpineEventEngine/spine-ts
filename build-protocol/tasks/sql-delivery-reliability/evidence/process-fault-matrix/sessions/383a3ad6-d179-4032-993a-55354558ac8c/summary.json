@@ -1,0 +1,250 @@
+{
+  "status": "FAIL_STOPPED_AFTER_FIRST_FAILURE",
+  "startedAt": "2026-10-14T01:33:00.085Z",
+  "sessionId": "383a3ad6-d179-4032-993a-55354558ac8c",
+  "worktree": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts",
+  "configuredProfile": {
+    "model": "gpt-6-luna",
+    "reasoning": "low",
+    "runtimeMetadata": "not exposed by this execution surface"
+  },
+  "command": "pnpm --filter @spine-event-engine/server-blackbox-tests test:process-faults",
+  "execution": "sequential; isolated per-invocation process group; no application/test fixture modifications",
+  "expectedCaseCount": 32,
+  "provenanceAtLaunch": {
+    "packages/server-blackbox-tests/dist/test-fixtures/project-workflow.js": "d0dcb0136f8a8db03a7939b639625020e812b2019194ec20f8ad785a92d2bd52",
+    "packages/server-blackbox-tests/dist/generated/spine/server/testing/project_workflow_pb.js": "b5e6d882578f431085d42b84e5fefb9d948880867e34c3c1b83c2b96d36c371b",
+    "packages/server/dist/index.js": "6bf9c9a8c971afc87de534107af1a935953f89a0607193ed3576e2b3def1909e",
+    "packages/proto/dist/src/index.js": "3b16144d721808f5ed8d458be542064c5323575247cf1b7e6d325b038adaeaa2",
+    "packages/core/dist/index.js": "64a74877641ebde82dab6e2c69577ba9cf246009adfd76f74173502d0b03b916",
+    "packages/storage/dist/index.js": "df614e0461342a5bc52377ed64200cdb3307f669b74cfd0340d587d17b2d55c7",
+    "packages/storage-postgres/dist/index.js": "84a8658d25708fd1bf4d2b0fd7b1bd678966fd089b9b8e6908df1b1005ad3139",
+    "packages/storage-mysql/dist/index.js": "1e344dd9d6163df30cabbcb6dec296cde324a3f74a9d185ea29c40a28862da74",
+    "packages/delivery-client/dist/index.js": "1e69a8d6b4ad6584f804baf8746d9d937b0e173a589cb52fba98735aeac22140",
+    "packages/delivery-server/dist/index.js": "b8b79d6f88a3f7f4dd0461062a09dc519e98c84387ae01360b4245acd23b5d08",
+    "packages/server-blackbox-tests/test-fixtures/project-process-faults.mjs": "a283b61ac20cdb09b9c72b56750eca7abf83e44252a5b4704b3e1b8d4ccc2cac",
+    "packages/server-blackbox-tests/test-fixtures/project-worker.mjs": "3f44bad652b7eeb02c4c11918625d48c24bf64aa5fddf8b16548498e099f555c",
+    "packages/server-blackbox-tests/test-fixtures/shared-delivery-worker.mjs": "5ff863eea121335afd54c7f5f907070dc170c90bbab58400328e7ab2f2771579",
+    "packages/server-blackbox-tests/test-fixtures/project-process-fault-observations.mjs": "e9bc0af21577dd60c117f262fadf139c563e5282fb05e9469c02864ae8eca75b",
+    "packages/server-blackbox-tests/test-fixtures/resistant-fault-driver.mjs": "dea89a995586b4a52a18d2d2ae23b1633d14eb37681e184eafd4b463c7a665f2",
+    "packages/server-blackbox-tests/test-fixtures/project-workflow.ts": "18962f7b8719556cd08a1300f3dd40f7c67a17ed4c9975cb932bea134c4cc0b4",
+    "packages/server-blackbox-tests/test/project-process-faults.integration.test.ts": "b45fa8857b91d316d7d5c8894721239be21704b728e0d23198df8c78be1e34cf"
+  },
+  "cases": [
+    {
+      "index": 1,
+      "config": {
+        "provider": "postgres16",
+        "processes": 2,
+        "scenario": "before-effect",
+        "requireColdRepair": true,
+        "requireKillObservation": true
+      },
+      "command": {
+        "executable": "pnpm",
+        "argv": [
+          "--filter",
+          "@spine-event-engine/server-blackbox-tests",
+          "test:process-faults"
+        ]
+      },
+      "startedAt": "2026-10-14T01:33:00.086Z",
+      "log": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/process-fault-matrix/sessions/383a3ad6-d179-4032-993a-55354558ac8c/postgres16-p2-before-effect.log",
+      "configuredProfile": {
+        "model": "gpt-6-luna",
+        "reasoning": "low"
+      },
+      "pnpmPid": 54027,
+      "processGroupId": 54027,
+      "endedAt": "2026-10-14T01:33:33.526Z",
+      "exit": {
+        "code": 1,
+        "signal": null,
+        "timedOut": false,
+        "timeoutSignal": null,
+        "escalated": false,
+        "groupExists": false
+      },
+      "status": "FAIL",
+      "failure": "public package command failed, timed out, or left its isolated process group alive",
+      "validationError": "before-effect assertion at project-process-faults.mjs:430: portfolio entries expected 1, actual 2; runId=15ef62b00ee2418d98267c684c478340"
+    },
+    {
+      "index": 2,
+      "config": {
+        "provider": "postgres16",
+        "processes": 2,
+        "scenario": "after-save-before-ack",
+        "requireColdRepair": true,
+        "requireKillObservation": true
+      },
+      "status": "PASS",
+      "executionStatus": "pass-from-persisted-run-artifacts; wrapper exit code not captured",
+      "runId": "d99a160691784cbabe734152156c9a25",
+      "artifactAudit": {
+        "status": "PASS",
+        "report": "audits/second-case-d99a160691784cbabe734152156c9a25-review1.json",
+        "databaseDropped": true,
+        "cleanupErrors": [],
+        "workerExits": [
+          {
+            "pid": 58115,
+            "code": 0,
+            "signal": null
+          },
+          {
+            "pid": 58116,
+            "code": 0,
+            "signal": null
+          }
+        ],
+        "killedPid": 56102,
+        "completedStates": true,
+        "handlerMethodCounts": {
+          "create": 1,
+          "planning": 2,
+          "staffing": 1,
+          "portfolio": 1,
+          "projection": 1
+        },
+        "gitHead": "84b28d646b32fc125c2391f26cf0c1d8385f4b96",
+        "runtimeTreeSha256": "401a4dc8126a18ba3a6c8ba7d5828b8d67da49fbdb9b81e644b331de1bf631ea"
+      }
+    }
+  ],
+  "stoppedAt": "2026-10-14T01:34:17.870Z",
+  "failure": {
+    "caseIndex": 1,
+    "runId": "15ef62b00ee2418d98267c684c478340",
+    "assertion": "beforeEffect at project-process-faults.mjs:430; portfolio entries expected 1, observed 2",
+    "cleanup": {
+      "databaseDropped": true,
+      "workerExitsClean": true,
+      "errors": []
+    }
+  },
+  "orchestratorStop": {
+    "caseIndex": 2,
+    "recordedPnpmPid": 56040,
+    "recordedProcessGroupId": 56040,
+    "signal": "SIGTERM after driver was interrupted",
+    "processAbsentAfterSignal": true,
+    "reason": "Enforced stop-on-first-failure; wrapper had started next case before interruption."
+  },
+  "inventory": {
+    "expectedCount": 32,
+    "actualCount": 2,
+    "missing": [
+      "postgres16|2|partial-publication-repair",
+      "postgres16|2|shared-volatile-loss",
+      "postgres16|8|before-effect",
+      "postgres16|8|after-save-before-ack",
+      "postgres16|8|partial-publication-repair",
+      "postgres16|8|shared-volatile-loss",
+      "postgres18|2|before-effect",
+      "postgres18|2|after-save-before-ack",
+      "postgres18|2|partial-publication-repair",
+      "postgres18|2|shared-volatile-loss",
+      "postgres18|8|before-effect",
+      "postgres18|8|after-save-before-ack",
+      "postgres18|8|partial-publication-repair",
+      "postgres18|8|shared-volatile-loss",
+      "mysql84|2|before-effect",
+      "mysql84|2|after-save-before-ack",
+      "mysql84|2|partial-publication-repair",
+      "mysql84|2|shared-volatile-loss",
+      "mysql84|8|before-effect",
+      "mysql84|8|after-save-before-ack",
+      "mysql84|8|partial-publication-repair",
+      "mysql84|8|shared-volatile-loss",
+      "mariadb114|2|before-effect",
+      "mariadb114|2|after-save-before-ack",
+      "mariadb114|2|partial-publication-repair",
+      "mariadb114|2|shared-volatile-loss",
+      "mariadb114|8|before-effect",
+      "mariadb114|8|after-save-before-ack",
+      "mariadb114|8|partial-publication-repair",
+      "mariadb114|8|shared-volatile-loss"
+    ],
+    "duplicates": []
+  },
+  "unrunCases": [
+    "postgres16|2|partial-publication-repair",
+    "postgres16|2|shared-volatile-loss",
+    "postgres16|8|before-effect",
+    "postgres16|8|after-save-before-ack",
+    "postgres16|8|partial-publication-repair",
+    "postgres16|8|shared-volatile-loss",
+    "postgres18|2|before-effect",
+    "postgres18|2|after-save-before-ack",
+    "postgres18|2|partial-publication-repair",
+    "postgres18|2|shared-volatile-loss",
+    "postgres18|8|before-effect",
+    "postgres18|8|after-save-before-ack",
+    "postgres18|8|partial-publication-repair",
+    "postgres18|8|shared-volatile-loss",
+    "mysql84|2|before-effect",
+    "mysql84|2|after-save-before-ack",
+    "mysql84|2|partial-publication-repair",
+    "mysql84|2|shared-volatile-loss",
+    "mysql84|8|before-effect",
+    "mysql84|8|after-save-before-ack",
+    "mysql84|8|partial-publication-repair",
+    "mysql84|8|shared-volatile-loss",
+    "mariadb114|2|before-effect",
+    "mariadb114|2|after-save-before-ack",
+    "mariadb114|2|partial-publication-repair",
+    "mariadb114|2|shared-volatile-loss",
+    "mariadb114|8|before-effect",
+    "mariadb114|8|after-save-before-ack",
+    "mariadb114|8|partial-publication-repair",
+    "mariadb114|8|shared-volatile-loss"
+  ],
+  "interruptedCase": {
+    "tuple": "postgres16|2|after-save-before-ack",
+    "pnpmPid": 56040,
+    "processGroupId": 56040,
+    "signalSent": "SIGTERM",
+    "processAbsentAtVerification": true,
+    "wrapperExitCodeCaptured": false,
+    "runId": "d99a160691784cbabe734152156c9a25",
+    "runResultStatus": "PASS",
+    "runResultEvidence": "process-fault-runs/d99a160691784cbabe734152156c9a25/result.json",
+    "cleanupEvidence": "process-fault-runs/d99a160691784cbabe734152156c9a25/cleanup.json",
+    "auditStatus": "PASS",
+    "auditReport": "process-fault-matrix/audits/second-case-d99a160691784cbabe734152156c9a25-review1.json",
+    "exactDatabaseCatalogCheck": {
+      "engine": "postgres16",
+      "containerId": "c95a7bcdb86b279a700cad9379d3cee4b7dc960da5b1d0306f6614107a645ed7",
+      "database": "sqlrel_fault_d99a160691784cbabe734152156c9a25",
+      "queryResult": "no matching pg_database row"
+    }
+  },
+  "failedCases": [
+    {
+      "config": {
+        "provider": "postgres16",
+        "processes": 2,
+        "scenario": "before-effect",
+        "requireColdRepair": true,
+        "requireKillObservation": true
+      },
+      "runId": "15ef62b00ee2418d98267c684c478340",
+      "failure": "before-effect assertion at project-process-faults.mjs:430: portfolio entries expected 1, actual 2"
+    }
+  ],
+  "stoppedAfterFirstFailure": true,
+  "endedAt": "2026-10-14T01:36:51.919Z",
+  "corrections": [
+    {
+      "at": "2026-10-14T01:36:51.918Z",
+      "reason": "Initial interpretation of the case-2 log missed persisted run artifacts; corrected from resource/result/cleanup files, database catalog, and audit-only validation.",
+      "evidence": {
+        "resource": "process-fault-runs/d99a160691784cbabe734152156c9a25/resource.json",
+        "result": "process-fault-runs/d99a160691784cbabe734152156c9a25/result.json",
+        "cleanup": "process-fault-runs/d99a160691784cbabe734152156c9a25/cleanup.json",
+        "audit": "process-fault-matrix/audits/second-case-d99a160691784cbabe734152156c9a25-review1.json"
+      }
+    }
+  ]
+}

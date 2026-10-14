@@ -946,7 +946,7 @@ async function runMatrix() {
 
   let expectedIndex = 0;
   let previousRuntimeTreeHash = null;
-  for (const provider of providers) {
+  matrixCases: for (const provider of providers) {
     for (const processes of processCounts) {
       for (const scenario of scenarios) {
         expectedIndex++;
@@ -974,6 +974,10 @@ async function runMatrix() {
         process.stdout.write(
           `CASE_${record.status} ${expectedIndex}/32 ${provider} p=${processes} scenario=${scenario}${record.runId ? ` run=${record.runId}` : ""}\n`,
         );
+        if (record.status !== "PASS") {
+          manifest.stoppedAfterFirstFailure = true;
+          break matrixCases;
+        }
       }
     }
   }
@@ -994,6 +998,7 @@ async function runMatrix() {
     missing: [...expectedInventory].filter((key) => !actualInventory.includes(key)),
     duplicates: actualInventory.filter((key, index) => actualInventory.indexOf(key) !== index),
   };
+  manifest.unrunCases = manifest.inventory.missing;
   manifest.failedCases = manifest.cases
     .filter((record) => record.status !== "PASS")
     .map((record) => ({
