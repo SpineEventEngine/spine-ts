@@ -1,0 +1,8 @@
+{
+  "provider": "mysql84",
+  "database": "sqlrel_admit_a80c38f8af7d4d09a908107e",
+  "contextName": "ProjectAdmission_c8bd0f70f4dc44d9",
+  "inboxTable": "inbox_admit_c8bd0f70f4dc44d9",
+  "faultName": "fail_admit_c8bd0f70f4dc44d9",
+  "counterName": "admit_attempts_c8bd0f70f4dc44d9"
+}

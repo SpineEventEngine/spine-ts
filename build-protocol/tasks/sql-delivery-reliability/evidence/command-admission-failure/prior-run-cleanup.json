@@ -1,0 +1,23 @@
+{
+  "status": "PASS",
+  "records": [
+    {
+      "runId": "fb27d3f5f8674320b6e81dfa3eaeb780",
+      "provider": "postgres16",
+      "database": "sqlrel_admit_fb27d3f5f8674320b6e81dfa",
+      "verification": "The unique database was absent when checked after the failed fixture precondition."
+    },
+    {
+      "runId": "a80c38f8af7d4d09a908107e6efed2dc",
+      "provider": "mysql84",
+      "database": "sqlrel_admit_a80c38f8af7d4d09a908107e",
+      "verification": "The unique database was found after the script reported a cleanup error; the scoped processlist query found zero sessions, then DROP DATABASE succeeded and a catalog query confirmed absence."
+    },
+    {
+      "runId": "bdb2046cfd1e498292bd50c5fef0d253",
+      "provider": "mysql84",
+      "database": "sqlrel_admit_bdb2046cfd1e498292bd50c5",
+      "verification": "The recorded cleanup error was MySQL Unknown thread id during a scoped KILL; a follow-up processlist query found zero sessions, then DROP DATABASE succeeded and a catalog query confirmed absence."
+    }
+  ]
+}

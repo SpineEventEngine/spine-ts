@@ -389,3 +389,62 @@ admin end independently and reports all failures. New regression injects both
 early failures and proves DROP. All4 providers7/7 and static checks pass. Original
 explicit Sol/medium review profile accepted; no reviewer runs. Test-only slice
 converged and ready for its separate commit/push.
+
+## Planned process-crash fixture review
+
+After the corrected PostgreSQL smoke and deterministic preflight freeze, dispatch
+two existing specialist concerns with explicit gpt-6-sol / medium profiles:
+performance/reliability and style/maintainability. Scope is the new process-fault
+driver, its opt-in test and inventory registration, and bounded project-worker
+fixture additions. No production runtime change is currently part of this slice.
+Read-only reviewers must not build, run services, or edit implementation files.
+
+Reliability must check proof of received Command acknowledgements, exact typed
+recipient identity, controlled OS death, committed acknowledgement versus attempted
+SQL, cleanup versus pending failure, all resulting states, execution counts,
+original saved Event identity, concurrent repair, volatile Inbox loss, bounded
+cleanup and false-positive test paths. Style checks fixture structure, repository
+conventions, domain-correct generated types, error propagation and evidence clarity.
+Collect the full wave before returning one correction batch to the implementer.
+
+Public API concern is N/A for this test-only slice because no exported runtime
+contract changes. Documentation concern is N/A for user-facing documentation at
+this stage; the implementation ledger must accurately distinguish preliminary
+runs and accepted evidence, replay-safe duplicate execution after a crash, and
+volatile-server loss. Parent checks those concrete limitations. Broad user guide
+and example changes receive separate review. Final security remains pending.
+
+The combined process-fault and bounded cleanup-tool slice is now frozen. The
+checker previously requested every evidence patch and untracked file; it now
+limits patch reads to audited sources while preserving global rename classification.
+A new regression first failed, then passed while still rejecting a newly added
+oversized production callable. Full checker suite 156/156 and actual branch
+lint:cleanup pass. The four corrected PG16 two-process crash scenarios, inventory
+4/4, tooling typecheck, syntax, ESLint, formatting, TSDoc and diff check pass.
+
+Dispatch performance_reliability_reviewer and style_maintainability_reviewer with
+both explicit model gpt-6-sol and reasoning medium, forked without prior history.
+The scope now also includes scripts/check-cleanup-rules.mjs and its regression
+tests: source selection must not weaken changed-line or rename enforcement.
+Reviewer output files are disjoint under task evidence; implementation remains
+frozen. Actual runtime introspection is unavailable; accept the immutable explicit
+configured role/profile unless the surface reports a mismatch.
+
+Both process-fault reviewers completed with the explicitly configured Sol/medium
+profiles and no exposed runtime introspection. The full wave has three accepted
+P2 corrections, aggregated into one batch for the existing implementer:
+
+- Confirm successful SIGKILL and observed exit for every targeted old PID before
+  replacement; retain cleanup tracking until confirmation. In the before-effect
+  case, also prove the effect remains absent after the selected process exits.
+- Require complete, successful expected-shard Inbox observations before absence
+  claims; reject error/truncated/missing rows rather than treating them as empty.
+  Add a focused negative regression for the rejected observation.
+- Bound process reaping after the wrapper escalates to SIGKILL and report durable
+  resource/cleanup diagnostics on timeout, as the existing matrix wrapper does.
+
+The Inbox-read finding is shared by both reviewers. The source-scoped cleanup
+checker correction is otherwise clean; no additional source-policy weakening was
+identified. After focused negative tests/static checks and affected live smoke,
+re-review only death/observation/reaping concerns. Broad SQL matrix starts after
+those converge. No new production behavior or architecture is required.

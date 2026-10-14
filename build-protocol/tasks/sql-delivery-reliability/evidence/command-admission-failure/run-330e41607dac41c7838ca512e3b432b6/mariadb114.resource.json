@@ -1,0 +1,8 @@
+{
+  "provider": "mariadb114",
+  "database": "sqlrel_admit_330e41607dac41c7838ca512",
+  "contextName": "ProjectAdmission_182e32c8d1864f51",
+  "inboxTable": "inbox_admit_182e32c8d1864f51",
+  "faultName": "fail_admit_182e32c8d1864f51",
+  "counterName": "admit_attempts_182e32c8d1864f51"
+}

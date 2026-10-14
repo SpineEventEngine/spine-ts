@@ -1,0 +1,18 @@
+RESOURCE {"provider":"postgres16","database":"sqlrel_admit_fb27d3f5f8674320b6e81dfa","inboxTable":"inbox_admit_61578afde1ea464f"}
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Control CreateProject must reach all five states.
+    at verify (file:///Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/command-admission-failure/run-command-admission-failure.mjs:270:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/command-admission-failure/run-command-admission-failure.mjs:108:20 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: false,
+  expected: true,
+  operator: '==',
+  diff: 'simple'
+}
+
+Node.js v24.18.0

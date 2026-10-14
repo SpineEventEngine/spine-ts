@@ -685,3 +685,48 @@ Recovery-clock fixture analysis completed under the existing explicit Luna/low
 profile, with no execution. Its recipe identifies exact public port gates,
 separate component-level override coverage, and the UUID database mismatch in
 existing SQL tracing. No new public configuration contract is assumed.
+
+Saved-Event API boundary probe completed on PostgreSQL 16/18, MySQL and MariaDB.
+Each provider returns NOT_FOUND/zero attempts for missing IDs, dispatches only the
+requested tenant's exact bytes for an ID shared across tenants, and returns
+CANCELLED/zero attempts for pre-aborted work. Cancellation during the first
+callback leaves that observed callback intact and stops the second ID. Exact
+outcomes and bytes are recorded; all probe tables were removed. Syntax, ESLint
+and formatting pass. This is direct SQL-backed callback evidence, not OS restart
+or Inbox deduplication. Original explicit Luna/low profile accepted; runtime
+metadata unavailable.
+
+Next bounded mechanical verification uses the completed execution function's
+original explicit gpt-6-luna / low profile: a live Command admission failure
+before the actual Project handler, on all four SQL engines. Reuse current built
+Project workflow and logger/real-gRPC diagnostic patterns, with a unique database
+and scoped Inbox INSERT trigger. Require a safe error Ack with exact Command ID,
+one correlated diagnostic retaining driver code, zero handler entries/state/Event
+for the rejected Command, and successful normal control after removing the fault.
+Evidence scripts/results only; no production/test-suite or frozen worker edits,
+no build or runtime transforms. Clean every created resource independently.
+Runtime metadata is unavailable. This closes the remaining admission-boundary
+check without replacing normalizer identity or OS-crash evidence.
+
+The existing mechanical function (original explicit Luna/low profile) may prepare
+one process-fault matrix orchestration/audit script while the implementation
+correction batch runs. Do not execute the matrix until review acceptance and an
+explicit parent release. The script covers four engines, two/eight processes,
+and the four frozen scenarios; every result must reconcile expected case identity,
+PASS status, received Command IDs, provenance, scenario observations, handler
+counts, resource cleanup and exact UUID database removal. Preserve failed runs
+and fail the aggregate when any case fails or is missing. Scripts and manifests
+only under task evidence, no source/build/service action in this preparation.
+Actual runtime profile introspection remains unavailable.
+
+Live pre-handler admission acceptance completed under the original explicit
+Luna/low profile. Final run 330e41607dac41c7838ca512e3b432b6 passes PostgreSQL 16/18,
+MySQL and MariaDB: one trigger attempt, safe error Ack retaining exact Command ID,
+one correlated cause-code diagnostic, zero handler entries and absent states,
+Event and Inbox row before retry. Removing the fault and resubmitting the same
+Command ID yields all five handler entries/states, one Event and one target row.
+Parent read final result statuses and cleanup: all four PASS, databases dropped,
+no errors. Earlier helper cleanup races and their exact database cleanup are
+preserved separately; prior-run-cleanup.json is PASS. Final script syntax, ESLint
+and formatting pass; runtime metadata unavailable. No framework source or built
+runtime was changed by this evidence function.

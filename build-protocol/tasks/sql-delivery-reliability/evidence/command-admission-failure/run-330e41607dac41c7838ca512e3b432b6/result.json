@@ -1,0 +1,818 @@
+{
+  "runId": "330e41607dac41c7838ca512e3b432b6",
+  "pid": 51999,
+  "node": "v24.18.0",
+  "providers": [
+    {
+      "provider": "postgres16",
+      "engineVersion": "PostgreSQL 16.15 (Debian 16.15-1.pgdg13+2) on aarch64-unknown-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit"
+    },
+    {
+      "provider": "postgres18",
+      "engineVersion": "PostgreSQL 18.6 (Debian 18.6-1.pgdg13+2) on aarch64-unknown-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit"
+    },
+    {
+      "provider": "mysql84",
+      "engineVersion": "8.4.10"
+    },
+    {
+      "provider": "mariadb114",
+      "engineVersion": "11.4.13-MariaDB-ubu2404"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/core/dist/index.js",
+      "sha256": "64a74877641ebde82dab6e2c69577ba9cf246009adfd76f74173502d0b03b916"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/dist/index.js",
+      "sha256": "6bf9c9a8c971afc87de534107af1a935953f89a0607193ed3576e2b3def1909e"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/dist/services/spine-services.js",
+      "sha256": "5e4cb77e848a3cc6c7f9932e5aebb9fee2b48239ede394af8d325726f47546b4"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/dist/context/bounded-context.js",
+      "sha256": "1715b8cd5883a65a8f9f3eb7406cf7bf5cbb17e85c713d3d6170e117de928dd1"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/dist/repository/repository.js",
+      "sha256": "4e7a082913b9f194fa5ed85d98a339ecafbfcdcc6e649d90e126a0e7b0012c12"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/dist/delivery/inbox-storage.js",
+      "sha256": "d5fd363a294b9f837567157e63508833ad7b0778024909d650750ed6e27c0b5d"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/dist/context/entity-inbox.js",
+      "sha256": "7bd568d171c4855012c528ab0d0e20b26dd9e9f1ddf9a680a546d371b8579402"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/dist/context/local-inbox-handoff.js",
+      "sha256": "f1884fde68326f805035fccbb79ba65b72f3f9bda58295c7487bc36569a75d24"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/dist/bus/command-bus.js",
+      "sha256": "8b717681f7ca1f663da07eba97808f4164b65ed2b014e8db65a1ba11482eb5f1"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage/dist/index.js",
+      "sha256": "df614e0461342a5bc52377ed64200cdb3307f669b74cfd0340d587d17b2d55c7"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage/dist/event/event-store.js",
+      "sha256": "2ad4bc09081f978e5078f05dca10fe6c3a6dfdf217159ae8480ca14e75a713f0"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/proto/dist/src/index.js",
+      "sha256": "3b16144d721808f5ed8d458be542064c5323575247cf1b7e6d325b038adaeaa2"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/proto/dist/src/client/index.js",
+      "sha256": "18ada071f62a1b96d7d855b1fa383661976405a161c55b5d18fb4254276b2d06"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/proto/dist/src/delivery/index.js",
+      "sha256": "7fb6120fd8413b0b865e8f176340c43e2fe73128ae1073809d9e9cef7942cbad"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server-blackbox-tests/dist/test-fixtures/project-workflow.js",
+      "sha256": "d0dcb0136f8a8db03a7939b639625020e812b2019194ec20f8ad785a92d2bd52"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server-blackbox-tests/dist/generated/spine/server/testing/project_commands_pb.js",
+      "sha256": "a0b225a08f913b531b56bc9263da79d0d3d40a5c39d5155ca15260fd1442f43b"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server-blackbox-tests/dist/generated/spine/server/testing/project_events_pb.js",
+      "sha256": "21f7d3e70dce28ed3e50ea7422467579bd97e24eb903bf8e9ffac931f851fd39"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server-blackbox-tests/dist/generated/spine/server/testing/project_workflow_pb.js",
+      "sha256": "b5e6d882578f431085d42b84e5fefb9d948880867e34c3c1b83c2b96d36c371b"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage-postgres/dist/index.js",
+      "sha256": "84a8658d25708fd1bf4d2b0fd7b1bd678966fd089b9b8e6908df1b1005ad3139"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage-postgres/dist/postgres/storage-factory.js",
+      "sha256": "1571cd65948d89693d5a66404af1577eef9e12d3deefbd88618742fbe9599983"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage-postgres/dist/index.js",
+      "sha256": "84a8658d25708fd1bf4d2b0fd7b1bd678966fd089b9b8e6908df1b1005ad3139"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage-postgres/dist/postgres/storage-factory.js",
+      "sha256": "1571cd65948d89693d5a66404af1577eef9e12d3deefbd88618742fbe9599983"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage-mysql/dist/index.js",
+      "sha256": "1e344dd9d6163df30cabbcb6dec296cde324a3f74a9d185ea29c40a28862da74"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage-mysql/dist/mysql/storage-factory.js",
+      "sha256": "658df307f07cf8956d7649c7c4d17ee1a08f29a67bdd6e1e9255e5caa4929db3"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage-mysql/dist/index.js",
+      "sha256": "1e344dd9d6163df30cabbcb6dec296cde324a3f74a9d185ea29c40a28862da74"
+    },
+    {
+      "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage-mysql/dist/mysql/storage-factory.js",
+      "sha256": "658df307f07cf8956d7649c7c4d17ee1a08f29a67bdd6e1e9255e5caa4929db3"
+    }
+  ],
+  "profile": {
+    "function": "orchestrator-dispatched mechanical verification",
+    "model": "gpt-6-luna",
+    "reasoning": "low",
+    "runtimeProfileIntrospection": "unavailable; immutable configured dispatch retained"
+  },
+  "results": [
+    {
+      "provider": "postgres16",
+      "engineVersion": "PostgreSQL 16.15 (Debian 16.15-1.pgdg13+2) on aarch64-unknown-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+      "database": "sqlrel_admit_330e41607dac41c7838ca512",
+      "contextName": "ProjectAdmission_1522bc4a013642cd",
+      "inboxTable": "inbox_admit_1522bc4a013642cd",
+      "port": 51313,
+      "pid": 51999,
+      "commandIds": {
+        "control": "03aa9e32-3c83-4ae6-b5b0-ba1da1c4c044",
+        "rejectedAndResubmitted": "2e8fb90c-4b8f-4dc9-a1bf-15ad4ce69a5c"
+      },
+      "projectIds": {
+        "control": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAB",
+        "rejectedAndResubmitted": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAC",
+        "inboxTarget": "eyJlbnRpdHlJZCI6eyJpZCI6eyJvcmdhbml6YXRpb24iOnsiY29kZSI6ImFkbWl0LTMzMGU0MTYwN2RhYyJ9LCJudW1iZXIiOjIsIkB0eXBlIjoidHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0SWQifX0sInR5cGVVcmwiOiJ0eXBlLnNwaW5lLnNlcnZlci50ZXN0aW5nL3NwaW5lLnNlcnZlci50ZXN0aW5nLlByb2plY3RTdGF0ZSJ9"
+      },
+      "commands": {
+        "controlBytesBase64": "CiYKJDAzYWE5ZTMyLTNjODMtNGFlNi1iNWIwLWJhMWRhMWM0YzA0NBJoCjx0eXBlLnNwaW5lLnNlcnZlci50ZXN0aW5nL3NwaW5lLnNlcnZlci50ZXN0aW5nLkNyZWF0ZVByb2plY3QSKAoYChQKEmFkbWl0LTMzMGU0MTYwN2RhYxABEgx3YXJtIGNvbnRyb2waGwoZEhcKFWFkbWlzc2lvbi1wcm9iZS1hY3Rvcg==",
+        "rejectedBytesBase64": "CiYKJDJlOGZiOTBjLTRiOGYtNGRjOS1hMWJmLTE1YWQ0Y2U2OWE1YxJtCjx0eXBlLnNwaW5lLnNlcnZlci50ZXN0aW5nL3NwaW5lLnNlcnZlci50ZXN0aW5nLkNyZWF0ZVByb2plY3QSLQoYChQKEmFkbWl0LTMzMGU0MTYwN2RhYxACEhFmYXVsdGVkIGFkbWlzc2lvbhobChkSFwoVYWRtaXNzaW9uLXByb2JlLWFjdG9y"
+      },
+      "acknowledgement": {
+        "rejectedStatus": "error",
+        "rejectedType": "COMMAND_POST_ERROR",
+        "rejectedMessage": "Command post failed.",
+        "rejectedMessageId": "2e8fb90c-4b8f-4dc9-a1bf-15ad4ce69a5c",
+        "repairedStatus": "ok",
+        "repairedMessageId": "2e8fb90c-4b8f-4dc9-a1bf-15ad4ce69a5c"
+      },
+      "triggerAttempts": 1,
+      "diagnostic": {
+        "message": "Command post failed.",
+        "facts": {
+          "contextName": "ProjectAdmission_1522bc4a013642cd",
+          "commandId": "2e8fb90c-4b8f-4dc9-a1bf-15ad4ce69a5c",
+          "commandType": "type.spine.server.testing/spine.server.testing.CreateProject",
+          "operation": "command.post",
+          "errorName": "Error",
+          "errorCode": "P0001"
+        }
+      },
+      "entries": [
+        {
+          "method": "create",
+          "receiver": "Project",
+          "correlation": "admit-330e41607dac:1",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAB"
+        },
+        {
+          "method": "planning",
+          "receiver": "ProjectPlanning",
+          "correlation": "admit-330e41607dac:1",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAB"
+        },
+        {
+          "method": "staffing",
+          "receiver": "ProjectStaffing",
+          "correlation": "admit-330e41607dac:1",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAB"
+        },
+        {
+          "method": "portfolio",
+          "receiver": "Portfolio",
+          "correlation": "admit-330e41607dac:1",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAB"
+        },
+        {
+          "method": "projection",
+          "receiver": "ProjectProjection",
+          "correlation": "admit-330e41607dac:1",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAB"
+        },
+        {
+          "method": "create",
+          "receiver": "Project",
+          "correlation": "admit-330e41607dac:2",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAC"
+        },
+        {
+          "method": "planning",
+          "receiver": "ProjectPlanning",
+          "correlation": "admit-330e41607dac:2",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAC"
+        },
+        {
+          "method": "staffing",
+          "receiver": "ProjectStaffing",
+          "correlation": "admit-330e41607dac:2",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAC"
+        },
+        {
+          "method": "portfolio",
+          "receiver": "Portfolio",
+          "correlation": "admit-330e41607dac:2",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAC"
+        },
+        {
+          "method": "projection",
+          "receiver": "ProjectProjection",
+          "correlation": "admit-330e41607dac:2",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAC"
+        }
+      ],
+      "handlerEntryCounts": {
+        "control": 5,
+        "rejectedBeforeRetry": 0,
+        "successfulRetry": 5
+      },
+      "states": {
+        "control": {
+          "project": true,
+          "planning": true,
+          "staffing": true,
+          "portfolio": true,
+          "projection": true
+        },
+        "rejectedBeforeRetry": {
+          "project": false,
+          "planning": false,
+          "staffing": false,
+          "portfolio": false,
+          "projection": false
+        },
+        "repaired": {
+          "project": true,
+          "planning": true,
+          "staffing": true,
+          "portfolio": true,
+          "projection": true
+        }
+      },
+      "events": {
+        "control": [
+          {
+            "eventId": "dc332bd9-192b-474a-a23e-05d80faa8262",
+            "organization": "admit-330e41607dac",
+            "number": 1,
+            "sha256": "f8e10363665d37d76ad503212ce64e7eaaac4cde54d8db42823dcdb5930877d7",
+            "bytesBase64": "CiYKJGRjMzMyYmQ5LTE5MmItNDc0YS1hMjNlLTA1ZDgwZmFhODI2MhJ/Cj10eXBlLnNwaW5lLnNlcnZlci50ZXN0aW5nL3NwaW5lLnNlcnZlci50ZXN0aW5nLlByb2plY3RDcmVhdGVkEj4KFAoSYWRtaXQtMzMwZTQxNjA3ZGFjEhgKFAoSYWRtaXQtMzMwZTQxNjA3ZGFjEAEaDHdhcm0gY29udHJvbBqTAgoMCOGpu9YGEOjq0P4BGlQKOHR5cGUuc3BpbmUuc2VydmVyLnRlc3Rpbmcvc3BpbmUuc2VydmVyLnRlc3RpbmcuUHJvamVjdElkEhgKFAoSYWRtaXQtMzMwZTQxNjA3ZGFjEAEiAHKqAQqMAQpMCiJ0eXBlLnNwaW5lLmlvL3NwaW5lLmNvcmUuQ29tbWFuZElkEiYKJDAzYWE5ZTMyLTNjODMtNGFlNi1iNWIwLWJhMWRhMWM0YzA0NBI8dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5DcmVhdGVQcm9qZWN0GhkSFwoVYWRtaXNzaW9uLXByb2JlLWFjdG9y"
+          }
+        ],
+        "rejectedBeforeRetry": [],
+        "repaired": [
+          {
+            "eventId": "5aa25853-f631-4d4e-a961-ec8040579d8c",
+            "organization": "admit-330e41607dac",
+            "number": 2,
+            "sha256": "5db3e0e436f316565fa93b09a19e6db0ca1c0d0e6feeb9ab6189994f3067b1f3",
+            "bytesBase64": "CiYKJDVhYTI1ODUzLWY2MzEtNGQ0ZS1hOTYxLWVjODA0MDU3OWQ4YxKEAQo9dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0Q3JlYXRlZBJDChQKEmFkbWl0LTMzMGU0MTYwN2RhYxIYChQKEmFkbWl0LTMzMGU0MTYwN2RhYxACGhFmYXVsdGVkIGFkbWlzc2lvbhqTAgoMCOGpu9YGEKiKhfwCGlQKOHR5cGUuc3BpbmUuc2VydmVyLnRlc3Rpbmcvc3BpbmUuc2VydmVyLnRlc3RpbmcuUHJvamVjdElkEhgKFAoSYWRtaXQtMzMwZTQxNjA3ZGFjEAIiAHKqAQqMAQpMCiJ0eXBlLnNwaW5lLmlvL3NwaW5lLmNvcmUuQ29tbWFuZElkEiYKJDJlOGZiOTBjLTRiOGYtNGRjOS1hMWJmLTE1YWQ0Y2U2OWE1YxI8dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5DcmVhdGVQcm9qZWN0GhkSFwoVYWRtaXNzaW9uLXByb2JlLWFjdG9y"
+          }
+        ]
+      },
+      "inboxTargetRowsAfterRetry": 1,
+      "inboxTargetRowsAfterFault": 0,
+      "cleanup": {
+        "errors": [],
+        "databaseDropped": true
+      },
+      "status": "PASS"
+    },
+    {
+      "provider": "postgres18",
+      "engineVersion": "PostgreSQL 18.6 (Debian 18.6-1.pgdg13+2) on aarch64-unknown-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+      "database": "sqlrel_admit_330e41607dac41c7838ca512",
+      "contextName": "ProjectAdmission_b01fa51ee15949f0",
+      "inboxTable": "inbox_admit_b01fa51ee15949f0",
+      "port": 51325,
+      "pid": 51999,
+      "commandIds": {
+        "control": "ec67e605-4812-4988-af9b-11aadd1e2f7d",
+        "rejectedAndResubmitted": "5be1dda4-09af-4e31-8dc4-aa700579a516"
+      },
+      "projectIds": {
+        "control": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAB",
+        "rejectedAndResubmitted": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAC",
+        "inboxTarget": "eyJlbnRpdHlJZCI6eyJpZCI6eyJvcmdhbml6YXRpb24iOnsiY29kZSI6ImFkbWl0LTMzMGU0MTYwN2RhYyJ9LCJudW1iZXIiOjIsIkB0eXBlIjoidHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0SWQifX0sInR5cGVVcmwiOiJ0eXBlLnNwaW5lLnNlcnZlci50ZXN0aW5nL3NwaW5lLnNlcnZlci50ZXN0aW5nLlByb2plY3RTdGF0ZSJ9"
+      },
+      "commands": {
+        "controlBytesBase64": "CiYKJGVjNjdlNjA1LTQ4MTItNDk4OC1hZjliLTExYWFkZDFlMmY3ZBJoCjx0eXBlLnNwaW5lLnNlcnZlci50ZXN0aW5nL3NwaW5lLnNlcnZlci50ZXN0aW5nLkNyZWF0ZVByb2plY3QSKAoYChQKEmFkbWl0LTMzMGU0MTYwN2RhYxABEgx3YXJtIGNvbnRyb2waGwoZEhcKFWFkbWlzc2lvbi1wcm9iZS1hY3Rvcg==",
+        "rejectedBytesBase64": "CiYKJDViZTFkZGE0LTA5YWYtNGUzMS04ZGM0LWFhNzAwNTc5YTUxNhJtCjx0eXBlLnNwaW5lLnNlcnZlci50ZXN0aW5nL3NwaW5lLnNlcnZlci50ZXN0aW5nLkNyZWF0ZVByb2plY3QSLQoYChQKEmFkbWl0LTMzMGU0MTYwN2RhYxACEhFmYXVsdGVkIGFkbWlzc2lvbhobChkSFwoVYWRtaXNzaW9uLXByb2JlLWFjdG9y"
+      },
+      "acknowledgement": {
+        "rejectedStatus": "error",
+        "rejectedType": "COMMAND_POST_ERROR",
+        "rejectedMessage": "Command post failed.",
+        "rejectedMessageId": "5be1dda4-09af-4e31-8dc4-aa700579a516",
+        "repairedStatus": "ok",
+        "repairedMessageId": "5be1dda4-09af-4e31-8dc4-aa700579a516"
+      },
+      "triggerAttempts": 1,
+      "diagnostic": {
+        "message": "Command post failed.",
+        "facts": {
+          "contextName": "ProjectAdmission_b01fa51ee15949f0",
+          "commandId": "5be1dda4-09af-4e31-8dc4-aa700579a516",
+          "commandType": "type.spine.server.testing/spine.server.testing.CreateProject",
+          "operation": "command.post",
+          "errorName": "Error",
+          "errorCode": "P0001"
+        }
+      },
+      "entries": [
+        {
+          "method": "create",
+          "receiver": "Project",
+          "correlation": "admit-330e41607dac:1",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAB"
+        },
+        {
+          "method": "planning",
+          "receiver": "ProjectPlanning",
+          "correlation": "admit-330e41607dac:1",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAB"
+        },
+        {
+          "method": "staffing",
+          "receiver": "ProjectStaffing",
+          "correlation": "admit-330e41607dac:1",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAB"
+        },
+        {
+          "method": "portfolio",
+          "receiver": "Portfolio",
+          "correlation": "admit-330e41607dac:1",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAB"
+        },
+        {
+          "method": "projection",
+          "receiver": "ProjectProjection",
+          "correlation": "admit-330e41607dac:1",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAB"
+        },
+        {
+          "method": "create",
+          "receiver": "Project",
+          "correlation": "admit-330e41607dac:2",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAC"
+        },
+        {
+          "method": "planning",
+          "receiver": "ProjectPlanning",
+          "correlation": "admit-330e41607dac:2",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAC"
+        },
+        {
+          "method": "staffing",
+          "receiver": "ProjectStaffing",
+          "correlation": "admit-330e41607dac:2",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAC"
+        },
+        {
+          "method": "portfolio",
+          "receiver": "Portfolio",
+          "correlation": "admit-330e41607dac:2",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAC"
+        },
+        {
+          "method": "projection",
+          "receiver": "ProjectProjection",
+          "correlation": "admit-330e41607dac:2",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAC"
+        }
+      ],
+      "handlerEntryCounts": {
+        "control": 5,
+        "rejectedBeforeRetry": 0,
+        "successfulRetry": 5
+      },
+      "states": {
+        "control": {
+          "project": true,
+          "planning": true,
+          "staffing": true,
+          "portfolio": true,
+          "projection": true
+        },
+        "rejectedBeforeRetry": {
+          "project": false,
+          "planning": false,
+          "staffing": false,
+          "portfolio": false,
+          "projection": false
+        },
+        "repaired": {
+          "project": true,
+          "planning": true,
+          "staffing": true,
+          "portfolio": true,
+          "projection": true
+        }
+      },
+      "events": {
+        "control": [
+          {
+            "eventId": "a38888d4-ea33-4a6a-b263-3fa7582ee46b",
+            "organization": "admit-330e41607dac",
+            "number": 1,
+            "sha256": "bf87de9b7187ffbfb1ef8b9676c454a3b550b82c7934d38d30f81120105d2e80",
+            "bytesBase64": "CiYKJGEzODg4OGQ0LWVhMzMtNGE2YS1iMjYzLTNmYTc1ODJlZTQ2YhJ/Cj10eXBlLnNwaW5lLnNlcnZlci50ZXN0aW5nL3NwaW5lLnNlcnZlci50ZXN0aW5nLlByb2plY3RDcmVhdGVkEj4KFAoSYWRtaXQtMzMwZTQxNjA3ZGFjEhgKFAoSYWRtaXQtMzMwZTQxNjA3ZGFjEAEaDHdhcm0gY29udHJvbBqSAgoLCOKpu9YGEOi+ijwaVAo4dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0SWQSGAoUChJhZG1pdC0zMzBlNDE2MDdkYWMQASIAcqoBCowBCkwKInR5cGUuc3BpbmUuaW8vc3BpbmUuY29yZS5Db21tYW5kSWQSJgokZWM2N2U2MDUtNDgxMi00OTg4LWFmOWItMTFhYWRkMWUyZjdkEjx0eXBlLnNwaW5lLnNlcnZlci50ZXN0aW5nL3NwaW5lLnNlcnZlci50ZXN0aW5nLkNyZWF0ZVByb2plY3QaGRIXChVhZG1pc3Npb24tcHJvYmUtYWN0b3I="
+          }
+        ],
+        "rejectedBeforeRetry": [],
+        "repaired": [
+          {
+            "eventId": "4af69740-dc79-44fc-ab9e-d201ec8998a7",
+            "organization": "admit-330e41607dac",
+            "number": 2,
+            "sha256": "7296aef684ea3610d5c8fdb1af439bd77776e9a61123ed4bf6f0e82b0b2f0bd1",
+            "bytesBase64": "CiYKJDRhZjY5NzQwLWRjNzktNDRmYy1hYjllLWQyMDFlYzg5OThhNxKEAQo9dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0Q3JlYXRlZBJDChQKEmFkbWl0LTMzMGU0MTYwN2RhYxIYChQKEmFkbWl0LTMzMGU0MTYwN2RhYxACGhFmYXVsdGVkIGFkbWlzc2lvbhqTAgoMCOKpu9YGEKjdmf0BGlQKOHR5cGUuc3BpbmUuc2VydmVyLnRlc3Rpbmcvc3BpbmUuc2VydmVyLnRlc3RpbmcuUHJvamVjdElkEhgKFAoSYWRtaXQtMzMwZTQxNjA3ZGFjEAIiAHKqAQqMAQpMCiJ0eXBlLnNwaW5lLmlvL3NwaW5lLmNvcmUuQ29tbWFuZElkEiYKJDViZTFkZGE0LTA5YWYtNGUzMS04ZGM0LWFhNzAwNTc5YTUxNhI8dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5DcmVhdGVQcm9qZWN0GhkSFwoVYWRtaXNzaW9uLXByb2JlLWFjdG9y"
+          }
+        ]
+      },
+      "inboxTargetRowsAfterRetry": 1,
+      "inboxTargetRowsAfterFault": 0,
+      "cleanup": {
+        "errors": [],
+        "databaseDropped": true
+      },
+      "status": "PASS"
+    },
+    {
+      "provider": "mysql84",
+      "engineVersion": "8.4.10",
+      "database": "sqlrel_admit_330e41607dac41c7838ca512",
+      "contextName": "ProjectAdmission_27a6b0af34ce4e43",
+      "inboxTable": "inbox_admit_27a6b0af34ce4e43",
+      "port": 51340,
+      "pid": 51999,
+      "commandIds": {
+        "control": "ee94425a-8459-49be-8844-1ceabdf15483",
+        "rejectedAndResubmitted": "17383ff4-43a1-460e-98da-aa0e142b0d93"
+      },
+      "projectIds": {
+        "control": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAB",
+        "rejectedAndResubmitted": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAC",
+        "inboxTarget": "eyJlbnRpdHlJZCI6eyJpZCI6eyJvcmdhbml6YXRpb24iOnsiY29kZSI6ImFkbWl0LTMzMGU0MTYwN2RhYyJ9LCJudW1iZXIiOjIsIkB0eXBlIjoidHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0SWQifX0sInR5cGVVcmwiOiJ0eXBlLnNwaW5lLnNlcnZlci50ZXN0aW5nL3NwaW5lLnNlcnZlci50ZXN0aW5nLlByb2plY3RTdGF0ZSJ9"
+      },
+      "commands": {
+        "controlBytesBase64": "CiYKJGVlOTQ0MjVhLTg0NTktNDliZS04ODQ0LTFjZWFiZGYxNTQ4MxJoCjx0eXBlLnNwaW5lLnNlcnZlci50ZXN0aW5nL3NwaW5lLnNlcnZlci50ZXN0aW5nLkNyZWF0ZVByb2plY3QSKAoYChQKEmFkbWl0LTMzMGU0MTYwN2RhYxABEgx3YXJtIGNvbnRyb2waGwoZEhcKFWFkbWlzc2lvbi1wcm9iZS1hY3Rvcg==",
+        "rejectedBytesBase64": "CiYKJDE3MzgzZmY0LTQzYTEtNDYwZS05OGRhLWFhMGUxNDJiMGQ5MxJtCjx0eXBlLnNwaW5lLnNlcnZlci50ZXN0aW5nL3NwaW5lLnNlcnZlci50ZXN0aW5nLkNyZWF0ZVByb2plY3QSLQoYChQKEmFkbWl0LTMzMGU0MTYwN2RhYxACEhFmYXVsdGVkIGFkbWlzc2lvbhobChkSFwoVYWRtaXNzaW9uLXByb2JlLWFjdG9y"
+      },
+      "acknowledgement": {
+        "rejectedStatus": "error",
+        "rejectedType": "COMMAND_POST_ERROR",
+        "rejectedMessage": "Command post failed.",
+        "rejectedMessageId": "17383ff4-43a1-460e-98da-aa0e142b0d93",
+        "repairedStatus": "ok",
+        "repairedMessageId": "17383ff4-43a1-460e-98da-aa0e142b0d93"
+      },
+      "triggerAttempts": 1,
+      "diagnostic": {
+        "message": "Command post failed.",
+        "facts": {
+          "contextName": "ProjectAdmission_27a6b0af34ce4e43",
+          "commandId": "17383ff4-43a1-460e-98da-aa0e142b0d93",
+          "commandType": "type.spine.server.testing/spine.server.testing.CreateProject",
+          "operation": "command.post",
+          "errorName": "Error",
+          "errorCode": "ER_SIGNAL_EXCEPTION"
+        }
+      },
+      "entries": [
+        {
+          "method": "create",
+          "receiver": "Project",
+          "correlation": "admit-330e41607dac:1",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAB"
+        },
+        {
+          "method": "planning",
+          "receiver": "ProjectPlanning",
+          "correlation": "admit-330e41607dac:1",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAB"
+        },
+        {
+          "method": "staffing",
+          "receiver": "ProjectStaffing",
+          "correlation": "admit-330e41607dac:1",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAB"
+        },
+        {
+          "method": "portfolio",
+          "receiver": "Portfolio",
+          "correlation": "admit-330e41607dac:1",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAB"
+        },
+        {
+          "method": "projection",
+          "receiver": "ProjectProjection",
+          "correlation": "admit-330e41607dac:1",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAB"
+        },
+        {
+          "method": "create",
+          "receiver": "Project",
+          "correlation": "admit-330e41607dac:2",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAC"
+        },
+        {
+          "method": "planning",
+          "receiver": "ProjectPlanning",
+          "correlation": "admit-330e41607dac:2",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAC"
+        },
+        {
+          "method": "staffing",
+          "receiver": "ProjectStaffing",
+          "correlation": "admit-330e41607dac:2",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAC"
+        },
+        {
+          "method": "portfolio",
+          "receiver": "Portfolio",
+          "correlation": "admit-330e41607dac:2",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAC"
+        },
+        {
+          "method": "projection",
+          "receiver": "ProjectProjection",
+          "correlation": "admit-330e41607dac:2",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAC"
+        }
+      ],
+      "handlerEntryCounts": {
+        "control": 5,
+        "rejectedBeforeRetry": 0,
+        "successfulRetry": 5
+      },
+      "states": {
+        "control": {
+          "project": true,
+          "planning": true,
+          "staffing": true,
+          "portfolio": true,
+          "projection": true
+        },
+        "rejectedBeforeRetry": {
+          "project": false,
+          "planning": false,
+          "staffing": false,
+          "portfolio": false,
+          "projection": false
+        },
+        "repaired": {
+          "project": true,
+          "planning": true,
+          "staffing": true,
+          "portfolio": true,
+          "projection": true
+        }
+      },
+      "events": {
+        "control": [
+          {
+            "eventId": "4be4d4ba-d201-4d4d-9fa1-97008ed14725",
+            "organization": "admit-330e41607dac",
+            "number": 1,
+            "sha256": "85ca2536038e5822f7511de207b4ec18cccf723cc439fba850c0bebe89ad1ce3",
+            "bytesBase64": "CiYKJDRiZTRkNGJhLWQyMDEtNGQ0ZC05ZmExLTk3MDA4ZWQxNDcyNRJ/Cj10eXBlLnNwaW5lLnNlcnZlci50ZXN0aW5nL3NwaW5lLnNlcnZlci50ZXN0aW5nLlByb2plY3RDcmVhdGVkEj4KFAoSYWRtaXQtMzMwZTQxNjA3ZGFjEhgKFAoSYWRtaXQtMzMwZTQxNjA3ZGFjEAEaDHdhcm0gY29udHJvbBqSAgoLCOOpu9YGEKjAxhMaVAo4dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0SWQSGAoUChJhZG1pdC0zMzBlNDE2MDdkYWMQASIAcqoBCowBCkwKInR5cGUuc3BpbmUuaW8vc3BpbmUuY29yZS5Db21tYW5kSWQSJgokZWU5NDQyNWEtODQ1OS00OWJlLTg4NDQtMWNlYWJkZjE1NDgzEjx0eXBlLnNwaW5lLnNlcnZlci50ZXN0aW5nL3NwaW5lLnNlcnZlci50ZXN0aW5nLkNyZWF0ZVByb2plY3QaGRIXChVhZG1pc3Npb24tcHJvYmUtYWN0b3I="
+          }
+        ],
+        "rejectedBeforeRetry": [],
+        "repaired": [
+          {
+            "eventId": "d7a359a4-39a8-492a-91f8-07a1232b00df",
+            "organization": "admit-330e41607dac",
+            "number": 2,
+            "sha256": "9ab5ad741ba323d457d1a02780779ebd34b80e70217a3dcb39582120824d7a5f",
+            "bytesBase64": "CiYKJGQ3YTM1OWE0LTM5YTgtNDkyYS05MWY4LTA3YTEyMzJiMDBkZhKEAQo9dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0Q3JlYXRlZBJDChQKEmFkbWl0LTMzMGU0MTYwN2RhYxIYChQKEmFkbWl0LTMzMGU0MTYwN2RhYxACGhFmYXVsdGVkIGFkbWlzc2lvbhqTAgoMCOOpu9YGEKjgkawBGlQKOHR5cGUuc3BpbmUuc2VydmVyLnRlc3Rpbmcvc3BpbmUuc2VydmVyLnRlc3RpbmcuUHJvamVjdElkEhgKFAoSYWRtaXQtMzMwZTQxNjA3ZGFjEAIiAHKqAQqMAQpMCiJ0eXBlLnNwaW5lLmlvL3NwaW5lLmNvcmUuQ29tbWFuZElkEiYKJDE3MzgzZmY0LTQzYTEtNDYwZS05OGRhLWFhMGUxNDJiMGQ5MxI8dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5DcmVhdGVQcm9qZWN0GhkSFwoVYWRtaXNzaW9uLXByb2JlLWFjdG9y"
+          }
+        ]
+      },
+      "inboxTargetRowsAfterRetry": 1,
+      "inboxTargetRowsAfterFault": 0,
+      "cleanup": {
+        "errors": [],
+        "databaseDropped": true
+      },
+      "status": "PASS"
+    },
+    {
+      "provider": "mariadb114",
+      "engineVersion": "11.4.13-MariaDB-ubu2404",
+      "database": "sqlrel_admit_330e41607dac41c7838ca512",
+      "contextName": "ProjectAdmission_182e32c8d1864f51",
+      "inboxTable": "inbox_admit_182e32c8d1864f51",
+      "port": 51350,
+      "pid": 51999,
+      "commandIds": {
+        "control": "8c94a069-f2c1-4d25-ac38-d84a37d95445",
+        "rejectedAndResubmitted": "c3c3c265-df77-427b-baf8-c239ec04dac6"
+      },
+      "projectIds": {
+        "control": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAB",
+        "rejectedAndResubmitted": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAC",
+        "inboxTarget": "eyJlbnRpdHlJZCI6eyJpZCI6eyJvcmdhbml6YXRpb24iOnsiY29kZSI6ImFkbWl0LTMzMGU0MTYwN2RhYyJ9LCJudW1iZXIiOjIsIkB0eXBlIjoidHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0SWQifX0sInR5cGVVcmwiOiJ0eXBlLnNwaW5lLnNlcnZlci50ZXN0aW5nL3NwaW5lLnNlcnZlci50ZXN0aW5nLlByb2plY3RTdGF0ZSJ9"
+      },
+      "commands": {
+        "controlBytesBase64": "CiYKJDhjOTRhMDY5LWYyYzEtNGQyNS1hYzM4LWQ4NGEzN2Q5NTQ0NRJoCjx0eXBlLnNwaW5lLnNlcnZlci50ZXN0aW5nL3NwaW5lLnNlcnZlci50ZXN0aW5nLkNyZWF0ZVByb2plY3QSKAoYChQKEmFkbWl0LTMzMGU0MTYwN2RhYxABEgx3YXJtIGNvbnRyb2waGwoZEhcKFWFkbWlzc2lvbi1wcm9iZS1hY3Rvcg==",
+        "rejectedBytesBase64": "CiYKJGMzYzNjMjY1LWRmNzctNDI3Yi1iYWY4LWMyMzllYzA0ZGFjNhJtCjx0eXBlLnNwaW5lLnNlcnZlci50ZXN0aW5nL3NwaW5lLnNlcnZlci50ZXN0aW5nLkNyZWF0ZVByb2plY3QSLQoYChQKEmFkbWl0LTMzMGU0MTYwN2RhYxACEhFmYXVsdGVkIGFkbWlzc2lvbhobChkSFwoVYWRtaXNzaW9uLXByb2JlLWFjdG9y"
+      },
+      "acknowledgement": {
+        "rejectedStatus": "error",
+        "rejectedType": "COMMAND_POST_ERROR",
+        "rejectedMessage": "Command post failed.",
+        "rejectedMessageId": "c3c3c265-df77-427b-baf8-c239ec04dac6",
+        "repairedStatus": "ok",
+        "repairedMessageId": "c3c3c265-df77-427b-baf8-c239ec04dac6"
+      },
+      "triggerAttempts": 1,
+      "diagnostic": {
+        "message": "Command post failed.",
+        "facts": {
+          "contextName": "ProjectAdmission_182e32c8d1864f51",
+          "commandId": "c3c3c265-df77-427b-baf8-c239ec04dac6",
+          "commandType": "type.spine.server.testing/spine.server.testing.CreateProject",
+          "operation": "command.post",
+          "errorName": "Error",
+          "errorCode": "ER_SIGNAL_EXCEPTION"
+        }
+      },
+      "entries": [
+        {
+          "method": "create",
+          "receiver": "Project",
+          "correlation": "admit-330e41607dac:1",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAB"
+        },
+        {
+          "method": "planning",
+          "receiver": "ProjectPlanning",
+          "correlation": "admit-330e41607dac:1",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAB"
+        },
+        {
+          "method": "staffing",
+          "receiver": "ProjectStaffing",
+          "correlation": "admit-330e41607dac:1",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAB"
+        },
+        {
+          "method": "portfolio",
+          "receiver": "Portfolio",
+          "correlation": "admit-330e41607dac:1",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAB"
+        },
+        {
+          "method": "projection",
+          "receiver": "ProjectProjection",
+          "correlation": "admit-330e41607dac:1",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAB"
+        },
+        {
+          "method": "create",
+          "receiver": "Project",
+          "correlation": "admit-330e41607dac:2",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAC"
+        },
+        {
+          "method": "planning",
+          "receiver": "ProjectPlanning",
+          "correlation": "admit-330e41607dac:2",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAC"
+        },
+        {
+          "method": "staffing",
+          "receiver": "ProjectStaffing",
+          "correlation": "admit-330e41607dac:2",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAC"
+        },
+        {
+          "method": "portfolio",
+          "receiver": "Portfolio",
+          "correlation": "admit-330e41607dac:2",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAC"
+        },
+        {
+          "method": "projection",
+          "receiver": "ProjectProjection",
+          "correlation": "admit-330e41607dac:2",
+          "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+          "recipientIdBase64": "ChQKEmFkbWl0LTMzMGU0MTYwN2RhYxAC"
+        }
+      ],
+      "handlerEntryCounts": {
+        "control": 5,
+        "rejectedBeforeRetry": 0,
+        "successfulRetry": 5
+      },
+      "states": {
+        "control": {
+          "project": true,
+          "planning": true,
+          "staffing": true,
+          "portfolio": true,
+          "projection": true
+        },
+        "rejectedBeforeRetry": {
+          "project": false,
+          "planning": false,
+          "staffing": false,
+          "portfolio": false,
+          "projection": false
+        },
+        "repaired": {
+          "project": true,
+          "planning": true,
+          "staffing": true,
+          "portfolio": true,
+          "projection": true
+        }
+      },
+      "events": {
+        "control": [
+          {
+            "eventId": "c4c65151-ad9e-454f-9b98-24e4455aadc3",
+            "organization": "admit-330e41607dac",
+            "number": 1,
+            "sha256": "e7e03a1a5127bacacab8aefa35576b8a380e4a2586be6581a12be5204c3b265d",
+            "bytesBase64": "CiYKJGM0YzY1MTUxLWFkOWUtNDU0Zi05Yjk4LTI0ZTQ0NTVhYWRjMxJ/Cj10eXBlLnNwaW5lLnNlcnZlci50ZXN0aW5nL3NwaW5lLnNlcnZlci50ZXN0aW5nLlByb2plY3RDcmVhdGVkEj4KFAoSYWRtaXQtMzMwZTQxNjA3ZGFjEhgKFAoSYWRtaXQtMzMwZTQxNjA3ZGFjEAEaDHdhcm0gY29udHJvbBqTAgoMCOOpu9YGENDctpcCGlQKOHR5cGUuc3BpbmUuc2VydmVyLnRlc3Rpbmcvc3BpbmUuc2VydmVyLnRlc3RpbmcuUHJvamVjdElkEhgKFAoSYWRtaXQtMzMwZTQxNjA3ZGFjEAEiAHKqAQqMAQpMCiJ0eXBlLnNwaW5lLmlvL3NwaW5lLmNvcmUuQ29tbWFuZElkEiYKJDhjOTRhMDY5LWYyYzEtNGQyNS1hYzM4LWQ4NGEzN2Q5NTQ0NRI8dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5DcmVhdGVQcm9qZWN0GhkSFwoVYWRtaXNzaW9uLXByb2JlLWFjdG9y"
+          }
+        ],
+        "rejectedBeforeRetry": [],
+        "repaired": [
+          {
+            "eventId": "35f6d947-0251-4dd4-bf4c-26a9f1832a23",
+            "organization": "admit-330e41607dac",
+            "number": 2,
+            "sha256": "5af034401623a1797bce701229df896338373eb29fb0bc3b27871ea194959a55",
+            "bytesBase64": "CiYKJDM1ZjZkOTQ3LTAyNTEtNGRkNC1iZjRjLTI2YTlmMTgzMmEyMxKEAQo9dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0Q3JlYXRlZBJDChQKEmFkbWl0LTMzMGU0MTYwN2RhYxIYChQKEmFkbWl0LTMzMGU0MTYwN2RhYxACGhFmYXVsdGVkIGFkbWlzc2lvbhqTAgoMCOOpu9YGEOiUu9QCGlQKOHR5cGUuc3BpbmUuc2VydmVyLnRlc3Rpbmcvc3BpbmUuc2VydmVyLnRlc3RpbmcuUHJvamVjdElkEhgKFAoSYWRtaXQtMzMwZTQxNjA3ZGFjEAIiAHKqAQqMAQpMCiJ0eXBlLnNwaW5lLmlvL3NwaW5lLmNvcmUuQ29tbWFuZElkEiYKJGMzYzNjMjY1LWRmNzctNDI3Yi1iYWY4LWMyMzllYzA0ZGFjNhI8dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5DcmVhdGVQcm9qZWN0GhkSFwoVYWRtaXNzaW9uLXByb2JlLWFjdG9y"
+          }
+        ]
+      },
+      "inboxTargetRowsAfterRetry": 1,
+      "inboxTargetRowsAfterFault": 0,
+      "cleanup": {
+        "errors": [],
+        "databaseDropped": true
+      },
+      "status": "PASS"
+    }
+  ],
+  "status": "PASS"
+}

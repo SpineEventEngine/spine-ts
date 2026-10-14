@@ -1,0 +1,13 @@
+[
+  {
+    "message": "Command post failed.",
+    "facts": {
+      "contextName": "ProjectAdmission_0b28eaa65ae34a25",
+      "commandId": "3655d20a-18a3-489a-a34f-787ec2c4eb8d",
+      "commandType": "type.spine.server.testing/spine.server.testing.CreateProject",
+      "operation": "command.post",
+      "errorName": "Error",
+      "errorCode": "P0001"
+    }
+  }
+]

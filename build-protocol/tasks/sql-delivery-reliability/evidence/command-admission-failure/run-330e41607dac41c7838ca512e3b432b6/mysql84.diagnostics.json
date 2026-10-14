@@ -1,0 +1,13 @@
+[
+  {
+    "message": "Command post failed.",
+    "facts": {
+      "contextName": "ProjectAdmission_27a6b0af34ce4e43",
+      "commandId": "17383ff4-43a1-460e-98da-aa0e142b0d93",
+      "commandType": "type.spine.server.testing/spine.server.testing.CreateProject",
+      "operation": "command.post",
+      "errorName": "Error",
+      "errorCode": "ER_SIGNAL_EXCEPTION"
+    }
+  }
+]
