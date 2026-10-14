@@ -15,100 +15,12 @@ future `master` merge triggers NPM publication and therefore carries a new
 common workspace version under D-0115.
 
 Current work: [Signal-driven Agent entities](planning/agent-entities.md),
-on `agent-entities`, based on official master `658da1cdd`. Anthropic model
-support is included in the first snapshot. PR #18 now includes implementation of the
-human-approved [Release Notes Studio desktop example](planning/release-notes-studio.md).
-On 12 October the human approved a new dashboard/wizard/Markdown-editor design.
-The redesigned implementation received three review-and-fix rounds, but live use
-found additional defects. Actual ChatGPT sign-in and model selection now work.
-A native generation retry confirmed that the example's artificial32KiB response
-ceiling interrupted a successful HTTP200 provider stream. The checkpoint removes
-that ceiling and permits absent model/invocation bounds through runtime and Proto
-validation. Five affected suites255tests pass, including complete Agent generation
-and staging; the example builds/packages successfully. Native use on 13 October confirmed real ChatGPT generation, Markdown editing,
-Preview, export, dashboard reopening, sign-out and native close in the checkpoint.
-The latest reviewed source was then built and packaged; sign-in and real
-GPT-6-Luna generation succeeded there too. Reusable subscription-session code now
-lives in the adapter. Focused checks passed 257 adapter/authentication tests and
-270 optional-limit, MCP, replay and history tests, plus 85 review-correction tests.
-Protobuf lint and generated-output checks pass. Final security review identified
-quadratic MCP response processing and missed synchronous cancellation; both were
-corrected, 222 focused tests passed and scoped independent re-review is clean.
-The human rejected the oversized UI. The desktop-scale correction now passes
-native checks at 1200x820 and 720x720; model dropdowns, generation, editing and
-Preview work. The final smaller package is open for human review. Framework
-versus example responsibilities have been reported. The human also reported slow
-model selection. The selected value now updates immediately while registration
-finishes; rapid changes prepare only the latest queued choice. Focused checks,
-independent review and the packaged native check pass. The app remains open for
-human review. The final full report passes 6,273 tests with branch coverage90.07%
-and all other coverage thresholds satisfied. Additional behavior tests cover
-model/session failures, recorded-response validation, history and Studio
-recovery. Test synchronization and selection-helper review findings are fixed
-and independently accepted. Cheap gates, both dependency audits,21 archive
-consumers and offline publication trials pass. The task record distinguishes
-the completed test report from a post-run shell-wrapper error.
-Commit `fedbbe8fe` passes both CI verify and trial. The human subsequently
-requires Studio to discard all app session data, including account grants, on
-close. The old credential file has been removed. An example-only correction
-replaces disk credentials with memory, removes saved-account UI, and gives the
-renderer a nonpersistent session. Focused review, build/package and native
-close/reopen checks pass. The next correction explains pending and failed Git
-comparisons beside the wizard fields; the reported base-1x v1.8.0/master range
-fails the existing ancestor requirement. Current native user session stays open
-while this feedback correction is built and reviewed. All40 focused comparison
-tests, scoped mechanical checks and independent lifecycle review pass. The
-converged source is packaged separately to preserve the running app session.
-The human then rejected the ancestor-only Git policy. Direct selected-tree
-comparisons now accept diverged/reverse/unrelated histories, with typed net
-citations and a scoped MCP patch tool. Real base-1x v1.8.0/master comparison
-succeeds; focused checks and independent contract/reliability review pass.
-The sole TSDoc finding is corrected. Isolated packaging succeeded. Canonical
-task gates pass; its full run passed6286 tests and found one stale three-tool
-inventory assertion. That test is corrected and its two-case suite passes,
-including scoped patch access and denial. The comparison correction is ready
-to push; the open native session was preserved. The previous push failed CI cleanup for long wizard functions; those
-functions have been refactored and the cleanup gate now passes locally.
-The live model-call and UI-inspection blockers are resolved.
-Current evidence and acceptance criteria are in the Agent task record.
-The ChatGPT subscription adapter checkpoint is implemented, reviewed, and pushed
-(D-0132). Desktop sign-in and protected credentials are implemented and reviewed (D-0133);
-production history/execution reads are implemented and reviewed for domain integration
-(D-0134). Append-only deployment registration and accepted-signal model selection
-are implemented and reviewed as domain-integration prerequisites (D-0135). The first version uses existing in-memory storage; persistent domain
-storage is deferred. Desktop UI polish and three fresh independent review-and-fix
-rounds for the earlier UI are complete. Before the redesign, local release
-qualification passed: 6,222 tests,
-all coverage thresholds, both dependency audits, all 21 external package
-consumers and offline publication trials, and six Electron checks. PR #18
-records the branch's Build/Security results. Live ChatGPT subscription interaction
-was not exercised by the controlled desktop/provider checks.
-The three additional Anthropic
-review-and-fix rounds and the two further requested rounds are complete, each
-with a fresh reviewer and no inherited conversation or memory. The signed-thinking continuation defect is
-fixed: ordered provider content is recorded and restored for tool and corrective
-requests, including replay (D-0131). All accepted findings, including the
-additional replay coverage and function-size corrections, are closed. Final
-security and specialist review dispositions for that earlier Agent/Anthropic
-scope are complete. Further corrections
-preserve measured bytes for bounded failed responses and keep interrupted tool
-input consistent across recorded projections and replay.
-
-Full release verification passes at code checkpoint `5c3d76a9b`: 5,944 tests
-passed and one skipped. Coverage: statements 93.78%, branches 90.01%, functions
-95.62%, lines 95.55%. Both dependency audits pass. All 21 package archives pass
-strict external consumer checks and the offline publication trial. The branch
-uses `2.0.0-snapshot.23`; no packages were published. The human-created
-[PR #18](https://github.com/SpineEventEngine/spine-ts/pull/18) is the integration
-destination; the cited release run predates the desktop example.
-
-The feature includes the Spine AI facade, mandatory indexed history, durable
-signal-triggered execution, Vercel/Ax integration, MCP and BlackBox support.
-History uses full occurrence timestamps and existing category/record IDs for
-ties. Native recovery checks passed for PostgreSQL, MySQL and Datastore, with
-additional SQL version checks recorded in the task log. Temporary Agent test
-containers were removed. General physical Entity deletion remains a separate
-deferred task. The feature worktree remains available for human review.
+implemented on `agent-entities` in
+[PR #18](https://github.com/SpineEventEngine/spine-ts/pull/18).
+The feature includes the AI facade, provider adapters, MCP, repository-indexed
+history, recovery, BlackBox support, and the
+[Release Notes Studio example](../examples/release-notes/README.md).
+General physical Entity deletion remains a separate deferred task.
 
 Previous completed work: [Process Manager queries across Bounded Contexts](planning/cross-context-queries.md)
 on `cross-context-queries`, based on official master `2324311be8`. Preserve the

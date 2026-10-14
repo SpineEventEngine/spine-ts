@@ -6030,7 +6030,7 @@ See [the Time task](planning/spine-time-task.md) and
 
 ## D-0129: Bounded Tenant Paging For Agent Recovery
 
-Status: Implemented; independent review and full release verification complete
+Status: Implemented
 
 Date: 2026-10-08
 
@@ -6047,15 +6047,9 @@ arrivals, and detaches from discovery waits on shutdown. Late results cannot
 submit work. These guarantees do not promise cancellation of a native request
 already issued by a provider, nor a fixed recovery latency across any backlog.
 
-This corrects the third independent Agent review's unbounded catalog finding.
-Amortizing full enumeration every five seconds did not bound the refresh itself.
-No domain Proto, history retention, deletion or Entity transaction contract
-changes. See [the Agent task](planning/agent-entities.md) and the
-[provider contract](../packages/storage/REFERENCE.md#tenant-catalog-paging).
-
 ## D-0130: Add Anthropic Messages To The Initial Agent Adapter
 
-Status: Implemented; independent reviews and full release checks complete
+Status: Implemented
 
 Date: 2026-10-08
 
@@ -6073,11 +6067,11 @@ provider login flow, SDK retry loop, hosted tools or additional Entity API is
 introduced. Supported model data can expand with package/documentation evidence
 and actual-SDK request fixtures without repeating the architecture pass.
 
-See [the Agent task](planning/agent-entities.md).
+See [the adapter reference](../packages/ai-vercel-ax/REFERENCE.md).
 
 ## D-0131: Preserve Anthropic Thinking In Recorded Continuations
 
-Status: Implemented; review corrections and full release checks complete
+Status: Implemented
 
 Date: 2026-10-08
 
@@ -6094,14 +6088,9 @@ responses. A package-internal bridge resolver checks the Ax projection before
 replacing it with recorded ordered content. Both tool and correction turns use
 the same reconstruction. Incomplete content never permits tool continuation.
 
-Agent and AiModel application APIs remain unchanged. This unreleased serialized
-contract needs no migration shim. The bounded architecture assessment is recorded
-in the [Agent task](planning/agent-entities.md); correction tests cover real pinned
-SDK requests, signature fragments, redacted content, bounds and recorded recovery.
-
 ## D-0132: ChatGPT Plan Responses Profile And Recorded Continuations
 
-Status: Implemented; focused review complete, coordinated release checks pending
+Status: Implemented
 
 Date: 2026-10-09
 
@@ -6119,8 +6108,7 @@ The application establishes that the explicit credential belongs to the selected
 ChatGPT registration; the adapter does not infer OAuth scopes from token syntax.
 Move the pinned OpenAI SDK dependency to this existing package runtime dependencies.
 
-Generation output-token ceilings become optional. All existing finite request,
-tool, byte, and deadline limits remain mandatory. The subscription profile
+Generation output-token ceilings become optional. Request, tool, byte, and deadline limits apply when explicitly configured. The subscription profile
 rejects explicit token ceilings and initially supports prompt-and-validation
 only. It uses public Responses with streaming, store:false, developer messages,
 namespace tools, and explicit encrypted-reasoning inclusion. SDK lowering occurs
@@ -6142,52 +6130,19 @@ a new transport layer. Received values remain in history, and prepared request
 metadata records the reconstruction/lowering revision. Replay validates recorded
 content, completeness, projections and digest before another request or tool.
 
-The prior architecture pass was reopened only for this demonstrated serialized
-continuation gap. No generic provider-content subsystem, database change, or
-migration shim is introduced. See [Release Notes Studio](planning/release-notes-studio.md)
-and [the Agent task](planning/agent-entities.md).
-
 ## D-0133: Local Desktop Authentication And Packaging
 
-Status: Implemented and reviewed; coordinated release and live-account checks pending
+Status: Superseded by D-0140 and the session-only credential requirement
 
 Date: 2026-10-09
 
-Keep Release Notes Studio in a private example workspace. Electron 44.7.0 bundles
-Node 24.21.0, satisfying the runtime requirement. Use official @electron/packager 20.3.0 with an esbuild-bundled private staging
-directory to produce a local macOS application. Forge 8.0.1 rejects the existing
-isolated pnpm linker; the direct packager avoids a global linker change or
-dependency-copying implementation. Use existing Playwright Test 1.62.0 for
-development and packaged-app checks. No distribution maker, signing, or notarization is
-required for this source example. Make the Electron binary download explicit
-before desktop tests. These development dependencies do not enter public packages.
-
-Implement the documented direct Sign in with ChatGPT flow independently using
-MIT-licensed openid-client 6.8.8. The inspected official SIWC DevKit packages are
-private and their source is noncommercial; do not copy that implementation.
-Every issued-client configuration enables nonrepudiation checks so ID-token
-signatures are verified with issuer JWKS, in addition to claims/state/nonce/PKCE
-checks. Do not write custom JWT cryptography. Preserve verified account identity
-through refresh and store credential rotations atomically under Electron
-safeStorage encryption in the trusted process. The renderer receives nonsecret
-account/model/status data only. No API-key fallback or unrelated credential reuse.
-
-Keep all draft, Entity, conversation, Event, and execution storage in memory.
-Only installation/account registrations and explicit Markdown exports persist.
-No saved credential can reconstruct a draft or start inference after launch.
-The live subscription check requires the human's explicit browser authorization;
-complete independent fixture/domain/UI work before requesting that step.
-
-Source evidence: [Electron DEPS](https://github.com/electron/electron/blob/v44.7.0/DEPS),
-[Electron installation](https://www.electronjs.org/docs/latest/tutorial/installation),
-[packaging](https://www.electronjs.org/docs/latest/tutorial/tutorial-packaging),
-[Playwright Electron](https://playwright.dev/docs/api/class-electron), and the
-published openid-client 6.8.8/oauth4webapi 3.8.8 code path documented in
-[the task record](planning/agent-entities.md).
+The initial Electron packaging and persisted-credential design is superseded.
+Studio now uses MōBrowser and keeps credentials only in memory for the current
+app session. See [the Studio guide](../examples/release-notes/USER_GUIDE.md).
 
 ## D-0134: Production Agent History And Execution Reads
 
-Status: Implemented and reviewed; coordinated release qualification pending
+Status: Implemented
 
 Date: 2026-10-09
 
@@ -6221,17 +6176,9 @@ is not domain acceptance or execution completion. Domain rejection releases an
 admission only when authoritative acceptance state excludes active accepted work;
 duplicate accepted generations remain attached to their original execution.
 
-This bounded architecture decision resolves the public read gaps already named
-in the approved plan. It changes no storage schema/index, domain responsibility,
-client runtime, history retention, or recovery semantics. Grounding: current
-RepositoryAccess history, AgentExecutionStorage exact reads and private phases,
-public SubscriptionUpdate Event envelopes, JVM Repository.find and Client.inProcess.
-See the acceptance cases in [Release Notes Studio](planning/release-notes-studio.md)
-and [the task record](planning/agent-entities.md).
-
 ## D-0135: Deployments Added After Startup And Signal-Specific Selection
 
-Status: Implemented and reviewed; coordinated release qualification pending
+Status: Implemented
 
 Date: 2026-10-09
 
@@ -6278,16 +6225,9 @@ authoritative rejection without accepted work or recorded completed/terminated.
 Each ModelRef remains one registration/account/endpoint/concrete-model binding.
 Adding accounts never rebuilds the Bounded Context or drops draft state.
 
-Source-grounded requirements_splitter pass confirms the registry map is live,
-backend catalog does not enter the policy digest, existing selection records
-retain identity, and authorizeSelection was declared/documented but not invoked.
-Focused tests must prove late registration, bootstrap without defaults, saved
-selection reuse, delayed/missing subscribers, authorization failure, cancellation,
-late callback results, detached input and unchanged accepted identity.
-
 ## D-0136: Acknowledging Repeated Release Generations
 
-Status: Accepted; implementation in progress
+Status: Implemented
 
 Date: 2026-10-09
 
@@ -6312,15 +6252,9 @@ A conflicting repeat cannot release admission for the original accepted work.
 Tests await the acknowledgement, then assert no second requested Event or model
 call, including older IDs after newer requests and fresh command envelopes.
 
-Grounding: handler-decorators.ts command assignment contract, server REFERENCE
-return-shape rules, Repository runtime nonempty-outcome check, and existing
-Entity transaction version behavior. This is a bounded refinement of the
-[approved example plan](planning/release-notes-studio.md), not a new framework
-API, persistence mechanism, or recovery policy.
-
 ## D-0137: Recorded MCP Setup Outcomes
 
-Status: Accepted; implementation in progress
+Status: Implemented
 
 Date: 2026-10-09
 
@@ -6347,15 +6281,9 @@ Replaying the saved failed operation returns its retained outcome without anothe
 authorization callback, MCP discovery or provider request. No public application
 API, Proto, storage format, recovery scheme or time utility is added.
 
-The bounded architecture pass inspected current Agent dispatch/setup/result and
-repository failure paths, plus JVM `PmEndpoint` and `PmTransaction`: normal
-handler outcomes follow existing transaction/publication phases, while dispatch
-infrastructure errors remain failures. Tests must cover actual Agent policy
-denial, unsupported schemas, saved-result replay and infrastructure exceptions.
-
 ## D-0138: Entity Versions in Release Notes Studio
 
-Status: Implemented in the example application
+Status: Implemented
 
 Date: 2026-10-09
 
@@ -6410,18 +6338,9 @@ The private status response may carry the rejection separately; framework
 `AgentExecutionStatus` remains unchanged. A fresh action uses a new generation
 ID and current draft snapshot; no automatic repost or framework policy is added.
 
-Grounding: local JVM CommandContext target_version; Aggregate/AggregateTransaction/
-EventEmitter, PmTransaction and ProjectionTransaction; TS EntityTransaction,
-Repository dispatch, Stand.readVersioned, public Client/BlackBox and EventBus/
-Projection handoff. Current Aggregate EventContext carries the pre-dispatch
-producer Version in both inspected runtimes. Do not mistake it for the current
-committed Aggregate Version, synthesize a next Version, or use the Projection's
-independent Version to target the Aggregate. The existing Event Proto comment
-is not sufficient evidence for post-commit version semantics.
-
 ## D-0139: Access to an already registered repository
 
-Status: Implemented and independently reviewed
+Status: Implemented
 
 Date: 2026-10-09
 
@@ -6445,15 +6364,9 @@ authorization mechanism. Add no reader facade, Agent service, storage format,
 application-policy hook, or cleanup-checker exception. Replace the example's
 unfinished manual assembly with normal registration plus this lookup.
 
-The bounded architecture pass confirmed JVM's InternalAccess.getRepository uses
-this lookup idiom internally. This decision deliberately makes a typed lookup
-public in TypeScript; it does not claim identical JVM public API. Tests cover
-explicit/generated registration, exact constructor and Bounded Context scope,
-typed Agent history/status use, no lookup side effects, and closure.
-
 ## D-0140: MōBrowser desktop shell for Release Notes Studio
 
-Status: Accepted
+Status: Implemented
 
 Date: 2026-10-13
 
@@ -6470,9 +6383,7 @@ Credentials, drafts and histories remain in memory. MōBrowser's default browser
 cache is persistent; clearing it at startup/normal close is not crash-safe
 incognito and must not be documented as such.
 
-Read the vendor's agent and testing documentation before implementation. A
-native template probe confirmed the runtime and build work. Custom protocol
-response headers enforce Permissions-Policy, but exact custom origins tested
+Custom protocol response headers enforce Permissions-Policy, but exact custom origins tested
 did not expose generated IPC. Use the documented application origin, restrictive
 CSP, fixed navigation, blocked popups, denied external permission requests and
 cancelled media-device selection. MōBrowser automatically grants website

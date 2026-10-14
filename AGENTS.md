@@ -59,7 +59,15 @@ indentation and a blank TSDoc line before the parameter/tag section.
 
 Do not add a Verification section, test counts, coverage totals, audit results,
 or agent review records to a pull request description unless the human explicitly
-asks for them. Keep required development evidence in the existing task records.
+asks for them. Keep any useful verification summary short and in the task file.
+
+## Repository Artifacts
+
+Do not commit execution diaries, review transcripts, temporary artifacts, or
+detailed verification reports. Keep task files limited to requirements,
+decisions, remaining work, and links useful for future maintenance. Include a
+short verification summary only when it is useful for future work. Superseded
+plans and progress reports should be removed rather than archived in Git.
 
 ## Model Allocation
 
