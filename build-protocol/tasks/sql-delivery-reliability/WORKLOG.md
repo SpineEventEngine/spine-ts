@@ -751,3 +751,15 @@ Resume the existing implementer with its immutable explicitly dispatched `gpt-6-
 Focused negative observation tests (3/3), resistant-process watchdog (1/1), PostgreSQL 16 cold-process repair (2/2), tooling typecheck, ESLint, format, cleanup enforcement, and diff checks pass. Reliability and style targeted reviews are clean. Commit/push the test-only harness and bounded cleanup-checker correction; then release the prepared 32-case matrix after schema audit. No production runtime or built artifact changed, so the accepted 80-run baseline is not repeated. Transport implementation continues in independent new files.
 
 The staged diff check exposed surplus blank lines at the end of five text command transcripts. The commit command nevertheless ran because the orchestration did not gate it on the exit code; this was an orchestration error. Preserve published history and make a separate whitespace-only transcript correction, then require a successful staged check before committing. No measured JSON, JSONL, or hashed run artifact is changed.
+
+## Broad documentation claim inventory
+
+Dispatch the existing documentation reviewer, explicit `gpt-6-luna` / `medium`, for a read-only inventory of current public framework documentation against accepted delivery, independent-write, saved-Event repair, diagnostics, and subscription contracts. Exclude example prose already inventoried in EXAMPLE_PLAN. Produce one bounded correction checklist for the existing implementer after runtime interfaces stabilize; do not edit production/docs or run services. Desktop explicit profile support confirmed; runtime introspection unavailable.
+
+## Dependency audit preparation
+
+Dispatch an orchestrator mechanical verification function with explicit `gpt-6-luna` / `low`: run the repository-approved dependency audits against the current lockfile, save raw output/exit codes and lockfile hash, and classify only mechanical package/dependency paths. No installs, fixes, builds, or manifest changes. This prepares the later final security review, not security acceptance. Repeat only if dependency resolution changes materially before final review. Runtime introspection unavailable.
+
+## Process-fault matrix release
+
+The mechanical matrix function retains its explicit immutable `gpt-6-luna` / `low` profile. Audit-only runs against saved before-effect, acknowledgement, partial-publication, volatile-loss, and final cold-process replay artifacts pass after correcting root resolution and exact artifact schemas. Static checks pass. Release all 32 sequential provider/process/scenario cases with independent UUID databases and bounded recorded process cleanup. Freeze process-fault fixtures and compiled runtime throughout; independent transport source/evidence commits may proceed, with relevant deep source/dist hashes authoritative and each exact Git HEAD retained. No baseline repetition or runtime rebuild.

@@ -1,0 +1,13 @@
+# Final documentation correction inventory
+
+The existing documentation reviewer was explicitly dispatched as `gpt-6-luna` with `medium` reasoning. Runtime introspection is unavailable. This read-only review returned its findings in messages; the parent persists this report because the reviewer reported a task-local prohibition on writing files. No production/documentation edit or service execution was performed by the reviewer.
+
+## Corrections for the final documentation pass
+
+- `docs/architecture/README.md:791–793` and `docs/api/README.md:688–690` separate the 10-second scan and 60-second stale-session threshold from Delivery server processing timeout, but omit that processing timeout is configurable and disabled by default. Link one canonical explanation. Source: `packages/delivery-server/REFERENCE.md:38–39`, `packages/delivery-server/src/core/in-memory-delivery-core.ts:108–110`, and `packages/server/src/delivery/delivery-supervisor.ts:309–315`.
+- `docs/USER_GUIDE.md:541–545` describes a delivered row or bounded recent cache for duplicate suppression without explaining its temporary nature. The cache is process-local and bounded to 1,000 identities (`packages/server/src/delivery/delivery.ts:1091–1098`); eligible delivered rows can be cleaned (`packages/server/src/delivery/inbox-storage.ts:195–204`). Repetition is possible after the relevant persistent and process-local suppression records are gone. SQL cleanup alone may still be suppressed by a surviving cache; neither cleanup nor eviction alone guarantees repeat execution. This is not an exactly-once or durability guarantee.
+- `packages/delivery-server/README.md:99–105` says state disappears on process stop. Clarify that accepted pending Inbox work can be lost while separately stored SQL business state survives. The PostgreSQL two-process crash smoke proves this boundary; the cross-provider/process matrix is still pending at this inventory point.
+
+## Verified no-change dispositions
+
+Storage references cover independent write prefixes, lack of cross-store transactions, atomic conditional writes, and immutable identical retry versus conflict. `docs/api/README.md:144–150` covers response-only activation acknowledgement, same-handle failed cancellation retry, and coalesced teardown. The API guide at lines 697–707 and server reference at 921–937 distinguish failed processing left pending, acknowledgement retries without deliberate handler rerun, and crash redelivery. The API guide at 353–364 covers finite exact-known-ID Event repair with the original envelope/current recipients and no historical scan or automatic discovery. Storage references document schema rejection without migration. Example omissions remain separately listed in `EXAMPLE_PLAN.md`.

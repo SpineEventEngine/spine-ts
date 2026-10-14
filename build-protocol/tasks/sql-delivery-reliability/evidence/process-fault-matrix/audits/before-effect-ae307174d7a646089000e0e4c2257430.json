@@ -1,0 +1,20 @@
+{
+  "status": "FAIL",
+  "mode": "audit-only",
+  "runId": "ae307174d7a646089000e0e4c2257430",
+  "auditedAt": "2026-10-14T01:28:25.183Z",
+  "config": {
+    "provider": "postgres16",
+    "processes": 2,
+    "scenario": "before-effect",
+    "requireColdRepair": false
+  },
+  "configuredProfile": {
+    "model": "gpt-6-luna",
+    "reasoning": "low",
+    "runtimeMetadata": "not exposed by this execution surface"
+  },
+  "audit": null,
+  "failure": "Error: post-kill state observation incorrectly completed Planning",
+  "note": "Validates saved run artifacts and their self-contained hashes; launches no processes or database operations."
+}
