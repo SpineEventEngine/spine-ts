@@ -177,6 +177,23 @@ interface ChildState<Child> {
 }
 
 /**
+ * Carries the captured identities for one child relay across its asynchronous completion.
+ * @typeParam Request The forwarded unary request.
+ * @typeParam Child The native child subscription handle.
+ * @typeParam Update The native child update.
+ */
+interface ChildActivation<Request, Child, Update> {
+  readonly state: DefinitionState<Child, Update>;
+  readonly key: string;
+  readonly child: ChildState<Child>;
+  readonly client: BackendMemberClient<Request, Child, Update>;
+  readonly controller: AbortController;
+  readonly logical: AbortController | undefined;
+  readonly lifetime: ActivationLifetime | undefined;
+  readonly readiness: ActivationReadiness<Update> | undefined;
+}
+
+/**
  * Tracks required child acknowledgements for one logical activation.
  *
  * @typeParam Update The native child update.
@@ -189,6 +206,14 @@ interface ActivationReadiness<Update> {
   emitting: boolean;
   reconciling: boolean;
   settled: boolean;
+  failure: Error | undefined;
+}
+
+/**
+ * Reports a child failure for the full lifetime of one logical activation.
+ */
+interface ActivationLifetime {
+  readonly gate: PromiseWithResolvers<undefined>;
   failure: Error | undefined;
 }
 
@@ -208,6 +233,7 @@ interface DefinitionState<Child, Update> {
   updates: ((update: Update) => Promise<void>) | undefined;
   failure: Error | undefined;
   readiness: ActivationReadiness<Update> | undefined;
+  lifetime: ActivationLifetime | undefined;
 }
 
 /**
@@ -405,6 +431,7 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
         updates: undefined,
         failure: undefined,
         readiness: undefined,
+        lifetime: undefined,
       };
       this.#definitions.set(key, state);
     }
@@ -412,12 +439,13 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
   }
 
   /**
-   * Creates update relay for a retained logical definition until cancellation.
+   * Activates a retained logical definition until cancellation or terminal child failure.
    *
    * @param definition Supplies the retained logical definition.
    * @param updates Receives relayed child updates.
    * @param signal Cancels update relay.
-   * @returns Completion after cancellation.
+   * @returns Normal completion after cancellation; rejects with a current child failure, possibly
+   * wrapped with a bounded cleanup failure.
    */
   async activate(
     definition: Uint8Array,
@@ -430,29 +458,46 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
     if (state.activationController !== undefined)
       throw new Error("subscription activation is already active");
     const controller = new AbortController();
-    state.activationController = controller;
-    state.active = true;
-    state.updates = updates;
-    const readiness = this.#newReadiness();
-    state.readiness = readiness;
+    const { readiness, lifetime } = this.#beginActivation(state, updates, controller);
     const abort = () => {
       this.#abortActivation(state, readiness, controller);
     };
     if (signal.aborted) {
       abort();
-      state.activationController = undefined;
-      state.active = false;
+      this.#finishActivation(state, controller);
       return;
     }
     signal.addEventListener("abort", abort, { once: true });
     try {
-      await this.#waitActivation(state, readiness, signal, controller);
+      await this.#waitActivation(state, readiness, lifetime, signal, controller);
     } catch (error) {
       await this.#failActivation(definition, readiness, signal, error);
     } finally {
       signal.removeEventListener("abort", abort);
       this.#finishActivation(state, controller);
     }
+  }
+
+  /**
+   * Captures one logical activation before any child relay starts.
+   * @param state The retained logical definition.
+   * @param updates Receives relayed child updates.
+   * @param controller Cancels this activation.
+   * @returns The readiness and terminal-failure gates for this activation.
+   */
+  #beginActivation(
+    state: DefinitionState<Child, Update>,
+    updates: (update: Update) => Promise<void>,
+    controller: AbortController,
+  ): { readiness: ActivationReadiness<Update> | undefined; lifetime: ActivationLifetime } {
+    state.activationController = controller;
+    state.active = true;
+    state.updates = updates;
+    const readiness = this.#newReadiness();
+    state.readiness = readiness;
+    const lifetime = this.#newLifetime();
+    state.lifetime = lifetime;
+    return { readiness, lifetime };
   }
 
   /**
@@ -467,6 +512,7 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
     state.active = false;
     state.updates = undefined;
     state.readiness = undefined;
+    state.lifetime = undefined;
   }
 
   /**
@@ -488,6 +534,19 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
     };
     void readiness.gate.promise.catch(() => undefined);
     return readiness;
+  }
+
+  /**
+   * Creates an observed terminal signal for one logical activation.
+   * @returns The unsettled activation lifetime.
+   */
+  #newLifetime(): ActivationLifetime {
+    const lifetime: ActivationLifetime = {
+      gate: Promise.withResolvers<undefined>(),
+      failure: undefined,
+    };
+    void lifetime.gate.promise.catch(() => undefined);
+    return lifetime;
   }
 
   /**
@@ -523,6 +582,7 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
   async #waitActivation(
     state: DefinitionState<Child, Update>,
     readiness: ActivationReadiness<Update> | undefined,
+    lifetime: ActivationLifetime,
     signal: AbortSignal,
     controller: AbortController,
   ): Promise<void> {
@@ -530,13 +590,27 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
       this.#schedule(this.#nodes, false),
       BackendMembershipKernel.waitForAbort(signal),
       BackendMembershipKernel.waitForAbort(controller.signal),
+      lifetime.gate.promise,
     ]);
+    this.#throwLifetimeFailure(lifetime);
     if (signal.aborted || controller.signal.aborted) return;
-    if (readiness !== undefined) await this.#awaitReadiness(state, readiness, signal);
+    if (readiness !== undefined)
+      await Promise.race([this.#awaitReadiness(state, readiness, signal), lifetime.gate.promise]);
+    this.#throwLifetimeFailure(lifetime);
     await Promise.race([
       BackendMembershipKernel.waitForAbort(signal),
       BackendMembershipKernel.waitForAbort(controller.signal),
+      lifetime.gate.promise,
     ]);
+    this.#throwLifetimeFailure(lifetime);
+  }
+
+  /**
+   * Preserves a child failure when cancellation and failure settle together.
+   * @param lifetime The current logical activation lifetime.
+   */
+  #throwLifetimeFailure(lifetime: ActivationLifetime): void {
+    if (lifetime.failure !== undefined) throw lifetime.failure;
   }
 
   /**
@@ -554,7 +628,7 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
     error: unknown,
   ): Promise<never> {
     // The signal can abort while scheduling or waiting for child readiness.
-    if (readiness !== undefined && !signal.aborted) {
+    if (!signal.aborted) {
       try {
         await this.cancel(definition, new AbortController().signal);
       } catch (cleanupError) {
@@ -578,7 +652,7 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
   ): Promise<void> {
     if (state.failure !== undefined) throw state.failure;
     readiness.expected = new Set(this.#nodes.map((member) => this.#options.memberKey(member)));
-    if ([...readiness.expected].some((key) => !state.children.has(key)))
+    if (!readiness.reconciling && [...readiness.expected].some((key) => !state.children.has(key)))
       throw new Error("backend membership is unavailable.");
     this.#emitReady(state, readiness);
     await Promise.race([readiness.gate.promise, BackendMembershipKernel.waitForAbort(signal)]);
@@ -776,6 +850,7 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
   }
 
   async #syncDefinition(state: DefinitionState<Child, Update>, generation: number): Promise<void> {
+    if (state.lifetime?.failure !== undefined) return;
     state.failure = undefined;
     for (const [key, child] of state.children)
       if (!this.#members.has(key)) {
@@ -815,7 +890,8 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
     current: Current<Member, Request, Child, Update>,
     generation: number,
   ): Promise<void> {
-    if (this.#closed || generation !== this.#generation) return;
+    if (this.#closed || generation !== this.#generation || state.lifetime?.failure !== undefined)
+      return;
     const controller = new AbortController();
     state.starts.add(controller);
     this.#childStarts.add(controller);
@@ -860,6 +936,7 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
       this.#members.get(key)?.incarnation !== current.incarnation ||
       controller.signal.aborted ||
       this.#definitions.get(this.#options.definitionKey(state.definition) ?? "") !== state ||
+      state.lifetime?.failure !== undefined ||
       this.#isClosed()
     ) {
       await this.#compensateChild(current.client, child, controller.signal);
@@ -883,55 +960,89 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
     child: ChildState<Child>,
     client: BackendMemberClient<Request, Child, Update>,
   ): void {
-    if (child.active || state.updates === undefined) return;
+    if (child.active || state.updates === undefined || state.lifetime?.failure !== undefined)
+      return;
     child.active = true;
     const controller = new AbortController();
     child.activationController = controller;
     const readiness = state.readiness;
+    const lifetime = state.lifetime;
     if (readiness !== undefined && !readiness.emitting && !readiness.settled)
       readiness.expected?.add(key);
     const logical = state.activationController;
     const sink = state.updates;
-    const onUpdate =
-      readiness === undefined
-        ? sink
-        : (update: Update) => this.#relayChild(state, key, readiness, logical, sink, update);
+    const onUpdate = (update: Update) =>
+      this.#relayChild(state, key, readiness, logical, sink, update);
+    const activation = { state, key, child, client, controller, logical, lifetime, readiness };
+    this.#observeChildActivation(activation, onUpdate);
+  }
+
+  /**
+   * Observes one captured child relay through failure and completion.
+   * @param activation The captured child identity and cancellation state.
+   * @param onUpdate Receives child updates for the logical relay.
+   */
+  #observeChildActivation(
+    activation: ChildActivation<Request, Child, Update>,
+    onUpdate: (update: Update) => Promise<void>,
+  ): void {
+    const { child, client, controller } = activation;
     // spine-log-boundary: deployment.membership_child_activation
     child.activation = client
       .activate(child.child, onUpdate, controller.signal)
       .catch((error: unknown) => {
-        if (readiness !== undefined) this.#failReadiness(readiness, error);
+        this.#failChildActivation(activation, error);
       })
       .then(() => {
-        this.#finishChildActivation(state, key, child, client, controller, readiness);
+        this.#finishChildActivation(activation);
       });
+  }
+
+  /**
+   * Fences the current logical relay when one required child fails or ends.
+   * @param activation The captured child identity and cancellation state.
+   * @param error The child failure or unexpected stream-end cause.
+   */
+  #failChildActivation(activation: ChildActivation<Request, Child, Update>, error: unknown): void {
+    const { state, key, child, controller, logical, lifetime, readiness } = activation;
+    if (
+      lifetime === undefined ||
+      logical === undefined ||
+      lifetime.failure !== undefined ||
+      controller.signal.aborted ||
+      logical.signal.aborted ||
+      this.#closed ||
+      state.lifetime !== lifetime ||
+      state.activationController !== logical ||
+      state.children.get(key) !== child ||
+      child.activationController !== controller
+    )
+      return;
+    lifetime.failure =
+      error instanceof Error ? error : new Error("Backend child failed.", { cause: error });
+    for (const start of state.starts) start.abort();
+    for (const current of state.children.values()) current.activationController?.abort();
+    lifetime.gate.reject(lifetime.failure);
+    if (readiness !== undefined) this.#failReadiness(readiness, error);
   }
 
   /**
    * Restarts a cancelled child relay or disposes a child whose stream ended.
    *
-   * @param state The retained logical definition.
-   * @param key The backend member identifier.
-   * @param child The activated child state.
-   * @param client The member client that created the child.
-   * @param controller The child activation controller.
-   * @param readiness The current logical acknowledgement gate.
+   * @param activation The captured child identity and cancellation state.
    */
-  #finishChildActivation(
-    state: DefinitionState<Child, Update>,
-    key: string,
-    child: ChildState<Child>,
-    client: BackendMemberClient<Request, Child, Update>,
-    controller: AbortController,
-    readiness: ActivationReadiness<Update> | undefined,
-  ): void {
+  #finishChildActivation(activation: ChildActivation<Request, Child, Update>): void {
+    const { state, key, child, client, controller, lifetime, readiness } = activation;
     if (child.activationController !== controller) return;
-    if (readiness !== undefined && !controller.signal.aborted)
-      this.#failReadiness(readiness, new Error("Backend child ended before activation ACK."));
+    if (!controller.signal.aborted) {
+      const failure = new Error("Backend child stream ended unexpectedly.");
+      this.#failChildActivation(activation, failure);
+    }
     child.activationController = undefined;
     child.active = false;
     if (
       controller.signal.aborted &&
+      lifetime?.failure === undefined &&
       state.children.get(key) === child &&
       state.active &&
       state.activationController !== undefined &&
@@ -1017,6 +1128,7 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
     sink: (update: Update) => Promise<void>,
     update: Update,
   ): Promise<void> {
+    if (logical === undefined || !this.#relayIsCurrent(state, logical)) return;
     if (readiness === undefined) {
       await sink(update);
       return;
@@ -1032,7 +1144,22 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
     }
     if (isAck) throw new Error("Backend child sent a duplicate activation ACK.");
     await readiness.gate.promise;
-    if (state.readiness === readiness && !logical?.signal.aborted) await state.updates?.(update);
+    if (state.readiness === readiness && this.#relayIsCurrent(state, logical))
+      await state.updates?.(update);
+  }
+
+  /**
+   * Checks generation, cancellation, and terminal failure before a child update.
+   * @param state The retained logical definition.
+   * @param logical The child relay's captured activation controller.
+   * @returns Whether the captured activation still accepts updates.
+   */
+  #relayIsCurrent(state: DefinitionState<Child, Update>, logical: AbortController): boolean {
+    return (
+      state.activationController === logical &&
+      !logical.signal.aborted &&
+      state.lifetime?.failure === undefined
+    );
   }
 
   /**

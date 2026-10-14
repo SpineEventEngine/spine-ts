@@ -1,0 +1,11 @@
+
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server-blackbox-tests/test-fixtures/project-subscription-transport.mjs
+   51:32  error  'URL' is not defined           no-undef
+   52:22  error  'process' is not defined       no-undef
+   53:18  error  'process' is not defined       no-undef
+   86:27  error  'URL' is not defined           no-undef
+  264:1   error  'process' is not defined       no-undef
+  272:17  error  'setTimeout' is not defined    no-undef
+  276:5   error  'clearTimeout' is not defined  no-undef
+
+✖ 7 problems (7 errors, 0 warnings)

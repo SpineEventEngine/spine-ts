@@ -71,3 +71,19 @@ Keep this suite under the existing opt-in external-service policy. Add only the 
 ## Fail-fast gates
 
 Before any full matrix run, assert at startup: selected endpoint responds; expected engine/version matches; all required databases exist; exactly one target protocol and Delivery mode selected for focused runs; process count is supported; and every generated fixture schema is imported from the worktree build. Put all held promises behind `try/finally` release. Every case must have a bounded timeout and assert cleanup counts. A failed setup assertion is an error, never a skipped acceptance. Report protocol, SQL image/version, Delivery mode, process PIDs, exact event/recipient IDs, and elapsed times alongside each acceptance result.
+
+## Confirmed public-surface boundaries
+
+The high-level subscription updates channel currently exposes `next()`, not a
+public iterator `return()` method. High-level concurrent teardown therefore uses
+explicit `cancel()` calls and `client.close()`. Low-level transport iterator
+teardown remains separately tested where that iterator supports it; do not add
+a high-level API merely to match the preliminary table above.
+
+The existing Client retry classifier retries ordinary `Error` values except
+`ClientProtocolError`. The permanent-failure row therefore means an actual
+protocol-validation failure with that type, not an invented status-code
+allowlist. Repeated transport errors exercise the configured attempt/time budget
+and visible exhaustion. D-0133 adds logical termination for unexpected current
+backend-child rejection or EOF; existing Client recovery handles resubscription.
+It adds no server reattachment loop, historical Event replay, or new policy.

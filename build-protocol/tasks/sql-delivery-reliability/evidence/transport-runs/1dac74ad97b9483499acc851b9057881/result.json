@@ -1,0 +1,77 @@
+{
+  "status": "PASS",
+  "result": {
+    "provider": "postgres16",
+    "protocol": "grpc-web",
+    "scenario": "child-retry-exhaustion",
+    "deliveryMode": "db-only",
+    "database": "sqlrel_sub_1dac74ad97b9483499acc851b9057881",
+    "counters": {
+      "subscribe": 3,
+      "activate": 3,
+      "ackReleased": 3,
+      "cancel": 3,
+      "cancelFaults": 0,
+      "cancelSuccesses": 3,
+      "streamFaults": 3,
+      "iterators": 0
+    },
+    "entries": []
+  },
+  "counters": {
+    "subscribe": 3,
+    "activate": 3,
+    "ackReleased": 3,
+    "cancel": 3,
+    "cancelFaults": 0,
+    "cancelSuccesses": 3,
+    "streamFaults": 3,
+    "iterators": 0
+  },
+  "secondaryCounters": {
+    "subscribe": 0,
+    "activate": 0,
+    "ackReleased": 0,
+    "cancel": 0,
+    "iterators": 0
+  },
+  "entries": [],
+  "subscriptionTrace": [
+    {
+      "operation": "subscribe",
+      "id": "s-51663bd8-55a0-4b6d-8e59-285d52543cb3"
+    },
+    {
+      "operation": "activate",
+      "id": "s-51663bd8-55a0-4b6d-8e59-285d52543cb3"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-51663bd8-55a0-4b6d-8e59-285d52543cb3"
+    },
+    {
+      "operation": "subscribe",
+      "id": "s-a544e8df-c617-4701-99f3-24318a36501d"
+    },
+    {
+      "operation": "activate",
+      "id": "s-a544e8df-c617-4701-99f3-24318a36501d"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-a544e8df-c617-4701-99f3-24318a36501d"
+    },
+    {
+      "operation": "subscribe",
+      "id": "s-0755c758-66c5-464f-ae4d-51792e6e3ec8"
+    },
+    {
+      "operation": "activate",
+      "id": "s-0755c758-66c5-464f-ae4d-51792e6e3ec8"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-0755c758-66c5-464f-ae4d-51792e6e3ec8"
+    }
+  ]
+}

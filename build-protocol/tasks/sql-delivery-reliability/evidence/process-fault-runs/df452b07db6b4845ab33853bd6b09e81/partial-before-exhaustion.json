@@ -1,0 +1,52 @@
+{
+  "snapshot": {
+    "projects": [
+      {
+        "number": 1,
+        "states": {
+          "project": true,
+          "planning": false,
+          "staffing": false,
+          "portfolio": false,
+          "projection": false
+        }
+      }
+    ],
+    "events": [
+      {
+        "id": "42e4831a-9cf1-4613-be57-6d75ebe008a8",
+        "typeUrl": "type.spine.server.testing/spine.server.testing.ProjectCreated",
+        "number": 1,
+        "organization": "fault-df452b07db6b4845ab33853bd6b09e81",
+        "name": "roadmap-1",
+        "sha256": "7d16662c1327dac01527c58ed6ce163120d1636f221bc8b8defdb03d7458fc1f",
+        "binaryBase64": "CiYKJDQyZTQ4MzFhLTljZjEtNDYxMy1iZTU3LTZkNzVlYmUwMDhhOBKkAQo9dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0Q3JlYXRlZBJjCigKJmZhdWx0LWRmNDUyYjA3ZGI2YjQ4NDVhYjMzODUzYmQ2YjA5ZTgxEiwKKAomZmF1bHQtZGY0NTJiMDdkYjZiNDg0NWFiMzM4NTNiZDZiMDllODEQARoJcm9hZG1hcC0xGp4CCgwI2dS71gYQqInOywEaaAo4dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0SWQSLAooCiZmYXVsdC1kZjQ1MmIwN2RiNmI0ODQ1YWIzMzg1M2JkNmIwOWU4MRABIgByoQEKjAEKTAoidHlwZS5zcGluZS5pby9zcGluZS5jb3JlLkNvbW1hbmRJZBImCiQwOWYyZWM1ZC0wYzdlLTRhNTItYWI4YS1hYTdlYmJjMzViNzgSPHR5cGUuc3BpbmUuc2VydmVyLnRlc3Rpbmcvc3BpbmUuc2VydmVyLnRlc3RpbmcuQ3JlYXRlUHJvamVjdBoQEg4KDG1hdHJpeC1hY3Rvcg=="
+      }
+    ]
+  },
+  "original": {
+    "id": "42e4831a-9cf1-4613-be57-6d75ebe008a8",
+    "typeUrl": "type.spine.server.testing/spine.server.testing.ProjectCreated",
+    "number": 1,
+    "organization": "fault-df452b07db6b4845ab33853bd6b09e81",
+    "name": "roadmap-1",
+    "sha256": "7d16662c1327dac01527c58ed6ce163120d1636f221bc8b8defdb03d7458fc1f",
+    "binaryBase64": "CiYKJDQyZTQ4MzFhLTljZjEtNDYxMy1iZTU3LTZkNzVlYmUwMDhhOBKkAQo9dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0Q3JlYXRlZBJjCigKJmZhdWx0LWRmNDUyYjA3ZGI2YjQ4NDVhYjMzODUzYmQ2YjA5ZTgxEiwKKAomZmF1bHQtZGY0NTJiMDdkYjZiNDg0NWFiMzM4NTNiZDZiMDllODEQARoJcm9hZG1hcC0xGp4CCgwI2dS71gYQqInOywEaaAo4dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0SWQSLAooCiZmYXVsdC1kZjQ1MmIwN2RiNmI0ODQ1YWIzMzg1M2JkNmIwOWU4MRABIgByoQEKjAEKTAoidHlwZS5zcGluZS5pby9zcGluZS5jb3JlLkNvbW1hbmRJZBImCiQwOWYyZWM1ZC0wYzdlLTRhNTItYWI4YS1hYTdlYmJjMzViNzgSPHR5cGUuc3BpbmUuc2VydmVyLnRlc3Rpbmcvc3BpbmUuc2VydmVyLnRlc3RpbmcuQ3JlYXRlUHJvamVjdBoQEg4KDG1hdHJpeC1hY3Rvcg=="
+  },
+  "prefix": [
+    {
+      "messageId": "47c9e921-ded1-48a6-9b2f-88850af766a5",
+      "signalId": "42e4831a-9cf1-4613-be57-6d75ebe008a8",
+      "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+      "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+      "targetIdBase64": "CigKJmZhdWx0LWRmNDUyYjA3ZGI2YjQ4NDVhYjMzODUzYmQ2YjA5ZTgxEAE=",
+      "signalTypeUrl": "type.spine.io/spine.core.Event",
+      "signalValueSha256": "7d16662c1327dac01527c58ed6ce163120d1636f221bc8b8defdb03d7458fc1f",
+      "status": "TO_DELIVER",
+      "whenReceivedSeconds": "1791945305",
+      "whenReceivedNanos": 440001000,
+      "keepUntilMillis": 1791945335440,
+      "version": "2"
+    }
+  ]
+}

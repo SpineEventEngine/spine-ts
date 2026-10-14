@@ -27,3 +27,14 @@ fallback explicitly. No runtime change is decided by this note.
 ## Remaining live acceptance boundary
 
 The first-task specification explicitly requests a cross-process late-write case. A single-process public supervisor/SQL component fixture can establish default and override timing, but does not replace that case. Use a separate writer process with coordinated persistence and failed busy-shard claim to prove the before-release arrival; separately gate an after-release arrival and missed notification. The previously accepted process workload is not evidence of this deterministic race. Preserve this distinction when implementing the remaining timing tests.
+
+The live clock slice must also retain a shared Delivery server across actual
+application-worker death/replacement while accepted work is pending. Measure
+recovery under the default 60-second stale-session threshold separately from
+the 10-second scan and configurable server processing timeout. The current
+crash matrix covers database-only processing faults and shared server volatility;
+neither its graceful baseline restart nor its destroyed/recreated Delivery server
+proves retained-server stale-session takeover. Use exact pending Inbox IDs, old
+and new process IDs, handler entries, configured values, and elapsed observations.
+Do not advertise a hard ten-second bound. This completes an existing specification
+requirement (first-task lines 536–542), not a new persistence subsystem.

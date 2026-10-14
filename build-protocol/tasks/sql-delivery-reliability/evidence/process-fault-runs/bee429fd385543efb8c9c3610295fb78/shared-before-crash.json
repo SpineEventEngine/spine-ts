@@ -1,0 +1,242 @@
+{
+  "firstReady": [
+    {
+      "pid": 78047,
+      "endpoint": "http://127.0.0.1:60656",
+      "configuredShards": 2,
+      "artifacts": [
+        {
+          "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server-blackbox-tests/dist/test-fixtures/project-workflow.js",
+          "sha256": "4369473fd7b246124d422e05e94aad97320161f6d18838eaa364d8616001b985"
+        },
+        {
+          "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server-blackbox-tests/dist/generated/spine/server/testing/project_workflow_pb.js",
+          "sha256": "b5e6d882578f431085d42b84e5fefb9d948880867e34c3c1b83c2b96d36c371b"
+        },
+        {
+          "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/dist/index.js",
+          "sha256": "6bf9c9a8c971afc87de534107af1a935953f89a0607193ed3576e2b3def1909e"
+        },
+        {
+          "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/proto/dist/src/index.js",
+          "sha256": "3b16144d721808f5ed8d458be542064c5323575247cf1b7e6d325b038adaeaa2"
+        },
+        {
+          "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/core/dist/index.js",
+          "sha256": "64a74877641ebde82dab6e2c69577ba9cf246009adfd76f74173502d0b03b916"
+        },
+        {
+          "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage/dist/index.js",
+          "sha256": "df614e0461342a5bc52377ed64200cdb3307f669b74cfd0340d587d17b2d55c7"
+        },
+        {
+          "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage-postgres/dist/index.js",
+          "sha256": "84a8658d25708fd1bf4d2b0fd7b1bd678966fd089b9b8e6908df1b1005ad3139"
+        },
+        {
+          "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage-mysql/dist/index.js",
+          "sha256": "1e344dd9d6163df30cabbcb6dec296cde324a3f74a9d185ea29c40a28862da74"
+        },
+        {
+          "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/delivery-client/dist/index.js",
+          "sha256": "1e69a8d6b4ad6584f804baf8746d9d937b0e173a589cb52fba98735aeac22140"
+        },
+        {
+          "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/delivery-server/dist/index.js",
+          "sha256": "b8b79d6f88a3f7f4dd0461062a09dc519e98c84387ae01360b4245acd23b5d08"
+        }
+      ]
+    },
+    {
+      "pid": 78048,
+      "endpoint": "http://127.0.0.1:60655",
+      "configuredShards": 2,
+      "artifacts": [
+        {
+          "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server-blackbox-tests/dist/test-fixtures/project-workflow.js",
+          "sha256": "4369473fd7b246124d422e05e94aad97320161f6d18838eaa364d8616001b985"
+        },
+        {
+          "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server-blackbox-tests/dist/generated/spine/server/testing/project_workflow_pb.js",
+          "sha256": "b5e6d882578f431085d42b84e5fefb9d948880867e34c3c1b83c2b96d36c371b"
+        },
+        {
+          "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/dist/index.js",
+          "sha256": "6bf9c9a8c971afc87de534107af1a935953f89a0607193ed3576e2b3def1909e"
+        },
+        {
+          "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/proto/dist/src/index.js",
+          "sha256": "3b16144d721808f5ed8d458be542064c5323575247cf1b7e6d325b038adaeaa2"
+        },
+        {
+          "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/core/dist/index.js",
+          "sha256": "64a74877641ebde82dab6e2c69577ba9cf246009adfd76f74173502d0b03b916"
+        },
+        {
+          "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage/dist/index.js",
+          "sha256": "df614e0461342a5bc52377ed64200cdb3307f669b74cfd0340d587d17b2d55c7"
+        },
+        {
+          "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage-postgres/dist/index.js",
+          "sha256": "84a8658d25708fd1bf4d2b0fd7b1bd678966fd089b9b8e6908df1b1005ad3139"
+        },
+        {
+          "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/storage-mysql/dist/index.js",
+          "sha256": "1e344dd9d6163df30cabbcb6dec296cde324a3f74a9d185ea29c40a28862da74"
+        },
+        {
+          "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/delivery-client/dist/index.js",
+          "sha256": "1e69a8d6b4ad6584f804baf8746d9d937b0e173a589cb52fba98735aeac22140"
+        },
+        {
+          "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/delivery-server/dist/index.js",
+          "sha256": "b8b79d6f88a3f7f4dd0461062a09dc519e98c84387ae01360b4245acd23b5d08"
+        }
+      ]
+    }
+  ],
+  "deliveryPid": 78045,
+  "acknowledgedCommandIds": [
+    "8ecc2bde-eca6-403e-9033-52d3feafb567",
+    "7b89325d-2c79-4d17-8b67-c190b6b9cec0"
+  ],
+  "entered": {
+    "method": "create",
+    "receiver": "Project",
+    "correlation": "fault-bee429fd385543efb8c9c3610295fb78:2",
+    "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+    "recipientIdBase64": "CigKJmZhdWx0LWJlZTQyOWZkMzg1NTQzZWZiOGM5YzM2MTAyOTVmYjc4EAI=",
+    "pid": 78047,
+    "at": 1791945219270
+  },
+  "seed": {
+    "projects": [
+      {
+        "number": 1,
+        "states": {
+          "project": true,
+          "planning": true,
+          "staffing": true,
+          "portfolio": true,
+          "projection": true
+        }
+      }
+    ],
+    "events": [
+      {
+        "id": "93be338b-1ea6-48ef-8749-6d5b2a62ce51",
+        "typeUrl": "type.spine.server.testing/spine.server.testing.ProjectCreated",
+        "number": 1,
+        "organization": "fault-bee429fd385543efb8c9c3610295fb78",
+        "name": "roadmap-1",
+        "sha256": "1545e507aa52219a3b2553fd07b70e81642fbadf3c6f037b15be6462652cfd4a",
+        "binaryBase64": "CiYKJDkzYmUzMzhiLTFlYTYtNDhlZi04NzQ5LTZkNWIyYTYyY2U1MRKkAQo9dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0Q3JlYXRlZBJjCigKJmZhdWx0LWJlZTQyOWZkMzg1NTQzZWZiOGM5YzM2MTAyOTVmYjc4EiwKKAomZmF1bHQtYmVlNDI5ZmQzODU1NDNlZmI4YzljMzYxMDI5NWZiNzgQARoJcm9hZG1hcC0xGp0CCgsIg9S71gYQ6Nn4PhpoCjh0eXBlLnNwaW5lLnNlcnZlci50ZXN0aW5nL3NwaW5lLnNlcnZlci50ZXN0aW5nLlByb2plY3RJZBIsCigKJmZhdWx0LWJlZTQyOWZkMzg1NTQzZWZiOGM5YzM2MTAyOTVmYjc4EAEiAHKhAQqMAQpMCiJ0eXBlLnNwaW5lLmlvL3NwaW5lLmNvcmUuQ29tbWFuZElkEiYKJDhlY2MyYmRlLWVjYTYtNDAzZS05MDMzLTUyZDNmZWFmYjU2NxI8dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5DcmVhdGVQcm9qZWN0GhASDgoMbWF0cml4LWFjdG9y"
+      }
+    ]
+  },
+  "before": {
+    "projects": [
+      {
+        "number": 1,
+        "states": {
+          "project": true,
+          "planning": true,
+          "staffing": true,
+          "portfolio": true,
+          "projection": true
+        }
+      },
+      {
+        "number": 2,
+        "states": {
+          "project": false,
+          "planning": false,
+          "staffing": false,
+          "portfolio": false,
+          "projection": false
+        }
+      }
+    ],
+    "events": [
+      {
+        "id": "93be338b-1ea6-48ef-8749-6d5b2a62ce51",
+        "typeUrl": "type.spine.server.testing/spine.server.testing.ProjectCreated",
+        "number": 1,
+        "organization": "fault-bee429fd385543efb8c9c3610295fb78",
+        "name": "roadmap-1",
+        "sha256": "1545e507aa52219a3b2553fd07b70e81642fbadf3c6f037b15be6462652cfd4a",
+        "binaryBase64": "CiYKJDkzYmUzMzhiLTFlYTYtNDhlZi04NzQ5LTZkNWIyYTYyY2U1MRKkAQo9dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0Q3JlYXRlZBJjCigKJmZhdWx0LWJlZTQyOWZkMzg1NTQzZWZiOGM5YzM2MTAyOTVmYjc4EiwKKAomZmF1bHQtYmVlNDI5ZmQzODU1NDNlZmI4YzljMzYxMDI5NWZiNzgQARoJcm9hZG1hcC0xGp0CCgsIg9S71gYQ6Nn4PhpoCjh0eXBlLnNwaW5lLnNlcnZlci50ZXN0aW5nL3NwaW5lLnNlcnZlci50ZXN0aW5nLlByb2plY3RJZBIsCigKJmZhdWx0LWJlZTQyOWZkMzg1NTQzZWZiOGM5YzM2MTAyOTVmYjc4EAEiAHKhAQqMAQpMCiJ0eXBlLnNwaW5lLmlvL3NwaW5lLmNvcmUuQ29tbWFuZElkEiYKJDhlY2MyYmRlLWVjYTYtNDAzZS05MDMzLTUyZDNmZWFmYjU2NxI8dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5DcmVhdGVQcm9qZWN0GhASDgoMbWF0cml4LWFjdG9y"
+      }
+    ]
+  },
+  "pending": {
+    "messageId": "f296afb6-e0b4-4436-8b32-26c179a64810",
+    "signalId": "7b89325d-2c79-4d17-8b67-c190b6b9cec0",
+    "targetTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectState",
+    "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+    "targetIdBase64": "CigKJmZhdWx0LWJlZTQyOWZkMzg1NTQzZWZiOGM5YzM2MTAyOTVmYjc4EAI=",
+    "signalTypeUrl": "type.spine.io/spine.core.Command",
+    "signalValueSha256": "fbfeea359b3ccfbca0b8b11f4733aff09fbe4d49c5f2621a8ebb44143c486db4",
+    "status": "TO_DELIVER",
+    "whenReceivedSeconds": "1791945219",
+    "whenReceivedNanos": 260001000,
+    "keepUntilMillis": 1791945249260,
+    "version": "4"
+  },
+  "entries": [
+    {
+      "method": "create",
+      "receiver": "Project",
+      "correlation": "fault-bee429fd385543efb8c9c3610295fb78:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+      "recipientIdBase64": "CigKJmZhdWx0LWJlZTQyOWZkMzg1NTQzZWZiOGM5YzM2MTAyOTVmYjc4EAE=",
+      "pid": 78047,
+      "at": 1791945219125
+    },
+    {
+      "method": "staffing",
+      "receiver": "ProjectStaffing",
+      "correlation": "fault-bee429fd385543efb8c9c3610295fb78:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+      "recipientIdBase64": "CigKJmZhdWx0LWJlZTQyOWZkMzg1NTQzZWZiOGM5YzM2MTAyOTVmYjc4EAE=",
+      "pid": 78047,
+      "at": 1791945219175
+    },
+    {
+      "method": "portfolio",
+      "receiver": "Portfolio",
+      "correlation": "fault-bee429fd385543efb8c9c3610295fb78:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+      "recipientIdBase64": "CigKJmZhdWx0LWJlZTQyOWZkMzg1NTQzZWZiOGM5YzM2MTAyOTVmYjc4EAE=",
+      "pid": 78048,
+      "at": 1791945219182
+    },
+    {
+      "method": "planning",
+      "receiver": "ProjectPlanning",
+      "correlation": "fault-bee429fd385543efb8c9c3610295fb78:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+      "recipientIdBase64": "CigKJmZhdWx0LWJlZTQyOWZkMzg1NTQzZWZiOGM5YzM2MTAyOTVmYjc4EAE=",
+      "pid": 78048,
+      "at": 1791945219194
+    },
+    {
+      "method": "projection",
+      "receiver": "ProjectProjection",
+      "correlation": "fault-bee429fd385543efb8c9c3610295fb78:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+      "recipientIdBase64": "CigKJmZhdWx0LWJlZTQyOWZkMzg1NTQzZWZiOGM5YzM2MTAyOTVmYjc4EAE=",
+      "pid": 78048,
+      "at": 1791945219215
+    },
+    {
+      "method": "create",
+      "receiver": "Project",
+      "correlation": "fault-bee429fd385543efb8c9c3610295fb78:2",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+      "recipientIdBase64": "CigKJmZhdWx0LWJlZTQyOWZkMzg1NTQzZWZiOGM5YzM2MTAyOTVmYjc4EAI=",
+      "pid": 78047,
+      "at": 1791945219270
+    }
+  ]
+}

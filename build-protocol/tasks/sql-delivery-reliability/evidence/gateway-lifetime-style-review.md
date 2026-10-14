@@ -1,0 +1,9 @@
+# Gateway lifetime style and maintainability review
+
+2026-10-14. Existing `style_maintainability_reviewer` remit, dispatched with explicit `gpt-6-sol` / `medium` profile. Actual runtime self-introspection is unavailable. Reviewed only the frozen `HEAD` diff in `backend-membership-kernel.ts`, `membership-kernel.test.ts`, and `dynamic-subscription-creator.test.ts`, plus their affected activation path. Read the human task ledger, `CODE_QUALITY.md`, gateway review wave, and D-0133 decision. No source edit, test, build, service operation, or subagent was used.
+
+## Finding
+
+No distinct actionable style or maintainability finding. The private activation lifetime matches the accepted D-0133 design. Its new methods remain within the 35-physical-line production limit; the helper keeps terminal fencing and the first cause in one place without adding a coordinator or retry scheduler. The changed tests use appropriate subscription/ACK fixtures, and their names describe the new EOF and failure behavior. No new naming, duplication, or test-quality defect warrants a separate correction batch.
+
+The API and reliability reviews already report the ACK-disabled cleanup gap and intentional pre-ACK replacement rejection as P1 findings, plus stale activation TSDoc as P2. This review does not duplicate them. The generic failure test currently establishes rejection but not disposal; that missing assertion belongs to the already reported cleanup finding. The `it.each` EOF/rejection case checks terminal messages, while sibling and generic rejection cases assert original error identity. Existing static checks and 153/153 affected source tests are reported as passing; this review did not rerun them. The latest source helper refactor has not yet been rebuilt into the independent real-transport matrix, so this report does not claim final transport acceptance.

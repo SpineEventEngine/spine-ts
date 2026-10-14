@@ -1,0 +1,4 @@
+playwright=<playwright._impl._playwright.Playwright object at 0x10a486120>
+chromium_version=156.0.8078.4
+blank_page_url=about:blank
+browser_closed=true

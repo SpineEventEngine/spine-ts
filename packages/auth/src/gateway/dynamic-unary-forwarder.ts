@@ -270,7 +270,8 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
    * @param wire Supplies the public subscription wire.
    * @param updates Receives relayed subscription updates.
    * @param signal Cancels update relay.
-   * @returns Completion after cancellation.
+   * @returns Completion after cancellation; rejects on unexpected child failure, possibly
+   * including bounded cleanup failure.
    */
   activateDefinition(
     wire: PublicSubscriptionWire,

@@ -15,7 +15,8 @@
   },
   "scripts": {
     "test:matrix": "pnpm exec vitest --root ../.. --config vitest.infrastructure.config.ts run packages/server-blackbox-tests/test/project-process-matrix.integration.test.ts",
-    "test:process-faults": "pnpm exec vitest --root ../.. --config vitest.infrastructure.config.ts run packages/server-blackbox-tests/test/project-process-faults.integration.test.ts"
+    "test:process-faults": "pnpm exec vitest --root ../.. --config vitest.infrastructure.config.ts run packages/server-blackbox-tests/test/project-process-faults.integration.test.ts",
+    "test:subscription-transports": "pnpm exec vitest --root ../.. --config vitest.infrastructure.config.ts run packages/server-blackbox-tests/test/project-subscription-transports.integration.test.ts"
   },
   "dependencies": {
     "@bufbuild/protobuf": "2.12.1",

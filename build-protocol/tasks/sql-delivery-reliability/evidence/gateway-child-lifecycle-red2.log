@@ -1,0 +1,34 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/deployment/test/membership-kernel.test.ts (62 tests | 2 failed | 60 skipped) 1012ms
+     × terminates a ready logical activation when its child ends by rejection 510ms
+     × terminates a ready logical activation when its child ends by EOF 501ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/deployment/test/membership-kernel.test.ts > BackendMembershipKernel > terminates a ready logical activation when its child ends by rejection
+ FAIL  packages/deployment/test/membership-kernel.test.ts > BackendMembershipKernel > terminates a ready logical activation when its child ends by EOF
+AssertionError: expected undefined to be 'rejected' // Object.is equality
+
+- Expected:
+"rejected"
+
++ Received:
+undefined
+
+ ❯ vi.waitFor.timeout packages/deployment/test/membership-kernel.test.ts:846:56
+    844|         await ready.promise;
+    845|         finishChild.resolve(undefined);
+    846|         await vi.waitFor(() => expect(outcome?.status).toBe("rejected"…
+       |                                                        ^
+    847|         expect(outcome?.error).toBeInstanceOf(Error);
+    848|         expect((outcome?.error as Error).message).toContain(
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 60 skipped (62)
+   Start at  03:08:29
+   Duration  1.16s (transform 38ms, setup 0ms, import 48ms, tests 1.01s, environment 0ms)

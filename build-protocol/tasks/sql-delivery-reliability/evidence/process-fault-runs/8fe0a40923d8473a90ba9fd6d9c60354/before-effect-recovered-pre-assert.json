@@ -1,0 +1,160 @@
+{
+  "after": {
+    "projects": [
+      {
+        "number": 1,
+        "states": {
+          "project": true,
+          "planning": true,
+          "staffing": true,
+          "portfolio": true,
+          "projection": true
+        }
+      }
+    ],
+    "events": [
+      {
+        "id": "8975c810-5279-4d4b-8028-8fe7a9b6918d",
+        "typeUrl": "type.spine.server.testing/spine.server.testing.ProjectCreated",
+        "number": 1,
+        "organization": "fault-8fe0a40923d8473a90ba9fd6d9c60354",
+        "name": "roadmap-1",
+        "sha256": "d019a3b362efd360779b242bb5f07c2226eb6069698eb04ee6690ac67ca851cd",
+        "binaryBase64": "CiYKJDg5NzVjODEwLTUyNzktNGQ0Yi04MDI4LThmZTdhOWI2OTE4ZBKkAQo9dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0Q3JlYXRlZBJjCigKJmZhdWx0LThmZTBhNDA5MjNkODQ3M2E5MGJhOWZkNmQ5YzYwMzU0EiwKKAomZmF1bHQtOGZlMGE0MDkyM2Q4NDczYTkwYmE5ZmQ2ZDljNjAzNTQQARoJcm9hZG1hcC0xGp4CCgwIktS71gYQqKG7pQEaaAo4dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0SWQSLAooCiZmYXVsdC04ZmUwYTQwOTIzZDg0NzNhOTBiYTlmZDZkOWM2MDM1NBABIgByoQEKjAEKTAoidHlwZS5zcGluZS5pby9zcGluZS5jb3JlLkNvbW1hbmRJZBImCiQ1ZjNjNDZhNS00YTBlLTQ2YjMtODJiMS04MmU5MDAyOWY3ZDUSPHR5cGUuc3BpbmUuc2VydmVyLnRlc3Rpbmcvc3BpbmUuc2VydmVyLnRlc3RpbmcuQ3JlYXRlUHJvamVjdBoQEg4KDG1hdHJpeC1hY3Rvcg=="
+      }
+    ]
+  },
+  "recoveredDelivery": {
+    "shards": [
+      {
+        "shard": "0/8",
+        "count": 0,
+        "truncated": false,
+        "rows": [],
+        "statuses": {}
+      },
+      {
+        "shard": "1/8",
+        "count": 0,
+        "truncated": false,
+        "rows": [],
+        "statuses": {}
+      },
+      {
+        "shard": "2/8",
+        "count": 0,
+        "truncated": false,
+        "rows": [],
+        "statuses": {}
+      },
+      {
+        "shard": "3/8",
+        "count": 0,
+        "truncated": false,
+        "rows": [],
+        "statuses": {}
+      },
+      {
+        "shard": "4/8",
+        "count": 0,
+        "truncated": false,
+        "rows": [],
+        "statuses": {}
+      },
+      {
+        "shard": "5/8",
+        "count": 0,
+        "truncated": false,
+        "rows": [],
+        "statuses": {}
+      },
+      {
+        "shard": "6/8",
+        "count": 0,
+        "truncated": false,
+        "rows": [],
+        "statuses": {}
+      },
+      {
+        "shard": "7/8",
+        "count": 0,
+        "truncated": false,
+        "rows": [],
+        "statuses": {}
+      },
+      {
+        "shard": "0/1",
+        "count": 0,
+        "truncated": false,
+        "rows": [],
+        "statuses": {}
+      }
+    ]
+  },
+  "allEntries": [
+    {
+      "method": "create",
+      "receiver": "Project",
+      "correlation": "fault-8fe0a40923d8473a90ba9fd6d9c60354:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+      "recipientIdBase64": "CigKJmZhdWx0LThmZTBhNDA5MjNkODQ3M2E5MGJhOWZkNmQ5YzYwMzU0EAE=",
+      "pid": 79923,
+      "at": 1791945234330
+    },
+    {
+      "method": "portfolio",
+      "receiver": "Portfolio",
+      "correlation": "fault-8fe0a40923d8473a90ba9fd6d9c60354:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+      "recipientIdBase64": "CigKJmZhdWx0LThmZTBhNDA5MjNkODQ3M2E5MGJhOWZkNmQ5YzYwMzU0EAE=",
+      "pid": 79923,
+      "at": 1791945234402
+    },
+    {
+      "method": "planning",
+      "receiver": "ProjectPlanning",
+      "correlation": "fault-8fe0a40923d8473a90ba9fd6d9c60354:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+      "recipientIdBase64": "CigKJmZhdWx0LThmZTBhNDA5MjNkODQ3M2E5MGJhOWZkNmQ5YzYwMzU0EAE=",
+      "pid": 79923,
+      "at": 1791945234450
+    },
+    {
+      "method": "projection",
+      "receiver": "ProjectProjection",
+      "correlation": "fault-8fe0a40923d8473a90ba9fd6d9c60354:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+      "recipientIdBase64": "CigKJmZhdWx0LThmZTBhNDA5MjNkODQ3M2E5MGJhOWZkNmQ5YzYwMzU0EAE=",
+      "pid": 79923,
+      "at": 1791945234458
+    },
+    {
+      "method": "staffing",
+      "receiver": "ProjectStaffing",
+      "correlation": "fault-8fe0a40923d8473a90ba9fd6d9c60354:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+      "recipientIdBase64": "CigKJmZhdWx0LThmZTBhNDA5MjNkODQ3M2E5MGJhOWZkNmQ5YzYwMzU0EAE=",
+      "pid": 80177,
+      "at": 1791945235003
+    },
+    {
+      "method": "planning",
+      "receiver": "ProjectPlanning",
+      "correlation": "fault-8fe0a40923d8473a90ba9fd6d9c60354:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+      "recipientIdBase64": "CigKJmZhdWx0LThmZTBhNDA5MjNkODQ3M2E5MGJhOWZkNmQ5YzYwMzU0EAE=",
+      "pid": 80182,
+      "at": 1791945265022
+    }
+  ],
+  "restartPids": [
+    80175,
+    80176,
+    80177,
+    80178,
+    80179,
+    80180,
+    80181,
+    80182
+  ]
+}

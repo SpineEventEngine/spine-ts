@@ -263,8 +263,9 @@ describe("BackendMembershipKernel", () => {
     const owner = kernel({
       create: async (member) =>
         client(member, {
-          activate: async () => {
+          activate: async (_child, _updates, signal) => {
             activations++;
+            await waitForAbort(signal);
           },
         }),
     });
@@ -506,6 +507,72 @@ describe("BackendMembershipKernel", () => {
     } finally {
       controller.abort();
       await result;
+      await owner.close();
+    }
+  });
+  it("ignores an intentionally replaced child's rejection before the replacement ACK", async () => {
+    const firstAck = deferred();
+    const releaseReplacement = deferred();
+    const oldStarted = deferred();
+    const oldRejected = deferred();
+    const delivered: string[] = [];
+    const owner = kernel({
+      isActivationAck: (update) => update.startsWith("ack:"),
+      create: async (member) =>
+        client(member, {
+          activate: async (_child, updates, signal) => {
+            if (member.id === "a") {
+              await updates("ack:a");
+              firstAck.resolve(undefined);
+              await waitForAbort(signal);
+            } else if (member.endpoint === "v1") {
+              oldStarted.resolve(undefined);
+              await waitForAbort(signal);
+              oldRejected.resolve(undefined);
+              throw new Error("old child rejected on intentional replacement");
+            } else {
+              await releaseReplacement.promise;
+              await updates("ack:b");
+              await waitForAbort(signal);
+            }
+          },
+        }),
+    });
+    await owner.reconcile([
+      { id: "a", endpoint: "v1" },
+      { id: "b", endpoint: "v1" },
+    ]);
+    await owner.subscribe(definition("x"), new AbortController().signal);
+    const controller = new AbortController();
+    const activation = owner.activate(
+      definition("x"),
+      async (update) => {
+        delivered.push(update);
+      },
+      controller.signal,
+    );
+    const outcome = activation.then(
+      () => "cancelled" as const,
+      (error: unknown) => error,
+    );
+    try {
+      await firstAck.promise;
+      await oldStarted.promise;
+      const replacing = owner.reconcile([
+        { id: "a", endpoint: "v1" },
+        { id: "b", endpoint: "v2" },
+      ]);
+      await oldRejected.promise;
+      expect(delivered).toEqual([]);
+      releaseReplacement.resolve(undefined);
+      await replacing;
+      await vi.waitFor(() => expect(delivered).toHaveLength(1));
+      controller.abort();
+      await expect(outcome).resolves.toBe("cancelled");
+    } finally {
+      releaseReplacement.resolve(undefined);
+      controller.abort();
+      await outcome;
       await owner.close();
     }
   });
@@ -763,7 +830,7 @@ describe("BackendMembershipKernel", () => {
       await owner.close();
     }
   });
-  it("disposes an unexpectedly ended ready child before its replacement activates", async () => {
+  it("rejects an unexpectedly ended ready child and permits a new logical subscription", async () => {
     let activations = 0;
     let disposals = 0;
     const ready = deferred();
@@ -792,15 +859,371 @@ describe("BackendMembershipKernel", () => {
       },
       controller.signal,
     );
+    const terminal = expect(active).rejects.toThrow("stream ended");
     try {
+      await terminal;
       await vi.waitFor(() => expect(disposals).toBe(1));
-      await owner.reconcile([{ id: "a" }]);
+      await owner.subscribe(definition("x"), new AbortController().signal);
+      const nextController = new AbortController();
+      const next = owner.activate(definition("x"), async () => {}, nextController.signal);
       await vi.waitFor(() => expect(activations).toBe(2));
+      nextController.abort();
+      await next;
     } finally {
       controller.abort();
-      await active;
       await owner.close();
     }
+  });
+  it.each(["rejection", "EOF"])(
+    "terminates a ready logical activation when its child ends by %s",
+    async (ending) => {
+      const ready = deferred();
+      const finishChild = deferred();
+      const failure = new Error("native child stream failed");
+      let disposals = 0;
+      const owner = kernel({
+        isActivationAck: (update) => update.startsWith("ack:"),
+        create: async (member) =>
+          client(member, {
+            activate: async (_child, updates) => {
+              await updates(`ack:${member.id}`);
+              await finishChild.promise;
+              if (ending === "rejection") throw failure;
+            },
+            dispose: async () => {
+              disposals++;
+            },
+          }),
+      });
+      await owner.reconcile([{ id: "a" }]);
+      await owner.subscribe(definition("x"), new AbortController().signal);
+      const controller = new AbortController();
+      const active = owner.activate(
+        definition("x"),
+        async () => ready.resolve(undefined),
+        controller.signal,
+      );
+      let outcome:
+        { readonly status: "resolved" | "rejected"; readonly error?: unknown } | undefined;
+      void active.then(
+        () => {
+          outcome = { status: "resolved" };
+        },
+        (error: unknown) => {
+          outcome = { status: "rejected", error };
+        },
+      );
+      try {
+        await ready.promise;
+        finishChild.resolve(undefined);
+        await vi.waitFor(() => expect(outcome?.status).toBe("rejected"), { timeout: 500 });
+        expect(outcome?.error).toBeInstanceOf(Error);
+        expect((outcome?.error as Error).message).toContain(
+          ending === "rejection" ? "native child stream failed" : "stream ended",
+        );
+        expect(disposals).toBe(1);
+      } finally {
+        controller.abort();
+        await active.catch(() => undefined);
+        await owner.close();
+      }
+    },
+  );
+  it.each(["rejection", "EOF"])(
+    "cleans up a generic child after %s following a business update",
+    async (ending) => {
+      const delivered = deferred();
+      const finishChild = deferred();
+      const failure = new Error("generic relay failed");
+      let disposals = 0;
+      const owner = kernel({
+        create: async (member) =>
+          client(member, {
+            activate: async (_child, updates) => {
+              await updates("business update");
+              await finishChild.promise;
+              if (ending === "rejection") throw failure;
+            },
+            dispose: async () => {
+              disposals++;
+            },
+          }),
+      });
+      await owner.reconcile([{ id: "a" }]);
+      await owner.subscribe(definition("x"), new AbortController().signal);
+      const active = owner.activate(
+        definition("x"),
+        async () => delivered.resolve(undefined),
+        new AbortController().signal,
+      );
+      const terminal =
+        ending === "rejection"
+          ? expect(active).rejects.toBe(failure)
+          : expect(active).rejects.toThrow("Backend child stream ended unexpectedly.");
+      await delivered.promise;
+      finishChild.resolve(undefined);
+      await terminal;
+      expect(disposals).toBe(1);
+      await owner.subscribe(definition("x"), new AbortController().signal);
+      await owner.close();
+    },
+  );
+  it("retains failed generic child cleanup and aggregates it with the original failure", async () => {
+    const delivered = deferred();
+    const finishChild = deferred();
+    const failure = new Error("generic child failed");
+    let disposals = 0;
+    const owner = kernel({
+      create: async (member) =>
+        client(member, {
+          activate: async (_child, updates) => {
+            await updates("business update");
+            await finishChild.promise;
+            throw failure;
+          },
+          dispose: async () => {
+            disposals++;
+            if (disposals === 1) throw new Error("generic cleanup failed");
+          },
+        }),
+    });
+    await owner.reconcile([{ id: "a" }]);
+    await owner.subscribe(definition("x"), new AbortController().signal);
+    const active = owner.activate(
+      definition("x"),
+      async () => delivered.resolve(undefined),
+      new AbortController().signal,
+    );
+    const terminal = expect(active).rejects.toMatchObject({
+      message: "Child activation cleanup failed.",
+      errors: [
+        failure,
+        expect.objectContaining({ message: "backend child cleanup remains incomplete." }),
+      ],
+    });
+    try {
+      await delivered.promise;
+      finishChild.resolve(undefined);
+      await terminal;
+      expect(disposals).toBe(1);
+      await owner.cancel(definition("x"), new AbortController().signal);
+      expect(disposals).toBe(2);
+    } finally {
+      finishChild.resolve(undefined);
+      await owner.close();
+    }
+  });
+  it("does not relay a late update from an aborted generic child into a replacement activation", async () => {
+    const firstStarted = deferred();
+    const releaseOld = deferred();
+    const secondSeen = deferred();
+    const firstUpdates: string[] = [];
+    const secondUpdates: string[] = [];
+    let attempts = 0;
+    const owner = kernel({
+      create: async (member) =>
+        client(member, {
+          activate: async (_child, updates, signal) => {
+            attempts++;
+            if (attempts === 1) {
+              firstStarted.resolve(undefined);
+              await releaseOld.promise;
+              await updates("late old update");
+              return;
+            }
+            await updates("current update");
+            secondSeen.resolve(undefined);
+            await waitForAbort(signal);
+          },
+        }),
+    });
+    await owner.reconcile([{ id: "a" }]);
+    await owner.subscribe(definition("x"), new AbortController().signal);
+    const firstController = new AbortController();
+    const first = owner.activate(
+      definition("x"),
+      async (update) => {
+        firstUpdates.push(update);
+      },
+      firstController.signal,
+    );
+    await firstStarted.promise;
+    firstController.abort();
+    await first;
+    const secondController = new AbortController();
+    const second = owner.activate(
+      definition("x"),
+      async (update) => {
+        secondUpdates.push(update);
+      },
+      secondController.signal,
+    );
+    try {
+      releaseOld.resolve(undefined);
+      await secondSeen.promise;
+      expect(firstUpdates).toEqual([]);
+      expect(secondUpdates).toEqual(["current update"]);
+    } finally {
+      secondController.abort();
+      await second;
+      await owner.close();
+    }
+  });
+  it("ends all ready sibling relays after one child fails", async () => {
+    const ready = deferred();
+    const fail = deferred();
+    const failure = new Error("one child failed");
+    const disposed: string[] = [];
+    let acknowledgements = 0;
+    const owner = kernel({
+      isActivationAck: (update) => update.startsWith("ack:"),
+      create: async (member) =>
+        client(member, {
+          activate: async (_child, updates, signal) => {
+            await updates(`ack:${member.id}`);
+            if (member.id === "b") {
+              await fail.promise;
+              throw failure;
+            }
+            await waitForAbort(signal);
+            await updates("late sibling update");
+          },
+          dispose: async () => {
+            disposed.push(member.id);
+          },
+        }),
+    });
+    await owner.reconcile([{ id: "a" }, { id: "b" }]);
+    await owner.subscribe(definition("x"), new AbortController().signal);
+    const active = owner.activate(
+      definition("x"),
+      async () => {
+        acknowledgements++;
+        ready.resolve(undefined);
+      },
+      new AbortController().signal,
+    );
+    const terminal = expect(active).rejects.toBe(failure);
+    await ready.promise;
+    fail.resolve(undefined);
+    await terminal;
+    expect(acknowledgements).toBe(1);
+    expect(disposed.sort()).toEqual(["a", "b"]);
+    await owner.close();
+  });
+  it("fails a logical activation while its single ACK callback is still pending", async () => {
+    const ackEntered = deferred();
+    const releaseAck = deferred();
+    const failChild = deferred();
+    const failure = new Error("child failed while ACK was pending");
+    const disposed: string[] = [];
+    let logicalAcks = 0;
+    const owner = kernel({
+      isActivationAck: (update) => update.startsWith("ack:"),
+      create: async (member) =>
+        client(member, {
+          activate: async (_child, updates, signal) => {
+            await updates(`ack:${member.id}`);
+            if (member.id === "b") {
+              await failChild.promise;
+              throw failure;
+            }
+            await waitForAbort(signal);
+          },
+          dispose: async () => {
+            disposed.push(member.id);
+          },
+        }),
+    });
+    await owner.reconcile([{ id: "a" }, { id: "b" }]);
+    await owner.subscribe(definition("x"), new AbortController().signal);
+    const active = owner.activate(
+      definition("x"),
+      async () => {
+        logicalAcks++;
+        ackEntered.resolve(undefined);
+        await releaseAck.promise;
+      },
+      new AbortController().signal,
+    );
+    const terminal = expect(active).rejects.toBe(failure);
+    try {
+      await ackEntered.promise;
+      failChild.resolve(undefined);
+      await terminal;
+      expect(logicalAcks).toBe(1);
+      expect(disposed.sort()).toEqual(["a", "b"]);
+    } finally {
+      releaseAck.resolve(undefined);
+      await owner.close();
+    }
+  });
+  it("treats a child rejection after public cancellation as the cancelled activation", async () => {
+    const ready = deferred();
+    const rejectChild = deferred();
+    let activations = 0;
+    const owner = kernel({
+      isActivationAck: (update) => update.startsWith("ack:"),
+      create: async (member) =>
+        client(member, {
+          activate: async (_child, updates) => {
+            activations++;
+            await updates(`ack:${member.id}`);
+            await rejectChild.promise;
+            throw new Error("late child rejection");
+          },
+        }),
+    });
+    await owner.reconcile([{ id: "a" }]);
+    await owner.subscribe(definition("x"), new AbortController().signal);
+    const controller = new AbortController();
+    const active = owner.activate(
+      definition("x"),
+      async () => ready.resolve(undefined),
+      controller.signal,
+    );
+    try {
+      await ready.promise;
+      controller.abort();
+      rejectChild.resolve(undefined);
+      await expect(active).resolves.toBeUndefined();
+      expect(activations).toBe(1);
+    } finally {
+      rejectChild.resolve(undefined);
+      await owner.close();
+    }
+  });
+  it("ends a ready logical relay when a late joining child fails after its ACK", async () => {
+    const ready = deferred();
+    const failure = new Error("late child failed");
+    let logicalAcks = 0;
+    const owner = kernel({
+      isActivationAck: (update) => update.startsWith("ack:"),
+      create: async (member) =>
+        client(member, {
+          activate: async (_child, updates, signal) => {
+            await updates(`ack:${member.id}`);
+            if (member.id === "b") throw failure;
+            await waitForAbort(signal);
+          },
+        }),
+    });
+    await owner.reconcile([{ id: "a" }]);
+    await owner.subscribe(definition("x"), new AbortController().signal);
+    const active = owner.activate(
+      definition("x"),
+      async () => {
+        logicalAcks++;
+        ready.resolve(undefined);
+      },
+      new AbortController().signal,
+    );
+    const terminal = expect(active).rejects.toBe(failure);
+    await ready.promise;
+    await owner.reconcile([{ id: "a" }, { id: "b" }]);
+    await terminal;
+    expect(logicalAcks).toBe(1);
+    await owner.close();
   });
   it("bounds cancellation when a native activation ignores abort", async () => {
     vi.useFakeTimers();
@@ -912,10 +1335,11 @@ describe("BackendMembershipKernel", () => {
     const owner = kernel({
       create: async (member) =>
         client(member, {
-          activate: async (_child, updates) => {
+          activate: async (_child, updates, signal) => {
             calls++;
             if (calls === 1) await release.promise;
             await updates(`${member.id}-${String(calls)}`);
+            await waitForAbort(signal);
           },
         }),
     });
@@ -1225,7 +1649,7 @@ describe("BackendMembershipKernel", () => {
     expect(disposals).toBe(2);
     await owner.close();
   });
-  it("activates a stored child once, replaces completed children, and contains update failures", async () => {
+  it("reports a failed update sink without recreating a child in that activation", async () => {
     let activates = 0;
     let subscriptions = 0;
     const owner = kernel({
@@ -1248,12 +1672,10 @@ describe("BackendMembershipKernel", () => {
       },
       controller.signal,
     );
-    await Promise.resolve();
+    await expect(activation).rejects.toThrow("consumer");
     await owner.reconcile([{ id: "a" }]);
-    controller.abort();
-    await activation;
-    expect(activates).toBe(2);
-    expect(subscriptions).toBe(2);
+    expect(activates).toBe(1);
+    expect(subscriptions).toBe(1);
     await owner.close();
   });
   it("cancels definitions with and without a client and coalesces repeated removal", async () => {

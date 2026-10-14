@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { ApplicationNode } from "@spine-event-engine/deployment";
 import { AnyMessages } from "@spine-event-engine/core";
@@ -284,7 +284,7 @@ describe("DynamicSubscriptionCreator", () => {
     await activation;
   });
 
-  it("replaces a child after an unexpected activation completion", async () => {
+  it("ends an unexpectedly completed activation until a new logical subscription starts", async () => {
     const firstActivation = deferred();
     const firstFinished = deferred();
     const acknowledged = deferred();
@@ -334,16 +334,25 @@ describe("DynamicSubscriptionCreator", () => {
     await acknowledged.promise;
     expect(activations).toBe(1);
 
+    const terminal = expect(activation).rejects.toThrow("stream ended");
     firstActivation.resolve(undefined);
     await firstFinished.promise;
-    await Promise.resolve();
+    await terminal;
     await owner.reconcile([node]);
-
-    expect(activations).toBe(2);
-    await owner.reconcile([node]);
-    expect(activations).toBe(2);
+    expect(activations).toBe(1);
+    await creator.subscribe(wire, new AbortController().signal);
+    const replacementController = new AbortController();
+    const replacement = creator.activate(
+      { wire, updates: () => Promise.resolve() },
+      replacementController.signal,
+    );
+    await vi.waitFor(() => {
+      expect(activations).toBe(2);
+    });
+    replacementController.abort();
+    await replacement;
     controller.abort();
-    await activation;
+    await owner.close();
   });
 
   it("rejects a new native subscription while membership is empty", async () => {

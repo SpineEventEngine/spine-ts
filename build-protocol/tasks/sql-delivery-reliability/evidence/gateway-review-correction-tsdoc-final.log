@@ -1,0 +1,2 @@
+$ node scripts/check-tsdoc.mjs
+TSDoc enforcement checks passed.

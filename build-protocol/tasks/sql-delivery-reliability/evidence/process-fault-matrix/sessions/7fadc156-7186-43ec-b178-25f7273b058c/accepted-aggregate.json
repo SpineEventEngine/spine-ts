@@ -1,0 +1,557 @@
+{
+  "status": "PASS",
+  "sessionId": "7fadc156-7186-43ec-b178-25f7273b058c",
+  "exactGitHead": "1eda779c3722e58bc82d766e77dbc72b7b033b32",
+  "runtimeTreeSha256": "78765cd81cb6c4c340fd94820f58c9f73807a2429f24fa0824d098a424d71b98",
+  "configuredProfile": {
+    "model": "gpt-6-luna",
+    "reasoning": "low",
+    "runtimeMetadata": "not exposed by this execution surface"
+  },
+  "commandExecution": "32/32 public package commands passed; no timeout or surviving isolated process group",
+  "inventory": {
+    "expectedCount": 32,
+    "actualCount": 32,
+    "missing": [],
+    "duplicates": []
+  },
+  "providerCases": {
+    "postgres16": 8,
+    "postgres18": 8,
+    "mysql84": 8,
+    "mariadb114": 8
+  },
+  "processCases": {
+    "p2": 16,
+    "p8": 16
+  },
+  "scenarioCounts": {
+    "before-effect": {
+      "cases": 8,
+      "commandIds": 8,
+      "completedStates": 8,
+      "expectedVolatileLossObserved": 0,
+      "completeColdRepairRows": 0,
+      "extraRecipientReplays": 5
+    },
+    "after-save-before-ack": {
+      "cases": 8,
+      "commandIds": 8,
+      "completedStates": 8,
+      "expectedVolatileLossObserved": 0,
+      "completeColdRepairRows": 0,
+      "extraRecipientReplays": 0
+    },
+    "partial-publication-repair": {
+      "cases": 8,
+      "commandIds": 8,
+      "completedStates": 8,
+      "expectedVolatileLossObserved": 0,
+      "completeColdRepairRows": 8,
+      "extraRecipientReplays": 0
+    },
+    "shared-volatile-loss": {
+      "cases": 8,
+      "commandIds": 16,
+      "completedStates": 0,
+      "expectedVolatileLossObserved": 8,
+      "completeColdRepairRows": 0,
+      "extraRecipientReplays": 0
+    }
+  },
+  "uniqueDatabaseRuns": 32,
+  "uniqueRunIds": 32,
+  "acceptedCommands": {
+    "total": 40,
+    "uniqueIds": 40,
+    "byRun": [
+      {
+        "runId": "ea505f3651334de389b6fc8f7737165a",
+        "provider": "postgres16",
+        "processes": 2,
+        "scenario": "before-effect",
+        "commandIds": [
+          "f2050738-4e5e-45bf-99c6-293cd44741be"
+        ]
+      },
+      {
+        "runId": "cd00bd3811204667a04a2e07fc2e9ab9",
+        "provider": "postgres16",
+        "processes": 2,
+        "scenario": "after-save-before-ack",
+        "commandIds": [
+          "5d3ad31b-3925-478e-b978-b0fee2bcde81"
+        ]
+      },
+      {
+        "runId": "3b286568764c44c099dddbdd6e189a18",
+        "provider": "postgres16",
+        "processes": 2,
+        "scenario": "partial-publication-repair",
+        "commandIds": [
+          "58ee74a6-a590-4fbb-9734-2b6e71eb3fe2"
+        ]
+      },
+      {
+        "runId": "46c8970c29344323a358bb88036f6ac3",
+        "provider": "postgres16",
+        "processes": 2,
+        "scenario": "shared-volatile-loss",
+        "commandIds": [
+          "1cbbdade-73ce-4a29-96eb-2ffcba1c206c",
+          "6e79ce1c-aec2-4403-b9eb-8c5eeae93647"
+        ]
+      },
+      {
+        "runId": "15ef71501fc7418bbef9afa05b6652b7",
+        "provider": "postgres16",
+        "processes": 8,
+        "scenario": "before-effect",
+        "commandIds": [
+          "42b6ad97-65e3-4838-aecc-9bb4622e7547"
+        ]
+      },
+      {
+        "runId": "518165aa5f104f879254b1caa689b7d5",
+        "provider": "postgres16",
+        "processes": 8,
+        "scenario": "after-save-before-ack",
+        "commandIds": [
+          "0e98451d-d1fb-4fad-93cc-6f3aab30a164"
+        ]
+      },
+      {
+        "runId": "185518d6e4df4110b00c3284cec29bc7",
+        "provider": "postgres16",
+        "processes": 8,
+        "scenario": "partial-publication-repair",
+        "commandIds": [
+          "65311189-6209-4d28-be37-1db5678f32af"
+        ]
+      },
+      {
+        "runId": "7644c2596ff941b197a1d0cdf6ffbd92",
+        "provider": "postgres16",
+        "processes": 8,
+        "scenario": "shared-volatile-loss",
+        "commandIds": [
+          "514e8f0a-0738-4713-997a-43153b3e61c7",
+          "5f6b8257-7c0e-4287-a947-4169aa69174e"
+        ]
+      },
+      {
+        "runId": "1a956816fb134bb9bde2378cd9f721d7",
+        "provider": "postgres18",
+        "processes": 2,
+        "scenario": "before-effect",
+        "commandIds": [
+          "c08f990d-2618-438d-9eef-5957481d604b"
+        ]
+      },
+      {
+        "runId": "800f7df1c49f4e52bcd6526fe17568a8",
+        "provider": "postgres18",
+        "processes": 2,
+        "scenario": "after-save-before-ack",
+        "commandIds": [
+          "425957c8-39d4-4793-b46a-92b87e8dfa61"
+        ]
+      },
+      {
+        "runId": "c84070361e6e477f840c7486d68821fc",
+        "provider": "postgres18",
+        "processes": 2,
+        "scenario": "partial-publication-repair",
+        "commandIds": [
+          "688b62a6-4fa9-48ae-895a-2cb7e025c6fe"
+        ]
+      },
+      {
+        "runId": "f1429e16415c45c19a74bb7f9218fd7a",
+        "provider": "postgres18",
+        "processes": 2,
+        "scenario": "shared-volatile-loss",
+        "commandIds": [
+          "b527c139-4af1-488d-b733-655a1fdee482",
+          "e5dca7e6-94ce-48e2-adbe-b4f7e80edeaa"
+        ]
+      },
+      {
+        "runId": "03492e57cbe840c58e64feac17c12ef5",
+        "provider": "postgres18",
+        "processes": 8,
+        "scenario": "before-effect",
+        "commandIds": [
+          "e0290416-c63b-4105-9744-a01e743ba8c9"
+        ]
+      },
+      {
+        "runId": "5a5f234263c8431fa18bdc802aba13dc",
+        "provider": "postgres18",
+        "processes": 8,
+        "scenario": "after-save-before-ack",
+        "commandIds": [
+          "f829306f-437b-4cd1-8bc2-2e2e0a727191"
+        ]
+      },
+      {
+        "runId": "e693d1cec1da4d4eb1114df85fc44949",
+        "provider": "postgres18",
+        "processes": 8,
+        "scenario": "partial-publication-repair",
+        "commandIds": [
+          "84cb8be0-b184-4bee-bc51-92b932b636da"
+        ]
+      },
+      {
+        "runId": "9fe0f7689f414a16a412754a99a1e56d",
+        "provider": "postgres18",
+        "processes": 8,
+        "scenario": "shared-volatile-loss",
+        "commandIds": [
+          "663f72ea-d451-4c1c-9c58-c6d8c93da085",
+          "327cc7b0-199a-4250-9f13-0b5d40a09ab7"
+        ]
+      },
+      {
+        "runId": "4f94b91ce8c94dadac7effa96634d831",
+        "provider": "mysql84",
+        "processes": 2,
+        "scenario": "before-effect",
+        "commandIds": [
+          "661e3bd9-0435-40bc-a132-2e06b8fc68c7"
+        ]
+      },
+      {
+        "runId": "f0f7f248d4b84b53817ec3201b4aa7aa",
+        "provider": "mysql84",
+        "processes": 2,
+        "scenario": "after-save-before-ack",
+        "commandIds": [
+          "78d21c64-953c-4103-b121-d7482ed874da"
+        ]
+      },
+      {
+        "runId": "e0cd84c49caa4f3b8c12b104f5b3f544",
+        "provider": "mysql84",
+        "processes": 2,
+        "scenario": "partial-publication-repair",
+        "commandIds": [
+          "fc94b11c-bf6b-49fe-ae88-aefe74f81589"
+        ]
+      },
+      {
+        "runId": "641cb0877b9347889129f1fb9fbe6057",
+        "provider": "mysql84",
+        "processes": 2,
+        "scenario": "shared-volatile-loss",
+        "commandIds": [
+          "27ae06e2-97ec-43cf-a07e-b8cba906d387",
+          "0bf2cfb7-2c1f-4230-8e33-87e208b5fcf5"
+        ]
+      },
+      {
+        "runId": "493374738fc54c8b95c2ebf38d59a340",
+        "provider": "mysql84",
+        "processes": 8,
+        "scenario": "before-effect",
+        "commandIds": [
+          "e4e83917-f647-42fb-906a-9aa1eba341da"
+        ]
+      },
+      {
+        "runId": "64f3cf95f0244819b24609b6fad22217",
+        "provider": "mysql84",
+        "processes": 8,
+        "scenario": "after-save-before-ack",
+        "commandIds": [
+          "0f2df878-f142-4fb9-8228-61e4441d5e80"
+        ]
+      },
+      {
+        "runId": "2239d41d9909495ea0707d273393bfb4",
+        "provider": "mysql84",
+        "processes": 8,
+        "scenario": "partial-publication-repair",
+        "commandIds": [
+          "bdb0cc95-40e1-4d55-9dd3-9745e4e3579a"
+        ]
+      },
+      {
+        "runId": "bd035f62679f4e28a19ae4ff406ef58e",
+        "provider": "mysql84",
+        "processes": 8,
+        "scenario": "shared-volatile-loss",
+        "commandIds": [
+          "27a91cf7-17a3-49e3-824b-c0d9834da3d7",
+          "1c9af1e3-446b-46a2-9e27-450b0e9da9e7"
+        ]
+      },
+      {
+        "runId": "43679da661814f28856ddd5f66011e9b",
+        "provider": "mariadb114",
+        "processes": 2,
+        "scenario": "before-effect",
+        "commandIds": [
+          "b512503b-92b4-42f5-a35f-5339754235dc"
+        ]
+      },
+      {
+        "runId": "5e4bd97531184b3c94cbe7b1fac16973",
+        "provider": "mariadb114",
+        "processes": 2,
+        "scenario": "after-save-before-ack",
+        "commandIds": [
+          "e59ae607-7151-4be6-a30a-8b98d1607504"
+        ]
+      },
+      {
+        "runId": "0b5b0cb4b2ac4edb9780080e5147568a",
+        "provider": "mariadb114",
+        "processes": 2,
+        "scenario": "partial-publication-repair",
+        "commandIds": [
+          "71f54ecb-16bd-4658-9f01-cfdbd4a99520"
+        ]
+      },
+      {
+        "runId": "bee429fd385543efb8c9c3610295fb78",
+        "provider": "mariadb114",
+        "processes": 2,
+        "scenario": "shared-volatile-loss",
+        "commandIds": [
+          "8ecc2bde-eca6-403e-9033-52d3feafb567",
+          "7b89325d-2c79-4d17-8b67-c190b6b9cec0"
+        ]
+      },
+      {
+        "runId": "8fe0a40923d8473a90ba9fd6d9c60354",
+        "provider": "mariadb114",
+        "processes": 8,
+        "scenario": "before-effect",
+        "commandIds": [
+          "5f3c46a5-4a0e-46b3-82b1-82e90029f7d5"
+        ]
+      },
+      {
+        "runId": "1ce8c2e9493242dfae9ea3db8f17cbba",
+        "provider": "mariadb114",
+        "processes": 8,
+        "scenario": "after-save-before-ack",
+        "commandIds": [
+          "bd311134-426b-49f7-a303-62bc795152b0"
+        ]
+      },
+      {
+        "runId": "df452b07db6b4845ab33853bd6b09e81",
+        "provider": "mariadb114",
+        "processes": 8,
+        "scenario": "partial-publication-repair",
+        "commandIds": [
+          "09f2ec5d-0c7e-4a52-ab8a-aa7ebbc35b78"
+        ]
+      },
+      {
+        "runId": "297590065dbf43488584be4eb633c992",
+        "provider": "mariadb114",
+        "processes": 8,
+        "scenario": "shared-volatile-loss",
+        "commandIds": [
+          "52c3f3c9-8040-40e8-8882-adb75e481a64",
+          "b415b869-19f7-489c-9522-f6a840abb080"
+        ]
+      }
+    ]
+  },
+  "validatedEventIdentities": {
+    "count": 32,
+    "identities": [
+      {
+        "runId": "ea505f3651334de389b6fc8f7737165a",
+        "eventId": "22e07501-176a-4d48-b5be-e03c45916c2d",
+        "sha256": "de07d8c3f776162ce16fe4fc8443cceaa00f149ab2ec0dd9c7f542a347e31afd"
+      },
+      {
+        "runId": "cd00bd3811204667a04a2e07fc2e9ab9",
+        "eventId": "c61ca0ab-f4ff-49a5-a284-66750653ef4e",
+        "sha256": "dc647ad78b92d0ccfa490fe6283fb0d4be2d3ecdee9d638f97657f32d3e284ab"
+      },
+      {
+        "runId": "3b286568764c44c099dddbdd6e189a18",
+        "eventId": "41992dce-13ad-44ec-8e02-1469bb17979f",
+        "sha256": "a3a36e240d93681843a4548b2f325d28ac2cc9dc5155e2d290c530f164fc853c"
+      },
+      {
+        "runId": "46c8970c29344323a358bb88036f6ac3",
+        "eventId": "021cb401-832d-44a5-9f24-392fe6061e41",
+        "sha256": "2027b140d91502be573de4b4881b2467329d99c42b44c9b068a4fd0ab83d62a3"
+      },
+      {
+        "runId": "15ef71501fc7418bbef9afa05b6652b7",
+        "eventId": "c56bc11f-c322-4e4f-b9bd-bd0c973e5728",
+        "sha256": "357b2046f2d3fd1a776458435b4411e704277b034555f3e1d7f443baacaa38bd"
+      },
+      {
+        "runId": "518165aa5f104f879254b1caa689b7d5",
+        "eventId": "9611d3ee-238e-4efe-a949-a0d9316d84f8",
+        "sha256": "ef8430fb3d708b07d6e5ba14c541ac3f7ef7da36949846a5369b76cff0811041"
+      },
+      {
+        "runId": "185518d6e4df4110b00c3284cec29bc7",
+        "eventId": "5061cc24-0ef9-43d5-a182-d8a651401063",
+        "sha256": "8057aad1dd967fb001a6c644b8e8ba931f2ccd6cd93aa9dd81e81cd0382c1a64"
+      },
+      {
+        "runId": "7644c2596ff941b197a1d0cdf6ffbd92",
+        "eventId": "61bf2155-6950-49ec-9a43-4cf61fb37c36",
+        "sha256": "9d00e9f40877a0f3b8e9eb4caa288b13b74e86bbc26453ec071e17c590575b6e"
+      },
+      {
+        "runId": "1a956816fb134bb9bde2378cd9f721d7",
+        "eventId": "c1154cfb-8734-482b-952b-1fbb6f1664bb",
+        "sha256": "ab1eca4b14161476d679888c08725ea7b7766dd572337254155ff518a8f345e9"
+      },
+      {
+        "runId": "800f7df1c49f4e52bcd6526fe17568a8",
+        "eventId": "05fbc3fc-cbba-4e44-952d-c02308afb1da",
+        "sha256": "2d7897671372a0efd1b70521e6e77a9388e844bae8ff3b33a950cf46c8b0fc16"
+      },
+      {
+        "runId": "c84070361e6e477f840c7486d68821fc",
+        "eventId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+        "sha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396"
+      },
+      {
+        "runId": "f1429e16415c45c19a74bb7f9218fd7a",
+        "eventId": "1f604539-5661-45df-85e7-cca7063209b1",
+        "sha256": "5631fa86b0b7916c5fab4702666b677b67eb91eff554a5e3cfa51bab3a3baaa4"
+      },
+      {
+        "runId": "03492e57cbe840c58e64feac17c12ef5",
+        "eventId": "1b25501c-2662-46e6-8031-b916a90cb3b9",
+        "sha256": "a9f6ec05b11b9879e4df7fb5df48ce3ecde9fed8f2eb7daf9d2bb8bc2fe3e209"
+      },
+      {
+        "runId": "5a5f234263c8431fa18bdc802aba13dc",
+        "eventId": "d944bdaa-30a3-4546-9e52-a00ba11e8d46",
+        "sha256": "f2d2e27ff7abc1732835d2d8ab50e3eff40cdf29c5801f3b5a4491565d0468a3"
+      },
+      {
+        "runId": "e693d1cec1da4d4eb1114df85fc44949",
+        "eventId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+        "sha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3"
+      },
+      {
+        "runId": "9fe0f7689f414a16a412754a99a1e56d",
+        "eventId": "7745c34a-0c6c-4f5f-b4ac-31601042267f",
+        "sha256": "d0d54f4c2e3fa7730963e73667c7e247433987a73936ed395d3d7fb0c27d12b1"
+      },
+      {
+        "runId": "4f94b91ce8c94dadac7effa96634d831",
+        "eventId": "c9bacab2-dc7e-4b73-be56-3f84e38b0014",
+        "sha256": "dcdbef9e58d5dce8f02ab6230a7d2ac4f6f0e99c9f3c7b70fcf288dea2e719c7"
+      },
+      {
+        "runId": "f0f7f248d4b84b53817ec3201b4aa7aa",
+        "eventId": "f5bbbf6e-76e1-451e-b218-fdf19da1c01f",
+        "sha256": "0ce2b5b23dff77263e27b5d272722d0db9db194e216a48d839cff501c48204cc"
+      },
+      {
+        "runId": "e0cd84c49caa4f3b8c12b104f5b3f544",
+        "eventId": "5e025eff-b911-4814-832a-0a9597b582a9",
+        "sha256": "a542eca699668c1fa4125af8fb35cb240918e19adbccc0514bbc9c245ee21a1c"
+      },
+      {
+        "runId": "641cb0877b9347889129f1fb9fbe6057",
+        "eventId": "ec0b7e22-e972-4702-8fb4-c1f2375403ee",
+        "sha256": "38d8df7c22975693c9278fac6915125fe92c59b79709f375fb1092766514c7c1"
+      },
+      {
+        "runId": "493374738fc54c8b95c2ebf38d59a340",
+        "eventId": "b04e7734-c35b-4815-b70d-f0e4290e31ee",
+        "sha256": "0c43ae1e4c6b139188a8cc4b3217d516f0997ebe890faaa575418b08fd170ad9"
+      },
+      {
+        "runId": "64f3cf95f0244819b24609b6fad22217",
+        "eventId": "8b944aeb-4af7-4c5d-9809-79e88deec448",
+        "sha256": "d8ba74d003e5bfa570727edbc3f749894601ba72a6d60df8dad46db654d316cc"
+      },
+      {
+        "runId": "2239d41d9909495ea0707d273393bfb4",
+        "eventId": "83e06dd5-57ff-4a11-ba35-ba9d8e2ef2fa",
+        "sha256": "558cca0001ebb61e2c169170be36e31fa6d97c8a41a84d171a3f916d1baee3d2"
+      },
+      {
+        "runId": "bd035f62679f4e28a19ae4ff406ef58e",
+        "eventId": "1982368d-1387-422e-a533-c76dc51e8f4c",
+        "sha256": "9e8d49ec47891bbdd4292dba7fef02b40a188b69a1231912475ce454c73e717f"
+      },
+      {
+        "runId": "43679da661814f28856ddd5f66011e9b",
+        "eventId": "98e82fbd-cdd3-41c3-bf7b-a9a8a66bd63a",
+        "sha256": "20d2c48a032ccd2c4fa8a90b2107228199f652733356e97ed21ece8806fad9c4"
+      },
+      {
+        "runId": "5e4bd97531184b3c94cbe7b1fac16973",
+        "eventId": "6d146856-1122-4fd7-807b-944e0dcf182d",
+        "sha256": "347a7f1950fc951d14598162796b181070908d0ee7da4999a545824b070c3fc7"
+      },
+      {
+        "runId": "0b5b0cb4b2ac4edb9780080e5147568a",
+        "eventId": "1f53c10c-596a-4bad-88ca-da3637c7703c",
+        "sha256": "c1f07729677fdceb4d4e518b6cdc766adf22604aedd674b05f75fee573eb0d39"
+      },
+      {
+        "runId": "bee429fd385543efb8c9c3610295fb78",
+        "eventId": "93be338b-1ea6-48ef-8749-6d5b2a62ce51",
+        "sha256": "1545e507aa52219a3b2553fd07b70e81642fbadf3c6f037b15be6462652cfd4a"
+      },
+      {
+        "runId": "8fe0a40923d8473a90ba9fd6d9c60354",
+        "eventId": "8975c810-5279-4d4b-8028-8fe7a9b6918d",
+        "sha256": "d019a3b362efd360779b242bb5f07c2226eb6069698eb04ee6690ac67ca851cd"
+      },
+      {
+        "runId": "1ce8c2e9493242dfae9ea3db8f17cbba",
+        "eventId": "e2f24536-efa2-4dd0-ba61-677196754870",
+        "sha256": "56da3963ffb79c79f837a0be875d48f66b3d3313881a2c4835090ed0e3f30dff"
+      },
+      {
+        "runId": "df452b07db6b4845ab33853bd6b09e81",
+        "eventId": "42e4831a-9cf1-4613-be57-6d75ebe008a8",
+        "sha256": "7d16662c1327dac01527c58ed6ce163120d1636f221bc8b8defdb03d7458fc1f"
+      },
+      {
+        "runId": "297590065dbf43488584be4eb633c992",
+        "eventId": "07532c4a-b322-43a8-86db-49078aa834fd",
+        "sha256": "a74612614738a9e22da412ee9ca7448de2d48d7650fc3e11c1226252ee6cd99a"
+      }
+    ]
+  },
+  "handlerEntryMethodCounts": {
+    "create": 24,
+    "planning": 40,
+    "staffing": 24,
+    "portfolio": 24,
+    "projection": 29
+  },
+  "coldRepairReplayHandlerMethodCounts": {
+    "create": 8,
+    "planning": 18,
+    "staffing": 16,
+    "portfolio": 16,
+    "projection": 16
+  },
+  "cleanup": {
+    "databasesDropped": 32,
+    "cleanupErrors": 0,
+    "successfulWorkerExits": 160,
+    "expectedWorkerExits": 160,
+    "allExitsClean": true
+  },
+  "limitations": [
+    "These scenarios exercise standalone Project native app/Delivery processes, not BrowserServer or managed coordinator child-stream recovery.",
+    "shared-volatile-loss demonstrates loss of a shared in-memory pending delivery after process failure; it is not a business-state durability claim.",
+    "Auth/deployment gateway source and dist files were not included in launch/per-case process-fault provenance; see separate post-run attestation."
+  ]
+}

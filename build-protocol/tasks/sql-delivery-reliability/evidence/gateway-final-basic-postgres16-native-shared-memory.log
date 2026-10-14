@@ -1,0 +1,9 @@
+$ pnpm exec vitest --root ../.. --config vitest.infrastructure.config.ts run packages/server-blackbox-tests/test/project-subscription-transports.integration.test.ts
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  03:39:15
+   Duration  1.20s (transform 17ms, setup 0ms, import 23ms, tests 1.06s, environment 0ms)

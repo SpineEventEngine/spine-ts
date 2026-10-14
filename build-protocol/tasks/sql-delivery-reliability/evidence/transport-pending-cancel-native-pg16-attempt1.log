@@ -1,0 +1,1 @@
+{"status":"PASS","provider":"postgres16","protocol":"native","scenario":"pending-cancel","deliveryMode":"db-only","database":"sqlrel_sub_7e9bc273fe0b4ae993e768f30036122c","counters":{"subscribe":1,"activate":1,"ackReleased":1,"cancel":1,"cancelFaults":0,"cancelSuccesses":1,"iterators":0},"entries":[]}

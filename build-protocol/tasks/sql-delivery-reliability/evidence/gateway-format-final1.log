@@ -1,0 +1,6 @@
+Checking formatting...
+[warn] packages/deployment/src/internal/backend-membership-kernel.ts
+[warn] packages/deployment/test/membership-kernel.test.ts
+[warn] packages/server-blackbox-tests/test-fixtures/project-subscription-transport.mjs
+[warn] packages/server-blackbox-tests/test/project-subscription-transports.integration.test.ts
+[warn] Code style issues found in 4 files. Run Prettier with --write to fix.

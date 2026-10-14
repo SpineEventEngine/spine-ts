@@ -1,0 +1,32 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/deployment/test/membership-kernel.test.ts (70 tests | 1 failed | 67 skipped) 1011ms
+     × ignores an intentionally replaced child's rejection before the replacement ACK 1009ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/deployment/test/membership-kernel.test.ts > BackendMembershipKernel > ignores an intentionally replaced child's rejection before the replacement ACK
+AssertionError: expected [] to have a length of 1 but got +0
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ packages/deployment/test/membership-kernel.test.ts:569:48
+    567|       releaseReplacement.resolve(undefined);
+    568|       await replacing;
+    569|       await vi.waitFor(() => expect(delivered).toHaveLength(1));
+       |                                                ^
+    570|       controller.abort();
+    571|       await expect(outcome).resolves.toBe("cancelled");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed | 67 skipped (70)
+   Start at  03:32:17
+   Duration  1.18s (transform 46ms, setup 0ms, import 57ms, tests 1.01s, environment 0ms)

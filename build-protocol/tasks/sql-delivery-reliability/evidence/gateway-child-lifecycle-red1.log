@@ -1,0 +1,28 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/deployment/test/membership-kernel.test.ts (62 tests | 2 failed | 60 skipped) 10017ms
+     × terminates a ready logical activation when its child ends by rejection 5011ms
+     × terminates a ready logical activation when its child ends by EOF 5004ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/deployment/test/membership-kernel.test.ts > BackendMembershipKernel > terminates a ready logical activation when its child ends by rejection
+ FAIL  packages/deployment/test/membership-kernel.test.ts > BackendMembershipKernel > terminates a ready logical activation when its child ends by EOF
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ packages/deployment/test/membership-kernel.test.ts:805:32
+    803|     }
+    804|   });
+    805|   it.each(["rejection", "EOF"])(
+       |                                ^
+    806|     "terminates a ready logical activation when its child ends by %s",
+    807|     async (ending) => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 60 skipped (62)
+   Start at  03:07:56
+   Duration  10.19s (transform 43ms, setup 0ms, import 53ms, tests 10.02s, environment 0ms)

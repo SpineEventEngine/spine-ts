@@ -1,0 +1,402 @@
+{
+  "acknowledgedCommandIds": [
+    "c08f990d-2618-438d-9eef-5957481d604b"
+  ],
+  "entered": {
+    "method": "planning",
+    "receiver": "ProjectPlanning",
+    "correlation": "fault-1a956816fb134bb9bde2378cd9f721d7:1",
+    "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+    "recipientIdBase64": "CigKJmZhdWx0LTFhOTU2ODE2ZmIxMzRiYjliZGUyMzc4Y2Q5ZjcyMWQ3EAE=",
+    "pid": 39450,
+    "at": 1791944588452
+  },
+  "before": {
+    "projects": [
+      {
+        "number": 1,
+        "states": {
+          "project": true,
+          "planning": false,
+          "staffing": true,
+          "portfolio": true,
+          "projection": true
+        }
+      }
+    ],
+    "events": [
+      {
+        "id": "c1154cfb-8734-482b-952b-1fbb6f1664bb",
+        "typeUrl": "type.spine.server.testing/spine.server.testing.ProjectCreated",
+        "number": 1,
+        "organization": "fault-1a956816fb134bb9bde2378cd9f721d7",
+        "name": "roadmap-1",
+        "sha256": "ab1eca4b14161476d679888c08725ea7b7766dd572337254155ff518a8f345e9",
+        "binaryBase64": "CiYKJGMxMTU0Y2ZiLTg3MzQtNDgyYi05NTJiLTFmYmI2ZjE2NjRiYhKkAQo9dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0Q3JlYXRlZBJjCigKJmZhdWx0LTFhOTU2ODE2ZmIxMzRiYjliZGUyMzc4Y2Q5ZjcyMWQ3EiwKKAomZmF1bHQtMWE5NTY4MTZmYjEzNGJiOWJkZTIzNzhjZDlmNzIxZDcQARoJcm9hZG1hcC0xGp0CCgsIjM+71gYQqLHTOhpoCjh0eXBlLnNwaW5lLnNlcnZlci50ZXN0aW5nL3NwaW5lLnNlcnZlci50ZXN0aW5nLlByb2plY3RJZBIsCigKJmZhdWx0LTFhOTU2ODE2ZmIxMzRiYjliZGUyMzc4Y2Q5ZjcyMWQ3EAEiAHKhAQqMAQpMCiJ0eXBlLnNwaW5lLmlvL3NwaW5lLmNvcmUuQ29tbWFuZElkEiYKJGMwOGY5OTBkLTI2MTgtNDM4ZC05ZWVmLTU5NTc0ODFkNjA0YhI8dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5DcmVhdGVQcm9qZWN0GhASDgoMbWF0cml4LWFjdG9y"
+      }
+    ]
+  },
+  "postKill": {
+    "projects": [
+      {
+        "number": 1,
+        "states": {
+          "project": true,
+          "planning": false,
+          "staffing": true,
+          "portfolio": true,
+          "projection": true
+        }
+      }
+    ],
+    "events": [
+      {
+        "id": "c1154cfb-8734-482b-952b-1fbb6f1664bb",
+        "typeUrl": "type.spine.server.testing/spine.server.testing.ProjectCreated",
+        "number": 1,
+        "organization": "fault-1a956816fb134bb9bde2378cd9f721d7",
+        "name": "roadmap-1",
+        "sha256": "ab1eca4b14161476d679888c08725ea7b7766dd572337254155ff518a8f345e9",
+        "binaryBase64": "CiYKJGMxMTU0Y2ZiLTg3MzQtNDgyYi05NTJiLTFmYmI2ZjE2NjRiYhKkAQo9dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0Q3JlYXRlZBJjCigKJmZhdWx0LTFhOTU2ODE2ZmIxMzRiYjliZGUyMzc4Y2Q5ZjcyMWQ3EiwKKAomZmF1bHQtMWE5NTY4MTZmYjEzNGJiOWJkZTIzNzhjZDlmNzIxZDcQARoJcm9hZG1hcC0xGp0CCgsIjM+71gYQqLHTOhpoCjh0eXBlLnNwaW5lLnNlcnZlci50ZXN0aW5nL3NwaW5lLnNlcnZlci50ZXN0aW5nLlByb2plY3RJZBIsCigKJmZhdWx0LTFhOTU2ODE2ZmIxMzRiYjliZGUyMzc4Y2Q5ZjcyMWQ3EAEiAHKhAQqMAQpMCiJ0eXBlLnNwaW5lLmlvL3NwaW5lLmNvcmUuQ29tbWFuZElkEiYKJGMwOGY5OTBkLTI2MTgtNDM4ZC05ZWVmLTU5NTc0ODFkNjA0YhI8dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5DcmVhdGVQcm9qZWN0GhASDgoMbWF0cml4LWFjdG9y"
+      }
+    ]
+  },
+  "after": {
+    "projects": [
+      {
+        "number": 1,
+        "states": {
+          "project": true,
+          "planning": true,
+          "staffing": true,
+          "portfolio": true,
+          "projection": true
+        }
+      }
+    ],
+    "events": [
+      {
+        "id": "c1154cfb-8734-482b-952b-1fbb6f1664bb",
+        "typeUrl": "type.spine.server.testing/spine.server.testing.ProjectCreated",
+        "number": 1,
+        "organization": "fault-1a956816fb134bb9bde2378cd9f721d7",
+        "name": "roadmap-1",
+        "sha256": "ab1eca4b14161476d679888c08725ea7b7766dd572337254155ff518a8f345e9",
+        "binaryBase64": "CiYKJGMxMTU0Y2ZiLTg3MzQtNDgyYi05NTJiLTFmYmI2ZjE2NjRiYhKkAQo9dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0Q3JlYXRlZBJjCigKJmZhdWx0LTFhOTU2ODE2ZmIxMzRiYjliZGUyMzc4Y2Q5ZjcyMWQ3EiwKKAomZmF1bHQtMWE5NTY4MTZmYjEzNGJiOWJkZTIzNzhjZDlmNzIxZDcQARoJcm9hZG1hcC0xGp0CCgsIjM+71gYQqLHTOhpoCjh0eXBlLnNwaW5lLnNlcnZlci50ZXN0aW5nL3NwaW5lLnNlcnZlci50ZXN0aW5nLlByb2plY3RJZBIsCigKJmZhdWx0LTFhOTU2ODE2ZmIxMzRiYjliZGUyMzc4Y2Q5ZjcyMWQ3EAEiAHKhAQqMAQpMCiJ0eXBlLnNwaW5lLmlvL3NwaW5lLmNvcmUuQ29tbWFuZElkEiYKJGMwOGY5OTBkLTI2MTgtNDM4ZC05ZWVmLTU5NTc0ODFkNjA0YhI8dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5DcmVhdGVQcm9qZWN0GhASDgoMbWF0cml4LWFjdG9y"
+      }
+    ]
+  },
+  "allEntries": [
+    {
+      "method": "create",
+      "receiver": "Project",
+      "correlation": "fault-1a956816fb134bb9bde2378cd9f721d7:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+      "recipientIdBase64": "CigKJmZhdWx0LTFhOTU2ODE2ZmIxMzRiYjliZGUyMzc4Y2Q5ZjcyMWQ3EAE=",
+      "pid": 39450,
+      "at": 1791944588108
+    },
+    {
+      "method": "portfolio",
+      "receiver": "Portfolio",
+      "correlation": "fault-1a956816fb134bb9bde2378cd9f721d7:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+      "recipientIdBase64": "CigKJmZhdWx0LTFhOTU2ODE2ZmIxMzRiYjliZGUyMzc4Y2Q5ZjcyMWQ3EAE=",
+      "pid": 39450,
+      "at": 1791944588216
+    },
+    {
+      "method": "staffing",
+      "receiver": "ProjectStaffing",
+      "correlation": "fault-1a956816fb134bb9bde2378cd9f721d7:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+      "recipientIdBase64": "CigKJmZhdWx0LTFhOTU2ODE2ZmIxMzRiYjliZGUyMzc4Y2Q5ZjcyMWQ3EAE=",
+      "pid": 39450,
+      "at": 1791944588264
+    },
+    {
+      "method": "projection",
+      "receiver": "ProjectProjection",
+      "correlation": "fault-1a956816fb134bb9bde2378cd9f721d7:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+      "recipientIdBase64": "CigKJmZhdWx0LTFhOTU2ODE2ZmIxMzRiYjliZGUyMzc4Y2Q5ZjcyMWQ3EAE=",
+      "pid": 39450,
+      "at": 1791944588293
+    },
+    {
+      "method": "planning",
+      "receiver": "ProjectPlanning",
+      "correlation": "fault-1a956816fb134bb9bde2378cd9f721d7:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+      "recipientIdBase64": "CigKJmZhdWx0LTFhOTU2ODE2ZmIxMzRiYjliZGUyMzc4Y2Q5ZjcyMWQ3EAE=",
+      "pid": 39450,
+      "at": 1791944588452
+    },
+    {
+      "method": "planning",
+      "receiver": "ProjectPlanning",
+      "correlation": "fault-1a956816fb134bb9bde2378cd9f721d7:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+      "recipientIdBase64": "CigKJmZhdWx0LTFhOTU2ODE2ZmIxMzRiYjliZGUyMzc4Y2Q5ZjcyMWQ3EAE=",
+      "pid": 39526,
+      "at": 1791944618938
+    }
+  ],
+  "extraReplays": [],
+  "preKillDelivery": {
+    "shards": [
+      {
+        "shard": "0/2",
+        "count": 1,
+        "truncated": false,
+        "rows": [
+          {
+            "messageId": "4330a0af-4703-4118-8a32-407d13df91e0",
+            "signalId": "c1154cfb-8734-482b-952b-1fbb6f1664bb",
+            "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+            "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+            "targetIdBase64": "CigKJmZhdWx0LTFhOTU2ODE2ZmIxMzRiYjliZGUyMzc4Y2Q5ZjcyMWQ3EAE=",
+            "signalTypeUrl": "type.spine.io/spine.core.Event",
+            "signalValueSha256": "ab1eca4b14161476d679888c08725ea7b7766dd572337254155ff518a8f345e9",
+            "status": "TO_DELIVER",
+            "whenReceivedSeconds": "1791944588",
+            "whenReceivedNanos": 152001000,
+            "keepUntilMillis": 1791944618152,
+            "version": "2"
+          }
+        ],
+        "statuses": {
+          "TO_DELIVER": 1
+        }
+      },
+      {
+        "shard": "1/2",
+        "count": 2,
+        "truncated": false,
+        "rows": [
+          {
+            "messageId": "8d1bf934-018f-49e0-a900-07b2ed501880",
+            "signalId": "c08f990d-2618-438d-9eef-5957481d604b",
+            "targetTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectState",
+            "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+            "targetIdBase64": "CigKJmZhdWx0LTFhOTU2ODE2ZmIxMzRiYjliZGUyMzc4Y2Q5ZjcyMWQ3EAE=",
+            "signalTypeUrl": "type.spine.io/spine.core.Command",
+            "signalValueSha256": "97aac7e0cf1925be42f0d63a48df3159220543fec6ddf900584777bf091c7948",
+            "status": "DELIVERED",
+            "whenReceivedSeconds": "1791944588",
+            "whenReceivedNanos": 55000000,
+            "keepUntilMillis": 1791944618054,
+            "version": "1"
+          },
+          {
+            "messageId": "cb6100ee-68be-4d4c-9a28-27314f8c1302",
+            "signalId": "c1154cfb-8734-482b-952b-1fbb6f1664bb",
+            "targetTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingState",
+            "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+            "targetIdBase64": "CigKJmZhdWx0LTFhOTU2ODE2ZmIxMzRiYjliZGUyMzc4Y2Q5ZjcyMWQ3EAE=",
+            "signalTypeUrl": "type.spine.io/spine.core.Event",
+            "signalValueSha256": "ab1eca4b14161476d679888c08725ea7b7766dd572337254155ff518a8f345e9",
+            "status": "DELIVERED",
+            "whenReceivedSeconds": "1791944588",
+            "whenReceivedNanos": 163001000,
+            "keepUntilMillis": 1791944618163,
+            "version": "3"
+          }
+        ],
+        "statuses": {
+          "DELIVERED": 2
+        }
+      },
+      {
+        "shard": "0/1",
+        "count": 2,
+        "truncated": false,
+        "rows": [
+          {
+            "messageId": "1d14bd02-3e40-4730-9d98-e75269af3c22",
+            "signalId": "c1154cfb-8734-482b-952b-1fbb6f1664bb",
+            "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioState",
+            "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+            "targetIdBase64": "CigKJmZhdWx0LTFhOTU2ODE2ZmIxMzRiYjliZGUyMzc4Y2Q5ZjcyMWQ3EAE=",
+            "signalTypeUrl": "type.spine.io/spine.core.Event",
+            "signalValueSha256": "ab1eca4b14161476d679888c08725ea7b7766dd572337254155ff518a8f345e9",
+            "status": "DELIVERED",
+            "whenReceivedSeconds": "1791944588",
+            "whenReceivedNanos": 172001000,
+            "keepUntilMillis": 1791944618172,
+            "version": "1"
+          },
+          {
+            "messageId": "f791d9e1-517d-46ca-ac6a-b92e2dc84c9c",
+            "signalId": "c1154cfb-8734-482b-952b-1fbb6f1664bb",
+            "targetTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectProjectionState",
+            "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+            "targetIdBase64": "CigKJmZhdWx0LTFhOTU2ODE2ZmIxMzRiYjliZGUyMzc4Y2Q5ZjcyMWQ3EAE=",
+            "signalTypeUrl": "type.spine.io/spine.core.Event",
+            "signalValueSha256": "ab1eca4b14161476d679888c08725ea7b7766dd572337254155ff518a8f345e9",
+            "status": "DELIVERED",
+            "whenReceivedSeconds": "1791944588",
+            "whenReceivedNanos": 180001000,
+            "keepUntilMillis": 1791944618180,
+            "version": "2"
+          }
+        ],
+        "statuses": {
+          "DELIVERED": 2
+        }
+      }
+    ]
+  },
+  "postKillDelivery": {
+    "shards": [
+      {
+        "shard": "0/2",
+        "count": 1,
+        "truncated": false,
+        "rows": [
+          {
+            "messageId": "4330a0af-4703-4118-8a32-407d13df91e0",
+            "signalId": "c1154cfb-8734-482b-952b-1fbb6f1664bb",
+            "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+            "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+            "targetIdBase64": "CigKJmZhdWx0LTFhOTU2ODE2ZmIxMzRiYjliZGUyMzc4Y2Q5ZjcyMWQ3EAE=",
+            "signalTypeUrl": "type.spine.io/spine.core.Event",
+            "signalValueSha256": "ab1eca4b14161476d679888c08725ea7b7766dd572337254155ff518a8f345e9",
+            "status": "TO_DELIVER",
+            "whenReceivedSeconds": "1791944588",
+            "whenReceivedNanos": 152001000,
+            "keepUntilMillis": 1791944618152,
+            "version": "2"
+          }
+        ],
+        "statuses": {
+          "TO_DELIVER": 1
+        }
+      },
+      {
+        "shard": "1/2",
+        "count": 2,
+        "truncated": false,
+        "rows": [
+          {
+            "messageId": "8d1bf934-018f-49e0-a900-07b2ed501880",
+            "signalId": "c08f990d-2618-438d-9eef-5957481d604b",
+            "targetTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectState",
+            "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+            "targetIdBase64": "CigKJmZhdWx0LTFhOTU2ODE2ZmIxMzRiYjliZGUyMzc4Y2Q5ZjcyMWQ3EAE=",
+            "signalTypeUrl": "type.spine.io/spine.core.Command",
+            "signalValueSha256": "97aac7e0cf1925be42f0d63a48df3159220543fec6ddf900584777bf091c7948",
+            "status": "DELIVERED",
+            "whenReceivedSeconds": "1791944588",
+            "whenReceivedNanos": 55000000,
+            "keepUntilMillis": 1791944618054,
+            "version": "1"
+          },
+          {
+            "messageId": "cb6100ee-68be-4d4c-9a28-27314f8c1302",
+            "signalId": "c1154cfb-8734-482b-952b-1fbb6f1664bb",
+            "targetTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingState",
+            "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+            "targetIdBase64": "CigKJmZhdWx0LTFhOTU2ODE2ZmIxMzRiYjliZGUyMzc4Y2Q5ZjcyMWQ3EAE=",
+            "signalTypeUrl": "type.spine.io/spine.core.Event",
+            "signalValueSha256": "ab1eca4b14161476d679888c08725ea7b7766dd572337254155ff518a8f345e9",
+            "status": "DELIVERED",
+            "whenReceivedSeconds": "1791944588",
+            "whenReceivedNanos": 163001000,
+            "keepUntilMillis": 1791944618163,
+            "version": "3"
+          }
+        ],
+        "statuses": {
+          "DELIVERED": 2
+        }
+      },
+      {
+        "shard": "0/1",
+        "count": 2,
+        "truncated": false,
+        "rows": [
+          {
+            "messageId": "1d14bd02-3e40-4730-9d98-e75269af3c22",
+            "signalId": "c1154cfb-8734-482b-952b-1fbb6f1664bb",
+            "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioState",
+            "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+            "targetIdBase64": "CigKJmZhdWx0LTFhOTU2ODE2ZmIxMzRiYjliZGUyMzc4Y2Q5ZjcyMWQ3EAE=",
+            "signalTypeUrl": "type.spine.io/spine.core.Event",
+            "signalValueSha256": "ab1eca4b14161476d679888c08725ea7b7766dd572337254155ff518a8f345e9",
+            "status": "DELIVERED",
+            "whenReceivedSeconds": "1791944588",
+            "whenReceivedNanos": 172001000,
+            "keepUntilMillis": 1791944618172,
+            "version": "1"
+          },
+          {
+            "messageId": "f791d9e1-517d-46ca-ac6a-b92e2dc84c9c",
+            "signalId": "c1154cfb-8734-482b-952b-1fbb6f1664bb",
+            "targetTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectProjectionState",
+            "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+            "targetIdBase64": "CigKJmZhdWx0LTFhOTU2ODE2ZmIxMzRiYjliZGUyMzc4Y2Q5ZjcyMWQ3EAE=",
+            "signalTypeUrl": "type.spine.io/spine.core.Event",
+            "signalValueSha256": "ab1eca4b14161476d679888c08725ea7b7766dd572337254155ff518a8f345e9",
+            "status": "DELIVERED",
+            "whenReceivedSeconds": "1791944588",
+            "whenReceivedNanos": 180001000,
+            "keepUntilMillis": 1791944618180,
+            "version": "2"
+          }
+        ],
+        "statuses": {
+          "DELIVERED": 2
+        }
+      }
+    ]
+  },
+  "recoveredDelivery": {
+    "shards": [
+      {
+        "shard": "0/2",
+        "count": 1,
+        "truncated": false,
+        "rows": [
+          {
+            "messageId": "4330a0af-4703-4118-8a32-407d13df91e0",
+            "signalId": "c1154cfb-8734-482b-952b-1fbb6f1664bb",
+            "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+            "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+            "targetIdBase64": "CigKJmZhdWx0LTFhOTU2ODE2ZmIxMzRiYjliZGUyMzc4Y2Q5ZjcyMWQ3EAE=",
+            "signalTypeUrl": "type.spine.io/spine.core.Event",
+            "signalValueSha256": "ab1eca4b14161476d679888c08725ea7b7766dd572337254155ff518a8f345e9",
+            "status": "DELIVERED",
+            "whenReceivedSeconds": "1791944588",
+            "whenReceivedNanos": 152001000,
+            "keepUntilMillis": 1791944618152,
+            "version": "2"
+          }
+        ],
+        "statuses": {
+          "DELIVERED": 1
+        }
+      },
+      {
+        "shard": "1/2",
+        "count": 0,
+        "truncated": false,
+        "rows": [],
+        "statuses": {}
+      },
+      {
+        "shard": "0/1",
+        "count": 0,
+        "truncated": false,
+        "rows": [],
+        "statuses": {}
+      }
+    ]
+  },
+  "planningEntryCount": 2,
+  "killedPid": 39450,
+  "restartPids": [
+    39526,
+    39527
+  ]
+}

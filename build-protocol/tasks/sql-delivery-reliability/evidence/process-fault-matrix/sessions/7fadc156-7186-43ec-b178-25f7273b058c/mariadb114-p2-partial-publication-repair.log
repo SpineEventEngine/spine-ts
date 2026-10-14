@@ -1,0 +1,16 @@
+startedAt=2026-10-14T02:32:53.266Z
+command=pnpm --filter @spine-event-engine/server-blackbox-tests test:process-faults
+case={"provider":"mariadb114","processes":2,"scenario":"partial-publication-repair","requireColdRepair":true,"requireKillObservation":true}
+stderr: $ pnpm exec vitest --root ../.. --config vitest.infrastructure.config.ts run packages/server-blackbox-tests/test/project-process-faults.integration.test.ts
+stdout:
+stdout:  RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+stdout:
+stdout:
+stdout:  Test Files  1 passed (1)
+stdout:       Tests  2 passed (2)
+   Start at  03:32:53
+stdout:    Duration  42.84s (transform 15ms, setup 0ms, import 20ms, tests 42.72s, environment 0ms)
+stdout:
+endedAt=2026-10-14T02:33:36.853Z
+exit=0/null
+exitDetails={"code":0,"signal":null,"timedOut":false,"timeoutSignal":null,"escalated":false,"groupExists":false}

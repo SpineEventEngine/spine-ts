@@ -62,3 +62,9 @@ section still calls the Coordinator port nonzero, although the starting HEAD's
 public options and validator already support zero for an OS-selected port.
 Correct that sentence alongside launch configuration documentation. This is
 stale prose, not a new port contract.
+
+## Browser verification preparation
+
+Root applied `/Users/armiol/.agents/skills/webapp-testing/SKILL.md` for the real React UI acceptance. It recommends headless Python Playwright, inspecting rendered DOM before choosing selectors, and guaranteed browser closure. Read its `with_server.py --help` before using that helper; existing task launchers may provide service lifecycle instead. Its generic network-idle wait must not hang on this application's long-lived subscription streams: use bounded document/visible-control readiness when network idle is not attainable, then assert actual domain updates. All screenshots/scripts/browser binaries, dependency installs/caches and temporary files must stay in this isolated worktree. Never use global Playwright installation/browser download paths or stop unrelated processes.
+
+Dispatch a bounded dependency-preparation function using explicit `gpt-6-luna` / `medium`: identify available Python/Playwright, prepare a task-local virtual environment/browser installation only if needed, and verify one empty headless Chromium session opens/closes with version records. No framework build, source edits or app launch while the runtime matrix is frozen. This is tool preparation, not UI acceptance.
