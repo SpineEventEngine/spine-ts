@@ -1,0 +1,21 @@
+[1/5] pnpm format:check
+Checking formatting...
+All matched files use Prettier code style!
+$ node scripts/format-files.mjs --check
+EXIT 0
+[2/5] pnpm lint:tsdoc
+TSDoc enforcement checks passed.
+$ node scripts/check-tsdoc.mjs
+EXIT 0
+[3/5] pnpm docs:api:check
+[info] json generated at ./.worktrees/sql-delivery-tmp/spine-typedoc-json-fuDjFW/api.json
+[info] html generated at ./.worktrees/sql-delivery-tmp/spine-typedoc-json-fuDjFW/reference
+TypeDoc JSON includes 100 expected @spine-event-engine/proto exports, 17 exact generated integration Proto exports, 109 expected @spine-event-engine/auth exports, 35 expected @spine-event-engine/core exports, 7 exact @spine-event-engine/core/codegen exports, 27 expected @spine-event-engine/client-node exports, 3 exact @spine-event-engine/client-node/codegen exports, 22 expected @spine-event-engine/client-web exports, 13 expected @spine-event-engine/client-react exports, 22 expected @spine-event-engine/delivery-client exports, 5 expected @spine-event-engine/delivery-server exports, 10 expected @spine-event-engine/deployment exports, 13 expected @spine-event-engine/deployment-gce exports, 6 expected @spine-event-engine/deployment-gke exports, 240 expected @spine-event-engine/server exports, 39 expected @spine-event-engine/storage exports, 23 documented and 23 declared @spine-event-engine/storage/provider exports, 7 expected @spine-event-engine/transport exports, 5 expected @spine-event-engine/testing exports.
+$ node scripts/check-api-docs.mjs
+EXIT 0
+[4/5] pnpm docs:audience:check
+$ node scripts/check-doc-audience.mjs
+EXIT 0
+[5/5] pnpm docs:snippets:check:generated
+$ node docs/check-typescript-snippets.mjs
+EXIT 0

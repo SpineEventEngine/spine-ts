@@ -1,6 +1,8 @@
 # Independent review requested after implementation
 
-Status: active. High risk: persistence, concurrency and public lifecycle contracts.
+Status: complete for the authorized local review and correction work. High risk:
+persistence, concurrency and public lifecycle contracts. PR-only remote CI remains
+unrun because no pull request is authorized.
 Continuation in the isolated feature worktree; starting working tree is clean.
 Frozen comparison: 658da1cdddcb8fd40f9205b1c200abc3a58dd62e to
 56826977ab60340af92ad7c28fadfe71059e3248.
@@ -253,3 +255,45 @@ affected checks against the final hashes before the expensive release gate.
 Select verify:release because this branch contains shared runtime/API and test
 changes; execute once after this convergence. Earlier real SQL/provider runs
 remain valid for identical executable source.
+
+## Final verification and disposition
+
+The single converged `pnpm verify:release` passed at source/test/documentation
+checkpoint `9a3b9bc46e4ac887f0c0f65d37c261981a42dc40` in 885.465 seconds.
+321 test files passed and one was skipped; 5,392 tests passed and three were
+skipped. This summary does not infer the identities of the skipped cases.
+Coverage: statements 93.30% (24,916/26,704), branches 90.15%
+(14,828/16,448), functions 92.97% (6,344/6,823), lines 94.50%
+(22,937/24,271). All required thresholds pass. The source, test, and lockfile
+hashes remain unchanged across the run. Exact output and exit metadata are in
+`evidence/independent-review/final-release-independent.log` and
+`final-release-independent-exits.json`.
+
+The final preflight sequence records the expected documentation edits, affected
+check reruns, and successful stable formatting/whitespace checks. Four review
+reports required deterministic Markdown formatting after becoming tracked; the
+formatting-only correction was pushed before release verification. No report
+conclusion changed. Runtime equivalence compares all 324 package/example source
+paths with the previous completed runtime: only supervisor TSDoc differs, and
+TypeScript comment-stripped transpilation is identical. The lockfile is identical.
+
+The focused live reruns pass all 54 integration tests across PostgreSQL 16/18,
+MySQL and MariaDB. Three Compose configurations pass actual Docker validation.
+All four uniquely registered database containers were removed; cleanup evidence
+records their exact IDs. No other service or worktree was changed.
+
+All participating agents have completed their assignments. The Desktop surface
+provides no separate close operation for completed contexts; none remains active.
+No outstanding accepted source, test, or documentation finding remains. Final
+security review from the completed runtime remains applicable because this
+follow-up changes tests, documentation and comments only. The independent story
+is preserved in `evidence/independent-review/code-derived-story.md`; the comparison
+above was made only after that code-derived account existed.
+
+The final evidence checkpoint changes records only. Feature-branch pushes remain
+to official origin; no PR, merge, publication, migration or master write occurred.
+PR-only CI cannot run without a pull request and is not claimed as verified.
+The implementation's remaining limits are explicit: independent partial writes,
+known-ID rather than automatic Event discovery/repair, possible repeated effects,
+volatile shared Delivery Inbox, separate recovery/takeover timers, and direct
+supervisor close that may wait on entered work beyond its grace phases.
