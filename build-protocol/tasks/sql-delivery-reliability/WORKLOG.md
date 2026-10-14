@@ -580,3 +580,34 @@ baseline artifact-hash sets match and all five audit statuses are PASS, and save
 baseline-historical-acceptance-summary.json. Mechanical function released the
 dist/worker reservation; implementer is authorized for worker seams/build/live
 crash cases. Original explicit Luna/low profile accepted, runtime metadata absent.
+
+## Continued acceptance work
+
+The user confirms that there are no production applications, legacy compatibility
+requirements, or data migration requirements. This reinforces the accepted fresh
+protocol behavior; no compatibility layer or migration will be added.
+
+The process crash slice remains in progress. The first acknowledgement-crash
+fixture allowed a sleeping database UPDATE to commit after the application died.
+That run is provisional, not accepted proof of acknowledgement by fresh workers.
+The implementer will force the old statement to fail, stop all old applications,
+and prove the exact row remains pending with saved business state before starting
+fresh processes. The first partial-publication run also restarted too early; the
+corrected fixture must observe finite publication exhaustion and Command settlement.
+
+Independent example execution is assigned to the existing mechanical function,
+original explicit gpt-6-luna / low profile, both fields verified in its original
+dispatch. Runtime introspection is unavailable. Scope: existing Orders and Projects
+teaching workloads, and existing single-process Todo memory and SQL modes only.
+Use current worktree artifacts, task-specific ports/databases, and task evidence
+files; no production or example edits, generation, builds, or shared image changes.
+Report limitations honestly. Broader launch correction stays with the implementer.
+Estimated active verification time is 0.25–0.5 hours, parallel to crash work.
+
+The first independent Orders run reports ten failed users despite exit code zero;
+no workflow acceptance is claimed. The mechanical source-scanning function
+(persisted explicit gpt-6-luna / low profile) will inspect the Orders and Projects
+subscription consumers against the new activation acknowledgement and enumerate
+only concrete affected example call sites. This is read-only triage, not a second
+implementation stream. Record findings in the example evidence directory; no
+builds or tests by this scanner. Runtime profile introspection is unavailable.
