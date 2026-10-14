@@ -8494,3 +8494,25 @@ analyzer 12.17s to 5.22s and exhaustive microsecond case 5.50s to 1.34s locally.
 Concurrent batches passed 439 and 487 tests; final packed consumers passed in
 31.75s. These are local measurements, not a CI estimate. Commit/push this frozen
 delta, then run one full verify:release and require exact-commit CI success.
+
+Full local verification at 178b201d5 passed pre-test gates but exposed one
+parallel-load failure: the real greater-than-200-commit Git fixture exceeded its
+existing 20-second timeout; 6,305 tests passed, one failed, one skipped. Suite
+wall time was 138.14s; whole command 399.85s. No coverage summary was produced.
+Same explicit Sol/medium implementer receives the sole correction: replace the
+fixture's hundreds of setup subprocesses with efficient real Git history creation,
+preserving all 201 compared commits and the actual production comparison. Do not
+raise timeouts, reduce inputs, add worker caps, or change runtime behavior. Repeat
+full cheap preflight, then affected test-quality/performance review before another
+full profile. Mechanical verification was explicitly Luna/low, fork none, with
+configured profile confirmed and actual runtime metadata unavailable.
+
+Correction replaces 603 Git setup subprocesses with one fast-import stream for
+Base plus 201 real sequential commits. Production comparison, complete selected
+range, assertion, and existing timeout are unchanged. Focused case passed in
+4.81s; all 19 Git tests passed in 15.43s while preflight ran. Tooling typecheck,
+affected ESLint, cleanup, TSDoc, formatting and diff checks passed. Existing
+Sol/medium performance/reliability and style/test-quality reviewers independently
+confirmed equivalent real history and unchanged behavioral coverage, no findings.
+No docs or API claims changed in this correction. Push the correction and repeat
+full verification once; require the final commit's GitHub verification and trial.

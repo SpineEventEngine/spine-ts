@@ -340,11 +340,24 @@ describe("trusted Git release comparison", () => {
 
   it("accepts a selected range with more than 200 commits", async () => {
     const directory = repository();
-    const base = commit(directory, "notes.txt", "0\n", "Base");
-    let target = base;
-    for (let index = 1; index <= 201; index++) {
-      target = commit(directory, "notes.txt", `${String(index)}\n`, `Change ${String(index)}`);
-    }
+    const branch = git(directory, "symbolic-ref", "HEAD");
+    const stream = Array.from({ length: 202 }, (_, index) => {
+      const subject = index === 0 ? "Base" : `Change ${String(index)}`;
+      const content = `${String(index)}\n`;
+      return [
+        `commit ${branch}`,
+        `committer Release Fixture <fixture@example.invalid> ${String(index + 1)} +0000`,
+        `data ${String(Buffer.byteLength(subject))}`,
+        subject,
+        "M 100644 inline notes.txt",
+        `data ${String(Buffer.byteLength(content))}`,
+        content,
+        "",
+      ].join("\n");
+    }).join("");
+    execFileSync(gitExecutable, ["fast-import", "--quiet"], { cwd: directory, input: stream });
+    const base = git(directory, "rev-parse", "HEAD~201");
+    const target = git(directory, "rev-parse", "HEAD");
     const comparison = await GitReleaseComparison.open({
       repository: directory,
       gitExecutable,
