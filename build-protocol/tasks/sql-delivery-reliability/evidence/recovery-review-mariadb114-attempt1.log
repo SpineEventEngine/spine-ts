@@ -1,0 +1,12 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+RECOVERY_CLOCK {"database":"sqlrel_clock_861ddabc2abe4aa5be53e709dd5e3712","provider":"mysql","mode":"default","elapsedMs":10059,"snapshots":2,"staleAges":[60000,60000]}
+RECOVERY_CLOCK {"database":"sqlrel_clock_86e8514994554cfba6a5831087d659d8","provider":"mysql","mode":"override","elapsedMs":113,"snapshots":2,"staleAges":[60000,60000]}
+RECOVERY_RELEASE {"database":"sqlrel_clock_f5e357cfe9404c8bab5200837b64199a","phase":"before","writerPid":42835,"writerPickup":"BLOCKED","delegatedRelease":true,"inboxId":"4437cc14-b1eb-4bd1-8191-365b6482c9b7","signalId":"a8a566dd-56e5-4e59-9f91-593c93b9889d","snapshots":5}
+RECOVERY_RELEASE {"database":"sqlrel_clock_67895b28e9684db28e297b0e1e9e5230","phase":"after","writerPid":42837,"writerPickup":"NOT_ATTEMPTED","delegatedRelease":true,"inboxId":"2e202371-f1ed-4eac-b3a4-c70279b2907c","signalId":"52a5b466-2a07-436b-98ed-286fc4695644","snapshots":5}
+
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Start at  04:12:37
+   Duration  12.00s (transform 602ms, setup 0ms, import 838ms, tests 11.05s, environment 0ms)

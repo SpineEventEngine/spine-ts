@@ -1,0 +1,2 @@
+packages/server-blackbox-tests/test/project-workflow-fixture.test.ts(31,50): error TS2322: Type 'number' is not assignable to type 'void | Promise<void>'.
+packages/server-blackbox-tests/test/project-workflow-fixture.test.ts(60,64): error TS2322: Type 'number' is not assignable to type 'void | Promise<void>'.

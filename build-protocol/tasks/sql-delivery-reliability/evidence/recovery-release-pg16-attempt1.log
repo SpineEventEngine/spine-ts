@@ -1,0 +1,66 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+RECOVERY_CLOCK {"database":"sqlrel_clock_c11fd6d4a1d0402eae3607fa4ab26f65","provider":"postgresql","mode":"default","elapsedMs":10069,"snapshots":2,"staleAges":[60000,60000]}
+RECOVERY_CLOCK {"database":"sqlrel_clock_20aff37690cc4943a930bb162446dee6","provider":"postgresql","mode":"override","elapsedMs":117,"snapshots":3,"staleAges":[60000,60000,60000]}
+ ❯ packages/server/test/delivery/sql-recovery-clock.integration.test.ts (4 tests | 2 failed) 11113ms
+     × recovers a separate-process write $phase the final shard release 266ms
+     × recovers a separate-process write $phase the final shard release 325ms
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 2 passed (4)
+   Start at  04:03:20
+   Duration  11.90s (transform 493ms, setup 0ms, import 690ms, tests 11.11s, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/test/delivery/sql-recovery-clock.integration.test.ts > live SQL DeliverySupervisor recovery clock > recovers a separate-process write $phase the final shard release
+Error: Command failed: /opt/homebrew/Cellar/node@24/24.18.0/bin/node /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/test/delivery/sql-recovery-writer.mjs {"postgres":true,"contextName":"clock-sqlrel_clock_65984aacbc4e4d229c8f1595a0ada65c","inboxTable":"clock_inbox_8477ed7b","sessionTable":"clock_session_79dd1e7a","taskListId":"list-1","taskId":"f30a676a-67bd-4307-bb19-a9a27a1aae0e","signalId":"47a1a15f-acb5-4a84-b820-78158d33c237"}
+node:internal/modules/esm/resolve:271
+    throw new ERR_MODULE_NOT_FOUND(
+          ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/examples/todo/generated/spine/examples/todo/task_events_pb.js' imported from /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/test/delivery/sql-recovery-writer.mjs
+    at finalizeResolution (node:internal/modules/esm/resolve:271:11)
+    at moduleResolve (node:internal/modules/esm/resolve:865:10)
+    at defaultResolve (node:internal/modules/esm/resolve:992:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)
+    at #resolve (node:internal/modules/esm/loader:683:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:163:33)
+    at ModuleJob.link (node:internal/modules/esm/module_job:253:17) {
+  code: 'ERR_MODULE_NOT_FOUND',
+  url: 'file:///Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/examples/todo/generated/spine/examples/todo/task_events_pb.js'
+}
+
+Node.js v24.18.0
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  packages/server/test/delivery/sql-recovery-clock.integration.test.ts > live SQL DeliverySupervisor recovery clock > recovers a separate-process write $phase the final shard release
+Error: Command failed: /opt/homebrew/Cellar/node@24/24.18.0/bin/node /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/test/delivery/sql-recovery-writer.mjs {"postgres":true,"contextName":"clock-sqlrel_clock_899a84985f4a4c8aaaaa873afd265e7a","inboxTable":"clock_inbox_d4d42737","sessionTable":"clock_session_ad6dc89e","taskListId":"list-1","taskId":"2afdf15f-580c-4707-b2f0-95fa68636a4c","signalId":"d2bc205a-7cee-4ce3-805f-281f94018d07"}
+node:internal/modules/esm/resolve:271
+    throw new ERR_MODULE_NOT_FOUND(
+          ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/examples/todo/generated/spine/examples/todo/task_events_pb.js' imported from /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/test/delivery/sql-recovery-writer.mjs
+    at finalizeResolution (node:internal/modules/esm/resolve:271:11)
+    at moduleResolve (node:internal/modules/esm/resolve:865:10)
+    at defaultResolve (node:internal/modules/esm/resolve:992:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)
+    at #resolve (node:internal/modules/esm/loader:683:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:163:33)
+    at ModuleJob.link (node:internal/modules/esm/module_job:253:17) {
+  code: 'ERR_MODULE_NOT_FOUND',
+  url: 'file:///Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/examples/todo/generated/spine/examples/todo/task_events_pb.js'
+}
+
+Node.js v24.18.0
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯

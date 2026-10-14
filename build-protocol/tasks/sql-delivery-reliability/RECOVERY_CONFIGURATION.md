@@ -38,3 +38,24 @@ proves retained-server stale-session takeover. Use exact pending Inbox IDs, old
 and new process IDs, handler entries, configured values, and elapsed observations.
 Do not advertise a hard ten-second bound. This completes an existing specification
 requirement (first-task lines 536–542), not a new persistence subsystem.
+
+## Measured release-race assessment
+
+The corrected four-engine SQL component tests use a distinct writer process,
+exact generated Todo Event bytes and Inbox ID, and an actual blocked shard
+pickup before the first worker releases. They also write after a confirmed
+successful SQL release. With notifications deliberately absent, both orders
+recover through the configurable periodic fallback with one handler entry for
+the late Event. Separate default/no-override tests observe approximately ten
+seconds; the race uses an 80 ms component override for bounded repeatability.
+Source-based parent and built-runtime child are explicitly a component
+interoperability proof, not a full-app configuration override.
+
+The task retains the existing periodic fallback for the last-read/release race.
+A new unconditional post-release pending notification would conflict with the
+reviewed failed-row feedback-loop protection; no such loop is added. A
+successful-run-only follow-up could reduce this wait, but is not necessary to
+correctness under the tested recovery contract and is not claimed here. These
+tests assess the JVM-style follow-up boundary without promising immediate
+cross-process wakeup. Retained shared-server worker death and idle SQL measurement
+remain separate acceptance work.

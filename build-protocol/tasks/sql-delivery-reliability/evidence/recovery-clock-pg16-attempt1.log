@@ -1,0 +1,36 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/server/test/delivery/sql-recovery-clock.integration.test.ts (2 tests | 2 failed) 10437ms
+     × finds a missed 'default' notification by reading the durable Inbox 10206ms
+     × finds a missed 'override' notification by reading the durable Inbox 230ms
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  03:53:01
+   Duration  11.22s (transform 486ms, setup 0ms, import 679ms, tests 10.44s, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/test/delivery/sql-recovery-clock.integration.test.ts > live SQL DeliverySupervisor recovery clock > finds a missed 'default' notification by reading the durable Inbox
+ FAIL  packages/server/test/delivery/sql-recovery-clock.integration.test.ts > live SQL DeliverySupervisor recovery clock > finds a missed 'override' notification by reading the durable Inbox
+AssertionError: expected undefined to be 'DELIVERED' // Object.is equality
+
+- Expected:
+"DELIVERED"
+
++ Received:
+undefined
+
+ ❯ packages/server/test/delivery/sql-recovery-clock.integration.test.ts:105:65
+    103|           expect(staleAges.every((age) => age === 60_000)).toBe(true);
+    104|           await supervisor.whenIdle();
+    105|           expect((await inbox.readMessage(message.id))?.status).toBe("…
+       |                                                                 ^
+    106|         } finally {
+    107|           await supervisor.close({ graceMs: 1_000 });
+ ❯ withSqlInbox packages/server/test/delivery/sql-recovery-clock.integration.test.ts:155:5
+ ❯ packages/server/test/delivery/sql-recovery-clock.integration.test.ts:57:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯

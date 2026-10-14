@@ -559,3 +559,30 @@ release of the 96-row matrix freeze: five applicable PG16 fanout controls pass
 again (`nested-review-exact-one-*.log`), scoped ESLint/format/diff pass. Both arrays
 are checked before indexing. All accepted nested harness P2 findings are
 resolved; no new production semantics or repeated specialist wave is needed.
+
+## SQL recovery clock test review
+
+The same implementation context freezes the new SQL supervisor clock test and
+writer helper, plus their opt-in inventory entries. Four cases pass on each of
+four engines (16 total): default/override and separate-process writes before/after
+a gated SQL release. Scoped ESLint/format/typecheck/syntax/diff pass. Dispatch
+existing performance/reliability and style/maintainability reviewers explicitly
+`gpt-6-sol` / `medium`, both fields present, runtime introspection unavailable.
+Review the precise race evidence and domain fixtures, process/resource bounds,
+real source/dist seams and timer claims. Public API concern is N/A (no runtime
+contract change); parent documentation disposition keeps component observations
+separate from application takeover and idle-query evidence. Collect both lanes
+before one correction batch. Retained-server process fixtures proceed in distinct
+files while this test-only slice is frozen. Expected review/correction work is
+part of the current 4–6-hour remaining estimate, approximately 0.2–0.5 hour for
+this bounded wave absent a demonstrated production defect.
+
+Clock correction targeted reviews converge. Both existing reviewers retain the
+explicit Sol/medium profiles and report no further finding: before-release writer
+pickup is BLOCKED with the first SQL session held; both phases assert actual
+release true; bounded database-drop retry closes the pool-drain race. All 16
+corrected live cases and scoped static/inventory checks pass. The mechanical
+callback correction in project-workflow-fixture.test.ts returns void and formats
+the numeric name explicitly; its two tests pass. API concern remains N/A for
+this test-only slice; parent records the source/built component boundary and
+separate remaining takeover/idle requirements.

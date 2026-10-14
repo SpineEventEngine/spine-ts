@@ -1,0 +1,4 @@
+Cleanup enforcement failed: lines longer than 120 characters
+  - packages/server/test/delivery/sql-recovery-clock.integration.test.ts:121 (145)
+  - packages/server/test/delivery/sql-recovery-clock.integration.test.ts:227 (201)
+  - packages/server/test/delivery/sql-recovery-writer.mjs:104 (297)

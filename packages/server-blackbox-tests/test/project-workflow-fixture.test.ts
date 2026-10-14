@@ -28,7 +28,9 @@ describe("Project process fixture", () => {
     const entries: string[] = [];
     const ids = projectWorkflowIds("fixture-test", 1);
     const blackBox = await BlackBox.from(
-      projectWorkflow("fixture-test", (entry) => entries.push(entry.method)),
+      projectWorkflow("fixture-test", (entry) => {
+        entries.push(entry.method);
+      }),
     );
     try {
       const result = await blackBox
@@ -57,21 +59,21 @@ describe("Project process fixture", () => {
 
   it("derives distinct recipient IDs for two ProjectCreated Events", async () => {
     const entries: string[] = [];
-    const context = projectWorkflow("two-projects", (entry) => entries.push(entry.correlation));
+    const context = projectWorkflow("two-projects", (entry) => {
+      entries.push(entry.correlation);
+    });
     const first = projectWorkflowIds("fixture-pair", 1);
     const second = projectWorkflowIds("fixture-pair", 2);
     const blackBox = await BlackBox.from(context);
     try {
       for (const ids of [first, second]) {
-        const result = await blackBox
-          .asGuest()
-          .post(
-            CreateProjectSchema,
-            create(CreateProjectSchema, {
-              project: ids.project,
-              name: `roadmap-${ids.project.number}`,
-            }),
-          );
+        const result = await blackBox.asGuest().post(
+          CreateProjectSchema,
+          create(CreateProjectSchema, {
+            project: ids.project,
+            name: `roadmap-${String(ids.project.number)}`,
+          }),
+        );
         expect(result.kind).toBe("ok");
       }
       await blackBox.eventually(

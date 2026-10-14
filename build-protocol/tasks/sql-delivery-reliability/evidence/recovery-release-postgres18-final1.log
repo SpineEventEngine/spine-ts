@@ -1,0 +1,12 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+RECOVERY_CLOCK {"database":"sqlrel_clock_baf91138a10d465cba6a2a2e9dc5e567","provider":"postgresql","mode":"default","elapsedMs":10053,"snapshots":2,"staleAges":[60000,60000]}
+RECOVERY_CLOCK {"database":"sqlrel_clock_07eb3de99c754cb999fe7958a8215acd","provider":"postgresql","mode":"override","elapsedMs":119,"snapshots":3,"staleAges":[60000,60000,60000]}
+RECOVERY_RELEASE {"database":"sqlrel_clock_f5434707f7d64b548fe52f93df65aea3","phase":"before","writerPid":11666,"inboxId":"a2527cd0-0697-4033-b9e2-b897eaea4847","signalId":"800ddb75-a06b-4211-81d2-36104d1f736f","snapshots":6}
+RECOVERY_RELEASE {"database":"sqlrel_clock_88e9ee36be1f42bfbe35239e1130df1b","phase":"after","writerPid":11670,"inboxId":"457081f4-065f-46bb-8ea2-0122cd74ac72","signalId":"8b6b51f9-47f7-4a97-8e7f-adecdc0779fb","snapshots":6}
+
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Start at  04:04:38
+   Duration  12.56s (transform 656ms, setup 0ms, import 906ms, tests 11.53s, environment 0ms)

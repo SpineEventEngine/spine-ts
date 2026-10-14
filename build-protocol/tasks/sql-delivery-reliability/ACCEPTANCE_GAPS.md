@@ -34,10 +34,12 @@ and the measured artifacts for bounded claims.
 
 ## Remaining work
 
-- Complete cross-process recovery timing: writes before/after shard release,
-  deliberately missed notification, and idle SQL at two/eight processes. The
-  public supervisor/real SQL component default and override tests pass on four
-  servers, but do not replace those process tests.
+- Measure idle SQL at two/eight application processes. Corrected supervisor/SQL
+  component tests now pass 16/16 across four engines, including default/override
+  scans and separate-process late writes before/after confirmed shard release.
+  The before-release writer proves its SQL pickup was blocked; notifications
+  are deliberately absent. These bounded component tests do not replace the
+  retained-server application-worker takeover case below.
 - Retain a shared Delivery server while an actual application worker dies and a
   replacement recovers pending accepted work. Measure the 60-second stale age,
   10-second scan and independently configured processing timeout separately.

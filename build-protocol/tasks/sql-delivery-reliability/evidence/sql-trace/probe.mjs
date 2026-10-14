@@ -18,6 +18,29 @@ import { setInterval } from "node:timers";
 
 const mode = process.argv[2];
 if (!["success", "failure", "timeout"].includes(mode)) throw new Error("Unknown probe mode.");
+const selectedUrl = process.env.SPINE_TS_POSTGRESQL_URL ?? process.env.SPINE_TS_MYSQL_URL;
+const marker = async (url, value) => {
+  if (process.env.SPINE_TS_POSTGRESQL_URL) {
+    const require = createRequire(resolve("packages/storage-postgres/package.json"));
+    const { Client } = require("pg");
+    const client = new Client({ connectionString: url });
+    await client.connect();
+    await client.query(`SELECT '${value}' AS marker`);
+    await client.end();
+  } else {
+    const require = createRequire(resolve("packages/storage-mysql/package.json"));
+    const mysql = require("mysql2/promise");
+    const client = await mysql.createConnection(url);
+    await client.query(`SELECT '${value}' AS marker`);
+    await client.end();
+  }
+};
+if (process.env.TRACE_MARKER_BEGIN) await marker(selectedUrl, process.env.TRACE_MARKER_BEGIN);
+if (process.env.TRACE_MARKER_DECOY) {
+  const decoyUrl = new URL(selectedUrl);
+  decoyUrl.pathname = "/spine_test";
+  await marker(decoyUrl.toString(), process.env.TRACE_MARKER_DECOY);
+}
 if (process.env.SPINE_TS_POSTGRESQL_URL) {
   const require = createRequire(resolve("packages/storage-postgres/package.json"));
   const { Client } = require("pg");
@@ -32,6 +55,7 @@ if (process.env.SPINE_TS_POSTGRESQL_URL) {
   await client.query("SELECT 'sqlrel_trace_wrapper_probe' AS marker");
   await client.end();
 }
+if (process.env.TRACE_MARKER_END) await marker(selectedUrl, process.env.TRACE_MARKER_END);
 process.stdout.write(`Probe ${mode} queried successfully; pid=${process.pid}.\n`);
 if (mode === "failure") process.exitCode = 7;
 if (mode === "timeout") {

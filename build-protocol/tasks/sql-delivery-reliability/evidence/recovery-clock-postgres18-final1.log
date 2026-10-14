@@ -1,0 +1,10 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+RECOVERY_CLOCK {"database":"sqlrel_clock_c962ceaad5624ef29956619bb2a2a417","provider":"postgresql","mode":"default","elapsedMs":10057,"snapshots":2,"staleAges":[60000,60000]}
+RECOVERY_CLOCK {"database":"sqlrel_clock_50d0e683448545499a2b434131a27840","provider":"postgresql","mode":"override","elapsedMs":121,"snapshots":3,"staleAges":[60000,60000,60000]}
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  03:58:23
+   Duration  11.44s (transform 637ms, setup 0ms, import 875ms, tests 10.46s, environment 0ms)

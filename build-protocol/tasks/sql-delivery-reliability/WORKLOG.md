@@ -878,3 +878,28 @@ Current ACCEPTANCE_GAPS.md replaces stale preparation statuses with measured
 completion and the precise remaining clock, transport-fault, examples and final
 gates. The same implementer continues a separate, unvalidated cross-process
 clock extension; it is excluded from the subscription checkpoint commit.
+
+## Exact-database idle SQL capture preparation
+
+Dispatch the mechanical evidence-capture function explicitly `gpt-6-luna` /
+`medium`, both fields present; runtime metadata unavailable. Restrict edits to
+existing task evidence/sql-trace/capture.mjs and new task evidence probe/records.
+Add a validated exact UUID database selector, verify the selected database exists
+before enabling logging and before child connections, and positively prove marker
+inclusion/decoy exclusion plus restoration on the four dedicated SQL containers.
+No production changes, general database truncation, or other container/process
+changes. No other capture is active. Coordinate the temporary logging window
+with the implementer and return the supported interface for the idle-process
+fixture. This prepares measurement; it is not idle-work acceptance.
+
+Clock test correction acceptance is complete after clean reliability and style
+re-reviews, both explicit Sol/medium. All 16 corrected live cases pass; the
+component default/override and before/after-release race requirement is closed
+with the documented source/built boundary. Retained-server application takeover
+and idle SQL remain open. Capture selector preparation from explicit Luna/medium
+is accepted: four positive engine controls include selected markers/exclude the
+decoy; PG16/MySQL failed-child controls restore settings; all UUID databases are
+dropped. No runtime or generated/dist changes occurred. The next checkpoint
+includes clock test/writer, both inventory declarations plus exact-list test,
+mechanical callback type correction, and completed capture evidence. Ongoing
+retained-server fixture files and live logs are excluded.

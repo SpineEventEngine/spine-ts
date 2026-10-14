@@ -1,0 +1,8 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  04:13:43
+   Duration  1.16s (transform 645ms, setup 0ms, import 923ms, tests 128ms, environment 0ms)

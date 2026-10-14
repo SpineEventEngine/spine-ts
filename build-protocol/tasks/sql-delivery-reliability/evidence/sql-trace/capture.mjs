@@ -35,6 +35,11 @@ const command = divider < 0 ? [] : process.argv.slice(divider + 1);
 const record = databases.records.find((entry) => entry.name === selection);
 const mysqlEngine = process.env.TRACE_MYSQL_ENGINE ?? "innodb";
 const operation = process.env.TRACE_OPERATION;
+const selectedDatabase = process.env.TRACE_DATABASE;
+const idleDatabaseSelected = selectedDatabase !== undefined;
+const markerBegin = "sqlrel_trace_warmup_begin";
+const markerEnd = "sqlrel_trace_capture_end";
+const markerDecoy = "sqlrel_trace_decoy_control";
 if (record === undefined || divider < 0 || command.length === 0) {
   process.stderr.write(
     "Usage: capture.mjs postgres16|postgres18|mysql84|mariadb114 -- <command> [args...]\n",
@@ -43,6 +48,8 @@ if (record === undefined || divider < 0 || command.length === 0) {
 }
 if (!/^[a-z0-9][a-z0-9._-]{0,63}$/i.test(operation ?? ""))
   throw new Error("Set TRACE_OPERATION to a short alphanumeric operation label.");
+if (idleDatabaseSelected && !/^sqlrel_idle_[a-f0-9]{32}$/.test(selectedDatabase))
+  throw new Error("TRACE_DATABASE must be sqlrel_idle_<32 lowercase hexadecimal characters>.");
 if (!["postgres16", "postgres18", "mysql84", "mariadb114"].includes(selection))
   throw new Error("Unsupported database selection.");
 if (!["innodb", "myisam", ...(selection === "mariadb114" ? ["aria"] : [])].includes(mysqlEngine))
@@ -74,6 +81,7 @@ let previousLogOutput;
 let mysqlLogOutputChanged = false;
 let previousGeneralLog;
 let mysqlGeneralLogChanged = false;
+let markerVerification = null;
 let interruptedSignal;
 let activeStopGroup;
 
@@ -111,6 +119,12 @@ function sanitizeCommand(args) {
     safe.push(/^-p.+/.test(arg) ? "-p[REDACTED]" : sanitizeArg(arg));
   }
   return safe;
+}
+
+function childDatabaseUrl(value, databaseName) {
+  const url = new URL(value);
+  url.pathname = `/${databaseName}`;
+  return url.toString();
 }
 
 async function runCommand(args, env) {
@@ -192,9 +206,15 @@ async function runPostgres() {
       !String(serverVersion).includes(`PostgreSQL ${expectedMajor}.`)
     )
       throw new Error(`Expected PostgreSQL ${expectedMajor}; got ${String(serverVersion)}`);
-    const dbNames = [
-      ...new Set(Object.values(record.urls).map((value) => new URL(value).pathname.slice(1))),
-    ];
+    const selectedExists = await pool.query(
+      "SELECT EXISTS (SELECT 1 FROM pg_database WHERE datname = $1) AS present",
+      [selectedDatabase ?? new URL(record.urls.spine_test).pathname.slice(1)],
+    );
+    if (!selectedExists.rows[0]?.present)
+      throw new Error(`Selected database does not exist: ${selectedDatabase}`);
+    const dbNames = idleDatabaseSelected
+      ? [selectedDatabase]
+      : [...new Set(Object.values(record.urls).map((value) => new URL(value).pathname.slice(1)))];
     for (const dbName of dbNames) {
       const prior = await pool.query(
         "SELECT setting FROM pg_db_role_setting s " +
@@ -215,14 +235,25 @@ async function runPostgres() {
     captureStart = new Date();
     const env = {
       ...process.env,
-      SPINE_TS_POSTGRESQL_URL: record.urls.spine_test,
-      SPINE_TS_POSTGRESQL_TENANT_A_URL: record.urls.spine_tenant_a,
-      SPINE_TS_POSTGRESQL_TENANT_B_URL: record.urls.spine_tenant_b,
+      SPINE_TS_POSTGRESQL_URL: idleDatabaseSelected
+        ? childDatabaseUrl(record.urls.spine_test, selectedDatabase)
+        : record.urls.spine_test,
+      SPINE_TS_POSTGRESQL_TENANT_A_URL: idleDatabaseSelected
+        ? childDatabaseUrl(record.urls.spine_test, selectedDatabase)
+        : record.urls.spine_tenant_a,
+      SPINE_TS_POSTGRESQL_TENANT_B_URL: idleDatabaseSelected
+        ? childDatabaseUrl(record.urls.spine_test, selectedDatabase)
+        : record.urls.spine_tenant_b,
       SPINE_TS_POSTGRESQL_EXPECTED_MAJOR: expectedMajor,
       TRACE_ENGINE: record.name,
       TRACE_SERVER_VERSION: serverVersion,
       TRACE_CONTAINER_ID: targetId,
       TRACE_OPERATION: operation,
+      TRACE_SELECTED_DATABASE:
+        selectedDatabase ?? new URL(record.urls.spine_test).pathname.slice(1),
+      TRACE_MARKER_BEGIN: idleDatabaseSelected ? markerBegin : "",
+      TRACE_MARKER_END: idleDatabaseSelected ? markerEnd : "",
+      TRACE_MARKER_DECOY: idleDatabaseSelected ? markerDecoy : "",
     };
     try {
       result = await runCommand(command, env);
@@ -260,6 +291,12 @@ async function runMysql() {
     serverVersion = versionRows[0]?.version;
     if (!String(serverVersion).includes(selection === "mysql84" ? "8.4." : "11.4."))
       throw new Error(`Unexpected server version: ${String(serverVersion)}`);
+    const selectedExists = await mysqlConn.query(
+      "SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE BINARY SCHEMA_NAME = BINARY ?",
+      [selectedDatabase ?? new URL(record.urls.spine_test).pathname.slice(1)],
+    );
+    if (selectedExists[0].length === 0)
+      throw new Error(`Selected database does not exist: ${selectedDatabase}`);
     const [settings] = await mysqlConn.query(
       "SELECT @@GLOBAL.general_log AS general_log, @@GLOBAL.log_output AS log_output",
     );
@@ -279,17 +316,26 @@ async function runMysql() {
     mysqlGeneralLogChanged = true;
     throwIfInterrupted();
     captureStart = new Date();
+    const selectedUrl = (value) =>
+      idleDatabaseSelected ? childDatabaseUrl(record.urls.spine_test, selectedDatabase) : value;
     const env = {
       ...process.env,
-      SPINE_TS_MYSQL_URL: record.urls.spine_test,
-      SPINE_TS_MYSQL_ADMIN_URL: record.adminUrl,
-      SPINE_TS_MYSQL_TENANT_A_URL: record.urls.spine_tenant_a,
-      SPINE_TS_MYSQL_TENANT_B_URL: record.urls.spine_tenant_b,
+      SPINE_TS_MYSQL_URL: selectedUrl(record.urls.spine_test),
+      SPINE_TS_MYSQL_ADMIN_URL: idleDatabaseSelected
+        ? childDatabaseUrl(record.adminUrl, selectedDatabase)
+        : record.adminUrl,
+      SPINE_TS_MYSQL_TENANT_A_URL: selectedUrl(record.urls.spine_tenant_a),
+      SPINE_TS_MYSQL_TENANT_B_URL: selectedUrl(record.urls.spine_tenant_b),
       SPINE_TS_MYSQL_ENGINE: mysqlEngine,
       TRACE_ENGINE: record.name,
       TRACE_SERVER_VERSION: serverVersion,
       TRACE_CONTAINER_ID: targetId,
       TRACE_OPERATION: operation,
+      TRACE_SELECTED_DATABASE:
+        selectedDatabase ?? new URL(record.urls.spine_test).pathname.slice(1),
+      TRACE_MARKER_BEGIN: idleDatabaseSelected ? markerBegin : "",
+      TRACE_MARKER_END: idleDatabaseSelected ? markerEnd : "",
+      TRACE_MARKER_DECOY: idleDatabaseSelected ? markerDecoy : "",
     };
     try {
       result = await runCommand(command, env);
@@ -319,10 +365,14 @@ async function runMysql() {
     }
     if (captureStart && captureEnd) {
       try {
-        const dbNames = [
-          ...new Set(Object.values(record.urls).map((value) => new URL(value).pathname.slice(1))),
-        ];
-        const databaseFilter = dbNames.map(() => "argument LIKE ?").join(" OR ");
+        const dbNames = idleDatabaseSelected
+          ? [selectedDatabase]
+          : [
+              ...new Set(
+                Object.values(record.urls).map((value) => new URL(value).pathname.slice(1)),
+              ),
+            ];
+        const databaseFilter = dbNames.map(() => "LOCATE(?, argument) > 0").join(" OR ");
         const [rows] = await mysqlConn.query(
           "SELECT DATE_FORMAT(event_time, '%Y-%m-%dT%H:%i:%s.%fZ') AS event_time, " +
             "user_host, thread_id, server_id, command_type, HEX(argument) AS argument_hex FROM mysql.general_log " +
@@ -333,7 +383,7 @@ async function runMysql() {
             captureEnd.toISOString().replace("T", " ").replace("Z", ""),
             captureStart.toISOString().replace("T", " ").replace("Z", ""),
             captureEnd.toISOString().replace("T", " ").replace("Z", ""),
-            ...dbNames.map((name) => `% on ${name} %`),
+            ...dbNames.map((name) => ` on ${name} `),
           ],
         );
         const lines = rows.map((row) =>
@@ -346,12 +396,23 @@ async function runMysql() {
           mode: 0o600,
         });
         rawLogWritten = true;
+        if (idleDatabaseSelected) verifyMarkers(lines.join("\n"));
       } catch (error) {
         failures.push(`trace extraction: ${String(error)}`);
       }
     }
     await mysqlConn.end();
   }
+}
+
+function verifyMarkers(rawText) {
+  markerVerification = {
+    warmupMarkerCaptured: rawText.includes(markerBegin),
+    endMarkerCaptured: rawText.includes(markerEnd),
+    decoyDatabaseControlExcluded: !rawText.includes(markerDecoy),
+  };
+  if (Object.values(markerVerification).some((present) => !present))
+    failures.push("Selected-database marker verification failed.");
 }
 
 try {
@@ -384,6 +445,7 @@ try {
     if (logs.status === 0) {
       await writeFile(rawPath, logs.stdout + logs.stderr, { mode: 0o600 });
       rawLogWritten = true;
+      if (idleDatabaseSelected) verifyMarkers(logs.stdout + logs.stderr);
     } else failures.push("Could not read bounded logs from the exact PostgreSQL task container.");
   }
   const metadata = {
@@ -392,6 +454,7 @@ try {
     serverVersion,
     containerName: targetName,
     containerId: targetId,
+    selectedDatabase: selectedDatabase ?? new URL(record.urls.spine_test).pathname.slice(1),
     image: record.image,
     startedAt: captureStart?.toISOString() ?? null,
     endedAt: captureEnd?.toISOString() ?? null,
@@ -402,6 +465,7 @@ try {
     loggingRestored: restoreErrors.length === 0,
     restoreErrors,
     failures,
+    markerVerification,
   };
   await writeFile(metaPath, JSON.stringify(metadata, null, 2) + "\n", { mode: 0o600 });
   process.stdout.write(
