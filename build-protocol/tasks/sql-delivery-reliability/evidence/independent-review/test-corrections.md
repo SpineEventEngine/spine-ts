@@ -30,3 +30,13 @@ The second live run passed: MySQL 8.4 and MariaDB 11.4 each 15/15, PostgreSQL 16
 ## Framework reference correction
 
 The accepted documentation finding concerned `packages/server/REFERENCE.md`: it described direct local Inbox cleanup as an atomic snapshot and shard-session check. The corrected paragraph reflects `Delivery.#cleanupPage()` and `InboxStorage.removeDelivered()`: eligibility and operation checks precede ID deletion; there is no stored-row snapshot comparison or post-delete session check. Cancellation stops later attempts, while completed deletions remain. The adjacent remote-client claim now describes its bounded removal request without attributing an atomic compare-and-delete guarantee. Prettier on the reference, `pnpm docs:snippets:check:generated`, and `git diff --check` passed. No runtime file changed.
+
+## Full-document audit correction batch
+
+The accepted browser guide finding is resolved by tying `connecting → connected` to a matching successful response-only activation ACK and stating that no business update is required. The direct `DeliverySupervisor.close({ graceMs })` contract is now explicit in the API index, server reference, and public TSDoc: 30,000 ms by default for each active-work and release-cleanup phase, with already-entered work able to keep close pending beyond both phases. Context and managed-server deadlines remain separate.
+
+The Message Board app README now labels its code as a default-port sketch and shows the default `webOrigin`; it links the actual entrypoint's validated `MESSAGE_BOARD_LOCAL_PORT` and `MESSAGE_BOARD_WEB_PORT` behavior to browser-origin alignment. The PostgreSQL reference now records prepared input, ordered independent state-history, diagnostic-Event, delivery-Event, and current-state writes; retained prefixes after failure; one captured-input replay for SQLSTATE `40P01` or `40001`; byte-identical immutable retry acceptance and collision rejection; and a link to the shared storage contract.
+
+Only documentation and `DeliverySupervisor.close()`/`DeliverySupervisorCloseOptions` TSDoc changed in this batch; no executable runtime line changed. Focused checks passed: Prettier for the six affected files, `pnpm lint:tsdoc`, `pnpm docs:snippets:check:generated`, `pnpm docs:audience:check`, server package TypeScript check, and `git diff --check`.
+
+The targeted correction review found that PostgreSQL preparation happens outside the replay catch. The PostgreSQL reference now limits the one captured-input replay to `40P01`/`40001` failures during ordered record writes after successful preparation; preparation failures are not retried. No source or other documentation claim changed in this final wording pass.

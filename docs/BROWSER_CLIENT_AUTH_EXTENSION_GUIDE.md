@@ -85,7 +85,7 @@ guarantee.
 ```mermaid
 stateDiagram-v2
   [*] --> connecting: activate()
-  connecting --> connected: wire active
+  connecting --> connected: matching successful activation ACK
   connected --> connecting: recoverable interruption
   connecting --> resynchronizing: entity reconnect
   resynchronizing --> connected: QueryResponse then held updates
@@ -95,6 +95,9 @@ stateDiagram-v2
   connecting --> failed: retry/deadline/error
   resynchronizing --> failed: invalid recovery
 ```
+
+The matching response-only ACK establishes readiness; no business update is
+required. A live wire alone does not establish `connected`.
 
 ### Subscription truth and recovery
 

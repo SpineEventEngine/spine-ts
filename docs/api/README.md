@@ -88,6 +88,12 @@ Managed close uses one configurable 30-second-default graceful deadline from
 the first close attempt across Delivery drain, relay cancellation, and final
 child close. Expiry reports failure and starts bounded process cleanup; an
 entered effect may still complete, so pending Delivery can repeat after restart.
+
+Direct `DeliverySupervisor.close({ graceMs })` has a different timing contract.
+`graceMs` defaults to 30,000 ms and bounds active-work grace and release cleanup
+separately. After those phases, close still awaits entered work that has not
+settled, so `graceMs` is not a hard total close deadline. Context and
+managed-server deadlines are separate controls.
 Each context has a separate shutdown deadline (default five seconds) starting
 when its own close begins; that deadline may end graceful context work earlier.
 Graceful child exit may add up to three seconds, while TERM/KILL and reaping

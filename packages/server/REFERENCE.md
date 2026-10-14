@@ -864,12 +864,15 @@ absent or elapsed (`keepUntil <= now`). Delivery skips per-record mutation check
 and deletion attempts for rows whose deadline is still in the future. Cleanup
 and retained-row duplicate recognition use the same applicable clock. Eligible
 rows still receive final time and shard checks before deletion.
-Direct local storage atomically verifies ownership and
-the exact delivered snapshot during removal. A remote adapter may instead read
-and compare the snapshot before sending a separate best-effort removal request;
-that sequence is not an atomic compare-and-delete guarantee. Pending, retryable,
-non-delivered, and still-protected rows remain. There is no additional retention
-configuration, timer, or scheduler.
+Direct local storage checks the supplied delivered status and deadline again,
+then deletes by ID while the operation is active. It does not re-read the stored
+row or compare its snapshot, and the shard session is not checked again after
+deletion. A row changed between the checks and deletion can therefore be
+removed. Cancellation stops subsequent cleanup attempts; deletions already
+completed remain. The remote adapter sends a separate bounded removal request,
+without an atomic compare-and-delete guarantee from this client. Pending,
+retryable, non-delivered, and still-protected rows are skipped by cleanup. There
+is no additional retention configuration, timer, or scheduler.
 
 `BoundedContextBuilder.withDeliveryStrategy(strategy)` snapshots a validated
 immutable strategy for its Entity Inbox; the default is one shard. For example,
@@ -897,6 +900,12 @@ before source client/storage. `DeliverySource` is not configured on
 `DeliveryBuilder`. The supervisor does not promise
 durable supervisor state, topology failover, exactly-once effects, or automatic
 retry of unknown remote mutations.
+
+Direct `DeliverySupervisor.close({ graceMs })` stops new admission and source
+activity. Its `graceMs` defaults to 30,000 ms and bounds active-work grace and
+release cleanup separately. After those waits, close may still await entered
+work that has not settled; it is not a hard total close deadline. Context close
+and managed-server shutdown have separate deadlines described below.
 
 Each Inbox read is bounded to one page. That bound does not limit the total
 pending work: an active drain continues from the last row read until that scan

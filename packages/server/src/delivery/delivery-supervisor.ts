@@ -402,9 +402,11 @@ export class DeliverySupervisor {
   /**
    * Stops admission and source activity, waits one bounded active-work grace phase, then fences runs.
    * A separate release-cleanup phase uses the same bound. Cleanup failure takes precedence over
-   * an active-work timeout; incomplete cleanup is retained for a later close retry.
+   * an active-work timeout; incomplete cleanup is retained for a later close retry. After both
+   * bounded phases, entered work may still keep close pending indefinitely. Context and managed
+   * server shutdown use separate deadlines.
    *
-   * @param options The bounded close controls.
+   * @param options Close controls; `graceMs` defaults to 30000 milliseconds per phase.
    * @returns A promise that settles after close cleanup completes.
    */
   close(options: DeliverySupervisorCloseOptions = {}): Promise<void> {
@@ -796,14 +798,15 @@ export interface DeliverySupervisorOptions {
 }
 
 /**
- * Bounded close controls for {@link DeliverySupervisor}.
+ * Per-phase close controls for {@link DeliverySupervisor}.
  */
 export interface DeliverySupervisorCloseOptions {
   // prettier-ignore
 
   /**
    * Non-negative safe-integer bound used separately for active work and release cleanup.
-   * Defaults to `30000` milliseconds. A zero value fences without waiting.
+   * Defaults to `30000` milliseconds. A zero value fences without waiting. Already-entered
+   * work may still keep close pending after both phases.
    */
   readonly graceMs?: number;
 }

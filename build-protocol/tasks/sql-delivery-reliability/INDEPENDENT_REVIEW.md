@@ -165,3 +165,91 @@ fork_turns none for fresh dispatches, no memory or previous narrative reads.
 Read complete current files in bounded chunks, preserve historical/reference
 classification, and record exact coverage. Collect the complete supplemental
 batch before fixing the two known remaining prose/TSDoc findings.
+
+## Independent code-derived account and comparison
+
+The fresh explicit Sol/medium API reviewer completed its account from source,
+Proto, configuration and launcher diffs without task definitions, prior reports,
+behavioral documentation or the original problem statement. A bounded follow-up
+covered omitted changed source paths without supplying expected conclusions.
+The parent then compared that recorded account with the original human messages
+in this chat, not with the task definition file.
+
+The account matches the original problem: SQL status-list filtering, useful
+internal error causes with safe remote diagnostics, independent storage writes
+with immutable retry checks, failed processing kept pending, acknowledgement
+retry distinguished from processing retry, saved-Event dispatch and explicit
+known-ID repair, subscription readiness/cancellation, recovery timing, and
+multi-process launch behavior. It does not establish exactly-once effects,
+atomic Entity persistence, automatic discovery of interrupted publication, or
+durability for the in-memory shared Inbox. Those were explicitly outside the
+required guarantees rather than hidden unfinished promises.
+
+Material supporting changes deserve disclosure: remote Inbox continuation now
+uses an added exact-cursor RPC; managed/context shutdown coordination and launch
+configuration expand beyond SQL storage; shared Entity/Event contracts also
+affect memory/Datastore providers. These serve the original remote-delivery,
+shutdown, and multi-process requirements. Removed rollback APIs and the new
+readiness/cursor protocol require current clients and servers together, consistent
+with the human's explicit lack of legacy/migration requirements. No unrelated
+product subsystem or new outbox was introduced.
+
+The code reader also exposes limitations that remain explicit: partial writes
+can leave Events from an incomplete save, a repair caller must know save
+completion, dispatch admission is not recipient completion, and a failed
+acknowledgement may cause a later handler execution. This is a narrower and
+more defensible result than a blanket no-loss/exactly-once promise. No material
+contradiction with the original stated scope was found.
+
+Reviewed test corrections and their live evidence are committed and pushed as
+0c5bf4756. Eight live console captures required only trailing-LF normalization;
+separate hashes and counts preserve exact original reconstruction. No measured
+result or non-ending console content changed. Full-document audit continues.
+
+## Full-document audit closure and correction batch
+
+All three full-content passes returned: 17 framework documents, 41 package
+documents, and 35 example/reference files. Their inventories are disjoint and
+cover all 93 paths. Package reviewer explicitly clarified that unchanged current
+docs were assessed as active contracts. It returned the report in chat despite
+the authorized report-only write, so the parent transcribed it with provenance.
+All profiles were explicit Luna/medium; no mismatch/fallback was exposed.
+
+Five accepted P2 documentation findings total: obsolete atomic cleanup claim
+(already fixed), ACK-gated browser readiness, separate non-total direct-supervisor
+close grace periods, stale local Message Board complete-entrypoint example, and
+missing PostgreSQL independent commit/retry description. Send the remaining
+four together to the existing Sol/medium implementer. Include relevant close
+TSDoc, without changing executable code. No extra product guarantee is added.
+A bounded existing Sol/medium reliability reviewer will check only the final
+semantic prose/TSDoc corrections against source; no whole-change review restart.
+
+Canonical follow-up dispositions: style/test quality and reliability reviewed;
+documentation reviewed across full catalog; public API semantics receive the
+bounded final prose/TSDoc check. No runtime, dependency, or serialized change
+is introduced by this follow-up, so the prior final security review remains
+applicable; a repeated security wave is unnecessary.
+
+## Review convergence
+
+The final Sol/medium technical documentation check accepts cleanup, readiness,
+shutdown and example-port corrections. It found one precise PostgreSQL wording
+overreach: preparation occurs outside the retry catch. The same implementer
+restricted the retry claim to ordered writes after successful preparation and
+explicitly stated that preparation failures are not retried. Parent source
+inspection confirms the correction; formatting/diff checks pass. This is a
+deterministic clarification, not a new runtime contract or review wave.
+
+All six test findings and five documentation issue categories are resolved,
+including that final wording correction. There is no introduced production
+defect outstanding from the fresh source review. Its non-exhaustive source
+coverage and the unchanged direct-supervisor shutdown limitation remain
+recorded. All 93 current documentation files received full-content review in
+the three bounded passes, followed by source-based semantic correction review.
+
+The first final preflight passes all 17 commands but captures the two expected
+documentation edits during execution. The mechanical function is repeating
+affected checks against the final hashes before the expensive release gate.
+Select verify:release because this branch contains shared runtime/API and test
+changes; execute once after this convergence. Earlier real SQL/provider runs
+remain valid for identical executable source.

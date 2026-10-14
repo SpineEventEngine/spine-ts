@@ -23,20 +23,29 @@ pnpm typecheck:build
 pnpm --dir examples/message-board/app start
 ```
 
-This workspace command uses the explicit local in-memory entrypoint. It prints
-`MessageBoard local server ready at http://127.0.0.1:8090` after the public
-browser listener is ready. Stop it with `Ctrl-C`.
+This workspace command uses the explicit local in-memory entrypoint. With its
+default ports, it prints `MessageBoard local server ready at http://127.0.0.1:8090`
+after the public browser listener is ready. Stop it with `Ctrl-C`.
 
-The complete entry point is intentionally small:
+A minimal sketch using the default ports is:
 
 <!-- docs-snippet-path: examples/message-board/app/src/local-application-server.ts -->
 
 ```ts
 import { MessageBoardApplication } from "./index.js";
 
-const server = await new MessageBoardApplication().run({ port: 8090 });
+const server = await new MessageBoardApplication().run({
+  port: 8090,
+  webOrigin: "http://127.0.0.1:5173",
+});
 console.log(`MessageBoard local server ready at ${server.baseUrl}`);
 ```
+
+The [actual local entrypoint](src/local-application-server.ts) validates
+`MESSAGE_BOARD_LOCAL_PORT` (default `8090`, including `0` for an available
+port) and `MESSAGE_BOARD_WEB_PORT` (default `5173`). It passes the selected web
+port as `webOrigin`, so the allowed browser origin follows the UI when that
+port changes. Point the UI at the selected local server port as well.
 
 Use `start()` instead of `run()` when another host handles process signals:
 
