@@ -1,0 +1,8 @@
+
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server-blackbox-tests/test/project-process-faults.integration.test.ts
+  100:11  error  Expected the Promise rejection reason to be an Error                                                                @typescript-eslint/prefer-promise-reject-errors
+  126:38  error  Returning a void expression from an arrow function shorthand is forbidden. Please add braces to the arrow function  @typescript-eslint/no-confusing-void-expression
+
+✖ 2 problems (2 errors, 0 warnings)
+  1 error and 0 warnings potentially fixable with the `--fix` option.
+

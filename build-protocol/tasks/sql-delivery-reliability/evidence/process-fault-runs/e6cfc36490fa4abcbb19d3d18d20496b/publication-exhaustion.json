@@ -1,0 +1,58 @@
+{
+  "failedInsertAttempts": 3,
+  "commandRows": [
+    {
+      "messageId": "1a21f724-ca94-4750-90af-faed704752fb",
+      "signalId": "d7f63f5b-f8b6-4f78-a06d-72a579ed1029",
+      "targetTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectState",
+      "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+      "targetIdBase64": "CigKJmZhdWx0LWU2Y2ZjMzY0OTBmYTRhYmNiYjE5ZDNkMThkMjA0OTZiEAE=",
+      "signalTypeUrl": "type.spine.io/spine.core.Command",
+      "signalValueSha256": "05ede30dce3f835332022023a48db9678a3d912846e31e4e4c22da170d9e0702",
+      "status": "DELIVERED",
+      "whenReceivedSeconds": "1791940637",
+      "whenReceivedNanos": 975000000,
+      "keepUntilMillis": 1791940667974,
+      "version": "1"
+    }
+  ],
+  "prefix": {
+    "messageId": "78d6759b-86a3-42d0-8029-36d5a693e35e",
+    "signalId": "67fb5008-d0de-467c-9003-a6f7d289cc76",
+    "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+    "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+    "targetIdBase64": "CigKJmZhdWx0LWU2Y2ZjMzY0OTBmYTRhYmNiYjE5ZDNkMThkMjA0OTZiEAE=",
+    "signalTypeUrl": "type.spine.io/spine.core.Event",
+    "signalValueSha256": "a4d2b905b4f4997a6e4fc0e7e32533f0b542a3023db9c592b8393e6671195962",
+    "status": "DELIVERED",
+    "whenReceivedSeconds": "1791940638",
+    "whenReceivedNanos": 43001000,
+    "keepUntilMillis": 1791940668043,
+    "version": "2"
+  },
+  "snapshot": {
+    "projects": [
+      {
+        "number": 1,
+        "states": {
+          "project": true,
+          "planning": true,
+          "staffing": false,
+          "portfolio": false,
+          "projection": false
+        }
+      }
+    ],
+    "events": [
+      {
+        "id": "67fb5008-d0de-467c-9003-a6f7d289cc76",
+        "typeUrl": "type.spine.server.testing/spine.server.testing.ProjectCreated",
+        "number": 1,
+        "organization": "fault-e6cfc36490fa4abcbb19d3d18d20496b",
+        "name": "roadmap-1",
+        "sha256": "a4d2b905b4f4997a6e4fc0e7e32533f0b542a3023db9c592b8393e6671195962",
+        "binaryBase64": "CiYKJDY3ZmI1MDA4LWQwZGUtNDY3Yy05MDAzLWE2ZjdkMjg5Y2M3NhKkAQo9dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0Q3JlYXRlZBJjCigKJmZhdWx0LWU2Y2ZjMzY0OTBmYTRhYmNiYjE5ZDNkMThkMjA0OTZiEiwKKAomZmF1bHQtZTZjZmMzNjQ5MGZhNGFiY2JiMTlkM2QxOGQyMDQ5NmIQARoJcm9hZG1hcC0xGp0CCgsInrC71gYQ6Oq+ChpoCjh0eXBlLnNwaW5lLnNlcnZlci50ZXN0aW5nL3NwaW5lLnNlcnZlci50ZXN0aW5nLlByb2plY3RJZBIsCigKJmZhdWx0LWU2Y2ZjMzY0OTBmYTRhYmNiYjE5ZDNkMThkMjA0OTZiEAEiAHKhAQqMAQpMCiJ0eXBlLnNwaW5lLmlvL3NwaW5lLmNvcmUuQ29tbWFuZElkEiYKJGQ3ZjYzZjViLWY4YjYtNGY3OC1hMDZkLTcyYTU3OWVkMTAyORI8dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5DcmVhdGVQcm9qZWN0GhASDgoMbWF0cml4LWFjdG9y"
+      }
+    ]
+  }
+}

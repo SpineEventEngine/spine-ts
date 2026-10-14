@@ -1,0 +1,1 @@
+{"severity":"ERROR","timestamp":"2026-10-14T00:48:40.116Z","message":"Produced signal handling failed.","contextName":"ProjectFault_3488d943822048d4a7acb507979647f4","eventId":"9346949c-ff26-41e0-891c-cc8b8c443cd4","eventType":"type.spine.server.testing/spine.server.testing.ProjectCreated","operation":"signal_publisher.handle","reasonCode":"handled_failure","errorName":"Error"}

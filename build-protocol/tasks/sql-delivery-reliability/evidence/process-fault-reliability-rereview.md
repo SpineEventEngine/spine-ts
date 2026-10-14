@@ -1,0 +1,18 @@
+# Process-fault performance and reliability targeted re-review
+
+Scope: frozen test-only corrections to the process-fault driver, Project worker, exact-shard observation helper and tests, plus the cold-process post-cleanup Event repair assertion. This is a targeted re-review of the changed execution paths and immediate invariants, not a new runtime-contract review. The existing performance/reliability reviewer was explicitly dispatched as `gpt-6-sol` with `medium` reasoning. The execution surface does not expose actual runtime model or reasoning metadata; no visible profile mismatch was reported. No matrix, build, service, or database command was run for this review.
+
+## Result
+
+**Clean for the reviewed slice; no actionable performance/reliability finding.**
+
+- `project-process-faults.mjs` now checks that every targeted `SIGKILL` is accepted and observes a `SIGKILL` exit before starting replacement processes. The before-effect path checks Planning state again after the selected process exits, closing the gate-expiry window in the prior finding. The after-save, partial-publication and shared-volatile paths likewise wait for all targeted old processes. A failed confirmation leaves the child in the cleanup list and fails the run.
+- `completeInboxRows()` requires the complete expected shard set exactly once, an error-free read, `truncated === false`, consistent counts, and nonempty row identifiers/statuses. The volatile-loss absence assertion and the partial-publication observations use it. Its focused tests reject failed, missing, duplicate, truncated and malformed shard observations, so a failed read cannot masquerade as an empty Inbox.
+- The outer test adapter escalates TERM to KILL and bounds waiting for driver exit. A TERM-resistant isolated process test confirms a bounded return, PID reaping, and resource/cleanup diagnostics. The driver records cleanup errors and a failed result with resource identity. These are test-process lifecycle guards, not production behavior changes.
+- After the original Event receipts are observed delivered, the partial-publication path waits until a complete SQL shard scan finds no row for that Event. It records method entries immediately before the second repair, confirms both then-current app processes exit by `SIGKILL`, and starts fresh PIDs. The final assertion requires one additional entry for each of the four Event recipients relative to that immediate baseline, exactly four distinct typed delivered receipts, one unchanged CreateProject entry, complete states, and the original Event ID, bytes and hash. This establishes the cold-process replay claim without assuming warm-process cache behavior.
+
+## Evidence and limits
+
+The focused PostgreSQL 16/two-app-process run `30208ac4a0674d8e8103c25266cd501f` passed 2/2 in 43.11 seconds (`process-fault-review-post-cleanup-final.log`); its `cleanup.json` records the database drop and no errors. Its snapshot records pre-repair recipient counts `[1,1,1,1]`, final counts `[2,2,2,2]`, distinct old/new PIDs, and four distinct typed `DELIVERED` rows. The observation-helper tests passed 3/3, and the isolated watchdog test passed 1/1 with the selected process-fault test skipped. Earlier warm-process trace `797c52b5f08b4d59afdee3f89dac8691` correctly remains a failed overstrong assertion: process-local recent-delivery cache can suppress some repeat entries after SQL cleanup. The separate warm control `e6cfc36490fa4abcbb19d3d18d20496b` is therefore a narrow observation, not a repeat-count guarantee.
+
+This review relies on the preserved focused logs and artifacts; it did not rerun live tests. Four-provider and eight-process acceptance, and final release verification, remain pending outside this targeted re-review.

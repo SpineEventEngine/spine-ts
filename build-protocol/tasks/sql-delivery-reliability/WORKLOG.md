@@ -730,3 +730,22 @@ no errors. Earlier helper cleanup races and their exact database cleanup are
 preserved separately; prior-run-cleanup.json is PASS. Final script syntax, ESLint
 and formatting pass; runtime metadata unavailable. No framework source or built
 runtime was changed by this evidence function.
+
+The matrix is held while the longer concurrent-repair observation is diagnosed.
+At 15 seconds, a PostgreSQL two-process run had one entry per handler and four
+delivered recipient rows, but also ten additional pending rows reported for the
+original Planning recipient. This is not yet classified: confirm distinct physical
+rows and full typed identity versus repeated descriptor observations, then inspect
+retention timestamps, admission times, errors and the subsequent bounded timeline.
+Do not treat admissions before cleanup as permitted post-cleanup replay, relax
+entry assertions, or claim duplicate suppression from the early final-state
+snapshot. The implementer is preserving the bounded observation and will diagnose
+before a runtime correction or broader matrix release.
+
+## Real SQL transport implementation dispatch
+
+Resume the existing implementer with its immutable explicitly dispatched `gpt-6-sol` / `medium` profile, sole test/runtime writer. Scope: new SQL subscription transport lifecycle fixture and tests using high-level public Client handles and real services, per TRANSPORT_PLAN and fixture construction evidence. Keep process-fault fixtures, inventory/package script files, and built outputs frozen until review/matrix handoff. Independent new source files may be written while read-only process-fault reviews run. No legacy support or data migration. Begin one focused PostgreSQL/native/local case, then expand the accepted lifecycle rows and engine/protocol/mode matrix. Runtime metadata introspection remains unavailable.
+
+## Frozen process-fault slice ready for commit
+
+Focused negative observation tests (3/3), resistant-process watchdog (1/1), PostgreSQL 16 cold-process repair (2/2), tooling typecheck, ESLint, format, cleanup enforcement, and diff checks pass. Reliability and style targeted reviews are clean. Commit/push the test-only harness and bounded cleanup-checker correction; then release the prepared 32-case matrix after schema audit. No production runtime or built artifact changed, so the accepted 80-run baseline is not repeated. Transport implementation continues in independent new files.

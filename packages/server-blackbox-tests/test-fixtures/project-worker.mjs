@@ -14,7 +14,7 @@
 
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import process from "node:process";
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
@@ -30,6 +30,7 @@ import {
   UserIdSchema,
 } from "@spine-event-engine/proto";
 import { CommandService } from "@spine-event-engine/proto/client";
+import { InboxMessageSchema } from "@spine-event-engine/proto/delivery";
 import {
   EnvironmentType,
   InboxStorage,
@@ -82,6 +83,9 @@ async function handle(request) {
       return inspect(request);
     case "inspectDelivery":
       return inspectDelivery();
+    case "republish":
+      if (context === undefined) throw new Error("Worker is not ready.");
+      return context.republishEvents({ eventIds: request.eventIds });
     case "close":
       await close();
       return { closed: true };
@@ -110,10 +114,12 @@ async function start(request) {
       ProjectProjectionStateSchema,
     ]),
   );
-  factory = await Factory.newBuilder()
+  const storageBuilder = Factory.newBuilder()
     .setOptions({ url: settings.url })
-    .setStringifierRegistry(stringifiers)
-    .build();
+    .setStringifierRegistry(stringifiers);
+  if (settings.inboxTable !== undefined)
+    storageBuilder.setTableName(InboxMessageSchema, settings.inboxTable);
+  factory = await storageBuilder.build();
   const environmentSettings = { logger: fileLogger(settings.logPath) };
   if (settings.deliveryEndpoint !== undefined) {
     delivery = RemoteDelivery.connectTo({ endpoint: settings.deliveryEndpoint });
@@ -131,6 +137,22 @@ async function start(request) {
         `${JSON.stringify({ ...entry, pid: process.pid, at: Date.now() })}\n`,
         { flush: true },
       );
+      const gate = settings.handlerGate;
+      if (
+        gate !== undefined &&
+        entry.method === gate.method &&
+        entry.correlation === gate.correlation &&
+        entry.recipientTypeUrl === gate.recipientTypeUrl &&
+        entry.recipientIdBase64 === gate.recipientIdBase64
+      ) {
+        const deadline = Date.now() + Math.min(gate.timeoutMs, 10_000);
+        const pause = new Int32Array(new SharedArrayBuffer(4));
+        while (!existsSync(gate.releaseFile) && Date.now() < deadline) {
+          Atomics.wait(pause, 0, 0, 25);
+        }
+        if (!existsSync(gate.releaseFile))
+          throw new Error(`Project fault gate expired for ${entry.correlation}.`);
+      }
     },
     factory,
     settings.shards,
@@ -262,9 +284,17 @@ async function inspectDelivery() {
             messageId: message.id.value,
             signalId: message.signalId,
             targetTypeUrl: message.inboxId.targetTypeUrl,
+            targetIdTypeUrl: message.inboxId.targetId.typeUrl,
+            targetIdBase64: Buffer.from(message.inboxId.targetId.value).toString("base64"),
+            signalTypeUrl: message.signal?.typeUrl,
+            signalValueSha256:
+              message.signal === undefined
+                ? undefined
+                : createHash("sha256").update(message.signal.value).digest("hex"),
             status: message.status,
             whenReceivedSeconds: String(message.whenReceived.seconds),
             whenReceivedNanos: message.whenReceived.nanos,
+            keepUntilMillis: message.keepUntil?.getTime(),
             version: String(message.version),
           })),
           statuses: messages.reduce((counts, message) => {

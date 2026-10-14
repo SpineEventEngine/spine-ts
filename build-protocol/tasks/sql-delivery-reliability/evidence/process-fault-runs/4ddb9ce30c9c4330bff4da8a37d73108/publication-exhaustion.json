@@ -1,0 +1,17 @@
+{
+  "failedInsertAttempts": 3,
+  "commandRows": [
+    {
+      "messageId": "652340a2-6109-4e59-8b43-70d0ba85cfce",
+      "signalId": "8a6cb0e7-e9a2-4794-8223-a9c2671713c7",
+      "targetTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectState",
+      "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+      "targetIdBase64": "CigKJmZhdWx0LTRkZGI5Y2UzMGM5YzQzMzBiZmY0ZGE4YTM3ZDczMTA4EAE=",
+      "signalTypeUrl": "type.spine.io/spine.core.Command",
+      "status": "DELIVERED",
+      "whenReceivedSeconds": "1791938676",
+      "whenReceivedNanos": 729001000,
+      "version": "1"
+    }
+  ]
+}

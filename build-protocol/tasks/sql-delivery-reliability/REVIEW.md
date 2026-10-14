@@ -448,3 +448,33 @@ checker correction is otherwise clean; no additional source-policy weakening was
 identified. After focused negative tests/static checks and affected live smoke,
 re-review only death/observation/reaping concerns. Broad SQL matrix starts after
 those converge. No new production behavior or architecture is required.
+
+Before the matrix freeze, complete the already-required post-cleanup replay
+boundary in the partial-publication scenario. After the retained-window eight-call
+repair proves one entry per recipient, observe actual runtime cleanup of delivered
+recipient rows using complete successful shard reads. Then explicitly repair the
+same saved Event again, recording the second entry for each recipient, unchanged
+Event bytes and no additional Command execution. No direct deletion, sleep-only
+assumption or retention disabling is permitted. This test-only phase will be part
+of the affected reliability/style re-review; it does not strengthen the runtime
+contract beyond the documented duplicate possibility after retention.
+
+Correction to the proposed post-cleanup assertion: requiring every recipient to
+execute exactly twice is not a user requirement. The binding requirement says
+replay may repeat a previously successful recipient after cleanup, and requires
+accurate counts and outcomes. The first extended run observed Planning/Staffing
+twice but both projections once. Determine whether those projections were validly
+suppressed, pending or failed before changing assertions; do not alter correct
+version/idempotency handling merely to force repeated execution. Capture entries
+immediately before and after the final repair to distinguish work triggered during
+the retention/lease wait from work triggered by that repair. Likewise, classify
+whether duplicate checks occur at admission or dispatch before making claims
+about requests admitted while a prior delivery record was retained.
+
+## Process-fault correction review dispatch
+
+The corrected fixture is frozen after the final PostgreSQL 16 cold-process replay and static preflight. The existing performance/reliability concern is dispatched to `gpt-6-sol` with explicit `medium` reasoning; the previous style reviewer is resumed with its immutable explicit `gpt-6-sol` / `medium` profile. Both review only the three accepted harness corrections and the added cleanup/restart replay evidence. No production behavior changed. Desktop supports these explicit profiles; actual runtime self-introspection is unavailable. Collect the complete wave before returning fixes. Public API and broad documentation concerns remain N/A for these test-only corrections; their final task reviews remain pending.
+
+## Process-fault correction acceptance
+
+Both targeted review reports are clean. The three accepted harness findings are resolved, including strict complete Inbox observations, confirmed process death, and bounded watchdog cleanup. The added cleanup/fresh-process replay test is accepted for the measured PostgreSQL 16/two-process scope. Explicit dispatch fields and immutable configured profiles match both assignments; runtime introspection is unavailable. Full provider/process matrix and final release checks remain pending. The independent cleanup-checker correction passed 156 tests and both first-wave reviewers found no weakened enforcement.

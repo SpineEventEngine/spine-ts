@@ -1,0 +1,54 @@
+{
+  "failedInsertAttempts": 3,
+  "commandRows": [
+    {
+      "messageId": "39b6517c-1be9-44a3-a520-dd04584eb53d",
+      "signalId": "3f9b01c3-fb4c-4e44-9bb9-c30f067387ff",
+      "targetTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectState",
+      "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+      "targetIdBase64": "CigKJmZhdWx0LWVmYTcwYzBiODY2ZDQxZTI4Mzg3OTQ2ZjRmOWY0NGI3EAE=",
+      "signalTypeUrl": "type.spine.io/spine.core.Command",
+      "status": "DELIVERED",
+      "whenReceivedSeconds": "1791939256",
+      "whenReceivedNanos": 423000000,
+      "version": "1"
+    }
+  ],
+  "prefix": {
+    "messageId": "96257cbd-a287-4232-9091-97003588bf14",
+    "signalId": "876a7f7e-9a75-440b-bd38-30aea54b536e",
+    "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+    "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+    "targetIdBase64": "CigKJmZhdWx0LWVmYTcwYzBiODY2ZDQxZTI4Mzg3OTQ2ZjRmOWY0NGI3EAE=",
+    "signalTypeUrl": "type.spine.io/spine.core.Event",
+    "status": "DELIVERED",
+    "whenReceivedSeconds": "1791939256",
+    "whenReceivedNanos": 493001000,
+    "version": "2"
+  },
+  "snapshot": {
+    "projects": [
+      {
+        "number": 1,
+        "states": {
+          "project": true,
+          "planning": true,
+          "staffing": false,
+          "portfolio": false,
+          "projection": false
+        }
+      }
+    ],
+    "events": [
+      {
+        "id": "876a7f7e-9a75-440b-bd38-30aea54b536e",
+        "typeUrl": "type.spine.server.testing/spine.server.testing.ProjectCreated",
+        "number": 1,
+        "organization": "fault-efa70c0b866d41e28387946f4f9f44b7",
+        "name": "roadmap-1",
+        "sha256": "1553ad0193e2068ddb5be2fc53d995ac76af7a1bfae3966ef647f2f2de6eb802",
+        "binaryBase64": "CiYKJDg3NmE3ZjdlLTlhNzUtNDQwYi1iZDM4LTMwYWVhNTRiNTM2ZRKkAQo9dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0Q3JlYXRlZBJjCigKJmZhdWx0LWVmYTcwYzBiODY2ZDQxZTI4Mzg3OTQ2ZjRmOWY0NGI3EiwKKAomZmF1bHQtZWZhNzBjMGI4NjZkNDFlMjgzODc5NDZmNGY5ZjQ0YjcQARoJcm9hZG1hcC0xGp4CCgwIuKW71gYQqM/L4AEaaAo4dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0SWQSLAooCiZmYXVsdC1lZmE3MGMwYjg2NmQ0MWUyODM4Nzk0NmY0ZjlmNDRiNxABIgByoQEKjAEKTAoidHlwZS5zcGluZS5pby9zcGluZS5jb3JlLkNvbW1hbmRJZBImCiQzZjliMDFjMy1mYjRjLTRlNDQtOWJiOS1jMzBmMDY3Mzg3ZmYSPHR5cGUuc3BpbmUuc2VydmVyLnRlc3Rpbmcvc3BpbmUuc2VydmVyLnRlc3RpbmcuQ3JlYXRlUHJvamVjdBoQEg4KDG1hdHJpeC1hY3Rvcg=="
+      }
+    ]
+  }
+}

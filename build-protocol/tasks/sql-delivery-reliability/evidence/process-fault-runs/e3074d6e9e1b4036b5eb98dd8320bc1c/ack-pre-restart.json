@@ -1,0 +1,127 @@
+{
+  "acknowledgedCommandIds": [
+    "c41e89c0-0d48-484f-a0ec-d2ef13d55b7a"
+  ],
+  "entered": {
+    "method": "planning",
+    "receiver": "ProjectPlanning",
+    "correlation": "fault-e3074d6e9e1b4036b5eb98dd8320bc1c:1",
+    "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+    "recipientIdBase64": "CigKJmZhdWx0LWUzMDc0ZDZlOWUxYjQwMzZiNWViOThkZDgzMjBiYzFjEAE=",
+    "pid": 60588,
+    "at": 1791939048313
+  },
+  "pending": {
+    "messageId": "385cb541-babd-4cc0-81a6-51bfba3b2ae4",
+    "signalId": "9a62854c-3a9d-4d87-b799-b8caa12996b9",
+    "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+    "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+    "targetIdBase64": "CigKJmZhdWx0LWUzMDc0ZDZlOWUxYjQwMzZiNWViOThkZDgzMjBiYzFjEAE=",
+    "signalTypeUrl": "type.spine.io/spine.core.Event",
+    "status": "TO_DELIVER",
+    "whenReceivedSeconds": "1791939048",
+    "whenReceivedNanos": 240001000,
+    "version": "2"
+  },
+  "saved": {
+    "observation": {
+      "projects": [
+        {
+          "number": 1,
+          "states": {
+            "project": true,
+            "planning": true,
+            "staffing": true,
+            "portfolio": true,
+            "projection": true
+          }
+        }
+      ],
+      "events": [
+        {
+          "id": "9a62854c-3a9d-4d87-b799-b8caa12996b9",
+          "typeUrl": "type.spine.server.testing/spine.server.testing.ProjectCreated",
+          "number": 1,
+          "organization": "fault-e3074d6e9e1b4036b5eb98dd8320bc1c",
+          "name": "roadmap-1",
+          "sha256": "e226b0edcc9245d3c4cc9359918b7d8b82b32c09e3957e5b0bef512dd4907fde",
+          "binaryBase64": "CiYKJDlhNjI4NTRjLTNhOWQtNGQ4Ny1iNzk5LWI4Y2FhMTI5OTZiORKkAQo9dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0Q3JlYXRlZBJjCigKJmZhdWx0LWUzMDc0ZDZlOWUxYjQwMzZiNWViOThkZDgzMjBiYzFjEiwKKAomZmF1bHQtZTMwNzRkNmU5ZTFiNDAzNmI1ZWI5OGRkODMyMGJjMWMQARoJcm9hZG1hcC0xGp0CCgsI6KO71gYQwNm2aBpoCjh0eXBlLnNwaW5lLnNlcnZlci50ZXN0aW5nL3NwaW5lLnNlcnZlci50ZXN0aW5nLlByb2plY3RJZBIsCigKJmZhdWx0LWUzMDc0ZDZlOWUxYjQwMzZiNWViOThkZDgzMjBiYzFjEAEiAHKhAQqMAQpMCiJ0eXBlLnNwaW5lLmlvL3NwaW5lLmNvcmUuQ29tbWFuZElkEiYKJGM0MWU4OWMwLTBkNDgtNDg0Zi1hMGVjLWQyZWYxM2Q1NWI3YRI8dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5DcmVhdGVQcm9qZWN0GhASDgoMbWF0cml4LWFjdG9y"
+        }
+      ]
+    },
+    "row": {
+      "messageId": "385cb541-babd-4cc0-81a6-51bfba3b2ae4",
+      "signalId": "9a62854c-3a9d-4d87-b799-b8caa12996b9",
+      "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+      "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+      "targetIdBase64": "CigKJmZhdWx0LWUzMDc0ZDZlOWUxYjQwMzZiNWViOThkZDgzMjBiYzFjEAE=",
+      "signalTypeUrl": "type.spine.io/spine.core.Event",
+      "status": "TO_DELIVER",
+      "whenReceivedSeconds": "1791939048",
+      "whenReceivedNanos": 240001000,
+      "version": "2"
+    }
+  },
+  "attempts": 1,
+  "preRestartStatus": 1,
+  "oldPids": [
+    60588,
+    60589
+  ],
+  "entries": [
+    {
+      "method": "create",
+      "receiver": "Project",
+      "correlation": "fault-e3074d6e9e1b4036b5eb98dd8320bc1c:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+      "recipientIdBase64": "CigKJmZhdWx0LWUzMDc0ZDZlOWUxYjQwMzZiNWViOThkZDgzMjBiYzFjEAE=",
+      "pid": 60588,
+      "at": 1791939048207
+    },
+    {
+      "method": "portfolio",
+      "receiver": "Portfolio",
+      "correlation": "fault-e3074d6e9e1b4036b5eb98dd8320bc1c:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+      "recipientIdBase64": "CigKJmZhdWx0LWUzMDc0ZDZlOWUxYjQwMzZiNWViOThkZDgzMjBiYzFjEAE=",
+      "pid": 60588,
+      "at": 1791939048281
+    },
+    {
+      "method": "planning",
+      "receiver": "ProjectPlanning",
+      "correlation": "fault-e3074d6e9e1b4036b5eb98dd8320bc1c:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+      "recipientIdBase64": "CigKJmZhdWx0LWUzMDc0ZDZlOWUxYjQwMzZiNWViOThkZDgzMjBiYzFjEAE=",
+      "pid": 60588,
+      "at": 1791939048313
+    },
+    {
+      "method": "projection",
+      "receiver": "ProjectProjection",
+      "correlation": "fault-e3074d6e9e1b4036b5eb98dd8320bc1c:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+      "recipientIdBase64": "CigKJmZhdWx0LWUzMDc0ZDZlOWUxYjQwMzZiNWViOThkZDgzMjBiYzFjEAE=",
+      "pid": 60588,
+      "at": 1791939058379
+    },
+    {
+      "method": "staffing",
+      "receiver": "ProjectStaffing",
+      "correlation": "fault-e3074d6e9e1b4036b5eb98dd8320bc1c:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+      "recipientIdBase64": "CigKJmZhdWx0LWUzMDc0ZDZlOWUxYjQwMzZiNWViOThkZDgzMjBiYzFjEAE=",
+      "pid": 60589,
+      "at": 1791939058401
+    },
+    {
+      "method": "planning",
+      "receiver": "ProjectPlanning",
+      "correlation": "fault-e3074d6e9e1b4036b5eb98dd8320bc1c:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+      "recipientIdBase64": "CigKJmZhdWx0LWUzMDc0ZDZlOWUxYjQwMzZiNWViOThkZDgzMjBiYzFjEAE=",
+      "pid": 60588,
+      "at": 1791939058408
+    }
+  ]
+}

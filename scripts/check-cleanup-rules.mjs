@@ -340,7 +340,7 @@ function isGeneratedFileDescriptor(
 }
 
 function checkCallableLength(repoRoot, files, runGitCommand) {
-  const { changed, baseline } = changedLines(repoRoot, runGitCommand);
+  const { changed, baseline } = changedLines(repoRoot, runGitCommand, new Set(files));
   const details = [];
   for (const file of files) {
     const lines = changed.get(file);
@@ -461,7 +461,7 @@ function callableName(node) {
     : (node.name?.getText() ?? "anonymous callable");
 }
 
-function changedLines(repoRoot, runGitCommand) {
+function changedLines(repoRoot, runGitCommand, eligible) {
   const changed = new Map();
   const mergeBase = runGitCommand(repoRoot, ["merge-base", "origin/master", "HEAD"]);
   const baseline = mergeBase.status === 0 ? mergeBase.stdout.trim() : "HEAD";
@@ -474,22 +474,30 @@ function changedLines(repoRoot, runGitCommand) {
     if (range !== undefined) statusArgs.push(range);
     const statuses = runGitCommand(repoRoot, statusArgs);
     if (statuses.status !== 0) throw new Error("Unable to classify changed source with git diff.");
-    const destinations = changedDestinationPaths(statuses.stdout);
-    const args = ["diff", "--unified=0", "--find-renames"];
-    if (range !== undefined) args.push(range);
-    const result = runGitCommand(repoRoot, args);
-    if (result.status !== 0) throw new Error("Unable to classify changed source with git diff.");
-    let file;
-    for (const line of result.stdout.split("\n")) {
-      if (line.startsWith("+++ b/")) file = line.slice(6);
-      const match = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/u.exec(line);
-      if (file !== undefined && destinations.has(file) && match !== null) {
-        const start = Number(match[1]);
-        const count = Number(match[2] ?? "1");
-        if (count > 0) {
-          const lines = changed.get(file) ?? new Set();
-          for (let index = 0; index < count; index += 1) lines.add(start + index);
-          changed.set(file, lines);
+    const destinations = [...changedDestinationPaths(statuses.stdout)].filter((file) =>
+      eligible.has(file),
+    );
+    for (let offset = 0; offset < destinations.length; offset += 64) {
+      const args = ["diff", "--unified=0", "--find-renames"];
+      if (range !== undefined) args.push(range);
+      args.push(
+        "--",
+        ...destinations.slice(offset, offset + 64).map((file) => `:(literal)${file}`),
+      );
+      const result = runGitCommand(repoRoot, args);
+      if (result.status !== 0) throw new Error("Unable to classify changed source with git diff.");
+      let file;
+      for (const line of result.stdout.split("\n")) {
+        if (line.startsWith("+++ b/")) file = line.slice(6);
+        const match = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/u.exec(line);
+        if (file !== undefined && eligible.has(file) && match !== null) {
+          const start = Number(match[1]);
+          const count = Number(match[2] ?? "1");
+          if (count > 0) {
+            const lines = changed.get(file) ?? new Set();
+            for (let index = 0; index < count; index += 1) lines.add(start + index);
+            changed.set(file, lines);
+          }
         }
       }
     }
@@ -497,6 +505,7 @@ function changedLines(repoRoot, runGitCommand) {
   const untracked = runGitCommand(repoRoot, ["ls-files", "--others", "--exclude-standard"]);
   if (untracked.status !== 0) throw new Error("Unable to classify untracked source.");
   for (const file of untracked.stdout.split("\n").filter(Boolean)) {
+    if (!eligible.has(file)) continue;
     const path = join(repoRoot, file);
     if (existsSync(path))
       changed.set(

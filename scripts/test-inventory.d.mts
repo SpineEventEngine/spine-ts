@@ -23,4 +23,5 @@ export declare const infrastructureTestFiles: readonly [
   "packages/server/test/delivery/inbox-provider-cleanup.test.ts",
   "packages/server/test/delivery/inbox-provider-faults.integration.test.ts",
   "packages/server-blackbox-tests/test/project-process-matrix.integration.test.ts",
+  "packages/server-blackbox-tests/test/project-process-faults.integration.test.ts",
 ];
