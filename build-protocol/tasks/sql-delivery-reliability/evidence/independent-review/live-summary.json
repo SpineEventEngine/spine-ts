@@ -1,0 +1,110 @@
+{
+  "integration_results": [
+    {
+      "provider": "postgres16",
+      "actual_server_version": "16.15 (Debian 16.15-1.pgdg13+2)",
+      "exit_code": 0,
+      "summary_lines": [
+        "Test Files  1 passed (1)",
+        "Tests  12 passed (12)",
+        "Duration  4.98s (transform 218ms, setup 0ms, import 351ms, tests 4.53s, environment 0ms)"
+      ],
+      "failed_test_titles": [],
+      "engine_selector": null,
+      "source_hashes_unchanged": true,
+      "raw_log": "build-protocol/tasks/sql-delivery-reliability/evidence/independent-review/live-postgres16.log"
+    },
+    {
+      "provider": "postgres18",
+      "actual_server_version": "18.6 (Debian 18.6-1.pgdg13+2)",
+      "exit_code": 0,
+      "summary_lines": [
+        "Test Files  1 passed (1)",
+        "Tests  12 passed (12)",
+        "Duration  5.01s (transform 217ms, setup 0ms, import 340ms, tests 4.56s, environment 0ms)"
+      ],
+      "failed_test_titles": [],
+      "engine_selector": null,
+      "source_hashes_unchanged": true,
+      "raw_log": "build-protocol/tasks/sql-delivery-reliability/evidence/independent-review/live-postgres18.log"
+    },
+    {
+      "provider": "mysql84",
+      "actual_server_version": "8.4.11",
+      "exit_code": 1,
+      "summary_lines": [
+        "Test Files  1 failed (1)",
+        "Tests  2 failed | 13 passed (15)",
+        "Duration  12.68s (transform 247ms, setup 0ms, import 421ms, tests 12.14s, environment 0ms)"
+      ],
+      "failed_test_titles": [
+        "persists MyISAM commits with and without optional immutable families 98ms",
+        "persists the completed InnoDB Entity commits from separate handles 30ms"
+      ],
+      "engine_selector": "MYISAM",
+      "source_hashes_unchanged": true,
+      "raw_log": "build-protocol/tasks/sql-delivery-reliability/evidence/independent-review/live-mysql84.log"
+    },
+    {
+      "provider": "mariadb114",
+      "actual_server_version": "11.4.13-MariaDB-ubu2404",
+      "exit_code": 1,
+      "summary_lines": [
+        "Test Files  1 failed (1)",
+        "Tests  2 failed | 13 passed (15)",
+        "Duration  5.18s (transform 219ms, setup 0ms, import 354ms, tests 4.73s, environment 0ms)"
+      ],
+      "failed_test_titles": [
+        "persists MyISAM commits with and without optional immutable families 59ms",
+        "persists the completed InnoDB Entity commits from separate handles 17ms"
+      ],
+      "engine_selector": "ARIA",
+      "source_hashes_unchanged": true,
+      "raw_log": "build-protocol/tasks/sql-delivery-reliability/evidence/independent-review/live-mariadb114.log"
+    }
+  ],
+  "compose_config_results": {
+    "compose_version": "5.3.1",
+    "all_succeeded": true,
+    "files": [
+      {
+        "path": "examples/distributed-message-board/deploy/compose.yaml",
+        "success": true,
+        "sha256_unchanged": true,
+        "services": 5
+      },
+      {
+        "path": "examples/message-board/deploy/compose/combined.compose.yaml",
+        "success": true,
+        "sha256_unchanged": true,
+        "services": 5
+      },
+      {
+        "path": "examples/message-board/deploy/compose/standalone.compose.yaml",
+        "success": true,
+        "sha256_unchanged": true,
+        "services": 6
+      }
+    ],
+    "selected_interpolated_fields_evidence": "live-compose-config.json"
+  },
+  "credential_hygiene": {
+    "saved_integration_logs_checked": true,
+    "connection_urls_or_passwords_found_in_saved_logs": false,
+    "connections_file_mode": "0600",
+    "connections_file_ignored": true
+  },
+  "source_hash_integrity": {
+    "all_four_provider_runs_unchanged": true,
+    "hash_manifest": "Each live-<provider>.json contains before/after SHA-256 for the changed source paths and five frozen test paths."
+  },
+  "tests_executed": [
+    "packages/storage-postgres/test/postgresql-integration.test.ts on PostgreSQL 16 and 18",
+    "packages/storage-mysql/test/mysql-integration.test.ts on MySQL 8.4 with MyISAM selector and MariaDB 11.4 with Aria selector"
+  ],
+  "non_actions": [
+    "No full coverage or release profile was run.",
+    "No source files were modified.",
+    "No database services were stopped."
+  ]
+}

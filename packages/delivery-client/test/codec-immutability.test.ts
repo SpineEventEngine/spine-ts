@@ -202,7 +202,7 @@ describe("delivery codec and immutable snapshots", () => {
     ).toThrow(DeliveryProtocolError);
   });
 
-  it("round-trips every supported remote label and delivery status", () => {
+  it("uses the declared wire values for every remote label and delivery status", () => {
     const command = domainMessage();
     const taskId = create(TaskIdSchema, { value: "task-1" });
     const taskListId = create(TaskListIdSchema, { value: "list-1" });
@@ -218,13 +218,20 @@ describe("delivery codec and immutable snapshots", () => {
         create(TaskCreatedSchema, { id: taskId, taskListId, title: "Task 1" }),
       ),
     });
-    for (const label of [
-      "HANDLE_COMMAND",
-      "UPDATE_SUBSCRIBER",
-      "REACT_UPON_EVENT",
-      "CATCH_UP",
-    ] as const) {
-      for (const status of ["TO_DELIVER", "SCHEDULED", "DELIVERED", "TO_CATCH_UP"] as const) {
+    const labels = [
+      ["HANDLE_COMMAND", InboxLabel.HANDLE_COMMAND],
+      ["UPDATE_SUBSCRIBER", InboxLabel.UPDATE_SUBSCRIBER],
+      ["REACT_UPON_EVENT", InboxLabel.REACT_UPON_EVENT],
+      ["CATCH_UP", InboxLabel.CATCH_UP],
+    ] as const;
+    const statuses = [
+      ["TO_DELIVER", InboxMessageStatus.TO_DELIVER],
+      ["SCHEDULED", InboxMessageStatus.SCHEDULED],
+      ["DELIVERED", InboxMessageStatus.DELIVERED],
+      ["TO_CATCH_UP", InboxMessageStatus.TO_CATCH_UP],
+    ] as const;
+    for (const [label, wireLabel] of labels) {
+      for (const [status, wireStatus] of statuses) {
         const subscriber = label === "UPDATE_SUBSCRIBER" || label === "CATCH_UP";
         const row =
           label === "HANDLE_COMMAND"
@@ -242,8 +249,11 @@ describe("delivery codec and immutable snapshots", () => {
                   targetTypeUrl: TypeUrls.derive(subscriber ? TaskListSchema : TaskSchema),
                 },
               };
+        const encoded = DeliveryMessageCodec.encode(row);
+        expect(encoded.label).toBe(wireLabel);
+        expect(encoded.status).toBe(wireStatus);
         const decoded = DeliveryMessageCodec.decode(
-          DeliveryMessageCodec.encode(row),
+          create(InboxMessageSchema, { ...encoded, label: wireLabel, status: wireStatus }),
           ShardIndex.single(),
         );
         expect(decoded).toMatchObject({ label, status });
@@ -291,17 +301,25 @@ describe("delivery codec and immutable snapshots", () => {
     }).toThrow(DeliveryProtocolError);
   });
 
-  it("bounds call options and malformed responses without leaking a serialization error", () => {
+  it("bounds call options", () => {
     const signal = new AbortController().signal;
     expect(DeliveryRequestCodec.callOptions(undefined)).toEqual({});
     expect(DeliveryRequestCodec.callOptions(signal)).toEqual({ signal });
     expect(DeliveryRequestCodec.callOptions(undefined, 200)).toEqual({ timeoutMs: 200 });
     expect(DeliveryRequestCodec.callOptions(signal, 200)).toEqual({ timeoutMs: 200, signal });
+  });
+
+  it("accepts a response at the 4 MiB limit and rejects a larger response", () => {
+    const within = create(StringValueSchema, { value: "a".repeat(4 * 1024 * 1024 - 5) });
+    const oversized = create(StringValueSchema, { value: "a".repeat(4 * 1024 * 1024 - 4) });
+    expect(toBinary(StringValueSchema, within)).toHaveLength(4 * 1024 * 1024);
+    expect(toBinary(StringValueSchema, oversized)).toHaveLength(4 * 1024 * 1024 + 1);
     expect(() => {
-      DeliveryRequestCodec.responseBytes(InboxMessageSchema, {
-        signal: { value: Symbol("unserializable") },
-      } as never);
+      DeliveryRequestCodec.responseBytes(StringValueSchema, within);
     }).not.toThrow();
+    expect(() => {
+      DeliveryRequestCodec.responseBytes(StringValueSchema, oversized);
+    }).toThrow(DeliveryProtocolError);
   });
 
   it("rejects a request that exceeds the delivery RPC byte limit", () => {

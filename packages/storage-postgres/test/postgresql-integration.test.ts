@@ -472,7 +472,7 @@ describe("PostgreSQL live storage acceptance", () => {
     }
   });
 
-  it("serializes concurrent Entity commits from separate handles", async () => {
+  it("persists a completed Entity state from concurrent handles", async () => {
     const second = await postgresBuilder().setOptions({ url }).build();
     const scope = context("entity_cas");
     const input = entityInput(scope, false, false);
@@ -495,6 +495,20 @@ describe("PostgreSQL live storage acceptance", () => {
         }),
       ]);
       expect(results).toEqual([undefined, undefined]);
+      const reader = entityStorage(second, input);
+      try {
+        const stored = await reader.current.read(id);
+        const allowed = [current(id, "a", 1), current(id, "b", 1)].map((record) =>
+          toBinary(EntityRecordSchema, record),
+        );
+        expect(allowed).toContainEqual(
+          stored === undefined ? undefined : toBinary(EntityRecordSchema, stored),
+        );
+        await expect(reader.states.backward(id, 1)).resolves.toEqual([]);
+        await expect(reader.events.backward(id, 1)).resolves.toEqual([]);
+      } finally {
+        reader.close();
+      }
     } finally {
       firstCommit.close();
       secondCommit.close();

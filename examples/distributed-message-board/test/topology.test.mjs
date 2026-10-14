@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { parseDocument } from "yaml";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const compose = join(root, "deploy", "compose.yaml");
@@ -47,15 +48,21 @@ test("starts without creating or supplying browser credentials", () => {
 
 test("uses isolated image tags and one selected browser and Gateway origin", () => {
   const source = readFileSync(compose, "utf8");
-
-  for (const image of ["simple-delivery-server", "message-board", "standalone-gateway"])
-    assert.match(
-      source,
-      new RegExp(`spine-ts/${image}:\\$\\{MESSAGE_BOARD_IMAGE_TAG:-local\\}`, "u"),
-    );
-  assert.match(source, /127\.0\.0\.1:\$\{GATEWAY_PORT:-18080\}:8080/u);
-  assert.match(source, /BROWSER_ORIGIN: http:\/\/127\.0\.0\.1:\$\{MESSAGE_BOARD_WEB_PORT:-5173\}/u);
-  assert.doesNotMatch(source, /SUBSCRIPTION_REGISTRY_NAMESPACE/u);
+  const document = parseDocument(source, { merge: true });
+  assert.deepEqual(document.errors, []);
+  const services = document.toJS().services;
+  const tag = "${MESSAGE_BOARD_IMAGE_TAG:-local}";
+  assert.equal(services.delivery.image, `spine-ts/simple-delivery-server:${tag}`);
+  assert.equal(services["application-node-1"].image, `spine-ts/message-board:${tag}`);
+  assert.equal(services["application-node-2"].image, `spine-ts/message-board:${tag}`);
+  assert.equal(services.gateway.image, `spine-ts/standalone-gateway:${tag}`);
+  assert.deepEqual(services.gateway.ports, ["127.0.0.1:${GATEWAY_PORT:-18080}:8080"]);
+  assert.equal(
+    services.gateway.environment.BROWSER_ORIGIN,
+    "http://127.0.0.1:${MESSAGE_BOARD_WEB_PORT:-5173}",
+  );
+  for (const service of Object.values(services))
+    assert.equal(service.environment?.SUBSCRIPTION_REGISTRY_NAMESPACE, undefined);
 });
 
 test("documents the reuse boundary and finite operator lifecycle", () => {

@@ -1,0 +1,53 @@
+{
+  "changes": "Trailing LF bytes only; append removedTrailingLfBytes LF bytes to reconstruct each original capture. No measured result changes.",
+  "files": [
+    {
+      "path": "build-protocol/tasks/sql-delivery-reliability/evidence/independent-review/live-mariadb114.log",
+      "beforeSha256": "dd75d80ff9ca7f3622e2632d37481166897f2144cb224e2f1b921cc1baa79b4b",
+      "afterSha256": "f54f795637b6117dc9d6f7a1798351f8a51a06e12af67dbada143a53cae00a48",
+      "removedTrailingLfBytes": 1
+    },
+    {
+      "path": "build-protocol/tasks/sql-delivery-reliability/evidence/independent-review/live-mysql84.log",
+      "beforeSha256": "b838e2b6928de788dcd59baa78d00cf5b4e98aeaca2b4305ca5970e46d61101d",
+      "afterSha256": "4f9789103170237f49f1cc310c273ba893e7adfa1fcb41464a589df3685ab53d",
+      "removedTrailingLfBytes": 1
+    },
+    {
+      "path": "build-protocol/tasks/sql-delivery-reliability/evidence/independent-review/live-postgres16.log",
+      "beforeSha256": "f4ab28830b8b910cc1f57d8a11adc1ad1c2e6b77c477d3ee31041df020075efa",
+      "afterSha256": "a9e634f319c85bf52d69ad09e8b23433a0a79f8fdf2ffeddd0c524f8fbbc5b06",
+      "removedTrailingLfBytes": 1
+    },
+    {
+      "path": "build-protocol/tasks/sql-delivery-reliability/evidence/independent-review/live-postgres18.log",
+      "beforeSha256": "da8bbcb6f5a52093f1b30a6466e6a8a8ea640164e2ad661c17c6eb3cb3588602",
+      "afterSha256": "ee493bf4afc73d573f4311dc2d10d7baabf2fce8a3b5df07f7cc87aee73e3200",
+      "removedTrailingLfBytes": 1
+    },
+    {
+      "path": "build-protocol/tasks/sql-delivery-reliability/evidence/independent-review/live-rerun-mariadb114.log",
+      "beforeSha256": "1b84811d0e189659186dc5d9f63e171960b375cd4c1052693f82ccd2c29af465",
+      "afterSha256": "10fd69f542132db76d419ecc2fe48e7eb6549048f456d162b59acd10cc1d75f6",
+      "removedTrailingLfBytes": 1
+    },
+    {
+      "path": "build-protocol/tasks/sql-delivery-reliability/evidence/independent-review/live-rerun-mysql84.log",
+      "beforeSha256": "122b6e96bac5d451f5fb589ceac5407282929445a3fcf0ed7ed29c384f0be469",
+      "afterSha256": "0c14b1f0348e8df2111cc28335716a7f10da76988dfcc6b4f1007566e3612267",
+      "removedTrailingLfBytes": 1
+    },
+    {
+      "path": "build-protocol/tasks/sql-delivery-reliability/evidence/independent-review/live-rerun-postgres16.log",
+      "beforeSha256": "69a4d6020e7037bebb3ce6d1c1781c28f5f2c260695e274a70f7b0144f7d7ab4",
+      "afterSha256": "b1cd0979af664312c44b856c54cf1055dc6a711058d74a43db74113e0e35c9df",
+      "removedTrailingLfBytes": 1
+    },
+    {
+      "path": "build-protocol/tasks/sql-delivery-reliability/evidence/independent-review/live-rerun-postgres18.log",
+      "beforeSha256": "5cdf4951efa3dfafce644759b64e4e56e14773bbc7df0814546f0195d3c1a071",
+      "afterSha256": "ec28e9d433fc7508e51175b48aa2a47564fe5e10add8a996de002250d0cd6255",
+      "removedTrailingLfBytes": 1
+    }
+  ]
+}
