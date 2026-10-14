@@ -749,3 +749,5 @@ Resume the existing implementer with its immutable explicitly dispatched `gpt-6-
 ## Frozen process-fault slice ready for commit
 
 Focused negative observation tests (3/3), resistant-process watchdog (1/1), PostgreSQL 16 cold-process repair (2/2), tooling typecheck, ESLint, format, cleanup enforcement, and diff checks pass. Reliability and style targeted reviews are clean. Commit/push the test-only harness and bounded cleanup-checker correction; then release the prepared 32-case matrix after schema audit. No production runtime or built artifact changed, so the accepted 80-run baseline is not repeated. Transport implementation continues in independent new files.
+
+The staged diff check exposed surplus blank lines at the end of five text command transcripts. The commit command nevertheless ran because the orchestration did not gate it on the exit code; this was an orchestration error. Preserve published history and make a separate whitespace-only transcript correction, then require a successful staged check before committing. No measured JSON, JSONL, or hashed run artifact is changed.

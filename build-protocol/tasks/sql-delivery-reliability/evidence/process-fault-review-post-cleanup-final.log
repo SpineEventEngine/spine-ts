@@ -7,4 +7,3 @@ $ pnpm exec vitest --root ../.. --config vitest.infrastructure.config.ts run pac
       Tests  2 passed (2)
    Start at  02:21:01
    Duration  43.11s (transform 19ms, setup 0ms, import 25ms, tests 42.97s, environment 0ms)
-
