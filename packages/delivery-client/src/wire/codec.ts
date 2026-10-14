@@ -383,6 +383,12 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
     if (!Number.isSafeInteger(message.version) || message.version < 0)
       throw DeliveryRequestCodec.protocol();
     const targetId = DeliveryMessageCodec.decodeTarget(entityId.typeUrl, entityId.value);
+    let received: Timestamp;
+    try {
+      received = create(TimestampSchema, DeliveryRequestCodec.timestamp(whenReceived));
+    } catch (error) {
+      throw new DeliveryProtocolError(error);
+    }
     return DeliveryValues.freeze({
       id: DeliveryValues.freeze({ value: id.uuid, shard }),
       inboxId: DeliveryValues.freeze({ targetId, targetTypeUrl: inboxId.typeUrl }),
@@ -391,7 +397,7 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
       label: DeliveryMessageCodec.decodeLabel(message.label),
       status: DeliveryMessageCodec.decodeStatus(message.status),
       shard,
-      whenReceived: create(TimestampSchema, DeliveryRequestCodec.timestamp(whenReceived)),
+      whenReceived: received,
       version: BigInt(message.version),
       ...(keepUntil === undefined ? {} : { keepUntil }),
     });

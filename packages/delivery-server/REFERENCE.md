@@ -12,7 +12,7 @@ This reference describes the public in-memory Delivery server API. Read the
 ## Public entry points
 
 `InMemoryDelivery.create(options)` returns `DeliveryCore` with Connect handler
-implementations `inbox` and `shards`. It does not open a listener or install
+implementations `inbox`, `inboxRead`, and `shards`. It does not open a listener or install
 Admin/health handlers. The caller registers these handlers and provides the
 network lifecycle.
 
@@ -54,8 +54,11 @@ admission commits nothing. Admission is the linearization point: once admitted,
 the synchronous mutation can commit even if the caller aborts or loses its
 response.
 
-Inbox pages are strict after the supplied timestamp and ordered by full wire
-timestamp, version, and UUID. Automatic pickup takeover requires elapsed time
+The copied JVM Inbox page RPC remains strict after a supplied timestamp. The
+authored TS `InboxReadService.ReadPage` continues after the exact receive-time,
+version, and message-ID tuple in unsigned UTF-8 byte order, including after a
+cursor row is removed. Reads are live and do not promise a snapshot across pages.
+Automatic pickup takeover requires elapsed time
 strictly greater than `processingTimeoutMs`; manual expiration accepts elapsed
 time greater than or equal to the supplied interval. Release is not
 pickup-time-conditional, but the supplied worker must match the current owner;

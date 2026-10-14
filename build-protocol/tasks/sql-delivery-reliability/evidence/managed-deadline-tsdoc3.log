@@ -1,0 +1,3 @@
+$ node scripts/check-tsdoc.mjs
+callable-summary: packages/server/src/server/managed-server-application.ts :: ManagedChildLifecycle.method@520()
+[ELIFECYCLE] Command failed with exit code 1.

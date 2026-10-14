@@ -21,6 +21,10 @@ import type { InboxMessage, InboxMessageId } from "@spine-event-engine/server";
 import { ShardIndex } from "@spine-event-engine/server";
 import {
   InboxService,
+  InboxReadService,
+  InboxCursorSchema,
+  type ReadInboxPage,
+  ReadInboxPageSchema,
   AdminService,
   ShardService,
   PageOfMessagesSchema,
@@ -29,7 +33,6 @@ import {
   LiquorPickUpOutcomeSchema as PickUpOutcomeSchema,
   ExpiredSessionsReleasedSchema,
   PickUpShardSchema,
-  ReadMessagesSinceTimeSchema as ReadMessagesSchema,
   RemoveMessageSchema,
   RemoveMessagesSchema,
   ReleaseExpiredSessionsSchema,
@@ -83,6 +86,8 @@ export type {
 export class DeliveryClient {
   readonly #inbox: ReturnType<typeof createClient<typeof InboxService>>;
 
+  readonly #inboxRead: ReturnType<typeof createClient<typeof InboxReadService>>;
+
   readonly #shards: ReturnType<typeof createClient<typeof ShardService>>;
 
   readonly #admin: ReturnType<typeof createClient<typeof AdminService>>;
@@ -130,6 +135,7 @@ export class DeliveryClient {
       "Delivery observation buffer size",
     );
     this.#inbox = createClient(InboxService, transport);
+    this.#inboxRead = createClient(InboxReadService, transport);
     this.#shards = createClient(ShardService, transport);
     this.#admin = createClient(AdminService, transport);
     this.#onCloseOwnedTransport = onCloseOwnedTransport;
@@ -278,13 +284,13 @@ export class DeliveryClient {
   }
 
   /**
-   * Reads and decodes the first bounded ordered page for one shard.
+   * Reads and decodes one exact-cursor ordered page for one shard.
    *
    * A server rejects an encoded response above 4 MiB with `RESOURCE_EXHAUSTED`;
    * retry this safe read with a smaller `pageSize`.
    * @param shardIndex Identifies the shard to read.
    * @param options Supplies page continuation, size, and read bounds.
-   * @returns Detached messages in remote timestamp order.
+   * @returns Detached messages in receive-time, version, and ID order.
    */
   async readPage(
     shardIndex: ShardIndex,
@@ -294,24 +300,90 @@ export class DeliveryClient {
       options.pageSize === undefined
         ? this.#pageSize
         : DeliveryRequestCodec.pageSize(options.pageSize);
+    const request = DeliveryClient.#pageRequest(shardIndex, options, size);
+    DeliveryRequestCodec.requestBytes(ReadInboxPageSchema, request);
+    const response = await this.#read(options, (signal, timeoutMs) =>
+      this.#inboxRead.readPage(request, { timeoutMs, signal }),
+    );
+    DeliveryRequestCodec.responseBytes(PageOfMessagesSchema, response);
+    if (response.message.length > size) throw DeliveryRequestCodec.protocol();
+    const decoded = response.message.map((message) =>
+      DeliveryMessageCodec.decode(message, shardIndex),
+    );
+    DeliveryClient.#validatePageOrder(decoded, options);
+    return Object.freeze(decoded);
+  }
+
+  /**
+   * Checks that a decoded page advances beyond its requested lower bound.
+   * @param decoded Holds the detached page rows.
+   * @param options Supplies the exclusive timestamp or exact cursor.
+   */
+  static #validatePageOrder(
+    decoded: readonly InboxMessage[],
+    options: DeliveryReadPageOptions,
+  ): void {
+    let prior = options.after;
+    const seenIds = new Set<string>();
+    for (const message of decoded) {
+      if (seenIds.has(message.id.value)) throw DeliveryRequestCodec.protocol();
+      seenIds.add(message.id.value);
+      const since = options.sinceWhen;
+      if (
+        since !== undefined &&
+        (message.whenReceived.seconds < since.seconds ||
+          (message.whenReceived.seconds === since.seconds &&
+            message.whenReceived.nanos <= since.nanos))
+      )
+        throw DeliveryRequestCodec.protocol();
+      if (prior !== undefined && DeliveryClient.#compareInbox(message, prior) <= 0)
+        throw DeliveryRequestCodec.protocol();
+      prior = {
+        messageId: message.id.value,
+        whenReceived: message.whenReceived,
+        version: message.version,
+      };
+    }
+  }
+
+  /**
+   * Validates and encodes one exact-cursor page request before transport.
+   * @param shardIndex Identifies the requested shard.
+   * @param options Supplies the exclusive position and optional time filter.
+   * @param size Bounds the page.
+   * @returns The validated wire request.
+   */
+  static #pageRequest(
+    shardIndex: ShardIndex,
+    options: DeliveryReadPageOptions,
+    size: number,
+  ): ReadInboxPage {
     const sinceWhen =
       options.sinceWhen === undefined
         ? undefined
         : DeliveryRequestCodec.timestamp(options.sinceWhen);
-    const request = create(ReadMessagesSchema, {
+    if (sinceWhen !== undefined && options.after !== undefined)
+      throw new TypeError("Delivery page positions conflict.");
+    const after = options.after;
+    if (
+      after !== undefined &&
+      (after.messageId.trim().length === 0 || after.version < 0n || after.version > 2_147_483_647n)
+    )
+      throw new TypeError("Delivery page cursor is invalid.");
+    const cursor =
+      after === undefined
+        ? undefined
+        : create(InboxCursorSchema, {
+            whenReceived: DeliveryRequestCodec.timestamp(after.whenReceived),
+            version: Number(after.version),
+            messageId: after.messageId,
+          });
+    return create(ReadInboxPageSchema, {
       shard: DeliveryShardCodec.encode(shardIndex),
       pageSize: size,
       ...(sinceWhen === undefined ? {} : { sinceWhen }),
+      ...(cursor === undefined ? {} : { after: cursor }),
     });
-    DeliveryRequestCodec.requestBytes(ReadMessagesSchema, request);
-    const response = await this.#read(options, (signal, timeoutMs) =>
-      this.#inbox.findManyInShard(request, { timeoutMs, signal }),
-    );
-    DeliveryRequestCodec.responseBytes(PageOfMessagesSchema, response);
-    if (response.message.length > size) throw DeliveryRequestCodec.protocol();
-    return Object.freeze(
-      response.message.map((message) => DeliveryMessageCodec.decode(message, shardIndex)),
-    );
   }
 
   /**
@@ -541,6 +613,27 @@ export class DeliveryClient {
   }
 
   /**
+   * Compares an Inbox row with an exact cursor in wire order.
+   * @param message Holds the decoded row.
+   * @param cursor Holds the exclusive lower bound.
+   * @returns The tuple comparison.
+   */
+  static #compareInbox(
+    message: InboxMessage,
+    cursor: NonNullable<DeliveryReadPageOptions["after"]>,
+  ): number {
+    if (message.whenReceived.seconds !== cursor.whenReceived.seconds)
+      return message.whenReceived.seconds < cursor.whenReceived.seconds ? -1 : 1;
+    if (message.whenReceived.nanos !== cursor.whenReceived.nanos)
+      return message.whenReceived.nanos - cursor.whenReceived.nanos;
+    if (message.version !== cursor.version) return message.version < cursor.version ? -1 : 1;
+    return Buffer.compare(
+      Buffer.from(message.id.value, "utf8"),
+      Buffer.from(cursor.messageId, "utf8"),
+    );
+  }
+
+  /**
    * Runs a bounded read with configured retries and linked cancellation.
    * @typeParam T The read response type returned by the supplied operation.
    * @param options The timeout and cancellation settings for this read.
@@ -567,6 +660,10 @@ export class DeliveryClient {
         } catch (error) {
           if (controller.signal.aborted) throw error;
           if (error instanceof ConnectError && error.code === Code.ResourceExhausted) throw error;
+          if (error instanceof ConnectError && error.code === Code.Unimplemented)
+            throw new Error("Delivery endpoint requires InboxReadService.ReadPage.", {
+              cause: error,
+            });
           if (!DeliveryClient.#isRetryableReadError(error)) throw DeliveryRequestCodec.protocol();
           if (attempt === this.#readRetries) throw error;
           await DeliveryClient.#pause(this.#retryBackoffMs, controller.signal);

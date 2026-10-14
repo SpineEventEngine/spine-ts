@@ -169,3 +169,180 @@ only its exact temporary fixture directory. Watchdog1/1 and selected adapter2/2
 pass; targeted lint/format/diff pass. This is resource-evidence handling without
 a new lifecycle algorithm, so no specialist lane reopens. All four concerns
 converge for the harness; complete SQL matrix acceptance remains pending.
+
+## Managed shutdown review wave
+
+The managed shutdown slice is frozen after the ordinary network-close correction.
+Reported preflight: normal incremental build, four focused suites113/113, scoped
+V8 run113/113, touched ESLint/Prettier, cleanup/TSDoc, tooling typecheck and
+whitespace check pass. Evidence: managed-deadline-freeze-focused2.log and
+managed-deadline-coverage1.log plus final static logs. Prior kernel cancellation
+coalescing regression60/60 remains relevant; no intervening kernel change.
+
+Dispatch existing performance_reliability_reviewer and typescript_api_docs_reviewer
+explicitly gpt-6-sol with medium reasoning, fork none, read-only concern-specific
+review. Then use existing style_maintainability_reviewer (Sol/medium) and
+documentation_reviewer (Luna/medium) as slots permit. No subagents, builds,
+processes or edits beyond assigned evidence records. Actual runtime model
+metadata unavailable; explicit configured profiles satisfy the acceptance gate.
+Collect all four lanes into one correction batch before reopening frozen files.
+Paging implementation may proceed in independent paths. Final security remains
+a release-readiness gate.
+
+Frozen runtime paths: server/managed-server-application.ts, server/node-coordinator.ts
+and deployment/internal/backend-membership-kernel.ts; corresponding unit and
+managed real-process tests plus narrow server API documentation. Compare each
+assigned path to33e9c9c82, which includes only preceding committed work. Review
+the full relevant diff, not unrelated pending harness or paging edits.
+
+Managed reliability and API lanes completed. Explicit configured Sol/medium
+profiles match dispatch; runtime introspection unavailable. Reliability records
+P1 forced child exit can become success on repeated close and P2 stuck membership
+reconciliation prevents kernel cleanup from starting at the deadline. API records
+parent timeout above the child's default being ignored/tightened, plus missing
+numeric range in option TSDoc. Parent persisted the API chat result. No runtime
+checks by reviewers. Style Sol/medium and documentation Luna/medium lanes now
+dispatched explicitly, read-only, concern-specific. Findings remain collected
+until both finish; managed files remain frozen, paging continues independently.
+
+Complete managed review wave accepted: all four explicit profiles match their
+dispatches; actual runtime introspection unavailable. Style is clean. Documentation
+adds context deadline interaction and phase-specific3second/2second cleanup
+allowances. Parent accepts one aggregate correction batch: preserve terminal
+force failure across close retries; initiate independent kernel cleanup despite
+stuck reconciliation; carry validated parent budget into managed child without
+local-default clamping; numeric option range and timer clarifications. No legacy
+fallback. Return to existing Sol/medium implementer, add focused behavior
+regressions and affected checks. Re-review reliability/API only after fixes;
+documentation corrections are deterministic unless the resulting contract changes.
+Style does not reopen for straightforward bounded fixes.
+
+Parent correction inspection found one additional deadline defect in the same
+concern: child #beginDeadline and default parent clock use Time.currentTimeMillis,
+although Time.monotonicTime exists. A backward wall-clock adjustment can make a
+new child timer appear earlier while extending its actual remaining duration.
+Use monotonic duration readings for both deadline calculations, preserving the
+injected clock seam, and cover nonextension under wall-clock adjustment. Sent
+to the same implementer within the bounded correction; include in targeted
+reliability re-review, no architecture or full review wave reopened.
+
+Managed correction freeze:109/109 managed and Coordinator unit tests plus7/7
+real managed integrations pass. Evidence managed-review-final-unit2.log and
+managed-review-integration5.log. Covers forced-failure retry, both kernel cleanup
+starts under stalled reconciliation, public60second parent/default child and
+monotonic duplicate-frame nonextension under wall-clock rollback. Normal server
+build, affected ESLint/Prettier and whitespace checks pass. Global cleanup/TSDoc
+fail only in independently active paging paths; managed paths are clear.
+
+Targeted follow-ups sent to the same existing reliability/API review contexts,
+retaining their original explicit gpt-6-sol/medium profiles and restating both
+fields. No new role, tests, builds or code edits. Recheck accepted findings and
+monotonic correction only; unaffected style lane stays closed. Parent verifies
+deterministic prose corrections. Actual runtime introspection unavailable.
+
+Targeted API re-review resolved with no residual findings. Same explicit
+Sol/medium configuration confirmed; runtime metadata unavailable. Parent also
+checked corrected option range, separate context timer, and3second graceful
+versus2second force-grace wording in source/reference/API README. Deterministic
+documentation corrections accepted without reopening its lane. Reliability
+re-review remains active.
+
+Targeted reliability re-review resolves TERM/KILL and explicit close-failed
+retention, independent kernel cleanup under stalled reconciliation and monotonic
+deadlines. One residual P1 remains in the same terminal-result contract: child
+exit before delivery-drained rejects the first drain wait but is not retained
+when closeFailure is unset; awaitChildClose accepts the pre-ACK exit, and a second
+close can resolve from empty slots. Accepted narrow correction returned to the
+same implementer: retain premature-exit failure and assert two close rejections
+while other cleanup completes. Only reliability reopens afterward; API/style/
+documentation stay closed. Profile remains explicit Sol/medium, actual runtime
+metadata unavailable.
+
+Managed integration fixtures now reference authored paging RPC declarations.
+Avoid committing those fixtures without their corresponding contract/runtime
+changes; retain a coherent working tree and choose an appropriately complete
+checkpoint rather than publish a broken partial commit.
+
+Managed residual correction frozen. managed-review-residual-final.log reports
+70/70 unit tests; residual cleanup/ESLint/format and tsdoc-final logs pass.
+Earlier TSDoc failure retained, corrected in final log. Only managed application
+and its unit test changed since the preceding targeted review. Dispatch the
+same reliability context again, original explicit Sol/medium retained and both
+fields restated, to check premature-exit retention only. Other concerns remain
+closed and paging continues in separate files.
+
+Final residual-only reliability re-review is clean. Premature exit now records
+exitFailure and terminalChildFailure; awaitChildClose rejects, repeated close
+still attempts other cleanup but includes the retained terminal result. Two-child
+regression checks both failures and the other child's close attempt. Same explicit
+Sol/medium profile confirmed; runtime metadata unavailable. No reviewer tests
+or code edits. All managed review concerns are now closed: reliability/API
+resolved, style clean, deterministic documentation corrections accepted.
+
+Managed review convergence does not establish full SQL transport/fault/process
+acceptance or final release verification. Keep its runtime/tests frozen while
+paging is completed, then commit a coherent dependency-complete checkpoint.
+
+## Exact remote paging review dispatch preparation
+
+After the implementer freezes the clean deterministic preflight, review the
+uncommitted paging slice against accepted D-0132. Existing API and reliability
+review contexts use their original explicit gpt-6-sol / medium profiles; style
+uses gpt-6-sol / medium and documentation uses gpt-6-luna / medium. Every fresh
+dispatch must state both fields explicitly. Runtime metadata is not exposed;
+the immutable configured profile and explicit dispatch fields are the acceptance
+evidence. Reviewers must not spawn children, change runtime/tests, run broad
+verification, or reopen the converged managed shutdown slice.
+
+API scope: authored Proto boundary, validation, client declarations, continuation
+semantics, unsupported endpoints, no legacy fallback. Reliability scope: exact
+ordering/seek, tied/deleted cursors, local filters, bounded reads, one deadline,
+cancellation and malformed peer responses. Style scope: affected callable
+complexity, existing abstractions and narrow test harness additions. Docs scope:
+manual assembly/health, required endpoint and live-read limitations, current API
+expectations and claim/evidence agreement. Collect all four before one correction
+batch. Security remains deferred to final release readiness.
+
+Paging API review completed with two accepted findings: missing per-page message-ID
+uniqueness and stale DeliveryPagingError TSDoc. Parent persisted the read-only chat
+result in evidence/paging-api-review.md. Explicit original Sol/medium dispatch
+confirmed, no visible profile mismatch and no runtime introspection. No tests ran.
+Existing style reviewer context now continues with its original explicit Sol/medium
+profile over paging and bounded harness diagnostics only. Reliability is running;
+documentation follows when capacity permits. No partial correction batch yet.
+
+Paging style review is clean; parent persisted its read-only chat result. Reliability
+returned two P2 findings: duplicate IDs (same issue as API; deduplicate) and malformed
+peer timestamp escaping as TypeError rather than DeliveryProtocolError. No further
+confirmed traversal/deadline/cancellation or harness diagnostic issue. Both existing
+Sol/medium profiles retained explicit dispatch configuration, no runtime metadata
+exposed. Documentation review dispatched to existing explicit Luna/medium context,
+with narrow changed paging claims and no reopening of managed shutdown.
+
+The four-concern paging review wave is complete. Accepted combined batch: reject
+repeated message IDs despite increasing tuple; classify invalid peer timestamp
+as DeliveryProtocolError while preserving local input validation; describe current
+DeliveryPagingError role; document sinceWhen/after mutual exclusion and whole-read
+AbortSignal cancellation. Style clean. Documentation added two bounded claim gaps
+and otherwise accepted endpoint/manual assembly/ordering/live-read limitations.
+Same implementer receives the entire batch; independent live fault work pauses
+at a safe boundary. Only API/reliability need targeted re-review after behavioral
+corrections; parent verifies deterministic prose. No managed or harness edits.
+Expected bounded correction/preflight/re-review: 0.3–0.6 hours, then failed workload
+repeat. Profile gates all accepted with explicit original fields, no mismatch and
+unavailable runtime self-introspection.
+
+Paging correction re-review converged. API and reliability both report resolved,
+no directly affected residual findings. Explicit existing Sol/medium profiles
+retained, no tests/builds performed by reviewers. RED reproduces duplicate ID and
+malformed timestamp classification; affected GREEN is 50/50 and build/tooling/
+ESLint/format/cleanup/TSDoc/diff checks pass. Parent directly checked reference
+mutual exclusion/initial-filter text and whole-read AbortSignal scope, accepting
+both deterministic documentation corrections. Style lane stays clean.
+
+A dependency-complete managed shutdown, paging and diagnostics checkpoint is ready
+for commit/push. The new independent SQL fault integration file and its inventory
+entries remain uncommitted while acceptance expands; they are not part of this
+checkpoint. The failed process workload must still be repeated, then the full
+baseline and historical labels; no causal attribution from the separate paging
+reproduction alone.

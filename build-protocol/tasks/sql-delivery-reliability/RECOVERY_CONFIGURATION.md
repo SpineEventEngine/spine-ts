@@ -11,3 +11,16 @@ The read-only investigation copy of AppFactory template does not construct Deliv
 ## Post-release pending-work assessment preparation
 
 Parent source inspection finds JVM core-jvm/server/src/main/java/io/spine/server/delivery/Delivery.java reads newestMessageToDeliver and emits onNewMessage after releasing the shard (lines487–488). Current TS DeliveryDrain.run releases and returns its finite result; LocalDeliverySource has no cross-process observation stream. Thus a SQL arrival after the last empty read can still wait for periodic recovery when its local notification loses the busy-shard race. The pending live timing slice must force arrivals both before and after release and measure the actual recovery delay. A naive unconditional notification of every retained pending row would reintroduce the reviewed failure-feedback retry loop. Assess a bounded successful-drain-only follow-up or retain the documented fallback with concrete measured limits; do not add an unconditional loop or claim a ten-second deadline. This is source analysis, not passing live evidence or a decided runtime change.
+
+
+Further bounded parent source note: DeliveryDrain.#readPages already repeats a
+full scan after delivered progress, then releases after an empty/no-progress
+scan. The remaining race is specifically between that final observation and
+release, not every paginated pass. An assessment should gate any immediate
+post-release follow-up on a successful healthy drain and prove failed retained
+rows cannot recreate the previously fixed feedback loop. Current public local
+Inbox port has no newestPending method; the similarly named RPC helper exists
+only on DeliveryClient. Do not add a public storage port solely by copying the
+remote method name. Prefer measuring the exact existing race and selecting the
+smallest supported follow-up seam if justified; otherwise document the measured
+fallback explicitly. No runtime change is decided by this note.

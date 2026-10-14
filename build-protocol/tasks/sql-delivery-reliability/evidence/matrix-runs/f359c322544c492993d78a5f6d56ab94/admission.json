@@ -1,0 +1,19 @@
+{
+  "commandId": "0f810056-2bb6-43b0-8d74-0f482917c2ff",
+  "ackStatus": {
+    "case": "error",
+    "value": {
+      "$typeName": "spine.base.Error",
+      "type": "COMMAND_POST_ERROR",
+      "code": 0,
+      "message": "Command post failed.",
+      "attributes": {},
+      "stacktrace": ""
+    }
+  },
+  "diagnostic": {
+    "name": "Error",
+    "message": "PostgreSQL record operation failed.",
+    "cause": "cannot encode message google.protobuf.Any to JSON: \"type.spine.server.testing/spine.server.testing.ProjectId\" is not in the type registry"
+  }
+}

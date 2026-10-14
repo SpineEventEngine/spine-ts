@@ -1192,7 +1192,6 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
     pending: FailedChildCleanup<Request, Child, Update>,
     signal: AbortSignal,
   ): Promise<boolean> {
-    if (pending.running !== undefined) return false;
     const controller = new AbortController();
     const abort = (): void => {
       controller.abort();
@@ -1200,31 +1199,47 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
     signal.addEventListener("abort", abort, { once: true });
     if (signal.aborted) abort();
     try {
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const timeout = new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(() => {
-          reject(new Error("backend child cleanup timed out"));
-        }, childCleanupTimeoutMs);
-        timer.unref();
-      });
-      try {
-        const running = pending.client.dispose(pending.child, controller.signal);
-        pending.running = running;
-        const settled = () => {
-          if (pending.running === running) pending.running = undefined;
-        };
-        // spine-log-boundary: deployment.membership_child_cleanup_retry
-        void running.then(settled, settled);
-        await Promise.race([running, timeout]);
-      } finally {
-        if (timer !== undefined) clearTimeout(timer);
-      }
+      await this.#awaitChildDisposal(pending, controller);
       return true;
     } catch {
       controller.abort();
       return false;
     } finally {
       signal.removeEventListener("abort", abort);
+    }
+  }
+
+  /**
+   * Races one shared child disposal against its existing bounded wait.
+   *
+   * @param pending The retained child disposal attempt.
+   * @param controller Cancels the entered disposal when its wait fails.
+   * @returns Completion when the child disposal settles within its limit.
+   */
+  async #awaitChildDisposal(
+    pending: FailedChildCleanup<Request, Child, Update>,
+    controller: AbortController,
+  ): Promise<void> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => {
+        reject(new Error("backend child cleanup timed out"));
+      }, childCleanupTimeoutMs);
+      timer.unref();
+    });
+    try {
+      const running = pending.running ?? pending.client.dispose(pending.child, controller.signal);
+      if (pending.running === undefined) {
+        pending.running = running;
+        const settled = () => {
+          if (pending.running === running) pending.running = undefined;
+        };
+        // spine-log-boundary: deployment.membership_child_cleanup_retry
+        void running.then(settled, settled);
+      }
+      await Promise.race([running, timeout]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
     }
   }
 

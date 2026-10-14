@@ -25,6 +25,7 @@ import {
   type DynamicUnaryClient,
 } from "@spine-event-engine/auth";
 import { ApplicationNode } from "@spine-event-engine/deployment";
+import { BackendMembershipKernel } from "@spine-event-engine/deployment/spi/backend-membership";
 import { AnyMessages } from "@spine-event-engine/core";
 import { SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS } from "@spine-event-engine/core/spi/subscription-lifecycle";
 import {
@@ -713,6 +714,38 @@ describe("NodeCoordinator", () => {
     await expect.poll(() => draining.cancellations()).toBe(1);
   });
 
+  it("rejects new subscription work after drain while allowing Cancel", async () => {
+    const replica = await backend("drain-subscriptions");
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+    });
+    closeables.push(() => coordinator.close());
+    const client = createClient(
+      SubscriptionService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    );
+    const topic = create(TopicSchema, {
+      id: { value: "drain-topic" },
+      context: create(ActorContextSchema, {
+        actor: { value: "actor" },
+        tenantId: create(TenantIdSchema, { kind: { case: "value", value: "tenant" } }),
+      }),
+    });
+    const accepted = await client.subscribe(topic);
+
+    await coordinator.beginDrain();
+
+    await expect(client.subscribe(topic)).rejects.toMatchObject({ code: Code.Unavailable });
+    await expect(client.activate(accepted)[Symbol.asyncIterator]().next()).rejects.toMatchObject({
+      code: Code.Unavailable,
+    });
+    await expect(client.cancel(accepted)).resolves.toBeDefined();
+    expect(replica.subscriptions()).toBe(1);
+    await expect.poll(() => replica.cancellations()).toBe(1);
+  });
+
   it("reconciles replacement membership without exposing or polling child topology", async () => {
     const first = await backend("first");
     const replacement = await backend("replacement");
@@ -913,6 +946,38 @@ describe("NodeCoordinator", () => {
     expect(coordinator.close()).toBe(first);
     members.set([]);
     await expect(first).resolves.toBeUndefined();
+  });
+
+  it("starts both kernel close paths when forced network close overtakes stalled reconciliation", async () => {
+    const members = new TestReadyMembers([]);
+    const coordinator = await NodeCoordinator.open({ members, port: 0 });
+    let release: (() => void) | undefined;
+    let entered: (() => void) | undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    Object.assign(members, {
+      onRelaySynchronized: () => {
+        entered?.();
+        return held;
+      },
+    });
+    members.set([]);
+    await started;
+    const close = vi.spyOn(BackendMembershipKernel.prototype, "close");
+    try {
+      await coordinator.forceNetworkClose();
+      await vi.waitFor(() => {
+        expect(close).toHaveBeenCalledTimes(2);
+      });
+    } finally {
+      release?.();
+      close.mockRestore();
+      await coordinator.close();
+    }
   });
 
   it("clears pending activation deadlines during close", async () => {

@@ -13,8 +13,10 @@
  */
 
 import { spawn } from "node:child_process";
-import { readFile, rm } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { expect, test } from "vitest";
@@ -26,6 +28,31 @@ const driver = fileURLToPath(
 const resistantDriver = fileURLToPath(
   new URL("../test-fixtures/resistant-matrix-driver.mjs", import.meta.url),
 );
+
+async function cleanupState(stdout: string): Promise<string> {
+  const runId = /MATRIX_RESOURCE \{"runId":"([a-f0-9]{32})"/u.exec(stdout)?.[1];
+  if (runId === undefined) return "cleanup unknown; no durable resource identity";
+  try {
+    const path = new URL(
+      `../../../build-protocol/tasks/sql-delivery-reliability/evidence/matrix-runs/${runId}/cleanup.json`,
+      import.meta.url,
+    );
+    const cleanup = JSON.parse(await readFile(path, "utf8")) as {
+      databaseDropped?: boolean;
+      workerExits?: { code: number | null }[];
+      deliveryExit?: { code: number | null };
+      errors?: string[];
+    };
+    return cleanup.databaseDropped === true &&
+      cleanup.workerExits?.every((exit) => exit.code === 0) === true &&
+      (cleanup.deliveryExit === undefined || cleanup.deliveryExit.code === 0) &&
+      cleanup.errors?.length === 0
+      ? "cleanup verified by durable cleanup.json"
+      : "cleanup incomplete according to durable cleanup.json";
+  } catch {
+    return "cleanup unknown; no cleanup.json verification";
+  }
+}
 
 async function runIsolatedDriver(
   args: string[],
@@ -93,22 +120,24 @@ async function runIsolatedDriver(
     ]);
     if (exit === undefined) {
       await escalate();
+      const cleanup = await cleanupState(stdout);
       throw new Error(
-        `Process matrix driver ${String(pid)} did not exit after SIGKILL; cleanup unknown after forced termination.\nstdout:\n${stdout}\nstderr:\n${stderr}`,
+        `Process matrix driver ${String(pid)} did not exit after SIGKILL; ${cleanup}.\n` +
+          `stdout:\n${stdout}\nstderr:\n${stderr}`,
       );
     }
     if (exit.code !== 0) {
       await escalate();
       const outcome = `Process matrix driver exited ${String(exit.code)}/${String(exit.signal)}`;
       const timing = deadline.expired ? " after timeout" : "";
-      throw new Error(
-        `${outcome}${timing}; cleanup unknown after forced termination.\nstdout:\n${stdout}\nstderr:\n${stderr}`,
-      );
+      const cleanup = await cleanupState(stdout);
+      throw new Error(`${outcome}${timing}; ${cleanup}.\nstdout:\n${stdout}\nstderr:\n${stderr}`);
     }
     if (deadline.expired) {
       await escalate();
+      const cleanup = await cleanupState(stdout);
       throw new Error(
-        `Process matrix driver timed out; cleanup unknown after forced termination.\nstdout:\n${stdout}\nstderr:\n${stderr}`,
+        `Process matrix driver timed out; ${cleanup}.\nstdout:\n${stdout}\nstderr:\n${stderr}`,
       );
     }
     return stdout;
@@ -129,7 +158,7 @@ test("the matrix watchdog kills a TERM-resistant driver and retains its diagnost
   expect(message).toMatch(
     /after timeout[\s\S]*resistant driver ready[\s\S]*resistant driver diagnostic/u,
   );
-  expect(message).toContain("cleanup unknown after forced termination");
+  expect(message).toContain("cleanup unknown; no cleanup.json verification");
   const identityLine = /MATRIX_RESOURCE (\{[^\n]+\})/u.exec(message)?.[1];
   if (identityLine === undefined)
     throw new Error("The stopped driver did not report its resource identity.");
@@ -156,6 +185,27 @@ test("the matrix watchdog kills a TERM-resistant driver and retains its diagnost
   if (pid === undefined) throw new Error("The resistant driver did not report its PID.");
   expect(() => process.kill(Number(pid), 0)).toThrow();
   expect(Date.now() - started).toBeLessThan(2_000);
+});
+
+test("a failed driver reports verified cleanup when its durable record is complete", async () => {
+  const runId = randomUUID().replaceAll("-", "");
+  const dir = resolve(
+    root,
+    "build-protocol/tasks/sql-delivery-reliability/evidence/matrix-runs",
+    runId,
+  );
+  await mkdir(dir);
+  try {
+    await writeFile(
+      resolve(dir, "cleanup.json"),
+      JSON.stringify({ databaseDropped: true, workerExits: [{ code: 0 }], errors: [] }),
+    );
+    expect(await cleanupState(`MATRIX_RESOURCE {"runId":"${runId}"}`)).toBe(
+      "cleanup verified by durable cleanup.json",
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 function required(name: string): string {

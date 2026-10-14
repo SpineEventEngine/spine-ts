@@ -1,0 +1,493 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+stderr | packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > treats one asynchronous child error and its later exit as one failed incarnation
+{"severity":"WARN","timestamp":"2026-10-13T23:21:46.371Z","message":"Managed replica exited unexpectedly.","operation":"managed_replica.exit","reasonCode":"unexpected_exit","slot":"0","incarnation":"abf5c5a6-d4eb-452a-8282-68e9e26b66a5","attempt":"1"}
+{"severity":"WARN","timestamp":"2026-10-13T23:21:46.372Z","message":"Managed replica replacement scheduled.","operation":"managed_replica.replace","reasonCode":"unexpected_exit","slot":"0","attempt":"1","delay":"2"}
+
+stderr | packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > admits a replacement when retained subscriptions were never activated
+{"severity":"WARN","timestamp":"2026-10-13T23:21:56.382Z","message":"Managed replica exited unexpectedly.","operation":"managed_replica.exit","reasonCode":"unexpected_exit","slot":"0","incarnation":"af1a823c-809d-4ad0-a7e8-b312a867bebb","attempt":"1"}
+{"severity":"WARN","timestamp":"2026-10-13T23:21:56.382Z","message":"Managed replica replacement scheduled.","operation":"managed_replica.replace","reasonCode":"unexpected_exit","slot":"0","attempt":"1","delay":"250"}
+
+stderr | packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > waits for the exact replacement subscription before activating Delivery
+{"severity":"WARN","timestamp":"2026-10-13T23:21:56.438Z","message":"Managed replica exited unexpectedly.","operation":"managed_replica.exit","reasonCode":"unexpected_exit","slot":"0","incarnation":"98d69449-1e6a-41cd-9010-c2a9ec6a6b50","attempt":"1"}
+{"severity":"WARN","timestamp":"2026-10-13T23:21:56.438Z","message":"Managed replica replacement scheduled.","operation":"managed_replica.replace","reasonCode":"unexpected_exit","slot":"0","attempt":"1","delay":"250"}
+
+stderr | packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > remains alive but unready at zero ready children and ignores malformed READY facts
+{"severity":"WARN","timestamp":"2026-10-13T23:21:56.440Z","message":"Managed replica exited unexpectedly.","operation":"managed_replica.exit","reasonCode":"unexpected_exit","slot":"0","incarnation":"af969003-8b7f-4416-80ed-b38a489c2a67","attempt":"1"}
+{"severity":"WARN","timestamp":"2026-10-13T23:21:56.440Z","message":"Managed replica replacement scheduled.","operation":"managed_replica.replace","reasonCode":"unexpected_exit","slot":"0","attempt":"1","delay":"2"}
+
+stderr | packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > replaces a child which exits before READY without abandoning initial readiness
+{"severity":"WARN","timestamp":"2026-10-13T23:21:56.441Z","message":"Managed replica exited unexpectedly.","operation":"managed_replica.exit","reasonCode":"unexpected_exit","slot":"0","incarnation":"4b9d7f21-fbf0-45be-81ba-f3c62f60b678","attempt":"1"}
+{"severity":"WARN","timestamp":"2026-10-13T23:21:56.441Z","message":"Managed replica replacement scheduled.","operation":"managed_replica.replace","reasonCode":"unexpected_exit","slot":"0","attempt":"1","delay":"2"}
+
+stderr | packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > keeps replacing after a synchronous child-start failure
+{"severity":"WARN","timestamp":"2026-10-13T23:21:56.441Z","message":"Managed replica start failed.","operation":"managed_replica.start","reasonCode":"start_failed","slot":"0","incarnation":"67f06c32-5641-4fcc-b443-5526e10dcd6e","attempt":"1"}
+{"severity":"WARN","timestamp":"2026-10-13T23:21:56.441Z","message":"Managed replica replacement scheduled.","operation":"managed_replica.replace","reasonCode":"unexpected_exit","slot":"0","attempt":"1","delay":"2"}
+
+ ❯ packages/server/test/server/managed-server-application.test.ts (64 tests | 29 failed) 38922ms
+     × treats one asynchronous child error and its later exit as one failed incarnation 5ms
+     × shares a failed parent close, bounds it, and retries the remaining child cleanup 5002ms
+     × reports Coordinator startup and managed-child rollback failures together 5000ms
+     × rejects non-canonical, oversized, and stale READY endpoints without retaining them 1ms
+     × does not start synchronization work in the parent 0ms
+     × removes a draining child from Coordinator admission before its server closes 0ms
+     × admits a replacement when retained subscriptions were never activated 1ms
+     × reports graceful child close failure and permits a parent retry 2ms
+     × bounds a closed child which does not exit before parent close 1ms
+     × waits for the exact replacement subscription before activating Delivery 1ms
+     × remains alive but unready at zero ready children and ignores malformed READY facts 0ms
+     × limits concurrent starts while admitting every initial logical slot 0ms
+     × replaces a child which exits before READY without abandoning initial readiness 0ms
+     × keeps replacing after a synchronous child-start failure 0ms
+     × ignores one private control fact before accepting close 1084ms
+     × contains a failed child close triggered by private message and permits explicit retry 5001ms
+     × starts one separate complete child for an explicit single-replica cohort 0ms
+     × admits an in-memory normal Server registry as a managed READY child 20000ms
+     × does not block readiness when a child writes verbose standard output 1ms
+     × starts four distinct child processes for one managed cohort 0ms
+     × binds the Coordinator to an operating-system-selected port when configured with zero 0ms
+     × reports each child's actual local listener only after that child is ready 0ms
+     × waits for child-local synchronization before admitting its private listener 1ms
+     × replaces only the unexpected child exit and retains its surviving sibling 0ms
+     × rejects invalid bounded restart settings { initialDelayMs: +0 } 1ms
+     × rejects invalid bounded restart settings { maximumDelayMs: 1, initialDelayMs: 2 } 0ms
+     × rejects invalid bounded restart settings { healthyReadyMs: Infinity } 0ms
+     × rejects invalid bounded restart settings { concurrentStarts: 2 } 1ms
+     × does not restart a child that the managed cohort closes 1ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 29 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > treats one asynchronous child error and its later exit as one failed incarnation
+Error: Managed child exited before Delivery drained.
+ ❯ ManagedServerCoordinator.#onExit packages/server/src/server/managed-server-application.ts:1037:7
+    1035|     replica.terminal = true;
+    1036|     replica.closeAttempt?.drained.reject(
+    1037|       new Error("Managed child exited before Delivery drained."),
+       |       ^
+    1038|     );
+    1039|     this.#clearSubscriptionWaiters(
+ ❯ EventEmitter.<anonymous> packages/server/src/server/managed-server-application.ts:910:12
+ ❯ EventEmitter.<anonymous> packages/server/test/server/managed-server-application.test.ts:407:13
+ ❯ Object.awaitChildClose packages/server/src/server/managed-server-application.ts:1947:13
+ ❯ Object.close packages/server/src/server/managed-server-application.ts:1918:44
+ ❯ ManagedServerCoordinator.#closeReplica packages/server/src/server/managed-server-application.ts:1261:50
+ ❯ packages/server/src/server/managed-server-application.ts:1222:41
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/29]⎯
+
+ FAIL  packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > shares a failed parent close, bounds it, and retries the remaining child cleanup
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ packages/server/test/server/managed-server-application.test.ts:481:3
+    479|   });
+    480|
+    481|   it("shares a failed parent close, bounds it, and retries the remaini…
+       |   ^
+    482|     const clock = new FakeClock();
+    483|     const child = fakeChild(1);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/29]⎯
+
+ FAIL  packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > reports Coordinator startup and managed-child rollback failures together
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ packages/server/test/server/managed-server-application.test.ts:524:3
+    522|   });
+    523|
+    524|   it("reports Coordinator startup and managed-child rollback failures …
+       |   ^
+    525|     const clock = new FakeClock();
+    526|     const child = fakeChild(1);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/29]⎯
+
+ FAIL  packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > rejects non-canonical, oversized, and stale READY endpoints without retaining them
+Error: Managed child exited before Delivery drained.
+ ❯ ManagedServerCoordinator.#onExit packages/server/src/server/managed-server-application.ts:1037:7
+    1035|     replica.terminal = true;
+    1036|     replica.closeAttempt?.drained.reject(
+    1037|       new Error("Managed child exited before Delivery drained."),
+       |       ^
+    1038|     );
+    1039|     this.#clearSubscriptionWaiters(
+ ❯ EventEmitter.<anonymous> packages/server/src/server/managed-server-application.ts:910:12
+ ❯ EventEmitter.<anonymous> packages/server/test/server/managed-server-application.test.ts:621:19
+ ❯ Object.awaitChildClose packages/server/src/server/managed-server-application.ts:1947:13
+ ❯ Object.close packages/server/src/server/managed-server-application.ts:1918:44
+ ❯ ManagedServerCoordinator.#closeReplica packages/server/src/server/managed-server-application.ts:1261:50
+ ❯ packages/server/src/server/managed-server-application.ts:1222:41
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/29]⎯
+
+ FAIL  packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > does not start synchronization work in the parent
+Error: Managed child exited before Delivery drained.
+ ❯ ManagedServerCoordinator.#onExit packages/server/src/server/managed-server-application.ts:1037:7
+    1035|     replica.terminal = true;
+    1036|     replica.closeAttempt?.drained.reject(
+    1037|       new Error("Managed child exited before Delivery drained."),
+       |       ^
+    1038|     );
+    1039|     this.#clearSubscriptionWaiters(
+ ❯ EventEmitter.<anonymous> packages/server/src/server/managed-server-application.ts:910:12
+ ❯ EventEmitter.<anonymous> packages/server/test/server/managed-server-application.test.ts:643:13
+ ❯ Object.awaitChildClose packages/server/src/server/managed-server-application.ts:1947:13
+ ❯ Object.close packages/server/src/server/managed-server-application.ts:1918:44
+ ❯ ManagedServerCoordinator.#closeReplica packages/server/src/server/managed-server-application.ts:1261:50
+ ❯ packages/server/src/server/managed-server-application.ts:1222:41
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/29]⎯
+
+ FAIL  packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > removes a draining child from Coordinator admission before its server closes
+Error: Managed child exited before Delivery drained.
+ ❯ ManagedServerCoordinator.#onExit packages/server/src/server/managed-server-application.ts:1037:7
+    1035|     replica.terminal = true;
+    1036|     replica.closeAttempt?.drained.reject(
+    1037|       new Error("Managed child exited before Delivery drained."),
+       |       ^
+    1038|     );
+    1039|     this.#clearSubscriptionWaiters(
+ ❯ EventEmitter.<anonymous> packages/server/src/server/managed-server-application.ts:910:12
+ ❯ packages/server/test/server/managed-server-application.test.ts:693:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/29]⎯
+
+ FAIL  packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > admits a replacement when retained subscriptions were never activated
+Error: Managed child exited before Delivery drained.
+ ❯ ManagedServerCoordinator.#onExit packages/server/src/server/managed-server-application.ts:1037:7
+    1035|     replica.terminal = true;
+    1036|     replica.closeAttempt?.drained.reject(
+    1037|       new Error("Managed child exited before Delivery drained."),
+       |       ^
+    1038|     );
+    1039|     this.#clearSubscriptionWaiters(
+ ❯ EventEmitter.<anonymous> packages/server/src/server/managed-server-application.ts:910:12
+ ❯ EventEmitter.<anonymous> packages/server/test/server/managed-server-application.test.ts:753:81
+ ❯ Object.awaitChildClose packages/server/src/server/managed-server-application.ts:1947:13
+ ❯ Object.close packages/server/src/server/managed-server-application.ts:1918:44
+ ❯ ManagedServerCoordinator.#closeReplica packages/server/src/server/managed-server-application.ts:1261:50
+ ❯ packages/server/src/server/managed-server-application.ts:1222:41
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/29]⎯
+
+ FAIL  packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > reports graceful child close failure and permits a parent retry
+AssertionError: expected [Function] to throw error including 'Managed child server close failed.' but got 'Managed child Delivery drain failed.'
+
+Expected: "Managed child server close failed."
+Received: "Managed child Delivery drain failed."
+
+ ❯ packages/server/test/server/managed-server-application.test.ts:795:33
+    793|     );
+    794|
+    795|     await expect(handle.close()).rejects.toThrow("Managed child server…
+       |                                 ^
+    796|
+    797|     (child.send as ReturnType<typeof vi.fn>).mockImplementationOnce(
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/29]⎯
+
+ FAIL  packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > bounds a closed child which does not exit before parent close
+AssertionError: expected [ 30000, 1000 ] to deeply equal [ 1000 ]
+
+- Expected
++ Received
+
+  [
++   30000,
++   1000,
+    1000,
+  ]
+
+ ❯ packages/server/test/server/managed-server-application.test.ts:853:26
+    851|     await Promise.resolve();
+    852|     expect(settled).toBe(false);
+    853|     expect(clock.delays).toEqual([1_000]);
+       |                          ^
+    854|
+    855|     clock.advance(1_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/29]⎯
+
+ FAIL  packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > waits for the exact replacement subscription before activating Delivery
+Error: Managed child exited before Delivery drained.
+ ❯ ManagedServerCoordinator.#onExit packages/server/src/server/managed-server-application.ts:1037:7
+    1035|     replica.terminal = true;
+    1036|     replica.closeAttempt?.drained.reject(
+    1037|       new Error("Managed child exited before Delivery drained."),
+       |       ^
+    1038|     );
+    1039|     this.#clearSubscriptionWaiters(
+ ❯ EventEmitter.<anonymous> packages/server/src/server/managed-server-application.ts:910:12
+ ❯ EventEmitter.<anonymous> packages/server/test/server/managed-server-application.test.ts:1021:81
+ ❯ Object.awaitChildClose packages/server/src/server/managed-server-application.ts:1947:13
+ ❯ Object.close packages/server/src/server/managed-server-application.ts:1918:44
+ ❯ ManagedServerCoordinator.#closeReplica packages/server/src/server/managed-server-application.ts:1261:50
+ ❯ packages/server/src/server/managed-server-application.ts:1222:41
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/29]⎯
+
+ FAIL  packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > remains alive but unready at zero ready children and ignores malformed READY facts
+Error: Managed child exited before Delivery drained.
+ ❯ ManagedServerCoordinator.#onExit packages/server/src/server/managed-server-application.ts:1037:7
+    1035|     replica.terminal = true;
+    1036|     replica.closeAttempt?.drained.reject(
+    1037|       new Error("Managed child exited before Delivery drained."),
+       |       ^
+    1038|     );
+    1039|     this.#clearSubscriptionWaiters(
+ ❯ EventEmitter.<anonymous> packages/server/src/server/managed-server-application.ts:910:12
+ ❯ EventEmitter.<anonymous> packages/server/test/server/managed-server-application.test.ts:1136:25
+ ❯ Object.awaitChildClose packages/server/src/server/managed-server-application.ts:1947:13
+ ❯ Object.close packages/server/src/server/managed-server-application.ts:1918:44
+ ❯ ManagedServerCoordinator.#closeReplica packages/server/src/server/managed-server-application.ts:1261:50
+ ❯ packages/server/src/server/managed-server-application.ts:1222:41
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/29]⎯
+
+ FAIL  packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > limits concurrent starts while admitting every initial logical slot
+Error: Managed child exited before Delivery drained.
+ ❯ ManagedServerCoordinator.#onExit packages/server/src/server/managed-server-application.ts:1037:7
+    1035|     replica.terminal = true;
+    1036|     replica.closeAttempt?.drained.reject(
+    1037|       new Error("Managed child exited before Delivery drained."),
+       |       ^
+    1038|     );
+    1039|     this.#clearSubscriptionWaiters(
+ ❯ EventEmitter.<anonymous> packages/server/src/server/managed-server-application.ts:910:12
+ ❯ EventEmitter.<anonymous> packages/server/test/server/managed-server-application.test.ts:1189:23
+ ❯ Object.awaitChildClose packages/server/src/server/managed-server-application.ts:1947:13
+ ❯ Object.close packages/server/src/server/managed-server-application.ts:1918:44
+ ❯ ManagedServerCoordinator.#closeReplica packages/server/src/server/managed-server-application.ts:1261:50
+ ❯ packages/server/src/server/managed-server-application.ts:1222:41
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/29]⎯
+
+ FAIL  packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > replaces a child which exits before READY without abandoning initial readiness
+Error: Managed child exited before Delivery drained.
+ ❯ ManagedServerCoordinator.#onExit packages/server/src/server/managed-server-application.ts:1037:7
+    1035|     replica.terminal = true;
+    1036|     replica.closeAttempt?.drained.reject(
+    1037|       new Error("Managed child exited before Delivery drained."),
+       |       ^
+    1038|     );
+    1039|     this.#clearSubscriptionWaiters(
+ ❯ EventEmitter.<anonymous> packages/server/src/server/managed-server-application.ts:910:12
+ ❯ EventEmitter.<anonymous> packages/server/test/server/managed-server-application.test.ts:1232:25
+ ❯ Object.awaitChildClose packages/server/src/server/managed-server-application.ts:1947:13
+ ❯ Object.close packages/server/src/server/managed-server-application.ts:1918:44
+ ❯ ManagedServerCoordinator.#closeReplica packages/server/src/server/managed-server-application.ts:1261:50
+ ❯ packages/server/src/server/managed-server-application.ts:1222:41
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/29]⎯
+
+ FAIL  packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > keeps replacing after a synchronous child-start failure
+Error: Managed child exited before Delivery drained.
+ ❯ ManagedServerCoordinator.#onExit packages/server/src/server/managed-server-application.ts:1037:7
+    1035|     replica.terminal = true;
+    1036|     replica.closeAttempt?.drained.reject(
+    1037|       new Error("Managed child exited before Delivery drained."),
+       |       ^
+    1038|     );
+    1039|     this.#clearSubscriptionWaiters(
+ ❯ EventEmitter.<anonymous> packages/server/src/server/managed-server-application.ts:910:12
+ ❯ EventEmitter.<anonymous> packages/server/test/server/managed-server-application.test.ts:1276:25
+ ❯ Object.awaitChildClose packages/server/src/server/managed-server-application.ts:1947:13
+ ❯ Object.close packages/server/src/server/managed-server-application.ts:1918:44
+ ❯ ManagedServerCoordinator.#closeReplica packages/server/src/server/managed-server-application.ts:1261:50
+ ❯ packages/server/src/server/managed-server-application.ts:1222:41
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/29]⎯
+
+ FAIL  packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > ignores one private control fact before accepting close
+AssertionError: expected "vi.fn()" to be called once, but got 0 times
+ ❯ packages/server/test/server/managed-server-application.test.ts:1423:38
+    1421|       expect(close).not.toHaveBeenCalled();
+    1422|       onMessage({ type: "close", remainingMs: 30_000 }, undefined);
+    1423|       await expect.poll(() => close).toHaveBeenCalledOnce();
+       |                                      ^
+    1424|       await expect.poll(() => disconnect).toHaveBeenCalledOnce();
+    1425|     } finally {
+
+Caused by: Error: Matcher did not succeed in time.
+ ❯ packages/server/test/server/managed-server-application.test.ts:1423:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/29]⎯
+
+ FAIL  packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > contains a failed child close triggered by private message and permits explicit retry
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ packages/server/test/server/managed-server-application.test.ts:1498:46
+    1496|   });
+    1497|
+    1498|   it.each(["message", "disconnect"] as const)(
+       |                                              ^
+    1499|     "contains a failed child close triggered by private %s and permits…
+    1500|     async (trigger) => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/29]⎯
+
+ FAIL  packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > starts one separate complete child for an explicit single-replica cohort
+Error: Parent must not assemble a child.
+ ❯ Object.createServer packages/server/test/server/managed-server-application.test.ts:1637:42
+    1635|       port: 0,
+    1636|       moduleUrl: new URL("./managed-server-application-child.mjs", imp…
+    1637|       createServer: () => Promise.reject(new Error("Parent must not as…
+       |                                          ^
+    1638|     });
+    1639|     try {
+ ❯ Object.child packages/server/src/server/managed-server-application.ts:277:34
+ ❯ Object.start packages/server/src/server/managed-server-application.ts:266:73
+ ❯ Object.run packages/server/src/server/managed-server-application.ts:245:32
+ ❯ packages/server/test/server/managed-server-application.test.ts:1633:52
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/29]⎯
+
+ FAIL  packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > admits an in-memory normal Server registry as a managed READY child
+Error: Test timed out in 20000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ packages/server/test/server/managed-server-application.test.ts:1689:3
+    1687|   }, 20_000);
+    1688|
+    1689|   it("admits an in-memory normal Server registry as a managed READY ch…
+       |   ^
+    1690|     const child = managedRegistryChild("memory");
+    1691|     childStderr(child);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/29]⎯
+
+ FAIL  packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > does not block readiness when a child writes verbose standard output
+Error: Parent must not assemble a child.
+ ❯ Object.createServer packages/server/test/server/managed-server-application.test.ts:1718:44
+    1716|         port: 0,
+    1717|         moduleUrl: new URL("./managed-server-application-child.mjs", i…
+    1718|         createServer: () => Promise.reject(new Error("Parent must not …
+       |                                            ^
+    1719|       });
+    1720|       await managed.close();
+ ❯ Object.child packages/server/src/server/managed-server-application.ts:277:34
+ ❯ Object.start packages/server/src/server/managed-server-application.ts:266:73
+ ❯ Object.run packages/server/src/server/managed-server-application.ts:245:32
+ ❯ packages/server/test/server/managed-server-application.test.ts:1714:54
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/29]⎯
+
+ FAIL  packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > starts four distinct child processes for one managed cohort
+Error: Parent must not assemble a child.
+ ❯ Object.createServer packages/server/test/server/managed-server-application.test.ts:1732:42
+    1730|       port: 0,
+    1731|       moduleUrl: new URL("./managed-server-application-child.mjs", imp…
+    1732|       createServer: () => Promise.reject(new Error("Parent must not as…
+       |                                          ^
+    1733|     });
+    1734|     try {
+ ❯ Object.child packages/server/src/server/managed-server-application.ts:277:34
+ ❯ Object.start packages/server/src/server/managed-server-application.ts:266:73
+ ❯ Object.run packages/server/src/server/managed-server-application.ts:245:32
+ ❯ packages/server/test/server/managed-server-application.test.ts:1728:52
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/29]⎯
+
+ FAIL  packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > binds the Coordinator to an operating-system-selected port when configured with zero
+Error: Parent must not assemble a child.
+ ❯ Object.createServer packages/server/test/server/managed-server-application.test.ts:1752:42
+    1750|       port: 0,
+    1751|       moduleUrl: new URL("./managed-server-application-child.mjs", imp…
+    1752|       createServer: () => Promise.reject(new Error("Parent must not as…
+       |                                          ^
+    1753|     });
+    1754|     try {
+ ❯ Object.child packages/server/src/server/managed-server-application.ts:277:34
+ ❯ Object.start packages/server/src/server/managed-server-application.ts:266:73
+ ❯ Object.run packages/server/src/server/managed-server-application.ts:245:32
+ ❯ packages/server/test/server/managed-server-application.test.ts:1748:52
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/29]⎯
+
+ FAIL  packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > reports each child's actual local listener only after that child is ready
+Error: Parent must not assemble a child.
+ ❯ Object.createServer packages/server/test/server/managed-server-application.test.ts:1768:42
+    1766|       port: 0,
+    1767|       moduleUrl: new URL("./managed-server-application-child.mjs", imp…
+    1768|       createServer: () => Promise.reject(new Error("Parent must not as…
+       |                                          ^
+    1769|     });
+    1770|     try {
+ ❯ Object.child packages/server/src/server/managed-server-application.ts:277:34
+ ❯ Object.start packages/server/src/server/managed-server-application.ts:266:73
+ ❯ Object.run packages/server/src/server/managed-server-application.ts:245:32
+ ❯ packages/server/test/server/managed-server-application.test.ts:1764:52
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/29]⎯
+
+ FAIL  packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > waits for child-local synchronization before admitting its private listener
+Error: Parent must not assemble a child.
+ ❯ Object.createServer packages/server/test/server/managed-server-application.test.ts:1785:42
+    1783|       port: 0,
+    1784|       moduleUrl: new URL("./managed-server-application-gated-child.mjs…
+    1785|       createServer: () => Promise.reject(new Error("Parent must not as…
+       |                                          ^
+    1786|     });
+    1787|     try {
+ ❯ Object.child packages/server/src/server/managed-server-application.ts:277:34
+ ❯ Object.start packages/server/src/server/managed-server-application.ts:266:73
+ ❯ Object.run packages/server/src/server/managed-server-application.ts:245:32
+ ❯ packages/server/test/server/managed-server-application.test.ts:1781:52
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/29]⎯
+
+ FAIL  packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > replaces only the unexpected child exit and retains its surviving sibling
+Error: Parent must not assemble a child.
+ ❯ Object.createServer packages/server/test/server/managed-server-application.test.ts:1802:42
+    1800|       port: 0,
+    1801|       moduleUrl: new URL("./managed-server-application-child.mjs", imp…
+    1802|       createServer: () => Promise.reject(new Error("Parent must not as…
+       |                                          ^
+    1803|     });
+    1804|     try {
+ ❯ Object.child packages/server/src/server/managed-server-application.ts:277:34
+ ❯ Object.start packages/server/src/server/managed-server-application.ts:266:73
+ ❯ Object.run packages/server/src/server/managed-server-application.ts:245:32
+ ❯ packages/server/test/server/managed-server-application.test.ts:1798:52
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/29]⎯
+
+ FAIL  packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > rejects invalid bounded restart settings { initialDelayMs: +0 }
+ FAIL  packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > rejects invalid bounded restart settings { maximumDelayMs: 1, initialDelayMs: 2 }
+ FAIL  packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > rejects invalid bounded restart settings { healthyReadyMs: Infinity }
+ FAIL  packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > rejects invalid bounded restart settings { concurrentStarts: 2 }
+AssertionError: expected [Function] to throw error including 'restart' but got 'not reached'
+
+Expected: "restart"
+Received: "not reached"
+
+ ❯ packages/server/test/server/managed-server-application.test.ts:1852:6
+    1850|         restart,
+    1851|       }),
+    1852|     ).rejects.toThrow("restart");
+       |      ^
+    1853|   });
+    1854|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/29]⎯
+
+ FAIL  packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > does not restart a child that the managed cohort closes
+Error: Parent must not assemble a child.
+ ❯ Object.createServer packages/server/test/server/managed-server-application.test.ts:1860:42
+    1858|       port: 0,
+    1859|       moduleUrl: new URL("./managed-server-application-child.mjs", imp…
+    1860|       createServer: () => Promise.reject(new Error("Parent must not as…
+       |                                          ^
+    1861|       restart: { initialDelayMs: 1, maximumDelayMs: 1, healthyReadyMs:…
+    1862|     });
+ ❯ Object.child packages/server/src/server/managed-server-application.ts:277:34
+ ❯ Object.start packages/server/src/server/managed-server-application.ts:266:73
+ ❯ Object.run packages/server/src/server/managed-server-application.ts:245:32
+ ❯ packages/server/test/server/managed-server-application.test.ts:1856:52
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/29]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  29 failed | 35 passed (64)
+   Start at  00:21:43
+   Duration  40.19s (transform 872ms, setup 0ms, import 1.14s, tests 38.92s, environment 0ms)

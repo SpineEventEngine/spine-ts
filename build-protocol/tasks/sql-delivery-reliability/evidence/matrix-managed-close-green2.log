@@ -1,0 +1,38 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/delivery-client/test/managed-remote-delivery-readiness.integration.test.ts (3 tests | 1 failed | 2 skipped) 20655ms
+   × RED-27/28 keeps the final managed subscription relay until fenced Delivery work drains 20654ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/delivery-client/test/managed-remote-delivery-readiness.integration.test.ts > RED-27/28 keeps the final managed subscription relay until fenced Delivery work drains
+Error: Managed fixture drained timed out:
+ ❯ Timeout.<anonymous> packages/delivery-client/test/managed-remote-delivery-readiness.integration.test.ts:213:14
+    211|     });
+    212|     const timer = setTimeout(() => {
+    213|       finish(new Error(`Managed fixture ${description} timed out: ${st…
+       |              ^
+    214|     }, 10_000);
+    215|     const onExit = (code: number | null, signal: NodeJS.Signals | null…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  packages/delivery-client/test/managed-remote-delivery-readiness.integration.test.ts > RED-27/28 keeps the final managed subscription relay until fenced Delivery work drains
+Error: Hook timed out in 10000ms.
+If this is a long-running hook, pass a timeout value as the last argument or configure it globally with "hookTimeout".
+ ❯ packages/delivery-client/test/managed-remote-delivery-readiness.integration.test.ts:53:1
+     51| );
+     52|
+     53| afterEach(async () => {
+       | ^
+     54|   // Release either real Delivery gate before asking the managed paren…
+     55|   // down: a replacement can still be opening its initial snapshot.
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 skipped (3)
+   Start at  23:56:30
+   Duration  21.48s (transform 509ms, setup 0ms, import 717ms, tests 20.65s, environment 0ms)

@@ -1,0 +1,3 @@
+# Task-local runtime and compiler caches are not verification records.
+runtime-tmp/
+tmp/

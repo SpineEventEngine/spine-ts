@@ -419,6 +419,10 @@
   ],
   "ownedSources": [
     {
+      "localPath": "packages/proto/proto/spine/delivery/inbox_read.proto",
+      "sha256": "433c3ce40a816c1011cc10ab959f4bf0b2df4d03d2849baeecee9bd0b501632c"
+    },
+    {
       "localPath": "packages/proto/proto/spine/auth/authentication_service.proto",
       "sha256": "dcd178e057a13d4d044ac9fb1ba487b5a27203b0686191d5955ee928852822d7"
     },

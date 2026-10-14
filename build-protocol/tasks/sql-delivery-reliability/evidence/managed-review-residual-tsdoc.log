@@ -1,0 +1,5 @@
+$ node scripts/check-tsdoc.mjs
+callable-summary: packages/server/src/server/managed-server-application.ts :: missingDrainAck
+callable-summary: packages/server/src/server/managed-server-application.ts :: missingDrainAck@2105(child,closeAttempt,exited,clock)
+missing-returns: packages/server/src/server/managed-server-application.ts :: missingDrainAck@2105(child,closeAttempt,exited,clock)
+[ELIFECYCLE] Command failed with exit code 1.

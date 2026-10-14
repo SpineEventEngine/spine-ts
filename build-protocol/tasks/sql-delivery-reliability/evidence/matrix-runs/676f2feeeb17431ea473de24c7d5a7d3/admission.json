@@ -1,0 +1,9 @@
+{
+  "commandId": "7e62cc9d-2be6-489f-bf5f-92f5d1d138f7",
+  "ackStatus": {
+    "case": "ok",
+    "value": {
+      "$typeName": "google.protobuf.Empty"
+    }
+  }
+}

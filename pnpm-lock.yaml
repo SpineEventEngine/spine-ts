@@ -706,6 +706,9 @@ importers:
       '@spine-event-engine/testing':
         specifier: workspace:*
         version: link:../testing
+      loglayer:
+        specifier: 9.4.0
+        version: 9.4.0
 
   packages/server/test-fixtures:
     dependencies:

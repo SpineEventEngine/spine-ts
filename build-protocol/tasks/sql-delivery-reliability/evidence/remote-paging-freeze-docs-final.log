@@ -1,0 +1,7 @@
+$ pnpm docs:api:check && pnpm docs:audience:check && pnpm docs:snippets:check:generated
+$ node scripts/check-api-docs.mjs
+[info] json generated at /var/folders/b7/lgl3q0z57xj72fjjjj_wd9n80000gq/T/spine-typedoc-json-K7mtja/api.json
+[info] html generated at /var/folders/b7/lgl3q0z57xj72fjjjj_wd9n80000gq/T/spine-typedoc-json-K7mtja/reference
+TypeDoc JSON is missing expected @spine-event-engine/storage exports: EventRollback
+[ELIFECYCLE] Command failed with exit code 1.
+[ELIFECYCLE] Command failed with exit code 1.

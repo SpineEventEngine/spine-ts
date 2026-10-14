@@ -14,7 +14,7 @@
 
 import * as http2 from "node:http2";
 import { randomUUID } from "node:crypto";
-import type { AddressInfo } from "node:net";
+import type { AddressInfo, Socket } from "node:net";
 
 import { clone, create, equals, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
@@ -234,6 +234,8 @@ export class NodeCoordinator {
 
   readonly #sessions: Set<http2.ServerHttp2Session>;
 
+  readonly #sockets: Set<Socket>;
+
   readonly #stopMembers: readonly (() => void)[];
 
   readonly #cancellations = new Map<string, Promise<void>>();
@@ -263,6 +265,10 @@ export class NodeCoordinator {
 
   #close: Promise<void> | undefined;
 
+  #networkClose: Promise<void> | undefined;
+
+  #draining = false;
+
   #membershipReconciliation = Promise.resolve();
 
   /**
@@ -272,12 +278,14 @@ export class NodeCoordinator {
    * @param server The HTTP/2 server.
    * @param address The listening address.
    * @param sessions Tracked HTTP/2 sessions.
+   * @param sockets Tracked TCP connections, including those without a session.
    */
   private constructor(
     options: NodeCoordinatorOptions,
     server: http2.Http2Server,
     address: AddressInfo,
     sessions: Set<http2.ServerHttp2Session>,
+    sockets: Set<Socket>,
   ) {
     this.#members = options.members;
     this.#unaryKernel = new BackendMembershipKernel(NodeCoordinatorValues.unaryKernelOptions());
@@ -286,6 +294,7 @@ export class NodeCoordinator {
     );
     this.#server = server;
     this.#sessions = sessions;
+    this.#sockets = sockets;
     this.host = address.address;
     this.port = address.port;
     this.baseUrl = `http://${NodeCoordinatorValues.formatHostForUrl(this.host)}:${this.port.toString()}`;
@@ -310,17 +319,11 @@ export class NodeCoordinator {
    * @returns The running private Coordinator.
    */
   static async open(options: NodeCoordinatorOptions): Promise<NodeCoordinator> {
-    const host = NodeCoordinatorValues.host(options.host ?? defaultHost);
-    const port = NodeCoordinatorValues.port(options.port ?? defaultPort);
-    const readMaxBytes = NodeCoordinatorValues.messageLimit(
-      options.readMaxBytes ?? defaultMessageMaxBytes,
-    );
-    const writeMaxBytes = NodeCoordinatorValues.messageLimit(
-      options.writeMaxBytes ?? defaultMessageMaxBytes,
-    );
+    const { host, port, readMaxBytes, writeMaxBytes } = this.#listenerOptions(options);
     // eslint-disable-next-line prefer-const -- routes capture the Coordinator before the listener exists.
     let coordinator: NodeCoordinator;
     const sessions = new Set<http2.ServerHttp2Session>();
+    const sockets = new Set<Socket>();
     const server = http2.createServer(
       connectNodeAdapter({
         routes: (router) => {
@@ -344,14 +347,57 @@ export class NodeCoordinator {
         writeMaxBytes,
       }),
     );
+    this.#trackConnections(server, sessions, sockets);
+    const address = await NodeCoordinatorValues.listen(server, host, port);
+    coordinator = new NodeCoordinator(options, server, address, sessions, sockets);
+    await coordinator.#reconcile();
+    return coordinator;
+  }
+
+  /**
+   * Validates private listener and message limits before opening the server.
+   *
+   * @param options The private Coordinator configuration.
+   * @returns Validated listener and message limits.
+   */
+  static #listenerOptions(options: NodeCoordinatorOptions): {
+    host: string;
+    port: number;
+    readMaxBytes: number;
+    writeMaxBytes: number;
+  } {
+    return {
+      host: NodeCoordinatorValues.host(options.host ?? defaultHost),
+      port: NodeCoordinatorValues.port(options.port ?? defaultPort),
+      readMaxBytes: NodeCoordinatorValues.messageLimit(
+        options.readMaxBytes ?? defaultMessageMaxBytes,
+      ),
+      writeMaxBytes: NodeCoordinatorValues.messageLimit(
+        options.writeMaxBytes ?? defaultMessageMaxBytes,
+      ),
+    };
+  }
+
+  /**
+   * Tracks sessions and sockets so deadline cleanup can destroy both.
+   *
+   * @param server The private Coordinator listener.
+   * @param sessions Receives active HTTP/2 sessions.
+   * @param sockets Receives active TCP sockets.
+   */
+  static #trackConnections(
+    server: http2.Http2Server,
+    sessions: Set<http2.ServerHttp2Session>,
+    sockets: Set<Socket>,
+  ): void {
     server.on("session", (session) => {
       sessions.add(session);
       session.once("close", () => sessions.delete(session));
     });
-    const address = await NodeCoordinatorValues.listen(server, host, port);
-    coordinator = new NodeCoordinator(options, server, address, sessions);
-    await coordinator.#reconcile();
-    return coordinator;
+    server.on("connection", (socket: Socket) => {
+      sockets.add(socket);
+      socket.once("close", () => sockets.delete(socket));
+    });
   }
 
   /**
@@ -368,12 +414,46 @@ export class NodeCoordinator {
   }
 
   /**
+   * Closes tracked HTTP/2 resources independently of membership reconciliation.
+   *
+   * @returns Completion after the tracked network handles close.
+   */
+  forceNetworkClose(): Promise<void> {
+    this.#draining = true;
+    for (const stop of this.#stopMembers) stop();
+    for (const pending of this.#pendingActivations.values()) clearTimeout(pending.timer);
+    this.#pendingActivations.clear();
+    // Start both kernel abort paths even if membership reconciliation is stalled.
+    void Promise.resolve()
+      .then(() => this.#unaryKernel.close())
+      .catch(() => undefined);
+    void Promise.resolve()
+      .then(() => this.#subscriptionKernel.close())
+      .catch(() => undefined);
+    for (const session of this.#sessions) session.destroy();
+    for (const socket of this.#sockets) socket.destroy();
+    this.#networkClose ??= NodeCoordinatorValues.closeServer(this.#server);
+    return this.#networkClose;
+  }
+
+  /**
    * Removes unary admission while retaining active subscription relays.
    *
    * @returns Completion after the unary member snapshot becomes empty.
    */
   beginDrain(): Promise<void> {
+    this.#draining = true;
     return this.#unaryKernel.reconcile([]);
+  }
+
+  /**
+   * Cancels backend relays while managed child listeners can still accept Cancel.
+   *
+   * @returns Completion after private child subscriptions are removed.
+   */
+  async closeSubscriptions(): Promise<void> {
+    await this.#membershipReconciliation;
+    await this.#subscriptionKernel.close();
   }
 
   async #post(command: Command, context: HandlerContext): Promise<Ack> {
@@ -399,6 +479,7 @@ export class NodeCoordinator {
   }
 
   async #subscribe(topic: Topic, context: HandlerContext): Promise<Subscription> {
+    if (this.#draining) throw new ConnectError("Managed application is closing.", Code.Unavailable);
     const subscription = create(SubscriptionSchema, {
       id: create(SubscriptionIdSchema, { value: `s-${randomUUID()}` }),
       topic,
@@ -411,14 +492,28 @@ export class NodeCoordinator {
     } catch (error) {
       throw this.#availabilityError(error);
     }
+    if (this.#isDraining()) {
+      await this.#cancelDefinition(toBinary(SubscriptionSchema, subscription), context.signal);
+      throw new ConnectError("Managed application is closing.", Code.Unavailable);
+    }
     this.#schedulePendingActivation(subscription);
     return subscription;
+  }
+
+  /**
+   * Reads current admission state after an asynchronous backend Subscribe.
+   *
+   * @returns Whether the Coordinator is draining.
+   */
+  #isDraining(): boolean {
+    return this.#draining;
   }
 
   async *#activate(
     subscription: Subscription,
     context: HandlerContext,
   ): AsyncIterable<SubscriptionUpdate> {
+    if (this.#draining) throw new ConnectError("Managed application is closing.", Code.Unavailable);
     const definition = toBinary(SubscriptionSchema, subscription);
     this.#clearPendingActivation(subscription);
     const overflow = new AbortController();
@@ -428,19 +523,7 @@ export class NodeCoordinator {
     context.signal.addEventListener("abort", abort, { once: true });
     if (context.signal.aborted) abort();
     const updates = new SubscriptionUpdateQueue(subscriptionQueueLimit, abort);
-    const activation = this.#subscriptionKernel
-      .activate(
-        definition,
-        async (childUpdate) => {
-          const update = fromBinary(SubscriptionUpdateSchema, childUpdate);
-          update.subscription = clone(SubscriptionSchema, subscription);
-          await updates.push(update);
-        },
-        overflow.signal,
-      )
-      .finally(() => {
-        updates.close();
-      });
+    const activation = this.#activateChild(definition, subscription, updates, overflow.signal);
     let failure: Error | undefined;
     try {
       for await (const update of updates) yield update;
@@ -452,6 +535,36 @@ export class NodeCoordinator {
       updates.close();
       await this.#finishActivation(definition, activation, failure);
     }
+  }
+
+  /**
+   * Relays accepted child updates through the bounded logical stream.
+   *
+   * @param definition The validated child subscription bytes.
+   * @param subscription The logical subscription exposed to callers.
+   * @param updates The bounded caller stream queue.
+   * @param signal Cancels the active child relay.
+   * @returns Completion after the backend activation ends.
+   */
+  #activateChild(
+    definition: Uint8Array,
+    subscription: Subscription,
+    updates: SubscriptionUpdateQueue,
+    signal: AbortSignal,
+  ): Promise<void> {
+    return this.#subscriptionKernel
+      .activate(
+        definition,
+        async (childUpdate) => {
+          const update = fromBinary(SubscriptionUpdateSchema, childUpdate);
+          update.subscription = clone(SubscriptionSchema, subscription);
+          await updates.push(update);
+        },
+        signal,
+      )
+      .finally(() => {
+        updates.close();
+      });
   }
 
   async #finishActivation(
@@ -485,6 +598,8 @@ export class NodeCoordinator {
   }
 
   async #forward(request: CoordinatorRequest): Promise<void> {
+    if (this.#draining)
+      throw new ConnectError("No ready application replica is available.", Code.Unavailable);
     try {
       await this.#unaryKernel.forward(request);
     } catch (error) {
@@ -570,7 +685,10 @@ export class NodeCoordinator {
     for (const pending of this.#pendingActivations.values()) clearTimeout(pending.timer);
     this.#pendingActivations.clear();
     await this.#membershipReconciliation;
-    const network = NodeCoordinatorValues.closeNetwork(this.#server, this.#sessions);
+    const network = (this.#networkClose ??= NodeCoordinatorValues.closeNetwork(
+      this.#server,
+      this.#sessions,
+    ));
     await Promise.all([network, this.#unaryKernel.close(), this.#subscriptionKernel.close()]);
   }
 }

@@ -30,7 +30,13 @@ import {
   UserIdSchema,
 } from "@spine-event-engine/proto";
 import { CommandService } from "@spine-event-engine/proto/client";
-import { EnvironmentType, Server, ServerEnvironment } from "@spine-event-engine/server";
+import {
+  EnvironmentType,
+  InboxStorage,
+  Server,
+  ServerEnvironment,
+  ShardIndex,
+} from "@spine-event-engine/server";
 import { EventStore } from "@spine-event-engine/storage";
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
 import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
@@ -50,6 +56,7 @@ import {
   StaffingStateSchema,
 } from "../dist/generated/spine/server/testing/project_workflow_pb.js";
 import { projectWorkflow, projectWorkflowIds } from "../dist/test-fixtures/project-workflow.js";
+import { fileLogger } from "./file-logger.mjs";
 
 let running;
 let factory;
@@ -73,6 +80,8 @@ async function handle(request) {
       return post(request);
     case "inspect":
       return inspect(request);
+    case "inspectDelivery":
+      return inspectDelivery();
     case "close":
       await close();
       return { closed: true };
@@ -105,10 +114,14 @@ async function start(request) {
     .setOptions({ url: settings.url })
     .setStringifierRegistry(stringifiers)
     .build();
+  const environmentSettings = { logger: fileLogger(settings.logPath) };
   if (settings.deliveryEndpoint !== undefined) {
     delivery = RemoteDelivery.connectTo({ endpoint: settings.deliveryEndpoint });
-    ServerEnvironment.when(EnvironmentType.Local).use({ delivery });
+    environmentSettings.delivery = delivery;
+    ServerEnvironment.when(EnvironmentType.Local).use(environmentSettings);
     await delivery.open();
+  } else {
+    ServerEnvironment.when(EnvironmentType.Local).use(environmentSettings);
   }
   context = projectWorkflow(
     settings.contextName,
@@ -221,6 +234,63 @@ async function inspect(request) {
       };
     }),
   };
+}
+
+async function inspectDelivery() {
+  if (factory === undefined || settings === undefined) throw new Error("Worker is not ready.");
+  const inbox =
+    delivery?.inbox ??
+    new InboxStorage({
+      context: { name: settings.contextName, multitenant: false },
+      storageFactory: factory,
+    });
+  const shardIndices = Array.from(
+    { length: settings.shards },
+    (_, index) => new ShardIndex(index, settings.shards),
+  );
+  const single = ShardIndex.single();
+  if (!shardIndices.some((shard) => shard.key() === single.key())) shardIndices.push(single);
+  const shards = await Promise.all(
+    shardIndices.map(async (shard) => {
+      try {
+        const messages = await inbox.read(shard, { limit: 1_000 });
+        return {
+          shard: shard.key(),
+          count: messages.length,
+          truncated: messages.length === 1_000,
+          rows: messages.map((message) => ({
+            messageId: message.id.value,
+            signalId: message.signalId,
+            targetTypeUrl: message.inboxId.targetTypeUrl,
+            status: message.status,
+            whenReceivedSeconds: String(message.whenReceived.seconds),
+            whenReceivedNanos: message.whenReceived.nanos,
+            version: String(message.version),
+          })),
+          statuses: messages.reduce((counts, message) => {
+            counts[message.status] = (counts[message.status] ?? 0) + 1;
+            return counts;
+          }, {}),
+        };
+      } catch (error) {
+        return { shard: shard.key(), error: String(error) };
+      }
+    }),
+  );
+  const observations =
+    delivery === undefined
+      ? undefined
+      : await delivery.source
+          .shardSnapshot()
+          .then((updates) =>
+            updates.map((update) => ({
+              shard: update.shard.key(),
+              status: update.status,
+              messages: update.messages,
+            })),
+          )
+          .catch((error) => ({ error: String(error) }));
+  return { shards, observations };
 }
 
 async function close() {

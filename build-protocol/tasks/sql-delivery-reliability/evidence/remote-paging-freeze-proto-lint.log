@@ -1,0 +1,4 @@
+$ pnpm exec buf lint
+packages/proto/proto/spine/delivery/inbox_read.proto:16:1:Multiple directories "spine/delivery,spine/delivery/admin" contain files with package "spine.delivery".
+packages/proto/proto/spine/delivery/inbox_read.proto:23:1:Files in package "spine.delivery" have both values "true" and no value for option "java_multiple_files" and all values must be equal.
+[ELIFECYCLE] Command failed with exit code 100.

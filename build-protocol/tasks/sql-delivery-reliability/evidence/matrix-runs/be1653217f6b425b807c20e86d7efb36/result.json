@@ -1,0 +1,31 @@
+{
+  "status": "PASS",
+  "runId": "be1653217f6b425b807c20e86d7efb36",
+  "provider": "postgres16",
+  "mode": "db-only",
+  "database": "sqlrel_matrix_be1653217f6b425b807c20e86d7efb36",
+  "processes": 2,
+  "configuredShards": 2,
+  "total": 16,
+  "burst": 16,
+  "pids": [
+    3079,
+    3080
+  ],
+  "endpoints": [
+    "http://127.0.0.1:63691",
+    "http://127.0.0.1:63692"
+  ],
+  "artifactSha256": "972dc303954785f9731b4ff3d14f421c0d2fb0cb0e48f6d36a303cdfc36cd237",
+  "commandCount": 16,
+  "eventCount": 16,
+  "entryCount": 80,
+  "entryMethods": [
+    "create",
+    "planning",
+    "staffing",
+    "portfolio",
+    "projection"
+  ],
+  "stateCopies": 2
+}

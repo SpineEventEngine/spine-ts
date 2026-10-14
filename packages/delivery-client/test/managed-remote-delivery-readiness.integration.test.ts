@@ -20,13 +20,14 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { create } from "@bufbuild/protobuf";
+import { create, fromBinary } from "@bufbuild/protobuf";
 import { Code, ConnectError, createClient } from "@connectrpc/connect";
 import { connectNodeAdapter, createGrpcTransport } from "@connectrpc/connect-node";
 import { SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import {
   AdminService,
   InboxService,
+  InboxReadService,
   ShardService,
 } from "@spine-event-engine/proto/delivery-server";
 import { SignalMetadata } from "@spine-event-engine/server";
@@ -34,6 +35,7 @@ import { UserIdSchema } from "@spine-event-engine/proto";
 import {
   CommandService,
   SubscriptionService,
+  type SubscriptionUpdate,
   TargetSchema,
   TopicIdSchema,
   TopicSchema,
@@ -98,10 +100,20 @@ it("RED-27/28 keeps the final managed subscription relay until fenced Delivery w
   const transport = createGrpcTransport({ baseUrl: endpoint });
   const subscriptions = createClient(SubscriptionService, transport);
   const subscription = await subscriptions.subscribe(projectOverviewTopic());
-  const iterator = subscriptions.activate(subscription)[Symbol.asyncIterator]();
+  // The generated stream iterator leaves its return value as `any`; the tests check `done`.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+  const iterator: AsyncIterator<SubscriptionUpdate, void> = subscriptions
+    .activate(subscription)
+    [Symbol.asyncIterator]();
+  const activation = await bounded(iterator.next(), "subscription activation ACK");
+  if (activation.done) throw new Error("Managed activation ended before its ACK.");
+  expect(activation.value.response?.status?.status.case).toBe("ok");
+  expect(activation.value.update.case).toBeUndefined();
   const commands = createClient(CommandService, transport);
   await bounded(commands.post(createProjectCommand()), "initial command");
-  await expect(bounded(iterator.next(), "initial update")).resolves.toMatchObject({ done: false });
+  const initialUpdate = await bounded(iterator.next(), "initial update");
+  if (initialUpdate.done) throw new Error("Initial Project update was missing.");
+  expect(projectStateId(initialUpdate.value)).toBe("t0209-project");
 
   await handlerGate.arm();
   const nextUpdate = iterator.next();
@@ -135,13 +147,23 @@ it("RED-27/28 keeps the final managed subscription relay until fenced Delivery w
     ]),
   ).resolves.toBe("active");
   await handlerGate.release();
-  await expect(bounded(nextUpdate, "drained update")).resolves.toMatchObject({ done: false });
+  const admittedUpdate = await bounded(nextUpdate, "drained update");
+  if (admittedUpdate.done) throw new Error("Admitted Project update was missing.");
+  expect(projectStateId(admittedUpdate.value)).toBe("t0209-drain-project");
   await drained;
-  // `managed.close()` retains this relay until all admitted work has drained.
-  // Therefore a second update here would show that the uniquely named command
-  // above had reached a replica despite its canceled/unavailable response.
-  await expect(iterator.next()).resolves.toEqual({ done: true, value: undefined });
+  await expect(bounded(iterator.next(), "post-drain stream end")).resolves.toEqual({
+    done: true,
+    value: undefined,
+  });
 }, 20_000);
+
+function projectStateId(update: SubscriptionUpdate): string | undefined {
+  if (update.update.case !== "entityUpdates") return undefined;
+  const state = update.update.value.update[0]?.kind;
+  if (state?.case !== "state") return undefined;
+  if (state.value.typeUrl !== TypeUrls.derive(ProjectOverviewStateSchema)) return undefined;
+  return fromBinary(ProjectOverviewStateSchema, state.value.value).id;
+}
 
 it("RED-28 holds a replacement outside managed admission until its remote snapshot opens", async () => {
   const delivery = await new GatedDeliveryListener().start();
@@ -163,12 +185,20 @@ it("RED-28 holds a replacement outside managed admission until its remote snapsh
   const transport = createGrpcTransport({ baseUrl: endpoint });
   const subscriptions = createClient(SubscriptionService, transport);
   const subscription = await subscriptions.subscribe(projectOverviewTopic());
-  const iterator = subscriptions.activate(subscription)[Symbol.asyncIterator]();
+  // The generated stream iterator leaves its return value as `any`; the tests check `done`.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+  const iterator: AsyncIterator<SubscriptionUpdate, void> = subscriptions
+    .activate(subscription)
+    [Symbol.asyncIterator]();
   const commands = createClient(CommandService, transport);
+  const activation = await bounded(iterator.next(), "replacement activation ACK");
+  if (activation.done) throw new Error("Replacement activation ended before its ACK.");
+  expect(activation.value.response?.status?.status.case).toBe("ok");
+  expect(activation.value.update.case).toBeUndefined();
   await bounded(commands.post(createProjectCommand()), "replacement initial command");
-  await expect(bounded(iterator.next(), "replacement initial update")).resolves.toMatchObject({
-    done: false,
-  });
+  const initial = await bounded(iterator.next(), "replacement initial update");
+  if (initial.done) throw new Error("Replacement initial Project update was missing.");
+  expect(projectStateId(initial.value)).toBe("t0209-project");
 
   const owner = await handlerGate.owner();
   const removed = members.find((member) => member.pid !== owner);
@@ -186,7 +216,9 @@ it("RED-28 holds a replacement outside managed admission until its remote snapsh
     commands.post(createProjectCommand("t0209-survivor", "t0209-survivor-project")),
     "survivor command",
   );
-  await expect(bounded(nextUpdate, "survivor update")).resolves.toMatchObject({ done: false });
+  const survivor = await bounded(nextUpdate, "survivor update");
+  if (survivor.done) throw new Error("Survivor Project update was missing.");
+  expect(projectStateId(survivor.value)).toBe("t0209-survivor-project");
   delivery.releaseSnapshot();
   await expect.poll(() => currentMembers(child, "replacement"), { timeout: 2_000 }).toHaveLength(2);
 
@@ -195,7 +227,9 @@ it("RED-28 holds a replacement outside managed admission until its remote snapsh
     commands.post(createProjectCommand("t0209-replacement", "t0209-replacement-project")),
     "replacement command",
   );
-  await expect(bounded(afterRejoin, "replacement update")).resolves.toMatchObject({ done: false });
+  const replacement = await bounded(afterRejoin, "replacement update");
+  if (replacement.done) throw new Error("Rejoined Project update was missing.");
+  expect(projectStateId(replacement.value)).toBe("t0209-replacement-project");
 }, 20_000);
 
 function receive(
@@ -220,6 +254,19 @@ function receive(
       );
     };
     const onMessage = (value: unknown) => {
+      if (
+        type === "drained" &&
+        typeof value === "object" &&
+        value !== null &&
+        (value as { type?: unknown }).type === "drain-error"
+      ) {
+        finish(
+          new Error(
+            `Managed fixture drain failed: ${String((value as { error?: unknown }).error)}`,
+          ),
+        );
+        return;
+      }
       if (
         typeof value !== "object" ||
         value === null ||
@@ -366,6 +413,7 @@ class GatedDeliveryListener {
       connectNodeAdapter({
         routes: (router) => {
           router.service(InboxService, this.#assembly.inbox);
+          router.service(InboxReadService, this.#assembly.inboxRead);
           router.service(ShardService, this.#assembly.shards);
           router.service(AdminService, {
             ...this.#assembly.admin,

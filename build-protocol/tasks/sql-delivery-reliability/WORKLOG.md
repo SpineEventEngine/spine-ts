@@ -282,7 +282,6 @@ wall time; no controlled-fault/crash/transport acceptance is implied. Runtime
 metadata unavailable. Parent may commit/push frozen harness/records while this
 read-only code consumption runs, with no source/dist change.
 
-
 Harness/evidence checkpoint888a6a063 was committed and immediately pushed to
 origin/sql-delivery-subscription-reliability. Staged diff whitespace check passed;
 managed runtime/tests remained unstaged. Completed raw log whitespace was
@@ -291,7 +290,6 @@ evidence/baseline-matrix-53b72c17-3c08-4732-acab-4783465c0cf2, runner session215
 Initial11/80 cases pass: all PostgreSQL16 two-process modes plus the first
 8-process database-only case. This is current partial progress, not acceptance.
 Dist remains reserved; implementer continues managed source-only work.
-
 
 Baseline matrix stopped at case17/80:16 cases passed, PostgreSQL16 ×8app
 processes ×shared-memory Delivery ×80/burst16 repeat2 failed convergence within
@@ -308,7 +306,6 @@ adapter misleading forced-cleanup wording. Dist reservation released after
 runner termination and verified resource cleanup, permitting managed build/test
 work; no matrix process remains. Progress68percent,6–9hours remains provisional.
 
-
 Scripts-first failed-run triage confirms80 accepted Commands and80 create,
 planning and staffing entries each, but only31 portfolio and31 projection
 entries, no duplicate method/correlation. The same49 Projects lack both
@@ -322,7 +319,6 @@ architecture redesign. Existing implementer continues shutdown and evidence
 fixes while diagnosis runs. Runtime introspection unavailable; explicit dispatch
 profile will be checked on acceptance.
 
-
 Failed matrix records committed17624ccb6 and immediately pushed to official
 feature branch; staged whitespace check passed. Recorded16passed workloads and
 failed17th remain independently inspectable. Managed source/tests unstaged.
@@ -333,7 +329,6 @@ successful same-topology projection PID distribution to avoid overinterpreting
 one-worker processing. Fresh supplemental evidence only. Original fields remain
 explicit; runtime introspection unavailable.
 
-
 Typed-recipient supplemental audit accepted from same explicit Luna/low
 mechanical function: all302 failed-run recipient type URLs and Protobuf bytes
 match their generated expected domain identifiers. Successful same-topology
@@ -341,7 +336,6 @@ run6643131164ba44d5986242529f74ba76 also routes all80 original projection
 entries through onePID, so worker concentration is not a confirmed defect.
 JSON validation and whitespace check passed; no runtime/build/DB operation.
 Reviewer and implementer informed. Actual runtime introspection unavailable.
-
 
 Bounded performance/reliability source diagnosis accepted with explicit
 Sol/medium profile confirmed. RemoteInbox rejects full timestamp-tied page
@@ -356,7 +350,6 @@ finishes managed preflight before any paging runtime change. Public continuation
 contract changes require a bounded architecture decision after this reproduction;
 no legacy or migration obligation is imposed by the human.
 
-
 Paging presents a demonstrated public-contract boundary: bounded timestamp-only
 continuation cannot distinguish arbitrary numbers of equal-time Inbox rows,
 including after cursor deletion. Increasing page size or skipping tied rows
@@ -369,7 +362,6 @@ with no legacy/migration support, global timestamp mutation or new persistence
 subsystem. Write task evidence only; return a concrete minimum decision or
 precise unresolved external contract constraint. Runtime metadata unavailable.
 
-
 Managed source-only unit suite now64passed with one real-child case excluded
 because it loads old dist; this is not a65case pass. Existing implementer will
 rebuild and run the full suite/integration/static preflight. The paging probe
@@ -379,7 +371,6 @@ build completion before starting its short runtime. Future reservations should
 cover execution rather than script preparation. Harness failure snapshots now
 include bounded per-shard Inbox/status and remote shard observations as well as
 structured logs; static checks reported passing, review/freeze still pending.
-
 
 Managed normal composite rebuild completed; full managed unit suite65/65 and
 real managed readiness/external-event integration7/7 pass. Initial infrastructure
@@ -397,7 +388,6 @@ No source patch or DB operation; this remains conditionalpaging evidence, not
 failed-workload cause proof or finished framework regression. Same explicit
 Luna/low function performs this mechanical provenance correction.
 
-
 D-0132 accepted following explicit Astra/high bounded architecture pass. Model
 and reasoning were explicit in dispatch; runtime introspection unavailable.
 Authored sibling InboxReadService avoids altering frozen copied JVM protocols,
@@ -407,3 +397,92 @@ UNIMPLEMENTED non-retryable per read, no fallback. Plain-built-schema wire run
 19e22f16-7d88-4982-acd6-5eab207320b7 confirms repeatedpagingfailure with101
 retained rows and clean teardown. Existing Sol/medium implementer receives
 bounded paging slice after managedpreflightfreeze; no second writer.
+
+Managed slice frozen for the four-concern review wave after113/113 focused and
+coverage runs plus reported static checks. Existing implementer continues paging
+in independent files, estimated1–2hours including generation and regressions.
+A focused framework RED now rejects a full two-row equal-time page rather than
+returning both records;10 neighboring tests pass. Decision/evidence checkpoint
+33e9c9c82 was committed and immediately pushed to the official feature branch.
+
+Parent micro review of harness diagnostics found that inspectDelivery visits
+only the configured N-way Entity shards, missing ShardIndex.single() used by
+projection subscribers. Returned a bounded correction to the existing implementer:
+include both distinct shard sets and limited per-row message/signal/target/status/
+timestamp/version metadata, with explicit1000row truncation, so future failure
+evidence can distinguish unadmitted publication from retained pending rows.
+This is a harness evidence fix and does not reopen the frozen managed slice.
+
+Paging coherent checkpoint reported: authored proto generation and normal
+proto/delivery-server/delivery-client build pass;51 existing client tests and
+11 RemoteInbox direct cases pass. Real HTTP/2 regression writes1,001 valid
+ProjectCreated projection Inbox rows with equal receive times, deletes cursor,
+and traverses exact remaining order while RemoteInbox collects1,000 rows.
+Validation, deadline/cancellation, malformed-wire and documentation acceptance
+remain open. Same implementer now switches to the complete managed review
+correction batch before expanding paging. Progress approximately70percent;
+remaining overall work estimate remains6–9hours, dominated by faults/transports,
+examples and final verification/review. No full-matrix acceptance claimed.
+
+Read-only mechanical inventory dispatched explicitly to gpt-6-luna/low: identify
+manual test/example Delivery service routers or service enumerations affected by
+the required authored InboxReadService. Run scripts-first searches, list paths
+and observed registration/client-read facts; no implementation changes, builds
+or runtime. This prevents discovering omitted test routers only in the release
+gate. Existing implementer retains all source responsibility and receives one
+bounded inventory. No subagents; actual runtime metadata unavailable.
+
+Paging service inventory accepted from explicit Luna/low mechanical function;
+profile fields were explicit, runtime introspection unavailable. Production and
+managed test routers register the authored read service. Remaining observed
+follow-ups: manual router snippet in delivery-server README and health-service
+assertions, including required paging readiness in multi-machine E2E. Other
+manual copied-service fixtures only perform point reads/mutations/observation
+and do not need blanket changes. Returned bounded inventory to implementer.
+Evidence contains source searches only, no runtime pass claim.
+
+Parent bounded historical-input audit found two earlier failed cases omitted
+from the three-label replay inventory: MySQL base32 and control16. Copied only
+reference input metadata/accepted labels into current evidence, retained exact
+source SHA-256, verified32unique suffixes0..31 for each, and left reference
+files untouched. Matrix resume plan now explicitly includes all five historical
+labels, including32Commands/burst16, alongside the complete80-case baseline.
+This is input/plan preparation, not new runtime evidence or a failure-rate claim.
+
+Managed shutdown slice review converged: all accepted behavior findings resolved,
+final reliability re-review clean. Last residual unit suite70/70 and affected
+static checks pass; earlier combined109/109 and real7/7 evidence retained.
+No full-matrix, fault, transport or final release claim. Paging remains active;
+its required RPC declaration is referenced by managed fixtures, so stage a
+dependency-complete checkpoint after paging convergence.
+
+### Next independent live fault acceptance slice
+
+The existing implementer retains explicit gpt-6-sol / medium configuration and
+sole responsibility for production changes. After the paging freeze, it may
+add independent opt-in test fixtures for public DeliveryBuilder monitor policy
+and real SQL acknowledgement faults. No production monitor injection API is
+authorized merely for tests. Scope includes default failure, throwing monitor,
+failed/successful selected repeat, unrelated progress, finite native SQL status
+UPDATE failure then success, exhaustion, exact handler/attempt counts and phase.
+Use only the task's dedicated four database services, unique database/context
+identities and bounded cleanup. Paging, managed lifecycle and process harness
+remain frozen through their pending review. Build output will be reserved during
+any process matrix execution. Runtime profile introspection remains unavailable;
+the original explicit dispatch and configured role are the profile evidence.
+
+Human reminder confirmed: there are no production applications, and no legacy
+support or migration is needed. This agrees with the required new paging endpoint
+and does not authorize historical Event discovery or a new durability subsystem.
+
+### Managed lifecycle and exact paging checkpoint
+
+All four relevant concerns converged for exact paging after one aggregated batch
+and two targeted clean re-reviews. Managed lifecycle was already converged.
+Checkpoint includes required authored RPC, exact/deleted cursor traversal,
+peer validation, one read budget/cancellation, matching docs and test diagnostics.
+It excludes the independent in-progress live SQL fault test and inventory entries.
+Next: reserve compiled output, repeat PG16 eight-process shared 80/burst16 with
+graceful worker restart and exact ID/handler audit; on success launch fresh full
+80-case baseline then five historical-labelled workloads. Stop on first failure
+and retain final correlated Inbox/worker evidence.

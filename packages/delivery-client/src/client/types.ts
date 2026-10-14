@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { ShardIndex } from "@spine-event-engine/server";
+import { ShardIndex, type InboxReadContinuation } from "@spine-event-engine/server";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 
 /**
@@ -132,24 +132,25 @@ export class DeliveryProtocolError extends Error {
 
   /**
    * Creates an error for an invalid delivery-server response.
+   * @param cause Preserves the invalid response's internal decoding error.
    */
-  constructor() {
-    super("Delivery server returned an invalid inbox message.");
+  constructor(cause?: unknown) {
+    super("Delivery server returned an invalid inbox message.", { cause });
     this.name = "DeliveryProtocolError";
   }
 }
 
 /**
- * Raised when the timestamp-only delivery wire page cannot continue without loss.
+ * Raised when a local caller supplies an offset unsupported by remote cursor paging.
  */
 export class DeliveryPagingError extends Error {
   // prettier-ignore
 
   /**
-   * Creates an error for a page that cannot continue safely.
+   * Creates an error for an unsupported local remote-read offset.
    */
   constructor() {
-    super("Delivery server page cannot be continued safely.");
+    super("Remote Inbox reads do not support an offset; use an exact cursor.");
     this.name = "DeliveryPagingError";
   }
 }
@@ -316,7 +317,7 @@ export interface DeliveryFindOneOptions {
 }
 
 /**
- * A bounded read page request; the wire contract can continue only by timestamp.
+ * A bounded read page request with exact Inbox cursor continuation.
  */
 export interface DeliveryReadPageOptions extends DeliveryFindOneOptions {
   // prettier-ignore
@@ -325,6 +326,11 @@ export interface DeliveryReadPageOptions extends DeliveryFindOneOptions {
    * Continues a timestamp-ordered page after this precise received time.
    */
   readonly sinceWhen?: Timestamp;
+
+  /**
+   * Continues after an exact receive-time, version, and message-ID tuple.
+   */
+  readonly after?: InboxReadContinuation;
 
   /**
    * Limits messages requested for this page.

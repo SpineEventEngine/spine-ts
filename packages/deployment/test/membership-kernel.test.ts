@@ -669,6 +669,34 @@ describe("BackendMembershipKernel", () => {
       await owner.close();
     }
   });
+  it("coalesces overlapping cancellation while the same child disposal is still running", async () => {
+    const disposalEntered = deferred();
+    const releaseDisposal = deferred();
+    let disposals = 0;
+    const owner = kernel({
+      create: async (member) =>
+        client(member, {
+          dispose: async () => {
+            disposals++;
+            disposalEntered.resolve(undefined);
+            await releaseDisposal.promise;
+          },
+        }),
+    });
+    await owner.reconcile([{ id: "a" }]);
+    await owner.subscribe(definition("x"), new AbortController().signal);
+    try {
+      const first = owner.cancel(definition("x"), new AbortController().signal);
+      await disposalEntered.promise;
+      const second = owner.cancel(definition("x"), new AbortController().signal);
+      releaseDisposal.resolve(undefined);
+      await expect(Promise.all([first, second])).resolves.toEqual([undefined, undefined]);
+      expect(disposals).toBe(1);
+    } finally {
+      releaseDisposal.resolve(undefined);
+      await owner.close();
+    }
+  });
   it("rejects a child failure before readiness and cleans up every installed child", async () => {
     const disposals: string[] = [];
     const delivered: string[] = [];
@@ -1246,7 +1274,7 @@ describe("BackendMembershipKernel", () => {
       owner.cancel(definition("with"), new AbortController().signal),
       owner.cancel(definition("with"), new AbortController().signal),
     ]);
-    expect(removals.filter((result) => result.status === "rejected")).toHaveLength(1);
+    expect(removals.filter((result) => result.status === "rejected")).toHaveLength(0);
     expect(disposals).toBe(1);
     await owner.close();
   });
@@ -1314,10 +1342,14 @@ describe("BackendMembershipKernel", () => {
       const rejected = expect(cancelled).rejects.toThrow("cleanup remains incomplete");
       await vi.advanceTimersByTimeAsync(1_000);
       await rejected;
-      await owner.reconcile([{ id: "a" }]);
-      await expect(owner.cancel(definition("x"), new AbortController().signal)).rejects.toThrow(
-        "cleanup remains incomplete",
-      );
+      const reconciliation = owner.reconcile([{ id: "a" }]);
+      await vi.advanceTimersByTimeAsync(1_000);
+      await reconciliation;
+      const repeated = expect(
+        owner.cancel(definition("x"), new AbortController().signal),
+      ).rejects.toThrow("cleanup remains incomplete");
+      await vi.advanceTimersByTimeAsync(1_000);
+      await repeated;
       expect(attempts).toBe(1);
       expect(vi.getTimerCount()).toBe(0);
       settled.resolve(undefined);

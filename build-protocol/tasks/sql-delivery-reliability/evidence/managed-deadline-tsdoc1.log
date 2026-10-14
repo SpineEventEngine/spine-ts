@@ -1,0 +1,19 @@
+$ node scripts/check-tsdoc.mjs
+callable-summary: packages/server/src/server/managed-server-application.ts :: ManagedChildLifecycle.method@513()
+class-member-spacing: packages/server/src/server/node-coordinator.ts :: member@236
+missing-param: packages/server/src/server/managed-server-application.ts :: ManagedChildLifecycle.constructor(server,shutdownTimeoutMs)(shutdownTimeoutMs)
+missing-param: packages/server/src/server/managed-server-application.ts :: ManagedChildLifecycle.method@474(remainingMs)(remainingMs)
+missing-param: packages/server/src/server/managed-server-application.ts :: awaitChildClose@1956(child,closeAttempt,exited,clock,remainingMs)(remainingMs)
+missing-param: packages/server/src/server/managed-server-application.ts :: close@1914(replica,clock,remainingMs)(remainingMs)
+missing-returns: packages/server/src/server/node-coordinator.ts :: NodeCoordinator.forceNetworkClose()
+tsdoc-block-opener: packages/server/src/server/managed-server-application.ts :: block@1142
+tsdoc-block-opener: packages/server/src/server/managed-server-application.ts :: block@1156
+tsdoc-block-opener: packages/server/src/server/managed-server-application.ts :: block@1186
+tsdoc-block-opener: packages/server/src/server/managed-server-application.ts :: block@1192
+tsdoc-block-opener: packages/server/src/server/managed-server-application.ts :: block@1263
+tsdoc-block-opener: packages/server/src/server/managed-server-application.ts :: block@1289
+tsdoc-block-opener: packages/server/src/server/managed-server-application.ts :: block@473
+tsdoc-block-opener: packages/server/src/server/managed-server-application.ts :: block@512
+tsdoc-block-opener: packages/server/src/server/node-coordinator.ts :: block@383
+tsdoc-block-opener: packages/server/src/server/node-coordinator.ts :: block@460
+[ELIFECYCLE] Command failed with exit code 1.

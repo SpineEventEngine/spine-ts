@@ -1,0 +1,149 @@
+packages/delivery-server/README.md-80-  maxTrackedShards: 1_000,
+packages/delivery-server/README.md-81-});
+packages/delivery-server/README.md-82-const transport = createRouterTransport((router) => {
+packages/delivery-server/README.md:83:  router.service(InboxService, delivery.inbox);
+packages/delivery-server/README.md-84-  router.service(ShardService, delivery.shards);
+packages/delivery-server/README.md-85-});
+packages/delivery-server/README.md-86-void transport;
+--
+packages/delivery-server/test/server/delivery-server-listener.test.ts-54-      ).resolves.toMatchObject({ shards: [] });
+packages/delivery-server/test/server/delivery-server-listener.test.ts-55-      await expect(createClient(Health, transport).check({ service: "" })).resolves.toBeDefined();
+packages/delivery-server/test/server/delivery-server-listener.test.ts-56-      await expect(
+packages/delivery-server/test/server/delivery-server-listener.test.ts:57:        createClient(InboxService, transport).findOne({ uuid: "" }),
+packages/delivery-server/test/server/delivery-server-listener.test.ts-58-      ).rejects.toMatchObject({
+packages/delivery-server/test/server/delivery-server-listener.test.ts-59-        code: Code.InvalidArgument,
+packages/delivery-server/test/server/delivery-server-listener.test.ts-60-      });
+--
+packages/delivery-server/test/admin/delivery-server-admin.test.ts-61-    const sessions = new Http2SessionManager(server.baseUrl);
+packages/delivery-server/test/admin/delivery-server-admin.test.ts-62-    const transport = createGrpcTransport({ baseUrl: server.baseUrl, sessionManager: sessions });
+packages/delivery-server/test/admin/delivery-server-admin.test.ts-63-    const admin = createClient(AdminService, transport);
+packages/delivery-server/test/admin/delivery-server-admin.test.ts:64:    const inbox = createClient(InboxService, transport);
+packages/delivery-server/test/admin/delivery-server-admin.test.ts-65-    const shards = createClient(ShardService, transport);
+packages/delivery-server/test/admin/delivery-server-admin.test.ts-66-    const first = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
+packages/delivery-server/test/admin/delivery-server-admin.test.ts-67-    const second = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
+--
+packages/delivery-client/test/managed-remote-delivery-readiness.integration.test.ts-412-    const server = http2.createServer(
+packages/delivery-client/test/managed-remote-delivery-readiness.integration.test.ts-413-      connectNodeAdapter({
+packages/delivery-client/test/managed-remote-delivery-readiness.integration.test.ts-414-        routes: (router) => {
+packages/delivery-client/test/managed-remote-delivery-readiness.integration.test.ts:415:          router.service(InboxService, this.#assembly.inbox);
+packages/delivery-client/test/managed-remote-delivery-readiness.integration.test.ts-416-          router.service(InboxReadService, this.#assembly.inboxRead);
+packages/delivery-client/test/managed-remote-delivery-readiness.integration.test.ts-417-          router.service(ShardService, this.#assembly.shards);
+packages/delivery-client/test/managed-remote-delivery-readiness.integration.test.ts-418-          router.service(AdminService, {
+--
+packages/delivery-server/test/health/health-service.test.ts-30-    for (const service of [
+packages/delivery-server/test/health/health-service.test.ts-31-      "",
+packages/delivery-server/test/health/health-service.test.ts-32-      "grpc.health.v1.Health",
+packages/delivery-server/test/health/health-service.test.ts:33:      "spine.delivery.InboxService",
+packages/delivery-server/test/health/health-service.test.ts-34-      "spine.delivery.ShardService",
+packages/delivery-server/test/health/health-service.test.ts-35-      "spine.delivery.AdminService",
+packages/delivery-server/test/health/health-service.test.ts-36-    ])
+--
+packages/delivery-client/test/managed-external-events.integration.test.ts-276-    const server = http2.createServer(
+packages/delivery-client/test/managed-external-events.integration.test.ts-277-      connectNodeAdapter({
+packages/delivery-client/test/managed-external-events.integration.test.ts-278-        routes: (router) => {
+packages/delivery-client/test/managed-external-events.integration.test.ts:279:          router.service(InboxService, this.#assembly.inbox);
+packages/delivery-client/test/managed-external-events.integration.test.ts-280-          router.service(InboxReadService, this.#assembly.inboxRead);
+packages/delivery-client/test/managed-external-events.integration.test.ts-281-          router.service(ShardService, this.#assembly.shards);
+packages/delivery-client/test/managed-external-events.integration.test.ts-282-          router.service(AdminService, this.#assembly.admin);
+--
+packages/delivery-client/test/e2e/multi-machine-delivery.test.ts-97-      });
+packages/delivery-client/test/e2e/multi-machine-delivery.test.ts-98-      expect(created(updates[0])).toBe(true);
+packages/delivery-client/test/e2e/multi-machine-delivery.test.ts-99-      await expect(admin.getShardInfo(create(EmptySchema))).resolves.toMatchObject({ shards: [] });
+packages/delivery-client/test/e2e/multi-machine-delivery.test.ts:100:      for (const service of ["", "spine.delivery.InboxService"]) {
+packages/delivery-client/test/e2e/multi-machine-delivery.test.ts-101-        await expect(
+packages/delivery-client/test/e2e/multi-machine-delivery.test.ts-102-          health.check(create(HealthCheckRequestSchema, { service })),
+packages/delivery-client/test/e2e/multi-machine-delivery.test.ts-103-        ).resolves.toMatchObject({
+--
+packages/delivery-client/test/delivery-client-grpc.integration.test.ts-44-    server = http2.createServer(
+packages/delivery-client/test/delivery-client-grpc.integration.test.ts-45-      connectNodeAdapter({
+packages/delivery-client/test/delivery-client-grpc.integration.test.ts-46-        routes: (router) =>
+packages/delivery-client/test/delivery-client-grpc.integration.test.ts:47:          router.service(InboxService, {
+packages/delivery-client/test/delivery-client-grpc.integration.test.ts-48-            findOne: () => {
+packages/delivery-client/test/delivery-client-grpc.integration.test.ts-49-              requests += 1;
+packages/delivery-client/test/delivery-client-grpc.integration.test.ts-50-              return create(OptionalInboxMessageSchema);
+--
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-34-    const core = InMemoryDelivery.create();
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-35-    const client = DeliveryClient.usingTransport(
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-36-      createRouterTransport((router) => {
+packages/delivery-client/test/in-memory-core-response-loss.test.ts:37:        router.service(InboxService, core.inbox);
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-38-        router.service(InboxReadService, core.inboxRead);
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-39-      }),
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-40-    );
+--
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-76-    const core = InMemoryDelivery.create();
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-77-    const client = DeliveryClient.usingTransport(
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-78-      createRouterTransport((router) => {
+packages/delivery-client/test/in-memory-core-response-loss.test.ts:79:        router.service(InboxService, core.inbox);
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-80-        router.service(InboxReadService, core.inboxRead);
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-81-      }),
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-82-    );
+--
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-114-    const core = InMemoryDelivery.create();
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-115-    const client = DeliveryClient.usingTransport(
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-116-      createRouterTransport((router) => {
+packages/delivery-client/test/in-memory-core-response-loss.test.ts:117:        router.service(InboxService, core.inbox);
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-118-        router.service(InboxReadService, core.inboxRead);
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-119-      }),
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-120-    );
+--
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-166-    const core = InMemoryDelivery.create();
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-167-    const client = DeliveryClient.usingTransport(
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-168-      createRouterTransport((router) => {
+packages/delivery-client/test/in-memory-core-response-loss.test.ts:169:        router.service(InboxService, core.inbox);
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-170-        router.service(InboxReadService, core.inboxRead);
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-171-      }),
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-172-    );
+--
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-222-    const core = InMemoryDelivery.create();
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-223-    const client = DeliveryClient.usingTransport(
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-224-      createRouterTransport((router) => {
+packages/delivery-client/test/in-memory-core-response-loss.test.ts:225:        router.service(InboxService, core.inbox);
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-226-        router.service(InboxReadService, core.inboxRead);
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-227-      }),
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-228-    );
+--
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-271-    const core = InMemoryDelivery.create();
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-272-    const client = DeliveryClient.usingTransport(
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-273-      createRouterTransport((router) => {
+packages/delivery-client/test/in-memory-core-response-loss.test.ts:274:        router.service(InboxService, core.inbox);
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-275-        router.service(InboxReadService, core.inboxRead);
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-276-      }),
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-277-    );
+--
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-324-    const core = InMemoryDelivery.create();
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-325-    const normal = DeliveryClient.usingTransport(
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-326-      createRouterTransport((router) => {
+packages/delivery-client/test/in-memory-core-response-loss.test.ts:327:        router.service(InboxService, core.inbox);
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-328-        router.service(InboxReadService, core.inboxRead);
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-329-      }),
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-330-    );
+--
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-333-    const lost = new RemoteInbox(
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-334-      DeliveryClient.usingTransport(
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-335-        createRouterTransport((router) => {
+packages/delivery-client/test/in-memory-core-response-loss.test.ts:336:          router.service(InboxService, {
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-337-            ...core.inbox,
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-338-            writeOne: async (request, context) => {
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-339-              await core.inbox.writeOne(request, context);
+--
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-351-  it("makes a committed write reconcilable after its response is lost", async () => {
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-352-    const core = InMemoryDelivery.create();
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-353-    const transport = createRouterTransport((router) => {
+packages/delivery-client/test/in-memory-core-response-loss.test.ts:354:      router.service(InboxService, {
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-355-        ...core.inbox,
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-356-        writeOne: async (request, context) => {
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-357-          await core.inbox.writeOne(request, context);
+--
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-368-  it("makes a committed removal observable after its response is lost", async () => {
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-369-    const core = InMemoryDelivery.create();
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-370-    const initial = createRouterTransport((router) => {
+packages/delivery-client/test/in-memory-core-response-loss.test.ts:371:      router.service(InboxService, core.inbox);
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-372-      router.service(InboxReadService, core.inboxRead);
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-373-    });
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-374-    const message = domainMessage("remove");
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-375-    await DeliveryClient.usingTransport(initial).writeOne(message);
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-376-    const transport = createRouterTransport((router) => {
+packages/delivery-client/test/in-memory-core-response-loss.test.ts:377:      router.service(InboxService, {
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-378-        ...core.inbox,
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-379-        removeOne: async (request, context) => {
+packages/delivery-client/test/in-memory-core-response-loss.test.ts-380-          await core.inbox.removeOne(request, context);

@@ -56,8 +56,8 @@ then defaults.
 ## 🧩 Embed the handlers
 
 Use `InMemoryDelivery.create()` when an application provides the Connect router and
-listener itself. `DeliveryCore.inbox` and `.shards` are the public Connect
-handler implementations; register both before creating the transport. The
+listener itself. `DeliveryCore.inbox`, `.inboxRead`, and `.shards` are the public
+Connect handler implementations; register all three before creating the transport. The
 application still manages the network listener and its lifecycle.
 
 An embedded consumer must declare and install direct dependencies on
@@ -71,7 +71,11 @@ delivery server's transitive dependencies.
 ```ts
 import { createRouterTransport } from "@connectrpc/connect";
 import { InMemoryDelivery } from "@spine-event-engine/delivery-server";
-import { InboxService, ShardService } from "@spine-event-engine/proto/delivery-server";
+import {
+  InboxReadService,
+  InboxService,
+  ShardService,
+} from "@spine-event-engine/proto/delivery-server";
 
 const delivery = InMemoryDelivery.create({
   processingTimeoutMs: 30_000,
@@ -81,12 +85,13 @@ const delivery = InMemoryDelivery.create({
 });
 const transport = createRouterTransport((router) => {
   router.service(InboxService, delivery.inbox);
+  router.service(InboxReadService, delivery.inboxRead);
   router.service(ShardService, delivery.shards);
 });
 void transport;
 ```
 
-The standalone listener exposes Inbox, Shard, Admin, and gRPC health services.
+The standalone listener exposes Inbox, InboxRead, Shard, Admin, and gRPC health services.
 It binds only to the loopback address by default. An explicit non-loopback host
 is a caller-selected trusted-network deployment and should not be exposed
 directly to the public Internet.

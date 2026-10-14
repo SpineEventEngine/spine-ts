@@ -1,0 +1,32 @@
+[
+  {
+    "states": {
+      "project": true,
+      "planning": true,
+      "staffing": true,
+      "portfolio": true,
+      "projection": true
+    },
+    "events": [
+      {
+        "id": "d30c018c-73bd-4c61-8485-9cf5da996d1f",
+        "typeUrl": "type.spine.server.testing/spine.server.testing.ProjectCreated"
+      }
+    ]
+  },
+  {
+    "states": {
+      "project": true,
+      "planning": true,
+      "staffing": true,
+      "portfolio": true,
+      "projection": true
+    },
+    "events": [
+      {
+        "id": "d30c018c-73bd-4c61-8485-9cf5da996d1f",
+        "typeUrl": "type.spine.server.testing/spine.server.testing.ProjectCreated"
+      }
+    ]
+  }
+]

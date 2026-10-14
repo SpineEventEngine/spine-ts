@@ -1,0 +1,26 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/deployment/test/membership-kernel.test.ts (60 tests | 1 failed) 5672ms
+     × retains one ignored-abort disposal until its underlying attempt settles 5010ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/deployment/test/membership-kernel.test.ts > BackendMembershipKernel > retains one ignored-abort disposal until its underlying attempt settles
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ packages/deployment/test/membership-kernel.test.ts:1321:3
+    1319|     }
+    1320|   });
+    1321|   it("retains one ignored-abort disposal until its underlying attempt …
+       |   ^
+    1322|     vi.useFakeTimers();
+    1323|     let attempts = 0;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 59 passed (60)
+   Start at  00:05:25
+   Duration  5.82s (transform 39ms, setup 0ms, import 48ms, tests 5.67s, environment 0ms)

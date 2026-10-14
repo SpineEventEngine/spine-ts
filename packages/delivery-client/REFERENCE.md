@@ -32,13 +32,19 @@ mutation response raises `DeliveryOutcomeUnknownError`; inspect its
 `reconciliation` instruction, read the remote fact, and do not blindly repeat
 the mutation.
 
-`readPage` uses the frozen timestamp-only continuation. If a full timestamp
-boundary cannot continue without loss, it throws `DeliveryPagingError`.
-Protocol-invalid data throws `DeliveryProtocolError`.
+`readPage` requires the TS `InboxReadService.ReadPage` extension and continues
+after an exact `(whenReceived, version, messageId)` tuple. The copied JVM
+`InboxService.FindManyInShard` contract remains unchanged. An endpoint without
+the authored read service fails once with an actionable error and its original
+`UNIMPLEMENTED` cause; a later read is a separate operation. Invalid local
+offsets throw `DeliveryPagingError`; protocol-invalid responses throw
+`DeliveryProtocolError`.
+`sinceWhen` is an exclusive timestamp lower bound for an initial page; it cannot
+be combined with `after`, which continues from an exact tuple.
 Inbox read results expose `whenReceived` as a Protobuf `Timestamp` with seconds
 and nanoseconds. Single and batch writes and removals, plus `readPage({ sinceWhen })`, require a
-Protobuf `Timestamp`. Its seconds and nanoseconds preserve exact receipt and
-continuation precision.
+Protobuf `Timestamp`. A cursor preserves that timestamp together with the row's
+version and UTF-8 message ID.
 
 ## Observation and topology
 
@@ -65,9 +71,13 @@ delivery and delivered rows are the deduplication fact. This
 package does not add authentication, authorization, durability, exactly-once
 effects, or a production topology.
 
-Each delivery read requests one bounded logical shard page. Because the remote
-cursor includes its anchor row, filling that logical page may require multiple
-bounded raw-page RPCs. The server delivery policy compares pending rows with
+Each delivery read requests one bounded logical shard page. Status filtering
+advances through bounded raw pages by their last row's exact cursor within one
+total read deadline, including pages containing only excluded statuses. The
+caller's `AbortSignal` also covers that complete multi-page collection, including
+later pages. The read is live: inserts behind the cursor require a later fresh
+scan. The server
+delivery policy compares pending rows with
 delivered rows in the logical page and its bounded recent-delivery cache, then
 removes exact duplicates without treating them as delivered acknowledgements.
 Remote duplicate removal compares the current snapshot before sending the
@@ -107,5 +117,5 @@ health route, provider selector, worker, or
 delivery-server mode.
 
 Retained rows suppress the same signal ID at the same typed Inbox target until
-`keep_until`. Remote pagination follows the JVM timestamp-only cursor and rejects a
-non-progressing full page; it does not provide arbitrary-depth indexed lookup.
+`keep_until`. Remote pagination uses the authored exact cursor and remains a
+bounded live scan; it does not provide arbitrary-depth indexed lookup.

@@ -1,0 +1,34 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/delivery-client/test/managed-remote-delivery-readiness.integration.test.ts (3 tests | 1 failed) 2981ms
+   × RED-27/28 keeps the final managed subscription relay until fenced Delivery work drains 1817ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/delivery-client/test/managed-remote-delivery-readiness.integration.test.ts > RED-27/28 keeps the final managed subscription relay until fenced Delivery work drains
+AssertionError: promise rejected "ConnectError: [internal] internal error { …(4) }" instead of resolving
+ ❯ packages/delivery-client/test/managed-remote-delivery-readiness.integration.test.ts:149:66
+    147|   expect(projectStateId(admittedUpdate.value)).toBe("t0209-drain-proje…
+    148|   await drained;
+    149|   await expect(bounded(iterator.next(), "post-drain stream end")).reso…
+       |                                                                  ^
+    150|     done: true,
+    151|     value: undefined,
+
+Caused by: ConnectError: [internal] internal error
+ ❯ findTrailerError node_modules/.pnpm/@connectrpc+connect@2.1.2_@bufbuild+protobuf@2.12.1/node_modules/@connectrpc/connect/dist/esm/protocol-grpc/trailer-status.js:101:20
+ ❯ validateTrailer node_modules/.pnpm/@connectrpc+connect@2.1.2_@bufbuild+protobuf@2.12.1/node_modules/@connectrpc/connect/dist/esm/protocol-grpc/validate-trailer.js:31:17
+ ❯ node_modules/.pnpm/@connectrpc+connect@2.1.2_@bufbuild+protobuf@2.12.1/node_modules/@connectrpc/connect/dist/esm/protocol-grpc/transport.js:173:37
+ ❯ resume node_modules/.pnpm/@connectrpc+connect@2.1.2_@bufbuild+protobuf@2.12.1/node_modules/@connectrpc/connect/dist/esm/protocol-grpc/transport.js:33:44
+ ❯ fulfill node_modules/.pnpm/@connectrpc+connect@2.1.2_@bufbuild+protobuf@2.12.1/node_modules/@connectrpc/connect/dist/esm/protocol-grpc/transport.js:35:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { rawMessage: 'internal error', code: 13, metadata: { constructor: 'Function<Headers>', append: 'Function<append>', delete: 'Function<delete>', get: 'Function<get>', has: 'Function<has>', set: 'Function<set>', getSetCookie: 'Function<getSetCookie>', keys: 'Function<keys>', values: 'Function<values>', entries: 'Function<entries>', forEach: 'Function<forEach>' }, details: [], findDetails: 'Function<findDetails>' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+   Start at  00:00:57
+   Duration  3.79s (transform 506ms, setup 0ms, import 708ms, tests 2.98s, environment 0ms)

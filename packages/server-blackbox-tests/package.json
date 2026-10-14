@@ -28,6 +28,7 @@
     "@spine-event-engine/storage": "workspace:*",
     "@spine-event-engine/storage-mysql": "workspace:*",
     "@spine-event-engine/storage-postgres": "workspace:*",
-    "@spine-event-engine/testing": "workspace:*"
+    "@spine-event-engine/testing": "workspace:*",
+    "loglayer": "9.4.0"
   }
 }

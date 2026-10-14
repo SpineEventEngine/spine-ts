@@ -1,0 +1,13 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+-------------------------------stderr | packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > does not extend an accepted child close deadline after wall-clock rollback
+{"severity":"WARN","timestamp":"2026-10-13T23:54:27.870Z","message":"Managed child close failed.","operation":"managed_replica.child_close","reasonCode":"close_failed"}
+{"severity":"WARN","timestamp":"2026-10-13T23:54:27.871Z","message":"Managed child close failed.","operation":"managed_replica.child_close","reasonCode":"close_failed"}
+
+·-------------------------------------
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 68 skipped (69)
+   Start at  00:54:26
+   Duration  926ms (transform 511ms, setup 0ms, import 717ms, tests 108ms, environment 0ms)

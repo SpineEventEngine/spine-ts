@@ -1,0 +1,44 @@
+{
+  "status": "PASS",
+  "runId": "bd92e7b8662140e8bcb531eba1b0c897",
+  "provider": "postgres16",
+  "mode": "shared-memory",
+  "database": "sqlrel_matrix_bd92e7b8662140e8bcb531eba1b0c897",
+  "processes": 8,
+  "configuredShards": 8,
+  "total": 16,
+  "burst": 16,
+  "pids": [
+    3395,
+    3396,
+    3397,
+    3398,
+    3399,
+    3400,
+    3401,
+    3402
+  ],
+  "deliveryPid": 3394,
+  "endpoints": [
+    "http://127.0.0.1:63723",
+    "http://127.0.0.1:63724",
+    "http://127.0.0.1:63726",
+    "http://127.0.0.1:63725",
+    "http://127.0.0.1:63727",
+    "http://127.0.0.1:63730",
+    "http://127.0.0.1:63729",
+    "http://127.0.0.1:63728"
+  ],
+  "artifactSha256": "972dc303954785f9731b4ff3d14f421c0d2fb0cb0e48f6d36a303cdfc36cd237",
+  "commandCount": 16,
+  "eventCount": 16,
+  "entryCount": 80,
+  "entryMethods": [
+    "create",
+    "planning",
+    "staffing",
+    "portfolio",
+    "projection"
+  ],
+  "stateCopies": 8
+}

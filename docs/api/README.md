@@ -84,6 +84,14 @@ remote/shared Delivery directly. DRAINING stops accepting new unary calls and sh
 retains subscription relays through active work, and closes the child after the
 final updates. The application selects its Delivery service and shard strategy;
 managed mode does not choose them or check where they came from.
+Managed close uses one configurable 30-second-default graceful deadline from
+the first close attempt across Delivery drain, relay cancellation, and final
+child close. Expiry reports failure and starts bounded process cleanup; an
+entered effect may still complete, so pending Delivery can repeat after restart.
+Each context has a separate shutdown deadline (default five seconds) starting
+when its own close begins; that deadline may end graceful context work earlier.
+Graceful child exit may add up to three seconds, while TERM/KILL and reaping
+after managed expiry may add up to two seconds.
 
 The reference includes entry points for `@spine-event-engine/client-web`,
 `@spine-event-engine/client-node`, `@spine-event-engine/delivery-client`, and

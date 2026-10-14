@@ -1,0 +1,34 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/server/test/server/managed-server-application.test.ts (63 tests | 5 failed | 58 skipped) 25022ms
+     × rejects invalid managed shutdown timeout 0 before child assembly 5009ms
+     × rejects invalid managed shutdown timeout -1 before child assembly 5003ms
+     × rejects invalid managed shutdown timeout 1.5 before child assembly 5001ms
+     × rejects invalid managed shutdown timeout Infinity before child assembly 5003ms
+     × rejects invalid managed shutdown timeout 2147483648 before child assembly 5004ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > rejects invalid managed shutdown timeout 0 before child assembly
+ FAIL  packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > rejects invalid managed shutdown timeout -1 before child assembly
+ FAIL  packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > rejects invalid managed shutdown timeout 1.5 before child assembly
+ FAIL  packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > rejects invalid managed shutdown timeout Infinity before child assembly
+ FAIL  packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > rejects invalid managed shutdown timeout 2147483648 before child assembly
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ packages/server/test/server/managed-server-application.test.ts:1859:65
+    1857|     },
+    1858|   );
+    1859|   it.each([0, -1, 1.5, Number.POSITIVE_INFINITY, 2_147_483_648])(
+       |                                                                 ^
+    1860|     "rejects invalid managed shutdown timeout %s before child assembly…
+    1861|     async (shutdownTimeoutMs) => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  5 failed | 58 skipped (63)
+   Start at  00:15:40
+   Duration  25.84s (transform 491ms, setup 0ms, import 691ms, tests 25.02s, environment 0ms)

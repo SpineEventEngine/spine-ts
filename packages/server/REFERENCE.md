@@ -706,7 +706,8 @@ group of complete server replicas when the framework handles process shutdown.
 and installs no process signal handlers; that host closes the returned handle.
 Both require a positive safe-integer
 `processCount` and an ESM `moduleUrl`; it never derives a process count from
-the machine. Its optional `host` and required nonzero `port` bind the public
+the machine. Its optional `host` and required `port` (zero selects an OS-assigned
+port) bind the public
 Coordinator listener. Every child executes that same module and calls the
 module's `createServer({ host: "127.0.0.1", port: 0 })`. The child reports its
 actual loopback endpoint only after its local readiness gates settle. The parent
@@ -724,6 +725,18 @@ Command and Query unary calls once to a READY child; process count does not
 inspect CPU availability and does not constrain the application's independently
 chosen `DeliveryStrategy` or shard count. Direct `Server.run()` and browser
 hosting remain independent of managed Node deployment.
+
+Managed close has one configurable `shutdownTimeoutMs` for all graceful phases,
+defaulting to 30 seconds from the first close attempt. Delivery drains before
+subscription relay cancellation; child listeners remain available while
+cancellation can be retried within that same budget. Final child close follows
+successful relay cleanup. A graceful child exit may add up to three seconds.
+An expired budget reports failure and starts bounded network and recorded-child
+termination; forced TERM/KILL and reaping may add up to two seconds. Each context
+also has a separate configured shutdown deadline (default five seconds) starting
+when that context begins closing, so it may end its graceful work earlier.
+Forced shutdown can interrupt an entered handler or SQL
+operation, leaving pending Delivery eligible for at-least-once recovery.
 
 If no child is READY, Command and Query return gRPC `UNAVAILABLE`. The
 Coordinator does not enter application intake and does not retry the selected

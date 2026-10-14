@@ -1,0 +1,9 @@
+$ node scripts/check-cleanup-rules.mjs
+Cleanup enforcement failed: modified production/example callables exceed 35 physical lines
+  - packages/delivery-client/src/client/client.ts:294-348 readPage
+  - packages/delivery-client/src/remote/adapters.ts:94-134 read
+  - packages/delivery-server/src/core/inbox-service.ts:96-136 anonymous callable
+  - packages/delivery-server/src/core/inbox-service.ts:98-135 anonymous callable
+  - packages/server/src/server/managed-server-application.ts:1075-1110 #onExit
+  - packages/server/src/server/managed-server-application.ts:1280-1316 #drainAndCloseReplicas
+[ELIFECYCLE] Command failed with exit code 1.

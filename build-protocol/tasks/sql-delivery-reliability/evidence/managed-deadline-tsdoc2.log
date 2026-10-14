@@ -1,0 +1,24 @@
+$ node scripts/check-tsdoc.mjs
+callable-summary: packages/server/src/server/managed-server-application.ts :: ManagedChildLifecycle.method@513()
+missing-param: packages/server/src/server/managed-server-application.ts :: ManagedChildLifecycle.constructor(server,shutdownTimeoutMs)(shutdownTimeoutMs)
+missing-param: packages/server/src/server/managed-server-application.ts :: ManagedChildLifecycle.method@474(remainingMs)(remainingMs)
+missing-param: packages/server/src/server/managed-server-application.ts :: awaitChildClose@1972(child,closeAttempt,exited,clock,remainingMs)(remainingMs)
+missing-param: packages/server/src/server/managed-server-application.ts :: close@1930(replica,clock,remainingMs)(remainingMs)
+missing-returns: packages/server/src/server/node-coordinator.ts :: NodeCoordinator.forceNetworkClose()
+tsdoc-block-opener: packages/deployment/src/internal/backend-membership-kernel.ts :: block@1212
+tsdoc-block-opener: packages/server/src/server/managed-server-application.ts :: block@1147
+tsdoc-block-opener: packages/server/src/server/managed-server-application.ts :: block@1161
+tsdoc-block-opener: packages/server/src/server/managed-server-application.ts :: block@1191
+tsdoc-block-opener: packages/server/src/server/managed-server-application.ts :: block@1197
+tsdoc-block-opener: packages/server/src/server/managed-server-application.ts :: block@1261
+tsdoc-block-opener: packages/server/src/server/managed-server-application.ts :: block@1279
+tsdoc-block-opener: packages/server/src/server/managed-server-application.ts :: block@1305
+tsdoc-block-opener: packages/server/src/server/managed-server-application.ts :: block@473
+tsdoc-block-opener: packages/server/src/server/managed-server-application.ts :: block@512
+tsdoc-block-opener: packages/server/src/server/managed-server-application.ts :: block@897
+tsdoc-block-opener: packages/server/src/server/node-coordinator.ts :: block@357
+tsdoc-block-opener: packages/server/src/server/node-coordinator.ts :: block@369
+tsdoc-block-opener: packages/server/src/server/node-coordinator.ts :: block@398
+tsdoc-block-opener: packages/server/src/server/node-coordinator.ts :: block@475
+tsdoc-block-opener: packages/server/src/server/node-coordinator.ts :: block@509
+[ELIFECYCLE] Command failed with exit code 1.

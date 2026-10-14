@@ -1,0 +1,14 @@
+$ node scripts/check-tsdoc.mjs
+callable-summary: packages/delivery-server/src/core/inbox-service.ts :: delta@555(prior,next)
+missing-type-param: packages/delivery-server/src/core/inbox-service.ts :: FunctionType@577@577<Schema>
+tsdoc-block-opener: packages/delivery-server/src/server/delivery-server.ts :: block@105
+tsdoc-block-opener: packages/delivery-server/src/server/delivery-server.ts :: block@108
+tsdoc-block-opener: packages/delivery-server/src/server/delivery-server.ts :: block@111
+tsdoc-block-opener: packages/delivery-server/src/server/delivery-server.ts :: block@114
+tsdoc-block-opener: packages/delivery-server/src/server/delivery-server.ts :: block@117
+tsdoc-block-opener: packages/delivery-server/src/server/delivery-server.ts :: block@120
+tsdoc-block-opener: packages/delivery-server/src/server/delivery-server.ts :: block@123
+tsdoc-block-opener: packages/delivery-server/src/server/delivery-server.ts :: block@126
+tsdoc-block-opener: packages/delivery-server/src/server/delivery-server.ts :: block@129
+tsdoc-block-opener: packages/delivery-server/src/server/delivery-server.ts :: block@132
+[ELIFECYCLE] Command failed with exit code 1.

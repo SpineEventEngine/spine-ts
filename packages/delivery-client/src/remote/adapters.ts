@@ -14,8 +14,7 @@
 
 import { Time } from "@spine-event-engine/core/time";
 import { randomUUID } from "node:crypto";
-import { create } from "@bufbuild/protobuf";
-import { type Timestamp, TimestampSchema } from "@bufbuild/protobuf/wkt";
+import type { Timestamp } from "@bufbuild/protobuf/wkt";
 
 import type {
   DeliveryInbox,
@@ -101,33 +100,93 @@ export class RemoteInbox implements DeliveryInbox {
       options.limit === undefined
         ? this.client.pageSize
         : DeliveryRequestCodec.pageSize(options.limit);
-    return this.#readCollected(shardIndex, options, limit);
+    RemoteInbox.#validateRead(shardIndex, options.after);
+    if (options.signal?.aborted) throw options.signal.reason;
+    const timeoutMs = DeliveryRequestCodec.timeout(options.timeoutMs ?? 30_000);
+    const deadline = Time.monotonicTime() + timeoutMs;
+    const controller = new AbortController();
+    const abort = () => {
+      controller.abort(options.signal?.reason);
+    };
+    options.signal?.addEventListener("abort", abort, { once: true });
+    const timer = setTimeout(() => {
+      controller.abort(new Error("Delivery Inbox read timed out."));
+    }, timeoutMs);
+    try {
+      return await this.#readCollected(
+        shardIndex,
+        { ...options, signal: controller.signal },
+        limit,
+        deadline,
+      );
+    } finally {
+      clearTimeout(timer);
+      options.signal?.removeEventListener("abort", abort);
+    }
+  }
+
+  /**
+   * Validates a remote read position even when status filtering returns no rows.
+   * @param shardIndex Identifies the requested shard.
+   * @param after Holds the exclusive cursor, when present.
+   */
+  static #validateRead(shardIndex: ShardIndex, after: InboxReadOptions["after"]): void {
+    DeliveryShardCodec.encode(shardIndex);
+    if (after === undefined) return;
+    DeliveryRequestCodec.timestamp(after.whenReceived);
+    if (after.messageId.trim().length === 0 || after.version < 0n || after.version > 2_147_483_647n)
+      throw new TypeError("Delivery page cursor is invalid.");
+  }
+
+  /**
+   * Settles a remote page wait on cancellation even if an injected transport does not.
+   *
+   * @param operation The already-entered remote read.
+   * @param signal Cancels the outward wait.
+   * @returns The page when it arrives before cancellation.
+   */
+  static async #awaitPage(
+    operation: Promise<readonly InboxMessage[]>,
+    signal: AbortSignal,
+  ): Promise<readonly InboxMessage[]> {
+    if (signal.aborted) throw signal.reason;
+    const abort = () => {
+      rejectAbort(signal.reason);
+    };
+    let rejectAbort: (reason: unknown) => void = () => undefined;
+    const cancelled = new Promise<never>((_resolve, reject) => {
+      rejectAbort = reject;
+    });
+    signal.addEventListener("abort", abort, { once: true });
+    try {
+      return await Promise.race([operation, cancelled]);
+    } finally {
+      signal.removeEventListener("abort", abort);
+    }
   }
 
   async #readPage(
     shardIndex: ShardIndex,
     after: InboxReadOptions["after"],
     limit: number,
-    options: DeliveryOperationOptions,
+    options: DeliveryOperationOptions & {
+      readonly signal: AbortSignal;
+      readonly timeoutMs: number;
+    },
   ): Promise<RemoteInboxPage> {
-    const pageSize = after === undefined ? limit : Math.min(1_000, limit + 1);
-    const page = await this.client.readPage(shardIndex, {
-      pageSize,
-      ...(options.signal === undefined ? {} : { signal: options.signal }),
-      ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
-      ...(after === undefined ? {} : { sinceWhen: RemoteValues.pageAnchor(after.whenReceived) }),
-    });
-    const start = after === undefined ? 0 : RemoteValues.exactAfter(page, after);
+    const pageSize = Math.min(1_000, limit);
+    const page = await RemoteInbox.#awaitPage(
+      this.client.readPage(shardIndex, {
+        pageSize,
+        signal: options.signal,
+        timeoutMs: options.timeoutMs,
+        ...(after === undefined ? {} : { after }),
+      }),
+      options.signal,
+    );
     const last = page.at(-1);
-    const prior = page.at(-2);
-    if (
-      page.length === pageSize &&
-      (last === undefined ||
-        (prior !== undefined && RemoteValues.sameTime(prior.whenReceived, last.whenReceived)))
-    )
-      throw new DeliveryPagingError();
     return {
-      messages: page.slice(start),
+      messages: page,
       complete: page.length < pageSize,
       last,
     };
@@ -135,20 +194,28 @@ export class RemoteInbox implements DeliveryInbox {
 
   async #readCollected(
     shardIndex: ShardIndex,
-    options: InboxReadOptions & DeliveryOperationOptions,
+    options: InboxReadOptions & DeliveryOperationOptions & { readonly signal: AbortSignal },
     limit: number,
+    deadline: number,
   ): Promise<readonly InboxMessage[]> {
     let after = options.after;
     const result: InboxMessage[] = [];
+    if (options.statuses?.length === 0) return Object.freeze(result);
     while (result.length < limit) {
-      const page = await this.#readPage(shardIndex, after, limit, options);
+      if (options.signal.aborted) throw options.signal.reason;
+      const remaining = Math.ceil(deadline - Time.monotonicTime());
+      if (remaining <= 0) throw new Error("Delivery Inbox read timed out.");
+      const page = await this.#readPage(shardIndex, after, limit, {
+        ...options,
+        timeoutMs: remaining,
+      });
       for (const message of page.messages) {
         if (options.statuses === undefined || options.statuses.includes(message.status))
           result.push(message);
         if (result.length === limit) return Object.freeze(result);
       }
       if (page.complete) return Object.freeze(result);
-      if (page.last === undefined) throw new DeliveryPagingError();
+      if (page.last === undefined) throw new DeliveryProtocolError();
       after = {
         messageId: page.last.id.value,
         whenReceived: page.last.whenReceived,
@@ -534,19 +601,6 @@ const RemoteValues = Object.freeze({
   },
 
   /**
-   * Returns the nanosecond before a page anchor for exclusive paging.
-   *
-   * @param value Supplies the received-time continuation.
-   * @returns The preceding instant as a precise timestamp.
-   */
-  pageAnchor(value: Timestamp): Timestamp {
-    if (value.seconds === -62_135_596_800n && value.nanos === 0) throw new DeliveryPagingError();
-    return value.nanos === 0
-      ? create(TimestampSchema, { seconds: value.seconds - 1n, nanos: 999_999_999 })
-      : create(TimestampSchema, { seconds: value.seconds, nanos: value.nanos - 1 });
-  },
-
-  /**
    * Compares two receive times at nanosecond precision.
    * @param left The first receive time.
    * @param right The second receive time.
@@ -576,24 +630,6 @@ const RemoteValues = Object.freeze({
    */
   sameWorker(left: DeliveryWorkerId, right: DeliveryWorkerId): boolean {
     return left.nodeId === right.nodeId && left.value === right.value;
-  },
-
-  /**
-   * Finds the exact continuation in one remote page.
-   *
-   * @param page Supplies the ordered remote page.
-   * @param after Supplies the requested continuation position.
-   * @returns The index after the matching message.
-   */
-  exactAfter(page: readonly InboxMessage[], after: NonNullable<InboxReadOptions["after"]>): number {
-    const exact = page.findIndex(
-      (message) =>
-        message.id.value === after.messageId &&
-        RemoteValues.sameTime(message.whenReceived, after.whenReceived) &&
-        message.version === after.version,
-    );
-    if (exact < 0) throw new DeliveryPagingError();
-    return exact + 1;
   },
 
   /**

@@ -147,7 +147,9 @@ try {
     deliveryProcess.stdout.on("data", (bytes) => {
       appendFileSync(resolve(dir, "delivery.stdout.log"), bytes);
     });
-    deliveryReady = await request(deliveryProcess, "start");
+    deliveryReady = await request(deliveryProcess, "start", {
+      logPath: resolve(dir, "delivery.structured.jsonl"),
+    });
     settings.deliveryEndpoint = deliveryReady.endpoint;
   }
   const ready = await launchAppWorkers(workers, settings, "worker");
@@ -185,8 +187,10 @@ try {
   );
   const deadline = Date.now() + 90_000;
   let snapshots;
+  let latestFirst;
   while (Date.now() < deadline) {
     const first = await request(workers[0], "inspect", { numbers }, 60_000);
+    latestFirst = first;
     if (first.projects.every((item) => Object.values(item.states).every(Boolean))) {
       snapshots = [
         first,
@@ -198,7 +202,37 @@ try {
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
-  await writeFile(resolve(dir, "last-snapshots.json"), `${JSON.stringify(snapshots, null, 2)}\n`);
+  if (snapshots === undefined) {
+    const observations = await Promise.allSettled(
+      workers.map((worker) => request(worker, "inspect", { numbers }, 5_000)),
+    );
+    await writeFile(
+      resolve(dir, "last-snapshots.json"),
+      `${JSON.stringify(
+        {
+          complete: false,
+          latestFirst,
+          observations: observations.map((observation) =>
+            observation.status === "fulfilled"
+              ? { status: "fulfilled", value: observation.value }
+              : { status: "rejected", reason: String(observation.reason) },
+          ),
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    const deliveryState = await request(workers[0], "inspectDelivery", {}, 10_000).then(
+      (value) => ({ status: "fulfilled", value }),
+      (error) => ({ status: "rejected", reason: String(error) }),
+    );
+    await writeFile(
+      resolve(dir, "delivery-snapshot.json"),
+      `${JSON.stringify(deliveryState, null, 2)}\n`,
+    );
+  } else {
+    await writeFile(resolve(dir, "last-snapshots.json"), `${JSON.stringify(snapshots, null, 2)}\n`);
+  }
   assert.ok(
     snapshots?.every((item) =>
       item.projects.every((project) => Object.values(project.states).every(Boolean)),
@@ -454,7 +488,13 @@ async function launchAppWorkers(target, settings, label) {
     });
     target.push(worker);
   }
-  return Promise.all(target.map((worker) => request(worker, "start", { settings })));
+  return Promise.all(
+    target.map((worker, index) =>
+      request(worker, "start", {
+        settings: { ...settings, logPath: resolve(dir, `${label}-${index}.structured.jsonl`) },
+      }),
+    ),
+  );
 }
 
 function assertMethodEntries(entries, number, organization, methods) {

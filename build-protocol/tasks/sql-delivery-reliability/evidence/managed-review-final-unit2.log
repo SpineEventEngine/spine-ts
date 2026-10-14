@@ -1,0 +1,72 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+···············································stderr | packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > treats one asynchronous child error and its later exit as one failed incarnation
+{"severity":"WARN","timestamp":"2026-10-13T23:55:46.234Z","message":"Managed replica exited unexpectedly.","operation":"managed_replica.exit","reasonCode":"unexpected_exit","slot":"0","incarnation":"b8334cc6-88d5-40a6-9bb4-7e5d7934dc8a","attempt":"1"}
+{"severity":"WARN","timestamp":"2026-10-13T23:55:46.235Z","message":"Managed replica replacement scheduled.","operation":"managed_replica.replace","reasonCode":"unexpected_exit","slot":"0","attempt":"1","delay":"2"}
+
+stderr | packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > drains a retired failed child when the coordinator closes
+{"severity":"WARN","timestamp":"2026-10-13T23:55:46.235Z","message":"Managed replica exited unexpectedly.","operation":"managed_replica.exit","reasonCode":"unexpected_exit","slot":"0","incarnation":"a8e2abf1-9835-4acd-95f6-abc2dd28fa5d","attempt":"1"}
+{"severity":"WARN","timestamp":"2026-10-13T23:55:46.235Z","message":"Managed replica replacement scheduled.","operation":"managed_replica.replace","reasonCode":"unexpected_exit","slot":"0","attempt":"1","delay":"10000"}
+
+stderr | packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > bounds a failed asynchronous child-error termination without blocking replacement
+{"severity":"WARN","timestamp":"2026-10-13T23:55:46.235Z","message":"Managed replica exited unexpectedly.","operation":"managed_replica.exit","reasonCode":"unexpected_exit","slot":"0","incarnation":"ecd59126-8933-4dc8-95fe-2a21e1f616e5","attempt":"1"}
+{"severity":"WARN","timestamp":"2026-10-13T23:55:46.235Z","message":"Managed replica replacement scheduled.","operation":"managed_replica.replace","reasonCode":"unexpected_exit","slot":"0","attempt":"1","delay":"10000"}
+
+stderr | packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > bounds a failed asynchronous child-error termination without blocking replacement
+{"severity":"WARN","timestamp":"2026-10-13T23:55:46.236Z","message":"Managed replica termination was bounded.","operation":"managed_replica.terminate","reasonCode":"unresponsive","slot":"0","incarnation":"ecd59126-8933-4dc8-95fe-2a21e1f616e5"}
+
+stderr | packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > bounds a failed asynchronous child-error termination without blocking replacement
+{"severity":"WARN","timestamp":"2026-10-13T23:55:46.236Z","message":"Managed replica termination was bounded.","operation":"managed_replica.terminate","reasonCode":"unresponsive","slot":"0","incarnation":"ecd59126-8933-4dc8-95fe-2a21e1f616e5"}
+
+stderr | packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > admits a replacement when retained subscriptions were never activated
+{"severity":"WARN","timestamp":"2026-10-13T23:55:46.238Z","message":"Managed replica exited unexpectedly.","operation":"managed_replica.exit","reasonCode":"unexpected_exit","slot":"0","incarnation":"db64fc4f-c6de-4d15-a997-2013b6da9f07","attempt":"1"}
+{"severity":"WARN","timestamp":"2026-10-13T23:55:46.238Z","message":"Managed replica replacement scheduled.","operation":"managed_replica.replace","reasonCode":"unexpected_exit","slot":"0","attempt":"1","delay":"250"}
+
+···········stderr | packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > waits for the exact replacement subscription before activating Delivery
+{"severity":"WARN","timestamp":"2026-10-13T23:55:46.348Z","message":"Managed replica exited unexpectedly.","operation":"managed_replica.exit","reasonCode":"unexpected_exit","slot":"0","incarnation":"c1b3ea5e-c914-4c3d-b2d0-cbaa64370309","attempt":"1"}
+{"severity":"WARN","timestamp":"2026-10-13T23:55:46.348Z","message":"Managed replica replacement scheduled.","operation":"managed_replica.replace","reasonCode":"unexpected_exit","slot":"0","attempt":"1","delay":"250"}
+
+stderr | packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > delays repeated failed replacements exponentially and caps the delay
+{"severity":"WARN","timestamp":"2026-10-13T23:55:46.349Z","message":"Managed replica exited unexpectedly.","operation":"managed_replica.exit","reasonCode":"unexpected_exit","slot":"0","incarnation":"ed78599e-148b-4c87-854f-865ca99d8aeb","attempt":"1"}
+{"severity":"WARN","timestamp":"2026-10-13T23:55:46.349Z","message":"Managed replica replacement scheduled.","operation":"managed_replica.replace","reasonCode":"unexpected_exit","slot":"0","attempt":"1","delay":"2"}
+{"severity":"WARN","timestamp":"2026-10-13T23:55:46.349Z","message":"Managed replica exited unexpectedly.","operation":"managed_replica.exit","reasonCode":"unexpected_exit","slot":"0","incarnation":"5c042450-e97b-42a0-a266-3261a200c3c4","attempt":"2"}
+{"severity":"WARN","timestamp":"2026-10-13T23:55:46.349Z","message":"Managed replica replacement scheduled.","operation":"managed_replica.replace","reasonCode":"unexpected_exit","slot":"0","attempt":"2","delay":"4"}
+{"severity":"WARN","timestamp":"2026-10-13T23:55:46.349Z","message":"Managed replica exited unexpectedly.","operation":"managed_replica.exit","reasonCode":"unexpected_exit","slot":"0","incarnation":"0a9b797c-7b37-44f2-a425-94da91d12ea4","attempt":"3"}
+{"severity":"WARN","timestamp":"2026-10-13T23:55:46.349Z","message":"Managed replica replacement scheduled.","operation":"managed_replica.replace","reasonCode":"unexpected_exit","slot":"0","attempt":"3","delay":"5"}
+{"severity":"WARN","timestamp":"2026-10-13T23:55:46.349Z","message":"Managed replica exited unexpectedly.","operation":"managed_replica.exit","reasonCode":"unexpected_exit","slot":"0","incarnation":"a416e38a-a579-476c-84e3-e6710ca4dd89","attempt":"1"}
+{"severity":"WARN","timestamp":"2026-10-13T23:55:46.349Z","message":"Managed replica replacement scheduled.","operation":"managed_replica.replace","reasonCode":"unexpected_exit","slot":"0","attempt":"1","delay":"2"}
+
+stderr | packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > remains alive but unready at zero ready children and ignores malformed READY facts
+{"severity":"WARN","timestamp":"2026-10-13T23:55:46.349Z","message":"Managed replica exited unexpectedly.","operation":"managed_replica.exit","reasonCode":"unexpected_exit","slot":"0","incarnation":"36226125-567f-4a97-89db-1bd148315f00","attempt":"1"}
+{"severity":"WARN","timestamp":"2026-10-13T23:55:46.349Z","message":"Managed replica replacement scheduled.","operation":"managed_replica.replace","reasonCode":"unexpected_exit","slot":"0","attempt":"1","delay":"2"}
+
+stderr | packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > replaces a child which exits before READY without abandoning initial readiness
+{"severity":"WARN","timestamp":"2026-10-13T23:55:46.350Z","message":"Managed replica exited unexpectedly.","operation":"managed_replica.exit","reasonCode":"unexpected_exit","slot":"0","incarnation":"50b4aca0-f43a-49cc-a2fd-42c8ba3b40ca","attempt":"1"}
+{"severity":"WARN","timestamp":"2026-10-13T23:55:46.350Z","message":"Managed replica replacement scheduled.","operation":"managed_replica.replace","reasonCode":"unexpected_exit","slot":"0","attempt":"1","delay":"2"}
+
+stderr | packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > keeps replacing after a synchronous child-start failure
+{"severity":"WARN","timestamp":"2026-10-13T23:55:46.350Z","message":"Managed replica start failed.","operation":"managed_replica.start","reasonCode":"start_failed","slot":"0","incarnation":"9039e7d6-bc65-40f9-83a3-ff03d8deb61a","attempt":"1"}
+{"severity":"WARN","timestamp":"2026-10-13T23:55:46.350Z","message":"Managed replica replacement scheduled.","operation":"managed_replica.replace","reasonCode":"unexpected_exit","slot":"0","attempt":"1","delay":"2"}
+
+·············stderr | packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > does not extend an accepted child close deadline after wall-clock rollback
+{"severity":"WARN","timestamp":"2026-10-13T23:55:46.718Z","message":"Managed child close failed.","operation":"managed_replica.child_close","reasonCode":"close_failed"}
+{"severity":"WARN","timestamp":"2026-10-13T23:55:46.718Z","message":"Managed child close failed.","operation":"managed_replica.child_close","reasonCode":"close_failed"}
+
+·stderr | packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > contains a failed child close triggered by private message and permits explicit retry
+{"severity":"WARN","timestamp":"2026-10-13T23:55:46.824Z","message":"Managed child close failed.","operation":"managed_replica.child_close","reasonCode":"close_failed"}
+
+stderr | packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > contains a failed child close triggered by private disconnect and permits explicit retry
+{"severity":"WARN","timestamp":"2026-10-13T23:55:46.876Z","message":"Managed child close failed.","operation":"managed_replica.child_close","reasonCode":"close_failed"}
+
+··········managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child managed-child
+·····stderr | packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > replaces only the unexpected child exit and retains its surviving sibling
+{"severity":"WARN","timestamp":"2026-10-13T23:55:51.002Z","message":"Managed replica exited unexpectedly.","operation":"managed_replica.exit","reasonCode":"unexpected_exit","slot":"0","incarnation":"5529d24e-97c8-4db1-bdef-5248c71f343b","attempt":"1"}
+{"severity":"WARN","timestamp":"2026-10-13T23:55:51.002Z","message":"Managed replica replacement scheduled.","operation":"managed_replica.replace","reasonCode":"unexpected_exit","slot":"0","attempt":"1","delay":"250"}
+
+······················
+
+ Test Files  2 passed (2)
+      Tests  109 passed (109)
+   Start at  00:55:43
+   Duration  8.31s (transform 793ms, setup 0ms, import 1.24s, tests 8.33s, environment 0ms)

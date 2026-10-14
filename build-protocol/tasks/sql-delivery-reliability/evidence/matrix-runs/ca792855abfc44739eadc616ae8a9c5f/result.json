@@ -1,0 +1,39 @@
+{
+  "status": "PASS",
+  "runId": "ca792855abfc44739eadc616ae8a9c5f",
+  "provider": "postgres16",
+  "database": "sqlrel_matrix_ca792855abfc44739eadc616ae8a9c5f",
+  "processes": 8,
+  "pids": [
+    96685,
+    96686,
+    96687,
+    96688,
+    96689,
+    96690,
+    96691,
+    96692
+  ],
+  "endpoints": [
+    "http://127.0.0.1:63467",
+    "http://127.0.0.1:63464",
+    "http://127.0.0.1:63465",
+    "http://127.0.0.1:63470",
+    "http://127.0.0.1:63471",
+    "http://127.0.0.1:63468",
+    "http://127.0.0.1:63469",
+    "http://127.0.0.1:63466"
+  ],
+  "artifactSha256": "ed0212d4496ceebcf96fcbf1ccaa476a4afb28f4c73e7b1618eaf8585eb874bd",
+  "commandId": "f6f2d94e-c01e-4291-b878-f23fd416eb6a",
+  "eventId": "9c388a0e-2178-4998-81ba-b41085a64857",
+  "entryCount": 5,
+  "entryMethods": [
+    "create",
+    "planning",
+    "staffing",
+    "portfolio",
+    "projection"
+  ],
+  "stateCopies": 8
+}

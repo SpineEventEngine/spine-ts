@@ -1,0 +1,33 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+----------x--------------------------------------------------------
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/server/test/server/managed-server-application.test.ts > ManagedServerApplication > shares a failed parent close, bounds it, and retries the remaining child cleanup
+AssertionError: promise resolved "undefined" instead of rejecting
+
+- Expected:
+Error {
+  "message": "rejected promise",
+}
+
++ Received:
+undefined
+
+ ❯ packages/server/test/server/managed-server-application.test.ts:553:38
+    551|     );
+    552|     child.emit("exit");
+    553|     await expect(coordinator.close()).rejects.toThrow("Managed child d…
+       |                                      ^
+    554|   });
+    555|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 66 skipped (67)
+   Start at  00:49:13
+   Duration  837ms (transform 519ms, setup 0ms, import 728ms, tests 8ms, environment 0ms)

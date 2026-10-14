@@ -265,3 +265,21 @@ application data migration is required. Correct the scoped contracts directly.
 ## Historical workload ID mapping
 
 Current compiled Project workflow uses a composite ProjectId (OrganizationId plus numeric Project number). Historical investigation Project IDs were scalar strings. The recorded historical ID sets may serve as external ledger labels, mapped explicitly to one actual run organization and distinct numeric Project numbers; do not substitute a Project string for a logically different Organization identifier. Repeat workload sizes/burst concurrency and adjacent-ID contention using current domain-correct schemas. Report this mapping and do not claim byte-identical old application IDs or recreation of the original SQL scheduling. No legacy schema, production compatibility or migration support is introduced.
+
+## Resume after the remote paging correction
+
+First repeat the newly failed PostgreSQL16 eight-process shared-Delivery
+80-Command/burst16 case with complete state, single-shard projection Inbox and
+structured error evidence. After focused paging acceptance and review, run a
+fresh complete80-case baseline matrix against one stable build. Stop on failure
+and preserve evidence before cleanup; do not silently rerun.
+
+Also execute the five explicitly labelled historical inputs with eight
+processes/eight Entity shards and shared Delivery: MySQL base32(32/burst32),
+control16(32/burst16), fixed32(32/burst32), replay80(80/burst16), and MariaDB
+maria80(80/burst16). This explicitly includes the previously failing32/burst16
+workload, which is not a distinct row in the default80-case baseline. Current
+domain ID mapping remains as described above; retain source hashes and labels
+without claiming identical original bytes or SQL scheduling. Each run includes
+graceful worker recreation and a new Command, accepted-ID reconciliation, exact
+Event bytes and actual handler counts. OS-crash/fault acceptance is separate.

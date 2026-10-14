@@ -1,0 +1,4 @@
+packages/server/test/delivery/inbox-provider-faults.integration.test.ts(99,31): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+packages/server/test/delivery/inbox-provider-faults.integration.test.ts(106,33): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string | URL'.
+  Type 'undefined' is not assignable to type 'string | URL'.

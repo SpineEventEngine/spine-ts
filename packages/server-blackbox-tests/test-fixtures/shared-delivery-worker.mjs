@@ -14,6 +14,7 @@
 
 import process from "node:process";
 import { DeliveryServer } from "@spine-event-engine/delivery-server";
+import { fileLogger } from "./file-logger.mjs";
 
 let server;
 
@@ -27,7 +28,7 @@ process.on("message", (request) => {
 async function handle(request) {
   switch (request.kind) {
     case "start":
-      server = await new DeliveryServer({ port: 0 }).start();
+      server = await new DeliveryServer({ port: 0, logger: fileLogger(request.logPath) }).start();
       return { pid: process.pid, endpoint: server.baseUrl };
     case "close":
       if (server !== undefined) await server.close();

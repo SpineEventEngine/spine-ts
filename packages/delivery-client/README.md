@@ -42,7 +42,9 @@ Read operations can use the configured bounded retry policy. Mutations never
 retry automatically: a lost mutation response means the remote outcome is
 unknown and must be reconciled before any later action.
 Inbox receipts and `sinceWhen` page anchors use Protobuf `Timestamp` values,
-preserving seconds and nanoseconds through reads and continuations.
+preserving seconds and nanoseconds through reads. Exact page continuation also
+uses version and message ID and requires the TS `InboxReadService.ReadPage`
+endpoint; an older endpoint is not used as a paging fallback.
 
 <!-- docs-snippet-path: packages/delivery-client/src/client/client.ts -->
 
