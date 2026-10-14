@@ -808,3 +808,69 @@ duplicate-ACK rows, all required extra fault scenarios are closed. Reliability
 and style findings resolved; no changed public runtime contract. Build
 reservation released. Checkpoint and immediately push this accepted slice;
 example corrections and final security/release gates remain active.
+
+Example correction source frozen after selected-origin regression RED/GREEN,
+nine app/Project tests, six launcher tests, affected app/Projects builds and
+scoped lint/format/type/diff checks. Resume existing reliability and API reviewers
+with their originally explicit immutable Sol/medium profiles: reliability only
+launcher/process shutdown, burst deadline/observed-row accounting and concrete
+origin propagation; API only the selected browser origin and public configuration
+contract. Style assertion corrections close by deterministic inspection and
+passing controls. Resume existing live mechanical function with originally
+explicit Luna/low profile for remaining actual examples/browser/eight-by-eight
+acceptance. Runtime introspection unavailable; no inherited-profile fallback.
+No transport or accepted framework runtime review is reopened.
+
+Parent deterministic inspection closes both style test findings: the Projects
+loop awaits the first task value at the project key before posting the second,
+then awaits that second value at the same key; the port-zero test accepts a
+valid nonzero TCP port and performs stop in finally before checking reuse.
+Focused controls passed. No substantive style/API contract change in these
+assertions, so no additional style rereview is required.
+
+Targeted example API and reliability rereviews are clean. All accepted example
+review findings are resolved; actual deployment/browser execution remains due.
+The explicit configured Sol/medium profiles match both original dispatches.
+
+Dispatch final release-readiness security reviewer, existing security_reviewer
+role, explicit gpt-6-sol / high, Standard speed. Implementation/runtime and
+example source are frozen; mechanical live examples continue. Scope is the
+coordinated task delta and relevant public package trust boundaries as required
+by the final security gate. Produce repository-grounded threat model and findings
+log; assess existing dependency audit evidence and its lock hash. No production
+edits, subagents, builds or service disruption. No unresolved security residual
+may be silently accepted. Runtime metadata introspection unavailable; configured
+role/profile and explicit fields are the acceptance evidence. Progress around
+90%, remaining estimate 1.5–3 hours for live examples, security, version/pins,
+preflight, release gate, corrections and final pushes.
+
+Final security wave complete: one accepted P2 documentation correction, no
+other confirmed exploitable code defect in the coordinated delta. The API guide
+still claims a built-in 1–100 registry quota, but the author previously removed
+arbitrary global capacity coordination. Correct the stale claim to describe
+no global retained-definition quota, no TTL for active definitions and deployment
+admission responsibility; retain the narrow unknown-Cancel concurrency meaning
+of subscriptionLimit. Do not restore rejected coordination. Return this one
+batch to the existing explicit Sol/medium implementer. The security role was
+explicit Sol/high as required; report-only writes in its two assigned paths are
+authorized current verification records, not implementation edits. Targeted
+security confirmation of this prose correction closes the finding. All/prod
+dependency audit lock hash still matches; later pins/lock changes get fresh audit.
+
+Final security targeted confirmation is clean: the API guide now accurately
+describes retained subscriptions without restoring the rejected global quota.
+No other confirmed security finding remains. Both security records are formatted;
+explicit Sol/high profile matches. All four canonical concerns and final security
+are resolved for source changes. The existing clean audits match the current lock;
+version/pin updates still require final audit applicability. Live distributed
+Compose browser command/query/subscription acceptance passes; a native HTTP/2
+helper aimed at its browser-only endpoint is recorded as a transport mismatch,
+not application failure. Final cleanup/Todo and release gates remain.
+
+Checkpoint push was rejected by GitHub credential protection because a live
+process-environment capture included GITHUB_TOKEN. No bypass was used. Replace
+the capture with an explicit topology-field allowlist, scan task evidence
+without printing secret values, and amend only the unpublished local checkpoint.
+The rejected original is not official branch history. Package version fields
+remain separately unstaged. Targeted final-security evidence review is required
+before retrying publication; the runtime/source review is unchanged.

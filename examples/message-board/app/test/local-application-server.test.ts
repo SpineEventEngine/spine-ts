@@ -18,7 +18,7 @@ import * as net from "node:net";
 import { describe, expect, it } from "vitest";
 
 const CompiledBoardProcess = Object.freeze({
-  start(): Promise<ChildProcess> {
+  start(webPort?: number): Promise<{ child: ChildProcess; port: number }> {
     return new Promise((resolve, reject) => {
       const child = spawn(
         process.execPath,
@@ -26,13 +26,20 @@ const CompiledBoardProcess = Object.freeze({
         {
           cwd: process.cwd(),
           stdio: ["ignore", "pipe", "pipe"],
+          env: {
+            ...process.env,
+            MESSAGE_BOARD_LOCAL_PORT: "0",
+            ...(webPort === undefined ? {} : { MESSAGE_BOARD_WEB_PORT: String(webPort) }),
+          },
         },
       );
       let output = "";
       child.stdout.on("data", (chunk: Buffer) => {
         output += chunk.toString();
-        if (output.includes("MessageBoard local server ready at http://127.0.0.1:8090"))
-          resolve(child);
+        const ready = /MessageBoard local server ready at http:\/\/127\.0\.0\.1:(\d+)/u.exec(
+          output,
+        );
+        if (ready !== null) resolve({ child, port: Number(ready[1]) });
       });
       child.stderr.on("data", (chunk: Buffer) => {
         output += chunk.toString();
@@ -56,11 +63,11 @@ const CompiledBoardProcess = Object.freeze({
       child.kill(signal);
     });
   },
-  bindPort(): Promise<void> {
+  bindPort(port: number): Promise<void> {
     return new Promise((resolve, reject) => {
       const server = net.createServer();
       server.once("error", reject);
-      server.listen(8090, "127.0.0.1", () => {
+      server.listen(port, "127.0.0.1", () => {
         server.close((error) => {
           if (error === undefined) resolve();
           else reject(error);
@@ -71,12 +78,36 @@ const CompiledBoardProcess = Object.freeze({
 });
 
 describe("compiled local MessageBoard entrypoint", () => {
+  it("admits the selected local UI origin on browser RPC preflight", async () => {
+    const webPort = 25_173;
+    const { child, port } = await CompiledBoardProcess.start(webPort);
+    try {
+      const origin = `http://127.0.0.1:${String(webPort)}`;
+      const response = await fetch(
+        `http://127.0.0.1:${String(port)}/spine.client.QueryService/Read`,
+        {
+          method: "OPTIONS",
+          headers: { origin },
+        },
+      );
+      expect(response.status).toBe(204);
+      expect(response.headers.get("access-control-allow-origin")).toBe(origin);
+    } finally {
+      await CompiledBoardProcess.stop(child, "SIGTERM");
+    }
+  }, 30_000);
+
   it.each(["SIGINT", "SIGTERM"] as const)(
-    "exits successfully and releases port 8090 after %s",
+    "exits successfully and releases its selected port after %s",
     async (signal) => {
-      const child = await CompiledBoardProcess.start();
-      await expect(CompiledBoardProcess.stop(child, signal)).resolves.toBe(0);
-      await expect(CompiledBoardProcess.bindPort()).resolves.toBeUndefined();
+      const { child, port } = await CompiledBoardProcess.start();
+      try {
+        expect(port).toBeGreaterThan(0);
+        expect(port).toBeLessThanOrEqual(65_535);
+      } finally {
+        await expect(CompiledBoardProcess.stop(child, signal)).resolves.toBe(0);
+      }
+      await expect(CompiledBoardProcess.bindPort(port)).resolves.toBeUndefined();
     },
     30_000,
   );

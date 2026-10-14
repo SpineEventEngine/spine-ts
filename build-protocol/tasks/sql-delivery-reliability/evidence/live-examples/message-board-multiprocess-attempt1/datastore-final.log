@@ -1,0 +1,48 @@
+Executing: /google-cloud-sdk/platform/cloud-firestore-emulator/cloud_firestore_emulator start --host=0.0.0.0 --port=8081 --database-mode=datastore-mode --database-edition=standard
+[firestore] WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+[firestore] WARNING: sun.misc.Unsafe::allocateMemory has been called by io.netty.util.internal.PlatformDependent0$2 (file:/google-cloud-sdk/platform/cloud-firestore-emulator/cloud-firestore-emulator.jar)
+[firestore] WARNING: Please consider reporting this to the maintainers of class io.netty.util.internal.PlatformDependent0$2
+[firestore] WARNING: sun.misc.Unsafe::allocateMemory will be removed in a future release
+[firestore] WARNING: A restricted method in java.lang.System has been called
+[firestore] WARNING: java.lang.System::loadLibrary has been called by io.netty.util.internal.NativeLibraryUtil in an unnamed module (file:/google-cloud-sdk/platform/cloud-firestore-emulator/cloud-firestore-emulator.jar)
+[firestore] WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+[firestore] WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+[firestore]
+[firestore] Oct 14, 2026 4:26:19 AM com.google.cloud.datastore.emulator.firestore.websocket.WebSocketServer start
+[firestore] INFO: Started WebSocket server on ws://0.0.0.0:32969
+[firestore]
+[firestore] API endpoint: http://0.0.0.0:8081
+[firestore] Database Edition: STANDARD
+[firestore] Database Mode: CLOUD_FIRESTORE_IN_DATASTORE_MODE
+[firestore]
+[firestore] If you are using a library that supports the FIRESTORE_EMULATOR_HOST environment variable, run:
+[firestore]
+[firestore]    export FIRESTORE_EMULATOR_HOST=0.0.0.0:8081
+[firestore]
+[firestore] If you are running a Firestore in Datastore Mode project, run:
+[firestore]
+[firestore]    export DATASTORE_EMULATOR_HOST=0.0.0.0:8081
+[firestore]
+[firestore] Note: Support for Datastore Mode is in preview. If you encounter any bugs please file at https://github.com/firebase/firebase-tools/issues.
+[firestore] Dev App Server is now running.
+[firestore]
+[firestore] Oct 14, 2026 4:26:19 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+[firestore] INFO: Detected non-HTTP/2 connection.
+[firestore] Oct 14, 2026 4:26:19 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+[firestore] INFO: Detected non-HTTP/2 connection.
+[firestore] Oct 14, 2026 4:28:31 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+[firestore] INFO: Detected HTTP/2 connection.
+[firestore] Oct 14, 2026 4:28:31 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+[firestore] INFO: Detected HTTP/2 connection.
+[firestore] Oct 14, 2026 4:28:31 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+[firestore] INFO: Detected HTTP/2 connection.
+[firestore] Oct 14, 2026 4:28:31 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+[firestore] INFO: Detected HTTP/2 connection.
+[firestore] Oct 14, 2026 4:28:31 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+[firestore] INFO: Detected HTTP/2 connection.
+[firestore] Oct 14, 2026 4:28:31 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+[firestore] INFO: Detected HTTP/2 connection.
+[firestore] Oct 14, 2026 4:28:31 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+[firestore] INFO: Detected HTTP/2 connection.
+[firestore] Oct 14, 2026 4:28:32 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+[firestore] INFO: Detected HTTP/2 connection.

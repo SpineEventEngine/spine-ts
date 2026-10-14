@@ -1,0 +1,9 @@
+{"severity":"WARN","timestamp":"2026-10-14T04:27:09.369Z","message":"Stand subscription registry is not persistent.","contextName":"MessageBoard","operation":"stand.registry","reasonCode":"volatile"}
+{"severity":"WARN","timestamp":"2026-10-14T04:27:09.370Z","message":"Stand subscription registry is not persistent.","contextName":"MessageBoard","operation":"stand.registry","reasonCode":"volatile"}
+{"severity":"WARN","timestamp":"2026-10-14T04:27:09.371Z","message":"Stand subscription registry is not persistent.","contextName":"MessageBoard","operation":"stand.registry","reasonCode":"volatile"}
+{"severity":"WARN","timestamp":"2026-10-14T04:27:09.371Z","message":"Stand subscription registry is not persistent.","contextName":"MessageBoard","operation":"stand.registry","reasonCode":"volatile"}
+{"severity":"WARN","timestamp":"2026-10-14T04:27:09.851Z","message":"Stand subscription registry is not persistent.","contextName":"MessageBoard","operation":"stand.registry","reasonCode":"volatile"}
+{"severity":"WARN","timestamp":"2026-10-14T04:27:09.852Z","message":"Stand subscription registry is not persistent.","contextName":"MessageBoard","operation":"stand.registry","reasonCode":"volatile"}
+{"severity":"WARN","timestamp":"2026-10-14T04:27:09.858Z","message":"Stand subscription registry is not persistent.","contextName":"MessageBoard","operation":"stand.registry","reasonCode":"volatile"}
+{"severity":"WARN","timestamp":"2026-10-14T04:27:09.861Z","message":"Stand subscription registry is not persistent.","contextName":"MessageBoard","operation":"stand.registry","reasonCode":"volatile"}
+MessageBoard managed coordinator ready at 127.0.0.1:28091

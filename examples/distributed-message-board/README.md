@@ -22,18 +22,23 @@ flowchart LR
 ## Start
 
 Build the local images once from the repository root, then start all topology
-processes with one command:
+processes with one command. Select a unique image tag, Compose project, and
+loopback Gateway port when another local demonstration may be running:
 
 ```bash
+export MESSAGE_BOARD_IMAGE_TAG=distributed-demo
+export GATEWAY_PORT=18081 MESSAGE_BOARD_WEB_PORT=5174
 pnpm images:build:local
-pnpm --dir examples/distributed-message-board start
+docker compose -p distributed-demo \
+  --file examples/distributed-message-board/deploy/compose.yaml up
 ```
 
 Start the existing UI separately with its Gateway URL:
 
 ```bash
-VITE_MESSAGE_BOARD_GATEWAY_URL=http://127.0.0.1:18080 \
-  pnpm --dir examples/message-board/web start
+VITE_MESSAGE_BOARD_GATEWAY_URL="http://127.0.0.1:$GATEWAY_PORT" \
+  pnpm --dir examples/message-board/web exec vite \
+    --host 127.0.0.1 --port "$MESSAGE_BOARD_WEB_PORT" --strictPort
 ```
 
 The Compose file starts exactly two managed Message Board nodes. Each node has
@@ -48,7 +53,7 @@ updates from both Coordinators. This is a fixed Compose topology with one
 Gateway, not a Multiple-Gateway example.
 
 Stop the topology with `Ctrl-C`, or from the repository root run
-`docker compose --file examples/distributed-message-board/deploy/compose.yaml down`.
+`docker compose -p distributed-demo --file examples/distributed-message-board/deploy/compose.yaml down`.
 
 ## Limits
 

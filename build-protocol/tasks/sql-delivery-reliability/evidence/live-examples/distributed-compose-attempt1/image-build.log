@@ -1,0 +1,1749 @@
+$ node examples/message-board/deploy/container/build-local-images.mjs
+Local image phase: build Message Board application at 2026-10-14T04:29:30.444Z.
+$ pnpm proto:generate && pnpm typecheck:build:generated
+$ node scripts/proto-workflow.mjs generate
+Verified 51 Spine proto source file checksums.
+Authored Proto style checks passed.
+Example Proto quality checks passed.
+Rejection source naming checks passed.
+Verified 55 frozen descriptor files against normalized digest 0844be5a0c588717932dc09da4d3fdc62c945a4f82be9bbb4e4d3d4814e42c3b.
+$ node scripts/clean-build-outputs.mjs && tsc -b && pnpm --dir packages/proto-tools run copy:runtime && node scripts/normalize-generated-declarations.mjs
+$ node scripts/copy-runtime-modules.mjs
+Local image phase: build stock browser UI at 2026-10-14T04:30:18.765Z.
+$ vite build
+vite v8.1.0 building client environment for production...
+[2K
+transforming...<script src="/message-board-runtime-config.js"> in "/index.html" can't be bundled without type="module" attribute
+✓ 262 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.59 kB │ gzip:   0.36 kB
+dist/assets/index-CrBXYOe_.css   21.45 kB │ gzip:   4.78 kB
+dist/assets/index-BuW7mIuS.js   568.61 kB │ gzip: 178.43 kB
+
+✓ built in 121ms
+[plugin builtin:vite-reporter]
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+Local image phase: pack local artifacts at 2026-10-14T04:30:19.441Z.
+package: @spine-event-engine/auth@2.0.0-snapshot.22
+Tarball Contents
+dist/gateway/dynamic-subscription-creator.d.ts
+dist/gateway/dynamic-subscription-creator.d.ts.map
+dist/gateway/dynamic-subscription-creator.js
+dist/gateway/dynamic-subscription-creator.js.map
+dist/gateway/dynamic-unary-forwarder.d.ts
+dist/gateway/dynamic-unary-forwarder.d.ts.map
+dist/gateway/dynamic-unary-forwarder.js
+dist/gateway/dynamic-unary-forwarder.js.map
+dist/gateway/index.d.ts
+dist/gateway/index.d.ts.map
+dist/gateway/index.js
+dist/gateway/index.js.map
+dist/index.d.ts
+dist/index.d.ts.map
+dist/index.js
+dist/index.js.map
+dist/native/index.d.ts
+dist/native/index.d.ts.map
+dist/native/index.js
+dist/native/index.js.map
+dist/oidc/contracts.d.ts
+dist/oidc/contracts.d.ts.map
+dist/oidc/contracts.js
+dist/oidc/contracts.js.map
+dist/oidc/index.d.ts
+dist/oidc/index.d.ts.map
+dist/oidc/index.js
+dist/oidc/index.js.map
+dist/providers/index.d.ts
+dist/providers/index.d.ts.map
+dist/providers/index.js
+dist/providers/index.js.map
+dist/request/index.d.ts
+dist/request/index.d.ts.map
+dist/request/index.js
+dist/request/index.js.map
+dist/sessions/cookies.d.ts
+dist/sessions/cookies.d.ts.map
+dist/sessions/cookies.js
+dist/sessions/cookies.js.map
+dist/sessions/opaque.d.ts
+dist/sessions/opaque.d.ts.map
+dist/sessions/opaque.js
+dist/sessions/opaque.js.map
+dist/sessions/signed.d.ts
+dist/sessions/signed.d.ts.map
+dist/sessions/signed.js
+dist/sessions/signed.js.map
+dist/subscriptions/index.d.ts
+dist/subscriptions/index.d.ts.map
+dist/subscriptions/index.js
+dist/subscriptions/index.js.map
+dist/tsconfig.tsbuildinfo
+LICENSE
+package.json
+README.md
+REFERENCE.md
+Tarball Details
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/runtime-tmp/browser-tools/tmp/spine-message-board-images-RmMjXO/tarballs/spine-event-engine-auth-2.0.0-snapshot.22.tgz
+package: @spine-event-engine/client-node@2.0.0-snapshot.22
+Tarball Contents
+codegen/entity-field-classification.d.mts
+codegen/entity-field-classification.mjs
+codegen/generate-entity-columns.mjs
+dist/client/node-client.d.ts
+dist/client/node-client.d.ts.map
+dist/client/node-client.js
+dist/client/node-client.js.map
+dist/codegen/index.d.ts
+dist/codegen/index.d.ts.map
+dist/codegen/index.js
+dist/codegen/index.js.map
+dist/entity/entity-column.d.ts
+dist/entity/entity-column.d.ts.map
+dist/entity/entity-column.js
+dist/entity/entity-column.js.map
+dist/index.d.ts
+dist/index.d.ts.map
+dist/index.js
+dist/index.js.map
+dist/query/entity-query.d.ts
+dist/query/entity-query.d.ts.map
+dist/query/entity-query.js
+dist/query/entity-query.js.map
+dist/tsconfig.tsbuildinfo
+LICENSE
+package.json
+README.md
+REFERENCE.md
+Tarball Details
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/runtime-tmp/browser-tools/tmp/spine-message-board-images-RmMjXO/tarballs/spine-event-engine-client-node-2.0.0-snapshot.22.tgz
+package: @spine-event-engine/client-react@2.0.0-snapshot.22
+Tarball Contents
+dist/index.d.ts
+dist/index.d.ts.map
+dist/index.js
+dist/index.js.map
+dist/tsconfig.tsbuildinfo
+LICENSE
+package.json
+README.md
+REFERENCE.md
+Tarball Details
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/runtime-tmp/browser-tools/tmp/spine-message-board-images-RmMjXO/tarballs/spine-event-engine-client-react-2.0.0-snapshot.22.tgz
+package: @spine-event-engine/client-web@2.0.0-snapshot.22
+Tarball Contents
+dist/client/browser-session.d.ts
+dist/client/browser-session.d.ts.map
+dist/client/browser-session.js
+dist/client/browser-session.js.map
+dist/client/client.d.ts
+dist/client/client.d.ts.map
+dist/client/client.js
+dist/client/client.js.map
+dist/index.d.ts
+dist/index.d.ts.map
+dist/index.js
+dist/index.js.map
+dist/tsconfig.tsbuildinfo
+LICENSE
+package.json
+README.md
+REFERENCE.md
+Tarball Details
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/runtime-tmp/browser-tools/tmp/spine-message-board-images-RmMjXO/tarballs/spine-event-engine-client-web-2.0.0-snapshot.22.tgz
+package: @spine-event-engine/core@2.0.0-snapshot.22
+Tarball Contents
+dist/codegen/index.d.ts
+dist/codegen/index.d.ts.map
+dist/codegen/index.js
+dist/codegen/index.js.map
+dist/entity/entity-column.d.ts
+dist/entity/entity-column.d.ts.map
+dist/entity/entity-column.js
+dist/entity/entity-column.js.map
+dist/index.d.ts
+dist/index.d.ts.map
+dist/index.js
+dist/index.js.map
+dist/internal/subscription-lifecycle.d.ts
+dist/internal/subscription-lifecycle.d.ts.map
+dist/internal/subscription-lifecycle.js
+dist/internal/subscription-lifecycle.js.map
+dist/query/entity-field-classification.d.ts
+dist/query/entity-field-classification.d.ts.map
+dist/query/entity-field-classification.js
+dist/query/entity-field-classification.js.map
+dist/query/entity-query.d.ts
+dist/query/entity-query.d.ts.map
+dist/query/entity-query.js
+dist/query/entity-query.js.map
+dist/query/generated-entity-query.d.ts
+dist/query/generated-entity-query.d.ts.map
+dist/query/generated-entity-query.js
+dist/query/generated-entity-query.js.map
+dist/spi/entity-query-plan.d.ts
+dist/spi/entity-query-plan.d.ts.map
+dist/spi/entity-query-plan.js
+dist/spi/entity-query-plan.js.map
+dist/spi/subscription-lifecycle.d.ts
+dist/spi/subscription-lifecycle.d.ts.map
+dist/spi/subscription-lifecycle.js
+dist/spi/subscription-lifecycle.js.map
+dist/time/index.d.ts
+dist/time/index.d.ts.map
+dist/time/index.js
+dist/time/index.js.map
+dist/tsconfig.tsbuildinfo
+LICENSE
+package.json
+README.md
+REFERENCE.md
+Tarball Details
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/runtime-tmp/browser-tools/tmp/spine-message-board-images-RmMjXO/tarballs/spine-event-engine-core-2.0.0-snapshot.22.tgz
+package: @spine-event-engine/delivery-client@2.0.0-snapshot.22
+Tarball Contents
+dist/client/client.d.ts
+dist/client/client.d.ts.map
+dist/client/client.js
+dist/client/client.js.map
+dist/client/shard-observation.d.ts
+dist/client/shard-observation.d.ts.map
+dist/client/shard-observation.js
+dist/client/shard-observation.js.map
+dist/client/types.d.ts
+dist/client/types.d.ts.map
+dist/client/types.js
+dist/client/types.js.map
+dist/index.d.ts
+dist/index.d.ts.map
+dist/index.js
+dist/index.js.map
+dist/remote/adapters.d.ts
+dist/remote/adapters.d.ts.map
+dist/remote/adapters.js
+dist/remote/adapters.js.map
+dist/remote/remote-delivery.d.ts
+dist/remote/remote-delivery.d.ts.map
+dist/remote/remote-delivery.js
+dist/remote/remote-delivery.js.map
+dist/tsconfig.tsbuildinfo
+dist/wire/codec.d.ts
+dist/wire/codec.d.ts.map
+dist/wire/codec.js
+dist/wire/codec.js.map
+LICENSE
+package.json
+README.md
+REFERENCE.md
+Tarball Details
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/runtime-tmp/browser-tools/tmp/spine-message-board-images-RmMjXO/tarballs/spine-event-engine-delivery-client-2.0.0-snapshot.22.tgz
+package: @spine-event-engine/delivery-server@2.0.0-snapshot.22
+Tarball Contents
+dist/admin/admin-service.d.ts
+dist/admin/admin-service.d.ts.map
+dist/admin/admin-service.js
+dist/admin/admin-service.js.map
+dist/bin/spine-delivery-server.d.ts
+dist/bin/spine-delivery-server.d.ts.map
+dist/bin/spine-delivery-server.js
+dist/bin/spine-delivery-server.js.map
+dist/core/in-memory-delivery-core.d.ts
+dist/core/in-memory-delivery-core.d.ts.map
+dist/core/in-memory-delivery-core.js
+dist/core/in-memory-delivery-core.js.map
+dist/core/in-memory-delivery-state.d.ts
+dist/core/in-memory-delivery-state.d.ts.map
+dist/core/in-memory-delivery-state.js
+dist/core/in-memory-delivery-state.js.map
+dist/core/inbox-service.d.ts
+dist/core/inbox-service.d.ts.map
+dist/core/inbox-service.js
+dist/core/inbox-service.js.map
+dist/core/limits.d.ts
+dist/core/limits.d.ts.map
+dist/core/limits.js
+dist/core/limits.js.map
+dist/core/mutation-admission.d.ts
+dist/core/mutation-admission.d.ts.map
+dist/core/mutation-admission.js
+dist/core/mutation-admission.js.map
+dist/core/shard-service.d.ts
+dist/core/shard-service.d.ts.map
+dist/core/shard-service.js
+dist/core/shard-service.js.map
+dist/core/wire-values.d.ts
+dist/core/wire-values.d.ts.map
+dist/core/wire-values.js
+dist/core/wire-values.js.map
+dist/health/health-service.d.ts
+dist/health/health-service.d.ts.map
+dist/health/health-service.js
+dist/health/health-service.js.map
+dist/index.d.ts
+dist/index.d.ts.map
+dist/index.js
+dist/index.js.map
+dist/server/assembly.d.ts
+dist/server/assembly.d.ts.map
+dist/server/assembly.js
+dist/server/assembly.js.map
+dist/server/config.d.ts
+dist/server/config.d.ts.map
+dist/server/config.js
+dist/server/config.js.map
+dist/server/delivery-server-log.d.ts
+dist/server/delivery-server-log.d.ts.map
+dist/server/delivery-server-log.js
+dist/server/delivery-server-log.js.map
+dist/server/delivery-server.d.ts
+dist/server/delivery-server.d.ts.map
+dist/server/delivery-server.js
+dist/server/delivery-server.js.map
+dist/server/shutdown.d.ts
+dist/server/shutdown.d.ts.map
+dist/server/shutdown.js
+dist/server/shutdown.js.map
+dist/testing/index.d.ts
+dist/testing/index.d.ts.map
+dist/testing/index.js
+dist/testing/index.js.map
+dist/tsconfig.tsbuildinfo
+LICENSE
+package.json
+README.md
+REFERENCE.md
+Tarball Details
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/runtime-tmp/browser-tools/tmp/spine-message-board-images-RmMjXO/tarballs/spine-event-engine-delivery-server-2.0.0-snapshot.22.tgz
+package: @spine-event-engine/deployment@2.0.0-snapshot.22
+Tarball Contents
+dist/discovery/application-node.d.ts
+dist/discovery/application-node.d.ts.map
+dist/discovery/application-node.js
+dist/discovery/application-node.js.map
+dist/discovery/scheduled-discovery-log.d.ts
+dist/discovery/scheduled-discovery-log.d.ts.map
+dist/discovery/scheduled-discovery-log.js
+dist/discovery/scheduled-discovery-log.js.map
+dist/index.d.ts
+dist/index.d.ts.map
+dist/index.js
+dist/index.js.map
+dist/internal/backend-membership-kernel.d.ts
+dist/internal/backend-membership-kernel.d.ts.map
+dist/internal/backend-membership-kernel.js
+dist/internal/backend-membership-kernel.js.map
+dist/registry/leased-node-registry.d.ts
+dist/registry/leased-node-registry.d.ts.map
+dist/registry/leased-node-registry.js
+dist/registry/leased-node-registry.js.map
+dist/spi/backend-membership.d.ts
+dist/spi/backend-membership.d.ts.map
+dist/spi/backend-membership.js
+dist/spi/backend-membership.js.map
+dist/tsconfig.tsbuildinfo
+LICENSE
+package.json
+README.md
+REFERENCE.md
+Tarball Details
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/runtime-tmp/browser-tools/tmp/spine-message-board-images-RmMjXO/tarballs/spine-event-engine-deployment-2.0.0-snapshot.22.tgz
+package: @spine-event-engine/deployment-gke@2.0.0-snapshot.22
+Tarball Contents
+dist/discovery/gke-log.d.ts
+dist/discovery/gke-log.d.ts.map
+dist/discovery/gke-log.js
+dist/discovery/gke-log.js.map
+dist/discovery/gke-node-discovery.d.ts
+dist/discovery/gke-node-discovery.d.ts.map
+dist/discovery/gke-node-discovery.js
+dist/discovery/gke-node-discovery.js.map
+dist/discovery/node-dns-resolver.d.ts
+dist/discovery/node-dns-resolver.d.ts.map
+dist/discovery/node-dns-resolver.js
+dist/discovery/node-dns-resolver.js.map
+dist/index.d.ts
+dist/index.d.ts.map
+dist/index.js
+dist/index.js.map
+dist/tsconfig.tsbuildinfo
+examples/application.ts
+examples/deployment-settings.ts
+examples/gateway.ts
+LICENSE
+package.json
+README.md
+REFERENCE.md
+terraform/.terraform.lock.hcl
+terraform/main.tf
+terraform/terraform.tfvars.example
+terraform/variables.tf
+terraform/versions.tf
+Tarball Details
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/runtime-tmp/browser-tools/tmp/spine-message-board-images-RmMjXO/tarballs/spine-event-engine-deployment-gke-2.0.0-snapshot.22.tgz
+package: @spine-event-engine/proto@2.0.0-snapshot.22
+Tarball Contents
+dist/generated/grpc/health/v1/health_pb.d.ts
+dist/generated/grpc/health/v1/health_pb.d.ts.map
+dist/generated/grpc/health/v1/health_pb.js
+dist/generated/grpc/health/v1/health_pb.js.map
+dist/generated/proto-module.d.ts
+dist/generated/proto-module.d.ts.map
+dist/generated/proto-module.js
+dist/generated/proto-module.js.map
+dist/generated/spine/auth/authenticated_subscription_pb.d.ts
+dist/generated/spine/auth/authenticated_subscription_pb.d.ts.map
+dist/generated/spine/auth/authenticated_subscription_pb.js
+dist/generated/spine/auth/authenticated_subscription_pb.js.map
+dist/generated/spine/auth/authentication_service_pb.d.ts
+dist/generated/spine/auth/authentication_service_pb.d.ts.map
+dist/generated/spine/auth/authentication_service_pb.js
+dist/generated/spine/auth/authentication_service_pb.js.map
+dist/generated/spine/base/error_pb.d.ts
+dist/generated/spine/base/error_pb.d.ts.map
+dist/generated/spine/base/error_pb.js
+dist/generated/spine/base/error_pb.js.map
+dist/generated/spine/base/field_path_pb.d.ts
+dist/generated/spine/base/field_path_pb.d.ts.map
+dist/generated/spine/base/field_path_pb.js
+dist/generated/spine/base/field_path_pb.js.map
+dist/generated/spine/client/command_service_pb.d.ts
+dist/generated/spine/client/command_service_pb.d.ts.map
+dist/generated/spine/client/command_service_pb.js
+dist/generated/spine/client/command_service_pb.js.map
+dist/generated/spine/client/entities_pb.d.ts
+dist/generated/spine/client/entities_pb.d.ts.map
+dist/generated/spine/client/entities_pb.js
+dist/generated/spine/client/entities_pb.js.map
+dist/generated/spine/client/filters_pb.d.ts
+dist/generated/spine/client/filters_pb.d.ts.map
+dist/generated/spine/client/filters_pb.js
+dist/generated/spine/client/filters_pb.js.map
+dist/generated/spine/client/query_pb.d.ts
+dist/generated/spine/client/query_pb.d.ts.map
+dist/generated/spine/client/query_pb.js
+dist/generated/spine/client/query_pb.js.map
+dist/generated/spine/client/query_service_pb.d.ts
+dist/generated/spine/client/query_service_pb.d.ts.map
+dist/generated/spine/client/query_service_pb.js
+dist/generated/spine/client/query_service_pb.js.map
+dist/generated/spine/client/subscription_pb.d.ts
+dist/generated/spine/client/subscription_pb.d.ts.map
+dist/generated/spine/client/subscription_pb.js
+dist/generated/spine/client/subscription_pb.js.map
+dist/generated/spine/client/subscription_record_pb.d.ts
+dist/generated/spine/client/subscription_record_pb.d.ts.map
+dist/generated/spine/client/subscription_record_pb.js
+dist/generated/spine/client/subscription_record_pb.js.map
+dist/generated/spine/client/subscription_service_pb.d.ts
+dist/generated/spine/client/subscription_service_pb.d.ts.map
+dist/generated/spine/client/subscription_service_pb.js
+dist/generated/spine/client/subscription_service_pb.js.map
+dist/generated/spine/core/ack_pb.d.ts
+dist/generated/spine/core/ack_pb.d.ts.map
+dist/generated/spine/core/ack_pb.js
+dist/generated/spine/core/ack_pb.js.map
+dist/generated/spine/core/actor_context_pb.d.ts
+dist/generated/spine/core/actor_context_pb.d.ts.map
+dist/generated/spine/core/actor_context_pb.js
+dist/generated/spine/core/actor_context_pb.js.map
+dist/generated/spine/core/bounded_context_pb.d.ts
+dist/generated/spine/core/bounded_context_pb.d.ts.map
+dist/generated/spine/core/bounded_context_pb.js
+dist/generated/spine/core/bounded_context_pb.js.map
+dist/generated/spine/core/command_pb.d.ts
+dist/generated/spine/core/command_pb.d.ts.map
+dist/generated/spine/core/command_pb.js
+dist/generated/spine/core/command_pb.js.map
+dist/generated/spine/core/diagnostics_pb.d.ts
+dist/generated/spine/core/diagnostics_pb.d.ts.map
+dist/generated/spine/core/diagnostics_pb.js
+dist/generated/spine/core/diagnostics_pb.js.map
+dist/generated/spine/core/enrichment_pb.d.ts
+dist/generated/spine/core/enrichment_pb.d.ts.map
+dist/generated/spine/core/enrichment_pb.js
+dist/generated/spine/core/enrichment_pb.js.map
+dist/generated/spine/core/event_pb.d.ts
+dist/generated/spine/core/event_pb.d.ts.map
+dist/generated/spine/core/event_pb.js
+dist/generated/spine/core/event_pb.js.map
+dist/generated/spine/core/response_pb.d.ts
+dist/generated/spine/core/response_pb.d.ts.map
+dist/generated/spine/core/response_pb.js
+dist/generated/spine/core/response_pb.js.map
+dist/generated/spine/core/tenant_id_pb.d.ts
+dist/generated/spine/core/tenant_id_pb.d.ts.map
+dist/generated/spine/core/tenant_id_pb.js
+dist/generated/spine/core/tenant_id_pb.js.map
+dist/generated/spine/core/user_id_pb.d.ts
+dist/generated/spine/core/user_id_pb.d.ts.map
+dist/generated/spine/core/user_id_pb.js
+dist/generated/spine/core/user_id_pb.js.map
+dist/generated/spine/core/version_pb.d.ts
+dist/generated/spine/core/version_pb.d.ts.map
+dist/generated/spine/core/version_pb.js
+dist/generated/spine/core/version_pb.js.map
+dist/generated/spine/delivery/admin/admin_service_pb.d.ts
+dist/generated/spine/delivery/admin/admin_service_pb.d.ts.map
+dist/generated/spine/delivery/admin/admin_service_pb.js
+dist/generated/spine/delivery/admin/admin_service_pb.js.map
+dist/generated/spine/delivery/commands_pb.d.ts
+dist/generated/spine/delivery/commands_pb.d.ts.map
+dist/generated/spine/delivery/commands_pb.js
+dist/generated/spine/delivery/commands_pb.js.map
+dist/generated/spine/delivery/events_pb.d.ts
+dist/generated/spine/delivery/events_pb.d.ts.map
+dist/generated/spine/delivery/events_pb.js
+dist/generated/spine/delivery/events_pb.js.map
+dist/generated/spine/delivery/inbox_read_pb.d.ts
+dist/generated/spine/delivery/inbox_read_pb.d.ts.map
+dist/generated/spine/delivery/inbox_read_pb.js
+dist/generated/spine/delivery/inbox_read_pb.js.map
+dist/generated/spine/delivery/message_delivery_pb.d.ts
+dist/generated/spine/delivery/message_delivery_pb.d.ts.map
+dist/generated/spine/delivery/message_delivery_pb.js
+dist/generated/spine/delivery/message_delivery_pb.js.map
+dist/generated/spine/delivery/pick_up_outcome_pb.d.ts
+dist/generated/spine/delivery/pick_up_outcome_pb.d.ts.map
+dist/generated/spine/delivery/pick_up_outcome_pb.js
+dist/generated/spine/delivery/pick_up_outcome_pb.js.map
+dist/generated/spine/delivery/rejections_pb.d.ts
+dist/generated/spine/delivery/rejections_pb.d.ts.map
+dist/generated/spine/delivery/rejections_pb.js
+dist/generated/spine/delivery/rejections_pb.js.map
+dist/generated/spine/deployment/node_discovery_pb.d.ts
+dist/generated/spine/deployment/node_discovery_pb.d.ts.map
+dist/generated/spine/deployment/node_discovery_pb.js
+dist/generated/spine/deployment/node_discovery_pb.js.map
+dist/generated/spine/net/email_address_pb.d.ts
+dist/generated/spine/net/email_address_pb.d.ts.map
+dist/generated/spine/net/email_address_pb.js
+dist/generated/spine/net/email_address_pb.js.map
+dist/generated/spine/net/internet_domain_pb.d.ts
+dist/generated/spine/net/internet_domain_pb.d.ts.map
+dist/generated/spine/net/internet_domain_pb.js
+dist/generated/spine/net/internet_domain_pb.js.map
+dist/generated/spine/options_pb.d.ts
+dist/generated/spine/options_pb.d.ts.map
+dist/generated/spine/options_pb.js
+dist/generated/spine/options_pb.js.map
+dist/generated/spine/server/catchup/catch_up_pb.d.ts
+dist/generated/spine/server/catchup/catch_up_pb.d.ts.map
+dist/generated/spine/server/catchup/catch_up_pb.js
+dist/generated/spine/server/catchup/catch_up_pb.js.map
+dist/generated/spine/server/delivery/delivery_events_pb.d.ts
+dist/generated/spine/server/delivery/delivery_events_pb.d.ts.map
+dist/generated/spine/server/delivery/delivery_events_pb.js
+dist/generated/spine/server/delivery/delivery_events_pb.js.map
+dist/generated/spine/server/delivery/delivery_pb.d.ts
+dist/generated/spine/server/delivery/delivery_pb.d.ts.map
+dist/generated/spine/server/delivery/delivery_pb.js
+dist/generated/spine/server/delivery/delivery_pb.js.map
+dist/generated/spine/server/delivery/inbox_pb.d.ts
+dist/generated/spine/server/delivery/inbox_pb.d.ts.map
+dist/generated/spine/server/delivery/inbox_pb.js
+dist/generated/spine/server/delivery/inbox_pb.js.map
+dist/generated/spine/server/entity/entity_pb.d.ts
+dist/generated/spine/server/entity/entity_pb.d.ts.map
+dist/generated/spine/server/entity/entity_pb.js
+dist/generated/spine/server/entity/entity_pb.js.map
+dist/generated/spine/server/entity/state_key_pb.d.ts
+dist/generated/spine/server/entity/state_key_pb.d.ts.map
+dist/generated/spine/server/entity/state_key_pb.js
+dist/generated/spine/server/entity/state_key_pb.js.map
+dist/generated/spine/server/integration/broker_pb.d.ts
+dist/generated/spine/server/integration/broker_pb.d.ts.map
+dist/generated/spine/server/integration/broker_pb.js
+dist/generated/spine/server/integration/broker_pb.js.map
+dist/generated/spine/server/server_environment_pb.d.ts
+dist/generated/spine/server/server_environment_pb.d.ts.map
+dist/generated/spine/server/server_environment_pb.js
+dist/generated/spine/server/server_environment_pb.js.map
+dist/generated/spine/server/transport/transport_pb.d.ts
+dist/generated/spine/server/transport/transport_pb.d.ts.map
+dist/generated/spine/server/transport/transport_pb.js
+dist/generated/spine/server/transport/transport_pb.js.map
+dist/generated/spine/string/template_string_pb.d.ts
+dist/generated/spine/string/template_string_pb.d.ts.map
+dist/generated/spine/string/template_string_pb.js
+dist/generated/spine/string/template_string_pb.js.map
+dist/generated/spine/system/server/entity_log_events_pb.d.ts
+dist/generated/spine/system/server/entity_log_events_pb.d.ts.map
+dist/generated/spine/system/server/entity_log_events_pb.js
+dist/generated/spine/system/server/entity_log_events_pb.js.map
+dist/generated/spine/system/server/entity_type_pb.d.ts
+dist/generated/spine/system/server/entity_type_pb.d.ts.map
+dist/generated/spine/system/server/entity_type_pb.js
+dist/generated/spine/system/server/entity_type_pb.js.map
+dist/generated/spine/time_options_pb.d.ts
+dist/generated/spine/time_options_pb.d.ts.map
+dist/generated/spine/time_options_pb.js
+dist/generated/spine/time_options_pb.js.map
+dist/generated/spine/time/time_pb.d.ts
+dist/generated/spine/time/time_pb.d.ts.map
+dist/generated/spine/time/time_pb.js
+dist/generated/spine/time/time_pb.js.map
+dist/generated/spine/ui/language_pb.d.ts
+dist/generated/spine/ui/language_pb.d.ts.map
+dist/generated/spine/ui/language_pb.js
+dist/generated/spine/ui/language_pb.js.map
+dist/generated/spine/validation/validation_error_pb.d.ts
+dist/generated/spine/validation/validation_error_pb.d.ts.map
+dist/generated/spine/validation/validation_error_pb.js
+dist/generated/spine/validation/validation_error_pb.js.map
+dist/src/auth/index.d.ts
+dist/src/auth/index.d.ts.map
+dist/src/auth/index.js
+dist/src/auth/index.js.map
+dist/src/client/index.d.ts
+dist/src/client/index.d.ts.map
+dist/src/client/index.js
+dist/src/client/index.js.map
+dist/src/delivery-server/index.d.ts
+dist/src/delivery-server/index.d.ts.map
+dist/src/delivery-server/index.js
+dist/src/delivery-server/index.js.map
+dist/src/delivery/index.d.ts
+dist/src/delivery/index.d.ts.map
+dist/src/delivery/index.js
+dist/src/delivery/index.js.map
+dist/src/deployment/index.d.ts
+dist/src/deployment/index.d.ts.map
+dist/src/deployment/index.js
+dist/src/deployment/index.js.map
+dist/src/index.d.ts
+dist/src/index.d.ts.map
+dist/src/index.js
+dist/src/index.js.map
+dist/src/model/proto-module.d.ts
+dist/src/model/proto-module.d.ts.map
+dist/src/model/proto-module.js
+dist/src/model/proto-module.js.map
+dist/tsconfig.tsbuildinfo
+generated/.spine-proto-generation.json
+generated/grpc/health/v1/health_pb.ts
+generated/proto-module.ts
+generated/spine/auth/authenticated_subscription_pb.ts
+generated/spine/auth/authentication_service_pb.ts
+generated/spine/base/error_pb.ts
+generated/spine/base/field_path_pb.ts
+generated/spine/client/command_service_pb.ts
+generated/spine/client/entities_pb.ts
+generated/spine/client/filters_pb.ts
+generated/spine/client/query_pb.ts
+generated/spine/client/query_service_pb.ts
+generated/spine/client/subscription_pb.ts
+generated/spine/client/subscription_record_pb.ts
+generated/spine/client/subscription_service_pb.ts
+generated/spine/core/ack_pb.ts
+generated/spine/core/actor_context_pb.ts
+generated/spine/core/bounded_context_pb.ts
+generated/spine/core/command_pb.ts
+generated/spine/core/diagnostics_pb.ts
+generated/spine/core/enrichment_pb.ts
+generated/spine/core/event_pb.ts
+generated/spine/core/response_pb.ts
+generated/spine/core/tenant_id_pb.ts
+generated/spine/core/user_id_pb.ts
+generated/spine/core/version_pb.ts
+generated/spine/delivery/admin/admin_service_pb.ts
+generated/spine/delivery/commands_pb.ts
+generated/spine/delivery/events_pb.ts
+generated/spine/delivery/inbox_read_pb.ts
+generated/spine/delivery/message_delivery_pb.ts
+generated/spine/delivery/pick_up_outcome_pb.ts
+generated/spine/delivery/rejections_pb.ts
+generated/spine/deployment/node_discovery_pb.ts
+generated/spine/net/email_address_pb.ts
+generated/spine/net/internet_domain_pb.ts
+generated/spine/options_pb.ts
+generated/spine/server/catchup/catch_up_pb.ts
+generated/spine/server/delivery/delivery_events_pb.ts
+generated/spine/server/delivery/delivery_pb.ts
+generated/spine/server/delivery/inbox_pb.ts
+generated/spine/server/entity/entity_pb.ts
+generated/spine/server/entity/state_key_pb.ts
+generated/spine/server/integration/broker_pb.ts
+generated/spine/server/server_environment_pb.ts
+generated/spine/server/transport/transport_pb.ts
+generated/spine/string/template_string_pb.ts
+generated/spine/system/server/entity_log_events_pb.ts
+generated/spine/system/server/entity_type_pb.ts
+generated/spine/time_options_pb.ts
+generated/spine/time/time_pb.ts
+generated/spine/ui/language_pb.ts
+generated/spine/validation/validation_error_pb.ts
+LICENSE
+package.json
+proto/frozen-descriptor-set.sha256
+proto/grpc/health/v1/health.proto
+proto/README.md
+proto/spine-sources.json
+proto/spine/auth/authenticated_subscription.proto
+proto/spine/auth/authentication_service.proto
+proto/spine/base/error.proto
+proto/spine/base/field_path.proto
+proto/spine/client/command_service.proto
+proto/spine/client/entities.proto
+proto/spine/client/filters.proto
+proto/spine/client/query_service.proto
+proto/spine/client/query.proto
+proto/spine/client/subscription_record.proto
+proto/spine/client/subscription_service.proto
+proto/spine/client/subscription.proto
+proto/spine/core/ack.proto
+proto/spine/core/actor_context.proto
+proto/spine/core/bounded_context.proto
+proto/spine/core/command.proto
+proto/spine/core/diagnostics.proto
+proto/spine/core/enrichment.proto
+proto/spine/core/event.proto
+proto/spine/core/response.proto
+proto/spine/core/tenant_id.proto
+proto/spine/core/user_id.proto
+proto/spine/core/version.proto
+proto/spine/delivery/admin/admin_service.proto
+proto/spine/delivery/commands.proto
+proto/spine/delivery/events.proto
+proto/spine/delivery/inbox_read.proto
+proto/spine/delivery/message_delivery.proto
+proto/spine/delivery/pick_up_outcome.proto
+proto/spine/delivery/rejections.proto
+proto/spine/deployment/node_discovery.proto
+proto/spine/net/email_address.proto
+proto/spine/net/internet_domain.proto
+proto/spine/options.proto
+proto/spine/server/catchup/catch_up.proto
+proto/spine/server/delivery/delivery_events.proto
+proto/spine/server/delivery/delivery.proto
+proto/spine/server/delivery/inbox.proto
+proto/spine/server/entity/entity.proto
+proto/spine/server/entity/state_key.proto
+proto/spine/server/integration/broker.proto
+proto/spine/server/server_environment.proto
+proto/spine/server/transport/transport.proto
+proto/spine/string/template_string.proto
+proto/spine/system/server/entity_log_events.proto
+proto/spine/system/server/entity_type.proto
+proto/spine/time_options.proto
+proto/spine/time/time.proto
+proto/spine/ui/language.proto
+proto/spine/validation/validation_error.proto
+README.md
+REFERENCE.md
+spine-proto-manifest.json
+spine-proto.json
+Tarball Details
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/runtime-tmp/browser-tools/tmp/spine-message-board-images-RmMjXO/tarballs/spine-event-engine-proto-2.0.0-snapshot.22.tgz
+package: @spine-event-engine/server@2.0.0-snapshot.22
+Tarball Contents
+dist/browser/browser-server.d.ts
+dist/browser/browser-server.d.ts.map
+dist/browser/browser-server.js
+dist/browser/browser-server.js.map
+dist/browser/durable-subscription-bindings.d.ts
+dist/browser/durable-subscription-bindings.d.ts.map
+dist/browser/durable-subscription-bindings.js
+dist/browser/durable-subscription-bindings.js.map
+dist/browser/index.d.ts
+dist/browser/index.d.ts.map
+dist/browser/index.js
+dist/browser/index.js.map
+dist/browser/options.d.ts
+dist/browser/options.d.ts.map
+dist/browser/options.js
+dist/browser/options.js.map
+dist/bus/command-bus.d.ts
+dist/bus/command-bus.d.ts.map
+dist/bus/command-bus.js
+dist/bus/command-bus.js.map
+dist/bus/command-dispatcher-registry.d.ts
+dist/bus/command-dispatcher-registry.d.ts.map
+dist/bus/command-dispatcher-registry.js
+dist/bus/command-dispatcher-registry.js.map
+dist/bus/command-dispatcher.d.ts
+dist/bus/command-dispatcher.d.ts.map
+dist/bus/command-dispatcher.js
+dist/bus/command-dispatcher.js.map
+dist/bus/command-errors.d.ts
+dist/bus/command-errors.d.ts.map
+dist/bus/command-errors.js
+dist/bus/command-errors.js.map
+dist/bus/event-bus.d.ts
+dist/bus/event-bus.d.ts.map
+dist/bus/event-bus.js
+dist/bus/event-bus.js.map
+dist/bus/event-dispatcher-origin-schemas.d.ts
+dist/bus/event-dispatcher-origin-schemas.d.ts.map
+dist/bus/event-dispatcher-origin-schemas.js
+dist/bus/event-dispatcher-origin-schemas.js.map
+dist/bus/event-dispatcher-registry.d.ts
+dist/bus/event-dispatcher-registry.d.ts.map
+dist/bus/event-dispatcher-registry.js
+dist/bus/event-dispatcher-registry.js.map
+dist/bus/event-dispatcher.d.ts
+dist/bus/event-dispatcher.d.ts.map
+dist/bus/event-dispatcher.js
+dist/bus/event-dispatcher.js.map
+dist/context/bounded-context.d.ts
+dist/context/bounded-context.d.ts.map
+dist/context/bounded-context.js
+dist/context/bounded-context.js.map
+dist/context/effective-tenant.d.ts
+dist/context/effective-tenant.d.ts.map
+dist/context/effective-tenant.js
+dist/context/effective-tenant.js.map
+dist/context/entity-inbox.d.ts
+dist/context/entity-inbox.d.ts.map
+dist/context/entity-inbox.js
+dist/context/entity-inbox.js.map
+dist/context/local-inbox-handoff.d.ts
+dist/context/local-inbox-handoff.d.ts.map
+dist/context/local-inbox-handoff.js
+dist/context/local-inbox-handoff.js.map
+dist/context/projection-handoff.d.ts
+dist/context/projection-handoff.d.ts.map
+dist/context/projection-handoff.js
+dist/context/projection-handoff.js.map
+dist/context/tenant-index.d.ts
+dist/context/tenant-index.d.ts.map
+dist/context/tenant-index.js
+dist/context/tenant-index.js.map
+dist/delivery/conditional-pickup.d.ts
+dist/delivery/conditional-pickup.d.ts.map
+dist/delivery/conditional-pickup.js
+dist/delivery/conditional-pickup.js.map
+dist/delivery/delivery-builder.d.ts
+dist/delivery/delivery-builder.d.ts.map
+dist/delivery/delivery-builder.js
+dist/delivery/delivery-builder.js.map
+dist/delivery/delivery-lease.d.ts
+dist/delivery/delivery-lease.d.ts.map
+dist/delivery/delivery-lease.js
+dist/delivery/delivery-lease.js.map
+dist/delivery/delivery-loop.d.ts
+dist/delivery/delivery-loop.d.ts.map
+dist/delivery/delivery-loop.js
+dist/delivery/delivery-loop.js.map
+dist/delivery/delivery-monitor.d.ts
+dist/delivery/delivery-monitor.d.ts.map
+dist/delivery/delivery-monitor.js
+dist/delivery/delivery-monitor.js.map
+dist/delivery/delivery-ports.d.ts
+dist/delivery/delivery-ports.d.ts.map
+dist/delivery/delivery-ports.js
+dist/delivery/delivery-ports.js.map
+dist/delivery/delivery-run-control.d.ts
+dist/delivery/delivery-run-control.d.ts.map
+dist/delivery/delivery-run-control.js
+dist/delivery/delivery-run-control.js.map
+dist/delivery/delivery-run-coordinator.d.ts
+dist/delivery/delivery-run-coordinator.d.ts.map
+dist/delivery/delivery-run-coordinator.js
+dist/delivery/delivery-run-coordinator.js.map
+dist/delivery/delivery-storage-error.d.ts
+dist/delivery/delivery-storage-error.d.ts.map
+dist/delivery/delivery-storage-error.js
+dist/delivery/delivery-storage-error.js.map
+dist/delivery/delivery-supervisor.d.ts
+dist/delivery/delivery-supervisor.d.ts.map
+dist/delivery/delivery-supervisor.js
+dist/delivery/delivery-supervisor.js.map
+dist/delivery/delivery-worker.d.ts
+dist/delivery/delivery-worker.d.ts.map
+dist/delivery/delivery-worker.js
+dist/delivery/delivery-worker.js.map
+dist/delivery/delivery.d.ts
+dist/delivery/delivery.d.ts.map
+dist/delivery/delivery.js
+dist/delivery/delivery.js.map
+dist/delivery/inbox-records.d.ts
+dist/delivery/inbox-records.d.ts.map
+dist/delivery/inbox-records.js
+dist/delivery/inbox-records.js.map
+dist/delivery/inbox-storage.d.ts
+dist/delivery/inbox-storage.d.ts.map
+dist/delivery/inbox-storage.js
+dist/delivery/inbox-storage.js.map
+dist/delivery/inbox.d.ts
+dist/delivery/inbox.d.ts.map
+dist/delivery/inbox.js
+dist/delivery/inbox.js.map
+dist/delivery/parked-delivery-obligations.d.ts
+dist/delivery/parked-delivery-obligations.d.ts.map
+dist/delivery/parked-delivery-obligations.js
+dist/delivery/parked-delivery-obligations.js.map
+dist/delivery/shard-index.d.ts
+dist/delivery/shard-index.d.ts.map
+dist/delivery/shard-index.js
+dist/delivery/shard-index.js.map
+dist/delivery/sharded-work-registry.d.ts
+dist/delivery/sharded-work-registry.d.ts.map
+dist/delivery/sharded-work-registry.js
+dist/delivery/sharded-work-registry.js.map
+dist/entity/entity-metadata.d.ts
+dist/entity/entity-metadata.d.ts.map
+dist/entity/entity-metadata.js
+dist/entity/entity-metadata.js.map
+dist/entity/entity-storage-descriptor.d.ts
+dist/entity/entity-storage-descriptor.d.ts.map
+dist/entity/entity-storage-descriptor.js
+dist/entity/entity-storage-descriptor.js.map
+dist/entity/entity-transaction.d.ts
+dist/entity/entity-transaction.d.ts.map
+dist/entity/entity-transaction.js
+dist/entity/entity-transaction.js.map
+dist/entity/entity-transition-validation.d.ts
+dist/entity/entity-transition-validation.d.ts.map
+dist/entity/entity-transition-validation.js
+dist/entity/entity-transition-validation.js.map
+dist/entity/entity.d.ts
+dist/entity/entity.d.ts.map
+dist/entity/entity.js
+dist/entity/entity.js.map
+dist/entity/implicit-required-id.d.ts
+dist/entity/implicit-required-id.d.ts.map
+dist/entity/implicit-required-id.js
+dist/entity/implicit-required-id.js.map
+dist/entity/spec-scanner.d.ts
+dist/entity/spec-scanner.d.ts.map
+dist/entity/spec-scanner.js
+dist/entity/spec-scanner.js.map
+dist/handler/command-registration-readiness.d.ts
+dist/handler/command-registration-readiness.d.ts.map
+dist/handler/command-registration-readiness.js
+dist/handler/command-registration-readiness.js.map
+dist/handler/declared-rejections.d.ts
+dist/handler/declared-rejections.d.ts.map
+dist/handler/declared-rejections.js
+dist/handler/declared-rejections.js.map
+dist/handler/event-handler-filter.d.ts
+dist/handler/event-handler-filter.d.ts.map
+dist/handler/event-handler-filter.js
+dist/handler/event-handler-filter.js.map
+dist/handler/event-registration-readiness.d.ts
+dist/handler/event-registration-readiness.d.ts.map
+dist/handler/event-registration-readiness.js
+dist/handler/event-registration-readiness.js.map
+dist/handler/external.d.ts
+dist/handler/external.d.ts.map
+dist/handler/external.js
+dist/handler/external.js.map
+dist/handler/generated-handler-registry.d.ts
+dist/handler/generated-handler-registry.d.ts.map
+dist/handler/generated-handler-registry.js
+dist/handler/generated-handler-registry.js.map
+dist/handler/generated-registry-discovery.d.ts
+dist/handler/generated-registry-discovery.d.ts.map
+dist/handler/generated-registry-discovery.js
+dist/handler/generated-registry-discovery.js.map
+dist/handler/handler-decorators.d.ts
+dist/handler/handler-decorators.d.ts.map
+dist/handler/handler-decorators.js
+dist/handler/handler-decorators.js.map
+dist/handler/handler-metadata.d.ts
+dist/handler/handler-metadata.d.ts.map
+dist/handler/handler-metadata.js
+dist/handler/handler-metadata.js.map
+dist/handler/registration-readiness-metadata.d.ts
+dist/handler/registration-readiness-metadata.d.ts.map
+dist/handler/registration-readiness-metadata.js
+dist/handler/registration-readiness-metadata.js.map
+dist/handler/rejection-source.d.ts
+dist/handler/rejection-source.d.ts.map
+dist/handler/rejection-source.js
+dist/handler/rejection-source.js.map
+dist/handler/standalone.d.ts
+dist/handler/standalone.d.ts.map
+dist/handler/standalone.js
+dist/handler/standalone.js.map
+dist/index.d.ts
+dist/index.d.ts.map
+dist/index.js
+dist/index.js.map
+dist/integration/external-messages.d.ts
+dist/integration/external-messages.d.ts.map
+dist/integration/external-messages.js
+dist/integration/external-messages.js.map
+dist/integration/integration-broker.d.ts
+dist/integration/integration-broker.d.ts.map
+dist/integration/integration-broker.js
+dist/integration/integration-broker.js.map
+dist/integration/third-party-context.d.ts
+dist/integration/third-party-context.d.ts.map
+dist/integration/third-party-context.js
+dist/integration/third-party-context.js.map
+dist/repository/command-errors.d.ts
+dist/repository/command-errors.d.ts.map
+dist/repository/command-errors.js
+dist/repository/command-errors.js.map
+dist/repository/command-routing.d.ts
+dist/repository/command-routing.d.ts.map
+dist/repository/command-routing.js
+dist/repository/command-routing.js.map
+dist/repository/commit-fence.d.ts
+dist/repository/commit-fence.d.ts.map
+dist/repository/commit-fence.js
+dist/repository/commit-fence.js.map
+dist/repository/event-routing.d.ts
+dist/repository/event-routing.d.ts.map
+dist/repository/event-routing.js
+dist/repository/event-routing.js.map
+dist/repository/primitive-id.d.ts
+dist/repository/primitive-id.d.ts.map
+dist/repository/primitive-id.js
+dist/repository/primitive-id.js.map
+dist/repository/repository.d.ts
+dist/repository/repository.d.ts.map
+dist/repository/repository.js
+dist/repository/repository.js.map
+dist/repository/routing-declarations.d.ts
+dist/repository/routing-declarations.d.ts.map
+dist/repository/routing-declarations.js
+dist/repository/routing-declarations.js.map
+dist/repository/state-update-routing.d.ts
+dist/repository/state-update-routing.d.ts.map
+dist/repository/state-update-routing.js
+dist/repository/state-update-routing.js.map
+dist/runtime/runtime.d.ts
+dist/runtime/runtime.d.ts.map
+dist/runtime/runtime.js
+dist/runtime/runtime.js.map
+dist/runtime/signal-intake.d.ts
+dist/runtime/signal-intake.d.ts.map
+dist/runtime/signal-intake.js
+dist/runtime/signal-intake.js.map
+dist/runtime/signal-metadata.d.ts
+dist/runtime/signal-metadata.d.ts.map
+dist/runtime/signal-metadata.js
+dist/runtime/signal-metadata.js.map
+dist/runtime/signal-publisher.d.ts
+dist/runtime/signal-publisher.d.ts.map
+dist/runtime/signal-publisher.js
+dist/runtime/signal-publisher.js.map
+dist/runtime/standalone-handler-runtime.d.ts
+dist/runtime/standalone-handler-runtime.d.ts.map
+dist/runtime/standalone-handler-runtime.js
+dist/runtime/standalone-handler-runtime.js.map
+dist/server/environment-attachment.d.ts
+dist/server/environment-attachment.d.ts.map
+dist/server/environment-attachment.js
+dist/server/environment-attachment.js.map
+dist/server/environment-delivery-records.d.ts
+dist/server/environment-delivery-records.d.ts.map
+dist/server/environment-delivery-records.js
+dist/server/environment-delivery-records.js.map
+dist/server/environment-delivery-worker.d.ts
+dist/server/environment-delivery-worker.d.ts.map
+dist/server/environment-delivery-worker.js
+dist/server/environment-delivery-worker.js.map
+dist/server/environment.d.ts
+dist/server/environment.d.ts.map
+dist/server/environment.js
+dist/server/environment.js.map
+dist/server/managed-child-subscription.d.ts
+dist/server/managed-child-subscription.d.ts.map
+dist/server/managed-child-subscription.js
+dist/server/managed-child-subscription.js.map
+dist/server/managed-server-application.d.ts
+dist/server/managed-server-application.d.ts.map
+dist/server/managed-server-application.js
+dist/server/managed-server-application.js.map
+dist/server/node-coordinator.d.ts
+dist/server/node-coordinator.d.ts.map
+dist/server/node-coordinator.js
+dist/server/node-coordinator.js.map
+dist/server/process-server-coordinator.d.ts
+dist/server/process-server-coordinator.d.ts.map
+dist/server/process-server-coordinator.js
+dist/server/process-server-coordinator.js.map
+dist/server/reserved-spine-rpc-paths.json
+dist/server/retryable-close.d.ts
+dist/server/retryable-close.d.ts.map
+dist/server/retryable-close.js
+dist/server/retryable-close.js.map
+dist/server/server-environment.d.ts
+dist/server/server-environment.d.ts.map
+dist/server/server-environment.js
+dist/server/server-environment.js.map
+dist/server/server-log.d.ts
+dist/server/server-log.d.ts.map
+dist/server/server-log.js
+dist/server/server-log.js.map
+dist/server/server.d.ts
+dist/server/server.d.ts.map
+dist/server/server.js
+dist/server/server.js.map
+dist/services/query-reader.d.ts
+dist/services/query-reader.d.ts.map
+dist/services/query-reader.js
+dist/services/query-reader.js.map
+dist/services/registered-targets.d.ts
+dist/services/registered-targets.d.ts.map
+dist/services/registered-targets.js
+dist/services/registered-targets.js.map
+dist/services/spine-services.d.ts
+dist/services/spine-services.d.ts.map
+dist/services/spine-services.js
+dist/services/spine-services.js.map
+dist/spi/delivery.d.ts
+dist/spi/delivery.d.ts.map
+dist/spi/delivery.js
+dist/spi/delivery.js.map
+dist/spi/handler-registry.d.ts
+dist/spi/handler-registry.d.ts.map
+dist/spi/handler-registry.js
+dist/spi/handler-registry.js.map
+dist/stand/stand.d.ts
+dist/stand/stand.d.ts.map
+dist/stand/stand.js
+dist/stand/stand.js.map
+dist/stand/subscription-observer.d.ts
+dist/stand/subscription-observer.d.ts.map
+dist/stand/subscription-observer.js
+dist/stand/subscription-observer.js.map
+dist/stand/subscription-records.d.ts
+dist/stand/subscription-records.d.ts.map
+dist/stand/subscription-records.js
+dist/stand/subscription-records.js.map
+dist/stand/subscription-registry.d.ts
+dist/stand/subscription-registry.d.ts.map
+dist/stand/subscription-registry.js
+dist/stand/subscription-registry.js.map
+dist/stand/subscription-runtime.d.ts
+dist/stand/subscription-runtime.d.ts.map
+dist/stand/subscription-runtime.js
+dist/stand/subscription-runtime.js.map
+dist/testing/index.d.ts
+dist/testing/index.d.ts.map
+dist/testing/index.js
+dist/testing/index.js.map
+dist/tsconfig.tsbuildinfo
+LICENSE
+package.json
+README.md
+REFERENCE.md
+Tarball Details
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/runtime-tmp/browser-tools/tmp/spine-message-board-images-RmMjXO/tarballs/spine-event-engine-server-2.0.0-snapshot.22.tgz
+package: @spine-event-engine/storage@2.0.0-snapshot.22
+Tarball Contents
+dist/entity/entity-history-record-spec.d.ts
+dist/entity/entity-history-record-spec.d.ts.map
+dist/entity/entity-history-record-spec.js
+dist/entity/entity-history-record-spec.js.map
+dist/entity/entity-history-storage.d.ts
+dist/entity/entity-history-storage.d.ts.map
+dist/entity/entity-history-storage.js
+dist/entity/entity-history-storage.js.map
+dist/entity/entity-record.d.ts
+dist/entity/entity-record.d.ts.map
+dist/entity/entity-record.js
+dist/entity/entity-record.js.map
+dist/entity/history-conformance.d.ts
+dist/entity/history-conformance.d.ts.map
+dist/entity/history-conformance.js
+dist/entity/history-conformance.js.map
+dist/event/event-store.d.ts
+dist/event/event-store.d.ts.map
+dist/event/event-store.js
+dist/event/event-store.js.map
+dist/index.d.ts
+dist/index.d.ts.map
+dist/index.js
+dist/index.js.map
+dist/internal/entity-commit.d.ts
+dist/internal/entity-commit.d.ts.map
+dist/internal/entity-commit.js
+dist/internal/entity-commit.js.map
+dist/internal/entity-history.d.ts
+dist/internal/entity-history.d.ts.map
+dist/internal/entity-history.js
+dist/internal/entity-history.js.map
+dist/internal/event-store.d.ts
+dist/internal/event-store.d.ts.map
+dist/internal/event-store.js
+dist/internal/event-store.js.map
+dist/internal/query-values.d.ts
+dist/internal/query-values.d.ts.map
+dist/internal/query-values.js
+dist/internal/query-values.js.map
+dist/internal/tenancy.d.ts
+dist/internal/tenancy.d.ts.map
+dist/internal/tenancy.js
+dist/internal/tenancy.js.map
+dist/memory/canonical-utf8.d.ts
+dist/memory/canonical-utf8.d.ts.map
+dist/memory/canonical-utf8.js
+dist/memory/canonical-utf8.js.map
+dist/memory/in-memory-entity-commit.d.ts
+dist/memory/in-memory-entity-commit.d.ts.map
+dist/memory/in-memory-entity-commit.js
+dist/memory/in-memory-entity-commit.js.map
+dist/memory/in-memory-entity-history.d.ts
+dist/memory/in-memory-entity-history.d.ts.map
+dist/memory/in-memory-entity-history.js
+dist/memory/in-memory-entity-history.js.map
+dist/memory/in-memory-record-storage.d.ts
+dist/memory/in-memory-record-storage.d.ts.map
+dist/memory/in-memory-record-storage.js
+dist/memory/in-memory-record-storage.js.map
+dist/memory/in-memory-storage-backend.d.ts
+dist/memory/in-memory-storage-backend.d.ts.map
+dist/memory/in-memory-storage-backend.js
+dist/memory/in-memory-storage-backend.js.map
+dist/memory/in-memory-storage-factory.d.ts
+dist/memory/in-memory-storage-factory.d.ts.map
+dist/memory/in-memory-storage-factory.js
+dist/memory/in-memory-storage-factory.js.map
+dist/memory/tenant-records.d.ts
+dist/memory/tenant-records.d.ts.map
+dist/memory/tenant-records.js
+dist/memory/tenant-records.js.map
+dist/provider.d.ts
+dist/provider.d.ts.map
+dist/provider.js
+dist/provider.js.map
+dist/query/query-execution.d.ts
+dist/query/query-execution.d.ts.map
+dist/query/query-execution.js
+dist/query/query-execution.js.map
+dist/query/query-policy.d.ts
+dist/query/query-policy.d.ts.map
+dist/query/query-policy.js
+dist/query/query-policy.js.map
+dist/record/column-mapping.d.ts
+dist/record/column-mapping.d.ts.map
+dist/record/column-mapping.js
+dist/record/column-mapping.js.map
+dist/record/column-type.d.ts
+dist/record/column-type.d.ts.map
+dist/record/column-type.js
+dist/record/column-type.js.map
+dist/record/record-column.d.ts
+dist/record/record-column.d.ts.map
+dist/record/record-column.js
+dist/record/record-column.js.map
+dist/record/record-query.d.ts
+dist/record/record-query.d.ts.map
+dist/record/record-query.js
+dist/record/record-query.js.map
+dist/record/record-spec.d.ts
+dist/record/record-spec.d.ts.map
+dist/record/record-spec.js
+dist/record/record-spec.js.map
+dist/record/record-storage.d.ts
+dist/record/record-storage.d.ts.map
+dist/record/record-storage.js
+dist/record/record-storage.js.map
+dist/record/storage-group.d.ts
+dist/record/storage-group.d.ts.map
+dist/record/storage-group.js
+dist/record/storage-group.js.map
+dist/storage/storage-factory.d.ts
+dist/storage/storage-factory.d.ts.map
+dist/storage/storage-factory.js
+dist/storage/storage-factory.js.map
+dist/storage/storage.d.ts
+dist/storage/storage.d.ts.map
+dist/storage/storage.js
+dist/storage/storage.js.map
+dist/tsconfig.tsbuildinfo
+LICENSE
+package.json
+README.md
+REFERENCE.md
+Tarball Details
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/runtime-tmp/browser-tools/tmp/spine-message-board-images-RmMjXO/tarballs/spine-event-engine-storage-2.0.0-snapshot.22.tgz
+package: @spine-event-engine/storage-datastore@2.0.0-snapshot.22
+Tarball Contents
+dist/datastore/column-mapping.d.ts
+dist/datastore/column-mapping.d.ts.map
+dist/datastore/column-mapping.js
+dist/datastore/column-mapping.js.map
+dist/datastore/entity-history.d.ts
+dist/datastore/entity-history.d.ts.map
+dist/datastore/entity-history.js
+dist/datastore/entity-history.js.map
+dist/datastore/id-column.d.ts
+dist/datastore/id-column.d.ts.map
+dist/datastore/id-column.js
+dist/datastore/id-column.js.map
+dist/datastore/namespace.d.ts
+dist/datastore/namespace.d.ts.map
+dist/datastore/namespace.js
+dist/datastore/namespace.js.map
+dist/datastore/record-storage.d.ts
+dist/datastore/record-storage.d.ts.map
+dist/datastore/record-storage.js
+dist/datastore/record-storage.js.map
+dist/datastore/storage-factory.d.ts
+dist/datastore/storage-factory.d.ts.map
+dist/datastore/storage-factory.js
+dist/datastore/storage-factory.js.map
+dist/datastore/tenant-catalog.d.ts
+dist/datastore/tenant-catalog.d.ts.map
+dist/datastore/tenant-catalog.js
+dist/datastore/tenant-catalog.js.map
+dist/index.d.ts
+dist/index.d.ts.map
+dist/index.js
+dist/index.js.map
+dist/tsconfig.tsbuildinfo
+index.yaml
+LICENSE
+package.json
+README.md
+REFERENCE.md
+Tarball Details
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/runtime-tmp/browser-tools/tmp/spine-message-board-images-RmMjXO/tarballs/spine-event-engine-storage-datastore-2.0.0-snapshot.22.tgz
+package: @spine-event-engine/transport@2.0.0-snapshot.22
+Tarball Contents
+dist/index.d.ts
+dist/index.d.ts.map
+dist/index.js
+dist/index.js.map
+dist/internal/message-channel.d.ts
+dist/internal/message-channel.d.ts.map
+dist/internal/message-channel.js
+dist/internal/message-channel.js.map
+dist/memory/message-transport.d.ts
+dist/memory/message-transport.d.ts.map
+dist/memory/message-transport.js
+dist/memory/message-transport.js.map
+dist/tsconfig.tsbuildinfo
+LICENSE
+package.json
+README.md
+REFERENCE.md
+Tarball Details
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/runtime-tmp/browser-tools/tmp/spine-message-board-images-RmMjXO/tarballs/spine-event-engine-transport-2.0.0-snapshot.22.tgz
+package: @spine-event-engine/example-message-board-model@2.0.0-snapshot.22
+Tarball Contents
+dist/generated/proto-module.d.ts
+dist/generated/proto-module.d.ts.map
+dist/generated/proto-module.js
+dist/generated/proto-module.js.map
+dist/generated/spine/examples/messageboard/commands_pb.d.ts
+dist/generated/spine/examples/messageboard/commands_pb.d.ts.map
+dist/generated/spine/examples/messageboard/commands_pb.js
+dist/generated/spine/examples/messageboard/commands_pb.js.map
+dist/generated/spine/examples/messageboard/events_pb.d.ts
+dist/generated/spine/examples/messageboard/events_pb.d.ts.map
+dist/generated/spine/examples/messageboard/events_pb.js
+dist/generated/spine/examples/messageboard/events_pb.js.map
+dist/generated/spine/examples/messageboard/message_board_pb.d.ts
+dist/generated/spine/examples/messageboard/message_board_pb.d.ts.map
+dist/generated/spine/examples/messageboard/message_board_pb.js
+dist/generated/spine/examples/messageboard/message_board_pb.js.map
+dist/generated/spine/examples/messageboard/message_board_query.d.ts
+dist/generated/spine/examples/messageboard/message_board_query.d.ts.map
+dist/generated/spine/examples/messageboard/message_board_query.js
+dist/generated/spine/examples/messageboard/message_board_query.js.map
+dist/generated/spine/examples/messageboard/rejections_pb.d.ts
+dist/generated/spine/examples/messageboard/rejections_pb.d.ts.map
+dist/generated/spine/examples/messageboard/rejections_pb.js
+dist/generated/spine/examples/messageboard/rejections_pb.js.map
+dist/generated/spine/examples/messageboard/rejections.d.ts
+dist/generated/spine/examples/messageboard/rejections.d.ts.map
+dist/generated/spine/examples/messageboard/rejections.js
+dist/generated/spine/examples/messageboard/rejections.js.map
+dist/generated/spine/examples/messageboard/user_pb.d.ts
+dist/generated/spine/examples/messageboard/user_pb.d.ts.map
+dist/generated/spine/examples/messageboard/user_pb.js
+dist/generated/spine/examples/messageboard/user_pb.js.map
+dist/tsconfig.tsbuildinfo
+LICENSE
+package.json
+proto/spine/examples/messageboard/commands.proto
+proto/spine/examples/messageboard/events.proto
+proto/spine/examples/messageboard/message_board.proto
+proto/spine/examples/messageboard/rejections.proto
+proto/spine/examples/messageboard/user.proto
+README.md
+scripts/clean-generated-dist.mjs
+spine-proto-manifest.json
+spine-proto.json
+Tarball Details
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/runtime-tmp/browser-tools/tmp/spine-message-board-images-RmMjXO/tarballs/spine-event-engine-example-message-board-model-2.0.0-snapshot.22.tgz
+package: @spine-event-engine/example-message-board-app@2.0.0-snapshot.22
+Tarball Contents
+dist/generated/handler/generated-handler-registry.d.ts
+dist/generated/handler/generated-handler-registry.d.ts.map
+dist/generated/handler/generated-handler-registry.js
+dist/generated/handler/generated-handler-registry.js.map
+dist/src/application-server.d.ts
+dist/src/application-server.d.ts.map
+dist/src/application-server.js
+dist/src/application-server.js.map
+dist/src/board-access.d.ts
+dist/src/board-access.d.ts.map
+dist/src/board-access.js
+dist/src/board-access.js.map
+dist/src/combined-server.d.ts
+dist/src/combined-server.d.ts.map
+dist/src/combined-server.js
+dist/src/combined-server.js.map
+dist/src/deployment-config.d.ts
+dist/src/deployment-config.d.ts.map
+dist/src/deployment-config.js
+dist/src/deployment-config.js.map
+dist/src/gateway-server.d.ts
+dist/src/gateway-server.d.ts.map
+dist/src/gateway-server.js
+dist/src/gateway-server.js.map
+dist/src/index.d.ts
+dist/src/index.d.ts.map
+dist/src/index.js
+dist/src/index.js.map
+dist/src/local-application-server.d.ts
+dist/src/local-application-server.d.ts.map
+dist/src/local-application-server.js
+dist/src/local-application-server.js.map
+dist/src/model-registry.d.ts
+dist/src/model-registry.d.ts.map
+dist/src/model-registry.js
+dist/src/model-registry.js.map
+dist/src/multi-process-app.d.ts
+dist/src/multi-process-app.d.ts.map
+dist/src/multi-process-app.js
+dist/src/multi-process-app.js.map
+dist/src/multi-process-coordinator.d.ts
+dist/src/multi-process-coordinator.d.ts.map
+dist/src/multi-process-coordinator.js
+dist/src/multi-process-coordinator.js.map
+dist/src/multi-process-replica.d.ts
+dist/src/multi-process-replica.d.ts.map
+dist/src/multi-process-replica.js
+dist/src/multi-process-replica.js.map
+dist/src/single-process-app.d.ts
+dist/src/single-process-app.d.ts.map
+dist/src/single-process-app.js
+dist/src/single-process-app.js.map
+dist/src/system-clock.d.ts
+dist/src/system-clock.d.ts.map
+dist/src/system-clock.js
+dist/src/system-clock.js.map
+dist/tsconfig.tsbuildinfo
+LICENSE
+package.json
+README.md
+spine-proto.json
+Tarball Details
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/runtime-tmp/browser-tools/tmp/spine-message-board-images-RmMjXO/tarballs/spine-event-engine-example-message-board-app-2.0.0-snapshot.22.tgz
+package: @spine-event-engine/example-message-board-web@2.0.0-snapshot.22
+Tarball Contents
+components.json
+dist/assets/index-BuW7mIuS.js
+dist/assets/index-CrBXYOe_.css
+dist/index.html
+index.html
+LICENSE
+package.json
+README.md
+REFERENCE.md
+scripts/static-server.mjs
+src/board-config.ts
+src/board-payloads.ts
+src/board-sync.ts
+src/board-view.ts
+src/browser-app.tsx
+src/components/ui/alert.tsx
+src/components/ui/avatar.tsx
+src/components/ui/button.tsx
+src/components/ui/card.tsx
+src/components/ui/input.tsx
+src/components/ui/label.tsx
+src/components/ui/textarea.tsx
+src/docs/client-react-provider-query.ts
+src/docs/client-react-subscription.ts
+src/docs/client-web-create-client.ts
+src/docs/client-web-request-subscription.ts
+src/index.css
+src/index.tsx
+src/lib/utils.ts
+src/message-list.tsx
+src/post-feedback.ts
+src/post-form.tsx
+src/relative-time.ts
+src/styles.d.ts
+test/board-config.test.ts
+test/board-payloads.test.ts
+test/board-view.test.ts
+test/browser/message-board.spec.ts
+test/browser/playwright.config.ts
+test/browser/tsconfig.json
+test/interop/browser/browser-test-app.ts
+test/interop/browser/browser.spec.mjs
+test/interop/browser/index.html
+test/interop/browser/playwright.config.mjs
+test/interop/browser/run.mjs
+test/interop/browser/run.test.mjs
+test/interop/browser/tsconfig.json
+test/interop/browser/vite.config.mjs
+test/interop/harness.lifecycle.test.mjs
+test/interop/harness.mjs
+test/interop/native-gateway-seam.test.ts
+test/interop/topology.test.mjs
+test/message-board.test.tsx
+test/post-feedback.test.ts
+test/relative-time.test.ts
+tsconfig.json
+vite.config.ts
+Tarball Details
+/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/runtime-tmp/browser-tools/tmp/spine-message-board-images-RmMjXO/tarballs/spine-event-engine-example-message-board-web-2.0.0-snapshot.22.tgz
+Local image phase: prepare offline installer at 2026-10-14T04:30:25.011Z.
+Progress: resolved 0, reused 1, downloaded 0, added 0
+Progress: resolved 167, reused 3, downloaded 14, added 0
+[WARN] 2 deprecated subdependencies found: glob@10.5.0, node-domexception@1.0.0
+Progress: resolved 178, reused 3, downloaded 14, added 0, done
+
+Done in 1.3s using pnpm v11.9.0
+✓ Lockfile passes supply-chain policies (verified 302ms ago)
+Importing packages to virtual store
+Already up to date
+Progress: resolved 1, reused 0, downloaded 0, added 0
+Progress: resolved 178, reused 0, downloaded 175, added 175
+Progress: resolved 178, reused 0, downloaded 178, added 178, done
+
+devDependencies: skipped
+
+Local image context: 22 files, 117408 KiB.
+Adding pnpm@11.9.0 to the cache...
+
+Packing the selected tools in pnpm.tgz...
+All done!
+Building local image target: message-board
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.60kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/node:24.18.0-bookworm-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 [packages 1/7] FROM docker.io/library/node:24.18.0-bookworm-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 119.01MB 0.8s done
+#5 DONE 0.8s
+
+#6 [packages 2/7] WORKDIR /app
+#6 CACHED
+
+#7 [packages 3/7] COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+#7 DONE 0.0s
+
+#8 [packages 4/7] COPY tarballs/ ./tarballs/
+#8 DONE 0.0s
+
+#9 [packages 5/7] COPY pnpm-store.tgz /tools/pnpm-store.tgz
+#9 DONE 0.1s
+
+#10 [packages 6/7] COPY pnpm.tgz /tools/pnpm.tgz
+#10 DONE 0.0s
+
+#11 [packages 7/7] RUN mkdir /pnpm-store   && tar -xzf /tools/pnpm-store.tgz -C /pnpm-store   && corepack install -g --cache-only /tools/pnpm.tgz   && corepack pnpm install --offline --frozen-lockfile --prod --ignore-scripts --store-dir /pnpm-store   && rm -rf /pnpm-store tarballs /tools
+#11 2.840 Adding pnpm@11.9.0 to the cache...
+#11 3.672 ? Verifying lockfile against supply-chain policies (178 entries)...
+#11 3.674 Lockfile is up to date, resolution step is skipped
+#11 3.710 Progress: resolved 1, reused 0, downloaded 0, added 0
+#11 3.721 Packages: +178
+#11 3.721 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#11 3.944 Progress: resolved 178, reused 178, downloaded 0, added 178, done
+#11 4.010
+#11 4.010 dependencies:
+#11 4.010 + @spine-event-engine/auth 2.0.0-snapshot.22
+#11 4.010 + @spine-event-engine/client-node 2.0.0-snapshot.22
+#11 4.010 + @spine-event-engine/client-react 2.0.0-snapshot.22
+#11 4.010 + @spine-event-engine/client-web 2.0.0-snapshot.22
+#11 4.010 + @spine-event-engine/core 2.0.0-snapshot.22
+#11 4.010 + @spine-event-engine/delivery-client 2.0.0-snapshot.22
+#11 4.010 + @spine-event-engine/delivery-server 2.0.0-snapshot.22
+#11 4.010 + @spine-event-engine/deployment 2.0.0-snapshot.22
+#11 4.010 + @spine-event-engine/deployment-gke 2.0.0-snapshot.22
+#11 4.010 + @spine-event-engine/example-message-board-app 2.0.0-snapshot.22
+#11 4.010 + @spine-event-engine/example-message-board-model 2.0.0-snapshot.22
+#11 4.010 + @spine-event-engine/example-message-board-web 2.0.0-snapshot.22
+#11 4.010 + @spine-event-engine/proto 2.0.0-snapshot.22
+#11 4.010 + @spine-event-engine/server 2.0.0-snapshot.22
+#11 4.010 + @spine-event-engine/storage 2.0.0-snapshot.22
+#11 4.010 + @spine-event-engine/storage-datastore 2.0.0-snapshot.22
+#11 4.010 + @spine-event-engine/transport 2.0.0-snapshot.22
+#11 4.010
+#11 4.010 devDependencies: skipped
+#11 4.010
+#11 4.855 ✓ Lockfile passes supply-chain policies (178 entries in 1.1s)
+#11 4.873 Done in 1.4s using pnpm v11.9.0
+#11 DONE 5.1s
+
+#12 [runtime 3/4] COPY --from=packages /app/node_modules ./node_modules
+#12 DONE 0.4s
+
+#13 [runtime 4/4] RUN find ./node_modules -type f ( -name '*.ts' -o -name '*.map' -o -name '*.tsbuildinfo' ) -delete   && find ./node_modules -type f -name '*.proto' ! -path '*/@google-cloud/datastore/build/protos/*' -delete   && find ./node_modules -type d ( -name test -o -name tests ) -prune -exec rm -rf {} +
+#13 DONE 0.4s
+
+#14 exporting to image
+#14 exporting layers
+#14 exporting layers 0.5s done
+#14 writing image sha256:f50851bbfb9e83379c0f3fce8f9dee58a04133a1ad1e8c4320719de02adf6674 done
+#14 naming to docker.io/spine-ts/message-board:sqlrel-compose-1014 done
+#14 DONE 0.5s
+Building local image target: standalone-gateway
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.60kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/node:24.18.0-bookworm-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 [packages 1/7] FROM docker.io/library/node:24.18.0-bookworm-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 1.65kB done
+#5 DONE 0.0s
+
+#6 [runtime 3/4] COPY --from=packages /app/node_modules ./node_modules
+#6 CACHED
+
+#7 [packages 2/7] WORKDIR /app
+#7 CACHED
+
+#8 [packages 7/7] RUN mkdir /pnpm-store   && tar -xzf /tools/pnpm-store.tgz -C /pnpm-store   && corepack install -g --cache-only /tools/pnpm.tgz   && corepack pnpm install --offline --frozen-lockfile --prod --ignore-scripts --store-dir /pnpm-store   && rm -rf /pnpm-store tarballs /tools
+#8 CACHED
+
+#9 [packages 6/7] COPY pnpm.tgz /tools/pnpm.tgz
+#9 CACHED
+
+#10 [packages 5/7] COPY pnpm-store.tgz /tools/pnpm-store.tgz
+#10 CACHED
+
+#11 [packages 3/7] COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+#11 CACHED
+
+#12 [packages 4/7] COPY tarballs/ ./tarballs/
+#12 CACHED
+
+#13 [runtime 4/4] RUN find ./node_modules -type f ( -name '*.ts' -o -name '*.map' -o -name '*.tsbuildinfo' ) -delete   && find ./node_modules -type f -name '*.proto' ! -path '*/@google-cloud/datastore/build/protos/*' -delete   && find ./node_modules -type d ( -name test -o -name tests ) -prune -exec rm -rf {} +
+#13 CACHED
+
+#14 exporting to image
+#14 exporting layers done
+#14 writing image sha256:bfad6c2ce7c8a663b3bf31e37fb0f51faa694c8e7e9c49f1f470097ab65935cb done
+#14 naming to docker.io/spine-ts/standalone-gateway:sqlrel-compose-1014 done
+#14 DONE 0.0s
+Building local image target: simple-delivery-server
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.60kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/node:24.18.0-bookworm-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 [packages 1/7] FROM docker.io/library/node:24.18.0-bookworm-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 1.65kB done
+#5 DONE 0.0s
+
+#6 [packages 4/7] COPY tarballs/ ./tarballs/
+#6 CACHED
+
+#7 [runtime 3/4] COPY --from=packages /app/node_modules ./node_modules
+#7 CACHED
+
+#8 [packages 7/7] RUN mkdir /pnpm-store   && tar -xzf /tools/pnpm-store.tgz -C /pnpm-store   && corepack install -g --cache-only /tools/pnpm.tgz   && corepack pnpm install --offline --frozen-lockfile --prod --ignore-scripts --store-dir /pnpm-store   && rm -rf /pnpm-store tarballs /tools
+#8 CACHED
+
+#9 [packages 5/7] COPY pnpm-store.tgz /tools/pnpm-store.tgz
+#9 CACHED
+
+#10 [packages 3/7] COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+#10 CACHED
+
+#11 [packages 2/7] WORKDIR /app
+#11 CACHED
+
+#12 [packages 6/7] COPY pnpm.tgz /tools/pnpm.tgz
+#12 CACHED
+
+#13 [runtime 4/4] RUN find ./node_modules -type f ( -name '*.ts' -o -name '*.map' -o -name '*.tsbuildinfo' ) -delete   && find ./node_modules -type f -name '*.proto' ! -path '*/@google-cloud/datastore/build/protos/*' -delete   && find ./node_modules -type d ( -name test -o -name tests ) -prune -exec rm -rf {} +
+#13 CACHED
+
+#14 exporting to image
+#14 exporting layers done
+#14 writing image sha256:51ae793b321f45b48e67cebb4a012a7c8a7a09b8114575a91187053ea29081c3 done
+#14 naming to docker.io/spine-ts/simple-delivery-server:sqlrel-compose-1014 done
+#14 DONE 0.0s
+Building local image target: message-board-web
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.60kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/node:24.18.0-bookworm-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 [packages 1/7] FROM docker.io/library/node:24.18.0-bookworm-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 1.65kB done
+#5 DONE 0.0s
+
+#6 [packages 7/7] RUN mkdir /pnpm-store   && tar -xzf /tools/pnpm-store.tgz -C /pnpm-store   && corepack install -g --cache-only /tools/pnpm.tgz   && corepack pnpm install --offline --frozen-lockfile --prod --ignore-scripts --store-dir /pnpm-store   && rm -rf /pnpm-store tarballs /tools
+#6 CACHED
+
+#7 [packages 2/7] WORKDIR /app
+#7 CACHED
+
+#8 [packages 6/7] COPY pnpm.tgz /tools/pnpm.tgz
+#8 CACHED
+
+#9 [packages 5/7] COPY pnpm-store.tgz /tools/pnpm-store.tgz
+#9 CACHED
+
+#10 [packages 4/7] COPY tarballs/ ./tarballs/
+#10 CACHED
+
+#11 [runtime 3/4] COPY --from=packages /app/node_modules ./node_modules
+#11 CACHED
+
+#12 [packages 3/7] COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+#12 CACHED
+
+#13 [runtime 4/4] RUN find ./node_modules -type f ( -name '*.ts' -o -name '*.map' -o -name '*.tsbuildinfo' ) -delete   && find ./node_modules -type f -name '*.proto' ! -path '*/@google-cloud/datastore/build/protos/*' -delete   && find ./node_modules -type d ( -name test -o -name tests ) -prune -exec rm -rf {} +
+#13 CACHED
+
+#14 exporting to image
+#14 exporting layers done
+#14 writing image sha256:024457a0946b61e285fb6706934488190f70b903ceae88624726fdff6ee1baed done
+#14 naming to docker.io/spine-ts/message-board-web:sqlrel-compose-1014 done
+#14 DONE 0.0s

@@ -527,11 +527,11 @@ definition in the context's Stand registry. `Activate` changes that definition
 to active before attaching this process's delivery; missing or expired
 definitions, and a definition already active for this process, produce no
 updates. `Cancel` and stream finalization release local delivery and physically
-delete the shared definition. Pending definitions expire after 30 seconds;
-active definitions have no framework TTL.
+delete the shared definition. Pending definitions expire after 30 seconds.
 
-The context builder's built-in registry capacity is from 1 through 100 admitted
-definitions, or the builder may provide a custom registry. Separately,
+The built-in registry has no global quota for retained definitions, and active
+definitions have no framework TTL. Application or ingress admission must bound
+acceptable use. Separately,
 `SpineServices.subscriptionLimit` defaults to 100 per service instance and
 bounds concurrent unknown-ID cancellation work; it is not a registry or
 distributed quota. `SpineServices.queueLimit` defaults to 100 queued updates

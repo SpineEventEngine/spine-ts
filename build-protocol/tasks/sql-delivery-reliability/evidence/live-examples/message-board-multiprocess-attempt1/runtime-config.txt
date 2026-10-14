@@ -1,0 +1,11 @@
+start=2026-10-14T04:25:35Z
+node=v24.18.0
+pnpm=11.9.0
+imageTag=sqlrel-live-1014
+processCount=8
+deliveryShardCount=8
+deliveryPort=28484
+datastorePort=28081
+coordinatorPort=28091
+gatewayPort=28090
+webPort=25173

@@ -1,0 +1,20 @@
+{
+  "runId": "c2bc9c662ba74e45b3c2eae231c741ab",
+  "url": "http://127.0.0.1:25173",
+  "status": "PASS",
+  "posts": [
+    {
+      "username": "ui-a-c2bc9c66",
+      "text": "first-c2bc9c662ba74e45b3c2eae231c741ab"
+    },
+    {
+      "username": "ui-b-c2bc9c66",
+      "text": "second-c2bc9c662ba74e45b3c2eae231c741ab"
+    }
+  ],
+  "contextUrls": [
+    "http://127.0.0.1:25173/",
+    "http://127.0.0.1:25173/"
+  ],
+  "issues": []
+}

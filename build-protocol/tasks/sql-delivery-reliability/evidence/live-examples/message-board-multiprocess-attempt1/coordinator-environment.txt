@@ -1,0 +1,10 @@
+Allowlisted process configuration retained for the live topology evidence.
+All unrelated environment values were removed before publication.
+PROCESS_COUNT=8
+DELIVERY_SHARD_COUNT=8
+DELIVERY_SERVER_URL=http://127.0.0.1:28484
+DATASTORE_PROJECT_ID=message-board-local-50ebfca9-818c-4d6f-9687-cd089cce67a1
+DATASTORE_EMULATOR_HOST=127.0.0.1:28081
+HOST=127.0.0.1
+PORT=28091
+NODE_ENV=production

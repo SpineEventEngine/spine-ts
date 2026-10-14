@@ -27,6 +27,9 @@ SPINE_DATASTORE_ORDERS_LOAD_USERS=10 pnpm --dir examples/orders run load
 
 The command generates and builds the required code, starts a loopback server,
 runs the scenario, prints one JSON result, and closes the server.
+This in-memory mode is a local teaching workload. A multi-process deployment
+should use shared Delivery, as shown in the
+[Distributed Message Board](../distributed-message-board/README.md).
 
 Choose `10`, `100`, or `1000` users by changing
 `SPINE_DATASTORE_ORDERS_LOAD_USERS`.

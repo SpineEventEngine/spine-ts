@@ -1,0 +1,6 @@
+NAME                                       IMAGE                                                 COMMAND                  SERVICE              CREATED         STATUS                   PORTS
+sqlrel-compose-1014-application-node-1-1   spine-ts/message-board:sqlrel-compose-1014            "node node_modules/@…"   application-node-1   9 seconds ago   Up 6 seconds
+sqlrel-compose-1014-application-node-2-1   spine-ts/message-board:sqlrel-compose-1014            "node node_modules/@…"   application-node-2   9 seconds ago   Up 6 seconds
+sqlrel-compose-1014-datastore-1            google/cloud-sdk:578.0.0-emulators                    "gcloud emulators fi…"   datastore            9 seconds ago   Up 9 seconds (healthy)
+sqlrel-compose-1014-delivery-1             spine-ts/simple-delivery-server:sqlrel-compose-1014   "node node_modules/@…"   delivery             9 seconds ago   Up 9 seconds (healthy)
+sqlrel-compose-1014-gateway-1              spine-ts/standalone-gateway:sqlrel-compose-1014       "node node_modules/@…"   gateway              9 seconds ago   Up 6 seconds             127.0.0.1:28180->8080/tcp

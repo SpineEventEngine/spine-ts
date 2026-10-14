@@ -1,0 +1,92 @@
+{
+  "runId": "8b6a0cd8662242c3a4296ac8adc7f336",
+  "url": "http://127.0.0.1:25173",
+  "status": "FAIL",
+  "error": "Locator expected to contain text 'Updating live'\nActual value: No live updates \nCall log:\n  - Expect \"to_contain_text\" get_by_role(\"status\") with timeout 15000ms\n  - waiting for get_by_role(\"status\")\n    34 \u00d7 locator resolved to <div role=\"status\" class=\"inline-flex items-center gap-2 rounded-full bg-zinc-800 px-3 py-2 text-sm font-medium text-zinc-300\">\u2026</div>\n       - unexpected value \"No live updates\"\n\nAria snapshot:\n- status: No live updates",
+  "issues": [
+    {
+      "kind": "console",
+      "text": "Access to fetch at 'http://127.0.0.1:28090/spine.client.QueryService/Read' from origin 'http://127.0.0.1:25173' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+    },
+    {
+      "kind": "requestfailed",
+      "text": "POST http://127.0.0.1:28090/spine.client.QueryService/Read"
+    },
+    {
+      "kind": "console",
+      "text": "Failed to load resource: net::ERR_FAILED"
+    },
+    {
+      "kind": "console",
+      "text": "Access to fetch at 'http://127.0.0.1:28090/spine.client.SubscriptionService/Subscribe' from origin 'http://127.0.0.1:25173' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+    },
+    {
+      "kind": "requestfailed",
+      "text": "POST http://127.0.0.1:28090/spine.client.SubscriptionService/Subscribe"
+    },
+    {
+      "kind": "console",
+      "text": "Failed to load resource: net::ERR_FAILED"
+    },
+    {
+      "kind": "console",
+      "text": "Access to fetch at 'http://127.0.0.1:28090/spine.client.SubscriptionService/Subscribe' from origin 'http://127.0.0.1:25173' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+    },
+    {
+      "kind": "requestfailed",
+      "text": "POST http://127.0.0.1:28090/spine.client.SubscriptionService/Subscribe"
+    },
+    {
+      "kind": "console",
+      "text": "Failed to load resource: net::ERR_FAILED"
+    },
+    {
+      "kind": "console",
+      "text": "Access to fetch at 'http://127.0.0.1:28090/spine.client.SubscriptionService/Subscribe' from origin 'http://127.0.0.1:25173' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+    },
+    {
+      "kind": "requestfailed",
+      "text": "POST http://127.0.0.1:28090/spine.client.SubscriptionService/Subscribe"
+    },
+    {
+      "kind": "console",
+      "text": "Failed to load resource: net::ERR_FAILED"
+    },
+    {
+      "kind": "console",
+      "text": "Access to fetch at 'http://127.0.0.1:28090/spine.client.SubscriptionService/Subscribe' from origin 'http://127.0.0.1:25173' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+    },
+    {
+      "kind": "requestfailed",
+      "text": "POST http://127.0.0.1:28090/spine.client.SubscriptionService/Subscribe"
+    },
+    {
+      "kind": "console",
+      "text": "Failed to load resource: net::ERR_FAILED"
+    },
+    {
+      "kind": "console",
+      "text": "Access to fetch at 'http://127.0.0.1:28090/spine.client.SubscriptionService/Subscribe' from origin 'http://127.0.0.1:25173' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+    },
+    {
+      "kind": "requestfailed",
+      "text": "POST http://127.0.0.1:28090/spine.client.SubscriptionService/Subscribe"
+    },
+    {
+      "kind": "console",
+      "text": "Failed to load resource: net::ERR_FAILED"
+    },
+    {
+      "kind": "console",
+      "text": "Access to fetch at 'http://127.0.0.1:28090/spine.client.SubscriptionService/Subscribe' from origin 'http://127.0.0.1:25173' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource."
+    },
+    {
+      "kind": "requestfailed",
+      "text": "POST http://127.0.0.1:28090/spine.client.SubscriptionService/Subscribe"
+    },
+    {
+      "kind": "console",
+      "text": "Failed to load resource: net::ERR_FAILED"
+    }
+  ]
+}

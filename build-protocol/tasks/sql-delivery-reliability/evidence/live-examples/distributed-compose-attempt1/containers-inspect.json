@@ -1,0 +1,1161 @@
+[
+    {
+        "Id": "60f6e2aae4d6f81ec406d164840ce9580a450f9edda7e9ac25c589b871d399c0",
+        "Created": "2026-10-14T04:31:09.083413589Z",
+        "Path": "node",
+        "Args": [
+            "node_modules/@spine-event-engine/example-message-board-app/dist/src/multi-process-app.js"
+        ],
+        "State": {
+            "Status": "running",
+            "Running": true,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 29011,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "2026-10-14T04:31:11.701044257Z",
+            "FinishedAt": "0001-01-01T00:00:00Z"
+        },
+        "Image": "sha256:f50851bbfb9e83379c0f3fce8f9dee58a04133a1ad1e8c4320719de02adf6674",
+        "ResolvConfPath": "/var/lib/docker/containers/60f6e2aae4d6f81ec406d164840ce9580a450f9edda7e9ac25c589b871d399c0/resolv.conf",
+        "HostnamePath": "/var/lib/docker/containers/60f6e2aae4d6f81ec406d164840ce9580a450f9edda7e9ac25c589b871d399c0/hostname",
+        "HostsPath": "/var/lib/docker/containers/60f6e2aae4d6f81ec406d164840ce9580a450f9edda7e9ac25c589b871d399c0/hosts",
+        "LogPath": "/var/lib/docker/containers/60f6e2aae4d6f81ec406d164840ce9580a450f9edda7e9ac25c589b871d399c0/60f6e2aae4d6f81ec406d164840ce9580a450f9edda7e9ac25c589b871d399c0-json.log",
+        "Name": "/sqlrel-compose-1014-application-node-1-1",
+        "RestartCount": 0,
+        "Driver": "overlay2",
+        "Platform": "linux",
+        "MountLabel": "",
+        "ProcessLabel": "",
+        "AppArmorProfile": "",
+        "ExecIDs": null,
+        "HostConfig": {
+            "Binds": null,
+            "ContainerIDFile": "",
+            "LogConfig": {
+                "Type": "json-file",
+                "Config": {}
+            },
+            "NetworkMode": "sqlrel-compose-1014_default",
+            "PortBindings": {},
+            "RestartPolicy": {
+                "Name": "no",
+                "MaximumRetryCount": 0
+            },
+            "AutoRemove": false,
+            "VolumeDriver": "",
+            "VolumesFrom": null,
+            "ConsoleSize": [
+                0,
+                0
+            ],
+            "CapAdd": null,
+            "CapDrop": null,
+            "CgroupnsMode": "private",
+            "Dns": null,
+            "DnsOptions": null,
+            "DnsSearch": null,
+            "ExtraHosts": [],
+            "GroupAdd": null,
+            "IpcMode": "private",
+            "Cgroup": "",
+            "Links": null,
+            "OomScoreAdj": 0,
+            "PidMode": "",
+            "Privileged": false,
+            "PublishAllPorts": false,
+            "ReadonlyRootfs": false,
+            "SecurityOpt": null,
+            "UTSMode": "",
+            "UsernsMode": "",
+            "ShmSize": 67108864,
+            "Runtime": "runc",
+            "Isolation": "",
+            "CpuShares": 0,
+            "Memory": 0,
+            "NanoCpus": 0,
+            "CgroupParent": "",
+            "BlkioWeight": 0,
+            "BlkioWeightDevice": null,
+            "BlkioDeviceReadBps": null,
+            "BlkioDeviceWriteBps": null,
+            "BlkioDeviceReadIOps": null,
+            "BlkioDeviceWriteIOps": null,
+            "CpuPeriod": 0,
+            "CpuQuota": 0,
+            "CpuRealtimePeriod": 0,
+            "CpuRealtimeRuntime": 0,
+            "CpusetCpus": "",
+            "CpusetMems": "",
+            "Devices": null,
+            "DeviceCgroupRules": null,
+            "DeviceRequests": null,
+            "MemoryReservation": 0,
+            "MemorySwap": 0,
+            "MemorySwappiness": null,
+            "OomKillDisable": null,
+            "PidsLimit": null,
+            "Ulimits": null,
+            "CpuCount": 0,
+            "CpuPercent": 0,
+            "IOMaximumIOps": 0,
+            "IOMaximumBandwidth": 0,
+            "MaskedPaths": [
+                "/proc/acpi",
+                "/proc/asound",
+                "/proc/interrupts",
+                "/proc/kcore",
+                "/proc/keys",
+                "/proc/latency_stats",
+                "/proc/sched_debug",
+                "/proc/scsi",
+                "/proc/timer_list",
+                "/proc/timer_stats",
+                "/sys/devices/virtual/powercap",
+                "/sys/firmware"
+            ],
+            "ReadonlyPaths": [
+                "/proc/bus",
+                "/proc/fs",
+                "/proc/irq",
+                "/proc/sys",
+                "/proc/sysrq-trigger"
+            ]
+        },
+        "GraphDriver": {
+            "Data": {
+                "ID": "60f6e2aae4d6f81ec406d164840ce9580a450f9edda7e9ac25c589b871d399c0",
+                "LowerDir": "/var/lib/docker/overlay2/015143cceb2e39870226071bf16844225307dee3314580e4036a1cba8460b95c-init/diff:/var/lib/docker/overlay2/ew6p25wrswfdhpk7kszimypdx/diff:/var/lib/docker/overlay2/lungmjciu85r5h4ufwetdxwdg/diff:/var/lib/docker/overlay2/nohrbj075603td80j6telfqir/diff:/var/lib/docker/overlay2/674dfbb081c8358afecfeefd72a21c2b18d309211e594a1784b9f4ae9d15d1aa/diff:/var/lib/docker/overlay2/5b6f02124e7a1c96899e49aa552043f97570bdbc89e6f3bc244e7b2a45d40281/diff:/var/lib/docker/overlay2/c6d6733a638ffc8062b90e95ab483a2c5c1a7f697d6b1df3a28c42b9837c644d/diff:/var/lib/docker/overlay2/28be73351a62f592b11a096034fb38db6d5fbecece0ad45bd703cc54cd90b1d9/diff:/var/lib/docker/overlay2/c1963c484f4b6180b20fd22680d44d6e75fb807ba652533365f0556440f5e203/diff",
+                "MergedDir": "/var/lib/docker/overlay2/015143cceb2e39870226071bf16844225307dee3314580e4036a1cba8460b95c/merged",
+                "UpperDir": "/var/lib/docker/overlay2/015143cceb2e39870226071bf16844225307dee3314580e4036a1cba8460b95c/diff",
+                "WorkDir": "/var/lib/docker/overlay2/015143cceb2e39870226071bf16844225307dee3314580e4036a1cba8460b95c/work"
+            },
+            "Name": "overlay2"
+        },
+        "Mounts": [],
+        "Config": {
+            "Hostname": "60f6e2aae4d6",
+            "Domainname": "",
+            "User": "",
+            "AttachStdin": false,
+            "AttachStdout": true,
+            "AttachStderr": true,
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "DATASTORE_PROJECT_ID=distributed-message-board",
+                "DATASTORE_EMULATOR_HOST=datastore:8081",
+                "PROCESS_COUNT=2",
+                "NODE_ENV=production",
+                "DELIVERY_SERVER_URL=http://delivery:8484",
+                "HOST=0.0.0.0",
+                "PORT=8080",
+                "DELIVERY_SHARD_COUNT=2",
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "NODE_VERSION=24.18.0",
+                "YARN_VERSION=1.22.22"
+            ],
+            "Cmd": [
+                "node_modules/@spine-event-engine/example-message-board-app/dist/src/multi-process-app.js"
+            ],
+            "Image": "spine-ts/message-board:sqlrel-compose-1014",
+            "Volumes": null,
+            "WorkingDir": "/app",
+            "Entrypoint": [
+                "node"
+            ],
+            "Labels": {
+                "com.docker.compose.config-hash": "c882a65b43f9da2c3814d16989f454b0e804c3c16be1ca1a9c2fc55859c2879f",
+                "com.docker.compose.container-number": "1",
+                "com.docker.compose.depends_on": "datastore:service_healthy:false,delivery:service_healthy:false",
+                "com.docker.compose.image": "sha256:f50851bbfb9e83379c0f3fce8f9dee58a04133a1ad1e8c4320719de02adf6674",
+                "com.docker.compose.oneoff": "False",
+                "com.docker.compose.project": "sqlrel-compose-1014",
+                "com.docker.compose.project.config_files": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/examples/distributed-message-board/deploy/compose.yaml",
+                "com.docker.compose.project.working_dir": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/examples/distributed-message-board/deploy",
+                "com.docker.compose.service": "application-node-1",
+                "com.docker.compose.version": "5.3.1"
+            }
+        },
+        "NetworkSettings": {
+            "SandboxID": "802e9944b1c8c86d695f85fa7482d436d723f1214a12560353edf23840243a38",
+            "SandboxKey": "/var/run/docker/netns/802e9944b1c8",
+            "Ports": {},
+            "Networks": {
+                "sqlrel-compose-1014_default": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": [
+                        "sqlrel-compose-1014-application-node-1-1",
+                        "application-node-1"
+                    ],
+                    "DriverOpts": null,
+                    "GwPriority": 0,
+                    "NetworkID": "e49772801faa30bf9a778befcc7284df6ab7b329e2e7d9666f4aa59c40cd8f4c",
+                    "EndpointID": "1f030ea12a45745452b9870dc28c7ac6a5f37c73942baf121a5a29c5641517d8",
+                    "Gateway": "172.18.0.1",
+                    "IPAddress": "172.18.0.4",
+                    "MacAddress": "5a:47:c4:ee:33:cd",
+                    "IPPrefixLen": 16,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "DNSNames": [
+                        "sqlrel-compose-1014-application-node-1-1",
+                        "application-node-1",
+                        "60f6e2aae4d6"
+                    ]
+                }
+            }
+        }
+    },
+    {
+        "Id": "27cc37de390e276dfd3cf4268bb790e6226373d66205b1baca9f9c2d8835a901",
+        "Created": "2026-10-14T04:31:09.081859172Z",
+        "Path": "node",
+        "Args": [
+            "node_modules/@spine-event-engine/example-message-board-app/dist/src/multi-process-app.js"
+        ],
+        "State": {
+            "Status": "running",
+            "Running": true,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 29012,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "2026-10-14T04:31:11.701528882Z",
+            "FinishedAt": "0001-01-01T00:00:00Z"
+        },
+        "Image": "sha256:f50851bbfb9e83379c0f3fce8f9dee58a04133a1ad1e8c4320719de02adf6674",
+        "ResolvConfPath": "/var/lib/docker/containers/27cc37de390e276dfd3cf4268bb790e6226373d66205b1baca9f9c2d8835a901/resolv.conf",
+        "HostnamePath": "/var/lib/docker/containers/27cc37de390e276dfd3cf4268bb790e6226373d66205b1baca9f9c2d8835a901/hostname",
+        "HostsPath": "/var/lib/docker/containers/27cc37de390e276dfd3cf4268bb790e6226373d66205b1baca9f9c2d8835a901/hosts",
+        "LogPath": "/var/lib/docker/containers/27cc37de390e276dfd3cf4268bb790e6226373d66205b1baca9f9c2d8835a901/27cc37de390e276dfd3cf4268bb790e6226373d66205b1baca9f9c2d8835a901-json.log",
+        "Name": "/sqlrel-compose-1014-application-node-2-1",
+        "RestartCount": 0,
+        "Driver": "overlay2",
+        "Platform": "linux",
+        "MountLabel": "",
+        "ProcessLabel": "",
+        "AppArmorProfile": "",
+        "ExecIDs": null,
+        "HostConfig": {
+            "Binds": null,
+            "ContainerIDFile": "",
+            "LogConfig": {
+                "Type": "json-file",
+                "Config": {}
+            },
+            "NetworkMode": "sqlrel-compose-1014_default",
+            "PortBindings": {},
+            "RestartPolicy": {
+                "Name": "no",
+                "MaximumRetryCount": 0
+            },
+            "AutoRemove": false,
+            "VolumeDriver": "",
+            "VolumesFrom": null,
+            "ConsoleSize": [
+                0,
+                0
+            ],
+            "CapAdd": null,
+            "CapDrop": null,
+            "CgroupnsMode": "private",
+            "Dns": null,
+            "DnsOptions": null,
+            "DnsSearch": null,
+            "ExtraHosts": [],
+            "GroupAdd": null,
+            "IpcMode": "private",
+            "Cgroup": "",
+            "Links": null,
+            "OomScoreAdj": 0,
+            "PidMode": "",
+            "Privileged": false,
+            "PublishAllPorts": false,
+            "ReadonlyRootfs": false,
+            "SecurityOpt": null,
+            "UTSMode": "",
+            "UsernsMode": "",
+            "ShmSize": 67108864,
+            "Runtime": "runc",
+            "Isolation": "",
+            "CpuShares": 0,
+            "Memory": 0,
+            "NanoCpus": 0,
+            "CgroupParent": "",
+            "BlkioWeight": 0,
+            "BlkioWeightDevice": null,
+            "BlkioDeviceReadBps": null,
+            "BlkioDeviceWriteBps": null,
+            "BlkioDeviceReadIOps": null,
+            "BlkioDeviceWriteIOps": null,
+            "CpuPeriod": 0,
+            "CpuQuota": 0,
+            "CpuRealtimePeriod": 0,
+            "CpuRealtimeRuntime": 0,
+            "CpusetCpus": "",
+            "CpusetMems": "",
+            "Devices": null,
+            "DeviceCgroupRules": null,
+            "DeviceRequests": null,
+            "MemoryReservation": 0,
+            "MemorySwap": 0,
+            "MemorySwappiness": null,
+            "OomKillDisable": null,
+            "PidsLimit": null,
+            "Ulimits": null,
+            "CpuCount": 0,
+            "CpuPercent": 0,
+            "IOMaximumIOps": 0,
+            "IOMaximumBandwidth": 0,
+            "MaskedPaths": [
+                "/proc/acpi",
+                "/proc/asound",
+                "/proc/interrupts",
+                "/proc/kcore",
+                "/proc/keys",
+                "/proc/latency_stats",
+                "/proc/sched_debug",
+                "/proc/scsi",
+                "/proc/timer_list",
+                "/proc/timer_stats",
+                "/sys/devices/virtual/powercap",
+                "/sys/firmware"
+            ],
+            "ReadonlyPaths": [
+                "/proc/bus",
+                "/proc/fs",
+                "/proc/irq",
+                "/proc/sys",
+                "/proc/sysrq-trigger"
+            ]
+        },
+        "GraphDriver": {
+            "Data": {
+                "ID": "27cc37de390e276dfd3cf4268bb790e6226373d66205b1baca9f9c2d8835a901",
+                "LowerDir": "/var/lib/docker/overlay2/5116197b0ee2dc147699341c58a95381a248e58e5ec47e1afcc9f78468a06f03-init/diff:/var/lib/docker/overlay2/ew6p25wrswfdhpk7kszimypdx/diff:/var/lib/docker/overlay2/lungmjciu85r5h4ufwetdxwdg/diff:/var/lib/docker/overlay2/nohrbj075603td80j6telfqir/diff:/var/lib/docker/overlay2/674dfbb081c8358afecfeefd72a21c2b18d309211e594a1784b9f4ae9d15d1aa/diff:/var/lib/docker/overlay2/5b6f02124e7a1c96899e49aa552043f97570bdbc89e6f3bc244e7b2a45d40281/diff:/var/lib/docker/overlay2/c6d6733a638ffc8062b90e95ab483a2c5c1a7f697d6b1df3a28c42b9837c644d/diff:/var/lib/docker/overlay2/28be73351a62f592b11a096034fb38db6d5fbecece0ad45bd703cc54cd90b1d9/diff:/var/lib/docker/overlay2/c1963c484f4b6180b20fd22680d44d6e75fb807ba652533365f0556440f5e203/diff",
+                "MergedDir": "/var/lib/docker/overlay2/5116197b0ee2dc147699341c58a95381a248e58e5ec47e1afcc9f78468a06f03/merged",
+                "UpperDir": "/var/lib/docker/overlay2/5116197b0ee2dc147699341c58a95381a248e58e5ec47e1afcc9f78468a06f03/diff",
+                "WorkDir": "/var/lib/docker/overlay2/5116197b0ee2dc147699341c58a95381a248e58e5ec47e1afcc9f78468a06f03/work"
+            },
+            "Name": "overlay2"
+        },
+        "Mounts": [],
+        "Config": {
+            "Hostname": "27cc37de390e",
+            "Domainname": "",
+            "User": "",
+            "AttachStdin": false,
+            "AttachStdout": true,
+            "AttachStderr": true,
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "NODE_ENV=production",
+                "DATASTORE_EMULATOR_HOST=datastore:8081",
+                "DELIVERY_SERVER_URL=http://delivery:8484",
+                "PORT=8080",
+                "DATASTORE_PROJECT_ID=distributed-message-board",
+                "PROCESS_COUNT=2",
+                "HOST=0.0.0.0",
+                "DELIVERY_SHARD_COUNT=2",
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "NODE_VERSION=24.18.0",
+                "YARN_VERSION=1.22.22"
+            ],
+            "Cmd": [
+                "node_modules/@spine-event-engine/example-message-board-app/dist/src/multi-process-app.js"
+            ],
+            "Image": "spine-ts/message-board:sqlrel-compose-1014",
+            "Volumes": null,
+            "WorkingDir": "/app",
+            "Entrypoint": [
+                "node"
+            ],
+            "Labels": {
+                "com.docker.compose.config-hash": "c882a65b43f9da2c3814d16989f454b0e804c3c16be1ca1a9c2fc55859c2879f",
+                "com.docker.compose.container-number": "1",
+                "com.docker.compose.depends_on": "delivery:service_healthy:false,datastore:service_healthy:false",
+                "com.docker.compose.image": "sha256:f50851bbfb9e83379c0f3fce8f9dee58a04133a1ad1e8c4320719de02adf6674",
+                "com.docker.compose.oneoff": "False",
+                "com.docker.compose.project": "sqlrel-compose-1014",
+                "com.docker.compose.project.config_files": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/examples/distributed-message-board/deploy/compose.yaml",
+                "com.docker.compose.project.working_dir": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/examples/distributed-message-board/deploy",
+                "com.docker.compose.service": "application-node-2",
+                "com.docker.compose.version": "5.3.1"
+            }
+        },
+        "NetworkSettings": {
+            "SandboxID": "e6a466f45b9d0b07bfab999e7c783a9707db37132bfd1030c34e8b53c7c7d81d",
+            "SandboxKey": "/var/run/docker/netns/e6a466f45b9d",
+            "Ports": {},
+            "Networks": {
+                "sqlrel-compose-1014_default": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": [
+                        "sqlrel-compose-1014-application-node-2-1",
+                        "application-node-2"
+                    ],
+                    "DriverOpts": null,
+                    "GwPriority": 0,
+                    "NetworkID": "e49772801faa30bf9a778befcc7284df6ab7b329e2e7d9666f4aa59c40cd8f4c",
+                    "EndpointID": "1c4d372a007fa2cd17905978b0ad47c7f5c9f013ec2c2cbd234ad1c7048185f0",
+                    "Gateway": "172.18.0.1",
+                    "IPAddress": "172.18.0.5",
+                    "MacAddress": "8e:af:28:45:9c:58",
+                    "IPPrefixLen": 16,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "DNSNames": [
+                        "sqlrel-compose-1014-application-node-2-1",
+                        "application-node-2",
+                        "27cc37de390e"
+                    ]
+                }
+            }
+        }
+    },
+    {
+        "Id": "79d2ab6d752b70270455827d26fa0eba46d4806cda2f6cdc9013222beb307a6a",
+        "Created": "2026-10-14T04:31:09.061765547Z",
+        "Path": "gcloud",
+        "Args": [
+            "emulators",
+            "firestore",
+            "start",
+            "--database-mode=datastore-mode",
+            "--host-port=0.0.0.0:8081",
+            "--quiet"
+        ],
+        "State": {
+            "Status": "running",
+            "Running": true,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 28732,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "2026-10-14T04:31:09.116905505Z",
+            "FinishedAt": "0001-01-01T00:00:00Z",
+            "Health": {
+                "Status": "healthy",
+                "FailingStreak": 0,
+                "Log": [
+                    {
+                        "Start": "2026-10-14T04:31:11.17137984Z",
+                        "End": "2026-10-14T04:31:11.205552006Z",
+                        "ExitCode": 0,
+                        "Output": ""
+                    },
+                    {
+                        "Start": "2026-10-14T04:31:13.215352882Z",
+                        "End": "2026-10-14T04:31:13.258726132Z",
+                        "ExitCode": 0,
+                        "Output": ""
+                    },
+                    {
+                        "Start": "2026-10-14T04:31:15.268337967Z",
+                        "End": "2026-10-14T04:31:15.318444342Z",
+                        "ExitCode": 0,
+                        "Output": ""
+                    },
+                    {
+                        "Start": "2026-10-14T04:31:17.326775093Z",
+                        "End": "2026-10-14T04:31:17.368803468Z",
+                        "ExitCode": 0,
+                        "Output": ""
+                    }
+                ]
+            }
+        },
+        "Image": "sha256:8ad6ebf72c0d9a0588cc1443eb950898366bfe1c61eb326db6666054960b6da2",
+        "ResolvConfPath": "/var/lib/docker/containers/79d2ab6d752b70270455827d26fa0eba46d4806cda2f6cdc9013222beb307a6a/resolv.conf",
+        "HostnamePath": "/var/lib/docker/containers/79d2ab6d752b70270455827d26fa0eba46d4806cda2f6cdc9013222beb307a6a/hostname",
+        "HostsPath": "/var/lib/docker/containers/79d2ab6d752b70270455827d26fa0eba46d4806cda2f6cdc9013222beb307a6a/hosts",
+        "LogPath": "/var/lib/docker/containers/79d2ab6d752b70270455827d26fa0eba46d4806cda2f6cdc9013222beb307a6a/79d2ab6d752b70270455827d26fa0eba46d4806cda2f6cdc9013222beb307a6a-json.log",
+        "Name": "/sqlrel-compose-1014-datastore-1",
+        "RestartCount": 0,
+        "Driver": "overlay2",
+        "Platform": "linux",
+        "MountLabel": "",
+        "ProcessLabel": "",
+        "AppArmorProfile": "",
+        "ExecIDs": null,
+        "HostConfig": {
+            "Binds": null,
+            "ContainerIDFile": "",
+            "LogConfig": {
+                "Type": "json-file",
+                "Config": {}
+            },
+            "NetworkMode": "sqlrel-compose-1014_default",
+            "PortBindings": {},
+            "RestartPolicy": {
+                "Name": "no",
+                "MaximumRetryCount": 0
+            },
+            "AutoRemove": false,
+            "VolumeDriver": "",
+            "VolumesFrom": null,
+            "ConsoleSize": [
+                0,
+                0
+            ],
+            "CapAdd": null,
+            "CapDrop": null,
+            "CgroupnsMode": "private",
+            "Dns": null,
+            "DnsOptions": null,
+            "DnsSearch": null,
+            "ExtraHosts": [],
+            "GroupAdd": null,
+            "IpcMode": "private",
+            "Cgroup": "",
+            "Links": null,
+            "OomScoreAdj": 0,
+            "PidMode": "",
+            "Privileged": false,
+            "PublishAllPorts": false,
+            "ReadonlyRootfs": false,
+            "SecurityOpt": null,
+            "UTSMode": "",
+            "UsernsMode": "",
+            "ShmSize": 67108864,
+            "Runtime": "runc",
+            "Isolation": "",
+            "CpuShares": 0,
+            "Memory": 0,
+            "NanoCpus": 0,
+            "CgroupParent": "",
+            "BlkioWeight": 0,
+            "BlkioWeightDevice": null,
+            "BlkioDeviceReadBps": null,
+            "BlkioDeviceWriteBps": null,
+            "BlkioDeviceReadIOps": null,
+            "BlkioDeviceWriteIOps": null,
+            "CpuPeriod": 0,
+            "CpuQuota": 0,
+            "CpuRealtimePeriod": 0,
+            "CpuRealtimeRuntime": 0,
+            "CpusetCpus": "",
+            "CpusetMems": "",
+            "Devices": null,
+            "DeviceCgroupRules": null,
+            "DeviceRequests": null,
+            "MemoryReservation": 0,
+            "MemorySwap": 0,
+            "MemorySwappiness": null,
+            "OomKillDisable": null,
+            "PidsLimit": null,
+            "Ulimits": null,
+            "CpuCount": 0,
+            "CpuPercent": 0,
+            "IOMaximumIOps": 0,
+            "IOMaximumBandwidth": 0,
+            "MaskedPaths": [
+                "/proc/acpi",
+                "/proc/asound",
+                "/proc/interrupts",
+                "/proc/kcore",
+                "/proc/keys",
+                "/proc/latency_stats",
+                "/proc/sched_debug",
+                "/proc/scsi",
+                "/proc/timer_list",
+                "/proc/timer_stats",
+                "/sys/devices/virtual/powercap",
+                "/sys/firmware"
+            ],
+            "ReadonlyPaths": [
+                "/proc/bus",
+                "/proc/fs",
+                "/proc/irq",
+                "/proc/sys",
+                "/proc/sysrq-trigger"
+            ]
+        },
+        "GraphDriver": {
+            "Data": {
+                "ID": "79d2ab6d752b70270455827d26fa0eba46d4806cda2f6cdc9013222beb307a6a",
+                "LowerDir": "/var/lib/docker/overlay2/b3541f2b58099716bf254095eff419a2425264a7fb7f9f6b7e30413083a55cf1-init/diff:/var/lib/docker/overlay2/cb80c0cab1aa02907644115fc47680c11468d9ebf4ea22b3b1fc80018e55c5ba/diff:/var/lib/docker/overlay2/16abcc320416da2acedcc20fa061cc468cd3784a5f7a12aea9f6596ad71e0c6f/diff:/var/lib/docker/overlay2/95004ab6f2aa47c7bc93a0a0e8ce86457f6624b8adbe4455ec581cc9bc9f815e/diff:/var/lib/docker/overlay2/8521ee73c5acd57dc6fbe9a8fa8f14d6434d372f87e7595c19abd13ab3af21ab/diff:/var/lib/docker/overlay2/458c80153f1cf68c6d426303308e2f524d8e2cb4262db8a69651a6fa4a6bc294/diff:/var/lib/docker/overlay2/a940a345e6a6b62837726371cc0824dcfcb1ba331d61fb97ceff96cbafb29548/diff:/var/lib/docker/overlay2/83c187e375cc737423ed84b7b9733ca6fbf1bc31cb8771d823309b74f764b9b9/diff",
+                "MergedDir": "/var/lib/docker/overlay2/b3541f2b58099716bf254095eff419a2425264a7fb7f9f6b7e30413083a55cf1/merged",
+                "UpperDir": "/var/lib/docker/overlay2/b3541f2b58099716bf254095eff419a2425264a7fb7f9f6b7e30413083a55cf1/diff",
+                "WorkDir": "/var/lib/docker/overlay2/b3541f2b58099716bf254095eff419a2425264a7fb7f9f6b7e30413083a55cf1/work"
+            },
+            "Name": "overlay2"
+        },
+        "Mounts": [],
+        "Config": {
+            "Hostname": "79d2ab6d752b",
+            "Domainname": "",
+            "User": "",
+            "AttachStdin": false,
+            "AttachStdout": true,
+            "AttachStderr": true,
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "PATH=/google-cloud-sdk/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "CLOUD_SDK_VERSION=578.0.0"
+            ],
+            "Cmd": [
+                "gcloud",
+                "emulators",
+                "firestore",
+                "start",
+                "--database-mode=datastore-mode",
+                "--host-port=0.0.0.0:8081",
+                "--quiet"
+            ],
+            "Healthcheck": {
+                "Test": [
+                    "CMD-SHELL",
+                    "bash -c 'echo \u003e /dev/tcp/127.0.0.1/8081'"
+                ],
+                "Interval": 2000000000,
+                "Timeout": 2000000000,
+                "Retries": 30
+            },
+            "Image": "google/cloud-sdk:578.0.0-emulators",
+            "Volumes": null,
+            "WorkingDir": "",
+            "Entrypoint": null,
+            "Labels": {
+                "com.docker.compose.config-hash": "44889d1c25039da4d42841259d5a750225035e7d8d65a77b1171622fc055c322",
+                "com.docker.compose.container-number": "1",
+                "com.docker.compose.depends_on": "",
+                "com.docker.compose.image": "sha256:8ad6ebf72c0d9a0588cc1443eb950898366bfe1c61eb326db6666054960b6da2",
+                "com.docker.compose.oneoff": "False",
+                "com.docker.compose.project": "sqlrel-compose-1014",
+                "com.docker.compose.project.config_files": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/examples/distributed-message-board/deploy/compose.yaml",
+                "com.docker.compose.project.working_dir": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/examples/distributed-message-board/deploy",
+                "com.docker.compose.service": "datastore",
+                "com.docker.compose.version": "5.3.1"
+            }
+        },
+        "NetworkSettings": {
+            "SandboxID": "2e66e61e3bc85f2fc57f94cb65107e03901081e4528366ca15e6c2c14d12d9cb",
+            "SandboxKey": "/var/run/docker/netns/2e66e61e3bc8",
+            "Ports": {},
+            "Networks": {
+                "sqlrel-compose-1014_default": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": [
+                        "sqlrel-compose-1014-datastore-1",
+                        "datastore"
+                    ],
+                    "DriverOpts": null,
+                    "GwPriority": 0,
+                    "NetworkID": "e49772801faa30bf9a778befcc7284df6ab7b329e2e7d9666f4aa59c40cd8f4c",
+                    "EndpointID": "b97c3e7cc65f272b2931dffc020046cc45d3c93650d5ac5e277daa4a5ee1744d",
+                    "Gateway": "172.18.0.1",
+                    "IPAddress": "172.18.0.2",
+                    "MacAddress": "b6:ca:71:1a:7f:cf",
+                    "IPPrefixLen": 16,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "DNSNames": [
+                        "sqlrel-compose-1014-datastore-1",
+                        "datastore",
+                        "79d2ab6d752b"
+                    ]
+                }
+            }
+        }
+    },
+    {
+        "Id": "360d8b9b412d00f40474976b271fa03262e9a19943441295576220be61f22982",
+        "Created": "2026-10-14T04:31:09.061834922Z",
+        "Path": "node",
+        "Args": [
+            "node_modules/@spine-event-engine/delivery-server/dist/bin/spine-delivery-server.js"
+        ],
+        "State": {
+            "Status": "running",
+            "Running": true,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 28731,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "2026-10-14T04:31:09.117271922Z",
+            "FinishedAt": "0001-01-01T00:00:00Z",
+            "Health": {
+                "Status": "healthy",
+                "FailingStreak": 0,
+                "Log": [
+                    {
+                        "Start": "2026-10-14T04:31:11.173966548Z",
+                        "End": "2026-10-14T04:31:11.22930434Z",
+                        "ExitCode": 0,
+                        "Output": ""
+                    },
+                    {
+                        "Start": "2026-10-14T04:31:13.229591466Z",
+                        "End": "2026-10-14T04:31:13.284822591Z",
+                        "ExitCode": 0,
+                        "Output": ""
+                    },
+                    {
+                        "Start": "2026-10-14T04:31:15.2854523Z",
+                        "End": "2026-10-14T04:31:15.344942383Z",
+                        "ExitCode": 0,
+                        "Output": ""
+                    },
+                    {
+                        "Start": "2026-10-14T04:31:17.345208968Z",
+                        "End": "2026-10-14T04:31:17.389089426Z",
+                        "ExitCode": 0,
+                        "Output": ""
+                    }
+                ]
+            }
+        },
+        "Image": "sha256:51ae793b321f45b48e67cebb4a012a7c8a7a09b8114575a91187053ea29081c3",
+        "ResolvConfPath": "/var/lib/docker/containers/360d8b9b412d00f40474976b271fa03262e9a19943441295576220be61f22982/resolv.conf",
+        "HostnamePath": "/var/lib/docker/containers/360d8b9b412d00f40474976b271fa03262e9a19943441295576220be61f22982/hostname",
+        "HostsPath": "/var/lib/docker/containers/360d8b9b412d00f40474976b271fa03262e9a19943441295576220be61f22982/hosts",
+        "LogPath": "/var/lib/docker/containers/360d8b9b412d00f40474976b271fa03262e9a19943441295576220be61f22982/360d8b9b412d00f40474976b271fa03262e9a19943441295576220be61f22982-json.log",
+        "Name": "/sqlrel-compose-1014-delivery-1",
+        "RestartCount": 0,
+        "Driver": "overlay2",
+        "Platform": "linux",
+        "MountLabel": "",
+        "ProcessLabel": "",
+        "AppArmorProfile": "",
+        "ExecIDs": null,
+        "HostConfig": {
+            "Binds": null,
+            "ContainerIDFile": "",
+            "LogConfig": {
+                "Type": "json-file",
+                "Config": {}
+            },
+            "NetworkMode": "sqlrel-compose-1014_default",
+            "PortBindings": {},
+            "RestartPolicy": {
+                "Name": "no",
+                "MaximumRetryCount": 0
+            },
+            "AutoRemove": false,
+            "VolumeDriver": "",
+            "VolumesFrom": null,
+            "ConsoleSize": [
+                0,
+                0
+            ],
+            "CapAdd": null,
+            "CapDrop": null,
+            "CgroupnsMode": "private",
+            "Dns": null,
+            "DnsOptions": null,
+            "DnsSearch": null,
+            "ExtraHosts": [],
+            "GroupAdd": null,
+            "IpcMode": "private",
+            "Cgroup": "",
+            "Links": null,
+            "OomScoreAdj": 0,
+            "PidMode": "",
+            "Privileged": false,
+            "PublishAllPorts": false,
+            "ReadonlyRootfs": false,
+            "SecurityOpt": null,
+            "UTSMode": "",
+            "UsernsMode": "",
+            "ShmSize": 67108864,
+            "Runtime": "runc",
+            "Isolation": "",
+            "CpuShares": 0,
+            "Memory": 0,
+            "NanoCpus": 0,
+            "CgroupParent": "",
+            "BlkioWeight": 0,
+            "BlkioWeightDevice": null,
+            "BlkioDeviceReadBps": null,
+            "BlkioDeviceWriteBps": null,
+            "BlkioDeviceReadIOps": null,
+            "BlkioDeviceWriteIOps": null,
+            "CpuPeriod": 0,
+            "CpuQuota": 0,
+            "CpuRealtimePeriod": 0,
+            "CpuRealtimeRuntime": 0,
+            "CpusetCpus": "",
+            "CpusetMems": "",
+            "Devices": null,
+            "DeviceCgroupRules": null,
+            "DeviceRequests": null,
+            "MemoryReservation": 0,
+            "MemorySwap": 0,
+            "MemorySwappiness": null,
+            "OomKillDisable": null,
+            "PidsLimit": null,
+            "Ulimits": null,
+            "CpuCount": 0,
+            "CpuPercent": 0,
+            "IOMaximumIOps": 0,
+            "IOMaximumBandwidth": 0,
+            "MaskedPaths": [
+                "/proc/acpi",
+                "/proc/asound",
+                "/proc/interrupts",
+                "/proc/kcore",
+                "/proc/keys",
+                "/proc/latency_stats",
+                "/proc/sched_debug",
+                "/proc/scsi",
+                "/proc/timer_list",
+                "/proc/timer_stats",
+                "/sys/devices/virtual/powercap",
+                "/sys/firmware"
+            ],
+            "ReadonlyPaths": [
+                "/proc/bus",
+                "/proc/fs",
+                "/proc/irq",
+                "/proc/sys",
+                "/proc/sysrq-trigger"
+            ]
+        },
+        "GraphDriver": {
+            "Data": {
+                "ID": "360d8b9b412d00f40474976b271fa03262e9a19943441295576220be61f22982",
+                "LowerDir": "/var/lib/docker/overlay2/660ab3e1ce7b89a4b86bec89a1430a9057652b5dc1ba5ecd69a8736c5163ef8a-init/diff:/var/lib/docker/overlay2/ew6p25wrswfdhpk7kszimypdx/diff:/var/lib/docker/overlay2/lungmjciu85r5h4ufwetdxwdg/diff:/var/lib/docker/overlay2/nohrbj075603td80j6telfqir/diff:/var/lib/docker/overlay2/674dfbb081c8358afecfeefd72a21c2b18d309211e594a1784b9f4ae9d15d1aa/diff:/var/lib/docker/overlay2/5b6f02124e7a1c96899e49aa552043f97570bdbc89e6f3bc244e7b2a45d40281/diff:/var/lib/docker/overlay2/c6d6733a638ffc8062b90e95ab483a2c5c1a7f697d6b1df3a28c42b9837c644d/diff:/var/lib/docker/overlay2/28be73351a62f592b11a096034fb38db6d5fbecece0ad45bd703cc54cd90b1d9/diff:/var/lib/docker/overlay2/c1963c484f4b6180b20fd22680d44d6e75fb807ba652533365f0556440f5e203/diff",
+                "MergedDir": "/var/lib/docker/overlay2/660ab3e1ce7b89a4b86bec89a1430a9057652b5dc1ba5ecd69a8736c5163ef8a/merged",
+                "UpperDir": "/var/lib/docker/overlay2/660ab3e1ce7b89a4b86bec89a1430a9057652b5dc1ba5ecd69a8736c5163ef8a/diff",
+                "WorkDir": "/var/lib/docker/overlay2/660ab3e1ce7b89a4b86bec89a1430a9057652b5dc1ba5ecd69a8736c5163ef8a/work"
+            },
+            "Name": "overlay2"
+        },
+        "Mounts": [],
+        "Config": {
+            "Hostname": "360d8b9b412d",
+            "Domainname": "",
+            "User": "",
+            "AttachStdin": false,
+            "AttachStdout": true,
+            "AttachStderr": true,
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "PORT=8484",
+                "HOST=0.0.0.0",
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "NODE_VERSION=24.18.0",
+                "YARN_VERSION=1.22.22",
+                "NODE_ENV=production"
+            ],
+            "Cmd": [
+                "node_modules/@spine-event-engine/delivery-server/dist/bin/spine-delivery-server.js"
+            ],
+            "Healthcheck": {
+                "Test": [
+                    "CMD-SHELL",
+                    "node -e \"const client=require('node:http2').connect('http://127.0.0.1:8484');client.on('connect',()=\u003e{client.close();process.exit(0)});client.on('error',()=\u003eprocess.exit(1));setTimeout(()=\u003eprocess.exit(1),1000)\""
+                ],
+                "Interval": 2000000000,
+                "Timeout": 2000000000,
+                "Retries": 30
+            },
+            "Image": "spine-ts/simple-delivery-server:sqlrel-compose-1014",
+            "Volumes": null,
+            "WorkingDir": "/app",
+            "Entrypoint": [
+                "node"
+            ],
+            "Labels": {
+                "com.docker.compose.config-hash": "e43771b0e3f8ec622dafbb4d7d1f2b568eb75e5ba1f6a2c5fc431485a1fb5d0f",
+                "com.docker.compose.container-number": "1",
+                "com.docker.compose.depends_on": "",
+                "com.docker.compose.image": "sha256:51ae793b321f45b48e67cebb4a012a7c8a7a09b8114575a91187053ea29081c3",
+                "com.docker.compose.oneoff": "False",
+                "com.docker.compose.project": "sqlrel-compose-1014",
+                "com.docker.compose.project.config_files": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/examples/distributed-message-board/deploy/compose.yaml",
+                "com.docker.compose.project.working_dir": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/examples/distributed-message-board/deploy",
+                "com.docker.compose.service": "delivery",
+                "com.docker.compose.version": "5.3.1"
+            }
+        },
+        "NetworkSettings": {
+            "SandboxID": "151c4bdf9bdc0ac983526c0e92e94ac294a618e8fde746868599a5af143a9480",
+            "SandboxKey": "/var/run/docker/netns/151c4bdf9bdc",
+            "Ports": {},
+            "Networks": {
+                "sqlrel-compose-1014_default": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": [
+                        "sqlrel-compose-1014-delivery-1",
+                        "delivery"
+                    ],
+                    "DriverOpts": null,
+                    "GwPriority": 0,
+                    "NetworkID": "e49772801faa30bf9a778befcc7284df6ab7b329e2e7d9666f4aa59c40cd8f4c",
+                    "EndpointID": "24014eff65be932fee32b1a4f475bf9a62c8b482d3f04a6fa83d0494e75fec58",
+                    "Gateway": "172.18.0.1",
+                    "IPAddress": "172.18.0.3",
+                    "MacAddress": "ba:de:8b:ce:56:0c",
+                    "IPPrefixLen": 16,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "DNSNames": [
+                        "sqlrel-compose-1014-delivery-1",
+                        "delivery",
+                        "360d8b9b412d"
+                    ]
+                }
+            }
+        }
+    },
+    {
+        "Id": "e3e67a1fdc451a18cf3e43a279a6b98d3361f8bbfa040db8aec71f0604cb2d39",
+        "Created": "2026-10-14T04:31:09.100053255Z",
+        "Path": "node",
+        "Args": [
+            "node_modules/@spine-event-engine/example-message-board-app/dist/src/gateway-server.js"
+        ],
+        "State": {
+            "Status": "running",
+            "Running": true,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 29138,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "2026-10-14T04:31:12.283644048Z",
+            "FinishedAt": "0001-01-01T00:00:00Z"
+        },
+        "Image": "sha256:bfad6c2ce7c8a663b3bf31e37fb0f51faa694c8e7e9c49f1f470097ab65935cb",
+        "ResolvConfPath": "/var/lib/docker/containers/e3e67a1fdc451a18cf3e43a279a6b98d3361f8bbfa040db8aec71f0604cb2d39/resolv.conf",
+        "HostnamePath": "/var/lib/docker/containers/e3e67a1fdc451a18cf3e43a279a6b98d3361f8bbfa040db8aec71f0604cb2d39/hostname",
+        "HostsPath": "/var/lib/docker/containers/e3e67a1fdc451a18cf3e43a279a6b98d3361f8bbfa040db8aec71f0604cb2d39/hosts",
+        "LogPath": "/var/lib/docker/containers/e3e67a1fdc451a18cf3e43a279a6b98d3361f8bbfa040db8aec71f0604cb2d39/e3e67a1fdc451a18cf3e43a279a6b98d3361f8bbfa040db8aec71f0604cb2d39-json.log",
+        "Name": "/sqlrel-compose-1014-gateway-1",
+        "RestartCount": 0,
+        "Driver": "overlay2",
+        "Platform": "linux",
+        "MountLabel": "",
+        "ProcessLabel": "",
+        "AppArmorProfile": "",
+        "ExecIDs": null,
+        "HostConfig": {
+            "Binds": null,
+            "ContainerIDFile": "",
+            "LogConfig": {
+                "Type": "json-file",
+                "Config": {}
+            },
+            "NetworkMode": "sqlrel-compose-1014_default",
+            "PortBindings": {
+                "8080/tcp": [
+                    {
+                        "HostIp": "127.0.0.1",
+                        "HostPort": "28180"
+                    }
+                ]
+            },
+            "RestartPolicy": {
+                "Name": "no",
+                "MaximumRetryCount": 0
+            },
+            "AutoRemove": false,
+            "VolumeDriver": "",
+            "VolumesFrom": null,
+            "ConsoleSize": [
+                0,
+                0
+            ],
+            "CapAdd": null,
+            "CapDrop": null,
+            "CgroupnsMode": "private",
+            "Dns": null,
+            "DnsOptions": null,
+            "DnsSearch": null,
+            "ExtraHosts": [],
+            "GroupAdd": null,
+            "IpcMode": "private",
+            "Cgroup": "",
+            "Links": null,
+            "OomScoreAdj": 0,
+            "PidMode": "",
+            "Privileged": false,
+            "PublishAllPorts": false,
+            "ReadonlyRootfs": false,
+            "SecurityOpt": null,
+            "UTSMode": "",
+            "UsernsMode": "",
+            "ShmSize": 67108864,
+            "Runtime": "runc",
+            "Isolation": "",
+            "CpuShares": 0,
+            "Memory": 0,
+            "NanoCpus": 0,
+            "CgroupParent": "",
+            "BlkioWeight": 0,
+            "BlkioWeightDevice": null,
+            "BlkioDeviceReadBps": null,
+            "BlkioDeviceWriteBps": null,
+            "BlkioDeviceReadIOps": null,
+            "BlkioDeviceWriteIOps": null,
+            "CpuPeriod": 0,
+            "CpuQuota": 0,
+            "CpuRealtimePeriod": 0,
+            "CpuRealtimeRuntime": 0,
+            "CpusetCpus": "",
+            "CpusetMems": "",
+            "Devices": null,
+            "DeviceCgroupRules": null,
+            "DeviceRequests": null,
+            "MemoryReservation": 0,
+            "MemorySwap": 0,
+            "MemorySwappiness": null,
+            "OomKillDisable": null,
+            "PidsLimit": null,
+            "Ulimits": null,
+            "CpuCount": 0,
+            "CpuPercent": 0,
+            "IOMaximumIOps": 0,
+            "IOMaximumBandwidth": 0,
+            "MaskedPaths": [
+                "/proc/acpi",
+                "/proc/asound",
+                "/proc/interrupts",
+                "/proc/kcore",
+                "/proc/keys",
+                "/proc/latency_stats",
+                "/proc/sched_debug",
+                "/proc/scsi",
+                "/proc/timer_list",
+                "/proc/timer_stats",
+                "/sys/devices/virtual/powercap",
+                "/sys/firmware"
+            ],
+            "ReadonlyPaths": [
+                "/proc/bus",
+                "/proc/fs",
+                "/proc/irq",
+                "/proc/sys",
+                "/proc/sysrq-trigger"
+            ]
+        },
+        "GraphDriver": {
+            "Data": {
+                "ID": "e3e67a1fdc451a18cf3e43a279a6b98d3361f8bbfa040db8aec71f0604cb2d39",
+                "LowerDir": "/var/lib/docker/overlay2/e06842cd09d8216ee5ecb02478a409359afd464daf128b71e3393d35daa901ed-init/diff:/var/lib/docker/overlay2/ew6p25wrswfdhpk7kszimypdx/diff:/var/lib/docker/overlay2/lungmjciu85r5h4ufwetdxwdg/diff:/var/lib/docker/overlay2/nohrbj075603td80j6telfqir/diff:/var/lib/docker/overlay2/674dfbb081c8358afecfeefd72a21c2b18d309211e594a1784b9f4ae9d15d1aa/diff:/var/lib/docker/overlay2/5b6f02124e7a1c96899e49aa552043f97570bdbc89e6f3bc244e7b2a45d40281/diff:/var/lib/docker/overlay2/c6d6733a638ffc8062b90e95ab483a2c5c1a7f697d6b1df3a28c42b9837c644d/diff:/var/lib/docker/overlay2/28be73351a62f592b11a096034fb38db6d5fbecece0ad45bd703cc54cd90b1d9/diff:/var/lib/docker/overlay2/c1963c484f4b6180b20fd22680d44d6e75fb807ba652533365f0556440f5e203/diff",
+                "MergedDir": "/var/lib/docker/overlay2/e06842cd09d8216ee5ecb02478a409359afd464daf128b71e3393d35daa901ed/merged",
+                "UpperDir": "/var/lib/docker/overlay2/e06842cd09d8216ee5ecb02478a409359afd464daf128b71e3393d35daa901ed/diff",
+                "WorkDir": "/var/lib/docker/overlay2/e06842cd09d8216ee5ecb02478a409359afd464daf128b71e3393d35daa901ed/work"
+            },
+            "Name": "overlay2"
+        },
+        "Mounts": [],
+        "Config": {
+            "Hostname": "e3e67a1fdc45",
+            "Domainname": "",
+            "User": "",
+            "AttachStdin": false,
+            "AttachStdout": true,
+            "AttachStderr": true,
+            "ExposedPorts": {
+                "8080/tcp": {}
+            },
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "PORT=8080",
+                "NODE_ENV=production",
+                "BROWSER_ORIGIN=http://127.0.0.1:25280",
+                "BACKEND_URLS=http://application-node-1:8080,http://application-node-2:8080",
+                "DATASTORE_PROJECT_ID=distributed-message-board",
+                "DATASTORE_EMULATOR_HOST=datastore:8081",
+                "HOST=0.0.0.0",
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "NODE_VERSION=24.18.0",
+                "YARN_VERSION=1.22.22"
+            ],
+            "Cmd": [
+                "node_modules/@spine-event-engine/example-message-board-app/dist/src/gateway-server.js"
+            ],
+            "Image": "spine-ts/standalone-gateway:sqlrel-compose-1014",
+            "Volumes": null,
+            "WorkingDir": "/app",
+            "Entrypoint": [
+                "node"
+            ],
+            "Labels": {
+                "com.docker.compose.config-hash": "09c7eebe00584b5dc4f17e3f6aebdb843130d5f5db8254172f1480c308b0873c",
+                "com.docker.compose.container-number": "1",
+                "com.docker.compose.depends_on": "application-node-1:service_started:false,application-node-2:service_started:false,datastore:service_healthy:false",
+                "com.docker.compose.image": "sha256:bfad6c2ce7c8a663b3bf31e37fb0f51faa694c8e7e9c49f1f470097ab65935cb",
+                "com.docker.compose.oneoff": "False",
+                "com.docker.compose.project": "sqlrel-compose-1014",
+                "com.docker.compose.project.config_files": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/examples/distributed-message-board/deploy/compose.yaml",
+                "com.docker.compose.project.working_dir": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/examples/distributed-message-board/deploy",
+                "com.docker.compose.service": "gateway",
+                "com.docker.compose.version": "5.3.1"
+            }
+        },
+        "NetworkSettings": {
+            "SandboxID": "805a3a82dff82599c58569fda649254dc2bb1bf946f7444a1c1a2531fe755142",
+            "SandboxKey": "/var/run/docker/netns/805a3a82dff8",
+            "Ports": {
+                "8080/tcp": [
+                    {
+                        "HostIp": "127.0.0.1",
+                        "HostPort": "28180"
+                    }
+                ]
+            },
+            "Networks": {
+                "sqlrel-compose-1014_default": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": [
+                        "sqlrel-compose-1014-gateway-1",
+                        "gateway"
+                    ],
+                    "DriverOpts": null,
+                    "GwPriority": 0,
+                    "NetworkID": "e49772801faa30bf9a778befcc7284df6ab7b329e2e7d9666f4aa59c40cd8f4c",
+                    "EndpointID": "f915cca3c07fc5d463b9722598036741b18ce98b4c237f17399d5d803c2f7fb2",
+                    "Gateway": "172.18.0.1",
+                    "IPAddress": "172.18.0.6",
+                    "MacAddress": "be:7c:c4:ce:1a:fc",
+                    "IPPrefixLen": 16,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "DNSNames": [
+                        "sqlrel-compose-1014-gateway-1",
+                        "gateway",
+                        "e3e67a1fdc45"
+                    ]
+                }
+            }
+        }
+    }
+]

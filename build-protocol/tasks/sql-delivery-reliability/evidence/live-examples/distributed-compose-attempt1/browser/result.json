@@ -1,0 +1,20 @@
+{
+  "runId": "ef2f4cf6585845a7aadbed6a5aa586d4",
+  "url": "http://127.0.0.1:25280",
+  "status": "PASS",
+  "posts": [
+    {
+      "username": "ui-a-ef2f4cf6",
+      "text": "first-ef2f4cf6585845a7aadbed6a5aa586d4"
+    },
+    {
+      "username": "ui-b-ef2f4cf6",
+      "text": "second-ef2f4cf6585845a7aadbed6a5aa586d4"
+    }
+  ],
+  "contextUrls": [
+    "http://127.0.0.1:25280/",
+    "http://127.0.0.1:25280/"
+  ],
+  "issues": []
+}

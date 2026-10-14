@@ -1,0 +1,19 @@
+{
+  "file": "build-protocol/tasks/sql-delivery-reliability/evidence/live-examples/message-board-multiprocess-attempt1/coordinator-environment.txt",
+  "reason": "GitHub push protection rejected an unpublished checkpoint containing a captured credential.",
+  "action": "Replaced the process environment capture with only the topology configuration allowlist. No secret values retained in this audit.",
+  "retainedKeys": [
+    "PROCESS_COUNT",
+    "DELIVERY_SHARD_COUNT",
+    "DELIVERY_SERVER_URL",
+    "DATASTORE_PROJECT_ID",
+    "DATASTORE_EMULATOR_HOST",
+    "HOST",
+    "PORT",
+    "NODE_ENV"
+  ],
+  "removedSensitiveKeyNames": [
+    "GITHUB_TOKEN"
+  ],
+  "publication": "Original push rejected; unpublished commit will be amended, never bypassed."
+}

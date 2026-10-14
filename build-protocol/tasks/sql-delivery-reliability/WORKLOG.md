@@ -1027,3 +1027,52 @@ duplicate-ACK rows, all required extra fault scenarios are closed. Reliability
 and style findings resolved; no changed public runtime contract. Build
 reservation released. Checkpoint and immediately push this accepted slice;
 example corrections and final security/release gates remain active.
+
+Accepted transport checkpoint 8ee53d282 was committed after clean staged
+diff checks and pushed immediately to official origin on the task branch.
+No PR was created. Progress approximately 90%; final example execution,
+security, versioning and release checks remain. Example correction controls
+now show selected-origin preflight RED 403 before correction and GREEN after
+app rebuild, nine app/Project tests and six launcher shutdown/port-reuse tests
+passing. Final scoped static checks and targeted review remain before acceptance.
+
+Live Message Board local and shared two-context React checks pass with no
+browser errors and bidirectional updates without reload. Shared run verifies
+eight application child PIDs, eight configured shards, task-isolated endpoints
+and 32 concurrent posts: all acknowledged, all 32 unique expected Message IDs
+observed with no duplicate/missing rows. Handler entries are not measured by
+this helper, and the public post outcome has no Command/Ack ID. The earlier
+helper dependency-resolution failure occurred before contacting the app and is
+preserved separately. Cleanup and distributed Compose execution continue.
+Progress about 93%, estimated 1–2.5 hours remaining for final live checks, security
+closure, versioning, preflight/release verification and pushes.
+
+Prepare final versioning with an orchestrator-dispatched package verification
+function, explicit gpt-6-luna / medium. Read-only preparation first while live
+example builds finish. Recheck the proposed common unused version on all public
+packages and official tags immediately before mutation. Assign only workspace
+manifest top-level versions, then separately fixed internal pins/lockfile and
+task evidence. No mutation until parent releases the build reservation; parent
+creates/pushes the version-only commit before permitting pins/lock changes.
+No external dependency upgrades. Both dispatch fields explicit, runtime
+introspection unavailable. Full verification follows converged versioned tree.
+
+All five example families and SQL/local exceptions are verified; corrected
+local and shared React, actual eight-process/eight-shard 32-post acceptance and
+distributed Compose browser smoke pass. All task application processes, ports,
+containers and unique image tags are cleaned. All four exact SQL container IDs
+are removed and absent in successful Docker inventory queries; first cleanup
+audit failed only because Docker lowercased its absent-object error, preserved
+in databases-final-cleanup.json. The task-only ESM resolver symlink was removed
+after verification; its creation command is retained for reproducibility.
+Security and all canonical reviews are clean. Progress approximately 96%,
+0.5–1.5 hours estimated for versioning, dependency audit, preflight/release checks
+and pushes. Version-only mutation is ready but remains separately unstaged.
+
+Checkpoint push was rejected by GitHub credential protection because a live
+process-environment capture included GITHUB_TOKEN. No bypass was used. Replace
+the capture with an explicit topology-field allowlist, scan task evidence
+without printing secret values, and amend only the unpublished local checkpoint.
+The rejected original is not official branch history. Package version fields
+remain separately unstaged. Targeted final-security evidence review is required
+before retrying publication; the runtime/source review is unchanged.

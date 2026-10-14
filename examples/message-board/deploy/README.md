@@ -49,6 +49,22 @@ pnpm typecheck:build
 pnpm images:build:local
 ```
 
+For concurrent task runs, select a distinct `MESSAGE_BOARD_IMAGE_TAG` for the
+image build and each Compose command, a distinct `MESSAGE_BOARD_PUBLIC_PORT`,
+and a distinct Compose project name. The web runtime URL and Gateway browser
+origin follow the selected public port. For example:
+
+```bash
+export MESSAGE_BOARD_IMAGE_TAG=sqlrel-example MESSAGE_BOARD_PUBLIC_PORT=28080
+pnpm images:build:local
+docker compose --project-name sqlrel-example \
+  --file examples/message-board/deploy/compose/combined.compose.yaml up --detach
+```
+
+Open `http://localhost:28080`, then use the same variables, project name and
+file with `down --volumes --remove-orphans`. The default tag and port remain
+`local` and `18080` for a single tutorial run.
+
 ```bash
 docker compose --file examples/message-board/deploy/compose/combined.compose.yaml up --detach
 ```

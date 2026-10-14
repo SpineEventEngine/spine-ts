@@ -18,7 +18,7 @@ services:
       retries: 30
 
   delivery:
-    image: spine-ts/simple-delivery-server:local
+    image: spine-ts/simple-delivery-server:${MESSAGE_BOARD_IMAGE_TAG:-local}
     environment:
       HOST: 0.0.0.0
       PORT: 8484
@@ -33,8 +33,9 @@ services:
       retries: 30
 
   application-node-1: &application
-    image: spine-ts/message-board:local
-    command: [node_modules/@spine-event-engine/example-message-board-app/dist/src/multi-process-app.js]
+    image: spine-ts/message-board:${MESSAGE_BOARD_IMAGE_TAG:-local}
+    command:
+      [node_modules/@spine-event-engine/example-message-board-app/dist/src/multi-process-app.js]
     environment: &application-environment
       HOST: 0.0.0.0
       PORT: 8080
@@ -55,15 +56,14 @@ services:
     environment: *application-environment
 
   gateway:
-    image: spine-ts/standalone-gateway:local
-    ports: ["${GATEWAY_PORT:-18080}:8080"]
+    image: spine-ts/standalone-gateway:${MESSAGE_BOARD_IMAGE_TAG:-local}
+    ports: ["127.0.0.1:${GATEWAY_PORT:-18080}:8080"]
     environment:
       HOST: 0.0.0.0
       PORT: 8080
       NODE_ENV: production
-      BROWSER_ORIGIN: http://127.0.0.1:5173
+      BROWSER_ORIGIN: http://127.0.0.1:${MESSAGE_BOARD_WEB_PORT:-5173}
       BACKEND_URLS: http://application-node-1:8080,http://application-node-2:8080
-      SUBSCRIPTION_REGISTRY_NAMESPACE: distributed-message-board
       DATASTORE_PROJECT_ID: distributed-message-board
       DATASTORE_EMULATOR_HOST: datastore:8081
     depends_on:

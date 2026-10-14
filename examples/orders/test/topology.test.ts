@@ -78,6 +78,12 @@ describe("datastore orders test app", () => {
     const updates = subscriptions
       .activate(subscription, { signal: controller.signal })
       [Symbol.asyncIterator]();
+    const ready = await updates.next();
+    expect(ready.done).toBe(false);
+    if (ready.done) throw new Error("Expected subscription activation acknowledgement.");
+    expect(ready.value.subscription?.id?.value).toBe(subscription.id?.value);
+    expect(ready.value.response?.status?.status.case).toBe("ok");
+    expect(ready.value.update.case).toBeUndefined();
     const nextUpdate = updates.next();
     try {
       const acknowledgement = await commands.post(
@@ -111,6 +117,16 @@ describe("datastore orders test app", () => {
       ).toBe(true);
       const update = await nextUpdate;
       expect(update.done).toBe(false);
+      if (update.done) throw new Error("Expected an OrderSummary update.");
+      expect(update.value.update.case).toBe("entityUpdates");
+      if (update.value.update.case === "entityUpdates")
+        expect(
+          update.value.update.value.update.some(
+            (row) =>
+              row.kind.case === "state" &&
+              AnyMessages.unpack(row.kind.value, OrderSummarySchema)?.id === id,
+          ),
+        ).toBe(true);
     } finally {
       controller.abort();
       await updates.return?.();

@@ -17,6 +17,7 @@ import {
   Aggregate,
   Assign,
   BoundedContext,
+  EventRouting,
   ProcessManager,
   Projection,
   React,
@@ -902,27 +903,30 @@ const ProjectRegistration = {
    * @returns The builder with its read models registered.
    */
   projections(builder: BoundedContextBuilder): BoundedContextBuilder {
+    const taskProjectRouting = EventRouting.create<string>().route(TaskCreatedSchema, (event) => [
+      event.projectId,
+    ]);
     return builder
       .add(ProjectSummaryProjection)
-      .add(TaskListProjection)
-      .add(StatusCountersProjection)
-      .add(PriorityCountersProjection)
-      .add(AssigneeWorkloadProjection)
+      .add(TaskListProjection, { eventRouting: taskProjectRouting })
+      .add(StatusCountersProjection, { eventRouting: taskProjectRouting })
+      .add(PriorityCountersProjection, { eventRouting: taskProjectRouting })
+      .add(AssigneeWorkloadProjection, { eventRouting: taskProjectRouting })
       .add(ActivityFeedProjection)
       .add(TenantViewProjection)
       .add(UserViewProjection)
-      .add(DueDateViewProjection)
-      .add(AssignmentViewProjection)
+      .add(DueDateViewProjection, { eventRouting: taskProjectRouting })
+      .add(AssignmentViewProjection, { eventRouting: taskProjectRouting })
       .add(ProjectLifecycleViewProjection)
-      .add(TaskDependencyViewProjection)
+      .add(TaskDependencyViewProjection, { eventRouting: taskProjectRouting })
       .add(AuditViewProjection)
       .add(SubscriptionFanoutViewProjection)
       .add(CleanupViewProjection)
       .add(ProjectIndexProjection)
-      .add(TaskIndexProjection)
+      .add(TaskIndexProjection, { eventRouting: taskProjectRouting })
       .add(PersonIndexProjection)
       .add(CapacityViewProjection)
-      .add(ProgressViewProjection);
+      .add(ProgressViewProjection, { eventRouting: taskProjectRouting });
   },
 
   /**

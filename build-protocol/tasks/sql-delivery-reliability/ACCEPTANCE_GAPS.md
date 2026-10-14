@@ -56,17 +56,17 @@ rows, this closes the three additional transport fault scenarios.
 
 ## Remaining work
 
-- Finish accepted example corrections for precise two-task assertions, bounded
-  RPC/launcher shutdown, duplicate-row accounting and custom local browser origin.
-  Orders/Projects ACK-aware loads pass. Execute the remaining live examples,
-  eight-process/eight-shard burst and both React modes, preserving local exceptions.
-- Review upcoming transport and example changes with the relevant existing
-  concerns; refresh final documentation and all four concern dispositions using
-  accepted bounded reviews rather than repeating converged slices.
-- Run final release-readiness security review, cheap preflight, verify:release,
-  common unused version-only commit, separate internal pins/lockfile update,
-  immediate pushes and exact remote-SHA verification. No PR is authorized;
-  unavailable PR-only CI must be reported accurately.
+All five example families, local/shared React modes and the eight-process/eight-shard
+burst are verified. All accepted reviewer findings, including final security, are
+resolved. Application resources and all four exact task SQL containers are removed;
+see `evidence/live-examples/README.md` and `evidence/databases-final-cleanup.json`.
+
+- Commit and push the common unused version-only update, then separately update
+  internal pins/lockfile and repeat dependency audits.
+- Run the mandatory cheap preflight and the converged `verify:release` profile;
+  address any failures and record exact final coverage/check results.
+- Commit and push final evidence, confirm exact remote SHA and clean worktree.
+  No PR is authorized; PR-only CI remains an explicit verification limitation.
 
 No automatic discovery of interrupted Event publication, durable simple shared
 Inbox, exactly-once delivery, or ten-second delivery/takeover deadline is claimed.

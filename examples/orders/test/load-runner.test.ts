@@ -25,7 +25,13 @@ import { AnyMessages } from "@spine-event-engine/core";
 import { AckSchema } from "@spine-event-engine/proto";
 import { ResponseSchema, StatusSchema } from "@spine-event-engine/proto";
 import { type Query, QueryResponseSchema } from "@spine-event-engine/proto/client";
-import { SubscriptionSchema, SubscriptionUpdateSchema } from "@spine-event-engine/proto/client";
+import {
+  SubscriptionIdSchema,
+  SubscriptionSchema,
+  SubscriptionUpdateSchema,
+  type Subscription,
+  type Topic,
+} from "@spine-event-engine/proto/client";
 import { CommandService } from "@spine-event-engine/proto/client";
 import { QueryService } from "@spine-event-engine/proto/client";
 import { SubscriptionService } from "@spine-event-engine/proto/client";
@@ -237,14 +243,23 @@ function queryHandlers(outcome: ProtocolOutcome, onStart: () => void, onAbort: (
 
 function subscriptionHandlers(outcome: ProtocolOutcome, onStart: () => void, onAbort: () => void) {
   return {
-    subscribe: (_topic: unknown, context: HandlerContext) =>
+    subscribe: (topic: Topic, context: HandlerContext) =>
       outcome === "stalled-subscription"
         ? stalled(context, onStart, onAbort)
-        : Promise.resolve(create(SubscriptionSchema)),
-    async *activate(_subscription: unknown, context: HandlerContext) {
+        : Promise.resolve(
+            create(SubscriptionSchema, {
+              id: create(SubscriptionIdSchema, { value: "test-subscription" }),
+              topic,
+            }),
+          ),
+    async *activate(subscription: Subscription, context: HandlerContext) {
       if (outcome === "stalled-activation") await stalled(context, onStart, onAbort);
       await Promise.resolve();
       if (outcome === "ended-subscription") return;
+      yield create(SubscriptionUpdateSchema, {
+        subscription,
+        response: create(ResponseSchema, { status: okStatus() }),
+      });
       yield create(SubscriptionUpdateSchema, outcome === "uncorrelated-update" ? {} : undefined);
     },
     cancel: () => Promise.resolve(create(ResponseSchema, { status: okStatus() })),

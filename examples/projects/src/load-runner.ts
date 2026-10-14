@@ -227,6 +227,19 @@ class ProjectManagementUserLoad {
     const iterator = this.subscriptions
       .activate(subscription, { signal: this.controller.signal })
       [Symbol.asyncIterator]();
+    const acknowledgement = await this.withTimeout(
+      iterator.next(),
+      "subscription activation ACK",
+      this.visibilityTimeoutMs,
+    );
+    if (
+      acknowledgement.done ||
+      acknowledgement.value.response?.status?.status.case !== "ok" ||
+      acknowledgement.value.subscription?.id?.value !== subscription.id?.value ||
+      acknowledgement.value.subscription?.topic?.id?.value !== subscription.topic?.id?.value ||
+      acknowledgement.value.update.case !== undefined
+    )
+      throw new Error("Project subscription did not return a matching activation ACK.");
     const firstUpdate = iterator.next();
     void this.ignoreCancellation(firstUpdate);
     return { iterator, firstUpdate };
