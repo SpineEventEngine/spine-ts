@@ -44,17 +44,15 @@ const DeliveryProcess: Readonly<{
       process.off("SIGTERM", stop);
     };
     const stop = () => {
-      stopping ??= server
-        .close()
-        .catch((error: unknown) => {
-          process.exitCode = 1;
-          process.stderr.write(
-            `Delivery server shutdown failed: ${DeliveryProcess.errorMessage(error)}\n`,
-          );
-        })
-        .finally(removeSignalHandlers);
+      stopping ??= server.close().catch((error: unknown) => {
+        process.exitCode = 1;
+        process.stderr.write(
+          `Delivery server shutdown failed: ${DeliveryProcess.errorMessage(error)}\n`,
+        );
+      });
     };
 
+    process.once("exit", removeSignalHandlers);
     process.on("SIGINT", stop);
     process.on("SIGTERM", stop);
     server.start().then(

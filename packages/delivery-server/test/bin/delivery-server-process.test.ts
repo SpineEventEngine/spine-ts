@@ -46,12 +46,13 @@ describe("spine-delivery-server executable", () => {
       stdio: ["ignore", "pipe", "pipe"],
     });
     const stderr = collect(child.stderr);
+    const exit = exited(child);
     const readiness = await waitFor(child, "Delivery server listening at http://127.0.0.1:");
     for (const signal of signals) {
       child.kill(signal);
       await nextTurn();
     }
-    const code = await exited(child);
+    const code = await exit;
     expect(code).toBe(0);
     await expect(stderr).resolves.toBe("");
     const replacement = new DeliveryServer({ port: readinessPort(readiness) });
