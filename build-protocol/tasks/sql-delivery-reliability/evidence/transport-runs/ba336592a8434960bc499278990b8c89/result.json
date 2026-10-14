@@ -1,0 +1,67 @@
+{
+  "status": "PASS",
+  "result": {
+    "provider": "postgres16",
+    "protocol": "connect",
+    "scenario": "pending-cancel",
+    "deliveryMode": "shared-memory",
+    "database": "sqlrel_sub_ba336592a8434960bc499278990b8c89",
+    "counters": {
+      "subscribe": 1,
+      "activate": 1,
+      "ackReleased": 1,
+      "cancel": 1,
+      "cancelFaults": 0,
+      "cancelSuccesses": 1,
+      "streamFaults": 0,
+      "iterators": 0
+    },
+    "entries": [],
+    "subscriptionTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-0734539f-e4ef-4f1b-80b7-4f2bac91db6e"
+      },
+      {
+        "operation": "activate",
+        "id": "s-0734539f-e4ef-4f1b-80b7-4f2bac91db6e"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-0734539f-e4ef-4f1b-80b7-4f2bac91db6e"
+      }
+    ]
+  },
+  "counters": {
+    "subscribe": 1,
+    "activate": 1,
+    "ackReleased": 1,
+    "cancel": 1,
+    "cancelFaults": 0,
+    "cancelSuccesses": 1,
+    "streamFaults": 0,
+    "iterators": 0
+  },
+  "secondaryCounters": {
+    "subscribe": 0,
+    "activate": 0,
+    "ackReleased": 0,
+    "cancel": 0,
+    "iterators": 0
+  },
+  "entries": [],
+  "subscriptionTrace": [
+    {
+      "operation": "subscribe",
+      "id": "s-0734539f-e4ef-4f1b-80b7-4f2bac91db6e"
+    },
+    {
+      "operation": "activate",
+      "id": "s-0734539f-e4ef-4f1b-80b7-4f2bac91db6e"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-0734539f-e4ef-4f1b-80b7-4f2bac91db6e"
+    }
+  ]
+}

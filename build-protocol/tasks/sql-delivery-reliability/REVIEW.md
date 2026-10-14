@@ -530,3 +530,32 @@ The existing performance/reliability reviewer resumes with its immutable explici
 ## Gateway correction accepted
 
 Reliability-only re-review is clean; both P1 findings are resolved and the deterministic API TSDoc correction is applied. Explicit immutable Sol/medium profile matches; runtime introspection unavailable. Root persists the read-only review report. Final build passed; exact compiled controls pass the 24-row basic engine/protocol/Delivery-mode grid, six PostgreSQL child rejection/EOF protocol controls, four-provider gRPC-Web fanout, and two PostgreSQL retry controls. No global coverage or managed/nested real-relay claim is made. The scoped branch coverage is not the release gate. Accept this bounded correction and checkpoint; final whole-task review remains pending.
+
+## Nested transport harness review assignment
+
+The nested Coordinator test-only slice is frozen after 48 grid passes, two retry
+controls and scoped static checks. The existing performance/reliability and
+style/maintainability concerns are dispatched explicitly as `gpt-6-sol` /
+`medium`, both configuration fields present; runtime metadata is unavailable.
+Review input is the current two transport harness files and their complete
+branch changes, plus focused evidence. Reliability checks assertions, real
+route, readiness/failure/cleanup bounds, identifiers and provenance. Style checks
+fixture maintainability and supported test conventions. Public-contract review
+is N/A for this narrow addition: no production API, declaration or serialized
+contract changes. Documentation concern is handled by parent checking the
+explicit same-process/real-socket limits; final broad prose review remains due.
+Collect both lanes before returning one accepted correction batch. Independent
+clock fixtures may proceed in different files during this freeze.
+
+The complete nested harness wave is aggregated in
+`evidence/transport-harness-review.md`: no P0/P1; three accepted P2 corrections
+(readiness ordering, measured two-update fanout cardinality, bounded polling).
+The reliability reviewer explicitly confirmed that two subscriptions to one
+shared service should assert two relayed copies, not introduce production
+business-update deduplication. The repeated scenario lists are recorded P3.
+
+The residual exact-one-Event-array assertions are mechanically verified after
+release of the 96-row matrix freeze: five applicable PG16 fanout controls pass
+again (`nested-review-exact-one-*.log`), scoped ESLint/format/diff pass. Both arrays
+are checked before indexing. All accepted nested harness P2 findings are
+resolved; no new production semantics or repeated specialist wave is needed.

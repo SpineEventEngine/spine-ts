@@ -1,24 +1,61 @@
-# Remaining acceptance inventory
+# Remaining acceptance gaps
 
-This is a bounded gap map, not a runtime review. Updated after storage and delivery checkpoints; the subscription slice remains active. The original acceptance contract is [FIRST_SPINE_TS_DELIVERY_TASK.md](/Users/armiol/development/Spine/spine-ts-and-appfactory/FIRST_SPINE_TS_DELIVERY_TASK.md); the current state is [ACCEPTANCE.md](ACCEPTANCE.md), [IMPLEMENTATION.md](IMPLEMENTATION.md), [MATRIX_PLAN.md](MATRIX_PLAN.md), and [TRANSPORT_PLAN.md](TRANSPORT_PLAN.md). The scripts-first source and test inventory is preserved in [raw-acceptance-gap-inventory.log](evidence/raw-acceptance-gap-inventory.log).
+Current status after the 96-case SQL transport lifecycle matrix. This replaces
+the earlier preparation inventory; historical gaps are preserved in Git history.
+The complete task remains active. Use ACCEPTANCE.md for the full requirement map
+and the measured artifacts for bounded claims.
 
-Assignment profile: orchestrator-dispatched mechanical function, explicitly configured **gpt-6-luna / medium**. Runtime model introspection is unavailable, so the explicit dispatch is the available profile evidence.
+## Closed live verification areas
 
-## Already checked, with bounded scope
+- Diagnostics include original driver causes, safe correlated real gRPC errors,
+  pre-handler admission rejection, valid Any serialization failures, same-ID
+  retry, and acknowledgement failure/exhaustion on all four SQL servers.
+- Status/tenant/order/paging probes passed 1,355 assertions across memory and all
+  four SQL servers. Forty-eight actual SQL trace cases and eight-process atomic
+  registry/Inbox conditions passed; direct MyISAM/Aria cleanup also passed.
+- The application baseline passed 80 runs over all four engines, two/eight
+  processes and database-only/shared Delivery: 3,920 accepted Commands reconciled
+  with exact business states, Events and handler entries. Its session is
+  `baseline-matrix-707f9e28-90e3-49e7-b56f-a16eeaa020e6`.
+- The 32-case crash matrix passed all four engines and two/eight processes for
+  processing interruption, saved state before acknowledgement, partial saved
+  Event publication/known-ID repair, and volatile shared Delivery server loss.
+  Session `7fadc156-7186-43ec-b178-25f7273b058c` preserves exact IDs, Event bytes,
+  phase-specific handler counts and cleanup. Repeat recipients after retention
+  are counted; successful Commands are not rerun by explicit Event repair.
+- Final compiled basic subscriptions passed 24 rows. Nested real-socket
+  Coordinator child-fault/fanout tests passed 48 rows; five subsequent PG16
+  controls strengthen all-child ACK and exact relayed-copy assertions. Two
+  endpoints share one Project service/process: this is not managed OS restart.
+- Real Cancel retry, pending-activation Cancel, concurrent teardown and stream
+  reconnect passed all 96 database/protocol/Delivery-mode combinations in session
+  `ac69f976-5ee9-4075-a53a-ec4b762292de`. All databases were dropped with zero
+  remaining sessions/errors and unchanged measured source/runtime hashes.
 
-- Status filtering now has caller-level tests and 1,355 additional assertions across memory and PostgreSQL 16/18, MySQL, and MariaDB. All status subsets, two tenants, ordering ties, page boundaries and deleted-cursor continuation pass. See `evidence/INBOX_STATUS_TENANTS_RESULTS.md` and the current acceptance matrix.
-- Diagnostics have focused service and SQL-error-cause tests plus real insert-trigger driver failures on all four SQL servers. The original driver cause/code/text remains available internally while the outer adapter message is stable. The prepared-column schema fault now also passes through real gRPC with one correlated diagnostic and safe Ack on all four SQL servers (sql-command-diagnostics-attempt1.log). Admission/acknowledgement/Any/retry acceptance remains pending; neither probe closes those paths.
-- The 48 primitive SQL trace cases and eight-process registry evidence passed and are not reopened by this gap map. They do not establish the full application workload matrix.
-- Delivery processing, acknowledgement-only retries, finite same-Event publication retry, known-ID repair and bounded shutdown have converged scoped tests and specialist review in commit `2b74bf1ee`. Live process/fault/restart acceptance remains pending.
-- Subscription readiness and cancellation are under implementation. Passing focused suites are recorded in WORKLOG.md; partial failure, teardown, real transport and broader infrastructure acceptance must still converge.
+## Remaining work
 
-## Remaining verification and harness needs
+- Complete cross-process recovery timing: writes before/after shard release,
+  deliberately missed notification, and idle SQL at two/eight processes. The
+  public supervisor/real SQL component default and override tests pass on four
+  servers, but do not replace those process tests.
+- Retain a shared Delivery server while an actual application worker dies and a
+  replacement recovers pending accepted work. Measure the 60-second stale age,
+  10-second scan and independently configured processing timeout separately.
+  The completed shared-server-loss case proves a different, volatile boundary.
+- Add explicit real-wire publication-versus-Cancel ordering, protocol-invalid
+  terminal failure, and failed cleanup during partial child fanout. Keep
+  existing finite client retry/exhaustion evidence and cleanup bounds distinct.
+- Correct Orders/Projects load examples to distinguish readiness ACKs from
+  actual business updates; finish coherent isolated launcher ports/images,
+  explicit process/shard counts and eight/eight verification. Execute all five
+  examples and both required React UI modes, preserving local exceptions.
+- Review the new clock tests and example changes with the relevant existing
+  concerns; refresh final documentation and all four concern dispositions using
+  accepted bounded reviews rather than repeating converged slices.
+- Run final release-readiness security review, cheap preflight, verify:release,
+  common unused version-only commit, separate internal pins/lockfile update,
+  immediate pushes and exact remote-SHA verification. No PR is authorized;
+  unavailable PR-only CI must be reported accurately.
 
-| Area                                    | What remains                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Reusable evidence or seam                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Remaining Command admission diagnostics | Prepared-record schema failure is verified on all four servers. Still induce pre-handler Command admission failures on each transactional SQL engine. Assert original internal driver cause/code, one correlated safe diagnostic, stable sanitized response, no handler execution for admission failure, and retry/exhaustion behavior. Existing unit coverage does not establish the remaining live admission/retry paths.                                                                                                                    | `packages/storage-mysql/test/mysql-integration.test.ts:418–457` shows scoped trigger injection/cleanup; `packages/storage-postgres/test/postgresql-integration.test.ts:428–467` injects a diagnostic insert constraint failure. `packages/server/test/services/spine-services.test.ts:766–848` supplies service-level diagnostics and admission assertions. These are reusable fault seams, not completed end-to-end acceptance.                                                                                                                                                       |
-| Process workload and restart            | Execute the pending four-engine × 2/8-process × database-only/shared process matrix and assert the specified 80/burst-16 and 32/burst-32 workloads, accepted IDs, state/projection results, execution counts, restart reconciliation, and failure outcomes. Keep the previously accepted eight-process registry evidence closed.                                                                                                                                                                                                               | [MATRIX_PLAN.md](MATRIX_PLAN.md) contains the workload and pass criteria; [SETUP.md](SETUP.md) and `evidence/databases.json` identify the dedicated SQL endpoints. Existing managed process fixtures and domain-correct Project fixtures are inventoried in the raw log. No process workload acceptance is claimed by the registry result.                                                                                                                                                                                                                                             |
-| Shared Delivery server OS crash         | Separately kill the Delivery server process while accepted work is pending, restart a new in-memory server, then verify the narrowly documented lost-ID/reconciliation behavior. The reference investigation only reconstructed a server instance within a running process; it explicitly did not test a Delivery-server process crash.                                                                                                                                                                                                        | `MATRIX_PLAN.md:154–170` defines this boundary and its assertions. A real child-process harness is still required; the current same-process reconstruction cannot stand in for it.                                                                                                                                                                                                                                                                                                                                                                                                     |
-| Native and browser transport lifecycle  | Add and run the opt-in real-wire subscription lifecycle suite: activation ACK gating/held Activate, idle readiness, immediate post, cancellation during activation, concurrent teardown and Cancel, fresh same-handle retry after failed Cancel, bounded permanent failure/close, and gateway fanout requiring aggregate ACK across backend children (including cleanup on partial child activation failure). Run native gRPC, gRPC-Web, and Connect against all four SQL endpoints; keep Event publication separate from subscription fanout. | `packages/server/test/services/native-subscription-integration.test.ts` has typed native-service fixtures but is not a real wire/lifecycle matrix. `packages/server/test/server/server.test.ts:2102–2369` exercises browser Connect/gRPC-Web RPC routing and auth, not subscriptions. `packages/client-web/test/client.test.ts:960–1282,2192–2278,2326–2437,2658–2668` provides mock transport cancellation/retry/resource-bound cases. `TRANSPORT_PLAN.md:26–58` specifies the opt-in fixture and adaptation seams. These tests are useful components, not real-transport acceptance. |
-
-The source inventory supports these gaps without indicating a runtime defect. Pending rows should be updated only from deterministic test output after the active implementation work stabilizes; a passing unit test or process exit alone does not close the live acceptance rows.
+No automatic discovery of interrupted Event publication, durable simple shared
+Inbox, exactly-once delivery, or ten-second delivery/takeover deadline is claimed.

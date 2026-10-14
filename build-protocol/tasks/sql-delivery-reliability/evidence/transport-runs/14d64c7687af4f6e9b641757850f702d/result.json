@@ -1,0 +1,175 @@
+{
+  "status": "PASS",
+  "result": {
+    "provider": "postgres16",
+    "protocol": "grpc-web",
+    "scenario": "coordinator-fanout-fault",
+    "deliveryMode": "db-only",
+    "database": "sqlrel_sub_14d64c7687af4f6e9b641757850f702d",
+    "counters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 2,
+      "cancel": 2,
+      "cancelFaults": 0,
+      "cancelSuccesses": 2,
+      "streamFaults": 1,
+      "iterators": 0
+    },
+    "secondaryCounters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 2,
+      "cancel": 2,
+      "iterators": 0
+    },
+    "entries": [
+      {
+        "method": "create",
+        "receiver": "Project",
+        "correlation": "subscription-sqlrel_sub_14d64c7687af4f6e9b641757850f702d:1",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+        "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzE0ZDY0Yzc2ODdhZjRmNmU5YjY0MTc1Nzg1MGY3MDJkEAE="
+      },
+      {
+        "method": "planning",
+        "receiver": "ProjectPlanning",
+        "correlation": "subscription-sqlrel_sub_14d64c7687af4f6e9b641757850f702d:1",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+        "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzE0ZDY0Yzc2ODdhZjRmNmU5YjY0MTc1Nzg1MGY3MDJkEAE="
+      },
+      {
+        "method": "staffing",
+        "receiver": "ProjectStaffing",
+        "correlation": "subscription-sqlrel_sub_14d64c7687af4f6e9b641757850f702d:1",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+        "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzE0ZDY0Yzc2ODdhZjRmNmU5YjY0MTc1Nzg1MGY3MDJkEAE="
+      },
+      {
+        "method": "portfolio",
+        "receiver": "Portfolio",
+        "correlation": "subscription-sqlrel_sub_14d64c7687af4f6e9b641757850f702d:1",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+        "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzE0ZDY0Yzc2ODdhZjRmNmU5YjY0MTc1Nzg1MGY3MDJkEAE="
+      },
+      {
+        "method": "projection",
+        "receiver": "ProjectProjection",
+        "correlation": "subscription-sqlrel_sub_14d64c7687af4f6e9b641757850f702d:1",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+        "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzE0ZDY0Yzc2ODdhZjRmNmU5YjY0MTc1Nzg1MGY3MDJkEAE="
+      }
+    ],
+    "subscriptionTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-0c4feb4a-9d1d-47d1-bc35-994188c8e733"
+      },
+      {
+        "operation": "activate",
+        "id": "s-0c4feb4a-9d1d-47d1-bc35-994188c8e733"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-0c4feb4a-9d1d-47d1-bc35-994188c8e733"
+      },
+      {
+        "operation": "subscribe",
+        "id": "s-6205e325-dca3-444e-9edc-a9b842a61966"
+      },
+      {
+        "operation": "activate",
+        "id": "s-6205e325-dca3-444e-9edc-a9b842a61966"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-6205e325-dca3-444e-9edc-a9b842a61966"
+      }
+    ],
+    "eventId": "21bc9c69-c98c-4e73-bc28-f2bc1a16eca0",
+    "coordinator": {
+      "endpoint": "http://127.0.0.1:63280",
+      "childActivations": 4
+    }
+  },
+  "counters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 2,
+    "cancel": 2,
+    "cancelFaults": 0,
+    "cancelSuccesses": 2,
+    "streamFaults": 1,
+    "iterators": 0
+  },
+  "secondaryCounters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 2,
+    "cancel": 2,
+    "iterators": 0
+  },
+  "entries": [
+    {
+      "method": "create",
+      "receiver": "Project",
+      "correlation": "subscription-sqlrel_sub_14d64c7687af4f6e9b641757850f702d:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+      "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzE0ZDY0Yzc2ODdhZjRmNmU5YjY0MTc1Nzg1MGY3MDJkEAE="
+    },
+    {
+      "method": "planning",
+      "receiver": "ProjectPlanning",
+      "correlation": "subscription-sqlrel_sub_14d64c7687af4f6e9b641757850f702d:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+      "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzE0ZDY0Yzc2ODdhZjRmNmU5YjY0MTc1Nzg1MGY3MDJkEAE="
+    },
+    {
+      "method": "staffing",
+      "receiver": "ProjectStaffing",
+      "correlation": "subscription-sqlrel_sub_14d64c7687af4f6e9b641757850f702d:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+      "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzE0ZDY0Yzc2ODdhZjRmNmU5YjY0MTc1Nzg1MGY3MDJkEAE="
+    },
+    {
+      "method": "portfolio",
+      "receiver": "Portfolio",
+      "correlation": "subscription-sqlrel_sub_14d64c7687af4f6e9b641757850f702d:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+      "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzE0ZDY0Yzc2ODdhZjRmNmU5YjY0MTc1Nzg1MGY3MDJkEAE="
+    },
+    {
+      "method": "projection",
+      "receiver": "ProjectProjection",
+      "correlation": "subscription-sqlrel_sub_14d64c7687af4f6e9b641757850f702d:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+      "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViXzE0ZDY0Yzc2ODdhZjRmNmU5YjY0MTc1Nzg1MGY3MDJkEAE="
+    }
+  ],
+  "subscriptionTrace": [
+    {
+      "operation": "subscribe",
+      "id": "s-0c4feb4a-9d1d-47d1-bc35-994188c8e733"
+    },
+    {
+      "operation": "activate",
+      "id": "s-0c4feb4a-9d1d-47d1-bc35-994188c8e733"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-0c4feb4a-9d1d-47d1-bc35-994188c8e733"
+    },
+    {
+      "operation": "subscribe",
+      "id": "s-6205e325-dca3-444e-9edc-a9b842a61966"
+    },
+    {
+      "operation": "activate",
+      "id": "s-6205e325-dca3-444e-9edc-a9b842a61966"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-6205e325-dca3-444e-9edc-a9b842a61966"
+    }
+  ]
+}

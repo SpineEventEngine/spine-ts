@@ -1,0 +1,1881 @@
+{
+  "status": "MEASURED_ORDERING_ONLY",
+  "matrixSessionId": "7fadc156-7186-43ec-b178-25f7273b058c",
+  "matrixScenario": "partial-publication-repair",
+  "finding": "Exactly two PostgreSQL 18 runs (p2 and p8) record a second Planning handler entry after the retained scenario.entries snapshot and in beforePostCleanupRepair.entries. In each run replayEntries contains that baseline entry plus one further Planning entry at or after repairStartedAt. Both explicit cold-repair +1 checks passed.",
+  "interpretation": "This records artifact ordering and exact typed identities only. It assigns no cause and does not classify the additional pre-repair Planning entries as a new failure. The cold-repair replay itself remains one additional Planning entry beyond the measured baseline in both runs.",
+  "runs": [
+    {
+      "runId": "c84070361e6e477f840c7486d68821fc",
+      "provider": "postgres18",
+      "processes": 2,
+      "originalEvent": {
+        "id": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+        "sha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+        "binaryBase64": "CiYKJDcwZjQzYjIxLTliMWItNDg0MC1iYjg2LTdhYjdiNTgwNjFhMhKkAQo9dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0Q3JlYXRlZBJjCigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEiwKKAomZmF1bHQtYzg0MDcwMzYxZTZlNDc3Zjg0MGM3NDg2ZDY4ODIxZmMQARoJcm9hZG1hcC0xGp4CCgwIzs+71gYQ6JmP8AIaaAo4dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0SWQSLAooCiZmYXVsdC1jODQwNzAzNjFlNmU0NzdmODQwYzc0ODZkNjg4MjFmYxABIgByoQEKjAEKTAoidHlwZS5zcGluZS5pby9zcGluZS5jb3JlLkNvbW1hbmRJZBImCiQ2ODhiNjJhNi00ZmE5LTQ4YWUtODk1YS0yY2I3ZTAyNWM2ZmUSPHR5cGUuc3BpbmUuc2VydmVyLnRlc3Rpbmcvc3BpbmUuc2VydmVyLnRlc3RpbmcuQ3JlYXRlUHJvamVjdBoQEg4KDG1hdHJpeC1hY3Rvcg=="
+      },
+      "selectedPlanningRecipient": {
+        "typeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+        "idBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE="
+      },
+      "handlerEntryStages": {
+        "retainedScenarioEntries": {
+          "counts": {
+            "create": 1,
+            "planning": 1,
+            "staffing": 1,
+            "portfolio": 1,
+            "projection": 1
+          },
+          "planning": [
+            {
+              "method": "planning",
+              "receiver": "ProjectPlanning",
+              "correlation": "fault-c84070361e6e477f840c7486d68821fc:1",
+              "pid": 50127,
+              "atMs": 1791944655144,
+              "atIso": "2026-10-14T02:24:15.144Z",
+              "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "recipientIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE="
+            }
+          ]
+        },
+        "beforePostCleanupRepairBaseline": {
+          "observedAtMs": 1791944695826,
+          "observedAtIso": "2026-10-14T02:24:55.826Z",
+          "counts": {
+            "create": 1,
+            "planning": 2,
+            "staffing": 1,
+            "portfolio": 1,
+            "projection": 1
+          },
+          "planning": [
+            {
+              "method": "planning",
+              "receiver": "ProjectPlanning",
+              "correlation": "fault-c84070361e6e477f840c7486d68821fc:1",
+              "pid": 50127,
+              "atMs": 1791944655144,
+              "atIso": "2026-10-14T02:24:15.144Z",
+              "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "recipientIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE="
+            },
+            {
+              "method": "planning",
+              "receiver": "ProjectPlanning",
+              "correlation": "fault-c84070361e6e477f840c7486d68821fc:1",
+              "pid": 50287,
+              "atMs": 1791944685698,
+              "atIso": "2026-10-14T02:24:45.698Z",
+              "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "recipientIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE="
+            }
+          ]
+        },
+        "afterColdRepairReplayLedger": {
+          "counts": {
+            "create": 1,
+            "planning": 3,
+            "staffing": 2,
+            "portfolio": 2,
+            "projection": 2
+          },
+          "planning": [
+            {
+              "method": "planning",
+              "receiver": "ProjectPlanning",
+              "correlation": "fault-c84070361e6e477f840c7486d68821fc:1",
+              "pid": 50127,
+              "atMs": 1791944655144,
+              "atIso": "2026-10-14T02:24:15.144Z",
+              "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "recipientIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE="
+            },
+            {
+              "method": "planning",
+              "receiver": "ProjectPlanning",
+              "correlation": "fault-c84070361e6e477f840c7486d68821fc:1",
+              "pid": 50287,
+              "atMs": 1791944685698,
+              "atIso": "2026-10-14T02:24:45.698Z",
+              "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "recipientIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE="
+            },
+            {
+              "method": "planning",
+              "receiver": "ProjectPlanning",
+              "correlation": "fault-c84070361e6e477f840c7486d68821fc:1",
+              "pid": 51948,
+              "atMs": 1791944696360,
+              "atIso": "2026-10-14T02:24:56.360Z",
+              "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "recipientIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE="
+            }
+          ]
+        }
+      },
+      "timing": {
+        "cleanupTraceFirstAtMs": 1791944656152,
+        "cleanupTraceLastAtMs": 1791944692662,
+        "cleanedSnapshotAtMs": 1791944695826,
+        "coldRepairStartedAtMs": 1791944696286,
+        "coldRepairEndedAtMs": 1791944696347,
+        "preRepairPlanningEntryAtMs": 1791944685698,
+        "postRepairPlanningEntryAtMs": [1791944696360]
+      },
+      "cleanupTraceExactPlanningRows": [
+        {
+          "observedAtMs": 1791944656152,
+          "observedAtIso": "2026-10-14T02:24:16.152Z",
+          "matchingOriginalEventPlanningRows": [
+            {
+              "messageId": "a11a0d77-624b-4c5d-a7cf-b288ac8f0fc2",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "DELIVERED",
+              "whenReceivedSeconds": "1791944654",
+              "whenReceivedNanos": 804001000,
+              "keepUntilMillis": 1791944684804,
+              "version": "2"
+            },
+            {
+              "messageId": "6949cd62-5558-4d23-957e-8171228b1d05",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 719001000,
+              "keepUntilMillis": 1791944685719,
+              "version": "1"
+            },
+            {
+              "messageId": "e0c0c8fd-274e-43eb-a886-a53c3a631e28",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 751000000,
+              "keepUntilMillis": 1791944685750,
+              "version": "1"
+            },
+            {
+              "messageId": "4429c9d9-2d67-4ee7-a187-e3836f68aa28",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 817001000,
+              "keepUntilMillis": 1791944685817,
+              "version": "3"
+            },
+            {
+              "messageId": "1d4db181-0e77-415c-8602-77633a3e0ba9",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 824001000,
+              "keepUntilMillis": 1791944685824,
+              "version": "3"
+            },
+            {
+              "messageId": "b61026a9-111b-4da6-8538-ea34d836fdf2",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 899001000,
+              "keepUntilMillis": 1791944685899,
+              "version": "5"
+            },
+            {
+              "messageId": "9524cfaf-4105-46a8-95d3-f471d2bd790d",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 908001000,
+              "keepUntilMillis": 1791944685908,
+              "version": "5"
+            },
+            {
+              "messageId": "3d9eb878-11b5-48fd-9aea-dcbef04815ba",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 976001000,
+              "keepUntilMillis": 1791944685976,
+              "version": "7"
+            },
+            {
+              "messageId": "ab2448d7-cf1b-43ca-9064-3fc755c1e4ba",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 991001000,
+              "keepUntilMillis": 1791944685991,
+              "version": "7"
+            }
+          ]
+        },
+        {
+          "observedAtMs": 1791944661193,
+          "observedAtIso": "2026-10-14T02:24:21.193Z",
+          "matchingOriginalEventPlanningRows": [
+            {
+              "messageId": "a11a0d77-624b-4c5d-a7cf-b288ac8f0fc2",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "DELIVERED",
+              "whenReceivedSeconds": "1791944654",
+              "whenReceivedNanos": 804001000,
+              "keepUntilMillis": 1791944684804,
+              "version": "2"
+            },
+            {
+              "messageId": "6949cd62-5558-4d23-957e-8171228b1d05",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 719001000,
+              "keepUntilMillis": 1791944685719,
+              "version": "1"
+            },
+            {
+              "messageId": "e0c0c8fd-274e-43eb-a886-a53c3a631e28",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 751000000,
+              "keepUntilMillis": 1791944685750,
+              "version": "1"
+            },
+            {
+              "messageId": "4429c9d9-2d67-4ee7-a187-e3836f68aa28",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 817001000,
+              "keepUntilMillis": 1791944685817,
+              "version": "3"
+            },
+            {
+              "messageId": "1d4db181-0e77-415c-8602-77633a3e0ba9",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 824001000,
+              "keepUntilMillis": 1791944685824,
+              "version": "3"
+            },
+            {
+              "messageId": "b61026a9-111b-4da6-8538-ea34d836fdf2",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 899001000,
+              "keepUntilMillis": 1791944685899,
+              "version": "5"
+            },
+            {
+              "messageId": "9524cfaf-4105-46a8-95d3-f471d2bd790d",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 908001000,
+              "keepUntilMillis": 1791944685908,
+              "version": "5"
+            },
+            {
+              "messageId": "3d9eb878-11b5-48fd-9aea-dcbef04815ba",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 976001000,
+              "keepUntilMillis": 1791944685976,
+              "version": "7"
+            },
+            {
+              "messageId": "ab2448d7-cf1b-43ca-9064-3fc755c1e4ba",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 991001000,
+              "keepUntilMillis": 1791944685991,
+              "version": "7"
+            }
+          ]
+        },
+        {
+          "observedAtMs": 1791944666436,
+          "observedAtIso": "2026-10-14T02:24:26.436Z",
+          "matchingOriginalEventPlanningRows": [
+            {
+              "messageId": "a11a0d77-624b-4c5d-a7cf-b288ac8f0fc2",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "DELIVERED",
+              "whenReceivedSeconds": "1791944654",
+              "whenReceivedNanos": 804001000,
+              "keepUntilMillis": 1791944684804,
+              "version": "2"
+            },
+            {
+              "messageId": "6949cd62-5558-4d23-957e-8171228b1d05",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 719001000,
+              "keepUntilMillis": 1791944685719,
+              "version": "1"
+            },
+            {
+              "messageId": "e0c0c8fd-274e-43eb-a886-a53c3a631e28",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 751000000,
+              "keepUntilMillis": 1791944685750,
+              "version": "1"
+            },
+            {
+              "messageId": "4429c9d9-2d67-4ee7-a187-e3836f68aa28",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 817001000,
+              "keepUntilMillis": 1791944685817,
+              "version": "3"
+            },
+            {
+              "messageId": "1d4db181-0e77-415c-8602-77633a3e0ba9",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 824001000,
+              "keepUntilMillis": 1791944685824,
+              "version": "3"
+            },
+            {
+              "messageId": "b61026a9-111b-4da6-8538-ea34d836fdf2",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 899001000,
+              "keepUntilMillis": 1791944685899,
+              "version": "5"
+            },
+            {
+              "messageId": "9524cfaf-4105-46a8-95d3-f471d2bd790d",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 908001000,
+              "keepUntilMillis": 1791944685908,
+              "version": "5"
+            },
+            {
+              "messageId": "3d9eb878-11b5-48fd-9aea-dcbef04815ba",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 976001000,
+              "keepUntilMillis": 1791944685976,
+              "version": "7"
+            },
+            {
+              "messageId": "ab2448d7-cf1b-43ca-9064-3fc755c1e4ba",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 991001000,
+              "keepUntilMillis": 1791944685991,
+              "version": "7"
+            }
+          ]
+        },
+        {
+          "observedAtMs": 1791944671714,
+          "observedAtIso": "2026-10-14T02:24:31.714Z",
+          "matchingOriginalEventPlanningRows": [
+            {
+              "messageId": "a11a0d77-624b-4c5d-a7cf-b288ac8f0fc2",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "DELIVERED",
+              "whenReceivedSeconds": "1791944654",
+              "whenReceivedNanos": 804001000,
+              "keepUntilMillis": 1791944684804,
+              "version": "2"
+            },
+            {
+              "messageId": "6949cd62-5558-4d23-957e-8171228b1d05",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 719001000,
+              "keepUntilMillis": 1791944685719,
+              "version": "1"
+            },
+            {
+              "messageId": "e0c0c8fd-274e-43eb-a886-a53c3a631e28",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 751000000,
+              "keepUntilMillis": 1791944685750,
+              "version": "1"
+            },
+            {
+              "messageId": "4429c9d9-2d67-4ee7-a187-e3836f68aa28",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 817001000,
+              "keepUntilMillis": 1791944685817,
+              "version": "3"
+            },
+            {
+              "messageId": "1d4db181-0e77-415c-8602-77633a3e0ba9",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 824001000,
+              "keepUntilMillis": 1791944685824,
+              "version": "3"
+            },
+            {
+              "messageId": "b61026a9-111b-4da6-8538-ea34d836fdf2",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 899001000,
+              "keepUntilMillis": 1791944685899,
+              "version": "5"
+            },
+            {
+              "messageId": "9524cfaf-4105-46a8-95d3-f471d2bd790d",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 908001000,
+              "keepUntilMillis": 1791944685908,
+              "version": "5"
+            },
+            {
+              "messageId": "3d9eb878-11b5-48fd-9aea-dcbef04815ba",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 976001000,
+              "keepUntilMillis": 1791944685976,
+              "version": "7"
+            },
+            {
+              "messageId": "ab2448d7-cf1b-43ca-9064-3fc755c1e4ba",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 991001000,
+              "keepUntilMillis": 1791944685991,
+              "version": "7"
+            }
+          ]
+        },
+        {
+          "observedAtMs": 1791944676934,
+          "observedAtIso": "2026-10-14T02:24:36.934Z",
+          "matchingOriginalEventPlanningRows": [
+            {
+              "messageId": "a11a0d77-624b-4c5d-a7cf-b288ac8f0fc2",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "DELIVERED",
+              "whenReceivedSeconds": "1791944654",
+              "whenReceivedNanos": 804001000,
+              "keepUntilMillis": 1791944684804,
+              "version": "2"
+            },
+            {
+              "messageId": "6949cd62-5558-4d23-957e-8171228b1d05",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 719001000,
+              "keepUntilMillis": 1791944685719,
+              "version": "1"
+            },
+            {
+              "messageId": "e0c0c8fd-274e-43eb-a886-a53c3a631e28",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 751000000,
+              "keepUntilMillis": 1791944685750,
+              "version": "1"
+            },
+            {
+              "messageId": "4429c9d9-2d67-4ee7-a187-e3836f68aa28",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 817001000,
+              "keepUntilMillis": 1791944685817,
+              "version": "3"
+            },
+            {
+              "messageId": "1d4db181-0e77-415c-8602-77633a3e0ba9",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 824001000,
+              "keepUntilMillis": 1791944685824,
+              "version": "3"
+            },
+            {
+              "messageId": "b61026a9-111b-4da6-8538-ea34d836fdf2",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 899001000,
+              "keepUntilMillis": 1791944685899,
+              "version": "5"
+            },
+            {
+              "messageId": "9524cfaf-4105-46a8-95d3-f471d2bd790d",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 908001000,
+              "keepUntilMillis": 1791944685908,
+              "version": "5"
+            },
+            {
+              "messageId": "3d9eb878-11b5-48fd-9aea-dcbef04815ba",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 976001000,
+              "keepUntilMillis": 1791944685976,
+              "version": "7"
+            },
+            {
+              "messageId": "ab2448d7-cf1b-43ca-9064-3fc755c1e4ba",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 991001000,
+              "keepUntilMillis": 1791944685991,
+              "version": "7"
+            }
+          ]
+        },
+        {
+          "observedAtMs": 1791944682191,
+          "observedAtIso": "2026-10-14T02:24:42.191Z",
+          "matchingOriginalEventPlanningRows": [
+            {
+              "messageId": "a11a0d77-624b-4c5d-a7cf-b288ac8f0fc2",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "DELIVERED",
+              "whenReceivedSeconds": "1791944654",
+              "whenReceivedNanos": 804001000,
+              "keepUntilMillis": 1791944684804,
+              "version": "2"
+            },
+            {
+              "messageId": "6949cd62-5558-4d23-957e-8171228b1d05",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 719001000,
+              "keepUntilMillis": 1791944685719,
+              "version": "1"
+            },
+            {
+              "messageId": "e0c0c8fd-274e-43eb-a886-a53c3a631e28",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 751000000,
+              "keepUntilMillis": 1791944685750,
+              "version": "1"
+            },
+            {
+              "messageId": "4429c9d9-2d67-4ee7-a187-e3836f68aa28",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 817001000,
+              "keepUntilMillis": 1791944685817,
+              "version": "3"
+            },
+            {
+              "messageId": "1d4db181-0e77-415c-8602-77633a3e0ba9",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 824001000,
+              "keepUntilMillis": 1791944685824,
+              "version": "3"
+            },
+            {
+              "messageId": "b61026a9-111b-4da6-8538-ea34d836fdf2",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 899001000,
+              "keepUntilMillis": 1791944685899,
+              "version": "5"
+            },
+            {
+              "messageId": "9524cfaf-4105-46a8-95d3-f471d2bd790d",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 908001000,
+              "keepUntilMillis": 1791944685908,
+              "version": "5"
+            },
+            {
+              "messageId": "3d9eb878-11b5-48fd-9aea-dcbef04815ba",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 976001000,
+              "keepUntilMillis": 1791944685976,
+              "version": "7"
+            },
+            {
+              "messageId": "ab2448d7-cf1b-43ca-9064-3fc755c1e4ba",
+              "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+              "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944655",
+              "whenReceivedNanos": 991001000,
+              "keepUntilMillis": 1791944685991,
+              "version": "7"
+            }
+          ]
+        },
+        {
+          "observedAtMs": 1791944687442,
+          "observedAtIso": "2026-10-14T02:24:47.442Z",
+          "matchingOriginalEventPlanningRows": []
+        },
+        {
+          "observedAtMs": 1791944692662,
+          "observedAtIso": "2026-10-14T02:24:52.662Z",
+          "matchingOriginalEventPlanningRows": []
+        }
+      ],
+      "cleanedSnapshot": {
+        "atMs": 1791944695826,
+        "matchingOriginalEventPlanningRows": 0,
+        "shards": 3,
+        "totalRows": 0
+      },
+      "coldRepairBaselineInbox": {
+        "atMs": 1791944695826,
+        "matchingOriginalEventPlanningRows": 0,
+        "shards": 3,
+        "totalRows": 0
+      },
+      "finalResolvedRows": {
+        "targetingExactPlanningRecipient": 1,
+        "allTypedDeliveredRows": [
+          {
+            "targetTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingState",
+            "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+            "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+            "status": "DELIVERED",
+            "messageId": "7916ade3-10c1-4b1e-af42-c9e054fcd9b0",
+            "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+            "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396"
+          },
+          {
+            "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+            "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+            "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+            "status": "DELIVERED",
+            "messageId": "4611c70e-30d9-4983-87c8-dc1e335c144d",
+            "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+            "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396"
+          },
+          {
+            "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioState",
+            "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+            "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+            "status": "DELIVERED",
+            "messageId": "7a265e78-a398-4859-a18a-da00957363e8",
+            "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+            "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396"
+          },
+          {
+            "targetTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectProjectionState",
+            "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+            "targetIdBase64": "CigKJmZhdWx0LWM4NDA3MDM2MWU2ZTQ3N2Y4NDBjNzQ4NmQ2ODgyMWZjEAE=",
+            "status": "DELIVERED",
+            "messageId": "ee44bd66-7df2-47ab-95bc-fba3fa8443af",
+            "signalId": "70f43b21-9b1b-4840-bb86-7ab7b58061a2",
+            "signalValueSha256": "7b0537d641595dc9fab50a950904b956464161130e0f64212fe3284254167396"
+          }
+        ]
+      },
+      "observedRepairOutcomes": {
+        "count": 8,
+        "statuses": [
+          "ADMITTED",
+          "ADMITTED",
+          "ADMITTED",
+          "ADMITTED",
+          "ADMITTED",
+          "ADMITTED",
+          "ADMITTED",
+          "ADMITTED"
+        ]
+      }
+    },
+    {
+      "runId": "e693d1cec1da4d4eb1114df85fc44949",
+      "provider": "postgres18",
+      "processes": 8,
+      "originalEvent": {
+        "id": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+        "sha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+        "binaryBase64": "CiYKJGUxM2U4ZDdjLWMyMzctNGJjNC1hNDU1LWI2NjQzYmNhN2QwMRKkAQo9dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0Q3JlYXRlZBJjCigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EiwKKAomZmF1bHQtZTY5M2QxY2VjMWRhNGQ0ZWIxMTE0ZGY4NWZjNDQ5NDkQARoJcm9hZG1hcC0xGp0CCgsI0NC71gYQqM6UMBpoCjh0eXBlLnNwaW5lLnNlcnZlci50ZXN0aW5nL3NwaW5lLnNlcnZlci50ZXN0aW5nLlByb2plY3RJZBIsCigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAEiAHKhAQqMAQpMCiJ0eXBlLnNwaW5lLmlvL3NwaW5lLmNvcmUuQ29tbWFuZElkEiYKJDg0Y2I4YmUwLWIxODQtNGJlZS1iYzUxLTkyYjkzMmI2MzZkYRI8dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5DcmVhdGVQcm9qZWN0GhASDgoMbWF0cml4LWFjdG9y"
+      },
+      "selectedPlanningRecipient": {
+        "typeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+        "idBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE="
+      },
+      "handlerEntryStages": {
+        "retainedScenarioEntries": {
+          "counts": {
+            "create": 1,
+            "planning": 1,
+            "staffing": 1,
+            "portfolio": 1,
+            "projection": 1
+          },
+          "planning": [
+            {
+              "method": "planning",
+              "receiver": "ProjectPlanning",
+              "correlation": "fault-e693d1cec1da4d4eb1114df85fc44949:1",
+              "pid": 58554,
+              "atMs": 1791944784568,
+              "atIso": "2026-10-14T02:26:24.568Z",
+              "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "recipientIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE="
+            }
+          ]
+        },
+        "beforePostCleanupRepairBaseline": {
+          "observedAtMs": 1791944825452,
+          "observedAtIso": "2026-10-14T02:27:05.452Z",
+          "counts": {
+            "create": 1,
+            "planning": 2,
+            "staffing": 1,
+            "portfolio": 1,
+            "projection": 1
+          },
+          "planning": [
+            {
+              "method": "planning",
+              "receiver": "ProjectPlanning",
+              "correlation": "fault-e693d1cec1da4d4eb1114df85fc44949:1",
+              "pid": 58554,
+              "atMs": 1791944784568,
+              "atIso": "2026-10-14T02:26:24.568Z",
+              "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "recipientIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE="
+            },
+            {
+              "method": "planning",
+              "receiver": "ProjectPlanning",
+              "correlation": "fault-e693d1cec1da4d4eb1114df85fc44949:1",
+              "pid": 58578,
+              "atMs": 1791944815271,
+              "atIso": "2026-10-14T02:26:55.271Z",
+              "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "recipientIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE="
+            }
+          ]
+        },
+        "afterColdRepairReplayLedger": {
+          "counts": {
+            "create": 1,
+            "planning": 3,
+            "staffing": 2,
+            "portfolio": 2,
+            "projection": 2
+          },
+          "planning": [
+            {
+              "method": "planning",
+              "receiver": "ProjectPlanning",
+              "correlation": "fault-e693d1cec1da4d4eb1114df85fc44949:1",
+              "pid": 58554,
+              "atMs": 1791944784568,
+              "atIso": "2026-10-14T02:26:24.568Z",
+              "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "recipientIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE="
+            },
+            {
+              "method": "planning",
+              "receiver": "ProjectPlanning",
+              "correlation": "fault-e693d1cec1da4d4eb1114df85fc44949:1",
+              "pid": 58578,
+              "atMs": 1791944815271,
+              "atIso": "2026-10-14T02:26:55.271Z",
+              "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "recipientIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE="
+            },
+            {
+              "method": "planning",
+              "receiver": "ProjectPlanning",
+              "correlation": "fault-e693d1cec1da4d4eb1114df85fc44949:1",
+              "pid": 60269,
+              "atMs": 1791944826790,
+              "atIso": "2026-10-14T02:27:06.790Z",
+              "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "recipientIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE="
+            }
+          ]
+        }
+      },
+      "timing": {
+        "cleanupTraceFirstAtMs": 1791944786369,
+        "cleanupTraceLastAtMs": 1791944822164,
+        "cleanedSnapshotAtMs": 1791944825452,
+        "coldRepairStartedAtMs": 1791944826710,
+        "coldRepairEndedAtMs": 1791944826780,
+        "preRepairPlanningEntryAtMs": 1791944815271,
+        "postRepairPlanningEntryAtMs": [1791944826790]
+      },
+      "cleanupTraceExactPlanningRows": [
+        {
+          "observedAtMs": 1791944786369,
+          "observedAtIso": "2026-10-14T02:26:26.369Z",
+          "matchingOriginalEventPlanningRows": [
+            {
+              "messageId": "aca8b837-f15c-432e-9636-1c3f53b7427b",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "DELIVERED",
+              "whenReceivedSeconds": "1791944784",
+              "whenReceivedNanos": 130001000,
+              "keepUntilMillis": 1791944814130,
+              "version": "2"
+            },
+            {
+              "messageId": "8bf25239-f6e6-4171-adde-3faecf299cfc",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 828000000,
+              "keepUntilMillis": 1791944815827,
+              "version": "1"
+            },
+            {
+              "messageId": "a7968030-3f0d-4166-8cea-84cc64e7f1c1",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 838000000,
+              "keepUntilMillis": 1791944815837,
+              "version": "1"
+            },
+            {
+              "messageId": "a4960dcb-a505-4d8e-ae9b-8771dda17b5f",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 845001000,
+              "keepUntilMillis": 1791944815845,
+              "version": "1"
+            },
+            {
+              "messageId": "00cd9a5c-dde3-4b62-bbb0-3c7f740daa64",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 852001000,
+              "keepUntilMillis": 1791944815852,
+              "version": "1"
+            },
+            {
+              "messageId": "2fd133a6-6ceb-405c-9445-3c9c87144d7a",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 859001000,
+              "keepUntilMillis": 1791944815859,
+              "version": "1"
+            },
+            {
+              "messageId": "a01809c6-2b01-4e68-86a5-5d55a4b1c35f",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 868001000,
+              "keepUntilMillis": 1791944815868,
+              "version": "1"
+            },
+            {
+              "messageId": "783706a3-0dd5-42a2-99db-c61e53a34b18",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 876000000,
+              "keepUntilMillis": 1791944815875,
+              "version": "1"
+            },
+            {
+              "messageId": "eafc58c7-4a75-4df1-aae2-201b94977b5f",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 882001000,
+              "keepUntilMillis": 1791944815882,
+              "version": "1"
+            }
+          ]
+        },
+        {
+          "observedAtMs": 1791944791537,
+          "observedAtIso": "2026-10-14T02:26:31.537Z",
+          "matchingOriginalEventPlanningRows": [
+            {
+              "messageId": "aca8b837-f15c-432e-9636-1c3f53b7427b",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "DELIVERED",
+              "whenReceivedSeconds": "1791944784",
+              "whenReceivedNanos": 130001000,
+              "keepUntilMillis": 1791944814130,
+              "version": "2"
+            },
+            {
+              "messageId": "8bf25239-f6e6-4171-adde-3faecf299cfc",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 828000000,
+              "keepUntilMillis": 1791944815827,
+              "version": "1"
+            },
+            {
+              "messageId": "a7968030-3f0d-4166-8cea-84cc64e7f1c1",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 838000000,
+              "keepUntilMillis": 1791944815837,
+              "version": "1"
+            },
+            {
+              "messageId": "a4960dcb-a505-4d8e-ae9b-8771dda17b5f",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 845001000,
+              "keepUntilMillis": 1791944815845,
+              "version": "1"
+            },
+            {
+              "messageId": "00cd9a5c-dde3-4b62-bbb0-3c7f740daa64",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 852001000,
+              "keepUntilMillis": 1791944815852,
+              "version": "1"
+            },
+            {
+              "messageId": "2fd133a6-6ceb-405c-9445-3c9c87144d7a",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 859001000,
+              "keepUntilMillis": 1791944815859,
+              "version": "1"
+            },
+            {
+              "messageId": "a01809c6-2b01-4e68-86a5-5d55a4b1c35f",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 868001000,
+              "keepUntilMillis": 1791944815868,
+              "version": "1"
+            },
+            {
+              "messageId": "783706a3-0dd5-42a2-99db-c61e53a34b18",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 876000000,
+              "keepUntilMillis": 1791944815875,
+              "version": "1"
+            },
+            {
+              "messageId": "eafc58c7-4a75-4df1-aae2-201b94977b5f",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 882001000,
+              "keepUntilMillis": 1791944815882,
+              "version": "1"
+            }
+          ]
+        },
+        {
+          "observedAtMs": 1791944796638,
+          "observedAtIso": "2026-10-14T02:26:36.638Z",
+          "matchingOriginalEventPlanningRows": [
+            {
+              "messageId": "aca8b837-f15c-432e-9636-1c3f53b7427b",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "DELIVERED",
+              "whenReceivedSeconds": "1791944784",
+              "whenReceivedNanos": 130001000,
+              "keepUntilMillis": 1791944814130,
+              "version": "2"
+            },
+            {
+              "messageId": "8bf25239-f6e6-4171-adde-3faecf299cfc",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 828000000,
+              "keepUntilMillis": 1791944815827,
+              "version": "1"
+            },
+            {
+              "messageId": "a7968030-3f0d-4166-8cea-84cc64e7f1c1",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 838000000,
+              "keepUntilMillis": 1791944815837,
+              "version": "1"
+            },
+            {
+              "messageId": "a4960dcb-a505-4d8e-ae9b-8771dda17b5f",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 845001000,
+              "keepUntilMillis": 1791944815845,
+              "version": "1"
+            },
+            {
+              "messageId": "00cd9a5c-dde3-4b62-bbb0-3c7f740daa64",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 852001000,
+              "keepUntilMillis": 1791944815852,
+              "version": "1"
+            },
+            {
+              "messageId": "2fd133a6-6ceb-405c-9445-3c9c87144d7a",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 859001000,
+              "keepUntilMillis": 1791944815859,
+              "version": "1"
+            },
+            {
+              "messageId": "a01809c6-2b01-4e68-86a5-5d55a4b1c35f",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 868001000,
+              "keepUntilMillis": 1791944815868,
+              "version": "1"
+            },
+            {
+              "messageId": "783706a3-0dd5-42a2-99db-c61e53a34b18",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 876000000,
+              "keepUntilMillis": 1791944815875,
+              "version": "1"
+            },
+            {
+              "messageId": "eafc58c7-4a75-4df1-aae2-201b94977b5f",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 882001000,
+              "keepUntilMillis": 1791944815882,
+              "version": "1"
+            }
+          ]
+        },
+        {
+          "observedAtMs": 1791944801781,
+          "observedAtIso": "2026-10-14T02:26:41.781Z",
+          "matchingOriginalEventPlanningRows": [
+            {
+              "messageId": "aca8b837-f15c-432e-9636-1c3f53b7427b",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "DELIVERED",
+              "whenReceivedSeconds": "1791944784",
+              "whenReceivedNanos": 130001000,
+              "keepUntilMillis": 1791944814130,
+              "version": "2"
+            },
+            {
+              "messageId": "8bf25239-f6e6-4171-adde-3faecf299cfc",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 828000000,
+              "keepUntilMillis": 1791944815827,
+              "version": "1"
+            },
+            {
+              "messageId": "a7968030-3f0d-4166-8cea-84cc64e7f1c1",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 838000000,
+              "keepUntilMillis": 1791944815837,
+              "version": "1"
+            },
+            {
+              "messageId": "a4960dcb-a505-4d8e-ae9b-8771dda17b5f",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 845001000,
+              "keepUntilMillis": 1791944815845,
+              "version": "1"
+            },
+            {
+              "messageId": "00cd9a5c-dde3-4b62-bbb0-3c7f740daa64",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 852001000,
+              "keepUntilMillis": 1791944815852,
+              "version": "1"
+            },
+            {
+              "messageId": "2fd133a6-6ceb-405c-9445-3c9c87144d7a",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 859001000,
+              "keepUntilMillis": 1791944815859,
+              "version": "1"
+            },
+            {
+              "messageId": "a01809c6-2b01-4e68-86a5-5d55a4b1c35f",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 868001000,
+              "keepUntilMillis": 1791944815868,
+              "version": "1"
+            },
+            {
+              "messageId": "783706a3-0dd5-42a2-99db-c61e53a34b18",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 876000000,
+              "keepUntilMillis": 1791944815875,
+              "version": "1"
+            },
+            {
+              "messageId": "eafc58c7-4a75-4df1-aae2-201b94977b5f",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 882001000,
+              "keepUntilMillis": 1791944815882,
+              "version": "1"
+            }
+          ]
+        },
+        {
+          "observedAtMs": 1791944806899,
+          "observedAtIso": "2026-10-14T02:26:46.899Z",
+          "matchingOriginalEventPlanningRows": [
+            {
+              "messageId": "aca8b837-f15c-432e-9636-1c3f53b7427b",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "DELIVERED",
+              "whenReceivedSeconds": "1791944784",
+              "whenReceivedNanos": 130001000,
+              "keepUntilMillis": 1791944814130,
+              "version": "2"
+            },
+            {
+              "messageId": "8bf25239-f6e6-4171-adde-3faecf299cfc",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 828000000,
+              "keepUntilMillis": 1791944815827,
+              "version": "1"
+            },
+            {
+              "messageId": "a7968030-3f0d-4166-8cea-84cc64e7f1c1",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 838000000,
+              "keepUntilMillis": 1791944815837,
+              "version": "1"
+            },
+            {
+              "messageId": "a4960dcb-a505-4d8e-ae9b-8771dda17b5f",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 845001000,
+              "keepUntilMillis": 1791944815845,
+              "version": "1"
+            },
+            {
+              "messageId": "00cd9a5c-dde3-4b62-bbb0-3c7f740daa64",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 852001000,
+              "keepUntilMillis": 1791944815852,
+              "version": "1"
+            },
+            {
+              "messageId": "2fd133a6-6ceb-405c-9445-3c9c87144d7a",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 859001000,
+              "keepUntilMillis": 1791944815859,
+              "version": "1"
+            },
+            {
+              "messageId": "a01809c6-2b01-4e68-86a5-5d55a4b1c35f",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 868001000,
+              "keepUntilMillis": 1791944815868,
+              "version": "1"
+            },
+            {
+              "messageId": "783706a3-0dd5-42a2-99db-c61e53a34b18",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 876000000,
+              "keepUntilMillis": 1791944815875,
+              "version": "1"
+            },
+            {
+              "messageId": "eafc58c7-4a75-4df1-aae2-201b94977b5f",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 882001000,
+              "keepUntilMillis": 1791944815882,
+              "version": "1"
+            }
+          ]
+        },
+        {
+          "observedAtMs": 1791944812119,
+          "observedAtIso": "2026-10-14T02:26:52.119Z",
+          "matchingOriginalEventPlanningRows": [
+            {
+              "messageId": "aca8b837-f15c-432e-9636-1c3f53b7427b",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "DELIVERED",
+              "whenReceivedSeconds": "1791944784",
+              "whenReceivedNanos": 130001000,
+              "keepUntilMillis": 1791944814130,
+              "version": "2"
+            },
+            {
+              "messageId": "8bf25239-f6e6-4171-adde-3faecf299cfc",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 828000000,
+              "keepUntilMillis": 1791944815827,
+              "version": "1"
+            },
+            {
+              "messageId": "a7968030-3f0d-4166-8cea-84cc64e7f1c1",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 838000000,
+              "keepUntilMillis": 1791944815837,
+              "version": "1"
+            },
+            {
+              "messageId": "a4960dcb-a505-4d8e-ae9b-8771dda17b5f",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 845001000,
+              "keepUntilMillis": 1791944815845,
+              "version": "1"
+            },
+            {
+              "messageId": "00cd9a5c-dde3-4b62-bbb0-3c7f740daa64",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 852001000,
+              "keepUntilMillis": 1791944815852,
+              "version": "1"
+            },
+            {
+              "messageId": "2fd133a6-6ceb-405c-9445-3c9c87144d7a",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 859001000,
+              "keepUntilMillis": 1791944815859,
+              "version": "1"
+            },
+            {
+              "messageId": "a01809c6-2b01-4e68-86a5-5d55a4b1c35f",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 868001000,
+              "keepUntilMillis": 1791944815868,
+              "version": "1"
+            },
+            {
+              "messageId": "783706a3-0dd5-42a2-99db-c61e53a34b18",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 876000000,
+              "keepUntilMillis": 1791944815875,
+              "version": "1"
+            },
+            {
+              "messageId": "eafc58c7-4a75-4df1-aae2-201b94977b5f",
+              "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+              "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+              "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+              "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+              "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3",
+              "status": "TO_DELIVER",
+              "whenReceivedSeconds": "1791944785",
+              "whenReceivedNanos": 882001000,
+              "keepUntilMillis": 1791944815882,
+              "version": "1"
+            }
+          ]
+        },
+        {
+          "observedAtMs": 1791944817130,
+          "observedAtIso": "2026-10-14T02:26:57.130Z",
+          "matchingOriginalEventPlanningRows": []
+        },
+        {
+          "observedAtMs": 1791944822164,
+          "observedAtIso": "2026-10-14T02:27:02.164Z",
+          "matchingOriginalEventPlanningRows": []
+        }
+      ],
+      "cleanedSnapshot": {
+        "atMs": 1791944825452,
+        "matchingOriginalEventPlanningRows": 0,
+        "shards": 9,
+        "totalRows": 0
+      },
+      "coldRepairBaselineInbox": {
+        "atMs": 1791944825452,
+        "matchingOriginalEventPlanningRows": 0,
+        "shards": 9,
+        "totalRows": 0
+      },
+      "finalResolvedRows": {
+        "targetingExactPlanningRecipient": 1,
+        "allTypedDeliveredRows": [
+          {
+            "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+            "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+            "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+            "status": "DELIVERED",
+            "messageId": "c152128d-0d0d-4533-9639-b7c4299618b1",
+            "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+            "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3"
+          },
+          {
+            "targetTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingState",
+            "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+            "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+            "status": "DELIVERED",
+            "messageId": "c26a4095-f9bf-4d76-9863-f1a201bb551c",
+            "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+            "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3"
+          },
+          {
+            "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioState",
+            "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+            "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+            "status": "DELIVERED",
+            "messageId": "902b06aa-3ef8-4eb4-8422-d7d37c058e04",
+            "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+            "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3"
+          },
+          {
+            "targetTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectProjectionState",
+            "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+            "targetIdBase64": "CigKJmZhdWx0LWU2OTNkMWNlYzFkYTRkNGViMTExNGRmODVmYzQ0OTQ5EAE=",
+            "status": "DELIVERED",
+            "messageId": "6d0eb708-bded-4dd3-93d9-b785c18862a6",
+            "signalId": "e13e8d7c-c237-4bc4-a455-b6643bca7d01",
+            "signalValueSha256": "f3bb79ac25ef20318d7ef47aa045a34ff7b95e4f18791921ca033c46aa794ea3"
+          }
+        ]
+      },
+      "observedRepairOutcomes": {
+        "count": 8,
+        "statuses": [
+          "ADMITTED",
+          "ADMITTED",
+          "ADMITTED",
+          "ADMITTED",
+          "ADMITTED",
+          "ADMITTED",
+          "ADMITTED",
+          "ADMITTED"
+        ]
+      }
+    }
+  ]
+}

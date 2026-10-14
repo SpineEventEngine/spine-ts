@@ -1,0 +1,67 @@
+{
+  "status": "PASS",
+  "result": {
+    "provider": "mysql84",
+    "protocol": "connect",
+    "scenario": "pending-cancel",
+    "deliveryMode": "db-only",
+    "database": "sqlrel_sub_bacf2ec23662429fb329336e2f2c0d42",
+    "counters": {
+      "subscribe": 1,
+      "activate": 1,
+      "ackReleased": 1,
+      "cancel": 1,
+      "cancelFaults": 0,
+      "cancelSuccesses": 1,
+      "streamFaults": 0,
+      "iterators": 0
+    },
+    "entries": [],
+    "subscriptionTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-93450cec-fc0b-4654-ad82-a81ba58ae308"
+      },
+      {
+        "operation": "activate",
+        "id": "s-93450cec-fc0b-4654-ad82-a81ba58ae308"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-93450cec-fc0b-4654-ad82-a81ba58ae308"
+      }
+    ]
+  },
+  "counters": {
+    "subscribe": 1,
+    "activate": 1,
+    "ackReleased": 1,
+    "cancel": 1,
+    "cancelFaults": 0,
+    "cancelSuccesses": 1,
+    "streamFaults": 0,
+    "iterators": 0
+  },
+  "secondaryCounters": {
+    "subscribe": 0,
+    "activate": 0,
+    "ackReleased": 0,
+    "cancel": 0,
+    "iterators": 0
+  },
+  "entries": [],
+  "subscriptionTrace": [
+    {
+      "operation": "subscribe",
+      "id": "s-93450cec-fc0b-4654-ad82-a81ba58ae308"
+    },
+    {
+      "operation": "activate",
+      "id": "s-93450cec-fc0b-4654-ad82-a81ba58ae308"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-93450cec-fc0b-4654-ad82-a81ba58ae308"
+    }
+  ]
+}

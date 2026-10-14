@@ -1,0 +1,67 @@
+{
+  "status": "PASS",
+  "result": {
+    "provider": "mariadb114",
+    "protocol": "grpc-web",
+    "scenario": "pending-cancel",
+    "deliveryMode": "shared-memory",
+    "database": "sqlrel_sub_723f6780ef8240d8a90136e231a089c0",
+    "counters": {
+      "subscribe": 1,
+      "activate": 1,
+      "ackReleased": 1,
+      "cancel": 1,
+      "cancelFaults": 0,
+      "cancelSuccesses": 1,
+      "streamFaults": 0,
+      "iterators": 0
+    },
+    "entries": [],
+    "subscriptionTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-16d9b652-6422-4772-8762-f76555e1bad9"
+      },
+      {
+        "operation": "activate",
+        "id": "s-16d9b652-6422-4772-8762-f76555e1bad9"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-16d9b652-6422-4772-8762-f76555e1bad9"
+      }
+    ]
+  },
+  "counters": {
+    "subscribe": 1,
+    "activate": 1,
+    "ackReleased": 1,
+    "cancel": 1,
+    "cancelFaults": 0,
+    "cancelSuccesses": 1,
+    "streamFaults": 0,
+    "iterators": 0
+  },
+  "secondaryCounters": {
+    "subscribe": 0,
+    "activate": 0,
+    "ackReleased": 0,
+    "cancel": 0,
+    "iterators": 0
+  },
+  "entries": [],
+  "subscriptionTrace": [
+    {
+      "operation": "subscribe",
+      "id": "s-16d9b652-6422-4772-8762-f76555e1bad9"
+    },
+    {
+      "operation": "activate",
+      "id": "s-16d9b652-6422-4772-8762-f76555e1bad9"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-16d9b652-6422-4772-8762-f76555e1bad9"
+    }
+  ]
+}

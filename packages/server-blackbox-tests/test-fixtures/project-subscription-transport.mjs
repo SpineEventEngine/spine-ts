@@ -26,7 +26,7 @@ import { clearTimeout, setTimeout } from "node:timers";
 import { fileURLToPath, URL } from "node:url";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { connectNodeAdapter } from "@connectrpc/connect-node";
-import { create } from "@bufbuild/protobuf";
+import { create, toBinary } from "@bufbuild/protobuf";
 import { AnyMessages, StringifierRegistry, TypeRegistry, TypeUrls } from "@spine-event-engine/core";
 import {
   QueryIdSchema,
@@ -37,11 +37,12 @@ import {
   TopicIdSchema,
   TopicSchema,
 } from "@spine-event-engine/proto/client";
-import { UserIdSchema } from "@spine-event-engine/proto";
+import { EventSchema, UserIdSchema } from "@spine-event-engine/proto";
 import { RemoteDelivery } from "@spine-event-engine/delivery-client";
 import { DeliveryServer } from "@spine-event-engine/delivery-server";
 import { EnvironmentType, ServerEnvironment, SpineServices } from "@spine-event-engine/server";
 import { BrowserServer } from "@spine-event-engine/server/browser";
+import { NodeCoordinator } from "../../server/dist/server/node-coordinator.js";
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
 import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
 
@@ -62,6 +63,7 @@ import {
   StaffingStateSchema,
 } from "../dist/generated/spine/server/testing/project_workflow_pb.js";
 import { projectWorkflow, projectWorkflowIds } from "../dist/test-fixtures/project-workflow.js";
+import { waitUntil } from "./project-subscription-wait.mjs";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const task = resolve(root, "build-protocol/tasks/sql-delivery-reliability");
@@ -70,6 +72,10 @@ const protocol = process.argv[3] ?? "native";
 const scenario = process.argv[4] ?? "basic";
 const deliveryMode = process.argv[5] ?? "db-only";
 assert.ok(["native", "grpc-web", "connect"].includes(protocol));
+assert.ok(
+  !(scenario === "child-fanout-fault" && protocol === "native"),
+  "Native direct transport has no browser gateway child fanout; use coordinator-fanout-fault.",
+);
 assert.ok(
   [
     "basic",
@@ -82,6 +88,10 @@ assert.ok(
     "child-fanout-fault",
     "child-retry-exhaustion",
     "child-retry-cancel",
+    "coordinator-child-fault",
+    "coordinator-fanout-fault",
+    "coordinator-retry-exhaustion",
+    "coordinator-retry-cancel",
   ].includes(scenario),
 );
 assert.ok(["db-only", "shared-memory"].includes(deliveryMode));
@@ -96,6 +106,8 @@ await mkdir(evidencePath, { recursive: true });
 const artifactPaths = [
   "packages/server-blackbox-tests/dist/test-fixtures/project-workflow.js",
   "packages/server/dist/index.js",
+  "packages/server/dist/server/node-coordinator.js",
+  "packages/deployment/dist/internal/backend-membership-kernel.js",
   "packages/proto/dist/src/index.js",
   "packages/storage-postgres/dist/index.js",
   "packages/storage-mysql/dist/index.js",
@@ -136,6 +148,8 @@ let context;
 let server;
 let secondaryServer;
 let browser;
+let coordinator;
+let coordinatorChildActivations = 0;
 let client;
 let deliveryServer;
 let remoteDelivery;
@@ -242,9 +256,16 @@ try {
                         "child-fanout-fault",
                         "child-retry-exhaustion",
                         "child-retry-cancel",
+                        "coordinator-child-fault",
+                        "coordinator-fanout-fault",
+                        "coordinator-retry-exhaustion",
+                        "coordinator-retry-cancel",
                       ].includes(scenario) ||
                         (scenario === "stream-reconnect" && protocol === "native")) &&
-                      (scenario === "child-retry-exhaustion" || counters.streamFaults === 0)
+                      (["child-retry-exhaustion", "coordinator-retry-exhaustion"].includes(
+                        scenario,
+                      ) ||
+                        counters.streamFaults === 0)
                     ) {
                       counters.streamFaults++;
                       if (scenario === "child-stream-eof") return;
@@ -286,7 +307,7 @@ try {
   assert.ok(address && typeof address !== "string");
   const endpoint = `http://127.0.0.1:${String(address.port)}`;
   let secondaryEndpoint;
-  if (scenario === "child-fanout-fault") {
+  if (["child-fanout-fault", "coordinator-fanout-fault"].includes(scenario)) {
     secondaryServer = http2.createServer(
       connectNodeAdapter({
         routes: (router) =>
@@ -336,11 +357,37 @@ try {
     assert.ok(secondaryAddress && typeof secondaryAddress !== "string");
     secondaryEndpoint = `http://127.0.0.1:${String(secondaryAddress.port)}`;
   }
+  if (
+    [
+      "coordinator-child-fault",
+      "coordinator-fanout-fault",
+      "coordinator-retry-exhaustion",
+      "coordinator-retry-cancel",
+    ].includes(scenario)
+  ) {
+    const membersList = [
+      { endpoint, incarnation: runId, pid: process.pid, slot: 0 },
+      ...(secondaryEndpoint === undefined
+        ? []
+        : [{ endpoint: secondaryEndpoint, incarnation: runId, pid: process.pid, slot: 1 }]),
+    ];
+    const members = {
+      readyMembers: () => membersList,
+      relayMembers: () => membersList,
+      onReadyMembersChange: () => () => undefined,
+      onRelayMembersChange: () => () => undefined,
+      onChildSubscriptionActivated: () => {
+        coordinatorChildActivations++;
+      },
+    };
+    coordinator = await NodeCoordinator.open({ members, port: 0 });
+  }
+  const coordinatorEndpoint = coordinator?.baseUrl ?? endpoint;
   if (protocol !== "native") {
     browser = await BrowserServer.open(undefined, {
       backend:
-        secondaryEndpoint === undefined
-          ? { baseUrl: endpoint }
+        secondaryEndpoint === undefined || coordinator !== undefined
+          ? { baseUrl: coordinatorEndpoint }
           : { baseUrls: [endpoint, secondaryEndpoint] },
       host: "127.0.0.1",
       port: 0,
@@ -367,20 +414,26 @@ try {
     streamProxy = await streamFaultProxy(browser.baseUrl, counters);
   }
   const browserEndpoint = streamProxy?.baseUrl ?? browser?.baseUrl;
-  const retryOptions = ["child-retry-exhaustion", "child-retry-cancel"].includes(scenario)
+  const retryOptions = [
+    "child-retry-exhaustion",
+    "child-retry-cancel",
+    "coordinator-retry-exhaustion",
+    "coordinator-retry-cancel",
+  ].includes(scenario)
     ? {
         subscriptions: {
           retryPolicy: {
             maxAttempts: 2,
             maxElapsedMs: 5_000,
-            delayMs: () => (scenario === "child-retry-cancel" ? 500 : 50),
+            delayMs: () =>
+              ["child-retry-cancel", "coordinator-retry-cancel"].includes(scenario) ? 500 : 50,
           },
         },
       }
     : {};
   client =
     protocol === "native"
-      ? NodeClient.connectTo(endpoint, retryOptions)
+      ? NodeClient.connectTo(coordinatorEndpoint, retryOptions)
       : protocol === "grpc-web"
         ? WebClient.forGrpcWeb(browserEndpoint, {
             ...retryOptions,
@@ -414,10 +467,11 @@ try {
     const updates = subscription.updates[Symbol.asyncIterator]();
     const next = updates.next();
     const cancellation = subscription.cancel();
-    await bounded(
-      waitUntil(() => counters.cancel === 1),
+    await waitUntil(
+      () => counters.cancel === 1,
       5_000,
       "server Cancel during held ACK",
+      termination.promise,
     );
     assert.equal(counters.ackReleased, 0, "Cancel reached the server before readiness ACK.");
     gate.resolve();
@@ -428,10 +482,11 @@ try {
     assert.equal(pending.done, true);
     assert.equal(counters.cancel, 1);
     assert.equal(counters.cancelSuccesses, 1);
-    await bounded(
-      waitUntil(() => counters.iterators === 0),
+    await waitUntil(
+      () => counters.iterators === 0,
       5_000,
       "activation stream close",
+      termination.promise,
     );
     assert.equal(counters.iterators, 0);
     assert.equal(entries.length, 0);
@@ -446,9 +501,19 @@ try {
       subscriptionTrace,
     };
   } else {
+    if (["child-fanout-fault", "coordinator-fanout-fault"].includes(scenario)) {
+      await waitUntil(
+        () => secondaryCounters.ackReleased === 1,
+        5_000,
+        "second child ACK before logical readiness",
+        termination.promise,
+      );
+      assert.equal(counters.ackReleased, 0, "First child ACK remains held.");
+      assert.equal(activated, false, "One child ACK cannot complete logical readiness.");
+    }
     gate.resolve();
     await bounded(activation, 10_000, "validated client activation ACK");
-    if (scenario === "child-retry-exhaustion") {
+    if (["child-retry-exhaustion", "coordinator-retry-exhaustion"].includes(scenario)) {
       const updates = subscription.updates[Symbol.asyncIterator]();
       const terminal = await bounded(
         updates.next().then(
@@ -472,12 +537,17 @@ try {
         database,
         counters,
         entries,
+        coordinator:
+          coordinator === undefined
+            ? undefined
+            : { endpoint: coordinator.baseUrl, childActivations: coordinatorChildActivations },
       };
-    } else if (scenario === "child-retry-cancel") {
-      await bounded(
-        waitUntil(() => counters.streamFaults === 1 && counters.cancel >= 1),
+    } else if (["child-retry-cancel", "coordinator-retry-cancel"].includes(scenario)) {
+      await waitUntil(
+        () => counters.streamFaults === 1 && counters.cancel >= 1,
         5_000,
         "first failed child cleanup before retry wait",
+        termination.promise,
       );
       await bounded(subscription.cancel(), 10_000, "cancel during child retry delay");
       await new Promise((resolve) => setTimeout(resolve, 600));
@@ -493,19 +563,29 @@ try {
         database,
         counters,
         entries,
+        coordinator:
+          coordinator === undefined
+            ? undefined
+            : { endpoint: coordinator.baseUrl, childActivations: coordinatorChildActivations },
       };
     } else if (
-      ["child-stream-fault", "child-stream-eof", "child-fanout-fault"].includes(scenario)
+      [
+        "child-stream-fault",
+        "child-stream-eof",
+        "child-fanout-fault",
+        "coordinator-child-fault",
+        "coordinator-fanout-fault",
+      ].includes(scenario)
     ) {
-      await bounded(
-        waitUntil(
-          () =>
-            counters.streamFaults === 1 &&
-            counters.ackReleased === 2 &&
-            (scenario !== "child-fanout-fault" || secondaryCounters.ackReleased === 2),
-        ),
+      await waitUntil(
+        () =>
+          counters.streamFaults === 1 &&
+          counters.ackReleased === 2 &&
+          (!["child-fanout-fault", "coordinator-fanout-fault"].includes(scenario) ||
+            secondaryCounters.ackReleased === 2),
         10_000,
         "logical reconnect after backend child stream fault",
+        termination.promise,
       );
       const updates = subscription.updates[Symbol.asyncIterator]();
       const received = bounded(updates.next(), 2_000, "update after native child stream fault");
@@ -521,19 +601,51 @@ try {
       assert.equal(update.done, false, "The logical stream must deliver after child failure.");
       assert.equal(update.value.kind, "update");
       assert.equal(update.value.update.update.case, "eventUpdates");
+      assert.equal(update.value.update.update.value.event.length, 1);
       const event = update.value.update.update.value.event[0];
       assert.ok(event?.id?.value);
+      const relayedEvents = [
+        {
+          id: event.id.value,
+          sha256: createHash("sha256").update(toBinary(EventSchema, event)).digest("hex"),
+        },
+      ];
       const payload = AnyMessages.unpack(event.message, ProjectCreatedSchema);
       assert.equal(payload?.project?.number, 1);
       assert.equal(payload?.project?.organization?.code, organization);
       assert.equal(payload?.name, "faulted-child-roadmap");
-      await bounded(subscription.cancel(), 10_000, "child-fault cancellation");
+      if (["child-fanout-fault", "coordinator-fanout-fault"].includes(scenario)) {
+        const sibling = await bounded(updates.next(), 2_000, "second relayed Event update");
+        assert.equal(sibling.done, false);
+        assert.equal(sibling.value.kind, "update");
+        assert.equal(sibling.value.update.update.case, "eventUpdates");
+        assert.equal(sibling.value.update.update.value.event.length, 1);
+        const siblingEvent = sibling.value.update.update.value.event[0];
+        assert.ok(siblingEvent?.id?.value);
+        assert.equal(siblingEvent.id.value, event.id.value);
+        assert.deepEqual(toBinary(EventSchema, siblingEvent), toBinary(EventSchema, event));
+        relayedEvents.push({
+          id: siblingEvent.id.value,
+          sha256: createHash("sha256").update(toBinary(EventSchema, siblingEvent)).digest("hex"),
+        });
+        const third = updates.next();
+        void third.catch(() => undefined);
+        const quiet = await Promise.race([
+          third.then(() => false),
+          new Promise((resolve) => setTimeout(() => resolve(true), 200)),
+        ]);
+        assert.equal(quiet, true, "Two backend subscriptions relay exactly two updates.");
+        await bounded(subscription.cancel(), 10_000, "child-fault cancellation");
+        assert.equal((await bounded(third, 2_000, "canceled fanout iterator")).done, true);
+      } else {
+        await bounded(subscription.cancel(), 10_000, "child-fault cancellation");
+      }
       assert.equal(counters.subscribe, 2);
       assert.equal(counters.activate, 2);
       assert.equal(counters.cancel, 2);
       assert.equal(counters.cancelSuccesses, 2);
       assert.equal(entries.filter((entry) => entry.method === "create").length, 1);
-      if (scenario === "child-fanout-fault")
+      if (["child-fanout-fault", "coordinator-fanout-fault"].includes(scenario))
         assert.deepEqual(secondaryCounters, {
           subscribe: 2,
           activate: 2,
@@ -552,13 +664,19 @@ try {
         entries,
         subscriptionTrace,
         eventId: event.id.value,
+        relayedEvents,
+        coordinator:
+          coordinator === undefined
+            ? undefined
+            : { endpoint: coordinator.baseUrl, childActivations: coordinatorChildActivations },
       };
     } else {
       if (scenario === "stream-reconnect")
-        await bounded(
-          waitUntil(() => counters.ackReleased === 2),
+        await waitUntil(
+          () => counters.ackReleased === 2,
           10_000,
           "stream reconnect",
+          termination.promise,
         );
       assert.equal(counters.ackReleased, scenario === "stream-reconnect" ? 2 : 1);
       const entitySubscription = await client.asGuest().createSubscription(
@@ -704,6 +822,7 @@ try {
     async () => client?.close(),
     async () => streamProxy?.close(),
     async () => browser?.close(),
+    async () => coordinator?.close(),
     async () => context?.close(),
     async () => remoteDelivery?.close(),
     async () => deliveryServer?.close(),
@@ -764,10 +883,6 @@ async function bounded(work, durationMs, label, cleanup = false) {
   } finally {
     clearTimeout(timer);
   }
-}
-
-async function waitUntil(predicate) {
-  while (!predicate()) await new Promise((resolve) => setTimeout(resolve, 5));
 }
 
 async function streamFaultProxy(backendBaseUrl, counters) {

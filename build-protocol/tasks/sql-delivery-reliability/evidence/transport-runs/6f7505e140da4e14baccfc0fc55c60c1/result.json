@@ -1,0 +1,67 @@
+{
+  "status": "PASS",
+  "result": {
+    "provider": "mysql84",
+    "protocol": "grpc-web",
+    "scenario": "pending-cancel",
+    "deliveryMode": "shared-memory",
+    "database": "sqlrel_sub_6f7505e140da4e14baccfc0fc55c60c1",
+    "counters": {
+      "subscribe": 1,
+      "activate": 1,
+      "ackReleased": 1,
+      "cancel": 1,
+      "cancelFaults": 0,
+      "cancelSuccesses": 1,
+      "streamFaults": 0,
+      "iterators": 0
+    },
+    "entries": [],
+    "subscriptionTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-6371b40f-b2a1-476e-9e08-3e4ace78c9b7"
+      },
+      {
+        "operation": "activate",
+        "id": "s-6371b40f-b2a1-476e-9e08-3e4ace78c9b7"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-6371b40f-b2a1-476e-9e08-3e4ace78c9b7"
+      }
+    ]
+  },
+  "counters": {
+    "subscribe": 1,
+    "activate": 1,
+    "ackReleased": 1,
+    "cancel": 1,
+    "cancelFaults": 0,
+    "cancelSuccesses": 1,
+    "streamFaults": 0,
+    "iterators": 0
+  },
+  "secondaryCounters": {
+    "subscribe": 0,
+    "activate": 0,
+    "ackReleased": 0,
+    "cancel": 0,
+    "iterators": 0
+  },
+  "entries": [],
+  "subscriptionTrace": [
+    {
+      "operation": "subscribe",
+      "id": "s-6371b40f-b2a1-476e-9e08-3e4ace78c9b7"
+    },
+    {
+      "operation": "activate",
+      "id": "s-6371b40f-b2a1-476e-9e08-3e4ace78c9b7"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-6371b40f-b2a1-476e-9e08-3e4ace78c9b7"
+    }
+  ]
+}

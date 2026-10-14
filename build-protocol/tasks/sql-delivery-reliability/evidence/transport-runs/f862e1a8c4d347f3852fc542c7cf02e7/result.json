@@ -1,0 +1,67 @@
+{
+  "status": "PASS",
+  "result": {
+    "provider": "mariadb114",
+    "protocol": "grpc-web",
+    "scenario": "pending-cancel",
+    "deliveryMode": "db-only",
+    "database": "sqlrel_sub_f862e1a8c4d347f3852fc542c7cf02e7",
+    "counters": {
+      "subscribe": 1,
+      "activate": 1,
+      "ackReleased": 1,
+      "cancel": 1,
+      "cancelFaults": 0,
+      "cancelSuccesses": 1,
+      "streamFaults": 0,
+      "iterators": 0
+    },
+    "entries": [],
+    "subscriptionTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-0c795929-c9b2-4f11-9441-f2f5e511b5ca"
+      },
+      {
+        "operation": "activate",
+        "id": "s-0c795929-c9b2-4f11-9441-f2f5e511b5ca"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-0c795929-c9b2-4f11-9441-f2f5e511b5ca"
+      }
+    ]
+  },
+  "counters": {
+    "subscribe": 1,
+    "activate": 1,
+    "ackReleased": 1,
+    "cancel": 1,
+    "cancelFaults": 0,
+    "cancelSuccesses": 1,
+    "streamFaults": 0,
+    "iterators": 0
+  },
+  "secondaryCounters": {
+    "subscribe": 0,
+    "activate": 0,
+    "ackReleased": 0,
+    "cancel": 0,
+    "iterators": 0
+  },
+  "entries": [],
+  "subscriptionTrace": [
+    {
+      "operation": "subscribe",
+      "id": "s-0c795929-c9b2-4f11-9441-f2f5e511b5ca"
+    },
+    {
+      "operation": "activate",
+      "id": "s-0c795929-c9b2-4f11-9441-f2f5e511b5ca"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-0c795929-c9b2-4f11-9441-f2f5e511b5ca"
+    }
+  ]
+}

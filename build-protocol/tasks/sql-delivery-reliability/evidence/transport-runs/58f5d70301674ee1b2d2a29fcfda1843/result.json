@@ -1,0 +1,67 @@
+{
+  "status": "PASS",
+  "result": {
+    "provider": "postgres18",
+    "protocol": "grpc-web",
+    "scenario": "pending-cancel",
+    "deliveryMode": "db-only",
+    "database": "sqlrel_sub_58f5d70301674ee1b2d2a29fcfda1843",
+    "counters": {
+      "subscribe": 1,
+      "activate": 1,
+      "ackReleased": 1,
+      "cancel": 1,
+      "cancelFaults": 0,
+      "cancelSuccesses": 1,
+      "streamFaults": 0,
+      "iterators": 0
+    },
+    "entries": [],
+    "subscriptionTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-453fcafc-11ee-4a6f-97a0-111cf0c183fd"
+      },
+      {
+        "operation": "activate",
+        "id": "s-453fcafc-11ee-4a6f-97a0-111cf0c183fd"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-453fcafc-11ee-4a6f-97a0-111cf0c183fd"
+      }
+    ]
+  },
+  "counters": {
+    "subscribe": 1,
+    "activate": 1,
+    "ackReleased": 1,
+    "cancel": 1,
+    "cancelFaults": 0,
+    "cancelSuccesses": 1,
+    "streamFaults": 0,
+    "iterators": 0
+  },
+  "secondaryCounters": {
+    "subscribe": 0,
+    "activate": 0,
+    "ackReleased": 0,
+    "cancel": 0,
+    "iterators": 0
+  },
+  "entries": [],
+  "subscriptionTrace": [
+    {
+      "operation": "subscribe",
+      "id": "s-453fcafc-11ee-4a6f-97a0-111cf0c183fd"
+    },
+    {
+      "operation": "activate",
+      "id": "s-453fcafc-11ee-4a6f-97a0-111cf0c183fd"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-453fcafc-11ee-4a6f-97a0-111cf0c183fd"
+    }
+  ]
+}

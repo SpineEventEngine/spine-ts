@@ -1,0 +1,182 @@
+{
+  "status": "PASS",
+  "result": {
+    "provider": "mariadb114",
+    "protocol": "connect",
+    "scenario": "cancel-retry",
+    "deliveryMode": "db-only",
+    "database": "sqlrel_sub_dfe0bc1ed9ea417691205444d0e9c99d",
+    "endpoint": "http://127.0.0.1:64894",
+    "browserEndpoint": "http://127.0.0.1:64895",
+    "eventId": "67f23d0d-a72d-4596-9fb2-ebff6254d1c8",
+    "stateId": {
+      "$typeName": "spine.server.testing.ProjectId",
+      "number": 1,
+      "organization": {
+        "$typeName": "spine.server.testing.OrganizationId",
+        "code": "subscription-sqlrel_sub_dfe0bc1ed9ea417691205444d0e9c99d"
+      }
+    },
+    "counters": {
+      "subscribe": 2,
+      "activate": 2,
+      "ackReleased": 2,
+      "cancel": 3,
+      "cancelFaults": 1,
+      "cancelSuccesses": 2,
+      "streamFaults": 0,
+      "iterators": 0
+    },
+    "entries": [
+      {
+        "method": "create",
+        "receiver": "Project",
+        "correlation": "subscription-sqlrel_sub_dfe0bc1ed9ea417691205444d0e9c99d:1",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+        "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViX2RmZTBiYzFlZDllYTQxNzY5MTIwNTQ0NGQwZTljOTlkEAE="
+      },
+      {
+        "method": "planning",
+        "receiver": "ProjectPlanning",
+        "correlation": "subscription-sqlrel_sub_dfe0bc1ed9ea417691205444d0e9c99d:1",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+        "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViX2RmZTBiYzFlZDllYTQxNzY5MTIwNTQ0NGQwZTljOTlkEAE="
+      },
+      {
+        "method": "staffing",
+        "receiver": "ProjectStaffing",
+        "correlation": "subscription-sqlrel_sub_dfe0bc1ed9ea417691205444d0e9c99d:1",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+        "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViX2RmZTBiYzFlZDllYTQxNzY5MTIwNTQ0NGQwZTljOTlkEAE="
+      },
+      {
+        "method": "portfolio",
+        "receiver": "Portfolio",
+        "correlation": "subscription-sqlrel_sub_dfe0bc1ed9ea417691205444d0e9c99d:1",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+        "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViX2RmZTBiYzFlZDllYTQxNzY5MTIwNTQ0NGQwZTljOTlkEAE="
+      },
+      {
+        "method": "projection",
+        "receiver": "ProjectProjection",
+        "correlation": "subscription-sqlrel_sub_dfe0bc1ed9ea417691205444d0e9c99d:1",
+        "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+        "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViX2RmZTBiYzFlZDllYTQxNzY5MTIwNTQ0NGQwZTljOTlkEAE="
+      }
+    ],
+    "subscriptionTrace": [
+      {
+        "operation": "subscribe",
+        "id": "s-727faa20-c05c-4bdf-b73d-06d07dee25ff"
+      },
+      {
+        "operation": "activate",
+        "id": "s-727faa20-c05c-4bdf-b73d-06d07dee25ff"
+      },
+      {
+        "operation": "subscribe",
+        "id": "s-703e70bd-73c4-469a-babc-35b3089377c0"
+      },
+      {
+        "operation": "activate",
+        "id": "s-703e70bd-73c4-469a-babc-35b3089377c0"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-727faa20-c05c-4bdf-b73d-06d07dee25ff"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-727faa20-c05c-4bdf-b73d-06d07dee25ff"
+      },
+      {
+        "operation": "cancel",
+        "id": "s-703e70bd-73c4-469a-babc-35b3089377c0"
+      }
+    ]
+  },
+  "counters": {
+    "subscribe": 2,
+    "activate": 2,
+    "ackReleased": 2,
+    "cancel": 3,
+    "cancelFaults": 1,
+    "cancelSuccesses": 2,
+    "streamFaults": 0,
+    "iterators": 0
+  },
+  "secondaryCounters": {
+    "subscribe": 0,
+    "activate": 0,
+    "ackReleased": 0,
+    "cancel": 0,
+    "iterators": 0
+  },
+  "entries": [
+    {
+      "method": "create",
+      "receiver": "Project",
+      "correlation": "subscription-sqlrel_sub_dfe0bc1ed9ea417691205444d0e9c99d:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+      "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViX2RmZTBiYzFlZDllYTQxNzY5MTIwNTQ0NGQwZTljOTlkEAE="
+    },
+    {
+      "method": "planning",
+      "receiver": "ProjectPlanning",
+      "correlation": "subscription-sqlrel_sub_dfe0bc1ed9ea417691205444d0e9c99d:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+      "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViX2RmZTBiYzFlZDllYTQxNzY5MTIwNTQ0NGQwZTljOTlkEAE="
+    },
+    {
+      "method": "staffing",
+      "receiver": "ProjectStaffing",
+      "correlation": "subscription-sqlrel_sub_dfe0bc1ed9ea417691205444d0e9c99d:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+      "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViX2RmZTBiYzFlZDllYTQxNzY5MTIwNTQ0NGQwZTljOTlkEAE="
+    },
+    {
+      "method": "portfolio",
+      "receiver": "Portfolio",
+      "correlation": "subscription-sqlrel_sub_dfe0bc1ed9ea417691205444d0e9c99d:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+      "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViX2RmZTBiYzFlZDllYTQxNzY5MTIwNTQ0NGQwZTljOTlkEAE="
+    },
+    {
+      "method": "projection",
+      "receiver": "ProjectProjection",
+      "correlation": "subscription-sqlrel_sub_dfe0bc1ed9ea417691205444d0e9c99d:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+      "recipientIdBase64": "CjoKOHN1YnNjcmlwdGlvbi1zcWxyZWxfc3ViX2RmZTBiYzFlZDllYTQxNzY5MTIwNTQ0NGQwZTljOTlkEAE="
+    }
+  ],
+  "subscriptionTrace": [
+    {
+      "operation": "subscribe",
+      "id": "s-727faa20-c05c-4bdf-b73d-06d07dee25ff"
+    },
+    {
+      "operation": "activate",
+      "id": "s-727faa20-c05c-4bdf-b73d-06d07dee25ff"
+    },
+    {
+      "operation": "subscribe",
+      "id": "s-703e70bd-73c4-469a-babc-35b3089377c0"
+    },
+    {
+      "operation": "activate",
+      "id": "s-703e70bd-73c4-469a-babc-35b3089377c0"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-727faa20-c05c-4bdf-b73d-06d07dee25ff"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-727faa20-c05c-4bdf-b73d-06d07dee25ff"
+    },
+    {
+      "operation": "cancel",
+      "id": "s-703e70bd-73c4-469a-babc-35b3089377c0"
+    }
+  ]
+}

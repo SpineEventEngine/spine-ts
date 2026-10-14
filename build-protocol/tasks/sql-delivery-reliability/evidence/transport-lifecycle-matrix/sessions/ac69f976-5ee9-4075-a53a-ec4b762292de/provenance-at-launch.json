@@ -1,0 +1,29 @@
+{
+  "sourceSha256": {
+    "packages/server-blackbox-tests/package.json": "ac7bb9233e7dd6c82d9320d81f4c8503328a4811d912b9517f60654fb5e3e2c6",
+    "packages/server-blackbox-tests/test-fixtures/project-subscription-transport.mjs": "8dfdd132cc73e91616a4bc94e94c2c3e9cc0d0c28a7f5655d4a6833926e43ee3",
+    "packages/server-blackbox-tests/test-fixtures/project-subscription-wait.mjs": "f06a514e2b925ed42f1340fbd87db73e26072718eb568817ffc9ee097f7e8885",
+    "packages/server-blackbox-tests/test/project-subscription-transports.integration.test.ts": "ae1cab5ff83bfd2ef628c570f03b3d4b08db79c9b6fcaee67761038f10b62928",
+    "packages/server-blackbox-tests/test-fixtures/project-workflow.ts": "8ed152a6fd0a88224cccfcd9ff219695a41a8dc38eeab75192081dbb90cc8bc4",
+    "packages/auth/src/gateway/dynamic-subscription-creator.ts": "7d6f461807b1610bd2033b7e94b368b01608d5a9240bf32cd8c91dbb25b5d498",
+    "packages/auth/src/gateway/dynamic-unary-forwarder.ts": "a3a76407fbacb78ecfb79ed9b8436647280d556067e7f0a550a8941e462729d9",
+    "packages/deployment/src/internal/backend-membership-kernel.ts": "1b26c61468a5d667784be7eb53bcdf2b8a165d2a6b1210b61e49dc8f064bd0c0"
+  },
+  "distSha256": {
+    "packages/server-blackbox-tests/dist/test-fixtures/project-workflow.js": "4369473fd7b246124d422e05e94aad97320161f6d18838eaa364d8616001b985",
+    "packages/server/dist/index.js": "6bf9c9a8c971afc87de534107af1a935953f89a0607193ed3576e2b3def1909e",
+    "packages/server/dist/browser/index.js": "408b3cf4068f99542d9a01219ac1c251096746e172845f82abafaafca0cd0e07",
+    "packages/server/dist/browser/browser-server.js": "8b5ed0a6d503af04fe806549cc0b5ac2c4e6c60f1b35f7ee779a36c8443810cc",
+    "packages/server/dist/browser/durable-subscription-bindings.js": "8378a58cad104a61b2c13a6f808f3b328af8673f5e7076cd91182a8969884dcc",
+    "packages/server/dist/server/node-coordinator.js": "8e5c5194dc8a3f36430e9f547cafd00d90dab4463209c8375ded885079abbb62",
+    "packages/auth/dist/gateway/dynamic-subscription-creator.js": "9fd4cdadacd3c1670f28a848448d16797b64e8d509b0be3b6b97ec818d23085b",
+    "packages/auth/dist/gateway/dynamic-unary-forwarder.js": "8840d7ad5c74617b8cf66fe05d0aae40b4ff9514d0a5435e33e515075ebde7ba",
+    "packages/deployment/dist/internal/backend-membership-kernel.js": "6ab8c5c3ba0b2541954af16dcf07e4e38cb771bd6888829fed3ee1a226bcf50d",
+    "packages/proto/dist/src/index.js": "3b16144d721808f5ed8d458be542064c5323575247cf1b7e6d325b038adaeaa2",
+    "packages/storage-postgres/dist/index.js": "84a8658d25708fd1bf4d2b0fd7b1bd678966fd089b9b8e6908df1b1005ad3139",
+    "packages/storage-mysql/dist/index.js": "1e344dd9d6163df30cabbcb6dec296cde324a3f74a9d185ea29c40a28862da74",
+    "packages/client-node/dist/index.js": "0d165190867682c2ffe00467affb4e0bf7bbf0d9c3a92bb31a56be9bfbd3c2f3",
+    "packages/client-web/dist/index.js": "f5207a268787d49974351129c0a25287b71e603ced7ce068ab502350e079c370",
+    "packages/delivery-server/dist/index.js": "b8b79d6f88a3f7f4dd0461062a09dc519e98c84387ae01360b4245acd23b5d08"
+  }
+}

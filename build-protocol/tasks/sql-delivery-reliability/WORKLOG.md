@@ -817,3 +817,64 @@ Browser dependency preparation accepted: explicit Luna/medium dispatch matched, 
 Fresh session `7fadc156-7186-43ec-b178-25f7273b058c` passes 32/32 cases in 17m10s at `1eda779c3`. All 40 unique accepted Command IDs have recorded outcomes; 24 database-only fault/repair cases reach all five states and eight shared-server-loss cases establish expected volatile pending-work loss while seed SQL state remains. All eight cold repair cases add exactly one entry per Event recipient relative to their measured immediate baseline, with no Command rerun and original Event bytes retained. Totals are phase-specific; do not claim every recipient executed exactly twice over the entire cleanup wait. All 32 databases were dropped without cleanup errors; the final cleanup ledger records 160 clean worker exits. Relevant business source/dist hashes remain consistent across cases. Auth/deployment hashes were absent from launch provenance; a separate post-run attestation states that timing limitation and does not retroactively change measured files. These standalone app tests do not exercise gateway/managed child streams. Dist reservation is released.
 
 Existing Luna/low mechanical dispatch matches; runtime introspection unavailable. Completed text command logs have trailing whitespace normalized for Git checks; measured JSON/JSONL artifacts and recorded hashes are unchanged. Gateway correction source/build/transport acceptance is recorded in REVIEW. Continue with managed/nested relay, live clocks/idle SQL, examples, final reviews/security/versioning and release gate.
+
+## Remaining transport and clock acceptance dispatch
+
+Resume the existing implementer with its immutable explicit `gpt-6-sol` / `medium` profile for the next bounded slice: real managed/nested coordinator relay faults plus remaining lifecycle grid, then deterministic live recovery clocks and idle SQL. These are verification/fixture changes unless actual runtime defects are demonstrated. Reuse supported service assembly and test-only transport proxy patterns; internal coordinator test assembly is acceptable framework testing if accurately labelled, but is not an OS-process managed-application claim. Do not add production hooks solely for faults. Existing real multi-process workload/crash acceptance stays separate. Record domain-correct fixture, precise layer/process/provider scope, cleanup and execution counts. Avoid rebuilding unrelated passed matrices; no dist reservation remains. Root retains evidence and Git. No child subagents. Model/reasoning explicitly configured in original dispatch and retained; runtime introspection unavailable.
+
+## Retention-window count audit
+
+The orchestrator dispatches a bounded reliability classification to the existing
+performance/reliability concern, explicitly `gpt-6-sol` / `medium`, both fields
+present in dispatch; runtime introspection is unavailable. Read-only inputs are
+the two measured PostgreSQL 18 cold-repair timelines and the corresponding
+Delivery duplicate/retention behavior. Establish whether the extra Planning
+entries violate a promised retention window, keeping measured facts separate
+from inferred cleanup ordering. No new recovery contract or exactly-once claim
+is authorized. This is not a repeated whole-change review wave.
+
+## Browser acceptance preparation continuation
+
+The existing browser-test preparation function is reused with its original
+explicit `gpt-6-luna` / `medium` configuration (both fields in initial dispatch;
+no runtime introspection). Read-only UI/API/test analysis may prepare the exact
+browser workflow and assertions while the sole implementation context handles
+runtime tests. No example launch, production edit or overlapping test edit is
+assigned; browser controls/selectors must still be confirmed against rendered
+DOM during actual execution. This does not count as UI acceptance.
+
+## Remaining transport grid preparation
+
+The existing mechanical-matrix function is reused at its original explicit
+`gpt-6-luna` / `low` configuration; both fields were present in initial dispatch,
+runtime metadata unavailable. Prepare a fail-fast wrapper for the four existing
+lifecycle scenarios across four SQL providers, three protocols and two Delivery
+modes (96 rows), but wait for the corrected fixture freeze before running. Save
+per-case exit status, exact new artifact identities, cleanup and fixture hashes;
+no production/test changes, builds or changes to shared database logging. The
+sole implementation context corrects the fixture independently.
+
+## Final review coverage inventory preparation
+
+Dispatch a read-only repository/review inventory function explicitly
+`gpt-6-luna` / `medium` (both fields required; runtime metadata unavailable).
+Map the changed production/public-contract paths to accepted bounded review
+checkpoints already recorded in REVIEW.md and identify any genuinely uncovered
+current area. Do not rerun or invent a whole-change wave. Runtime implementation
+is stable while remaining clock/example/test work continues, so final acceptance
+still requires a refreshed map after those edits. Security is reserved until
+coordinated implementation is ready. The human estimate remains 4–6 hours for
+remaining timing, examples, browser, review and release work.
+
+## SQL transport checkpoint acceptance
+
+The existing mechanical matrix function's explicit Luna/low dispatch is accepted
+(runtime metadata unavailable). Session ac69f976-5ee9-4075-a53a-ec4b762292de passes
+96/96 unique configurations, with 96 unique databases dropped, zero remaining
+sessions/cleanup errors and unchanged measured source/dist hashes. The matrix
+freeze was then released for two deterministic Event-array assertions; those
+assertions affect fanout-only paths and five applicable PG16 controls pass.
+Current ACCEPTANCE_GAPS.md replaces stale preparation statuses with measured
+completion and the precise remaining clock, transport-fault, examples and final
+gates. The same implementer continues a separate, unvalidated cross-process
+clock extension; it is excluded from the subscription checkpoint commit.

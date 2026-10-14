@@ -1,0 +1,4 @@
+Scoped Prettier check: PASS (task records, requested new evidence Markdown, transport matrix plan/runner).
+Completed transport logs: trailing whitespace removed and one final newline normalized; measured JSON/JSONL untouched.
+Running git diff --check:
+git diff --check: PASS

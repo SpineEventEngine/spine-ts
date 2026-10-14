@@ -108,6 +108,10 @@ test("real SQL and selected transport preserve subscription readiness and exact 
     "child-fanout-fault",
     "child-retry-exhaustion",
     "child-retry-cancel",
+    "coordinator-child-fault",
+    "coordinator-fanout-fault",
+    "coordinator-retry-exhaustion",
+    "coordinator-retry-cancel",
   ]).toContain(scenario);
   expect(["db-only", "shared-memory"]).toContain(deliveryMode);
   const stdout = await runTransport([provider, protocol, scenario, deliveryMode]);
@@ -120,6 +124,7 @@ test("real SQL and selected transport preserve subscription readiness and exact 
     scenario: string;
     deliveryMode: string;
     eventId?: string;
+    relayedEvents?: readonly { id: string; sha256: string }[];
     stateId?: { number: number };
     counters: {
       ackReleased: number;
@@ -135,6 +140,7 @@ test("real SQL and selected transport preserve subscription readiness and exact 
       cancel: number;
       iterators: number;
     };
+    coordinator?: { endpoint: string; childActivations: number };
   };
   expect(result).toMatchObject({
     status: "PASS",
@@ -143,15 +149,25 @@ test("real SQL and selected transport preserve subscription readiness and exact 
     scenario,
     deliveryMode,
     counters: {
-      ackReleased: ["pending-cancel", "child-retry-cancel"].includes(scenario)
+      ackReleased: ["pending-cancel", "child-retry-cancel", "coordinator-retry-cancel"].includes(
+        scenario,
+      )
         ? 1
-        : ["stream-reconnect", "child-retry-exhaustion"].includes(scenario)
+        : ["stream-reconnect", "child-retry-exhaustion", "coordinator-retry-exhaustion"].includes(
+              scenario,
+            )
           ? 3
           : 2,
       cancelFaults: scenario === "cancel-retry" ? 1 : 0,
-      cancelSuccesses: ["pending-cancel", "child-retry-cancel"].includes(scenario)
+      cancelSuccesses: [
+        "pending-cancel",
+        "child-retry-cancel",
+        "coordinator-retry-cancel",
+      ].includes(scenario)
         ? 1
-        : ["stream-reconnect", "child-retry-exhaustion"].includes(scenario)
+        : ["stream-reconnect", "child-retry-exhaustion", "coordinator-retry-exhaustion"].includes(
+              scenario,
+            )
           ? 3
           : 2,
       streamFaults: [
@@ -160,20 +176,49 @@ test("real SQL and selected transport preserve subscription readiness and exact 
         "child-stream-eof",
         "child-fanout-fault",
         "child-retry-cancel",
+        "coordinator-child-fault",
+        "coordinator-fanout-fault",
+        "coordinator-retry-cancel",
       ].includes(scenario)
         ? 1
-        : scenario === "child-retry-exhaustion"
+        : ["child-retry-exhaustion", "coordinator-retry-exhaustion"].includes(scenario)
           ? 3
           : 0,
       iterators: 0,
     },
   });
-  if (["pending-cancel", "child-retry-exhaustion", "child-retry-cancel"].includes(scenario)) {
+  if (
+    [
+      "pending-cancel",
+      "child-retry-exhaustion",
+      "child-retry-cancel",
+      "coordinator-retry-exhaustion",
+      "coordinator-retry-cancel",
+    ].includes(scenario)
+  ) {
     expect(result.eventId).toBeUndefined();
-  } else if (["child-stream-fault", "child-stream-eof", "child-fanout-fault"].includes(scenario)) {
+    if (["coordinator-retry-exhaustion", "coordinator-retry-cancel"].includes(scenario))
+      expect(result.coordinator?.childActivations).toBe(
+        scenario === "coordinator-retry-exhaustion" ? 3 : 1,
+      );
+  } else if (
+    [
+      "child-stream-fault",
+      "child-stream-eof",
+      "child-fanout-fault",
+      "coordinator-child-fault",
+      "coordinator-fanout-fault",
+    ].includes(scenario)
+  ) {
     expect(typeof result.eventId).toBe("string");
     expect(result.eventId).not.toBe("");
-    if (scenario === "child-fanout-fault")
+    if (["coordinator-child-fault", "coordinator-fanout-fault"].includes(scenario)) {
+      expect(result.coordinator?.endpoint).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/u);
+      expect(result.coordinator?.childActivations).toBe(
+        scenario === "coordinator-fanout-fault" ? 4 : 2,
+      );
+    }
+    if (["child-fanout-fault", "coordinator-fanout-fault"].includes(scenario))
       expect(result.secondaryCounters).toEqual({
         subscribe: 2,
         activate: 2,
@@ -181,6 +226,11 @@ test("real SQL and selected transport preserve subscription readiness and exact 
         cancel: 2,
         iterators: 0,
       });
+    if (["child-fanout-fault", "coordinator-fanout-fault"].includes(scenario)) {
+      expect(result.relayedEvents).toHaveLength(2);
+      expect(result.relayedEvents?.[0]?.id).toBe(result.eventId);
+      expect(result.relayedEvents?.[1]).toEqual(result.relayedEvents?.[0]);
+    }
   } else {
     expect(result.stateId?.number).toBe(1);
     expect(result.eventId).not.toBe("");
