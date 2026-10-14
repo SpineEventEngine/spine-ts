@@ -5,6 +5,7 @@ import { createWriteStream } from "node:fs";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import process from "node:process";
+import { clearTimeout, setTimeout } from "node:timers";
 import { fileURLToPath, URL } from "node:url";
 
 const root = resolve(fileURLToPath(new URL("../../../../../", import.meta.url)));
@@ -77,7 +78,7 @@ async function runOne(config, index, launch) {
   const exited = new Promise((resolveExit, reject) => {
     child.once("error", reject);
     child.once("close", (code, signal) => resolveExit({ code, signal }));
-    timeout = setTimeout(() => { record.timedOut = true; try { process.kill(-child.pid, "SIGTERM"); } catch {} }, 120_000);
+    timeout = setTimeout(() => { record.timedOut = true; try { process.kill(-child.pid, "SIGTERM"); } catch { /* The process group already exited. */ } }, 120_000);
   });
   const exit = await exited.catch((error) => ({ code: null, signal: String(error) }));
   clearTimeout(timeout);
@@ -92,7 +93,9 @@ async function runOne(config, index, launch) {
       try {
         const resource = await json(resolve(runsRoot, id, "resource.json"));
         if (resource.providerName === config.provider && resource.protocol === config.protocol && resource.scenario === config.scenario && resource.deliveryMode === config.deliveryMode) matches.push({ id, resource });
-      } catch {}
+      } catch {
+        // An incomplete or unrelated run directory cannot match this case.
+      }
     }
     assert(matches.length === 1, `expected one matching transport-runs UUID, got ${matches.length}; new IDs=${created.join(",")}`);
     const { id, resource } = matches[0];

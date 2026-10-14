@@ -17,7 +17,7 @@ import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import process from "node:process";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL, URL } from "node:url";
 import { setTimeout, clearTimeout } from "node:timers";
 const root = fileURLToPath(new URL("../../../../", import.meta.url));
 assert.equal(process.cwd(), root.replace(/\/$/, ""));

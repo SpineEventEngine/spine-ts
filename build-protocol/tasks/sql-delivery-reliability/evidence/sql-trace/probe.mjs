@@ -15,6 +15,7 @@ import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import process from "node:process";
 import { setInterval } from "node:timers";
+import { URL } from "node:url";
 
 const mode = process.argv[2];
 if (!["success", "failure", "timeout"].includes(mode)) throw new Error("Unknown probe mode.");
