@@ -1,0 +1,448 @@
+{
+  "snapshots": [
+    {
+      "at": 1791948472139,
+      "elapsedMs": 438,
+      "allStates": false
+    },
+    {
+      "at": 1791948473154,
+      "elapsedMs": 1454,
+      "allStates": false
+    },
+    {
+      "at": 1791948474184,
+      "elapsedMs": 2484,
+      "allStates": false
+    },
+    {
+      "at": 1791948475211,
+      "elapsedMs": 3511,
+      "allStates": false
+    },
+    {
+      "at": 1791948476239,
+      "elapsedMs": 4539,
+      "allStates": false
+    },
+    {
+      "at": 1791948477267,
+      "elapsedMs": 5567,
+      "allStates": false
+    },
+    {
+      "at": 1791948478291,
+      "elapsedMs": 6591,
+      "allStates": false
+    },
+    {
+      "at": 1791948479318,
+      "elapsedMs": 7618,
+      "allStates": false
+    },
+    {
+      "at": 1791948480345,
+      "elapsedMs": 8645,
+      "allStates": false
+    },
+    {
+      "at": 1791948481372,
+      "elapsedMs": 9672,
+      "allStates": false
+    },
+    {
+      "at": 1791948482399,
+      "elapsedMs": 10699,
+      "allStates": false
+    },
+    {
+      "at": 1791948483425,
+      "elapsedMs": 11725,
+      "allStates": false
+    },
+    {
+      "at": 1791948484454,
+      "elapsedMs": 12754,
+      "allStates": false
+    },
+    {
+      "at": 1791948485480,
+      "elapsedMs": 13780,
+      "allStates": false
+    },
+    {
+      "at": 1791948486506,
+      "elapsedMs": 14806,
+      "allStates": false
+    },
+    {
+      "at": 1791948487536,
+      "elapsedMs": 15836,
+      "allStates": false
+    },
+    {
+      "at": 1791948488562,
+      "elapsedMs": 16862,
+      "allStates": false
+    },
+    {
+      "at": 1791948489589,
+      "elapsedMs": 17889,
+      "allStates": false
+    },
+    {
+      "at": 1791948490611,
+      "elapsedMs": 18911,
+      "allStates": false
+    },
+    {
+      "at": 1791948491635,
+      "elapsedMs": 19935,
+      "allStates": false
+    },
+    {
+      "at": 1791948492661,
+      "elapsedMs": 20961,
+      "allStates": false
+    },
+    {
+      "at": 1791948493694,
+      "elapsedMs": 21994,
+      "allStates": false
+    },
+    {
+      "at": 1791948494723,
+      "elapsedMs": 23023,
+      "allStates": false
+    },
+    {
+      "at": 1791948495750,
+      "elapsedMs": 24050,
+      "allStates": false
+    },
+    {
+      "at": 1791948496778,
+      "elapsedMs": 25078,
+      "allStates": false
+    },
+    {
+      "at": 1791948497805,
+      "elapsedMs": 26105,
+      "allStates": false
+    },
+    {
+      "at": 1791948498832,
+      "elapsedMs": 27132,
+      "allStates": false
+    },
+    {
+      "at": 1791948499852,
+      "elapsedMs": 28152,
+      "allStates": false
+    },
+    {
+      "at": 1791948500880,
+      "elapsedMs": 29180,
+      "allStates": false
+    },
+    {
+      "at": 1791948501901,
+      "elapsedMs": 30201,
+      "allStates": false
+    },
+    {
+      "at": 1791948502923,
+      "elapsedMs": 31223,
+      "allStates": false
+    },
+    {
+      "at": 1791948503945,
+      "elapsedMs": 32245,
+      "allStates": false
+    },
+    {
+      "at": 1791948504965,
+      "elapsedMs": 33265,
+      "allStates": false
+    },
+    {
+      "at": 1791948505993,
+      "elapsedMs": 34293,
+      "allStates": false
+    },
+    {
+      "at": 1791948507021,
+      "elapsedMs": 35321,
+      "allStates": false
+    },
+    {
+      "at": 1791948508055,
+      "elapsedMs": 36355,
+      "allStates": false
+    },
+    {
+      "at": 1791948509079,
+      "elapsedMs": 37379,
+      "allStates": false
+    },
+    {
+      "at": 1791948510107,
+      "elapsedMs": 38407,
+      "allStates": false
+    },
+    {
+      "at": 1791948511126,
+      "elapsedMs": 39426,
+      "allStates": false
+    },
+    {
+      "at": 1791948512146,
+      "elapsedMs": 40446,
+      "allStates": false
+    },
+    {
+      "at": 1791948513169,
+      "elapsedMs": 41469,
+      "allStates": false
+    },
+    {
+      "at": 1791948514191,
+      "elapsedMs": 42491,
+      "allStates": false
+    },
+    {
+      "at": 1791948515219,
+      "elapsedMs": 43519,
+      "allStates": false
+    },
+    {
+      "at": 1791948516242,
+      "elapsedMs": 44542,
+      "allStates": false
+    },
+    {
+      "at": 1791948517268,
+      "elapsedMs": 45568,
+      "allStates": false
+    },
+    {
+      "at": 1791948518294,
+      "elapsedMs": 46594,
+      "allStates": false
+    },
+    {
+      "at": 1791948519321,
+      "elapsedMs": 47621,
+      "allStates": false
+    },
+    {
+      "at": 1791948520343,
+      "elapsedMs": 48643,
+      "allStates": false
+    },
+    {
+      "at": 1791948521368,
+      "elapsedMs": 49668,
+      "allStates": false
+    },
+    {
+      "at": 1791948522402,
+      "elapsedMs": 50702,
+      "allStates": false
+    },
+    {
+      "at": 1791948523430,
+      "elapsedMs": 51730,
+      "allStates": false
+    },
+    {
+      "at": 1791948524450,
+      "elapsedMs": 52750,
+      "allStates": false
+    },
+    {
+      "at": 1791948525476,
+      "elapsedMs": 53776,
+      "allStates": false
+    },
+    {
+      "at": 1791948526494,
+      "elapsedMs": 54794,
+      "allStates": false
+    },
+    {
+      "at": 1791948527522,
+      "elapsedMs": 55822,
+      "allStates": false
+    },
+    {
+      "at": 1791948528548,
+      "elapsedMs": 56848,
+      "allStates": false
+    },
+    {
+      "at": 1791948529575,
+      "elapsedMs": 57875,
+      "allStates": false
+    },
+    {
+      "at": 1791948530601,
+      "elapsedMs": 58901,
+      "allStates": false
+    },
+    {
+      "at": 1791948531623,
+      "elapsedMs": 59923,
+      "allStates": false
+    },
+    {
+      "at": 1791948532650,
+      "elapsedMs": 60950,
+      "allStates": true
+    }
+  ],
+  "finalState": {
+    "projects": [
+      {
+        "number": 1,
+        "states": {
+          "project": true,
+          "planning": true,
+          "staffing": true,
+          "portfolio": true,
+          "projection": true
+        }
+      }
+    ],
+    "events": [
+      {
+        "id": "6142c0e0-c13c-462a-9895-ff219ac27f85",
+        "typeUrl": "type.spine.server.testing/spine.server.testing.ProjectCreated",
+        "number": 1,
+        "organization": "takeover-42dcdec2a94948418f50ed8589259efb",
+        "name": "roadmap-1",
+        "sha256": "919614542f0a215c32fdaa50ae1502eaf73beed71008df6fba9e8dbab1cced3a",
+        "binaryBase64": "CiYKJDYxNDJjMGUwLWMxM2MtNDYyYS05ODk1LWZmMjE5YWMyN2Y4NRKqAQo9dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0Q3JlYXRlZBJpCisKKXRha2VvdmVyLTQyZGNkZWMyYTk0OTQ4NDE4ZjUwZWQ4NTg5MjU5ZWZiEi8KKwopdGFrZW92ZXItNDJkY2RlYzJhOTQ5NDg0MThmNTBlZDg1ODkyNTllZmIQARoJcm9hZG1hcC0xGqECCgwIt+271gYQ6JXgkAIaawo4dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0SWQSLworCil0YWtlb3Zlci00MmRjZGVjMmE5NDk0ODQxOGY1MGVkODU4OTI1OWVmYhABIgByoQEKjAEKTAoidHlwZS5zcGluZS5pby9zcGluZS5jb3JlLkNvbW1hbmRJZBImCiQ3ZmI2ODFjOS1iZTQ2LTQ1OTQtYjI4MS03YzBlZTlhMDlkMDMSPHR5cGUuc3BpbmUuc2VydmVyLnRlc3Rpbmcvc3BpbmUuc2VydmVyLnRlc3RpbmcuQ3JlYXRlUHJvamVjdBoQEg4KDG1hdHJpeC1hY3Rvcg=="
+      }
+    ]
+  },
+  "finalInbox": {
+    "shards": [
+      {
+        "shard": "0/2",
+        "count": 0,
+        "truncated": false,
+        "rows": [],
+        "statuses": {}
+      },
+      {
+        "shard": "1/2",
+        "count": 0,
+        "truncated": false,
+        "rows": [],
+        "statuses": {}
+      },
+      {
+        "shard": "0/1",
+        "count": 2,
+        "truncated": false,
+        "rows": [
+          {
+            "messageId": "a540e281-7a5d-4136-8c2b-0e76726c97d1",
+            "signalId": "6142c0e0-c13c-462a-9895-ff219ac27f85",
+            "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioState",
+            "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+            "targetIdBase64": "CisKKXRha2VvdmVyLTQyZGNkZWMyYTk0OTQ4NDE4ZjUwZWQ4NTg5MjU5ZWZiEAE=",
+            "signalTypeUrl": "type.spine.io/spine.core.Event",
+            "signalValueSha256": "919614542f0a215c32fdaa50ae1502eaf73beed71008df6fba9e8dbab1cced3a",
+            "status": "DELIVERED",
+            "whenReceivedSeconds": "1791948471",
+            "whenReceivedNanos": 610000000,
+            "keepUntilMillis": 1791948501609,
+            "version": "1"
+          },
+          {
+            "messageId": "b107107f-fcc4-4a51-867e-448866a521b2",
+            "signalId": "6142c0e0-c13c-462a-9895-ff219ac27f85",
+            "targetTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectProjectionState",
+            "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+            "targetIdBase64": "CisKKXRha2VvdmVyLTQyZGNkZWMyYTk0OTQ4NDE4ZjUwZWQ4NTg5MjU5ZWZiEAE=",
+            "signalTypeUrl": "type.spine.io/spine.core.Event",
+            "signalValueSha256": "919614542f0a215c32fdaa50ae1502eaf73beed71008df6fba9e8dbab1cced3a",
+            "status": "DELIVERED",
+            "whenReceivedSeconds": "1791948471",
+            "whenReceivedNanos": 611001000,
+            "keepUntilMillis": 1791948501611,
+            "version": "2"
+          }
+        ],
+        "statuses": {
+          "DELIVERED": 2
+        }
+      }
+    ],
+    "observations": [
+      {
+        "shard": "0/1",
+        "status": "NOT_PICKED",
+        "messages": 0
+      }
+    ]
+  },
+  "finalEntries": [
+    {
+      "method": "create",
+      "receiver": "Project",
+      "correlation": "takeover-42dcdec2a94948418f50ed8589259efb:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+      "recipientIdBase64": "CisKKXRha2VvdmVyLTQyZGNkZWMyYTk0OTQ4NDE4ZjUwZWQ4NTg5MjU5ZWZiEAE=",
+      "pid": 80482,
+      "at": 1791948471565
+    },
+    {
+      "method": "staffing",
+      "receiver": "ProjectStaffing",
+      "correlation": "takeover-42dcdec2a94948418f50ed8589259efb:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+      "recipientIdBase64": "CisKKXRha2VvdmVyLTQyZGNkZWMyYTk0OTQ4NDE4ZjUwZWQ4NTg5MjU5ZWZiEAE=",
+      "pid": 80482,
+      "at": 1791948471636
+    },
+    {
+      "method": "portfolio",
+      "receiver": "Portfolio",
+      "correlation": "takeover-42dcdec2a94948418f50ed8589259efb:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+      "recipientIdBase64": "CisKKXRha2VvdmVyLTQyZGNkZWMyYTk0OTQ4NDE4ZjUwZWQ4NTg5MjU5ZWZiEAE=",
+      "pid": 80487,
+      "at": 1791948472048
+    },
+    {
+      "method": "projection",
+      "receiver": "ProjectProjection",
+      "correlation": "takeover-42dcdec2a94948418f50ed8589259efb:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+      "recipientIdBase64": "CisKKXRha2VvdmVyLTQyZGNkZWMyYTk0OTQ4NDE4ZjUwZWQ4NTg5MjU5ZWZiEAE=",
+      "pid": 80487,
+      "at": 1791948472081
+    },
+    {
+      "method": "staffing",
+      "receiver": "ProjectStaffing",
+      "correlation": "takeover-42dcdec2a94948418f50ed8589259efb:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+      "recipientIdBase64": "CisKKXRha2VvdmVyLTQyZGNkZWMyYTk0OTQ4NDE4ZjUwZWQ4NTg5MjU5ZWZiEAE=",
+      "pid": 80487,
+      "at": 1791948532092
+    },
+    {
+      "method": "planning",
+      "receiver": "ProjectPlanning",
+      "correlation": "takeover-42dcdec2a94948418f50ed8589259efb:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+      "recipientIdBase64": "CisKKXRha2VvdmVyLTQyZGNkZWMyYTk0OTQ4NDE4ZjUwZWQ4NTg5MjU5ZWZiEAE=",
+      "pid": 80488,
+      "at": 1791948532115
+    }
+  ]
+}

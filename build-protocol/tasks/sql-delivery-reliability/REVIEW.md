@@ -586,3 +586,46 @@ callback correction in project-workflow-fixture.test.ts returns void and formats
 the numeric name explicitly; its two tests pass. API concern remains N/A for
 this test-only slice; parent records the source/built component boundary and
 separate remaining takeover/idle requirements.
+
+## Retained Delivery server takeover fixture review plan
+
+After the current four-engine/two-and-eight-worker rows and focused static checks
+finish, review the new `project-shared-takeover.mjs`,
+`retained-delivery-worker.mjs`, integration wrapper, and the narrow
+`project-worker.mjs` gate-candidate change. Existing reliability and style
+concerns use explicit `gpt-6-sol` / `medium` dispatch fields. Review exact
+interruption observations, handler counts, immutable Event identity, real process
+separation, timer claims, resource cleanup and fixture bounds. No production API
+or serialized contract changes: API review is N/A for this fixture slice. Parent
+documentation disposition must distinguish scan interval, stale release and
+server processing timeout; broad final prose review remains pending. Existing
+crash classifier was reviewed and is reused, not reopened without a concrete
+interaction defect. Collect both reports before one correction batch. Runtime
+introspection is unavailable; desktop immutable profiles satisfy the dispatch
+gate. This bounded review is included in the current 3–5-hour estimate.
+
+The takeover wave is complete: style clean; reliability reports one accepted P2
+assertion gap. Require one selected pending row with the exact generated state
+and identifier types, Event Any type and original saved Event payload hash before
+and after the kill and at the pre-stale observation. Existing eight final saved
+observations contain the expected values. Return one correction batch to the
+same explicit Sol/medium implementation context. Audit all eight saved results
+with the stronger predicate and run one fresh live opt-in wrapper plus scoped
+static checks; do not repeat the complete matrix for a deterministic assertion
+addition if the saved observations satisfy it. This does not alter runtime or
+public API. No substantive reviewer lane reopens for the mechanical assertion
+correction. Preserve the actual limit: measured timings do not trace which timer
+invocation released the session; abnormal outer timeout cleanup is reported as
+unverified rather than successful. Both explicit reviewer profiles match;
+runtime introspection unavailable.
+
+Takeover review converged. The exact typed pending-row predicate now asserts
+uniqueness, generated state and identifier types, Event Any type, saved Event
+hash, pending status and retained message ID. The eight saved final observation
+sets pass the stronger audit without altering their JSON, and one fresh PostgreSQL
+16 opt-in wrapper passes at 61.77 seconds with clean cleanup. Scoped static checks
+pass. Accept the deterministic correction; style remains clean and no new API
+review is relevant. Timer wording clarification in the Delivery server guide and
+reference is source-backed and reserved for the final prose review. The retained
+worker takeover verification gap is closed, within its stated timer/process
+limits.

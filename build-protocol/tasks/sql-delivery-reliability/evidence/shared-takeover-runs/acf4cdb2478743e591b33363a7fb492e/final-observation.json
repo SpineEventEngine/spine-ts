@@ -1,0 +1,475 @@
+{
+  "snapshots": [
+    {
+      "at": 1791948545730,
+      "elapsedMs": 414,
+      "allStates": false
+    },
+    {
+      "at": 1791948546744,
+      "elapsedMs": 1428,
+      "allStates": false
+    },
+    {
+      "at": 1791948547756,
+      "elapsedMs": 2440,
+      "allStates": false
+    },
+    {
+      "at": 1791948548768,
+      "elapsedMs": 3452,
+      "allStates": false
+    },
+    {
+      "at": 1791948549780,
+      "elapsedMs": 4464,
+      "allStates": false
+    },
+    {
+      "at": 1791948550790,
+      "elapsedMs": 5474,
+      "allStates": false
+    },
+    {
+      "at": 1791948551801,
+      "elapsedMs": 6485,
+      "allStates": false
+    },
+    {
+      "at": 1791948552814,
+      "elapsedMs": 7498,
+      "allStates": false
+    },
+    {
+      "at": 1791948553825,
+      "elapsedMs": 8509,
+      "allStates": false
+    },
+    {
+      "at": 1791948554836,
+      "elapsedMs": 9520,
+      "allStates": false
+    },
+    {
+      "at": 1791948555844,
+      "elapsedMs": 10528,
+      "allStates": false
+    },
+    {
+      "at": 1791948556857,
+      "elapsedMs": 11541,
+      "allStates": false
+    },
+    {
+      "at": 1791948557872,
+      "elapsedMs": 12556,
+      "allStates": false
+    },
+    {
+      "at": 1791948558885,
+      "elapsedMs": 13569,
+      "allStates": false
+    },
+    {
+      "at": 1791948559901,
+      "elapsedMs": 14585,
+      "allStates": false
+    },
+    {
+      "at": 1791948560915,
+      "elapsedMs": 15599,
+      "allStates": false
+    },
+    {
+      "at": 1791948561929,
+      "elapsedMs": 16613,
+      "allStates": false
+    },
+    {
+      "at": 1791948562938,
+      "elapsedMs": 17622,
+      "allStates": false
+    },
+    {
+      "at": 1791948563948,
+      "elapsedMs": 18632,
+      "allStates": false
+    },
+    {
+      "at": 1791948564961,
+      "elapsedMs": 19645,
+      "allStates": false
+    },
+    {
+      "at": 1791948565974,
+      "elapsedMs": 20658,
+      "allStates": false
+    },
+    {
+      "at": 1791948566988,
+      "elapsedMs": 21672,
+      "allStates": false
+    },
+    {
+      "at": 1791948567998,
+      "elapsedMs": 22682,
+      "allStates": false
+    },
+    {
+      "at": 1791948569014,
+      "elapsedMs": 23698,
+      "allStates": false
+    },
+    {
+      "at": 1791948570032,
+      "elapsedMs": 24716,
+      "allStates": false
+    },
+    {
+      "at": 1791948571042,
+      "elapsedMs": 25726,
+      "allStates": false
+    },
+    {
+      "at": 1791948572055,
+      "elapsedMs": 26739,
+      "allStates": false
+    },
+    {
+      "at": 1791948573068,
+      "elapsedMs": 27752,
+      "allStates": false
+    },
+    {
+      "at": 1791948574082,
+      "elapsedMs": 28766,
+      "allStates": false
+    },
+    {
+      "at": 1791948575093,
+      "elapsedMs": 29777,
+      "allStates": false
+    },
+    {
+      "at": 1791948576101,
+      "elapsedMs": 30785,
+      "allStates": false
+    },
+    {
+      "at": 1791948577115,
+      "elapsedMs": 31799,
+      "allStates": false
+    },
+    {
+      "at": 1791948578126,
+      "elapsedMs": 32810,
+      "allStates": false
+    },
+    {
+      "at": 1791948579137,
+      "elapsedMs": 33821,
+      "allStates": false
+    },
+    {
+      "at": 1791948580148,
+      "elapsedMs": 34832,
+      "allStates": false
+    },
+    {
+      "at": 1791948581158,
+      "elapsedMs": 35842,
+      "allStates": false
+    },
+    {
+      "at": 1791948582173,
+      "elapsedMs": 36857,
+      "allStates": false
+    },
+    {
+      "at": 1791948583183,
+      "elapsedMs": 37867,
+      "allStates": false
+    },
+    {
+      "at": 1791948584194,
+      "elapsedMs": 38878,
+      "allStates": false
+    },
+    {
+      "at": 1791948585209,
+      "elapsedMs": 39893,
+      "allStates": false
+    },
+    {
+      "at": 1791948586216,
+      "elapsedMs": 40900,
+      "allStates": false
+    },
+    {
+      "at": 1791948587230,
+      "elapsedMs": 41914,
+      "allStates": false
+    },
+    {
+      "at": 1791948588244,
+      "elapsedMs": 42928,
+      "allStates": false
+    },
+    {
+      "at": 1791948589259,
+      "elapsedMs": 43943,
+      "allStates": false
+    },
+    {
+      "at": 1791948590270,
+      "elapsedMs": 44954,
+      "allStates": false
+    },
+    {
+      "at": 1791948591284,
+      "elapsedMs": 45968,
+      "allStates": false
+    },
+    {
+      "at": 1791948592292,
+      "elapsedMs": 46976,
+      "allStates": false
+    },
+    {
+      "at": 1791948593303,
+      "elapsedMs": 47987,
+      "allStates": false
+    },
+    {
+      "at": 1791948594316,
+      "elapsedMs": 49000,
+      "allStates": false
+    },
+    {
+      "at": 1791948595327,
+      "elapsedMs": 50011,
+      "allStates": false
+    },
+    {
+      "at": 1791948596342,
+      "elapsedMs": 51026,
+      "allStates": false
+    },
+    {
+      "at": 1791948597352,
+      "elapsedMs": 52036,
+      "allStates": false
+    },
+    {
+      "at": 1791948598360,
+      "elapsedMs": 53044,
+      "allStates": false
+    },
+    {
+      "at": 1791948599373,
+      "elapsedMs": 54057,
+      "allStates": false
+    },
+    {
+      "at": 1791948600382,
+      "elapsedMs": 55066,
+      "allStates": false
+    },
+    {
+      "at": 1791948601395,
+      "elapsedMs": 56079,
+      "allStates": false
+    },
+    {
+      "at": 1791948602410,
+      "elapsedMs": 57094,
+      "allStates": false
+    },
+    {
+      "at": 1791948603418,
+      "elapsedMs": 58102,
+      "allStates": false
+    },
+    {
+      "at": 1791948604432,
+      "elapsedMs": 59116,
+      "allStates": false
+    },
+    {
+      "at": 1791948605446,
+      "elapsedMs": 60130,
+      "allStates": false
+    },
+    {
+      "at": 1791948606454,
+      "elapsedMs": 61138,
+      "allStates": true
+    }
+  ],
+  "finalState": {
+    "projects": [
+      {
+        "number": 1,
+        "states": {
+          "project": true,
+          "planning": true,
+          "staffing": true,
+          "portfolio": true,
+          "projection": true
+        }
+      }
+    ],
+    "events": [
+      {
+        "id": "525525e2-8394-4763-b031-04a56b68f6c9",
+        "typeUrl": "type.spine.server.testing/spine.server.testing.ProjectCreated",
+        "number": 1,
+        "organization": "takeover-acf4cdb2478743e591b33363a7fb492e",
+        "name": "roadmap-1",
+        "sha256": "5e3817ba720b9260656e3db2393cb05bcecdab15c8b744d8e22987a103d00f54",
+        "binaryBase64": "CiYKJDUyNTUyNWUyLTgzOTQtNDc2My1iMDMxLTA0YTU2YjY4ZjZjORKqAQo9dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0Q3JlYXRlZBJpCisKKXRha2VvdmVyLWFjZjRjZGIyNDc4NzQzZTU5MWIzMzM2M2E3ZmI0OTJlEi8KKwopdGFrZW92ZXItYWNmNGNkYjI0Nzg3NDNlNTkxYjMzMzYzYTdmYjQ5MmUQARoJcm9hZG1hcC0xGqACCgsIge671gYQ6Pm6XRprCjh0eXBlLnNwaW5lLnNlcnZlci50ZXN0aW5nL3NwaW5lLnNlcnZlci50ZXN0aW5nLlByb2plY3RJZBIvCisKKXRha2VvdmVyLWFjZjRjZGIyNDc4NzQzZTU5MWIzMzM2M2E3ZmI0OTJlEAEiAHKhAQqMAQpMCiJ0eXBlLnNwaW5lLmlvL3NwaW5lLmNvcmUuQ29tbWFuZElkEiYKJGU0ZDE4OGZiLWRkZTAtNDliNS04ZDRmLTA2M2IzMTI4MGIwNBI8dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5DcmVhdGVQcm9qZWN0GhASDgoMbWF0cml4LWFjdG9y"
+      }
+    ]
+  },
+  "finalInbox": {
+    "shards": [
+      {
+        "shard": "0/2",
+        "count": 1,
+        "truncated": false,
+        "rows": [
+          {
+            "messageId": "a89b7a70-2c36-466b-95a4-e22d9180518f",
+            "signalId": "525525e2-8394-4763-b031-04a56b68f6c9",
+            "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+            "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+            "targetIdBase64": "CisKKXRha2VvdmVyLWFjZjRjZGIyNDc4NzQzZTU5MWIzMzM2M2E3ZmI0OTJlEAE=",
+            "signalTypeUrl": "type.spine.io/spine.core.Event",
+            "signalValueSha256": "5e3817ba720b9260656e3db2393cb05bcecdab15c8b744d8e22987a103d00f54",
+            "status": "DELIVERED",
+            "whenReceivedSeconds": "1791948545",
+            "whenReceivedNanos": 213001000,
+            "keepUntilMillis": 1791948575213,
+            "version": "2"
+          }
+        ],
+        "statuses": {
+          "DELIVERED": 1
+        }
+      },
+      {
+        "shard": "1/2",
+        "count": 0,
+        "truncated": false,
+        "rows": [],
+        "statuses": {}
+      },
+      {
+        "shard": "0/1",
+        "count": 2,
+        "truncated": false,
+        "rows": [
+          {
+            "messageId": "e20b7937-34ea-46aa-93c6-7f268134c0d9",
+            "signalId": "525525e2-8394-4763-b031-04a56b68f6c9",
+            "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioState",
+            "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+            "targetIdBase64": "CisKKXRha2VvdmVyLWFjZjRjZGIyNDc4NzQzZTU5MWIzMzM2M2E3ZmI0OTJlEAE=",
+            "signalTypeUrl": "type.spine.io/spine.core.Event",
+            "signalValueSha256": "5e3817ba720b9260656e3db2393cb05bcecdab15c8b744d8e22987a103d00f54",
+            "status": "DELIVERED",
+            "whenReceivedSeconds": "1791948545",
+            "whenReceivedNanos": 217001000,
+            "keepUntilMillis": 1791948575217,
+            "version": "1"
+          },
+          {
+            "messageId": "0d997589-3108-4b39-bdca-6fb2564426ab",
+            "signalId": "525525e2-8394-4763-b031-04a56b68f6c9",
+            "targetTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectProjectionState",
+            "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+            "targetIdBase64": "CisKKXRha2VvdmVyLWFjZjRjZGIyNDc4NzQzZTU5MWIzMzM2M2E3ZmI0OTJlEAE=",
+            "signalTypeUrl": "type.spine.io/spine.core.Event",
+            "signalValueSha256": "5e3817ba720b9260656e3db2393cb05bcecdab15c8b744d8e22987a103d00f54",
+            "status": "DELIVERED",
+            "whenReceivedSeconds": "1791948545",
+            "whenReceivedNanos": 219000000,
+            "keepUntilMillis": 1791948575218,
+            "version": "2"
+          }
+        ],
+        "statuses": {
+          "DELIVERED": 2
+        }
+      }
+    ],
+    "observations": [
+      {
+        "shard": "0/1",
+        "status": "NOT_PICKED",
+        "messages": 0
+      },
+      {
+        "shard": "0/2",
+        "status": "NOT_PICKED",
+        "messages": 0
+      }
+    ]
+  },
+  "finalEntries": [
+    {
+      "method": "create",
+      "receiver": "Project",
+      "correlation": "takeover-acf4cdb2478743e591b33363a7fb492e:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+      "recipientIdBase64": "CisKKXRha2VvdmVyLWFjZjRjZGIyNDc4NzQzZTU5MWIzMzM2M2E3ZmI0OTJlEAE=",
+      "pid": 83308,
+      "at": 1791948545189
+    },
+    {
+      "method": "staffing",
+      "receiver": "ProjectStaffing",
+      "correlation": "takeover-acf4cdb2478743e591b33363a7fb492e:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+      "recipientIdBase64": "CisKKXRha2VvdmVyLWFjZjRjZGIyNDc4NzQzZTU5MWIzMzM2M2E3ZmI0OTJlEAE=",
+      "pid": 83308,
+      "at": 1791948545239
+    },
+    {
+      "method": "portfolio",
+      "receiver": "Portfolio",
+      "correlation": "takeover-acf4cdb2478743e591b33363a7fb492e:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+      "recipientIdBase64": "CisKKXRha2VvdmVyLWFjZjRjZGIyNDc4NzQzZTU5MWIzMzM2M2E3ZmI0OTJlEAE=",
+      "pid": 83312,
+      "at": 1791948545644
+    },
+    {
+      "method": "planning",
+      "receiver": "ProjectPlanning",
+      "correlation": "takeover-acf4cdb2478743e591b33363a7fb492e:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+      "recipientIdBase64": "CisKKXRha2VvdmVyLWFjZjRjZGIyNDc4NzQzZTU5MWIzMzM2M2E3ZmI0OTJlEAE=",
+      "pid": 83312,
+      "at": 1791948545651
+    },
+    {
+      "method": "projection",
+      "receiver": "ProjectProjection",
+      "correlation": "takeover-acf4cdb2478743e591b33363a7fb492e:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+      "recipientIdBase64": "CisKKXRha2VvdmVyLWFjZjRjZGIyNDc4NzQzZTU5MWIzMzM2M2E3ZmI0OTJlEAE=",
+      "pid": 83312,
+      "at": 1791948545684
+    },
+    {
+      "method": "staffing",
+      "receiver": "ProjectStaffing",
+      "correlation": "takeover-acf4cdb2478743e591b33363a7fb492e:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+      "recipientIdBase64": "CisKKXRha2VvdmVyLWFjZjRjZGIyNDc4NzQzZTU5MWIzMzM2M2E3ZmI0OTJlEAE=",
+      "pid": 83312,
+      "at": 1791948605688
+    }
+  ]
+}

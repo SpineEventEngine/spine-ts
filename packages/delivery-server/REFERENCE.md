@@ -36,7 +36,7 @@ which override defaults. Invalid values throw before a listener is created:
 - `maxInboundMessageBytes` / `MAX_INBOUND_MESSAGE_SIZE`: integer 1–2147483647;
   default 4194304;
 - `processingTimeoutSeconds` / `SHARD_PROCESSING_TIMEOUT`: integer
-  0–2147483647; default 0, which disables automatic takeover;
+  0–2147483647; default 0, which disables timeout-based takeover during pickup;
 - retained message/byte limits: integer 1–2147483647; defaults 10000 and
   33554432;
 - tracked shards: integer 1–1000; default 1000.
@@ -56,6 +56,9 @@ separate from the supervisor's default 60-second stale-session threshold
 The in-memory Delivery server uses a separate processing timeout: `processingTimeoutSeconds` on the listener, or
 `processingTimeoutMs` on `InMemoryDelivery`. Its default is zero, which disables
 automatic pickup takeover; applications may configure a positive timeout.
+This does not disable the application supervisor's separate release of stale
+sessions. A positive server processing timeout alone does not shorten the
+supervisor's stale-session threshold.
 
 A scan can encounter a busy shard, an unexpired session, unavailable storage, or
 failed processing. Request deadlines, retry delays, and shutdown bounds also

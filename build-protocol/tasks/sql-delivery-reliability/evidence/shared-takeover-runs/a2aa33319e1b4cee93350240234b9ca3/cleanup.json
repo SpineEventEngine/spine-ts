@@ -1,0 +1,56 @@
+{
+  "databaseDropped": true,
+  "exits": [
+    {
+      "pid": 68756,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 68755,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 68754,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 68753,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 68752,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 68751,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 68750,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 68749,
+      "code": 0,
+      "signal": null
+    },
+    {
+      "pid": 68735,
+      "code": null,
+      "signal": "SIGKILL"
+    },
+    {
+      "pid": 68733,
+      "code": 0,
+      "signal": null
+    }
+  ],
+  "errors": []
+}

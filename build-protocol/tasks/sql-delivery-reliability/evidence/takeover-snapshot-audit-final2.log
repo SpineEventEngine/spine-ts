@@ -1,0 +1,53 @@
+{
+  "status": "PASS",
+  "audited": [
+    {
+      "provider": "postgres16",
+      "count": 2,
+      "runId": "60bbf4c68812457688776c852575f044",
+      "originalEventId": "7c63fbea-0016-4cef-833c-abd57226149c"
+    },
+    {
+      "provider": "postgres16",
+      "count": 8,
+      "runId": "109ee6028f59476fa05b2b50380cafa7",
+      "originalEventId": "f67d0904-ce15-444f-9b20-6250b86d8be5"
+    },
+    {
+      "provider": "postgres18",
+      "count": 2,
+      "runId": "42dcdec2a94948418f50ed8589259efb",
+      "originalEventId": "6142c0e0-c13c-462a-9895-ff219ac27f85"
+    },
+    {
+      "provider": "postgres18",
+      "count": 8,
+      "runId": "21ac07ff17244881a889307462b69f49",
+      "originalEventId": "995ee0c2-b097-40ca-9c35-d13fafe2c05a"
+    },
+    {
+      "provider": "mysql84",
+      "count": 2,
+      "runId": "ffee1c0c64fe4b21a7c008a1a0d7ff7d",
+      "originalEventId": "1c9fad61-f404-4818-afd5-b2442bd7fbd8"
+    },
+    {
+      "provider": "mysql84",
+      "count": 8,
+      "runId": "ae89c5bd62b3459d828567110206e3a1",
+      "originalEventId": "22707605-c679-4cea-86db-50d0e6a329c5"
+    },
+    {
+      "provider": "mariadb114",
+      "count": 2,
+      "runId": "acf4cdb2478743e591b33363a7fb492e",
+      "originalEventId": "525525e2-8394-4763-b031-04a56b68f6c9"
+    },
+    {
+      "provider": "mariadb114",
+      "count": 8,
+      "runId": "046567231d564335ba769a1f6d9fb14a",
+      "originalEventId": "3a74d006-092e-4cda-9da3-c684076a99ae"
+    }
+  ]
+}

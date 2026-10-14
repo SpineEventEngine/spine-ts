@@ -903,3 +903,49 @@ dropped. No runtime or generated/dist changes occurred. The next checkpoint
 includes clock test/writer, both inventory declarations plus exact-list test,
 mechanical callback type correction, and completed capture evidence. Ongoing
 retained-server fixture files and live logs are excluded.
+
+## Final release preparation while takeover verification continues
+
+The no-production-apps instruction remains binding: no legacy compatibility or
+migration work is required. The desktop supports explicit configured child
+models/reasoning. Dispatch a bounded read-only mechanical/package preparation
+function using `gpt-6-luna` / `medium`: inspect current release/preflight commands,
+version manifests and npm/official remote version availability, without builds,
+installs, source changes or version mutations. Persist a concise final-gate plan
+and candidate common unused version in task evidence. Both dispatch fields are
+explicit; runtime introspection is unavailable. This is preparation only, not
+release verification or a reservation of the version. Current estimate remains
+85% and 3–5 hours for remaining fault, idle, examples, review and final gates.
+
+Release preparation accepted from the explicitly dispatched Luna/medium function;
+its immutable configured fields match and introspection is unavailable. The
+read-only inventory found 31 manifests, 55 dependency/devDependency pins plus one
+peer pin, and provisional unused snapshot.23 across 19 public packages. Recheck
+immediately before versioning. Perform version-only and separate pins/lockfile
+commits before the final frozen preflight/release gate so verification covers the
+release candidate. No release check has run yet; opt-in SQL matrices remain
+separate from the default release test inventory.
+
+Retained-server evidence exposes one wording ambiguity in the existing Delivery
+server README/option list: zero disables timeout-based pickup takeover, not the
+application supervisor's separate stale-session release. Parent clarifies those
+two guide files and the canonical timer paragraph against current shard-service
+release semantics; include this bounded clarification in final documentation
+review. No runtime option or behavior changes. The final eight default runs and
+ten-second override remain measured observations, not a guaranteed deadline.
+
+## Idle SQL matrix handoff plan
+
+After implementation freezes the isolated idle driver with one passing live
+control and scoped static checks, resume the existing mechanical verification
+function with its immutable explicitly selected `gpt-6-luna` / `low` profile.
+Both original dispatch fields were explicit; introspection unavailable. Execute
+four engines at two/eight application processes and database-only/shared Delivery
+with matching shards, unique UUID databases and unchanged source/dist hashes.
+Measure at least two default recovery intervals strictly between selected-DB SQL
+markers after readiness/warmup. Count query families and duration; exclude setup,
+DDL, inspection and teardown. Preserve raw trace files, positive controls and
+logging-restoration evidence. The confirmed exact-container capture helper must
+serialize capture on the same SQL server. No builds/source changes during the
+matrix; transport-only fixture authoring may proceed independently. Report
+bounded observed process scaling, not throughput or production capacity claims.

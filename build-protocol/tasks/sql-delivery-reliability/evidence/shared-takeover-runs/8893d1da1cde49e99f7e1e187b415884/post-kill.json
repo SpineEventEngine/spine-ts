@@ -1,0 +1,185 @@
+{
+  "killAt": 1791947733844,
+  "killed": {
+    "code": null,
+    "signal": "SIGKILL"
+  },
+  "serverPid": 55771,
+  "ready": [
+    {
+      "pid": 55775,
+      "endpoint": "http://127.0.0.1:49387",
+      "configuredShards": 2,
+      "artifacts": [
+        {
+          "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/dist/index.js",
+          "sha256": "6bf9c9a8c971afc87de534107af1a935953f89a0607193ed3576e2b3def1909e"
+        },
+        {
+          "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server-blackbox-tests/dist/test-fixtures/project-workflow.js",
+          "sha256": "4369473fd7b246124d422e05e94aad97320161f6d18838eaa364d8616001b985"
+        },
+        {
+          "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server-blackbox-tests/dist/generated/spine/server/testing/project_workflow_pb.js",
+          "sha256": "b5e6d882578f431085d42b84e5fefb9d948880867e34c3c1b83c2b96d36c371b"
+        },
+        {
+          "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/delivery-server/dist/index.js",
+          "sha256": "b8b79d6f88a3f7f4dd0461062a09dc519e98c84387ae01360b4245acd23b5d08"
+        },
+        {
+          "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/delivery-client/dist/index.js",
+          "sha256": "1e69a8d6b4ad6584f804baf8746d9d937b0e173a589cb52fba98735aeac22140"
+        }
+      ]
+    },
+    {
+      "pid": 55776,
+      "endpoint": "http://127.0.0.1:49386",
+      "configuredShards": 2,
+      "artifacts": [
+        {
+          "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server/dist/index.js",
+          "sha256": "6bf9c9a8c971afc87de534107af1a935953f89a0607193ed3576e2b3def1909e"
+        },
+        {
+          "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server-blackbox-tests/dist/test-fixtures/project-workflow.js",
+          "sha256": "4369473fd7b246124d422e05e94aad97320161f6d18838eaa364d8616001b985"
+        },
+        {
+          "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server-blackbox-tests/dist/generated/spine/server/testing/project_workflow_pb.js",
+          "sha256": "b5e6d882578f431085d42b84e5fefb9d948880867e34c3c1b83c2b96d36c371b"
+        },
+        {
+          "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/delivery-server/dist/index.js",
+          "sha256": "b8b79d6f88a3f7f4dd0461062a09dc519e98c84387ae01360b4245acd23b5d08"
+        },
+        {
+          "path": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/delivery-client/dist/index.js",
+          "sha256": "1e69a8d6b4ad6584f804baf8746d9d937b0e173a589cb52fba98735aeac22140"
+        }
+      ]
+    }
+  ],
+  "afterKill": {
+    "shards": [
+      {
+        "shard": "0/2",
+        "count": 1,
+        "truncated": false,
+        "rows": [
+          {
+            "messageId": "6a16d72b-498d-4aac-9738-2ac519d84062",
+            "signalId": "89dcef87-3a88-4ed8-93b6-364a1af27d92",
+            "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+            "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+            "targetIdBase64": "CisKKXRha2VvdmVyLTg4OTNkMWRhMWNkZTQ5ZTk5ZjdlMWUxODdiNDE1ODg0EAE=",
+            "signalTypeUrl": "type.spine.io/spine.core.Event",
+            "signalValueSha256": "174e8933f3f7dc6e0963a441fad6b213b09dabf8a4048f39edf38db20f042173",
+            "status": "TO_DELIVER",
+            "whenReceivedSeconds": "1791947733",
+            "whenReceivedNanos": 711001000,
+            "keepUntilMillis": 1791947763711,
+            "version": "2"
+          }
+        ],
+        "statuses": {
+          "TO_DELIVER": 1
+        }
+      },
+      {
+        "shard": "1/2",
+        "count": 2,
+        "truncated": false,
+        "rows": [
+          {
+            "messageId": "57fc2184-a966-438c-8d97-132515cd2638",
+            "signalId": "649159e4-343a-4cdc-9295-54e2dbfc3a0a",
+            "targetTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectState",
+            "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+            "targetIdBase64": "CisKKXRha2VvdmVyLTg4OTNkMWRhMWNkZTQ5ZTk5ZjdlMWUxODdiNDE1ODg0EAE=",
+            "signalTypeUrl": "type.spine.io/spine.core.Command",
+            "signalValueSha256": "9e879389115a436a0ef8d932a9bdeb13dca914c41c62e4f6ae2bfe3960f2626d",
+            "status": "DELIVERED",
+            "whenReceivedSeconds": "1791947733",
+            "whenReceivedNanos": 658000000,
+            "keepUntilMillis": 1791947763657,
+            "version": "1"
+          },
+          {
+            "messageId": "912519f0-c8b1-4eff-8eca-a7ace44e492f",
+            "signalId": "89dcef87-3a88-4ed8-93b6-364a1af27d92",
+            "targetTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingState",
+            "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+            "targetIdBase64": "CisKKXRha2VvdmVyLTg4OTNkMWRhMWNkZTQ5ZTk5ZjdlMWUxODdiNDE1ODg0EAE=",
+            "signalTypeUrl": "type.spine.io/spine.core.Event",
+            "signalValueSha256": "174e8933f3f7dc6e0963a441fad6b213b09dabf8a4048f39edf38db20f042173",
+            "status": "DELIVERED",
+            "whenReceivedSeconds": "1791947733",
+            "whenReceivedNanos": 714001000,
+            "keepUntilMillis": 1791947763714,
+            "version": "3"
+          }
+        ],
+        "statuses": {
+          "DELIVERED": 2
+        }
+      },
+      {
+        "shard": "0/1",
+        "count": 2,
+        "truncated": false,
+        "rows": [
+          {
+            "messageId": "96f51c49-f308-4c39-bcbe-ce788fac7c63",
+            "signalId": "89dcef87-3a88-4ed8-93b6-364a1af27d92",
+            "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioState",
+            "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+            "targetIdBase64": "CisKKXRha2VvdmVyLTg4OTNkMWRhMWNkZTQ5ZTk5ZjdlMWUxODdiNDE1ODg0EAE=",
+            "signalTypeUrl": "type.spine.io/spine.core.Event",
+            "signalValueSha256": "174e8933f3f7dc6e0963a441fad6b213b09dabf8a4048f39edf38db20f042173",
+            "status": "DELIVERED",
+            "whenReceivedSeconds": "1791947733",
+            "whenReceivedNanos": 716001000,
+            "keepUntilMillis": 1791947763716,
+            "version": "1"
+          },
+          {
+            "messageId": "364b72e4-9e0a-46e7-9918-a2044902c5dd",
+            "signalId": "89dcef87-3a88-4ed8-93b6-364a1af27d92",
+            "targetTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectProjectionState",
+            "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+            "targetIdBase64": "CisKKXRha2VvdmVyLTg4OTNkMWRhMWNkZTQ5ZTk5ZjdlMWUxODdiNDE1ODg0EAE=",
+            "signalTypeUrl": "type.spine.io/spine.core.Event",
+            "signalValueSha256": "174e8933f3f7dc6e0963a441fad6b213b09dabf8a4048f39edf38db20f042173",
+            "status": "DELIVERED",
+            "whenReceivedSeconds": "1791947733",
+            "whenReceivedNanos": 718001000,
+            "keepUntilMillis": 1791947763718,
+            "version": "2"
+          }
+        ],
+        "statuses": {
+          "DELIVERED": 2
+        }
+      }
+    ],
+    "observations": [
+      {
+        "shard": "0/1",
+        "status": "NOT_PICKED",
+        "messages": 0
+      },
+      {
+        "shard": "0/2",
+        "status": "PICKED",
+        "messages": 1
+      },
+      {
+        "shard": "1/2",
+        "status": "NOT_PICKED",
+        "messages": 0
+      }
+    ]
+  }
+}

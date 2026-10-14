@@ -1,0 +1,448 @@
+{
+  "snapshots": [
+    {
+      "at": 1791948471929,
+      "elapsedMs": 437,
+      "allStates": false
+    },
+    {
+      "at": 1791948472945,
+      "elapsedMs": 1453,
+      "allStates": false
+    },
+    {
+      "at": 1791948473963,
+      "elapsedMs": 2471,
+      "allStates": false
+    },
+    {
+      "at": 1791948474982,
+      "elapsedMs": 3490,
+      "allStates": false
+    },
+    {
+      "at": 1791948476004,
+      "elapsedMs": 4512,
+      "allStates": false
+    },
+    {
+      "at": 1791948477026,
+      "elapsedMs": 5534,
+      "allStates": false
+    },
+    {
+      "at": 1791948478045,
+      "elapsedMs": 6553,
+      "allStates": false
+    },
+    {
+      "at": 1791948479067,
+      "elapsedMs": 7575,
+      "allStates": false
+    },
+    {
+      "at": 1791948480089,
+      "elapsedMs": 8597,
+      "allStates": false
+    },
+    {
+      "at": 1791948481107,
+      "elapsedMs": 9614,
+      "allStates": false
+    },
+    {
+      "at": 1791948482129,
+      "elapsedMs": 10637,
+      "allStates": false
+    },
+    {
+      "at": 1791948483147,
+      "elapsedMs": 11655,
+      "allStates": false
+    },
+    {
+      "at": 1791948484165,
+      "elapsedMs": 12673,
+      "allStates": false
+    },
+    {
+      "at": 1791948485186,
+      "elapsedMs": 13694,
+      "allStates": false
+    },
+    {
+      "at": 1791948486208,
+      "elapsedMs": 14716,
+      "allStates": false
+    },
+    {
+      "at": 1791948487228,
+      "elapsedMs": 15736,
+      "allStates": false
+    },
+    {
+      "at": 1791948488250,
+      "elapsedMs": 16758,
+      "allStates": false
+    },
+    {
+      "at": 1791948489271,
+      "elapsedMs": 17779,
+      "allStates": false
+    },
+    {
+      "at": 1791948490285,
+      "elapsedMs": 18793,
+      "allStates": false
+    },
+    {
+      "at": 1791948491307,
+      "elapsedMs": 19815,
+      "allStates": false
+    },
+    {
+      "at": 1791948492328,
+      "elapsedMs": 20836,
+      "allStates": false
+    },
+    {
+      "at": 1791948493349,
+      "elapsedMs": 21857,
+      "allStates": false
+    },
+    {
+      "at": 1791948494374,
+      "elapsedMs": 22882,
+      "allStates": false
+    },
+    {
+      "at": 1791948495395,
+      "elapsedMs": 23903,
+      "allStates": false
+    },
+    {
+      "at": 1791948496409,
+      "elapsedMs": 24917,
+      "allStates": false
+    },
+    {
+      "at": 1791948497429,
+      "elapsedMs": 25937,
+      "allStates": false
+    },
+    {
+      "at": 1791948498441,
+      "elapsedMs": 26949,
+      "allStates": false
+    },
+    {
+      "at": 1791948499457,
+      "elapsedMs": 27965,
+      "allStates": false
+    },
+    {
+      "at": 1791948500474,
+      "elapsedMs": 28982,
+      "allStates": false
+    },
+    {
+      "at": 1791948501488,
+      "elapsedMs": 29996,
+      "allStates": false
+    },
+    {
+      "at": 1791948502505,
+      "elapsedMs": 31013,
+      "allStates": false
+    },
+    {
+      "at": 1791948503521,
+      "elapsedMs": 32029,
+      "allStates": false
+    },
+    {
+      "at": 1791948504538,
+      "elapsedMs": 33046,
+      "allStates": false
+    },
+    {
+      "at": 1791948505555,
+      "elapsedMs": 34063,
+      "allStates": false
+    },
+    {
+      "at": 1791948506576,
+      "elapsedMs": 35084,
+      "allStates": false
+    },
+    {
+      "at": 1791948507605,
+      "elapsedMs": 36113,
+      "allStates": false
+    },
+    {
+      "at": 1791948508615,
+      "elapsedMs": 37123,
+      "allStates": false
+    },
+    {
+      "at": 1791948509635,
+      "elapsedMs": 38143,
+      "allStates": false
+    },
+    {
+      "at": 1791948510655,
+      "elapsedMs": 39163,
+      "allStates": false
+    },
+    {
+      "at": 1791948511676,
+      "elapsedMs": 40184,
+      "allStates": false
+    },
+    {
+      "at": 1791948512691,
+      "elapsedMs": 41199,
+      "allStates": false
+    },
+    {
+      "at": 1791948513713,
+      "elapsedMs": 42221,
+      "allStates": false
+    },
+    {
+      "at": 1791948514729,
+      "elapsedMs": 43237,
+      "allStates": false
+    },
+    {
+      "at": 1791948515749,
+      "elapsedMs": 44257,
+      "allStates": false
+    },
+    {
+      "at": 1791948516770,
+      "elapsedMs": 45278,
+      "allStates": false
+    },
+    {
+      "at": 1791948517791,
+      "elapsedMs": 46299,
+      "allStates": false
+    },
+    {
+      "at": 1791948518811,
+      "elapsedMs": 47319,
+      "allStates": false
+    },
+    {
+      "at": 1791948519828,
+      "elapsedMs": 48336,
+      "allStates": false
+    },
+    {
+      "at": 1791948520849,
+      "elapsedMs": 49357,
+      "allStates": false
+    },
+    {
+      "at": 1791948521868,
+      "elapsedMs": 50376,
+      "allStates": false
+    },
+    {
+      "at": 1791948522889,
+      "elapsedMs": 51397,
+      "allStates": false
+    },
+    {
+      "at": 1791948523906,
+      "elapsedMs": 52414,
+      "allStates": false
+    },
+    {
+      "at": 1791948524923,
+      "elapsedMs": 53431,
+      "allStates": false
+    },
+    {
+      "at": 1791948525946,
+      "elapsedMs": 54454,
+      "allStates": false
+    },
+    {
+      "at": 1791948526963,
+      "elapsedMs": 55471,
+      "allStates": false
+    },
+    {
+      "at": 1791948527985,
+      "elapsedMs": 56493,
+      "allStates": false
+    },
+    {
+      "at": 1791948529006,
+      "elapsedMs": 57514,
+      "allStates": false
+    },
+    {
+      "at": 1791948530028,
+      "elapsedMs": 58536,
+      "allStates": false
+    },
+    {
+      "at": 1791948531049,
+      "elapsedMs": 59557,
+      "allStates": false
+    },
+    {
+      "at": 1791948532068,
+      "elapsedMs": 60576,
+      "allStates": true
+    }
+  ],
+  "finalState": {
+    "projects": [
+      {
+        "number": 1,
+        "states": {
+          "project": true,
+          "planning": true,
+          "staffing": true,
+          "portfolio": true,
+          "projection": true
+        }
+      }
+    ],
+    "events": [
+      {
+        "id": "7c63fbea-0016-4cef-833c-abd57226149c",
+        "typeUrl": "type.spine.server.testing/spine.server.testing.ProjectCreated",
+        "number": 1,
+        "organization": "takeover-60bbf4c68812457688776c852575f044",
+        "name": "roadmap-1",
+        "sha256": "ee0ae6319f0d9cbcd83fbba27dfa365347b6ed32cb2132b165d3cecd09ef6aac",
+        "binaryBase64": "CiYKJDdjNjNmYmVhLTAwMTYtNGNlZi04MzNjLWFiZDU3MjI2MTQ5YxKqAQo9dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0Q3JlYXRlZBJpCisKKXRha2VvdmVyLTYwYmJmNGM2ODgxMjQ1NzY4ODc3NmM4NTI1NzVmMDQ0Ei8KKwopdGFrZW92ZXItNjBiYmY0YzY4ODEyNDU3Njg4Nzc2Yzg1MjU3NWYwNDQQARoJcm9hZG1hcC0xGqECCgwIt+271gYQqPv/rgEaawo4dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0SWQSLworCil0YWtlb3Zlci02MGJiZjRjNjg4MTI0NTc2ODg3NzZjODUyNTc1ZjA0NBABIgByoQEKjAEKTAoidHlwZS5zcGluZS5pby9zcGluZS5jb3JlLkNvbW1hbmRJZBImCiQ2NmJlNzViNy0zY2FhLTQzMGItOWM1ZS0zYzE4NDBkNGQ2MmMSPHR5cGUuc3BpbmUuc2VydmVyLnRlc3Rpbmcvc3BpbmUuc2VydmVyLnRlc3RpbmcuQ3JlYXRlUHJvamVjdBoQEg4KDG1hdHJpeC1hY3Rvcg=="
+      }
+    ]
+  },
+  "finalInbox": {
+    "shards": [
+      {
+        "shard": "0/2",
+        "count": 0,
+        "truncated": false,
+        "rows": [],
+        "statuses": {}
+      },
+      {
+        "shard": "1/2",
+        "count": 0,
+        "truncated": false,
+        "rows": [],
+        "statuses": {}
+      },
+      {
+        "shard": "0/1",
+        "count": 2,
+        "truncated": false,
+        "rows": [
+          {
+            "messageId": "8d4bc56f-f61a-4486-9dc4-22d0e494e1e3",
+            "signalId": "7c63fbea-0016-4cef-833c-abd57226149c",
+            "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioState",
+            "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+            "targetIdBase64": "CisKKXRha2VvdmVyLTYwYmJmNGM2ODgxMjQ1NzY4ODc3NmM4NTI1NzVmMDQ0EAE=",
+            "signalTypeUrl": "type.spine.io/spine.core.Event",
+            "signalValueSha256": "ee0ae6319f0d9cbcd83fbba27dfa365347b6ed32cb2132b165d3cecd09ef6aac",
+            "status": "DELIVERED",
+            "whenReceivedSeconds": "1791948471",
+            "whenReceivedNanos": 396001000,
+            "keepUntilMillis": 1791948501396,
+            "version": "1"
+          },
+          {
+            "messageId": "2f2c5d8a-fcc6-41a2-98b1-b7ec6813d9ea",
+            "signalId": "7c63fbea-0016-4cef-833c-abd57226149c",
+            "targetTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectProjectionState",
+            "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+            "targetIdBase64": "CisKKXRha2VvdmVyLTYwYmJmNGM2ODgxMjQ1NzY4ODc3NmM4NTI1NzVmMDQ0EAE=",
+            "signalTypeUrl": "type.spine.io/spine.core.Event",
+            "signalValueSha256": "ee0ae6319f0d9cbcd83fbba27dfa365347b6ed32cb2132b165d3cecd09ef6aac",
+            "status": "DELIVERED",
+            "whenReceivedSeconds": "1791948471",
+            "whenReceivedNanos": 398001000,
+            "keepUntilMillis": 1791948501398,
+            "version": "2"
+          }
+        ],
+        "statuses": {
+          "DELIVERED": 2
+        }
+      }
+    ],
+    "observations": [
+      {
+        "shard": "0/1",
+        "status": "NOT_PICKED",
+        "messages": 0
+      }
+    ]
+  },
+  "finalEntries": [
+    {
+      "method": "create",
+      "receiver": "Project",
+      "correlation": "takeover-60bbf4c68812457688776c852575f044:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+      "recipientIdBase64": "CisKKXRha2VvdmVyLTYwYmJmNGM2ODgxMjQ1NzY4ODc3NmM4NTI1NzVmMDQ0EAE=",
+      "pid": 80470,
+      "at": 1791948471360
+    },
+    {
+      "method": "staffing",
+      "receiver": "ProjectStaffing",
+      "correlation": "takeover-60bbf4c68812457688776c852575f044:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+      "recipientIdBase64": "CisKKXRha2VvdmVyLTYwYmJmNGM2ODgxMjQ1NzY4ODc3NmM4NTI1NzVmMDQ0EAE=",
+      "pid": 80470,
+      "at": 1791948471425
+    },
+    {
+      "method": "portfolio",
+      "receiver": "Portfolio",
+      "correlation": "takeover-60bbf4c68812457688776c852575f044:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PortfolioId",
+      "recipientIdBase64": "CisKKXRha2VvdmVyLTYwYmJmNGM2ODgxMjQ1NzY4ODc3NmM4NTI1NzVmMDQ0EAE=",
+      "pid": 80484,
+      "at": 1791948471826
+    },
+    {
+      "method": "projection",
+      "receiver": "ProjectProjection",
+      "correlation": "takeover-60bbf4c68812457688776c852575f044:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.ProjectId",
+      "recipientIdBase64": "CisKKXRha2VvdmVyLTYwYmJmNGM2ODgxMjQ1NzY4ODc3NmM4NTI1NzVmMDQ0EAE=",
+      "pid": 80484,
+      "at": 1791948471863
+    },
+    {
+      "method": "planning",
+      "receiver": "ProjectPlanning",
+      "correlation": "takeover-60bbf4c68812457688776c852575f044:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+      "recipientIdBase64": "CisKKXRha2VvdmVyLTYwYmJmNGM2ODgxMjQ1NzY4ODc3NmM4NTI1NzVmMDQ0EAE=",
+      "pid": 80483,
+      "at": 1791948531889
+    },
+    {
+      "method": "staffing",
+      "receiver": "ProjectStaffing",
+      "correlation": "takeover-60bbf4c68812457688776c852575f044:1",
+      "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.StaffingId",
+      "recipientIdBase64": "CisKKXRha2VvdmVyLTYwYmJmNGM2ODgxMjQ1NzY4ODc3NmM4NTI1NzVmMDQ0EAE=",
+      "pid": 80484,
+      "at": 1791948531891
+    }
+  ]
+}

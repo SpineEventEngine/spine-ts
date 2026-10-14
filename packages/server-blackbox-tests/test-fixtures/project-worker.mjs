@@ -130,6 +130,7 @@ async function start(request) {
   } else {
     ServerEnvironment.when(EnvironmentType.Local).use(environmentSettings);
   }
+  let firstCandidateGated = false;
   context = projectWorkflow(
     settings.contextName,
     (entry) => {
@@ -138,14 +139,19 @@ async function start(request) {
         `${JSON.stringify({ ...entry, pid: process.pid, at: Date.now() })}\n`,
         { flush: true },
       );
-      const gate = settings.handlerGate;
+      const gate = (settings.handlerGateCandidates ?? [settings.handlerGate]).find(
+        (candidate) =>
+          candidate !== undefined &&
+          entry.method === candidate.method &&
+          entry.correlation === candidate.correlation &&
+          entry.recipientTypeUrl === candidate.recipientTypeUrl &&
+          entry.recipientIdBase64 === candidate.recipientIdBase64,
+      );
       if (
         gate !== undefined &&
-        entry.method === gate.method &&
-        entry.correlation === gate.correlation &&
-        entry.recipientTypeUrl === gate.recipientTypeUrl &&
-        entry.recipientIdBase64 === gate.recipientIdBase64
+        (settings.handlerGateCandidates === undefined || !firstCandidateGated)
       ) {
+        firstCandidateGated = true;
         const deadline = Date.now() + Math.min(gate.timeoutMs, 10_000);
         return new Promise((resolve, reject) => {
           const check = () => {

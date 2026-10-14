@@ -92,7 +92,8 @@ void transport;
 ```
 
 The example explicitly enables a 30-second processing timeout. The default is
-zero, which disables automatic takeover. The application recovery scan and
+zero, which disables timeout-based takeover during shard pickup. The application
+supervisor can still release stale sessions. Its recovery scan and
 stale-session threshold are separate [recovery timers](REFERENCE.md#recovery-timers).
 
 The standalone listener exposes Inbox, InboxRead, Shard, Admin, and gRPC health services.

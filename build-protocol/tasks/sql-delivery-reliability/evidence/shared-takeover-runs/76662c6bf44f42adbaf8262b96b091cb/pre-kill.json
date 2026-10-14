@@ -1,0 +1,61 @@
+{
+  "at": 1791947850167,
+  "acknowledged": {
+    "commandId": "a472375e-698c-4a36-887b-11c3a1ed31e0",
+    "number": 1,
+    "ackStatus": {
+      "case": "ok",
+      "value": {
+        "$typeName": "google.protobuf.Empty"
+      }
+    }
+  },
+  "entry": {
+    "method": "planning",
+    "receiver": "ProjectPlanning",
+    "correlation": "takeover-76662c6bf44f42adbaf8262b96b091cb:1",
+    "recipientTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+    "recipientIdBase64": "CisKKXRha2VvdmVyLTc2NjYyYzZiZjQ0ZjQyYWRiYWY4MjYyYjk2YjA5MWNiEAE=",
+    "pid": 58142,
+    "at": 1791947850108
+  },
+  "before": {
+    "projects": [
+      {
+        "number": 1,
+        "states": {
+          "project": true,
+          "planning": false,
+          "staffing": false,
+          "portfolio": false,
+          "projection": false
+        }
+      }
+    ],
+    "events": [
+      {
+        "id": "25070675-1617-412c-80d6-f35fee8515a2",
+        "typeUrl": "type.spine.server.testing/spine.server.testing.ProjectCreated",
+        "number": 1,
+        "organization": "takeover-76662c6bf44f42adbaf8262b96b091cb",
+        "name": "roadmap-1",
+        "sha256": "fd01bf84fb8c131fab9baf1c1318a09c9380df85b734fe0a1643205281f1cdc8",
+        "binaryBase64": "CiYKJDI1MDcwNjc1LTE2MTctNDEyYy04MGQ2LWYzNWZlZTg1MTVhMhKqAQo9dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5Qcm9qZWN0Q3JlYXRlZBJpCisKKXRha2VvdmVyLTc2NjYyYzZiZjQ0ZjQyYWRiYWY4MjYyYjk2YjA5MWNiEi8KKwopdGFrZW92ZXItNzY2NjJjNmJmNDRmNDJhZGJhZjgyNjJiOTZiMDkxY2IQARoJcm9hZG1hcC0xGqACCgsIyui71gYQwOWoGBprCjh0eXBlLnNwaW5lLnNlcnZlci50ZXN0aW5nL3NwaW5lLnNlcnZlci50ZXN0aW5nLlByb2plY3RJZBIvCisKKXRha2VvdmVyLTc2NjYyYzZiZjQ0ZjQyYWRiYWY4MjYyYjk2YjA5MWNiEAEiAHKhAQqMAQpMCiJ0eXBlLnNwaW5lLmlvL3NwaW5lLmNvcmUuQ29tbWFuZElkEiYKJGE0NzIzNzVlLTY5OGMtNGEzNi04ODdiLTExYzNhMWVkMzFlMBI8dHlwZS5zcGluZS5zZXJ2ZXIudGVzdGluZy9zcGluZS5zZXJ2ZXIudGVzdGluZy5DcmVhdGVQcm9qZWN0GhASDgoMbWF0cml4LWFjdG9y"
+      }
+    ]
+  },
+  "pending": {
+    "messageId": "9693a25b-78e3-422e-b728-bb0200d8833e",
+    "signalId": "25070675-1617-412c-80d6-f35fee8515a2",
+    "targetTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningState",
+    "targetIdTypeUrl": "type.spine.server.testing/spine.server.testing.PlanningId",
+    "targetIdBase64": "CisKKXRha2VvdmVyLTc2NjYyYzZiZjQ0ZjQyYWRiYWY4MjYyYjk2YjA5MWNiEAE=",
+    "signalTypeUrl": "type.spine.io/spine.core.Event",
+    "signalValueSha256": "fd01bf84fb8c131fab9baf1c1318a09c9380df85b734fe0a1643205281f1cdc8",
+    "status": "TO_DELIVER",
+    "whenReceivedSeconds": "1791947850",
+    "whenReceivedNanos": 76001000,
+    "keepUntilMillis": 1791947880076,
+    "version": "2"
+  }
+}

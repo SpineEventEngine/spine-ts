@@ -1,6 +1,6 @@
 # Remaining acceptance gaps
 
-Current status after the 96-case SQL transport lifecycle matrix. This replaces
+Current status after the SQL transport lifecycle and retained-server takeover matrices. This replaces
 the earlier preparation inventory; historical gaps are preserved in Git history.
 The complete task remains active. Use ACCEPTANCE.md for the full requirement map
 and the measured artifacts for bounded claims.
@@ -32,6 +32,8 @@ and the measured artifacts for bounded claims.
   `ac69f976-5ee9-4075-a53a-ec4b762292de`. All databases were dropped with zero
   remaining sessions/errors and unchanged measured source/runtime hashes.
 
+- Retained shared Delivery server takeover passed all eight four-engine/two-and-eight-process rows with complete interruption-time Inbox observations and source/runtime provenance. Pending work remained at 35–36 seconds and finished at 60.48–61.34 seconds. The successful Command entered once; the selected interrupted Event handler entered once before death and once on a replacement. Other handlers entered once in these final rows. A PostgreSQL 16 two-process server-timeout override also completed near 60 seconds. All test databases and children were cleaned up. Fixture reliability/style review is accepted after a stronger saved-trace audit and fresh live control; this is not a hard takeover deadline or exactly-once guarantee.
+
 ## Remaining work
 
 - Measure idle SQL at two/eight application processes. Corrected supervisor/SQL
@@ -40,10 +42,6 @@ and the measured artifacts for bounded claims.
   The before-release writer proves its SQL pickup was blocked; notifications
   are deliberately absent. These bounded component tests do not replace the
   retained-server application-worker takeover case below.
-- Retain a shared Delivery server while an actual application worker dies and a
-  replacement recovers pending accepted work. Measure the 60-second stale age,
-  10-second scan and independently configured processing timeout separately.
-  The completed shared-server-loss case proves a different, volatile boundary.
 - Add explicit real-wire publication-versus-Cancel ordering, protocol-invalid
   terminal failure, and failed cleanup during partial child fanout. Keep
   existing finite client retry/exhaustion evidence and cleanup bounds distinct.
@@ -51,7 +49,7 @@ and the measured artifacts for bounded claims.
   actual business updates; finish coherent isolated launcher ports/images,
   explicit process/shard counts and eight/eight verification. Execute all five
   examples and both required React UI modes, preserving local exceptions.
-- Review the new clock tests and example changes with the relevant existing
+- Review upcoming transport and example changes with the relevant existing
   concerns; refresh final documentation and all four concern dispositions using
   accepted bounded reviews rather than repeating converged slices.
 - Run final release-readiness security review, cheap preflight, verify:release,
