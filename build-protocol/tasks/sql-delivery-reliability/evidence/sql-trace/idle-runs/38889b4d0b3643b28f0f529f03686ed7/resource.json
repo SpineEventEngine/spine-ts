@@ -1,0 +1,8 @@
+{
+  "runId": "38889b4d0b3643b28f0f529f03686ed7",
+  "database": "sqlrel_idle_38889b4d0b3643b28f0f529f03686ed7",
+  "evidencePath": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/sql-trace/idle-runs/38889b4d0b3643b28f0f529f03686ed7",
+  "providerName": "postgres16",
+  "count": 8,
+  "mode": "shared-memory"
+}

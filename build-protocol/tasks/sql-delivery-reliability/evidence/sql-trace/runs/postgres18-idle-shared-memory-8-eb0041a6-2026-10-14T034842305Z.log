@@ -1,0 +1,226 @@
+2026-10-14T03:48:43.005917882Z 2026-10-14 03:48:43.005 UTC [6319] LOG:  statement: SELECT current_schema() AS schema
+2026-10-14T03:48:43.005949091Z 2026-10-14 03:48:43.005 UTC [6318] LOG:  statement: SELECT current_schema() AS schema
+2026-10-14T03:48:43.005950882Z 2026-10-14 03:48:43.005 UTC [6321] LOG:  statement: SELECT current_schema() AS schema
+2026-10-14T03:48:43.005951841Z 2026-10-14 03:48:43.005 UTC [6317] LOG:  statement: SELECT current_schema() AS schema
+2026-10-14T03:48:43.005952757Z 2026-10-14 03:48:43.005 UTC [6316] LOG:  statement: SELECT current_schema() AS schema
+2026-10-14T03:48:43.005953591Z 2026-10-14 03:48:43.005 UTC [6320] LOG:  statement: SELECT current_schema() AS schema
+2026-10-14T03:48:43.006264966Z 2026-10-14 03:48:43.006 UTC [6323] LOG:  statement: SELECT current_schema() AS schema
+2026-10-14T03:48:43.006270882Z 2026-10-14 03:48:43.006 UTC [6322] LOG:  statement: SELECT current_schema() AS schema
+2026-10-14T03:48:43.008067466Z 2026-10-14 03:48:43.007 UTC [6320] LOG:  execute <unnamed>: SELECT 1 FROM information_schema.schemata WHERE schema_name = $1
+2026-10-14T03:48:43.008079966Z 2026-10-14 03:48:43.007 UTC [6320] DETAIL:  Parameters: $1 = 'public'
+2026-10-14T03:48:43.008081591Z 2026-10-14 03:48:43.008 UTC [6317] LOG:  execute <unnamed>: SELECT 1 FROM information_schema.schemata WHERE schema_name = $1
+2026-10-14T03:48:43.008082966Z 2026-10-14 03:48:43.008 UTC [6317] DETAIL:  Parameters: $1 = 'public'
+2026-10-14T03:48:43.008236466Z 2026-10-14 03:48:43.008 UTC [6316] LOG:  execute <unnamed>: SELECT 1 FROM information_schema.schemata WHERE schema_name = $1
+2026-10-14T03:48:43.008242674Z 2026-10-14 03:48:43.008 UTC [6316] DETAIL:  Parameters: $1 = 'public'
+2026-10-14T03:48:43.008244132Z 2026-10-14 03:48:43.008 UTC [6322] LOG:  execute <unnamed>: SELECT 1 FROM information_schema.schemata WHERE schema_name = $1
+2026-10-14T03:48:43.008245549Z 2026-10-14 03:48:43.008 UTC [6322] DETAIL:  Parameters: $1 = 'public'
+2026-10-14T03:48:43.008246591Z 2026-10-14 03:48:43.008 UTC [6323] LOG:  execute <unnamed>: SELECT 1 FROM information_schema.schemata WHERE schema_name = $1
+2026-10-14T03:48:43.008247591Z 2026-10-14 03:48:43.008 UTC [6323] DETAIL:  Parameters: $1 = 'public'
+2026-10-14T03:48:43.008248507Z 2026-10-14 03:48:43.008 UTC [6318] LOG:  execute <unnamed>: SELECT 1 FROM information_schema.schemata WHERE schema_name = $1
+2026-10-14T03:48:43.008249591Z 2026-10-14 03:48:43.008 UTC [6318] DETAIL:  Parameters: $1 = 'public'
+2026-10-14T03:48:43.008250466Z 2026-10-14 03:48:43.008 UTC [6319] LOG:  execute <unnamed>: SELECT 1 FROM information_schema.schemata WHERE schema_name = $1
+2026-10-14T03:48:43.008251466Z 2026-10-14 03:48:43.008 UTC [6319] DETAIL:  Parameters: $1 = 'public'
+2026-10-14T03:48:43.008341716Z 2026-10-14 03:48:43.008 UTC [6321] LOG:  execute <unnamed>: SELECT 1 FROM information_schema.schemata WHERE schema_name = $1
+2026-10-14T03:48:43.008350757Z 2026-10-14 03:48:43.008 UTC [6321] DETAIL:  Parameters: $1 = 'public'
+2026-10-14T03:48:43.012394341Z 2026-10-14 03:48:43.012 UTC [6319] LOG:  execute <unnamed>: SELECT 1 FROM information_schema.columns WHERE table_schema = $1 AND LOWER(column_name) IN ('_scope', '_revision') LIMIT 1
+2026-10-14T03:48:43.012417382Z 2026-10-14 03:48:43.012 UTC [6319] DETAIL:  Parameters: $1 = 'public'
+2026-10-14T03:48:43.012419216Z 2026-10-14 03:48:43.012 UTC [6317] LOG:  execute <unnamed>: SELECT 1 FROM information_schema.columns WHERE table_schema = $1 AND LOWER(column_name) IN ('_scope', '_revision') LIMIT 1
+2026-10-14T03:48:43.012420549Z 2026-10-14 03:48:43.012 UTC [6317] DETAIL:  Parameters: $1 = 'public'
+2026-10-14T03:48:43.012421466Z 2026-10-14 03:48:43.012 UTC [6322] LOG:  execute <unnamed>: SELECT 1 FROM information_schema.columns WHERE table_schema = $1 AND LOWER(column_name) IN ('_scope', '_revision') LIMIT 1
+2026-10-14T03:48:43.012422507Z 2026-10-14 03:48:43.012 UTC [6322] DETAIL:  Parameters: $1 = 'public'
+2026-10-14T03:48:43.012425091Z 2026-10-14 03:48:43.012 UTC [6320] LOG:  execute <unnamed>: SELECT 1 FROM information_schema.columns WHERE table_schema = $1 AND LOWER(column_name) IN ('_scope', '_revision') LIMIT 1
+2026-10-14T03:48:43.012426132Z 2026-10-14 03:48:43.012 UTC [6320] DETAIL:  Parameters: $1 = 'public'
+2026-10-14T03:48:43.012426966Z 2026-10-14 03:48:43.012 UTC [6321] LOG:  execute <unnamed>: SELECT 1 FROM information_schema.columns WHERE table_schema = $1 AND LOWER(column_name) IN ('_scope', '_revision') LIMIT 1
+2026-10-14T03:48:43.012427966Z 2026-10-14 03:48:43.012 UTC [6321] DETAIL:  Parameters: $1 = 'public'
+2026-10-14T03:48:43.012428799Z 2026-10-14 03:48:43.012 UTC [6323] LOG:  execute <unnamed>: SELECT 1 FROM information_schema.columns WHERE table_schema = $1 AND LOWER(column_name) IN ('_scope', '_revision') LIMIT 1
+2026-10-14T03:48:43.012429799Z 2026-10-14 03:48:43.012 UTC [6323] DETAIL:  Parameters: $1 = 'public'
+2026-10-14T03:48:43.012430632Z 2026-10-14 03:48:43.012 UTC [6318] LOG:  execute <unnamed>: SELECT 1 FROM information_schema.columns WHERE table_schema = $1 AND LOWER(column_name) IN ('_scope', '_revision') LIMIT 1
+2026-10-14T03:48:43.012431632Z 2026-10-14 03:48:43.012 UTC [6318] DETAIL:  Parameters: $1 = 'public'
+2026-10-14T03:48:43.012432424Z 2026-10-14 03:48:43.012 UTC [6316] LOG:  execute <unnamed>: SELECT 1 FROM information_schema.columns WHERE table_schema = $1 AND LOWER(column_name) IN ('_scope', '_revision') LIMIT 1
+2026-10-14T03:48:43.012433466Z 2026-10-14 03:48:43.012 UTC [6316] DETAIL:  Parameters: $1 = 'public'
+2026-10-14T03:48:43.043598299Z 2026-10-14 03:48:43.043 UTC [6320] LOG:  statement: BEGIN
+2026-10-14T03:48:43.043630757Z 2026-10-14 03:48:43.043 UTC [6318] LOG:  statement: BEGIN
+2026-10-14T03:48:43.043866674Z 2026-10-14 03:48:43.043 UTC [6316] LOG:  statement: BEGIN
+2026-10-14T03:48:43.044056924Z 2026-10-14 03:48:43.043 UTC [6319] LOG:  statement: BEGIN
+2026-10-14T03:48:43.044230424Z 2026-10-14 03:48:43.044 UTC [6317] LOG:  statement: BEGIN
+2026-10-14T03:48:43.044237091Z 2026-10-14 03:48:43.044 UTC [6321] LOG:  statement: BEGIN
+2026-10-14T03:48:43.044370966Z 2026-10-14 03:48:43.044 UTC [6322] LOG:  statement: BEGIN
+2026-10-14T03:48:43.044533382Z 2026-10-14 03:48:43.044 UTC [6318] LOG:  execute <unnamed>: SELECT pg_advisory_xact_lock($1)
+2026-10-14T03:48:43.044556799Z 2026-10-14 03:48:43.044 UTC [6318] DETAIL:  Parameters: $1 = '-5266392685775830702'
+2026-10-14T03:48:43.045243924Z 2026-10-14 03:48:43.045 UTC [6323] LOG:  statement: BEGIN
+2026-10-14T03:48:43.045249591Z 2026-10-14 03:48:43.045 UTC [6320] LOG:  execute <unnamed>: SELECT pg_advisory_xact_lock($1)
+2026-10-14T03:48:43.045250841Z 2026-10-14 03:48:43.045 UTC [6320] DETAIL:  Parameters: $1 = '-5266392685775830702'
+2026-10-14T03:48:43.045251674Z 2026-10-14 03:48:43.045 UTC [6316] LOG:  execute <unnamed>: SELECT pg_advisory_xact_lock($1)
+2026-10-14T03:48:43.045252382Z 2026-10-14 03:48:43.045 UTC [6316] DETAIL:  Parameters: $1 = '-5266392685775830702'
+2026-10-14T03:48:43.045253091Z 2026-10-14 03:48:43.045 UTC [6321] LOG:  execute <unnamed>: SELECT pg_advisory_xact_lock($1)
+2026-10-14T03:48:43.045253757Z 2026-10-14 03:48:43.045 UTC [6321] DETAIL:  Parameters: $1 = '-5266392685775830702'
+2026-10-14T03:48:43.045254424Z 2026-10-14 03:48:43.045 UTC [6319] LOG:  execute <unnamed>: SELECT pg_advisory_xact_lock($1)
+2026-10-14T03:48:43.045255132Z 2026-10-14 03:48:43.045 UTC [6319] DETAIL:  Parameters: $1 = '-5266392685775830702'
+2026-10-14T03:48:43.045308507Z 2026-10-14 03:48:43.045 UTC [6318] LOG:  statement: CREATE TABLE IF NOT EXISTS "public"."spine_client_subscriptionrecord" ("ID" VARCHAR(512) NOT NULL, "bytes" BYTEA NOT NULL, "status" INT, "when_activation_expires" BIGINT, PRIMARY KEY ("ID"))
+2026-10-14T03:48:43.045324632Z 2026-10-14 03:48:43.045 UTC [6322] LOG:  execute <unnamed>: SELECT pg_advisory_xact_lock($1)
+2026-10-14T03:48:43.045326132Z 2026-10-14 03:48:43.045 UTC [6322] DETAIL:  Parameters: $1 = '-5266392685775830702'
+2026-10-14T03:48:43.045328341Z 2026-10-14 03:48:43.045 UTC [6317] LOG:  execute <unnamed>: SELECT pg_advisory_xact_lock($1)
+2026-10-14T03:48:43.045329174Z 2026-10-14 03:48:43.045 UTC [6317] DETAIL:  Parameters: $1 = '-5266392685775830702'
+2026-10-14T03:48:43.046178299Z 2026-10-14 03:48:43.046 UTC [6323] LOG:  execute <unnamed>: SELECT pg_advisory_xact_lock($1)
+2026-10-14T03:48:43.046187716Z 2026-10-14 03:48:43.046 UTC [6323] DETAIL:  Parameters: $1 = '-5266392685775830702'
+2026-10-14T03:48:43.048359799Z 2026-10-14 03:48:43.048 UTC [6318] LOG:  execute <unnamed>: SELECT column_name, data_type, character_maximum_length, is_nullable, column_default FROM information_schema.columns WHERE table_schema=$1 AND table_name=$2 ORDER BY ordinal_position
+2026-10-14T03:48:43.048371549Z 2026-10-14 03:48:43.048 UTC [6318] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_client_subscriptionrecord'
+2026-10-14T03:48:43.051012591Z 2026-10-14 03:48:43.050 UTC [6318] LOG:  execute <unnamed>: SELECT kcu.column_name, kcu.ordinal_position FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu USING (constraint_catalog, constraint_schema, constraint_name) WHERE tc.table_schema=$1 AND tc.table_name=$2 AND tc.constraint_type = 'PRIMARY KEY' ORDER BY kcu.ordinal_position
+2026-10-14T03:48:43.051030632Z 2026-10-14 03:48:43.050 UTC [6318] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_client_subscriptionrecord'
+2026-10-14T03:48:43.054257924Z 2026-10-14 03:48:43.054 UTC [6318] LOG:  execute <unnamed>: SELECT tc.constraint_name, kcu.column_name, kcu.ordinal_position FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu USING (constraint_catalog, constraint_schema, constraint_name) WHERE tc.table_schema=$1 AND tc.table_name=$2 AND tc.constraint_type = 'UNIQUE' ORDER BY tc.constraint_name, kcu.ordinal_position
+2026-10-14T03:48:43.054266132Z 2026-10-14 03:48:43.054 UTC [6318] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_client_subscriptionrecord'
+2026-10-14T03:48:43.055752424Z 2026-10-14 03:48:43.055 UTC [6318] LOG:  statement: COMMIT
+2026-10-14T03:48:43.057248674Z 2026-10-14 03:48:43.057 UTC [6320] LOG:  statement: CREATE TABLE IF NOT EXISTS "public"."spine_client_subscriptionrecord" ("ID" VARCHAR(512) NOT NULL, "bytes" BYTEA NOT NULL, "status" INT, "when_activation_expires" BIGINT, PRIMARY KEY ("ID"))
+2026-10-14T03:48:43.057486299Z 2026-10-14 03:48:43.057 UTC [6318] LOG:  execute <unnamed>: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" WHERE "status" IS NOT DISTINCT FROM $1 ORDER BY "when_activation_expires" ASC NULLS FIRST, "ID" ASC NULLS FIRST, "ID" ASC LIMIT $2
+2026-10-14T03:48:43.057493257Z 2026-10-14 03:48:43.057 UTC [6318] DETAIL:  Parameters: $1 = '1', $2 = '26'
+2026-10-14T03:48:43.057984799Z 2026-10-14 03:48:43.057 UTC [6318] LOG:  statement: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" ORDER BY "ID" ASC NULLS FIRST, "ID" ASC
+2026-10-14T03:48:43.059146799Z 2026-10-14 03:48:43.059 UTC [6320] LOG:  execute <unnamed>: SELECT column_name, data_type, character_maximum_length, is_nullable, column_default FROM information_schema.columns WHERE table_schema=$1 AND table_name=$2 ORDER BY ordinal_position
+2026-10-14T03:48:43.059155674Z 2026-10-14 03:48:43.059 UTC [6320] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_client_subscriptionrecord'
+2026-10-14T03:48:43.061615091Z 2026-10-14 03:48:43.061 UTC [6320] LOG:  execute <unnamed>: SELECT kcu.column_name, kcu.ordinal_position FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu USING (constraint_catalog, constraint_schema, constraint_name) WHERE tc.table_schema=$1 AND tc.table_name=$2 AND tc.constraint_type = 'PRIMARY KEY' ORDER BY kcu.ordinal_position
+2026-10-14T03:48:43.061626674Z 2026-10-14 03:48:43.061 UTC [6320] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_client_subscriptionrecord'
+2026-10-14T03:48:43.064587174Z 2026-10-14 03:48:43.064 UTC [6320] LOG:  execute <unnamed>: SELECT tc.constraint_name, kcu.column_name, kcu.ordinal_position FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu USING (constraint_catalog, constraint_schema, constraint_name) WHERE tc.table_schema=$1 AND tc.table_name=$2 AND tc.constraint_type = 'UNIQUE' ORDER BY tc.constraint_name, kcu.ordinal_position
+2026-10-14T03:48:43.064599841Z 2026-10-14 03:48:43.064 UTC [6320] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_client_subscriptionrecord'
+2026-10-14T03:48:43.066025007Z 2026-10-14 03:48:43.065 UTC [6320] LOG:  statement: COMMIT
+2026-10-14T03:48:43.066669632Z 2026-10-14 03:48:43.066 UTC [6316] LOG:  statement: CREATE TABLE IF NOT EXISTS "public"."spine_client_subscriptionrecord" ("ID" VARCHAR(512) NOT NULL, "bytes" BYTEA NOT NULL, "status" INT, "when_activation_expires" BIGINT, PRIMARY KEY ("ID"))
+2026-10-14T03:48:43.066853216Z 2026-10-14 03:48:43.066 UTC [6320] LOG:  execute <unnamed>: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" WHERE "status" IS NOT DISTINCT FROM $1 ORDER BY "when_activation_expires" ASC NULLS FIRST, "ID" ASC NULLS FIRST, "ID" ASC LIMIT $2
+2026-10-14T03:48:43.066862049Z 2026-10-14 03:48:43.066 UTC [6320] DETAIL:  Parameters: $1 = '1', $2 = '26'
+2026-10-14T03:48:43.070635591Z 2026-10-14 03:48:43.070 UTC [6320] LOG:  statement: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" ORDER BY "ID" ASC NULLS FIRST, "ID" ASC
+2026-10-14T03:48:43.070648591Z 2026-10-14 03:48:43.070 UTC [6316] LOG:  execute <unnamed>: SELECT column_name, data_type, character_maximum_length, is_nullable, column_default FROM information_schema.columns WHERE table_schema=$1 AND table_name=$2 ORDER BY ordinal_position
+2026-10-14T03:48:43.070650174Z 2026-10-14 03:48:43.070 UTC [6316] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_client_subscriptionrecord'
+2026-10-14T03:48:43.073205299Z 2026-10-14 03:48:43.073 UTC [6316] LOG:  execute <unnamed>: SELECT kcu.column_name, kcu.ordinal_position FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu USING (constraint_catalog, constraint_schema, constraint_name) WHERE tc.table_schema=$1 AND tc.table_name=$2 AND tc.constraint_type = 'PRIMARY KEY' ORDER BY kcu.ordinal_position
+2026-10-14T03:48:43.073215341Z 2026-10-14 03:48:43.073 UTC [6316] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_client_subscriptionrecord'
+2026-10-14T03:48:43.076299632Z 2026-10-14 03:48:43.076 UTC [6316] LOG:  execute <unnamed>: SELECT tc.constraint_name, kcu.column_name, kcu.ordinal_position FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu USING (constraint_catalog, constraint_schema, constraint_name) WHERE tc.table_schema=$1 AND tc.table_name=$2 AND tc.constraint_type = 'UNIQUE' ORDER BY tc.constraint_name, kcu.ordinal_position
+2026-10-14T03:48:43.076308632Z 2026-10-14 03:48:43.076 UTC [6316] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_client_subscriptionrecord'
+2026-10-14T03:48:43.082087257Z 2026-10-14 03:48:43.081 UTC [6316] LOG:  statement: COMMIT
+2026-10-14T03:48:43.083211716Z 2026-10-14 03:48:43.083 UTC [6321] LOG:  statement: CREATE TABLE IF NOT EXISTS "public"."spine_client_subscriptionrecord" ("ID" VARCHAR(512) NOT NULL, "bytes" BYTEA NOT NULL, "status" INT, "when_activation_expires" BIGINT, PRIMARY KEY ("ID"))
+2026-10-14T03:48:43.083376299Z 2026-10-14 03:48:43.083 UTC [6316] LOG:  execute <unnamed>: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" WHERE "status" IS NOT DISTINCT FROM $1 ORDER BY "when_activation_expires" ASC NULLS FIRST, "ID" ASC NULLS FIRST, "ID" ASC LIMIT $2
+2026-10-14T03:48:43.083381049Z 2026-10-14 03:48:43.083 UTC [6316] DETAIL:  Parameters: $1 = '1', $2 = '26'
+2026-10-14T03:48:43.083979799Z 2026-10-14 03:48:43.083 UTC [6316] LOG:  statement: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" ORDER BY "ID" ASC NULLS FIRST, "ID" ASC
+2026-10-14T03:48:43.085221757Z 2026-10-14 03:48:43.085 UTC [6321] LOG:  execute <unnamed>: SELECT column_name, data_type, character_maximum_length, is_nullable, column_default FROM information_schema.columns WHERE table_schema=$1 AND table_name=$2 ORDER BY ordinal_position
+2026-10-14T03:48:43.085242299Z 2026-10-14 03:48:43.085 UTC [6321] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_client_subscriptionrecord'
+2026-10-14T03:48:43.087733299Z 2026-10-14 03:48:43.087 UTC [6321] LOG:  execute <unnamed>: SELECT kcu.column_name, kcu.ordinal_position FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu USING (constraint_catalog, constraint_schema, constraint_name) WHERE tc.table_schema=$1 AND tc.table_name=$2 AND tc.constraint_type = 'PRIMARY KEY' ORDER BY kcu.ordinal_position
+2026-10-14T03:48:43.087742591Z 2026-10-14 03:48:43.087 UTC [6321] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_client_subscriptionrecord'
+2026-10-14T03:48:43.090467716Z 2026-10-14 03:48:43.090 UTC [6321] LOG:  execute <unnamed>: SELECT tc.constraint_name, kcu.column_name, kcu.ordinal_position FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu USING (constraint_catalog, constraint_schema, constraint_name) WHERE tc.table_schema=$1 AND tc.table_name=$2 AND tc.constraint_type = 'UNIQUE' ORDER BY tc.constraint_name, kcu.ordinal_position
+2026-10-14T03:48:43.090472966Z 2026-10-14 03:48:43.090 UTC [6321] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_client_subscriptionrecord'
+2026-10-14T03:48:43.091744299Z 2026-10-14 03:48:43.091 UTC [6321] LOG:  statement: COMMIT
+2026-10-14T03:48:43.092412257Z 2026-10-14 03:48:43.092 UTC [6321] LOG:  execute <unnamed>: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" WHERE "status" IS NOT DISTINCT FROM $1 ORDER BY "when_activation_expires" ASC NULLS FIRST, "ID" ASC NULLS FIRST, "ID" ASC LIMIT $2
+2026-10-14T03:48:43.092418299Z 2026-10-14 03:48:43.092 UTC [6321] DETAIL:  Parameters: $1 = '1', $2 = '26'
+2026-10-14T03:48:43.092419799Z 2026-10-14 03:48:43.092 UTC [6319] LOG:  statement: CREATE TABLE IF NOT EXISTS "public"."spine_client_subscriptionrecord" ("ID" VARCHAR(512) NOT NULL, "bytes" BYTEA NOT NULL, "status" INT, "when_activation_expires" BIGINT, PRIMARY KEY ("ID"))
+2026-10-14T03:48:43.092934716Z 2026-10-14 03:48:43.092 UTC [6321] LOG:  statement: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" ORDER BY "ID" ASC NULLS FIRST, "ID" ASC
+2026-10-14T03:48:43.094195132Z 2026-10-14 03:48:43.094 UTC [6319] LOG:  execute <unnamed>: SELECT column_name, data_type, character_maximum_length, is_nullable, column_default FROM information_schema.columns WHERE table_schema=$1 AND table_name=$2 ORDER BY ordinal_position
+2026-10-14T03:48:43.094198549Z 2026-10-14 03:48:43.094 UTC [6319] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_client_subscriptionrecord'
+2026-10-14T03:48:43.096681257Z 2026-10-14 03:48:43.096 UTC [6319] LOG:  execute <unnamed>: SELECT kcu.column_name, kcu.ordinal_position FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu USING (constraint_catalog, constraint_schema, constraint_name) WHERE tc.table_schema=$1 AND tc.table_name=$2 AND tc.constraint_type = 'PRIMARY KEY' ORDER BY kcu.ordinal_position
+2026-10-14T03:48:43.096684549Z 2026-10-14 03:48:43.096 UTC [6319] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_client_subscriptionrecord'
+2026-10-14T03:48:43.099555507Z 2026-10-14 03:48:43.099 UTC [6319] LOG:  execute <unnamed>: SELECT tc.constraint_name, kcu.column_name, kcu.ordinal_position FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu USING (constraint_catalog, constraint_schema, constraint_name) WHERE tc.table_schema=$1 AND tc.table_name=$2 AND tc.constraint_type = 'UNIQUE' ORDER BY tc.constraint_name, kcu.ordinal_position
+2026-10-14T03:48:43.099573632Z 2026-10-14 03:48:43.099 UTC [6319] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_client_subscriptionrecord'
+2026-10-14T03:48:43.101128424Z 2026-10-14 03:48:43.101 UTC [6319] LOG:  statement: COMMIT
+2026-10-14T03:48:43.101843716Z 2026-10-14 03:48:43.101 UTC [6322] LOG:  statement: CREATE TABLE IF NOT EXISTS "public"."spine_client_subscriptionrecord" ("ID" VARCHAR(512) NOT NULL, "bytes" BYTEA NOT NULL, "status" INT, "when_activation_expires" BIGINT, PRIMARY KEY ("ID"))
+2026-10-14T03:48:43.101984007Z 2026-10-14 03:48:43.101 UTC [6319] LOG:  execute <unnamed>: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" WHERE "status" IS NOT DISTINCT FROM $1 ORDER BY "when_activation_expires" ASC NULLS FIRST, "ID" ASC NULLS FIRST, "ID" ASC LIMIT $2
+2026-10-14T03:48:43.101989674Z 2026-10-14 03:48:43.101 UTC [6319] DETAIL:  Parameters: $1 = '1', $2 = '26'
+2026-10-14T03:48:43.102430924Z 2026-10-14 03:48:43.102 UTC [6319] LOG:  statement: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" ORDER BY "ID" ASC NULLS FIRST, "ID" ASC
+2026-10-14T03:48:43.103631549Z 2026-10-14 03:48:43.103 UTC [6322] LOG:  execute <unnamed>: SELECT column_name, data_type, character_maximum_length, is_nullable, column_default FROM information_schema.columns WHERE table_schema=$1 AND table_name=$2 ORDER BY ordinal_position
+2026-10-14T03:48:43.103636507Z 2026-10-14 03:48:43.103 UTC [6322] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_client_subscriptionrecord'
+2026-10-14T03:48:43.106055841Z 2026-10-14 03:48:43.105 UTC [6322] LOG:  execute <unnamed>: SELECT kcu.column_name, kcu.ordinal_position FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu USING (constraint_catalog, constraint_schema, constraint_name) WHERE tc.table_schema=$1 AND tc.table_name=$2 AND tc.constraint_type = 'PRIMARY KEY' ORDER BY kcu.ordinal_position
+2026-10-14T03:48:43.106060216Z 2026-10-14 03:48:43.105 UTC [6322] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_client_subscriptionrecord'
+2026-10-14T03:48:43.109045966Z 2026-10-14 03:48:43.108 UTC [6322] LOG:  execute <unnamed>: SELECT tc.constraint_name, kcu.column_name, kcu.ordinal_position FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu USING (constraint_catalog, constraint_schema, constraint_name) WHERE tc.table_schema=$1 AND tc.table_name=$2 AND tc.constraint_type = 'UNIQUE' ORDER BY tc.constraint_name, kcu.ordinal_position
+2026-10-14T03:48:43.109053549Z 2026-10-14 03:48:43.108 UTC [6322] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_client_subscriptionrecord'
+2026-10-14T03:48:43.110561216Z 2026-10-14 03:48:43.110 UTC [6322] LOG:  statement: COMMIT
+2026-10-14T03:48:43.111418924Z 2026-10-14 03:48:43.111 UTC [6317] LOG:  statement: CREATE TABLE IF NOT EXISTS "public"."spine_client_subscriptionrecord" ("ID" VARCHAR(512) NOT NULL, "bytes" BYTEA NOT NULL, "status" INT, "when_activation_expires" BIGINT, PRIMARY KEY ("ID"))
+2026-10-14T03:48:43.111614632Z 2026-10-14 03:48:43.111 UTC [6322] LOG:  execute <unnamed>: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" WHERE "status" IS NOT DISTINCT FROM $1 ORDER BY "when_activation_expires" ASC NULLS FIRST, "ID" ASC NULLS FIRST, "ID" ASC LIMIT $2
+2026-10-14T03:48:43.111625591Z 2026-10-14 03:48:43.111 UTC [6322] DETAIL:  Parameters: $1 = '1', $2 = '26'
+2026-10-14T03:48:43.112046757Z 2026-10-14 03:48:43.111 UTC [6322] LOG:  statement: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" ORDER BY "ID" ASC NULLS FIRST, "ID" ASC
+2026-10-14T03:48:43.113242007Z 2026-10-14 03:48:43.113 UTC [6317] LOG:  execute <unnamed>: SELECT column_name, data_type, character_maximum_length, is_nullable, column_default FROM information_schema.columns WHERE table_schema=$1 AND table_name=$2 ORDER BY ordinal_position
+2026-10-14T03:48:43.113246341Z 2026-10-14 03:48:43.113 UTC [6317] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_client_subscriptionrecord'
+2026-10-14T03:48:43.115595799Z 2026-10-14 03:48:43.115 UTC [6317] LOG:  execute <unnamed>: SELECT kcu.column_name, kcu.ordinal_position FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu USING (constraint_catalog, constraint_schema, constraint_name) WHERE tc.table_schema=$1 AND tc.table_name=$2 AND tc.constraint_type = 'PRIMARY KEY' ORDER BY kcu.ordinal_position
+2026-10-14T03:48:43.115602299Z 2026-10-14 03:48:43.115 UTC [6317] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_client_subscriptionrecord'
+2026-10-14T03:48:43.118622716Z 2026-10-14 03:48:43.118 UTC [6317] LOG:  execute <unnamed>: SELECT tc.constraint_name, kcu.column_name, kcu.ordinal_position FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu USING (constraint_catalog, constraint_schema, constraint_name) WHERE tc.table_schema=$1 AND tc.table_name=$2 AND tc.constraint_type = 'UNIQUE' ORDER BY tc.constraint_name, kcu.ordinal_position
+2026-10-14T03:48:43.118627382Z 2026-10-14 03:48:43.118 UTC [6317] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_client_subscriptionrecord'
+2026-10-14T03:48:43.120113299Z 2026-10-14 03:48:43.120 UTC [6317] LOG:  statement: COMMIT
+2026-10-14T03:48:43.120744216Z 2026-10-14 03:48:43.120 UTC [6323] LOG:  statement: CREATE TABLE IF NOT EXISTS "public"."spine_client_subscriptionrecord" ("ID" VARCHAR(512) NOT NULL, "bytes" BYTEA NOT NULL, "status" INT, "when_activation_expires" BIGINT, PRIMARY KEY ("ID"))
+2026-10-14T03:48:43.120748507Z 2026-10-14 03:48:43.120 UTC [6317] LOG:  execute <unnamed>: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" WHERE "status" IS NOT DISTINCT FROM $1 ORDER BY "when_activation_expires" ASC NULLS FIRST, "ID" ASC NULLS FIRST, "ID" ASC LIMIT $2
+2026-10-14T03:48:43.120750049Z 2026-10-14 03:48:43.120 UTC [6317] DETAIL:  Parameters: $1 = '1', $2 = '26'
+2026-10-14T03:48:43.121196341Z 2026-10-14 03:48:43.121 UTC [6317] LOG:  statement: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" ORDER BY "ID" ASC NULLS FIRST, "ID" ASC
+2026-10-14T03:48:43.122462424Z 2026-10-14 03:48:43.122 UTC [6323] LOG:  execute <unnamed>: SELECT column_name, data_type, character_maximum_length, is_nullable, column_default FROM information_schema.columns WHERE table_schema=$1 AND table_name=$2 ORDER BY ordinal_position
+2026-10-14T03:48:43.122469507Z 2026-10-14 03:48:43.122 UTC [6323] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_client_subscriptionrecord'
+2026-10-14T03:48:43.124827716Z 2026-10-14 03:48:43.124 UTC [6323] LOG:  execute <unnamed>: SELECT kcu.column_name, kcu.ordinal_position FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu USING (constraint_catalog, constraint_schema, constraint_name) WHERE tc.table_schema=$1 AND tc.table_name=$2 AND tc.constraint_type = 'PRIMARY KEY' ORDER BY kcu.ordinal_position
+2026-10-14T03:48:43.124845091Z 2026-10-14 03:48:43.124 UTC [6323] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_client_subscriptionrecord'
+2026-10-14T03:48:43.127708841Z 2026-10-14 03:48:43.127 UTC [6323] LOG:  execute <unnamed>: SELECT tc.constraint_name, kcu.column_name, kcu.ordinal_position FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu USING (constraint_catalog, constraint_schema, constraint_name) WHERE tc.table_schema=$1 AND tc.table_name=$2 AND tc.constraint_type = 'UNIQUE' ORDER BY tc.constraint_name, kcu.ordinal_position
+2026-10-14T03:48:43.127715049Z 2026-10-14 03:48:43.127 UTC [6323] DETAIL:  Parameters: $1 = 'public', $2 = 'spine_client_subscriptionrecord'
+2026-10-14T03:48:43.129124257Z 2026-10-14 03:48:43.129 UTC [6323] LOG:  statement: COMMIT
+2026-10-14T03:48:43.129763466Z 2026-10-14 03:48:43.129 UTC [6323] LOG:  execute <unnamed>: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" WHERE "status" IS NOT DISTINCT FROM $1 ORDER BY "when_activation_expires" ASC NULLS FIRST, "ID" ASC NULLS FIRST, "ID" ASC LIMIT $2
+2026-10-14T03:48:43.129770591Z 2026-10-14 03:48:43.129 UTC [6323] DETAIL:  Parameters: $1 = '1', $2 = '26'
+2026-10-14T03:48:43.130116674Z 2026-10-14 03:48:43.130 UTC [6323] LOG:  statement: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" ORDER BY "ID" ASC NULLS FIRST, "ID" ASC
+2026-10-14T03:48:53.041440470Z 2026-10-14 03:48:53.040 UTC [6319] LOG:  execute <unnamed>: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" WHERE "status" IS NOT DISTINCT FROM $1 ORDER BY "when_activation_expires" ASC NULLS FIRST, "ID" ASC NULLS FIRST, "ID" ASC LIMIT $2
+2026-10-14T03:48:53.041475637Z 2026-10-14 03:48:53.040 UTC [6319] DETAIL:  Parameters: $1 = '1', $2 = '26'
+2026-10-14T03:48:53.042398304Z 2026-10-14 03:48:53.041 UTC [6318] LOG:  execute <unnamed>: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" WHERE "status" IS NOT DISTINCT FROM $1 ORDER BY "when_activation_expires" ASC NULLS FIRST, "ID" ASC NULLS FIRST, "ID" ASC LIMIT $2
+2026-10-14T03:48:53.042421929Z 2026-10-14 03:48:53.041 UTC [6318] DETAIL:  Parameters: $1 = '1', $2 = '26'
+2026-10-14T03:48:53.042425179Z 2026-10-14 03:48:53.041 UTC [6317] LOG:  execute <unnamed>: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" WHERE "status" IS NOT DISTINCT FROM $1 ORDER BY "when_activation_expires" ASC NULLS FIRST, "ID" ASC NULLS FIRST, "ID" ASC LIMIT $2
+2026-10-14T03:48:53.042427970Z 2026-10-14 03:48:53.041 UTC [6317] DETAIL:  Parameters: $1 = '1', $2 = '26'
+2026-10-14T03:48:53.042429804Z 2026-10-14 03:48:53.041 UTC [6320] LOG:  execute <unnamed>: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" WHERE "status" IS NOT DISTINCT FROM $1 ORDER BY "when_activation_expires" ASC NULLS FIRST, "ID" ASC NULLS FIRST, "ID" ASC LIMIT $2
+2026-10-14T03:48:53.042432137Z 2026-10-14 03:48:53.041 UTC [6320] DETAIL:  Parameters: $1 = '1', $2 = '26'
+2026-10-14T03:48:53.042447304Z 2026-10-14 03:48:53.042 UTC [6316] LOG:  execute <unnamed>: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" WHERE "status" IS NOT DISTINCT FROM $1 ORDER BY "when_activation_expires" ASC NULLS FIRST, "ID" ASC NULLS FIRST, "ID" ASC LIMIT $2
+2026-10-14T03:48:53.042450637Z 2026-10-14 03:48:53.042 UTC [6316] DETAIL:  Parameters: $1 = '1', $2 = '26'
+2026-10-14T03:48:53.042452220Z 2026-10-14 03:48:53.042 UTC [6322] LOG:  execute <unnamed>: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" WHERE "status" IS NOT DISTINCT FROM $1 ORDER BY "when_activation_expires" ASC NULLS FIRST, "ID" ASC NULLS FIRST, "ID" ASC LIMIT $2
+2026-10-14T03:48:53.042454512Z 2026-10-14 03:48:53.042 UTC [6322] DETAIL:  Parameters: $1 = '1', $2 = '26'
+2026-10-14T03:48:53.042456054Z 2026-10-14 03:48:53.042 UTC [6321] LOG:  execute <unnamed>: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" WHERE "status" IS NOT DISTINCT FROM $1 ORDER BY "when_activation_expires" ASC NULLS FIRST, "ID" ASC NULLS FIRST, "ID" ASC LIMIT $2
+2026-10-14T03:48:53.042458679Z 2026-10-14 03:48:53.042 UTC [6321] DETAIL:  Parameters: $1 = '1', $2 = '26'
+2026-10-14T03:48:53.043543429Z 2026-10-14 03:48:53.042 UTC [6319] LOG:  statement: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" ORDER BY "ID" ASC NULLS FIRST, "ID" ASC
+2026-10-14T03:48:53.043563429Z 2026-10-14 03:48:53.042 UTC [6323] LOG:  execute <unnamed>: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" WHERE "status" IS NOT DISTINCT FROM $1 ORDER BY "when_activation_expires" ASC NULLS FIRST, "ID" ASC NULLS FIRST, "ID" ASC LIMIT $2
+2026-10-14T03:48:53.043567804Z 2026-10-14 03:48:53.042 UTC [6323] DETAIL:  Parameters: $1 = '1', $2 = '26'
+2026-10-14T03:48:53.049622387Z 2026-10-14 03:48:53.044 UTC [6320] LOG:  statement: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" ORDER BY "ID" ASC NULLS FIRST, "ID" ASC
+2026-10-14T03:48:53.049646470Z 2026-10-14 03:48:53.044 UTC [6322] LOG:  statement: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" ORDER BY "ID" ASC NULLS FIRST, "ID" ASC
+2026-10-14T03:48:53.049650179Z 2026-10-14 03:48:53.044 UTC [6317] LOG:  statement: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" ORDER BY "ID" ASC NULLS FIRST, "ID" ASC
+2026-10-14T03:48:53.049652262Z 2026-10-14 03:48:53.044 UTC [6316] LOG:  statement: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" ORDER BY "ID" ASC NULLS FIRST, "ID" ASC
+2026-10-14T03:48:53.049654304Z 2026-10-14 03:48:53.044 UTC [6321] LOG:  statement: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" ORDER BY "ID" ASC NULLS FIRST, "ID" ASC
+2026-10-14T03:48:53.049656054Z 2026-10-14 03:48:53.049 UTC [6318] LOG:  statement: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" ORDER BY "ID" ASC NULLS FIRST, "ID" ASC
+2026-10-14T03:48:53.050023429Z 2026-10-14 03:48:53.049 UTC [6323] LOG:  statement: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" ORDER BY "ID" ASC NULLS FIRST, "ID" ASC
+2026-10-14T03:48:55.093590763Z 2026-10-14 03:48:55.093 UTC [6315] LOG:  statement: SELECT 'sqlrel_trace_warmup_begin' AS marker
+2026-10-14T03:49:03.039186003Z 2026-10-14 03:49:03.038 UTC [6316] LOG:  execute <unnamed>: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" WHERE "status" IS NOT DISTINCT FROM $1 ORDER BY "when_activation_expires" ASC NULLS FIRST, "ID" ASC NULLS FIRST, "ID" ASC LIMIT $2
+2026-10-14T03:49:03.039239128Z 2026-10-14 03:49:03.038 UTC [6316] DETAIL:  Parameters: $1 = '1', $2 = '26'
+2026-10-14T03:49:03.039245878Z 2026-10-14 03:49:03.038 UTC [6319] LOG:  execute <unnamed>: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" WHERE "status" IS NOT DISTINCT FROM $1 ORDER BY "when_activation_expires" ASC NULLS FIRST, "ID" ASC NULLS FIRST, "ID" ASC LIMIT $2
+2026-10-14T03:49:03.039252586Z 2026-10-14 03:49:03.038 UTC [6319] DETAIL:  Parameters: $1 = '1', $2 = '26'
+2026-10-14T03:49:03.039288919Z 2026-10-14 03:49:03.038 UTC [6318] LOG:  execute <unnamed>: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" WHERE "status" IS NOT DISTINCT FROM $1 ORDER BY "when_activation_expires" ASC NULLS FIRST, "ID" ASC NULLS FIRST, "ID" ASC LIMIT $2
+2026-10-14T03:49:03.039297086Z 2026-10-14 03:49:03.038 UTC [6318] DETAIL:  Parameters: $1 = '1', $2 = '26'
+2026-10-14T03:49:03.039301294Z 2026-10-14 03:49:03.038 UTC [6320] LOG:  execute <unnamed>: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" WHERE "status" IS NOT DISTINCT FROM $1 ORDER BY "when_activation_expires" ASC NULLS FIRST, "ID" ASC NULLS FIRST, "ID" ASC LIMIT $2
+2026-10-14T03:49:03.039306794Z 2026-10-14 03:49:03.038 UTC [6320] DETAIL:  Parameters: $1 = '1', $2 = '26'
+2026-10-14T03:49:03.041436378Z 2026-10-14 03:49:03.040 UTC [6320] LOG:  statement: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" ORDER BY "ID" ASC NULLS FIRST, "ID" ASC
+2026-10-14T03:49:03.041460044Z 2026-10-14 03:49:03.040 UTC [6316] LOG:  statement: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" ORDER BY "ID" ASC NULLS FIRST, "ID" ASC
+2026-10-14T03:49:03.041465044Z 2026-10-14 03:49:03.041 UTC [6322] LOG:  execute <unnamed>: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" WHERE "status" IS NOT DISTINCT FROM $1 ORDER BY "when_activation_expires" ASC NULLS FIRST, "ID" ASC NULLS FIRST, "ID" ASC LIMIT $2
+2026-10-14T03:49:03.041469836Z 2026-10-14 03:49:03.041 UTC [6322] DETAIL:  Parameters: $1 = '1', $2 = '26'
+2026-10-14T03:49:03.041472503Z 2026-10-14 03:49:03.041 UTC [6319] LOG:  statement: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" ORDER BY "ID" ASC NULLS FIRST, "ID" ASC
+2026-10-14T03:49:03.041475544Z 2026-10-14 03:49:03.041 UTC [6318] LOG:  statement: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" ORDER BY "ID" ASC NULLS FIRST, "ID" ASC
+2026-10-14T03:49:03.041478503Z 2026-10-14 03:49:03.041 UTC [6317] LOG:  execute <unnamed>: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" WHERE "status" IS NOT DISTINCT FROM $1 ORDER BY "when_activation_expires" ASC NULLS FIRST, "ID" ASC NULLS FIRST, "ID" ASC LIMIT $2
+2026-10-14T03:49:03.041482003Z 2026-10-14 03:49:03.041 UTC [6317] DETAIL:  Parameters: $1 = '1', $2 = '26'
+2026-10-14T03:49:03.042364669Z 2026-10-14 03:49:03.042 UTC [6323] LOG:  execute <unnamed>: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" WHERE "status" IS NOT DISTINCT FROM $1 ORDER BY "when_activation_expires" ASC NULLS FIRST, "ID" ASC NULLS FIRST, "ID" ASC LIMIT $2
+2026-10-14T03:49:03.042396086Z 2026-10-14 03:49:03.042 UTC [6323] DETAIL:  Parameters: $1 = '1', $2 = '26'
+2026-10-14T03:49:03.042399003Z 2026-10-14 03:49:03.042 UTC [6321] LOG:  execute <unnamed>: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" WHERE "status" IS NOT DISTINCT FROM $1 ORDER BY "when_activation_expires" ASC NULLS FIRST, "ID" ASC NULLS FIRST, "ID" ASC LIMIT $2
+2026-10-14T03:49:03.042402003Z 2026-10-14 03:49:03.042 UTC [6321] DETAIL:  Parameters: $1 = '1', $2 = '26'
+2026-10-14T03:49:03.043120461Z 2026-10-14 03:49:03.042 UTC [6322] LOG:  statement: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" ORDER BY "ID" ASC NULLS FIRST, "ID" ASC
+2026-10-14T03:49:03.043143086Z 2026-10-14 03:49:03.042 UTC [6317] LOG:  statement: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" ORDER BY "ID" ASC NULLS FIRST, "ID" ASC
+2026-10-14T03:49:03.043553128Z 2026-10-14 03:49:03.043 UTC [6323] LOG:  statement: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" ORDER BY "ID" ASC NULLS FIRST, "ID" ASC
+2026-10-14T03:49:03.043569253Z 2026-10-14 03:49:03.043 UTC [6321] LOG:  statement: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" ORDER BY "ID" ASC NULLS FIRST, "ID" ASC
+2026-10-14T03:49:13.044095966Z 2026-10-14 03:49:13.043 UTC [6318] LOG:  execute <unnamed>: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" WHERE "status" IS NOT DISTINCT FROM $1 ORDER BY "when_activation_expires" ASC NULLS FIRST, "ID" ASC NULLS FIRST, "ID" ASC LIMIT $2
+2026-10-14T03:49:13.044134882Z 2026-10-14 03:49:13.043 UTC [6318] DETAIL:  Parameters: $1 = '1', $2 = '26'
+2026-10-14T03:49:13.044138507Z 2026-10-14 03:49:13.043 UTC [6320] LOG:  execute <unnamed>: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" WHERE "status" IS NOT DISTINCT FROM $1 ORDER BY "when_activation_expires" ASC NULLS FIRST, "ID" ASC NULLS FIRST, "ID" ASC LIMIT $2
+2026-10-14T03:49:13.044141716Z 2026-10-14 03:49:13.043 UTC [6320] DETAIL:  Parameters: $1 = '1', $2 = '26'
+2026-10-14T03:49:13.044915466Z 2026-10-14 03:49:13.044 UTC [6316] LOG:  execute <unnamed>: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" WHERE "status" IS NOT DISTINCT FROM $1 ORDER BY "when_activation_expires" ASC NULLS FIRST, "ID" ASC NULLS FIRST, "ID" ASC LIMIT $2
+2026-10-14T03:49:13.044932216Z 2026-10-14 03:49:13.044 UTC [6316] DETAIL:  Parameters: $1 = '1', $2 = '26'
+2026-10-14T03:49:13.044934716Z 2026-10-14 03:49:13.044 UTC [6319] LOG:  execute <unnamed>: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" WHERE "status" IS NOT DISTINCT FROM $1 ORDER BY "when_activation_expires" ASC NULLS FIRST, "ID" ASC NULLS FIRST, "ID" ASC LIMIT $2
+2026-10-14T03:49:13.044937132Z 2026-10-14 03:49:13.044 UTC [6319] DETAIL:  Parameters: $1 = '1', $2 = '26'
+2026-10-14T03:49:13.045786549Z 2026-10-14 03:49:13.045 UTC [6317] LOG:  execute <unnamed>: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" WHERE "status" IS NOT DISTINCT FROM $1 ORDER BY "when_activation_expires" ASC NULLS FIRST, "ID" ASC NULLS FIRST, "ID" ASC LIMIT $2
+2026-10-14T03:49:13.045876924Z 2026-10-14 03:49:13.045 UTC [6317] DETAIL:  Parameters: $1 = '1', $2 = '26'
+2026-10-14T03:49:13.045881966Z 2026-10-14 03:49:13.045 UTC [6323] LOG:  execute <unnamed>: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" WHERE "status" IS NOT DISTINCT FROM $1 ORDER BY "when_activation_expires" ASC NULLS FIRST, "ID" ASC NULLS FIRST, "ID" ASC LIMIT $2
+2026-10-14T03:49:13.045884841Z 2026-10-14 03:49:13.045 UTC [6323] DETAIL:  Parameters: $1 = '1', $2 = '26'
+2026-10-14T03:49:13.045886466Z 2026-10-14 03:49:13.045 UTC [6321] LOG:  execute <unnamed>: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" WHERE "status" IS NOT DISTINCT FROM $1 ORDER BY "when_activation_expires" ASC NULLS FIRST, "ID" ASC NULLS FIRST, "ID" ASC LIMIT $2
+2026-10-14T03:49:13.045888757Z 2026-10-14 03:49:13.045 UTC [6321] DETAIL:  Parameters: $1 = '1', $2 = '26'
+2026-10-14T03:49:13.046686757Z 2026-10-14 03:49:13.045 UTC [6322] LOG:  execute <unnamed>: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" WHERE "status" IS NOT DISTINCT FROM $1 ORDER BY "when_activation_expires" ASC NULLS FIRST, "ID" ASC NULLS FIRST, "ID" ASC LIMIT $2
+2026-10-14T03:49:13.046700049Z 2026-10-14 03:49:13.045 UTC [6322] DETAIL:  Parameters: $1 = '1', $2 = '26'
+2026-10-14T03:49:13.046701966Z 2026-10-14 03:49:13.045 UTC [6318] LOG:  statement: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" ORDER BY "ID" ASC NULLS FIRST, "ID" ASC
+2026-10-14T03:49:13.046704091Z 2026-10-14 03:49:13.046 UTC [6320] LOG:  statement: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" ORDER BY "ID" ASC NULLS FIRST, "ID" ASC
+2026-10-14T03:49:13.047715882Z 2026-10-14 03:49:13.047 UTC [6319] LOG:  statement: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" ORDER BY "ID" ASC NULLS FIRST, "ID" ASC
+2026-10-14T03:49:13.047731174Z 2026-10-14 03:49:13.047 UTC [6316] LOG:  statement: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" ORDER BY "ID" ASC NULLS FIRST, "ID" ASC
+2026-10-14T03:49:13.047861132Z 2026-10-14 03:49:13.047 UTC [6321] LOG:  statement: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" ORDER BY "ID" ASC NULLS FIRST, "ID" ASC
+2026-10-14T03:49:13.047868591Z 2026-10-14 03:49:13.047 UTC [6323] LOG:  statement: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" ORDER BY "ID" ASC NULLS FIRST, "ID" ASC
+2026-10-14T03:49:13.047870799Z 2026-10-14 03:49:13.047 UTC [6317] LOG:  statement: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" ORDER BY "ID" ASC NULLS FIRST, "ID" ASC
+2026-10-14T03:49:13.048613466Z 2026-10-14 03:49:13.048 UTC [6322] LOG:  statement: SELECT "ID", "bytes" FROM "public"."spine_client_subscriptionrecord" ORDER BY "ID" ASC NULLS FIRST, "ID" ASC
+2026-10-14T03:49:20.098430136Z 2026-10-14 03:49:20.098 UTC [6315] LOG:  statement: SELECT 'sqlrel_trace_capture_end' AS marker

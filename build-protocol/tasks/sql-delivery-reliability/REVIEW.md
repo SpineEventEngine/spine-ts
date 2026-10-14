@@ -629,3 +629,62 @@ review is relevant. Timer wording clarification in the Delivery server guide and
 reference is source-backed and reserved for the final prose review. The retained
 worker takeover verification gap is closed, within its stated timer/process
 limits.
+
+## Idle recurring schema statements: bounded source diagnosis
+
+The warmed PostgreSQL control persisted 24 DDL matches within its measured idle
+window. Dispatch an existing performance/reliability concern with explicit
+`gpt-6-sol` / `medium` to trace those exact statements to recurring runtime paths
+and identify whether their work is bounded per process/scan or accumulates.
+This is evidence-led read-only diagnosis while the remaining matrix runs, not a
+request for speculative caching or a new architecture. The complete counts are
+pending; do not classify a production defect from statement volume alone.
+No source edits or tests/builds are authorized in this assignment. Runtime
+introspection is unavailable; both dispatch fields must be explicit. The same
+implementation context will receive any confirmed scoped correction later.
+
+## Final verification-harness additions review wave
+
+The idle matrix is complete (16/16, stable hashes, SQL counts reconciled), and
+transport fault source is frozen after 54 passing grid rows plus all 18 PG16
+controls; its final MariaDB batch is underway. All scoped static checks pass.
+Dispatch existing style/maintainability and performance/reliability concerns
+with explicit `gpt-6-sol` / `medium` fields. Capacity sequences these two lanes;
+collect both before corrections. Scope: new project-idle-sql.mjs, the new three
+scenario branches in project-subscription-transport.mjs and their integration
+wrapper, plus corresponding mechanical wrapper assertions/evidence. Preserve
+accepted old scenario/capture/helper reviews unless a concrete interaction
+changes them. Review bounded processes, exact signal/recipient/Cancel assertions,
+real transport boundaries, SQL marker attribution and claims/provenance. No
+production API or wire contract changed in this slice, so API is N/A. Parent
+keeps same-process fanout, per-handle schema costs and finite-window timing
+limits explicit; final public documentation review remains due. Runtime
+introspection unavailable; explicit immutable configured profiles satisfy the
+dispatch gate. Current estimate is 88% and 2–4 hours, including examples, final
+reviews, security and release verification.
+
+Final harness review wave aggregated: idle fixture/measurement has no accepted
+finding; duplicate-ACK terminal scenario has no finding. Accept two deduplicated
+P2 corrections in transport tests: (1) assert and preserve primary admitted IDs,
+the first failed Cancel and later successful same-ID retry, successful cleanup
+of both distinct registrations, and the original unavailable activation error;
+(2) establish exact server-side Event publication/delivery during the held
+cancellation race, plus precise final removal, rather than inferring publication
+from Command acceptance and a closed client iterator. Return this complete batch
+to the same explicit Sol/medium implementer. Both reviewer profiles match and
+runtime introspection is unavailable. Preserve the 72 original passes with their
+actual narrower assertions; rerun the two substantively strengthened scenarios
+across the existing engine/protocol/mode grid (48 affected rows), leaving the
+accepted duplicate-ACK and idle rows unchanged. A targeted reliability rereview
+covers the new race observation; style's exact-ID assertion is deterministic and
+does not reopen its lane. No new runtime contract or broad review is required.
+
+Idle verification slice accepted independently: both final-harness reviewers
+report no finding for its driver, marker attribution or bounded measurements.
+The explicit Luna/low matrix profile matches its assignment; the sixteen fresh
+rows have stable recorded hashes, reconciled raw SQL counts and successful
+resource/logging cleanup. Style and reliability are clean for this slice; API
+is N/A because no runtime/exported contract changes, and parent documentation
+retains the measured-window/schema-cost limits. Final public prose review remains
+separate. Checkpoint this accepted slice while unrelated transport assertions
+and example source continue.

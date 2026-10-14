@@ -34,17 +34,27 @@ and the measured artifacts for bounded claims.
 
 - Retained shared Delivery server takeover passed all eight four-engine/two-and-eight-process rows with complete interruption-time Inbox observations and source/runtime provenance. Pending work remained at 35–36 seconds and finished at 60.48–61.34 seconds. The successful Command entered once; the selected interrupted Event handler entered once before death and once on a replacement. Other handlers entered once in these final rows. A PostgreSQL 16 two-process server-timeout override also completed near 60 seconds. All test databases and children were cleaned up. Fixture reliability/style review is accepted after a stronger saved-trace audit and fresh live control; this is not a hard takeover deadline or exactly-once guarantee.
 
+- Idle SQL passed all 16 four-engine/two-and-eight-process/Delivery-mode rows
+  after 12-second warmup and 25-second marked windows. Counts include recurring
+  schema initialization: database-only 190–224 statements at two processes and
+  1,398–1,984 at eight; shared Delivery eight and 32 respectively. All measured
+  resources were cleaned up, SQL logging restored and recorded hashes stable.
+  These are bounded observations, not throughput or long-duration load claims.
+- The final real-wire fault grid passed 72/72: publication versus Cancel,
+  duplicate-ACK terminal protocol failure without retry, and transient Cancel
+  failure during partial activation followed by cleanup retry. Every database
+  was dropped with zero remaining sessions/errors. All four provider batches
+  share the same recorded source/runtime hashes. Same-process backend fanout
+  remains distinguished from OS-managed application restart.
+
 ## Remaining work
 
-- Measure idle SQL at two/eight application processes. Corrected supervisor/SQL
-  component tests now pass 16/16 across four engines, including default/override
-  scans and separate-process late writes before/after confirmed shard release.
-  The before-release writer proves its SQL pickup was blocked; notifications
-  are deliberately absent. These bounded component tests do not replace the
-  retained-server application-worker takeover case below.
-- Add explicit real-wire publication-versus-Cancel ordering, protocol-invalid
-  terminal failure, and failed cleanup during partial child fanout. Keep
-  existing finite client retry/exhaustion evidence and cleanup bounds distinct.
+- Resolve the two accepted transport-harness assertion findings: exact primary
+  admitted-ID cleanup/error preservation, and exact server-side publication
+  during the held Cancel race. Rerun the 48 affected configurations and obtain
+  targeted reliability review of the race evidence. The 16 idle cases and 24
+  duplicate-ACK cases remain accepted; the original 72-row grid retains its
+  narrower recorded assertions and does not prove the missing observations.
 - Correct Orders/Projects load examples to distinguish readiness ACKs from
   actual business updates; finish coherent isolated launcher ports/images,
   explicit process/shard counts and eight/eight verification. Execute all five

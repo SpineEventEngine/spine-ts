@@ -1,0 +1,20 @@
+{
+  "providerName": "mariadb114",
+  "count": 8,
+  "mode": "shared-memory",
+  "database": "sqlrel_idle_e5d00025e1164559a7ecb9b6a8ac01ed",
+  "warmupMs": 12000,
+  "began": 1791950059067,
+  "ended": 1791950084073,
+  "workerPids": [
+    84127,
+    84128,
+    84129,
+    84130,
+    84131,
+    84132,
+    84133,
+    84134
+  ],
+  "deliveryPid": 84123
+}

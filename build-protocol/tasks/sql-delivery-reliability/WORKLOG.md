@@ -949,3 +949,31 @@ logging-restoration evidence. The confirmed exact-container capture helper must
 serialize capture on the same SQL server. No builds/source changes during the
 matrix; transport-only fixture authoring may proceed independently. Report
 bounded observed process scaling, not throughput or production capacity claims.
+
+The retained-server takeover checkpoint is committed and pushed as
+`b7cecb2da9a900ec2a16dbb29fc299268dcf6c72`. All accepted review corrections and
+bounded evidence are included; no PR was created. The independent idle driver is
+now frozen after a passing 12-second-warmup/25-second-window PostgreSQL control.
+The existing explicit Luna/low function is resumed for the remaining matrix rows.
+The first trace contains repeated DDL inside the measured window; count it as
+idle cost and classify only after comparing process counts, never relabel it as
+excluded startup. The same Sol/medium implementer proceeds with transport-only
+fixture files, leaving the measured worker and dist unchanged.
+
+## Remaining transport fault grid handoff
+
+The existing implementer reports three new fault cases green on PostgreSQL 16
+across native gRPC, gRPC-Web and Connect: publication-versus-Cancel ordering,
+terminal duplicate wire ACK, and partial child activation with an injected
+cleanup Cancel failure followed by retry. Freeze the test-only source after its
+scoped static checks and shared-mode controls. Dispatch an independent existing
+mechanical verification function explicitly `gpt-6-luna` / `low` for the complete
+four-engine/three-protocol/two-Delivery-mode grid, three scenarios (72 rows).
+Keep source/dist hashes fixed, case databases unique and cleanup checked. Avoid
+running a transport provider concurrently with its idle SQL capture, using
+completed provider batches as the handoff. No runtime edits/builds during either
+matrix. The same Sol/medium implementation context may author independent
+example source/configuration/docs while verification proceeds. Both dispatch
+fields must be explicit; runtime introspection unavailable. Final test-harness
+review follows static/evidence convergence; existing accepted runtime concerns
+are not reopened solely by new controls.

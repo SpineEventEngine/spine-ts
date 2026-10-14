@@ -1,0 +1,32 @@
+{
+  "operation": "idle-shared-memory-8-8e670595",
+  "engine": "mysql84",
+  "serverVersion": "8.4.10",
+  "containerName": "spine-sqlrel-8327eaa2-mysql",
+  "containerId": "730a636f7dca4d81251b563f225964a1db01cd94f4b914a8937776c786d88522",
+  "selectedDatabase": "sqlrel_idle_8e67059571ac42108c28e604f89b257c",
+  "image": "mysql@sha256:c592c15aaf4a1961e15d82eb31ea5987dda862d1c4b1e93424438c0e91dc1f8d",
+  "startedAt": "2026-10-14T03:51:22.083Z",
+  "endedAt": "2026-10-14T03:52:01.856Z",
+  "command": [
+    "/opt/homebrew/Cellar/node@24/24.18.0/bin/node",
+    "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/packages/server-blackbox-tests/test-fixtures/project-idle-sql.mjs",
+    "child",
+    "mysql84",
+    "8",
+    "shared-memory",
+    "sqlrel_idle_8e67059571ac42108c28e604f89b257c",
+    "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/sql-trace/idle-runs/8e67059571ac42108c28e604f89b257c"
+  ],
+  "exitCode": 0,
+  "interruptedSignal": null,
+  "rawLog": "/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/build-protocol/tasks/sql-delivery-reliability/evidence/sql-trace/runs/mysql84-idle-shared-memory-8-8e670595-2026-10-14T035122022Z.log",
+  "loggingRestored": true,
+  "restoreErrors": [],
+  "failures": [],
+  "markerVerification": {
+    "warmupMarkerCaptured": true,
+    "endMarkerCaptured": true,
+    "decoyDatabaseControlExcluded": true
+  }
+}

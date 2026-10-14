@@ -1,0 +1,20 @@
+{
+  "providerName": "postgres18",
+  "count": 8,
+  "mode": "db-only",
+  "database": "sqlrel_idle_41e46d4844774227808eff80760124c3",
+  "warmupMs": 12000,
+  "began": 1791949694910,
+  "ended": 1791949719920,
+  "workerPids": [
+    60310,
+    60311,
+    60312,
+    60313,
+    60314,
+    60315,
+    60316,
+    60317
+  ],
+  "deliveryPid": null
+}

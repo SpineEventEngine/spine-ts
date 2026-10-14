@@ -1,0 +1,20 @@
+{
+  "providerName": "mysql84",
+  "count": 8,
+  "mode": "db-only",
+  "database": "sqlrel_idle_f38123065a2d4ea5b1bfbcdfae8f2ecd",
+  "warmupMs": 12000,
+  "began": 1791949854683,
+  "ended": 1791949879689,
+  "workerPids": [
+    76860,
+    76861,
+    76862,
+    76863,
+    76865,
+    76866,
+    76867,
+    76868
+  ],
+  "deliveryPid": null
+}

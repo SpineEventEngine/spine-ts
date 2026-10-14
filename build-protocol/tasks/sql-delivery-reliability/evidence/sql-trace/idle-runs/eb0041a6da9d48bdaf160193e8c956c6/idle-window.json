@@ -1,0 +1,20 @@
+{
+  "providerName": "postgres18",
+  "count": 8,
+  "mode": "shared-memory",
+  "database": "sqlrel_idle_eb0041a6da9d48bdaf160193e8c956c6",
+  "warmupMs": 12000,
+  "began": 1791949735091,
+  "ended": 1791949760099,
+  "workerPids": [
+    66298,
+    66299,
+    66300,
+    66301,
+    66302,
+    66303,
+    66304,
+    66305
+  ],
+  "deliveryPid": 66297
+}

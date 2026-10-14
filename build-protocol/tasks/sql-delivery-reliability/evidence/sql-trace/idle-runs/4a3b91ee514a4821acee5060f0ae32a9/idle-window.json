@@ -1,0 +1,14 @@
+{
+  "providerName": "postgres16",
+  "count": 2,
+  "mode": "shared-memory",
+  "database": "sqlrel_idle_4a3b91ee514a4821acee5060f0ae32a9",
+  "warmupMs": 12000,
+  "began": 1791949493818,
+  "ended": 1791949518827,
+  "workerPids": [
+    47679,
+    47680
+  ],
+  "deliveryPid": 47678
+}
