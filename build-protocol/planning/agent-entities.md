@@ -42,6 +42,9 @@ records, four-line previews, and centered full-content dialogs. Preserve complet
 history through cursors, refresh expanded histories, and discard pending UI reads
 on sign-out. Creation age must not change after editing a release.
 
+Show message expand controls on hover or keyboard focus. Label tool activity
+as MCP calls and results, and application events as App activity.
+
 Keep the addition within the example: read indexed history through the existing
 API, retain the original draft creation time separately from edit time, and
 format records for display. Do not add another audit store or framework API.

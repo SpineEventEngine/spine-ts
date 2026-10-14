@@ -162,8 +162,8 @@ export const historyAge = (created: string | undefined, now: Date): string => {
 const titles: Readonly<Record<string, string>> = {
   GenerationRequest: "Request",
   GenerationResponse: "Response",
-  ToolRequest: "Tool call",
-  ToolResponse: "Tool result",
+  ToolRequest: "Call",
+  ToolResponse: "Result",
   OpenAiAssistantContent: "Assistant",
   AnthropicAssistantContent: "Assistant",
   AgentAiOperationStarted: "Writing started",
@@ -242,6 +242,11 @@ export interface HistoryRecord {
   readonly kind: string;
 
   /**
+   * Name shown for the app, model, or MCP tool that produced the record.
+   */
+  readonly speaker: string;
+
+  /**
    * Human-readable event or record type.
    */
   readonly title: string;
@@ -286,6 +291,7 @@ export const historyRecord = (entry: unknown): HistoryRecord => {
   const occurredAt = typeof item?.occurredAt === "string" ? item.occurredAt : undefined;
   return {
     kind,
+    speaker: kind === "Tool" ? "MCP" : kind === "System" || kind === "Domain" ? "App" : kind,
     title,
     preview: kind === "Tool" ? (exact.split("\n")[0] ?? title) : exact || title,
     exact,

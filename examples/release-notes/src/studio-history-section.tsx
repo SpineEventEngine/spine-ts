@@ -299,11 +299,11 @@ const HistoryEntry = ({
       className={`rs-history-entry ${bubble ? "conversation" : "compact"} ${view.kind.toLowerCase()}`}
     >
       <div className="rs-history-entry-head">
-        <span className="rs-history-kind">{view.kind}</span>
+        <span className="rs-history-kind">{view.speaker}</span>
         <strong>{view.title}</strong>
         <EntryTime value={view.occurredAt} />
       </div>
-      <p className="rs-history-preview">{view.preview}</p>
+      {view.preview !== view.title && <p className="rs-history-preview">{view.preview}</p>}
       <button
         type="button"
         className="rs-history-read"

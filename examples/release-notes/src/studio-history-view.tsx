@@ -292,7 +292,7 @@ const ModalHeading = ({
 }): ReactElement => (
   <header>
     <div>
-      <span className="rs-history-kind">{detail.kind}</span>
+      <span className="rs-history-kind">{detail.speaker}</span>
       <h2>{detail.title}</h2>
     </div>
     <button type="button" aria-label="Close detail" onClick={focus.hide}>

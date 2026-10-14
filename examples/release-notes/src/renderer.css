@@ -1174,6 +1174,8 @@ button:not(:disabled):hover {
   line-height: 1.42;
 }
 .rs-history-read {
+  opacity: 0;
+  pointer-events: none;
   display: flex;
   min-height: 22px;
   margin: 5px 0 0 auto;
@@ -1182,6 +1184,11 @@ button:not(:disabled):hover {
   background: transparent;
   color: #236b52;
   font-size: 11px;
+}
+.rs-history-entry:hover .rs-history-read,
+.rs-history-read:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
 }
 .rs-history-read:hover {
   text-decoration: underline;
