@@ -1214,3 +1214,40 @@ failures. Establish each actual cause before updating code/tests; retain
 independent writes, original Event repair and failed-processing pending semantics.
 Progress approximately 95%, estimated 1–3 hours for this complete correction
 batch, relevant review, full preflight/release tests/coverage and final pushes.
+
+Focused environmental rerun resolves four suites under the corrected task-local
+temporary root. Remaining tooling assertions require confirmed isolated fixture
+configuration; all runtime failures remain assigned for explicit contract triage.
+
+For cross-package blackbox coordinator access, approve extending the existing
+private server-test-fixtures/internal module with NodeCoordinator. That module
+already forwards private server test seams; keep the published server exports
+unchanged. Use published roots for clients/DeliveryServer and existing private
+generated-schema exports, with explicit private workspace test dependencies.
+This is a test fixture boundary correction, not a new public runtime API. Verify
+public package export inventories and resolved implementation identity; do not
+add a blanket sibling-source exception. Any lockfile change gets fresh audits.
+
+First release4 correction group passes eight suites/198 tests including package
+boundaries, API/build inventories, generator isolation and remote Inbox paging.
+Managed remote readiness passes under corrected TMPDIR. Remaining focused batch
+has 130 passed/22 failed: four ACK-less iterator fixtures, one Todo ACK-as-update,
+fourteen historical Inbox/projection success expectations and three predicate
+error assertions. These are being aligned with acknowledged readiness and
+failed-processing pending/rejection behavior; no runtime behavior change has
+been established. The complete raw focused failure log is retained.
+
+Private test dependency additions and lockfile are frozen. Dispatch read-only
+package/audit verification to existing Luna/medium function: compare resolution
+sets against the prior audited lock, record the three workspace dependency
+additions and fresh all/production audits. No installs/source writes, only
+final-versioning evidence. Explicit original profile remains applicable.
+
+Release correction checkpoint: consolidated original-failure files pass 483/483
+tests across 18 files without unhandled rejection. Three scoped Sol/medium
+reviews are complete; the one accepted exact-pending-ID assertion finding is
+corrected and its 37 tests pass. No framework runtime statements changed in
+this correction. Package importer audit is clean; no external resolutions
+changed. Task records and raw evidence are retained. Full preflight/release
+coverage remain due; no claim of final acceptance yet. New evidence credential
+pattern scan found no matching paths before publication.

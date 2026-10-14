@@ -679,6 +679,12 @@ importers:
       '@connectrpc/connect-node':
         specifier: 2.1.2
         version: 2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))
+      '@spine-event-engine/client-node':
+        specifier: workspace:*
+        version: link:../client-node
+      '@spine-event-engine/client-web':
+        specifier: workspace:*
+        version: link:../client-web
       '@spine-event-engine/core':
         specifier: workspace:*
         version: link:../core
@@ -694,6 +700,9 @@ importers:
       '@spine-event-engine/server':
         specifier: workspace:*
         version: link:../server
+      '@spine-event-engine/server-test-fixtures':
+        specifier: workspace:*
+        version: link:../server/test-fixtures
       '@spine-event-engine/storage':
         specifier: workspace:*
         version: link:../storage

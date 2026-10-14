@@ -1,0 +1,9 @@
+
+===== production-dependencies =====
+$ node scripts/check-production-dependencies.mjs
+exit=0
+
+===== release-readiness =====
+$ node scripts/check-release-readiness.mjs
+Release readiness: 97 package imports; 55 package assets; 457 relative Markdown links.
+exit=0

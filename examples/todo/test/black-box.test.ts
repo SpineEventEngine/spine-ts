@@ -328,6 +328,18 @@ describe("@spine-event-engine/example-todo", () => {
       let rawUpdate: Promise<IteratorResult<SubscriptionUpdate>> | undefined;
 
       try {
+        const readiness = await withTimeout(
+          iterator.next(),
+          "standalone subscription activation acknowledgement",
+          500,
+        );
+        expect(readiness.done).toBe(false);
+        if (readiness.done === true) {
+          throw new Error("Expected a subscription activation acknowledgement.");
+        }
+        expect(readiness.value.subscription?.id).toEqual(subscription.id);
+        expect(readiness.value.response?.status?.status.case).toBe("ok");
+        expect(readiness.value.update.case).toBeUndefined();
         rawUpdate = iterator.next();
         void rawUpdate.catch(() => undefined);
         await postRemoteCommand(

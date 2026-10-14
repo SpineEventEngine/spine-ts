@@ -1,0 +1,15 @@
+# Release verification 4 correction: performance and reliability review
+
+Scope: frozen correction diff against `ee7373148`, limited to changed execution paths and immediate invariants. Existing `performance_reliability_reviewer` role, explicitly dispatched with `gpt-6-sol` / `medium` at Standard speed. The configured profile and explicit dispatch fields match; actual runtime model metadata is unavailable on this surface. This was a read-only source and evidence review; no build, test, or service was run here.
+
+## Result
+
+No confirmed P0–P2 performance or reliability finding in the correction diff.
+
+- The Entity batch test now requires the first replay error to propagate, observes both target attempts, and checks that only one row remains `TO_DELIVER`. The single-row Entity and Projection cases likewise require rejection and pending status for failed or unsupported processing. The Process Manager invalid-predicate test requires the error to reach the caller with zero storage reads. These assertions align with independent processing and do not convert failures into successful acknowledgement.
+- Client iterator mocks now provide a valid activation acknowledgement before stalled or failing streams. The disposal tests still check bounded cancellation and exactly one `return()` per iterator. Todo consumes and validates the acknowledgement before waiting for a business update.
+- RED-28 cancels the initial raw subscription before killing a reported child. It still observes one surviving managed member while a real remote Delivery snapshot is held, validates a new survivor activation and exact update, releases the snapshot, observes two ready members, and validates a subsequent exact update. This proves the intended replacement-admission boundary and continued logical delivery. The post-rejoin update does not identify which member produced it, so it is not separate proof of replacement-specific routing. D-0133 permits the old raw stream to fail after a required child dies. High-level Client recovery through real transports is covered separately by the blackbox child-fault and reconnect scenarios; this correction does not assert raw-stream continuity.
+- The immediate rejection observers attach to the same `next()` promises later passed to `bounded`; they mark early rejections as observed without converting the awaited result into success. The bounded helper wraps rejection with a phase label and preserves the cause. The recorded final 18-file run reports 483 passing tests and no unhandled rejection. The earlier red run and three isolated managed reruns provide targeted evidence; the full release profile remains pending.
+- The external-consumer fixture now checks real paths remain inside its isolated tree, while the package-boundary scanner still uses tracked files at the actual Git root and discovered files only for a synthetic nested root. No changed path introduces unbounded work or alters runtime persistence, retries, or shutdown behavior.
+
+The review does not replace the pending full `verify:release` gate or claim global coverage. No production delivery code changed in this correction.

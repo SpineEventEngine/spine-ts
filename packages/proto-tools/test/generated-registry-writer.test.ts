@@ -1110,6 +1110,15 @@ function createCompileFixture(): string {
   });
   mkdirSync(join(repoRoot, "node_modules/@acme/generated"), { recursive: true });
   writeFileSync(
+    join(repoRoot, "node_modules/@spine-event-engine/server/package.json"),
+    JSON.stringify({
+      name: "@spine-event-engine/server",
+      exports: {
+        "./spi/handler-registry": { types: "./spi/handler-registry.d.ts" },
+      },
+    }),
+  );
+  writeFileSync(
     join(repoRoot, "packages/demo/src/task-aggregate.ts"),
     ["export class TaskAggregate {", "  createTask(): void {}", "}", ""].join("\n"),
   );

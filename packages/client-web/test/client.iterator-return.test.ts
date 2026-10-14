@@ -14,7 +14,17 @@
 
 import { create } from "@bufbuild/protobuf";
 import type { Transport } from "@connectrpc/connect";
-import { QuerySchema, TargetSchema, TopicSchema } from "@spine-event-engine/proto/client";
+import { ResponseSchema, StatusSchema } from "@spine-event-engine/proto";
+import {
+  QuerySchema,
+  SubscriptionIdSchema,
+  SubscriptionSchema,
+  SubscriptionUpdateSchema,
+  TargetSchema,
+  type Subscription,
+  type Topic,
+  TopicSchema,
+} from "@spine-event-engine/proto/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const connect = vi.hoisted(() => ({
@@ -26,9 +36,37 @@ const connect = vi.hoisted(() => ({
 
 vi.mock("@connectrpc/connect", () => ({
   createClient: () => ({
-    subscribe: (topic: unknown) => Promise.resolve({ id: { value: "wire" }, topic }),
-    activate: () => ({
-      [Symbol.asyncIterator]: () => connect.iterators.shift() ?? connect.iterator,
+    subscribe: (topic: unknown) =>
+      Promise.resolve(
+        create(SubscriptionSchema, {
+          id: create(SubscriptionIdSchema, { value: "wire" }),
+          topic: topic as Topic,
+        }),
+      ),
+    activate: (wire: unknown) => ({
+      [Symbol.asyncIterator]: () => {
+        const source = connect.iterators.shift() ?? connect.iterator;
+        if (source === undefined) throw new Error("Expected a test subscription iterator.");
+        let acknowledged = false;
+        return {
+          next: () => {
+            if (!acknowledged) {
+              acknowledged = true;
+              return Promise.resolve({
+                done: false,
+                value: create(SubscriptionUpdateSchema, {
+                  subscription: wire as Subscription,
+                  response: create(ResponseSchema, {
+                    status: create(StatusSchema, { status: { case: "ok", value: {} } }),
+                  }),
+                }),
+              });
+            }
+            return source.next();
+          },
+          return: () => source.return?.() ?? Promise.resolve({ done: true, value: undefined }),
+        };
+      },
     }),
     cancel: connect.cancel,
     read: connect.read,

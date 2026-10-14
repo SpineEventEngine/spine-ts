@@ -1,0 +1,491 @@
+
+ RUN  v4.1.11 /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+
+ ❯ packages/client-web/test/client.iterator-return.test.ts (4 tests | 4 failed) 20018ms
+     × settles cancellation when iterator return rejects after a non-cooperative next 5008ms
+     × waits for a cooperative iterator return before cancelling its wire 5003ms
+     × disposes a retryable failed stream once before reconnect and never returns it again 5004ms
+     × disposes each Entity replacement iterator once through Read retry exhaustion 5002ms
+ ❯ examples/todo/test/black-box.test.ts (48 tests | 1 failed) 3296ms
+     × ignores an unrelated update and observes the exact subscribed task 64ms
+ ❯ packages/server/test/entity/process-manager-querying.test.ts (45 tests | 3 failed) 1964ms
+     × rejects a 'cyclic' predicate before reading storage 14ms
+     × rejects a 'too deep' predicate before reading storage 3ms
+     × rejects a 'too wide' predicate before reading storage 3ms
+ ❯ packages/server/test/context/entity-inbox.test.ts (37 tests | 9 failed) 739ms
+     × continues draining persisted batch rows after an earlier reception fails 4ms
+     × emits for all persisted batch rows before a later exact drain rejection 2ms
+     × drains the received row and unrelated backlog in the owned shard 7ms
+     × contains an Error reception failure and marks the row delivered 3ms
+     × contains a non-Error reception failure and marks the row delivered 1ms
+     × contains an unsupported inbox label and marks the row delivered 1ms
+     × emits no readiness when the registered target does not configure the persisted label 1ms
+     × emits no readiness for a persisted shard outside the configured endpoint 1ms
+     × contains a missing process-manager target and marks the row delivered 1ms
+ ❯ packages/server/test/context/projection-handoff.test.ts (15 tests | 5 failed) 330ms
+     × preserves exact-drain failure when the readiness observer also throws 3ms
+     × contains a fresh-delivery duplicate replay failure 153ms
+     × persists a valid non-projection label without readiness 2ms
+     × emits no readiness for a persisted row without a registered projection target 1ms
+     × emits no readiness for a persisted shard outside the configured endpoint 1ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 22 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  examples/todo/test/black-box.test.ts > @spine-event-engine/example-todo > ignores an unrelated update and observes the exact subscribed task
+Error: Expected a task-list projection update.
+ ❯ unpackSubscribedTaskList examples/todo/test/black-box.test.ts:2317:11
+    2315|   }
+    2316|   if (list === undefined) {
+    2317|     throw new Error("Expected a task-list projection update.");
+       |           ^
+    2318|   }
+    2319|
+ ❯ examples/todo/test/black-box.test.ts:367:24
+ ❯ withRemoteTodo examples/todo/test/black-box.test.ts:1968:12
+ ❯ examples/todo/test/black-box.test.ts:317:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/22]⎯
+
+ FAIL  packages/client-web/test/client.iterator-return.test.ts > Client iterator disposal > settles cancellation when iterator return rejects after a non-cooperative next
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ packages/client-web/test/client.iterator-return.test.ts:49:3
+     47|   });
+     48|
+     49|   it("settles cancellation when iterator return rejects after a non-co…
+       |   ^
+     50|     let returns = 0;
+     51|     let closed = 0;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/22]⎯
+
+ FAIL  packages/client-web/test/client.iterator-return.test.ts > Client iterator disposal > waits for a cooperative iterator return before cancelling its wire
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ packages/client-web/test/client.iterator-return.test.ts:78:3
+     76|   });
+     77|
+     78|   it("waits for a cooperative iterator return before cancelling its wi…
+       |   ^
+     79|     let settle: (() => void) | undefined;
+     80|     connect.iterator = {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/22]⎯
+
+ FAIL  packages/client-web/test/client.iterator-return.test.ts > Client iterator disposal > disposes a retryable failed stream once before reconnect and never returns it again
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ packages/client-web/test/client.iterator-return.test.ts:106:3
+    104|   });
+    105|
+    106|   it("disposes a retryable failed stream once before reconnect and nev…
+       |   ^
+    107|     const firstReturn = vi.fn(() => Promise.reject(new Error("first re…
+    108|     const secondReturn = vi.fn(() => new Promise<IteratorResult<unknow…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/22]⎯
+
+ FAIL  packages/client-web/test/client.iterator-return.test.ts > Client iterator disposal > disposes each Entity replacement iterator once through Read retry exhaustion
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ packages/client-web/test/client.iterator-return.test.ts:138:3
+    136|   });
+    137|
+    138|   it("disposes each Entity replacement iterator once through Read retr…
+       |   ^
+    139|     const returns = [
+    140|       vi.fn(() => Promise.resolve({ done: true, value: undefined })),
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/22]⎯
+
+ FAIL  packages/server/test/context/entity-inbox.test.ts > LocalEntityInbox > continues draining persisted batch rows after an earlier reception fails
+AssertionError: promise rejected "Error: first drain failed" instead of resolving
+ ❯ packages/server/test/context/entity-inbox.test.ts:311:6
+    309|         ["first", "second"].map((targetId) => processInput(targetTypeU…
+    310|       ),
+    311|     ).resolves.toHaveLength(2);
+       |      ^
+    312|     expect(replayed).toEqual(["first", "second"]);
+    313|   });
+
+Caused by: Error: first drain failed
+ ❯ packages/server/test/context/entity-inbox.test.ts:292:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/22]⎯
+
+ FAIL  packages/server/test/context/entity-inbox.test.ts > LocalEntityInbox > emits for all persisted batch rows before a later exact drain rejection
+AssertionError: expected Error: batch replay failed to be undefined
+
+- Expected:
+undefined
+
++ Received:
+Error {
+  "message": "batch replay failed",
+}
+
+ ❯ packages/server/test/context/entity-inbox.test.ts:673:20
+    671|       );
+    672|
+    673|     expect(result).toBeUndefined();
+       |                    ^
+    674|     expect(ready).toHaveLength(2);
+    675|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/22]⎯
+
+ FAIL  packages/server/test/context/entity-inbox.test.ts > LocalEntityInbox > drains the received row and unrelated backlog in the owned shard
+AssertionError: expected [ { id: { …(2) }, …(8) }, …(1) ] to deeply equal [ ObjectContaining{…} ]
+
+- Expected
++ Received
+
+@@ -47,6 +47,48 @@
+        "$typeName": "google.protobuf.Timestamp",
+        "nanos": 0,
+        "seconds": 1783501200n,
+      },
+    },
++   {
++     "id": {
++       "shard": ShardIndex {
++         "index": 0,
++         "ofTotal": 1,
++       },
++       "value": "71ccdb38-1d83-434a-b55c-08f16410cc60",
++     },
++     "inboxId": {
++       "targetId": {
++         "$typeName": "google.protobuf.Any",
++         "typeUrl": "type.googleapis.com/google.protobuf.StringValue",
++         "value": Uint8Array [
++           10,
++           4,
++           112,
++           109,
++           45,
++           48,
++         ],
++       },
++       "targetTypeUrl": "type.example.dev/Tasks.OtherProcessManager",
++     },
++     "label": "HANDLE_COMMAND",
++     "shard": ShardIndex {
++       "index": 0,
++       "ofTotal": 1,
++     },
++     "signal": {
++       "$typeName": "google.protobuf.Any",
++       "typeUrl": "type.spine.io/spine.core.Command",
++       "value": Uint8Array [],
++     },
++     "signalId": "signal-0",
++     "status": "TO_DELIVER",
++     "version": 2n,
++     "whenReceived": {
++       "$typeName": "google.protobuf.Timestamp",
++       "nanos": 0,
++       "seconds": 1783501201n,
++     },
++   },
+  ]
+
+ ❯ packages/server/test/context/entity-inbox.test.ts:1306:75
+    1304|       status: "TO_DELIVER",
+    1305|     });
+    1306|     await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"]…
+       |                                                                           ^
+    1307|       expect.objectContaining({
+    1308|         signalId: "event-0",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/22]⎯
+
+ FAIL  packages/server/test/context/entity-inbox.test.ts > LocalEntityInbox > contains an Error reception failure and marks the row delivered
+AssertionError: promise rejected "Error: target failed" instead of resolving
+ ❯ packages/server/test/context/entity-inbox.test.ts:1340:6
+    1338|         status: "TO_DELIVER",
+    1339|       }),
+    1340|     ).resolves.toBeDefined();
+       |      ^
+    1341|     await expect(
+    1342|       delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED…
+
+Caused by: Error: target failed
+ ❯ Object.replay packages/server/test/context/entity-inbox.test.ts:1328:31
+ ❯ LocalEntityInbox.#replay packages/server/src/context/entity-inbox.ts:515:35
+ ❯ LocalEntityInbox.#replayAndFollowUp packages/server/src/context/entity-inbox.ts:391:18
+ ❯ Object.onReplay [as onMessage] packages/server/src/context/entity-inbox.ts:372:14
+ ❯ packages/server/src/delivery/delivery.ts:674:48
+ ❯ withDeliveryCommitFence packages/server/src/repository/commit-fence.ts:35:17
+ ❯ DeliveryDrain.#dispatch packages/server/src/delivery/delivery.ts:670:11
+ ❯ DeliveryDrain.#deliver packages/server/src/delivery/delivery.ts:575:18
+ ❯ DeliveryDrain.#processMessage packages/server/src/delivery/delivery.ts:506:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/22]⎯
+
+ FAIL  packages/server/test/context/entity-inbox.test.ts > LocalEntityInbox > contains a non-Error reception failure and marks the row delivered
+AssertionError: promise rejected "Error: Entity Inbox replay failed." instead of resolving
+ ❯ packages/server/test/context/entity-inbox.test.ts:1372:6
+    1370|         status: "TO_DELIVER",
+    1371|       }),
+    1372|     ).resolves.toBeDefined();
+       |      ^
+    1373|     await expect(
+    1374|       delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED…
+
+Caused by: Error: Entity Inbox replay failed.
+ ❯ Object.replayFailure packages/server/src/context/local-inbox-handoff.ts:592:45
+ ❯ Object.drainAttempt packages/server/src/context/local-inbox-handoff.ts:573:26
+ ❯ Object.runDrain packages/server/src/context/local-inbox-handoff.ts:552:23
+ ❯ Object.drain packages/server/src/context/local-inbox-handoff.ts:547:5
+ ❯ LocalEntityInbox.#drainInboxRow packages/server/src/context/entity-inbox.ts:349:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/22]⎯
+
+ FAIL  packages/server/test/context/entity-inbox.test.ts > LocalEntityInbox > contains an unsupported inbox label and marks the row delivered
+AssertionError: promise rejected "Error: BoundedContext delivery has no han…" instead of resolving
+ ❯ packages/server/test/context/entity-inbox.test.ts:1497:6
+    1495|         }),
+    1496|       ),
+    1497|     ).resolves.toBeDefined();
+       |      ^
+    1498|     await expect(
+    1499|       delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED…
+
+Caused by: Error: BoundedContext delivery has no handler for inbox label "UPDATE_SUBSCRIBER".
+ ❯ LocalEntityInbox.#assert packages/server/src/context/entity-inbox.ts:548:13
+ ❯ LocalEntityInbox.#replay packages/server/src/context/entity-inbox.ts:499:22
+ ❯ LocalEntityInbox.#replayAndFollowUp packages/server/src/context/entity-inbox.ts:391:18
+ ❯ Object.onReplay [as onMessage] packages/server/src/context/entity-inbox.ts:372:14
+ ❯ packages/server/src/delivery/delivery.ts:674:48
+ ❯ withDeliveryCommitFence packages/server/src/repository/commit-fence.ts:35:17
+ ❯ DeliveryDrain.#dispatch packages/server/src/delivery/delivery.ts:670:11
+ ❯ DeliveryDrain.#deliver packages/server/src/delivery/delivery.ts:575:18
+ ❯ DeliveryDrain.#processMessage packages/server/src/delivery/delivery.ts:506:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/22]⎯
+
+ FAIL  packages/server/test/context/entity-inbox.test.ts > LocalEntityInbox > emits no readiness when the registered target does not configure the persisted label
+AssertionError: promise rejected "Error: unconfigured event label should no…" instead of resolving
+ ❯ packages/server/test/context/entity-inbox.test.ts:1527:6
+    1525|         status: "TO_DELIVER",
+    1526|       }),
+    1527|     ).resolves.toBeDefined();
+       |      ^
+    1528|     await expect(
+    1529|       delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED…
+
+Caused by: Error: unconfigured event label should not replay
+ ❯ packages/server/test/context/entity-inbox.test.ts:1512:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/22]⎯
+
+ FAIL  packages/server/test/context/entity-inbox.test.ts > LocalEntityInbox > emits no readiness for a persisted shard outside the configured endpoint
+AssertionError: promise rejected "Error: non-configured shard should preser…" instead of resolving
+ ❯ packages/server/test/context/entity-inbox.test.ts:1557:6
+    1555|         status: "TO_DELIVER",
+    1556|       }),
+    1557|     ).resolves.toBeDefined();
+       |      ^
+    1558|     await expect(
+    1559|       delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED…
+
+Caused by: Error: non-configured shard should preserve drain failure
+ ❯ packages/server/test/context/entity-inbox.test.ts:1542:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/22]⎯
+
+ FAIL  packages/server/test/context/entity-inbox.test.ts > LocalEntityInbox > contains a missing process-manager target and marks the row delivered
+AssertionError: promise rejected "Error: BoundedContext delivery has no Ent…" instead of resolving
+ ❯ packages/server/test/context/entity-inbox.test.ts:1583:6
+    1581|         status: "TO_DELIVER",
+    1582|       }),
+    1583|     ).resolves.toBeDefined();
+       |      ^
+    1584|     await expect(
+    1585|       delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED…
+
+Caused by: Error: BoundedContext delivery has no Entity Inbox target for "type.example.dev/Tasks.ProcessManager".
+ ❯ LocalEntityInbox.#replay packages/server/src/context/entity-inbox.ts:504:13
+ ❯ LocalEntityInbox.#replayAndFollowUp packages/server/src/context/entity-inbox.ts:391:18
+ ❯ Object.onReplay [as onMessage] packages/server/src/context/entity-inbox.ts:372:14
+ ❯ packages/server/src/delivery/delivery.ts:674:48
+ ❯ withDeliveryCommitFence packages/server/src/repository/commit-fence.ts:35:17
+ ❯ DeliveryDrain.#dispatch packages/server/src/delivery/delivery.ts:670:11
+ ❯ DeliveryDrain.#deliver packages/server/src/delivery/delivery.ts:575:18
+ ❯ DeliveryDrain.#processMessage packages/server/src/delivery/delivery.ts:506:17
+ ❯ DeliveryDrain.#processPage packages/server/src/delivery/delivery.ts:485:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/22]⎯
+
+ FAIL  packages/server/test/context/projection-handoff.test.ts > LocalProjectionInbox > preserves exact-drain failure when the readiness observer also throws
+AssertionError: expected Error: projection replay failed to be undefined
+
+- Expected:
+undefined
+
++ Received:
+Error {
+  "message": "projection replay failed",
+}
+
+ ❯ packages/server/test/context/projection-handoff.test.ts:223:20
+    221|       );
+    222|
+    223|     expect(result).toBeUndefined();
+       |                    ^
+    224|     expect(notifications).toBe(1);
+    225|     await expect(
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/22]⎯
+
+ FAIL  packages/server/test/context/projection-handoff.test.ts > LocalProjectionInbox > contains a fresh-delivery duplicate replay failure
+AssertionError: expected Error: projection replay failed to be undefined
+
+- Expected:
+undefined
+
++ Received:
+Error {
+  "message": "projection replay failed",
+}
+
+ ❯ packages/server/test/context/projection-handoff.test.ts:473:30
+    471|     releaseReplay();
+    472|
+    473|     await expect(firstResult).resolves.toBeUndefined();
+       |                              ^
+    474|     await expect(duplicateResult).resolves.toBeUndefined();
+    475|     await expect(firstDelivery.inbox.read(shard, { statuses: ["TO_DELI…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/22]⎯
+
+ FAIL  packages/server/test/context/projection-handoff.test.ts > LocalProjectionInbox > persists a valid non-projection label without readiness
+AssertionError: promise rejected "Error: BoundedContext delivery has no han…" instead of resolving
+ ❯ packages/server/test/context/projection-handoff.test.ts:509:6
+    507|         }),
+    508|       ),
+    509|     ).resolves.toMatchObject({ label: "HANDLE_COMMAND" });
+       |      ^
+    510|     await expect(
+    511|       delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED…
+
+Caused by: Error: BoundedContext delivery has no handler for inbox label "HANDLE_COMMAND".
+ ❯ LocalProjectionInbox.#assert packages/server/src/context/projection-handoff.ts:238:13
+ ❯ LocalProjectionInbox.#replay packages/server/src/context/projection-handoff.ts:223:26
+ ❯ Object.onReplay [as onMessage] packages/server/src/context/projection-handoff.ts:184:32
+ ❯ packages/server/src/delivery/delivery.ts:674:48
+ ❯ withDeliveryCommitFence packages/server/src/repository/commit-fence.ts:35:17
+ ❯ DeliveryDrain.#dispatch packages/server/src/delivery/delivery.ts:670:11
+ ❯ DeliveryDrain.#deliver packages/server/src/delivery/delivery.ts:575:18
+ ❯ DeliveryDrain.#processMessage packages/server/src/delivery/delivery.ts:506:17
+ ❯ DeliveryDrain.#processPage packages/server/src/delivery/delivery.ts:485:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/22]⎯
+
+ FAIL  packages/server/test/context/projection-handoff.test.ts > LocalProjectionInbox > emits no readiness for a persisted row without a registered projection target
+AssertionError: promise rejected "Error: BoundedContext delivery has no pro…" instead of resolving
+ ❯ packages/server/test/context/projection-handoff.test.ts:574:6
+    572|         shard: ShardIndex.single(),
+    573|       }),
+    574|     ).resolves.toMatchObject({ label: "UPDATE_SUBSCRIBER" });
+       |      ^
+    575|     await expect(
+    576|       delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED…
+
+Caused by: Error: BoundedContext delivery has no projection subscriber target for "type.example.dev/Tasks.MissingProjection".
+ ❯ LocalProjectionInbox.#replay packages/server/src/context/projection-handoff.ts:228:13
+ ❯ Object.onReplay [as onMessage] packages/server/src/context/projection-handoff.ts:184:32
+ ❯ packages/server/src/delivery/delivery.ts:674:48
+ ❯ withDeliveryCommitFence packages/server/src/repository/commit-fence.ts:35:17
+ ❯ DeliveryDrain.#dispatch packages/server/src/delivery/delivery.ts:670:11
+ ❯ DeliveryDrain.#deliver packages/server/src/delivery/delivery.ts:575:18
+ ❯ DeliveryDrain.#processMessage packages/server/src/delivery/delivery.ts:506:17
+ ❯ DeliveryDrain.#processPage packages/server/src/delivery/delivery.ts:485:13
+ ❯ DeliveryDrain.#readPages packages/server/src/delivery/delivery.ts:448:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/22]⎯
+
+ FAIL  packages/server/test/context/projection-handoff.test.ts > LocalProjectionInbox > emits no readiness for a persisted shard outside the configured endpoint
+AssertionError: promise rejected "Error: non-configured shard should preser…" instead of resolving
+ ❯ packages/server/test/context/projection-handoff.test.ts:608:6
+    606|         shard,
+    607|       }),
+    608|     ).resolves.toMatchObject({ label: "UPDATE_SUBSCRIBER" });
+       |      ^
+    609|     await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] …
+    610|     expect(ready).toEqual([]);
+
+Caused by: Error: non-configured shard should preserve drain failure
+ ❯ packages/server/test/context/projection-handoff.test.ts:589:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/22]⎯
+
+ FAIL  packages/server/test/entity/process-manager-querying.test.ts > Process Manager querying > rejects a 'cyclic' predicate before reading storage
+TypeError: Entity query predicate must not contain cycles.
+ ❯ Object.compileGroups packages/core/src/query/entity-query.ts:1110:15
+ ❯ Object.compilePlanGroups packages/core/src/query/entity-query.ts:971:25
+ ❯ EntityQueryBuilder.buildPlan packages/core/src/query/entity-query.ts:413:44
+ ❯ ProcessManagerQuery.read packages/server/src/entity/entity.ts:279:32
+    277|   async read(): Promise<readonly MessageShape<Schema>[]> {
+    278|     const capability = processManagerQueryAccess.require(this.#entity);
+    279|     const plan = this.#builder.buildPlan();
+       |                                ^
+    280|     ProcessManagerQueryLimits.check(plan);
+    281|     const states = await capability.execute(plan, this.#schema, this.#…
+ ❯ ProjectLookup.assign packages/server/test/entity/process-manager-querying.test.ts:353:18
+ ❯ Object.invokeEntityMethod packages/server/src/repository/repository.ts:5043:20
+ ❯ ProcessManagerCommandExecution.#invokeCommandHandler packages/server/src/repository/repository.ts:3981:47
+ ❯ ProcessManagerCommandExecution.#invoke packages/server/src/repository/repository.ts:3960:25
+ ❯ ProcessManagerCommandExecution.run packages/server/src/repository/repository.ts:3774:35
+ ❯ Object.replayProcessManagerCommand packages/server/src/repository/repository.ts:8935:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/22]⎯
+
+ FAIL  packages/server/test/entity/process-manager-querying.test.ts > Process Manager querying > rejects a 'too deep' predicate before reading storage
+TypeError: Entity query predicate exceeds maximum depth 64.
+ ❯ Object.compileGroups packages/core/src/query/entity-query.ts:1113:15
+ ❯ Object.compilePlanGroups packages/core/src/query/entity-query.ts:971:25
+ ❯ EntityQueryBuilder.buildPlan packages/core/src/query/entity-query.ts:413:44
+ ❯ ProcessManagerQuery.read packages/server/src/entity/entity.ts:279:32
+    277|   async read(): Promise<readonly MessageShape<Schema>[]> {
+    278|     const capability = processManagerQueryAccess.require(this.#entity);
+    279|     const plan = this.#builder.buildPlan();
+       |                                ^
+    280|     ProcessManagerQueryLimits.check(plan);
+    281|     const states = await capability.execute(plan, this.#schema, this.#…
+ ❯ ProjectLookup.assign packages/server/test/entity/process-manager-querying.test.ts:353:18
+ ❯ Object.invokeEntityMethod packages/server/src/repository/repository.ts:5043:20
+ ❯ ProcessManagerCommandExecution.#invokeCommandHandler packages/server/src/repository/repository.ts:3981:47
+ ❯ ProcessManagerCommandExecution.#invoke packages/server/src/repository/repository.ts:3960:25
+ ❯ ProcessManagerCommandExecution.run packages/server/src/repository/repository.ts:3774:35
+ ❯ Object.replayProcessManagerCommand packages/server/src/repository/repository.ts:8935:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/22]⎯
+
+ FAIL  packages/server/test/entity/process-manager-querying.test.ts > Process Manager querying > rejects a 'too wide' predicate before reading storage
+TypeError: Entity query predicate exceeds maximum node count 10000.
+ ❯ Object.compileGroups packages/core/src/query/entity-query.ts:1129:15
+ ❯ Object.compilePlanGroups packages/core/src/query/entity-query.ts:971:25
+ ❯ EntityQueryBuilder.buildPlan packages/core/src/query/entity-query.ts:413:44
+ ❯ ProcessManagerQuery.read packages/server/src/entity/entity.ts:279:32
+    277|   async read(): Promise<readonly MessageShape<Schema>[]> {
+    278|     const capability = processManagerQueryAccess.require(this.#entity);
+    279|     const plan = this.#builder.buildPlan();
+       |                                ^
+    280|     ProcessManagerQueryLimits.check(plan);
+    281|     const states = await capability.execute(plan, this.#schema, this.#…
+ ❯ ProjectLookup.assign packages/server/test/entity/process-manager-querying.test.ts:353:18
+ ❯ Object.invokeEntityMethod packages/server/src/repository/repository.ts:5043:20
+ ❯ ProcessManagerCommandExecution.#invokeCommandHandler packages/server/src/repository/repository.ts:3981:47
+ ❯ ProcessManagerCommandExecution.#invoke packages/server/src/repository/repository.ts:3960:25
+ ❯ ProcessManagerCommandExecution.run packages/server/src/repository/repository.ts:3774:35
+ ❯ Object.replayProcessManagerCommand packages/server/src/repository/repository.ts:8935:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/22]⎯
+
+
+ Test Files  5 failed | 1 passed (6)
+      Tests  22 failed | 130 passed (152)
+   Start at  06:47:58
+   Duration  32.15s (transform 1.07s, setup 0ms, import 2.22s, tests 29.28s, environment 0ms)

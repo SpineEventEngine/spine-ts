@@ -2029,8 +2029,9 @@ describe("Process Manager querying", () => {
     });
 
     try {
-      await context.commandBus().post(queryCommand("query-id", "invalid"));
-      expect(ProjectLookup.failure).toMatchObject({ message });
+      await expect(context.commandBus().post(queryCommand("query-id", "invalid"))).rejects.toThrow(
+        message,
+      );
       expect(reads).toBe(0);
     } finally {
       observation.close();

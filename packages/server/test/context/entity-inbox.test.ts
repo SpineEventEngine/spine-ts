@@ -283,7 +283,7 @@ describe("LocalEntityInbox", () => {
     await expect(inbox.receive(delivery, input)).rejects.toBe(failure);
   });
 
-  it("continues draining persisted batch rows after an earlier reception fails", async () => {
+  it("continues a batch after one reception fails while retaining the failed row", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -308,8 +308,13 @@ describe("LocalEntityInbox", () => {
         delivery,
         ["first", "second"].map((targetId) => processInput(targetTypeUrl, targetId)),
       ),
-    ).resolves.toHaveLength(2);
+    ).rejects.toBe(drainFailure);
     expect(replayed).toEqual(["first", "second"]);
+    await expect(
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+    ).resolves.toEqual([
+      expect.objectContaining({ signalId: "signal-first", status: "TO_DELIVER" }),
+    ]);
   });
 
   it("buffers persisted rows while direct drain ownership transfers", async () => {
@@ -670,7 +675,7 @@ describe("LocalEntityInbox", () => {
         (error: unknown) => error,
       );
 
-    expect(result).toBeUndefined();
+    expect(result).toBe(drainFailure);
     expect(ready).toHaveLength(2);
   });
   it("replays and cleans eligible durable command and event rows through a delivery loop endpoint", async () => {
@@ -1309,11 +1314,16 @@ describe("LocalEntityInbox", () => {
         label: "UPDATE_SUBSCRIBER",
         status: "TO_DELIVER",
       }),
+      expect.objectContaining({
+        signalId: "signal-0",
+        label: "HANDLE_COMMAND",
+        status: "TO_DELIVER",
+      }),
     ]);
     await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
   });
 
-  it("contains an Error reception failure and marks the row delivered", async () => {
+  it("propagates an Error reception failure and retains the pending row", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -1337,13 +1347,13 @@ describe("LocalEntityInbox", () => {
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
       }),
-    ).resolves.toBeDefined();
+    ).rejects.toThrow("target failed");
     await expect(
-      delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
-    ).resolves.toEqual([]);
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+    ).resolves.toMatchObject([{ signalId: "signal-2", status: "TO_DELIVER" }]);
   });
 
-  it("contains a non-Error reception failure and marks the row delivered", async () => {
+  it("normalizes a non-Error reception failure and retains the pending row", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -1369,10 +1379,10 @@ describe("LocalEntityInbox", () => {
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
       }),
-    ).resolves.toBeDefined();
+    ).rejects.toThrow("Entity Inbox replay failed.");
     await expect(
-      delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
-    ).resolves.toEqual([]);
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+    ).resolves.toMatchObject([{ signalId: "signal-3", status: "TO_DELIVER" }]);
   });
 
   it("rejects skipped delivery and leaves the claimed shard available again", async () => {
@@ -1465,7 +1475,7 @@ describe("LocalEntityInbox", () => {
     expect(ready).toEqual([]);
   });
 
-  it("contains an unsupported inbox label and marks the row delivered", async () => {
+  it("rejects an unsupported inbox label and retains the pending row", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -1494,10 +1504,10 @@ describe("LocalEntityInbox", () => {
           shard: ShardIndex.single(),
         }),
       ),
-    ).resolves.toBeDefined();
+    ).rejects.toThrow('no handler for inbox label "UPDATE_SUBSCRIBER"');
     await expect(
-      delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
-    ).resolves.toEqual([]);
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+    ).resolves.toMatchObject([{ signalId: "signal-6", status: "TO_DELIVER" }]);
     expect(ready).toEqual([]);
   });
 
@@ -1524,10 +1534,10 @@ describe("LocalEntityInbox", () => {
         label: "REACT_UPON_EVENT",
         status: "TO_DELIVER",
       }),
-    ).resolves.toBeDefined();
+    ).rejects.toBe(replayFailure);
     await expect(
-      delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
-    ).resolves.toEqual([]);
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+    ).resolves.toMatchObject([{ signalId: "event-label-mismatch", status: "TO_DELIVER" }]);
     expect(ready).toEqual([]);
   });
 
@@ -1554,14 +1564,14 @@ describe("LocalEntityInbox", () => {
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
       }),
-    ).resolves.toBeDefined();
+    ).rejects.toBe(replayFailure);
     await expect(
-      delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
-    ).resolves.toEqual([]);
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+    ).resolves.toMatchObject([{ signalId: "command-shard-mismatch", status: "TO_DELIVER" }]);
     expect(ready).toMatchObject([{ label: "HANDLE_COMMAND", targetTypeUrl }]);
   });
 
-  it("contains a missing process-manager target and marks the row delivered", async () => {
+  it("rejects a missing process-manager target and retains the pending row", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -1580,10 +1590,10 @@ describe("LocalEntityInbox", () => {
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
       }),
-    ).resolves.toBeDefined();
+    ).rejects.toThrow("no Entity Inbox target");
     await expect(
-      delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
-    ).resolves.toEqual([]);
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+    ).resolves.toMatchObject([{ signalId: "signal-7", status: "TO_DELIVER" }]);
     expect(ready).toEqual([]);
   });
 

@@ -899,3 +899,47 @@ implementation context is responsible for all confirmed fixes. No prior review
 is treated as overriding a failing required check. Reopen only substantively
 affected concerns after focused correction; do not restore superseded delivery
 or cross-record atomicity guarantees to satisfy stale tests.
+
+Release4 correction review plan (dispatch after static checks pass): use the
+existing style/maintainability, TypeScript/API and performance/reliability
+review concerns, each explicit gpt-6-sol / medium, Standard speed. Limit input
+to the correction diff from ee7373148 and its focused evidence. Style checks
+tooling/fixture structure; API checks private fixture exports/public imports,
+package graph and domain-correct fixtures; reliability checks failed/pending
+assertions, sibling completion, ACK/iterator teardown and isolation fidelity.
+No production delivery behavior is changed by the current correction. Public
+documentation concern is N/A for this correction because no public prose or
+workflow changes; existing documentation review remains applicable and task
+records get deterministic checks. Final security runtime review remains
+applicable: no changed published trust boundary or external resolutions; fresh
+post-fixture dependency audits are clean. Collect the complete scoped wave
+before returning any accepted findings. Runtime introspection unavailable;
+explicit dispatch fields/configured profiles are the acceptance evidence.
+
+Pre-review local audit for the release correction is complete: the consolidated
+18-file run passes all 483 tests with no unhandled rejection; focused static
+checks and parent diffcheck pass. Task/work/review status remains active pending
+the final gate. No published API or runtime statement changed. The private
+fixture export stays in the private test package; no new policy constants or
+recovery guarantees were introduced. D-0133 still has a historical pending
+implementation status, queued for the final status reconciliation. Its actual
+accepted stream-failure contract remains unchanged. Review the frozen correction
+diff against ee7373148; all three planned explicit Sol/medium lanes apply.
+
+The complete release-correction review wave is collected. All three existing
+roles used explicitly dispatched gpt-6-sol / medium; no visible mismatch and
+runtime introspection unavailable. API and reliability are clean. Accept the
+style P2: the two-row Entity Inbox batch test must identify signal-first as
+pending and exclude signal-second, rather than only match a status. Return
+this one deterministic assertion correction to the existing implementer. No
+substantive concern is reopened after a focused passing regression. The
+managed post-rejoin test establishes logical delivery and does not identify
+which child supplied the update; preserve that limitation in its evidence.
+
+The sole accepted correction is closed: the batch test identifies signal-first
+as the only pending row, retains both replay calls and the original error.
+Its 37-test focused file and relevant static checks pass. The post-rejoin
+evidence is narrowed to logical delivery without child attribution. No runtime
+statement changed; all scoped concerns are converged. Proceed with fresh full
+preflight and release verification using the existing explicit Luna/low
+mechanical function. The complete task remains active until that gate passes.

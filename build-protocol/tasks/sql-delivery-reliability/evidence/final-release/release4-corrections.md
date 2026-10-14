@@ -1,0 +1,40 @@
+# Release verification 4 correction record
+
+The release profile stopped after 5,320 passing and 37 failing tests. Its aggregate coverage result was unavailable. The failures had distinct causes; this record describes the focused corrections without treating that interrupted profile as a pass.
+
+## Environment and build fixtures
+
+All focused reruns use `TMPDIR=/Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/.worktrees/sql-delivery-tmp`. The earlier `node_modules/.cache` temp root caused Node 24 to reject type stripping for temporary TypeScript fixtures. Under the worktree temp root, the Proto workflow bootstrap, core Time, package bin, declaration normalizer, and managed remote readiness tests run without their earlier environment failure. The first seven-file probe still found five independent failures: two TS6 ancestor-config errors, two missing fake package exports, and one obsolete external-fixture location assertion.
+
+The two generated Proto tool tests now pass `--ignoreConfig` to their isolated `tsc` commands. The generated registry test writes the fake server package's `./spi/handler-registry` type export, making its intended isolated NodeNext import resolvable. The external-consumer test checks that copied dependencies are real files confined to the isolated fixture and have no symlink into the checkout, rather than assuming the task-local fixture lies outside the repository root. The package-boundary scanner uses tracked files only for the actual Git root; its synthetic nested fixture uses discovered files, restoring its negative boundary case. The API inventory reflects removed cleanup ports and `EntityCommitSnapshots`; build output cleanup includes the new blackbox dist path; the canonical Proto count is 51.
+
+The six sibling-source/generated import violations were corrected through existing package exports. The remote paging test now uses published DeliveryServer and domain-correct ProjectMilestone generated schemas from the private server test fixture package. The blackbox transport fixture imports public Node/Web client packages and the existing private `server-test-fixtures/internal` route, extended to export NodeCoordinator without changing published server API. Blackbox test package gained three `workspace:*` development dependencies (client-node, client-web, server-test-fixtures); the lockfile importer gained only those three links. An offline `pnpm install` succeeded. Runtime identity check from the blackbox package confirmed private NodeCoordinator is `===` the compiled server NodeCoordinator class.
+
+## Behavior expectations
+
+Client iterator disposal mocks now emit a valid response-only activation ACK before their intentional stalled/error stream behavior. Todo's successful subscription test consumes and validates the ACK before asserting the generated TaskList update. Process Manager predicate tests expect the propagated invalid-predicate TypeError while asserting zero storage reads.
+
+Local Entity and Projection Inbox tests now distinguish durable admission from successful processing. A failed replay or unsupported target/label rejects the exact receive and leaves its row `TO_DELIVER`; it does not count as a successful `DELIVERED` acknowledgement. The two-row Entity batch still attempts both targets, retains the failed row, completes the successful row, and reports the first error. Existing readiness and side-effect assertions remain. These are expectation corrections to the established processing-versus-acknowledgement contract; no production delivery code changed.
+
+The focused style review identified that the batch test initially matched only one pending row's status. Its final assertion identifies `signal-first` as the sole `TO_DELIVER` row, so `signal-second` cannot remain pending while both replay attempts and the original rejection are still checked. The 37-test Entity Inbox suite, focused ESLint, Prettier, cleanup enforcement, and `git diff --check` pass after this assertion change. The earlier 483-test consolidated result predates only this stronger assertion; no runtime code changed.
+
+The initial 18-file combined run uncovered an intermittent managed RED-28 test assumption: after killing a backend child, it required the same raw generated Activate stream to carry survivor updates. D-0133 (`build-protocol/DECISION_LOG.md`) permits a required child failure to terminate that logical stream; bounded recovery is the high-level Client behavior, while intentional membership removal can race that failure. The old test alternated between a pending read and gRPC `ConnectError [internal]`, including an unobserved pending rejection. A diagnostic run identified the exact failed phase as `survivor update`, and a second diagnostic run showed that requiring old-stream termination can itself time out. Neither outcome proves a replacement-admission defect.
+
+The replacement-admission test now cancels its initial raw subscription **before** the kill. It still SIGKILLs a specific reported child PID, observes exactly one surviving managed member while the real remote Delivery snapshot is held, opens a fresh validated subscription against that survivor, receives its exact Project update, releases the snapshot, observes two members again, and receives the exact post-rejoin Project update. Canceling the old raw stream removes only the unsupported continuity assertion; it does not bypass child retirement, held snapshot admission, survivor routing, or logical delivery after rejoin. The post-rejoin update does not identify which child supplied it. Other pending test reads have immediate rejection observers, and the bounded test helper labels the failing phase while retaining its cause. Three consecutive focused runs passed with no unhandled rejection. No production code changed.
+
+High-level retry and child-failure coverage remains in `packages/server-blackbox-tests/test/project-subscription-transports.integration.test.ts` with `project-subscription-transport.mjs`: its `stream-reconnect`, `child-stream-fault`, `child-stream-eof`, `coordinator-child-fault`, and fanout selectors use `NodeClient.connectTo` or `WebClient.forGrpcWeb`/`forConnect`, a real SQL Project service, and validated activation. The earlier transport grids and D-0133 implementation evidence in `IMPLEMENTATION.md` cover that separate contract; RED-28 is not substituted for them.
+
+## Verification
+
+- Initial corrected-temp seven-suite probe: 4 files pass, 3 fail, 300 tests pass / 5 fail; the five remaining failures were isolated and addressed above.
+- Second eight-suite probe after build-fixture/import fixes: 8 files / 198 tests pass, exit 0.
+- Client/Todo/Process Manager focused tests: 3 files / 93 tests pass, exit 0 after the ACK and propagated-error corrections.
+- Entity/Projection focused tests: 2 files / 52 tests pass, exit 0 after pending-row assertions.
+- `pnpm typecheck:build:generated`: pass, exit 0.
+- `pnpm typecheck:tooling`: pass, exit 0.
+- Focused ESLint and Prettier: pass after correcting one unused import and four formatted files; `git diff --check`: pass.
+- Cleanup and TSDoc enforcement: pass. The three long private generated fixture import declarations are split under `prettier-ignore` so both the repository 120-character cleanup rule and Prettier agree without changing their actual module path.
+- Consolidated original-failure-file rerun before the managed fixture correction: 17 files pass, 1 fails; 482 tests pass, 1 fails, and 1 unhandled rejection. The failure is the old RED-28 raw-stream continuity assertion and is retained in `release4-consolidated-red.log` as RED evidence. The corrected managed file passed 3/3 tests in three consecutive isolated runs; the full release profile remains for the orchestrator.
+- Final consolidated original-failure-file rerun after the managed fixture correction: **18 files / 483 tests pass, exit 0**, with no unhandled error reported. Raw output: `release4-consolidated-final.log`.
+
+The full `verify:release` profile and global coverage have not been rerun by this implementation pass; the orchestrator controls that final gate.

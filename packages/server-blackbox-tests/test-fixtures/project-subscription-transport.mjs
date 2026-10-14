@@ -42,12 +42,12 @@ import { RemoteDelivery } from "@spine-event-engine/delivery-client";
 import { DeliveryServer } from "@spine-event-engine/delivery-server";
 import { EnvironmentType, ServerEnvironment, SpineServices } from "@spine-event-engine/server";
 import { BrowserServer } from "@spine-event-engine/server/browser";
-import { NodeCoordinator } from "../../server/dist/server/node-coordinator.js";
+import { NodeCoordinator } from "@spine-event-engine/server-test-fixtures/internal";
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
 import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
 
-import { Client as NodeClient } from "../../client-node/dist/index.js";
-import { Client as WebClient } from "../../client-web/dist/index.js";
+import { Client as NodeClient } from "@spine-event-engine/client-node";
+import { Client as WebClient } from "@spine-event-engine/client-web";
 import { CreateProjectSchema } from "../dist/generated/spine/server/testing/project_commands_pb.js";
 import { ProjectCreatedSchema } from "../dist/generated/spine/server/testing/project_events_pb.js";
 import {

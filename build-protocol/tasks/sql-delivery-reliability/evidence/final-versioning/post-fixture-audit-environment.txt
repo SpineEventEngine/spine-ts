@@ -1,0 +1,13 @@
+Role/function: orchestrator-dispatched package/version verification.
+Expected profile: gpt-6-luna / medium (retained from the original explicit dispatch).
+Runtime model introspection: unavailable.
+Worktree: /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts
+Baseline lock: ec40b81e7:pnpm-lock.yaml
+Current HEAD: ee73731480b71e9bd2b0e89ecfcf1416d8296431
+Current lockfile SHA-256: 9b142ea7ed339c8c1c25494ee380d9d57bd89949fdbcbcb4aa2065f5b2cd386b
+Node: v24.18.0
+pnpm: 11.9.0
+Audit temporary directory: /Users/armiol/.codex/worktrees/sql-delivery-reliability/spine-ts/.worktrees/sql-delivery-tmp
+No installation or lockfile mutation was performed for this audit.
+
+Routing note: one preliminary read-only comparison invocation used a non-designated checkout path and was discarded when its HEAD did not match the assigned task worktree. It made no changes. All accepted lock comparison and audit commands were run from the designated worktree above.

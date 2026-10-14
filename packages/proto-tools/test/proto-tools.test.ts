@@ -1558,6 +1558,7 @@ describe("spine proto model tooling", () => {
       process.execPath,
       [
         join(process.cwd(), "node_modules/typescript/bin/tsc"),
+        "--ignoreConfig",
         "--noEmit",
         "--module",
         "NodeNext",
@@ -1601,6 +1602,7 @@ describe("spine proto model tooling", () => {
       process.execPath,
       [
         join(process.cwd(), "node_modules/typescript/bin/tsc"),
+        "--ignoreConfig",
         "--noEmit",
         "--module",
         "NodeNext",

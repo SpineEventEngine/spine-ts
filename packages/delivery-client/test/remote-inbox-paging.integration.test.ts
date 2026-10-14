@@ -16,17 +16,28 @@ import { create } from "@bufbuild/protobuf";
 import { Code } from "@connectrpc/connect";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
-import { EventContextSchema, EventIdSchema, EventSchema } from "@spine-event-engine/proto";
-import { DeliveryServer } from "../../delivery-server/src/index.js";
+import {
+  EventContextSchema,
+  EventIdSchema,
+  EventSchema,
+  UserIdSchema,
+} from "@spine-event-engine/proto";
+import { DeliveryServer } from "@spine-event-engine/delivery-server";
 import { ShardIndex, type InboxMessage } from "@spine-event-engine/server";
 import { afterEach, expect, it } from "vitest";
 
-import { ProjectCreatedSchema } from "../../server-blackbox-tests/generated/spine/server/testing/project_events_pb.js";
+// prettier-ignore
 import {
-  OrganizationIdSchema,
-  ProjectIdSchema,
-  ProjectProjectionStateSchema,
-} from "../../server-blackbox-tests/generated/spine/server/testing/project_workflow_pb.js";
+  ProjectMilestoneAddedSchema,
+} from "@spine-event-engine/server-test-fixtures/generated/repository-routing/project_events_pb.js";
+// prettier-ignore
+import {
+  ProjectMilestoneIdSchema,
+} from "@spine-event-engine/server-test-fixtures/generated/repository-routing/project_identifiers_pb.js";
+// prettier-ignore
+import {
+  ProjectMilestoneOverviewStateSchema,
+} from "@spine-event-engine/server-test-fixtures/generated/repository-routing/project_states_pb.js";
 import { DeliveryClient } from "../src/client/client.js";
 import { RemoteInbox } from "../src/remote/adapters.js";
 
@@ -143,17 +154,15 @@ it("reports an oversized page so the caller can request fewer rows", async () =>
 
 function projectionMessage(index: number, name = `Project ${String(index + 1)}`): InboxMessage {
   const id = `projection-${String(index).padStart(4, "0")}`;
-  const organization = create(OrganizationIdSchema, { code: "paging" });
-  const project = create(ProjectIdSchema, { organization, number: index + 1 });
+  const milestone = create(ProjectMilestoneIdSchema, {
+    reader: create(UserIdSchema, { value: "paging-reader" }),
+    number: index + 1,
+  });
   const event = create(EventSchema, {
     id: create(EventIdSchema, { value: `event-${id}` }),
     message: AnyMessages.pack(
-      ProjectCreatedSchema,
-      create(ProjectCreatedSchema, {
-        organization,
-        project,
-        name,
-      }),
+      ProjectMilestoneAddedSchema,
+      create(ProjectMilestoneAddedSchema, { id: milestone, name }),
     ),
     context: create(EventContextSchema, {
       timestamp: create(TimestampSchema, { seconds: 1n }),
@@ -162,8 +171,8 @@ function projectionMessage(index: number, name = `Project ${String(index + 1)}`)
   return {
     id: { value: id, shard: ShardIndex.single() },
     inboxId: {
-      targetId: AnyMessages.pack(ProjectIdSchema, project),
-      targetTypeUrl: TypeUrls.derive(ProjectProjectionStateSchema),
+      targetId: AnyMessages.pack(ProjectMilestoneIdSchema, milestone),
+      targetTypeUrl: TypeUrls.derive(ProjectMilestoneOverviewStateSchema),
     },
     signalId: event.id?.value ?? "",
     signal: AnyMessages.pack(EventSchema, event, { validate: false }),

@@ -117,6 +117,7 @@ it("RED-27/28 keeps the final managed subscription relay until fenced Delivery w
 
   await handlerGate.arm();
   const nextUpdate = iterator.next();
+  void nextUpdate.catch(() => undefined);
   await bounded(
     commands.post(createProjectCommand("t0209-drain-create", "t0209-drain-project")),
     "drained command",
@@ -203,6 +204,7 @@ it("RED-28 holds a replacement outside managed admission until its remote snapsh
   const owner = await handlerGate.owner();
   const removed = members.find((member) => member.pid !== owner);
   if (removed === undefined) throw new Error("Managed fixture did not report an initial replica.");
+  await bounded(subscriptions.cancel(subscription), "initial subscription cancellation");
   delivery.armSnapshot();
   process.kill(removed.pid, "SIGKILL");
   await expect.poll(() => currentMembers(child, "retired")).toHaveLength(1);
@@ -211,7 +213,21 @@ it("RED-28 holds a replacement outside managed admission until its remote snapsh
   expect(whileSnapshotHeld[0]?.pid).not.toBe(removed.pid);
   await delivery.snapshotEntered;
 
-  const nextUpdate = iterator.next();
+  const survivorSubscription = await bounded(
+    subscriptions.subscribe(projectOverviewTopic()),
+    "survivor subscription",
+  );
+  // The generated stream iterator leaves its return value as `any`; the tests check `done`.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+  const survivorIterator: AsyncIterator<SubscriptionUpdate, void> = subscriptions
+    .activate(survivorSubscription)
+    [Symbol.asyncIterator]();
+  const survivorAck = await bounded(survivorIterator.next(), "survivor activation ACK");
+  if (survivorAck.done) throw new Error("Survivor activation ended before its ACK.");
+  expect(survivorAck.value.response?.status?.status.case).toBe("ok");
+  expect(survivorAck.value.update.case).toBeUndefined();
+  const nextUpdate = survivorIterator.next();
+  void nextUpdate.catch(() => undefined);
   await bounded(
     commands.post(createProjectCommand("t0209-survivor", "t0209-survivor-project")),
     "survivor command",
@@ -222,7 +238,8 @@ it("RED-28 holds a replacement outside managed admission until its remote snapsh
   delivery.releaseSnapshot();
   await expect.poll(() => currentMembers(child, "replacement"), { timeout: 2_000 }).toHaveLength(2);
 
-  const afterRejoin = iterator.next();
+  const afterRejoin = survivorIterator.next();
+  void afterRejoin.catch(() => undefined);
   await bounded(
     commands.post(createProjectCommand("t0209-replacement", "t0209-replacement-project")),
     "replacement command",
@@ -481,9 +498,13 @@ function bounded<T>(work: Promise<T>, description: string, timeout = 5_000): Pro
       reject(new Error(`${description} timed out.`));
     }, timeout);
   });
-  return Promise.race([work, expired]).finally(() => {
-    clearTimeout(timer);
-  });
+  return Promise.race([work, expired])
+    .catch((error: unknown) => {
+      throw new Error(`${description} failed.`, { cause: error });
+    })
+    .finally(() => {
+      clearTimeout(timer);
+    });
 }
 
 function listen(server: http2.Http2Server): Promise<number> {
