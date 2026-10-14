@@ -8550,3 +8550,28 @@ branches) and hit the shared BoundedContext missing-registry error path. Prior
 full coverage output was preserved. Commit/push these test-only corrections,
 repeat full verification once using explicit Luna/low mechanical dispatch, and
 require final-commit CI verification and publication trial to pass.
+
+Full local verification passed at 1199facbe in 362.04s, all 6,306 tests passing
+and all coverage totals unchanged. Hosted run 38561063545 passed every test and
+90% branch coverage, but correctly failed on one unhandled React scheduler callback
+after renderer-auth-recovery.test.tsx's jsdom teardown (`window is not defined`).
+Hosted test phase is now 628.30s versus baseline 1,069.21s. Same explicit Sol/medium
+implementer receives the concrete fixture lifecycle defect: inspect renderer tests
+that import the app entry point, ensure actual React roots/effects are unmounted
+before environment teardown, and preserve UI behavioral assertions. No swallowed
+errors, arbitrary sleeps/timeouts, or production test-only API. Run all affected
+renderer tests and complete preflight before narrow lifecycle/test-quality review.
+
+Renderer test-only helper now delegates to actual React createRoot, retains the
+created roots, and unmounts them inside act before jsdom teardown. All four
+renderer suites keep their UI assertions and pass together without unhandled
+errors. Tooling and affected package typechecks, ESLint, cleanup, TSDoc, formatting
+and diff checks pass. Existing explicit Sol/medium performance/reliability and
+style/test-quality reviewers receive the helper and four call-site changes for
+narrow re-review. No production behavior, exports, or public documentation changed.
+
+Both renderer re-reviews passed: real React rendering and all UI assertions remain;
+root cleanup also runs if mounting fails after root creation. No suppressed errors,
+arbitrary delays, or simulated rendering were introduced. Commit/push correction
+and run one full verify:release with explicit Luna/low mechanical dispatch; await
+final-commit hosted verification and publication trial before reporting completion.

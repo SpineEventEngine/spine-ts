@@ -13,6 +13,7 @@
  */
 
 // @vitest-environment jsdom
+import { mountRenderer } from "./renderer-root.js";
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { expect, test, vi } from "vitest";
 
@@ -57,7 +58,7 @@ test("keeps the workspace behind sign-in until a usable account is confirmed", a
   Object.defineProperty(window, "releaseNotes", { configurable: true, value: bridge });
   document.body.innerHTML = '<div id="root"></div>';
   await act(async () => {
-    await import("../src/renderer.js");
+    await mountRenderer();
   });
   expect(screen.getByRole("dialog", { name: "Welcome" })).toBeTruthy();
   expect(screen.queryByRole("button", { name: "New release" })).toBeNull();

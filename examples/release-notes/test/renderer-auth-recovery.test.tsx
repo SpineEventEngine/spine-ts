@@ -13,6 +13,7 @@
  */
 
 // @vitest-environment jsdom
+import { mountRenderer } from "./renderer-root.js";
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { expect, test, vi } from "vitest";
 
@@ -52,7 +53,7 @@ test("a limited grant can retry sign-in in the same app session without saved-ac
   });
   document.body.innerHTML = '<div id="root"></div>';
   await act(async () => {
-    await import("../src/renderer.js");
+    await mountRenderer();
   });
   const primary = await screen.findByRole("button", { name: "Sign in with ChatGPT" });
   expect(screen.queryByRole("combobox", { name: "Account" })).toBeNull();

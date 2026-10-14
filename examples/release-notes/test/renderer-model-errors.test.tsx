@@ -13,6 +13,7 @@
  */
 
 // @vitest-environment jsdom
+import { mountRenderer } from "./renderer-root.js";
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { expect, test, vi } from "vitest";
 
@@ -47,7 +48,7 @@ test("catalog failure keeps the workspace visible and uncertain sign-out explain
   });
   document.body.innerHTML = '<div id="root"></div>';
   await act(async () => {
-    await import("../src/renderer.js");
+    await mountRenderer();
   });
   await screen.findByRole("heading", { name: "Your releases" });
   await screen.findByText("Models for this account are unavailable.");

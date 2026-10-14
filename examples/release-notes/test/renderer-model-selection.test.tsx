@@ -13,6 +13,7 @@
  */
 
 // @vitest-environment jsdom
+import { mountRenderer } from "./renderer-root.js";
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { expect, test, vi } from "vitest";
 
@@ -92,7 +93,7 @@ test("a clicked model displays immediately and only the latest confirmed choice 
   });
   document.body.innerHTML = '<div id="root"></div>';
   await act(async () => {
-    await import("../src/renderer.js");
+    await mountRenderer();
   });
   fireEvent.click(await screen.findByRole("button", { name: "New release" }));
   fireEvent.click(screen.getByRole("button", { name: "Choose a Git project" }));
