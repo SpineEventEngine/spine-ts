@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { clone, create, toBinary } from "@bufbuild/protobuf";
+import { create, toBinary } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { AnyMessages, Time } from "@spine-event-engine/core";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
@@ -137,7 +137,7 @@ describe("in-memory Agent repository separation", () => {
           key,
           token: "claim",
           expectedRecordBytes: toBinary(AgentExecutionRecordSchema, record),
-          next: clone(AgentExecutionRecordSchema, record),
+          next: record,
           historyEntries: [
             conversation(recordId, "conversation", create(TimestampSchema, { seconds: 101n })),
           ],

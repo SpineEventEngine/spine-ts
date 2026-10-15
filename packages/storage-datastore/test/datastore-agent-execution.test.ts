@@ -17,7 +17,6 @@ import { Datastore } from "@google-cloud/datastore";
 import { clone, create, toBinary } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { EventIdSchema, EventSchema, VersionSchema } from "@spine-event-engine/proto";
-import { AgentHistoryEntrySchema } from "@spine-event-engine/proto/agent";
 import { Time } from "@spine-event-engine/core";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
@@ -190,9 +189,10 @@ describe.runIf(emulatorHost !== undefined)("Datastore Agent execution", () => {
         historyRecordBytes: 1_000_000,
         transactionPayloadBytes: 9 * 1024 * 1024,
       });
-      const oversized = clone(
-        AgentHistoryEntrySchema,
-        conversation(randomUUID(), "capacity", create(TimestampSchema, { seconds: 101n })),
+      const oversized = conversation(
+        randomUUID(),
+        "capacity",
+        create(TimestampSchema, { seconds: 101n }),
       );
       if (
         oversized.item.case !== "conversationRecord" ||
@@ -208,7 +208,7 @@ describe.runIf(emulatorHost !== undefined)("Datastore Agent execution", () => {
           key: required(source.key),
           token: "version",
           expectedRecordBytes: toBinary(AgentExecutionRecordSchema, claim.record),
-          next: clone(AgentExecutionRecordSchema, claim.record),
+          next: claim.record,
           historyEntries: [oversized],
         }),
       ).rejects.toThrow(/history record exceeds Datastore entity payload capacity/i);

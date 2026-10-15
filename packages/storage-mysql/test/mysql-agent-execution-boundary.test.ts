@@ -230,8 +230,12 @@ describe("MySQL Agent execution provider boundary", () => {
         expect.any(Function),
         { requireTransaction: true },
       );
-      rows.invocation.readLocked.mockImplementation(() => Promise.resolve(admitted));
-      rows.invocation.read.mockImplementation(() => Promise.resolve(admitted));
+      rows.invocation.readLocked.mockImplementation(() =>
+        Promise.resolve(clone(AgentExecutionRecordSchema, admitted)),
+      );
+      rows.invocation.read.mockImplementation(() =>
+        Promise.resolve(clone(AgentExecutionRecordSchema, admitted)),
+      );
       const detached = required(await storage.read(required(additional.key)));
       detached.status = AgentInvocationStatus.AGENT_INVOCATION_TERMINATED;
       expect((await storage.read(required(additional.key)))?.status).toBe(

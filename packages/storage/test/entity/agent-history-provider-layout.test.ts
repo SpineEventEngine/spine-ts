@@ -12,8 +12,9 @@
  * the License.
  */
 
-import { toBinary } from "@bufbuild/protobuf";
+import { clone, toBinary } from "@bufbuild/protobuf";
 import { AgentHistoryEntrySchema } from "@spine-event-engine/proto/agent";
+import { AgentHistoryRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
 import { describe, expect, it } from "vitest";
 
 import { AgentHistoryKeys } from "../../src/entity/agent-history.js";
@@ -92,7 +93,8 @@ describe("Agent history native query paging", () => {
                   AgentHistoryKeys.fromEntry(AgentHistoryRecords.requiredEntry(record)),
                 ) > after,
             )
-            .slice(0, limit),
+            .slice(0, limit)
+            .map((record) => clone(AgentHistoryRecordSchema, record)),
         );
       },
     );

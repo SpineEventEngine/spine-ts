@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { clone, create } from "@bufbuild/protobuf";
+import { create } from "@bufbuild/protobuf";
 import {
   AbstractAssignee,
   AbstractEventSubscriber,
@@ -21,10 +21,7 @@ import {
 } from "@spine-event-engine/server";
 
 import type { ReviewSupportReply } from "../../generated/spine/server/testing/support_agent_commands_pb.js";
-import {
-  SupportReplyUnavailableSchema,
-  type SupportReplyUnavailable,
-} from "../../generated/spine/server/testing/support_agent_rejections_pb.js";
+import type { SupportReplyUnavailable } from "../../generated/spine/server/testing/support_agent_rejections_pb.js";
 import {
   SupportReplyReviewStartedSchema as ReviewStartedSchema,
   type SupportReplyReviewStarted,
@@ -46,7 +43,7 @@ export class SupportRejectionSubscriber extends AbstractEventSubscriber {
    * @param rejection Rejected ticket identity.
    */
   @Subscribe onReplyUnavailable(rejection: SupportReplyUnavailable): void {
-    this.rejections.push(clone(SupportReplyUnavailableSchema, rejection));
+    this.rejections.push(rejection);
   }
 }
 

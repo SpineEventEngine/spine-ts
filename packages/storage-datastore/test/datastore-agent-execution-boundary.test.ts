@@ -270,7 +270,7 @@ describe("Datastore Agent execution provider boundary", () => {
           key,
           token: "expired",
           expectedRecordBytes: toBinary(Execution.AgentExecutionRecordSchema, first.record),
-          next: clone(Execution.AgentExecutionRecordSchema, first.record),
+          next: first.record,
         }),
       ).rejects.toThrow(/claim|current/i);
       const recovered = required(
@@ -541,10 +541,7 @@ describe("Datastore Agent execution provider boundary", () => {
       stateType: SupportReplyAgentStateSchema.typeName,
     });
     try {
-      const invalidSource = clone(
-        Execution.AgentAcceptedInvocationSchema,
-        accepted(randomUUID(), "T-invalid-id"),
-      );
+      const invalidSource = accepted(randomUUID(), "T-invalid-id");
       invalidSource.recipientId = create(AnySchema, {
         typeUrl: "type.spine.server.testing/OtherId",
       });

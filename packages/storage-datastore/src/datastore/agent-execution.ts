@@ -156,7 +156,7 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
       if (prior !== undefined) {
         if (!AgentExecutionValues.sameAccepted(prior.accepted, accepted))
           throw new Error("Agent execution admission conflicts with immutable source facts.");
-        return AgentExecutionValues.cloneRecord(prior);
+        return prior;
       }
       this.offerCandidate(head, record);
       this.save(tx, this.rows.head, head);
@@ -252,7 +252,7 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
       invocationId(AgentExecutionValues.requiredKey(key, this.input.stateType)),
     );
     checkIdentity(found, key);
-    return found === undefined ? undefined : AgentExecutionValues.cloneRecord(found);
+    return found;
   }
 
   /**
@@ -306,7 +306,7 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
     this.save(tx, this.rows.invocation, record);
     this.save(tx, this.rows.head, head);
     return {
-      record: AgentExecutionValues.cloneRecord(record),
+      record,
       preferences: head.preferences.map((item) => item),
     };
   }

@@ -376,7 +376,8 @@ class FlatEntityCodec<I, R extends Message> {
     }
 
     try {
-      return fromBinary(this.recordSpec.recordType, payload, { readUnknownFields: false });
+      const bytes = Buffer.isBuffer(payload) ? Uint8Array.from(payload) : payload;
+      return fromBinary(this.recordSpec.recordType, bytes, { readUnknownFields: false });
     } catch {
       throw new Error("Datastore entity cannot be decoded.");
     }

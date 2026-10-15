@@ -12,12 +12,11 @@
  * the License.
  */
 
-import { clone, create, equals, type MessageShape } from "@bufbuild/protobuf";
+import { create, equals, type MessageShape } from "@bufbuild/protobuf";
 import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
 import { AnyMessages, TypeUrls, Validate, type MessageSchema } from "@spine-event-engine/core";
 import {
   CommandIdSchema,
-  EventContextSchema,
   EventIdSchema,
   EventSchema,
   MessageIdSchema,
@@ -26,9 +25,6 @@ import {
 import {
   AgentOperationRefSchema,
   AiModelKind,
-  ConversationIdSchema,
-  AiOperationIdSchema,
-  ModelRefSchema,
   type AgentOperationRef,
 } from "@spine-event-engine/proto/agent";
 import {
@@ -147,15 +143,15 @@ export const AgentInteractionEvents: AgentInteractionEventFactory = Object.freez
     )
       throw new TypeError("Agent interaction requires a selected model and kind.");
     const result = create(AgentOperationRefSchema, {
-      operation: clone(AiOperationIdSchema, operation.operation),
+      operation: operation.operation,
       agent: create(MessageIdSchema, {
-        id: clone(AnySchema, agentId),
+        id: agentId,
         typeUrl: TypeUrls.derive(stateSchema),
       }),
       sourceSignal: sourceRef(accepted),
-      model: clone(ModelRefSchema, selected.model),
+      model: selected.model,
       kind: selected.kind,
-      conversation: clone(ConversationIdSchema, operation.conversation),
+      conversation: operation.conversation,
     });
     return Validate.check(AgentOperationRefSchema, result);
   },
@@ -189,8 +185,8 @@ export const AgentInteractionEvents: AgentInteractionEventFactory = Object.freez
           ? metadata.eventFromEvent(accepted.signal.value, {})
           : undefined;
     if (!origin) throw new TypeError("Agent interaction requires a source signal.");
-    const context = clone(EventContextSchema, origin.context);
-    context.producerId = clone(AnySchema, producer);
+    const context = origin.context;
+    context.producerId = producer;
     return Validate.check(
       EventSchema,
       create(EventSchema, {

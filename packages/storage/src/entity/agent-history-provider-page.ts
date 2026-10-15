@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { clone, toBinary } from "@bufbuild/protobuf";
+import { toBinary } from "@bufbuild/protobuf";
 import { AgentHistoryEntrySchema, type AgentHistoryEntry } from "@spine-event-engine/proto/agent";
 import type { AgentHistoryRecord } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
 
@@ -56,7 +56,7 @@ export const AgentHistoryPages = {
             throw new RangeError("Agent history first entry exceeds maxBytes.");
           return { entries: Object.freeze(entries), hasMore: true };
         }
-        entries.push(clone(AgentHistoryEntrySchema, entry));
+        entries.push(entry);
         bytes += length;
         next = AgentHistoryKeys.indexValue(AgentHistoryKeys.fromEntry(entry));
       }

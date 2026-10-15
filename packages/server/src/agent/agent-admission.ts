@@ -12,11 +12,9 @@
  * the License.
  */
 
-import { clone, create, equals } from "@bufbuild/protobuf";
-import { AnySchema } from "@bufbuild/protobuf/wkt";
+import { create, equals } from "@bufbuild/protobuf";
 import type { Any } from "@bufbuild/protobuf/wkt";
 import type { ActorContext, Command, Event } from "@spine-event-engine/proto";
-import { ActorContextSchema, CommandSchema, EventSchema } from "@spine-event-engine/proto";
 import {
   AgentAcceptedInvocationSchema,
   AgentCodeRevisionSchema,
@@ -141,12 +139,12 @@ export const AgentAdmission: AgentAdmissionAccess = Object.freeze({
         }),
         sourceSignal,
       }),
-      recipientId: clone(AnySchema, input.recipientId),
+      recipientId: input.recipientId,
       signal:
         input.signal.kind === "command"
-          ? { case: "command", value: clone(CommandSchema, input.signal.value) }
-          : { case: "event", value: clone(EventSchema, input.signal.value) },
-      actor: clone(ActorContextSchema, input.actor),
+          ? { case: "command", value: input.signal.value }
+          : { case: "event", value: input.signal.value },
+      actor: input.actor,
       order: create(AgentInboxOrderSchema, {
         receivedAt: input.inbox.whenReceived,
         inboxVersion: input.inbox.version,

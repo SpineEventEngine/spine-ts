@@ -81,7 +81,9 @@ describe("Datastore Agent history provider boundary", () => {
           ),
         );
         return Promise.resolve({
-          entries: selected.slice(0, request.limit).map((record) => ({ record })),
+          entries: selected.slice(0, request.limit).map((record) => ({
+            record: clone(AgentHistoryRecordSchema, record),
+          })),
           hasMore: selected.length > request.limit,
         });
       },

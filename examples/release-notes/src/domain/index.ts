@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { clone, create, equals, toBinary } from "@bufbuild/protobuf";
+import { create, equals, toBinary } from "@bufbuild/protobuf";
 import { createHash } from "node:crypto";
 import type { AiFailure, AiRegistry } from "@spine-event-engine/ai";
 import { VersionSchema } from "@spine-event-engine/proto";
@@ -211,7 +211,7 @@ export class ReleaseDraft extends Aggregate<ReleaseDraftId, typeof ReleaseDraftS
   ): ReleaseGenerationRequested {
     this.update((state) => {
       state.pendingGeneration = command.generation;
-      state.pendingInputVersion = clone(VersionSchema, this.version);
+      state.pendingInputVersion = this.version;
       state.generationStatus = "requested";
       state.conversation = command.conversation;
       state.receipts.push(
@@ -224,7 +224,7 @@ export class ReleaseDraft extends Aggregate<ReleaseDraftId, typeof ReleaseDraftS
     return create(ReleaseGenerationRequestedSchema, {
       id: this.id,
       generation: command.generation,
-      inputVersion: clone(VersionSchema, this.version),
+      inputVersion: this.version,
       comparison: this.state.comparison,
       catalog: command.catalog,
       audience: this.state.audience,
@@ -306,7 +306,7 @@ export class ReleaseDraft extends Aggregate<ReleaseDraftId, typeof ReleaseDraftS
     return create(ExportPreparedSchema, {
       id: this.id,
       snapshot: create(ReleaseExportSnapshotSchema, {
-        sourceVersion: clone(VersionSchema, this.version),
+        sourceVersion: this.version,
         digest: ReleaseMarkdown.digest(bytes),
         markdown: bytes,
       }),

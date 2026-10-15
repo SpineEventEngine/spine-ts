@@ -49,3 +49,11 @@ Keep History and Sign out in matching, centered icon buttons at the header's rig
 Keep the addition within the example: read indexed history through the existing
 API, retain the original draft creation time separately from edit time, and
 format records for display. Do not add another audit store or framework API.
+
+## Copies of mutable objects
+
+Keep cloning only where another caller can actually mutate a retained object,
+or where an independent value must be changed without changing its source.
+Trace the complete call path before retaining a defensive copy. Do not clone
+values again when an earlier getter, storage read, or serialization operation
+already provides a separate object and no mutable reference is shared.

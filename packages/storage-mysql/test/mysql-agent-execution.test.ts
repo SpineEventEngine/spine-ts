@@ -175,7 +175,7 @@ describe.runIf(url !== undefined)("MySQL Agent execution", () => {
           key: staleKey,
           token: "mysql-stale",
           expectedRecordBytes: toBinary(AgentExecutionRecordSchema, staleClaim),
-          next: clone(AgentExecutionRecordSchema, staleClaim),
+          next: staleClaim,
           historyEntries: [oversized],
         }),
       ).rejects.toThrow(/history record exceeds MySQL BLOB capacity/i);

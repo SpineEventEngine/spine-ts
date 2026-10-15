@@ -104,13 +104,11 @@ import {
   type AgentPendingPage,
 } from "@spine-event-engine/storage/provider";
 import {
-  AgentHistoryCursorSchema,
   AgentHistoryEntrySchema,
   AgentInvocationTerminatedSchema,
   AgentModelSelectionChangedSchema as SelectionChangedSchema,
   AiModelKind,
   AiDiagnosticIdSchema,
-  ModelPreferenceSchema,
   ModelRefSchema,
   ToolEffect,
   type AgentHistoryEntry,
@@ -118,7 +116,6 @@ import {
   ConversationIdSchema,
 } from "@spine-event-engine/proto/agent";
 import {
-  AgentExecutionRecordSchema,
   AgentInvocationKeySchema,
   AgentExecutionStartSchema,
   type AgentExecutionStart,
@@ -1134,9 +1131,7 @@ const RepositoryAgentReads = {
   request(request: HistoryRead): HistoryRead {
     return {
       pageSize: request.pageSize,
-      ...(request.cursor === undefined
-        ? {}
-        : { cursor: clone(AgentHistoryCursorSchema, request.cursor) }),
+      ...(request.cursor === undefined ? {} : { cursor: request.cursor }),
     };
   },
 
@@ -1211,10 +1206,8 @@ const RepositoryAgentReads = {
         request,
       );
       return {
-        items: page.items.map((entry) => clone(AgentHistoryEntrySchema, entry)),
-        ...(page.nextCursor === undefined
-          ? {}
-          : { nextCursor: clone(AgentHistoryCursorSchema, page.nextCursor) }),
+        items: page.items,
+        ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }),
       };
     } finally {
       history.close();
@@ -4444,7 +4437,7 @@ class ProcessManagerExecutionSupport {
         id,
         create(AgentHistoryEntrySchema, {
           occurredAt: event.context.timestamp,
-          item: { case: "domainEvent", value: clone(EventSchema, event) },
+          item: { case: "domainEvent", value: event },
         }),
       );
     }
@@ -5097,16 +5090,11 @@ const AgentExecutionRunner = {
     await this.authorizePreferenceChanges(repository, runtime, tenantId, session);
     const version = RepositoryEntities.repositoryVersion(loaded.entity);
     const preferences = session.preferences();
-    const { historyEntries: emitted } = this.completionFacts(
-      session.record(),
-      version,
-      outputs,
-      preferences,
-    );
+    const emitted = this.emittedHistory(outputs);
     const preferenceEvents = this.preferenceEvents(repository, runtime, tenantId, session);
     const historyEntries = [...emitted, ...this.preferenceHistory(preferenceEvents)];
     const makeNext = (record: AgentExecutionRecord) =>
-      this.completionFacts(record, version, outputs, preferences).next;
+      this.completionFacts(record, version, outputs, preferences);
     const completed = await this.commitCompletion(
       repository,
       runtime,
@@ -5332,7 +5320,7 @@ const AgentExecutionRunner = {
    * @param version Entity version associated with the signal.
    * @param outputs Prepared outgoing domain signals.
    * @param preferences Current Agent instance model preferences.
-   * @returns Completion facts with original outputs and resulting version.
+   * @returns Record completed with original outputs and resulting version.
    */
   completionFacts(
     record: AgentExecutionRecord,
@@ -5343,18 +5331,17 @@ const AgentExecutionRunner = {
     const initialVersion = record.started?.initialVersion;
     if (initialVersion === undefined)
       throw new Error("Agent completion requires its started Version.");
-    const next = clone(AgentExecutionRecordSchema, record);
-    next.status =
+    record.status =
       outputs.length === 0
         ? AgentInvocationStatus.AGENT_INVOCATION_COMPLETED
         : AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_DELIVERY;
-    next.completion = create(AgentExecutionCompletionSchema, {
+    record.completion = create(AgentExecutionCompletionSchema, {
       initialVersion,
       resultingVersion: version,
-      preferences: preferences.map((entry) => clone(ModelPreferenceSchema, entry)),
-      outgoing: outputs.map((output) => clone(AgentOutgoingSignalSchema, output)),
+      preferences: [...preferences],
+      outgoing: [...outputs],
     });
-    return { next, historyEntries: this.emittedHistory(outputs) };
+    return record;
   },
 
   /**

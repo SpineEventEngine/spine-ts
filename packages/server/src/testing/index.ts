@@ -15,16 +15,9 @@
 import { ServerEnvironmentLifecycle } from "../server/server-environment.js";
 import type { Agent } from "../entity/entity.js";
 import { boundedContextAccess, type BoundedContext } from "../context/bounded-context.js";
-import { clone } from "@bufbuild/protobuf";
 import type { HistoryPage, HistoryRead } from "@spine-event-engine/ai";
 import { Validate } from "@spine-event-engine/core";
-import {
-  EventIdSchema,
-  EventSchema,
-  type Command,
-  type Event,
-  type EventId,
-} from "@spine-event-engine/proto";
+import { EventIdSchema, type Command, type Event, type EventId } from "@spine-event-engine/proto";
 import type { AgentHistoryEntry } from "@spine-event-engine/proto/agent";
 import type { TenantId } from "@spine-event-engine/proto";
 import { EventStore } from "@spine-event-engine/storage";
@@ -221,7 +214,7 @@ export async function readSystemEvents(
     const found = new Map((await store.read({ ids })).map((event) => [event.id?.value, event]));
     return ids.flatMap((id) => {
       const event = found.get(id.value);
-      return event === undefined ? [] : [clone(EventSchema, event)];
+      return event === undefined ? [] : [event];
     });
   } finally {
     store.close();

@@ -15,8 +15,7 @@
 import { clone, create, equals, type MessageShape } from "@bufbuild/protobuf";
 import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
 import { AnyMessages, TypeUrls, type MessageSchema } from "@spine-event-engine/core";
-import { AgentHistoryCursorSchema } from "@spine-event-engine/proto/agent";
-import { QueryIdSchema, QuerySchema, type Query } from "@spine-event-engine/proto/client";
+import { QuerySchema, type Query } from "@spine-event-engine/proto/client";
 import {
   AgentExecutionJournalEntrySchema as JournalEntrySchema,
   AgentExecutionScopeSchema,
@@ -193,7 +192,7 @@ export class AgentReadRuntime {
         "Agent projection query request or scope changed on recovery.",
       );
     const normalized = clone(QuerySchema, query);
-    normalized.id = clone(QueryIdSchema, saved.id);
+    normalized.id = saved.id;
     if (!equals(QuerySchema, normalized, saved))
       throw new AgentExecutionFault(
         "REPLAY_DIVERGENCE",
@@ -361,9 +360,7 @@ export class AgentReadRuntime {
         kind,
         ...(view.kind === "conversation" ? { conversation: view.conversation } : {}),
         pageSize: BigInt(request.pageSize),
-        ...(request.cursor === undefined
-          ? {}
-          : { cursor: clone(AgentHistoryCursorSchema, request.cursor) }),
+        ...(request.cursor === undefined ? {} : { cursor: request.cursor }),
         ...(maxBytes === undefined ? {} : { maxBytes: BigInt(maxBytes) }),
       }),
     );

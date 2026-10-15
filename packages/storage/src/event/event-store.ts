@@ -434,7 +434,7 @@ export const eventStoreAccess: EventStoreAccess = Object.freeze({
         storage.close();
       }
     });
-    return clone(EventSchema, record);
+    return record;
   },
 });
 

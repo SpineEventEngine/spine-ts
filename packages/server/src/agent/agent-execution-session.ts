@@ -69,11 +69,9 @@ export class AgentExecutionSession {
   ) {
     if (record.accepted?.key === undefined || record.claimToken !== token)
       throw new Error("Agent execution session requires its exact claimed record.");
-    this.#record = clone(AgentExecutionRecordSchema, record);
-    this.#initialPreferences = preferences.map((entry) => clone(ModelPreferenceSchema, entry));
-    this.#preferences = this.#initialPreferences.map((entry) =>
-      clone(ModelPreferenceSchema, entry),
-    );
+    this.#record = record;
+    this.#initialPreferences = preferences;
+    this.#preferences = [...this.#initialPreferences];
   }
 
   /**
@@ -97,19 +95,19 @@ export class AgentExecutionSession {
   /**
    * Returns per-instance selections observed at the claim boundary.
    *
-   * @returns Independent copies of current staged selections.
+   * @returns Current staged selections in a separate array.
    */
   preferences(): readonly ModelPreference[] {
-    return this.#preferences.map((entry) => clone(ModelPreferenceSchema, entry));
+    return [...this.#preferences];
   }
 
   /**
    * Returns selections fixed when this invocation claimed its Agent.
    *
-   * @returns Independent copies of the claim-time selections.
+   * @returns Claim-time selections in a separate array.
    */
   initialPreferences(): readonly ModelPreference[] {
-    return this.#initialPreferences.map((entry) => clone(ModelPreferenceSchema, entry));
+    return [...this.#initialPreferences];
   }
 
   /**
@@ -136,11 +134,7 @@ export class AgentExecutionSession {
    * Restores claim-time selections after a draft is rejected before completion.
    */
   discardPreferenceChanges(): void {
-    this.#preferences.splice(
-      0,
-      this.#preferences.length,
-      ...this.#initialPreferences.map((entry) => clone(ModelPreferenceSchema, entry)),
-    );
+    this.#preferences.splice(0, this.#preferences.length, ...this.#initialPreferences);
   }
 
   /**
@@ -176,7 +170,7 @@ export class AgentExecutionSession {
         next,
         historyEntries,
       });
-      this.#record = clone(AgentExecutionRecordSchema, next);
+      this.#record = next;
       return this.record();
     });
   }
@@ -196,7 +190,7 @@ export class AgentExecutionSession {
       const refreshed = await this.storage.read(key);
       if (refreshed?.claimToken !== this.token)
         throw new Error("Agent execution lost its provider claim after renewal.");
-      this.#record = clone(AgentExecutionRecordSchema, refreshed);
+      this.#record = refreshed;
       return this.record();
     });
   }
@@ -228,7 +222,7 @@ export class AgentExecutionSession {
         historyEntries,
         ...(entityCommit === undefined ? {} : { entityCommit }),
       });
-      this.#record = clone(AgentExecutionRecordSchema, next);
+      this.#record = next;
       return this.record();
     });
   }
@@ -253,7 +247,7 @@ export class AgentExecutionSession {
       const refreshed = await this.storage.read(key);
       if (refreshed === undefined)
         throw new Error("Agent output record disappeared after delivery.");
-      this.#record = clone(AgentExecutionRecordSchema, refreshed);
+      this.#record = refreshed;
       return this.record();
     });
   }

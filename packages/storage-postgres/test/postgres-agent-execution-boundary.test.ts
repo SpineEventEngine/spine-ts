@@ -217,7 +217,9 @@ describe("PostgreSQL Agent execution provider boundary", () => {
       );
       expect(headWrites.at(-1)?.pending).toEqual(additional.key);
       expect(client.query).toHaveBeenCalledWith("SELECT pg_advisory_xact_lock($1)", [17]);
-      invocation.read.mockImplementation(() => Promise.resolve(admitted));
+      invocation.read.mockImplementation(() =>
+        Promise.resolve(clone(AgentExecutionRecordSchema, admitted)),
+      );
       const detached = required(await storage.read(required(additional.key)));
       detached.status = AgentInvocationStatus.AGENT_INVOCATION_TERMINATED;
       expect((await storage.read(required(additional.key)))?.status).toBe(

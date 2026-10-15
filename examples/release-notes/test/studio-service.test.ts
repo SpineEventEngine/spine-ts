@@ -260,7 +260,7 @@ it("opens a draft through the public in-process Client with one pinned Git compa
     let recoveredPosts = 0;
     prototype.post = async function (this: unknown, ...args: unknown[]) {
       if ((args[0] as { typeName?: string }).typeName === OpenReleaseDraftSchema.typeName) {
-        posted.push(structuredClone(args[1]));
+        posted.push(args[1]);
         if (lost) {
           lost = false;
           throw new Error("Fixture lost draft admission before dispatch.");
@@ -912,7 +912,7 @@ it("retains uncertain accepted admission and locks account switching without a d
     const submitted: unknown[] = [];
     prototype.post = async function (this: unknown, ...args: unknown[]) {
       if ((args[0] as { typeName?: string }).typeName === RequestReleaseGenerationSchema.typeName)
-        submitted.push(structuredClone(args[1]));
+        submitted.push(args[1]);
       if (
         !heldBeforeCommit &&
         (args[0] as { typeName?: string }).typeName === RequestReleaseGenerationSchema.typeName

@@ -125,7 +125,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
       if (prior !== undefined) {
         if (!AgentExecutionValues.sameAccepted(prior.accepted, accepted))
           throw new Error("Agent execution admission conflicts with immutable source facts.");
-        return AgentExecutionValues.cloneRecord(prior);
+        return prior;
       }
       this.offerCandidate(head, record);
       await this.rows.head.write(head);
@@ -203,7 +203,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
       invocationId(AgentExecutionValues.requiredKey(key, this.input.stateType)),
     );
     this.checkIdentity(record, key);
-    return record === undefined ? undefined : AgentExecutionValues.cloneRecord(record);
+    return record;
   }
 
   /**
@@ -255,7 +255,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
     await this.rows.invocation.write(record);
     await this.rows.head.write(head);
     return {
-      record: AgentExecutionValues.cloneRecord(record),
+      record,
       preferences: head.preferences.map((item) => item),
     };
   }

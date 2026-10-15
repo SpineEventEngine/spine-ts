@@ -108,7 +108,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
       if (prior !== undefined) {
         if (!AgentExecutionValues.sameAccepted(prior.accepted, accepted))
           throw new Error("Agent execution admission conflicts with immutable source facts.");
-        return AgentExecutionValues.cloneRecord(prior);
+        return prior;
       }
       const record = create(AgentExecutionRecordSchema, {
         accepted,
@@ -145,7 +145,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
         if (head.scope?.stateType !== this.input.stateType || head.pending === undefined)
           throw new Error("PostgreSQL Agent execution head scope or candidate is invalid.");
         const record = await this.existing(client, rows, head.pending);
-        if (record !== undefined) records.push(AgentExecutionValues.cloneRecord(record));
+        if (record !== undefined) records.push(record);
       }
       const last = observed.at(-1);
       return {
@@ -198,7 +198,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
     AgentExecutionValues.requiredKey(key, this.input.stateType);
     return rows.invocation.using(async (client) => {
       const found = await this.existing(client, rows, key);
-      return found === undefined ? undefined : AgentExecutionValues.cloneRecord(found);
+      return found;
     });
   }
 
@@ -260,7 +260,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
     await rows.invocation.write(client, record);
     await rows.head.write(client, head);
     return {
-      record: AgentExecutionValues.cloneRecord(record),
+      record,
       preferences: head.preferences.map((item) => item),
     };
   }

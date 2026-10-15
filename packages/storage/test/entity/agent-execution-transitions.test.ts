@@ -151,7 +151,7 @@ describe("saved Agent output transitions", () => {
     const record = completed();
     const first = record.completion?.outgoing[0];
     if (first === undefined) throw new Error("Transition fixture lacks outgoing Event.");
-    record.completion?.outgoing.push(clone(AgentOutgoingSignalSchema, first));
+    record.completion?.outgoing.push(first);
     expect(() => {
       AgentExecutionTransitions.assertCompletion(record);
     }).toThrow(/duplicate/i);
@@ -198,7 +198,7 @@ describe("saved Agent Command delivery", () => {
   it("cannot install completion through an ordinary update", () => {
     const record = create(AgentExecutionRecordSchema, { accepted: accepted("source") });
     expect(() => {
-      AgentExecutionTransitions.assertUpdate(record, clone(AgentExecutionRecordSchema, record));
+      AgentExecutionTransitions.assertUpdate(record, record);
     }).not.toThrow();
     const next = clone(AgentExecutionRecordSchema, record);
     next.completion = create(AgentExecutionCompletionSchema);
@@ -225,7 +225,7 @@ describe("saved Agent Command delivery", () => {
       AgentExecutionTransitions.assertUpdate(record, changed);
     }).toThrow(/immutable/i);
     expect(() => {
-      AgentExecutionTransitions.assertUpdate(record, clone(AgentExecutionRecordSchema, record));
+      AgentExecutionTransitions.assertUpdate(record, record);
     }).not.toThrow();
   });
 

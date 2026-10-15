@@ -12,10 +12,10 @@
  * the License.
  */
 
-import { clone, create } from "@bufbuild/protobuf";
+import { create } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import type { ConversationHistoryRead, HistoryPage, HistoryRead } from "@spine-event-engine/ai";
-import { EventSchema, type Event } from "@spine-event-engine/proto";
+import type { Event } from "@spine-event-engine/proto";
 import {
   AgentHistoryCursorSchema,
   AgentHistoryEntrySchema,
@@ -249,7 +249,7 @@ export const AgentHistoryReads: AgentHistoryReadAccess = Object.freeze({
       binding.entityId,
       create(AgentHistoryEntrySchema, {
         occurredAt: event.context.timestamp,
-        item: { case: "systemEvent", value: clone(EventSchema, event) },
+        item: { case: "systemEvent", value: event },
       }),
     );
   },

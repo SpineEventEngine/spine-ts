@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { clone, toBinary } from "@bufbuild/protobuf";
+import { toBinary } from "@bufbuild/protobuf";
 import {
   AgentInvocationKeySchema,
   type AgentExecutionRecord,
@@ -430,7 +430,7 @@ export class AgentScheduler {
     if (key === undefined || this.#closed) return false;
     const id = `${scope.id}:${Buffer.from(toBinary(AgentInvocationKeySchema, key)).toString("base64")}`;
     if (this.#active.has(id)) return true;
-    const invocation = clone(AgentInvocationKeySchema, key);
+    const invocation = key;
     const task = this.capacity.trySubmit({
       key: id,
       signal: this.#controller.signal,

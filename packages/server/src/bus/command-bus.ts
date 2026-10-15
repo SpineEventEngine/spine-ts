@@ -314,7 +314,7 @@ export class CommandBus {
   }
 
   async #dispatch(command: Command): Promise<void> {
-    await this.#checkedDispatcher(command).dispatch(clone(CommandSchema, command));
+    await this.#checkedDispatcher(command).dispatch(command);
   }
 
   #checkedDispatcher(command: Command): CommandDispatcher {

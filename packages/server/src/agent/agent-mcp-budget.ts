@@ -426,7 +426,7 @@ export class AgentMcpBudget {
         throw new Error("Agent tool outcome is unknown and cannot be completed later.");
       if (tool.response !== undefined || response.call?.value !== callId)
         throw new Error("Agent tool completion does not match a pending intent.");
-      tool.response = clone(ToolResponseSchema, response);
+      tool.response = response;
       this.#checkCapacity(record, history);
       return record;
     };
@@ -503,8 +503,7 @@ export class AgentMcpBudget {
       request.effect !== facts.effect
     )
       throw new AgentExecutionFault("REPLAY_DIVERGENCE", "Agent tool request changed on recovery.");
-    if (prior.response !== undefined)
-      return { kind: "replay", response: clone(ToolResponseSchema, prior.response) };
+    if (prior.response !== undefined) return { kind: "replay", response: prior.response };
     const callId = request.call?.value;
     if (callId === undefined) throw new Error("Saved Agent tool call ID is absent.");
     if (prior.dispatched && request.effect === ToolEffect.WRITE)

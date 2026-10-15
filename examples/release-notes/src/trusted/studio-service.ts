@@ -575,7 +575,7 @@ export class ReleaseStudio {
       (admission.sourceEventId && admission.sourceEventId.value !== sourceId.value)
     )
       throw new Error("Accepted release generation source Event does not match its binding.");
-    admission.actor = clone(ActorContextSchema, scope.actor);
+    admission.actor = scope.actor;
     admission.sourceEventId = sourceId;
     bySource.set(sourceId.value, admission);
     return admission.model;
@@ -893,7 +893,7 @@ export class ReleaseStudio {
     this.observeContentTime(id, markdown, record.version.timestamp);
     return {
       id,
-      version: clone(VersionSchema, record.version),
+      version: record.version,
       title: record.state.title?.value ?? "",
       audience: record.state.audience,
       comparison: this.selection(selectionId, comparison),
@@ -993,7 +993,7 @@ export class ReleaseStudio {
     if (!read?.state.markdown || !read.version) throw new Error("Release draft is unavailable.");
     const markdown = new Uint8Array(read.state.markdown.utf8);
     return {
-      version: clone(VersionSchema, read.version),
+      version: read.version,
       markdown,
       digest: ReleaseMarkdown.digest(markdown),
     };
@@ -1375,7 +1375,7 @@ export class ReleaseStudio {
     const command = create(RequestReleaseGenerationSchema, {
       id: create(ReleaseDraftIdSchema, { value: id }),
       generation: create(ReleaseGenerationIdSchema, { value: generation }),
-      expectedVersion: clone(VersionSchema, read.version),
+      expectedVersion: read.version,
       catalog: this.catalog(comparison),
       instruction: create(ReleaseInstructionSchema, {
         value: instruction.trim() || "Summarize the selected release changes.",
@@ -1388,8 +1388,8 @@ export class ReleaseStudio {
     return this.sendGeneration(generation, id, {
       draftId: id,
       comparison,
-      comparisonValue: clone(ReleaseComparisonSchema, read.state.comparison),
-      command: clone(RequestReleaseGenerationSchema, command),
+      comparisonValue: read.state.comparison,
+      command,
       model: ref,
     });
   }

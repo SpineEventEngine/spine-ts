@@ -36,11 +36,11 @@ class TestCredentialStore implements ChatgptPlanCredentialStore {
     return Promise.resolve("urn:uuid:test-host");
   }
   registrations(): Promise<readonly ChatgptPlanRegistration[]> {
-    return Promise.resolve([...this.entries.values()].map((entry) => structuredClone(entry)));
+    return Promise.resolve([...this.entries.values()]);
   }
   registration(clientId: string): Promise<ChatgptPlanRegistration | undefined> {
     const entry = this.entries.get(clientId);
-    return Promise.resolve(entry === undefined ? undefined : structuredClone(entry));
+    return Promise.resolve(entry);
   }
   pendingClientIds(): Promise<readonly string[]> {
     return Promise.resolve([...this.pending]);
@@ -50,7 +50,7 @@ class TestCredentialStore implements ChatgptPlanCredentialStore {
     return Promise.resolve();
   }
   save(registration: ChatgptPlanRegistration): Promise<void> {
-    this.entries.set(registration.clientId, structuredClone(registration));
+    this.entries.set(registration.clientId, registration);
     this.pending.delete(registration.clientId);
     return Promise.resolve();
   }
