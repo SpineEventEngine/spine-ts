@@ -521,69 +521,47 @@ contracts.
 
 ## 7b. Ask an Agent to draft a support reply
 
-Two warehouse packing stations cannot print shipping labels. The employee has
-already restarted the printers and PCs, and orders are waiting for a carrier.
-A support person needs a useful first reply that acknowledges those facts and
-asks for missing information. The [Support example](../examples/support/README.md)
-models this request and keeps the proposed reply for a person to review.
+An Agent is an Entity that can ask a model to help with a domain task and record what happened. Use one when a normal handler needs a model-generated proposal, while the application still decides what to do with that proposal. The [warehouse support example](../examples/support/README.md) drafts a reply about broken label printers for a support person to review; it never sends the reply.
 
-The application posts a `DraftSupportReply` Command with the ticket ID, facts,
-and conversation ID. Spine routes it to that ticket's Agent instance. The Agent
-has Proto state and a repository, just like other stateful Entities. Its
-`@Assign` handler awaits `this.ai.invoke(...)`, then emits either
-`SupportReplySuggested` or `SupportReplyFailed`. A Projection exposes the result.
+The application first records the reported facts as a ticket. It then posts a separate `DraftSupportReply` Command with the ticket ID, those facts, and an explicit conversation ID:
 
-```text
-Application posts DraftSupportReply
-  -> asynchronous storage: Spine records the accepted work
-  -> asynchronous response: caller learns that the Command was accepted
-  -> asynchronous execution: the Agent handles the saved Command
-       -> synchronous: construct typed input from the supplied ticket facts
-       -> asynchronous: await the model and retain the request and response
-       -> synchronous: validate the model response and update the Entity draft
-       -> asynchronous storage: save the Entity state and emitted domain Event
-  -> asynchronous delivery: the Projection receives the domain Event
-  -> asynchronous query: the support person reads the proposed reply
+<!-- prettier-ignore-start -->
+
+<!-- docs-snippet-path: examples/support/test/support-blackbox.test.ts -->
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import { ConversationIdSchema } from "@spine-event-engine/proto/agent";
+import { DraftSupportReplySchema } from "../generated/spine/examples/support/commands_pb.js";
+import {
+    SupportRequestSchema,
+    SupportTicketIdSchema,
+} from "../generated/spine/examples/support/types_pb.js";
+
+const command = create(DraftSupportReplySchema, {
+    id: create(SupportTicketIdSchema, { value: "SUP-47" }),
+    conversation: create(ConversationIdSchema, { value: "SUP-47-draft-1" }),
+    request: create(SupportRequestSchema, {
+        incident: "Neither packing station can print shipping labels.",
+        attemptedSteps: ["Restarted both printers", "Restarted both PCs"],
+        impact: "Orders are waiting for the carrier.",
+    }),
+});
 ```
 
-Command acceptance does not mean the reply is ready. A client observes the later
-domain Event or queries the Projection. The model call is awaited inside the
-Entity's handling operation; database reads and writes remain short operations.
-Another Agent instance can make progress while this one waits for its model.
+<!-- prettier-ignore-end -->
 
-Define the operation with `AiModel.define()`. Its generated Proto descriptors
-describe the input and result. Its instructions explain the job. Applications can
-optionally limit requests, elapsed time, bytes, output tokens, and tool calls.
-Omitted settings do not impose framework defaults. Native schema output and
-prompt-and-validate output are explicit choices; both require
-local validation before the Agent receives a successful result. An application
-validation rule can reject a reply that ignores a known business constraint.
+```text
+DraftSupportReply → SupportDraftAgent → model proposal
+                                          ↓
+                       SupportReplySuggested or SupportReplyFailed
+                                          ↓
+                              SupportReview query
+```
 
-This makes the accepted interface predictable; it does not make a fresh model
-request produce the same words every time. The model can still be wrong about
-facts that the supplied evidence cannot verify. Here, the business process keeps
-a person responsible for sending the reply.
+The Agent's `@Assign` handler calls `this.ai.invoke(...)` with a typed task defined by `AiModel.define()`. It checks the reply before emitting `SupportReplySuggested`; unusable output leads to `SupportReplyFailed`. The review Projection stores the outcome for a person to inspect. Command acceptance means the work was saved, so the client waits for the later Event or queries the Projection to find the draft.
 
-Configure authenticated model deployments outside Entity code through
-`AiRegistry` and the optional [Vercel and Ax adapter](../packages/ai-vercel-ax/README.md).
-The registry can also apply optional ceilings shared by all model calls made
-while handling one signal. MCP tools are registered
-explicitly, with an allowlist and application authorization; tool access is not
-inferred from the model's text.
-
-Spine retains conversation records and System Events that describe model and
-tool activity, alongside the Agent's emitted domain Events. Read them through
-`fullHistory`, `conversationHistory`, `systemEventHistory`, or
-`domainEventHistory`. Every method returns newest entries first and an opaque
-cursor for older entries. The conversation method requires a conversation ID.
-These reads use repository storage indexed for that Agent instance. Recording
-cannot be disabled, and archiving an Entity does not erase the history.
-
-For tests, script responses with `AiTestBackend` and post real Commands through
-`BlackBox`. Test both a usable draft and malformed output. Inspect emitted domain
-Events, query the review Projection, and read the Agent history through
-`BlackBox.readAgentHistory()`. No paid model or provider credentials are needed.
-See the [executable support tests](../examples/support/test/support-blackbox.test.ts).
+A model can still be wrong about facts it cannot verify. Keep the review decision in application code. Configure the permitted provider and its credentials outside the Agent. For local tests, `AiTestBackend` supplies controlled replies without a paid model request. The example's [BlackBox test](../examples/support/test/support-blackbox.test.ts) checks the proposal, failure, review query, and recorded interaction history. See the [AI package guide](../packages/ai/README.md) for the task definition, [adapter guide](../packages/ai-vercel-ax/README.md) for deployment, and [Agent reference](../packages/server/REFERENCE.md#agent-execution) for exact runtime contracts.
 
 ## 8. Run and observe it
 

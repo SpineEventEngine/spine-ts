@@ -1,6 +1,6 @@
 # Agent AI facade reference
 
-Audience: application developers and adapter implementers.
+Audience: coding agents implementing or checking the AI facade and deployment contracts.
 
 ## Typed operations and deployments
 
@@ -82,7 +82,7 @@ validates question IDs, answer kinds and ranges before calling the versioned
 Proto validation and the application validation rule still apply. Optional
 requirements for full probability distributions and independent question
 execution must be supported by the deployment. See the
-[Jev registration example](../ai-vercel-ax/README.md#openrouter-jev-decision-registration).
+[Jev registration example](../ai-vercel-ax/REFERENCE.md#openrouter-jev-decision-registration).
 
 ## Limits and tools
 

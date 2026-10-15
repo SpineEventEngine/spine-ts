@@ -29,22 +29,22 @@ registration.
 Use one detailed source for each subject rather than treating this page as a
 tutorial:
 
-| Need                                                     | Canonical detail                                                                             |
-| -------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| Runtime and Bounded Context boundaries                   | [Architecture notes](../architecture/README.md)                                              |
-| Server assembly, handlers, routing, filters, and logging | [Server reference](../../packages/server/REFERENCE.md)                                       |
-| Cross-context external-event exchange                    | [Server external-event guide](../../packages/server/README.md#cross-context-external-events) |
-| Integration message transport                            | [Transport reference](../../packages/transport/REFERENCE.md)                                 |
-| Exact integration Protobuf contracts                     | [Proto reference](../../packages/proto/REFERENCE.md#integration-broker-contracts)            |
-| Node client contract                                     | [Node client reference](../../packages/client-node/REFERENCE.md)                             |
-| Browser client contract                                  | [Browser client reference](../../packages/client-web/REFERENCE.md)                           |
-| React client contract                                    | [React client reference](../../packages/client-react/REFERENCE.md)                           |
-| Storage, queries, provider layouts, and tenancy          | [Storage reference](../../packages/storage/REFERENCE.md)                                     |
-| Remote delivery client and coordination contract         | [Delivery client reference](../../packages/delivery-client/REFERENCE.md)                     |
-| Local in-memory Delivery server limits and lifecycle     | [Delivery server reference](../../packages/delivery-server/REFERENCE.md)                     |
-| Common deployment and discovery contract                 | [Deployment reference](../../packages/deployment/REFERENCE.md)                               |
-| GCE deployment operation                                 | [GCE deployment reference](../../packages/deployment-gce/REFERENCE.md)                       |
-| GKE deployment operation                                 | [GKE deployment reference](../../packages/deployment-gke/REFERENCE.md)                       |
+| Need                                                     | Canonical detail                                                                                      |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Runtime and Bounded Context boundaries                   | [Architecture notes](../architecture/README.md)                                                       |
+| Server assembly, handlers, routing, filters, and logging | [Server reference](../../packages/server/REFERENCE.md)                                                |
+| External Events across Bounded Contexts                  | [Server external-event guide](../../packages/server/REFERENCE.md#integration-broker-and-event-origin) |
+| Integration message transport                            | [Transport reference](../../packages/transport/REFERENCE.md)                                          |
+| Exact integration Protobuf contracts                     | [Proto reference](../../packages/proto/REFERENCE.md#integration-broker-contracts)                     |
+| Node client contract                                     | [Node client reference](../../packages/client-node/REFERENCE.md)                                      |
+| Browser client contract                                  | [Browser client reference](../../packages/client-web/REFERENCE.md)                                    |
+| React client contract                                    | [React client reference](../../packages/client-react/REFERENCE.md)                                    |
+| Storage, queries, provider layouts, and tenancy          | [Storage reference](../../packages/storage/REFERENCE.md)                                              |
+| Remote delivery client and coordination contract         | [Delivery client reference](../../packages/delivery-client/REFERENCE.md)                              |
+| Local in-memory Delivery server limits and lifecycle     | [Delivery server reference](../../packages/delivery-server/REFERENCE.md)                              |
+| Common deployment and discovery contract                 | [Deployment reference](../../packages/deployment/REFERENCE.md)                                        |
+| GCE deployment operation                                 | [GCE deployment reference](../../packages/deployment-gce/REFERENCE.md)                                |
+| GKE deployment operation                                 | [GKE deployment reference](../../packages/deployment-gke/REFERENCE.md)                                |
 
 For the end-to-end browser/authentication extension contract, including the
 exact trust-boundary limitations that TypeDoc declarations cannot convey, see
@@ -360,7 +360,7 @@ publication; these classes do not expose public transaction controls.
 Aggregates and Process Managers provide protected repository-bound Event-history
 methods. Agents provide separate full, conversation, System Event, and domain Event
 history reads. Projections do not expose these history methods.
-Process Managers also provide protected `select()` reads of Entity state.
+Process Managers and Agents also provide protected `select()` reads of Entity state.
 The target type identifies its Bounded Context among those registered with the same
 `Server`, while the query preserves the handler's effective tenant. See the
 [query contract](../../packages/server/REFERENCE.md#handler-routing-and-operations)

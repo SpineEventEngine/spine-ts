@@ -1,5 +1,7 @@
 # Support example reference
 
+Audience: coding agents checking the domain model, deployment, and test contracts.
+
 The generated domain Protos are under `proto/spine/examples/support`. `types.proto` defines `SupportTicketId`, supplied `SupportRequest` facts, and reviewable `SupportReply`. `commands.proto` keeps ticket opening and reply drafting distinct. `events.proto` records ticket opening, proposal, and failure. `states.proto` declares the ticket Aggregate, drafting Agent, and review Projection with the canonical Spine Entity kinds. Every draft Command and outcome carries `spine.ts.agent.ConversationId` supplied by the application; no conversation is inferred from a ticket ID.
 
 The first field of each Entity state is its ID. The runtime requires that ID and validates the ID message through the repository, so these state fields omit redundant `(required)` and `(validate)` options. This convention does not make arbitrary message fields required or recursively validated.

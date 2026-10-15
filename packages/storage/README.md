@@ -5,21 +5,15 @@ includes an in-memory implementation for local development and tests. Use it
 when an application needs a small record store, or when an adapter needs to
 implement the same storage contract for a durable provider.
 
-Agent history uses a separate provider contract. The in-memory factory offers
-indexed, append-only history during the process lifetime; the PostgreSQL,
-MySQL, and Datastore providers persist the same entries in indexed native
-record families. Adapter authors can use the provider-only history port and
-conformance checks described in the
-[reference](REFERENCE.md#provider-spi); the storage root does not expose an
-application history service.
+Agents use the configured storage provider to retain accepted work and the
+recorded model interaction. The in-memory factory keeps these records only while
+the process runs; choose a database provider when they must survive a restart.
+Applications read an Agent's history through its repository, as shown in the
+[support example](../../examples/support/README.md). Adapter implementation
+details are in the [coding-agent reference](REFERENCE.md#provider-spi).
 
 This is an experimental snapshot package. Use Node 24 or newer and generated
 Protobuf record schemas before configuring storage.
-
-Agent execution also uses the configured storage factory. It keeps accepted
-signals and completed work so the framework can resume delivery without repeating
-a completed Agent handler. In-memory storage keeps this data only while the
-process runs; use a database provider when it must survive restart.
 
 ## Install and write one record
 

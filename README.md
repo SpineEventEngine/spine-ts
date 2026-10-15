@@ -27,7 +27,7 @@ Node.js with less code.
 
 - Bounded Contexts, Aggregates, Process Managers, Projections, Agents, generated
   handlers, validation, and rejections.
-- Signal-driven AI operations with typed results, bounded model and tool calls,
+- Signal-driven AI operations with typed results, model and permitted tool calls,
   retained conversation records, and domain and System Event histories.
 - A `Server` that manages startup, readiness, shutdown, and optional authenticated
   browser access.
@@ -116,6 +116,7 @@ Start with these packages:
 - [End-user guide](docs/USER_GUIDE.md)
 - [Message Board example](examples/message-board/README.md)
 - [Support reply Agent example](examples/support/README.md)
+- [Release Notes Studio example](examples/release-notes/README.md)
 - [Deploy on GKE](packages/deployment-gke/README.md)
 - [Deploy on GCE](packages/deployment-gce/README.md)
 - [Browser authentication and extension guide](docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)

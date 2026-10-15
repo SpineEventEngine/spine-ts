@@ -1,7 +1,7 @@
 # @spine-event-engine/storage-postgres reference
 
 This reference describes the public PostgreSQL adapter contract for coding
-agents and maintainers.
+agents.
 
 ## Public entry point
 

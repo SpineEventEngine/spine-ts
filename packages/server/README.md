@@ -135,103 +135,6 @@ Process Managers have protected read-only `select()` during a handler. Agents us
 the generated `select(query).read()` form with the same actor, tenant, and
 1,000-state limits. Aggregates do not expose handler-scoped queries.
 
-An Agent uses a Proto `ENTITY` state and a generated handler registry.
-`@Assign` returns one or more native Events, `@React` returns native Events or
-`undefined`, and `@Command` returns native Commands under the existing Process
-Manager signal contract. Agents reject `@Subscribe` and Entity-state Apply
-handlers. Matching Event reactors run before commanders against one draft and
-commit one Version. The protected `ai` facade is available while a signal handler
-is active. Its asynchronous calls retain model requests and responses before
-returning a validated result or an operational failure.
-
-An Agent can read its repository history through protected `fullHistory`,
-`conversationHistory`, `systemEventHistory`, and `domainEventHistory` methods.
-Pass a positive `pageSize`; `conversationHistory` also requires a `ConversationId`.
-Pages run newest first and return an opaque `nextCursor` when older entries
-remain. Cursors are bound to the Bounded Context, tenant, repository, Agent ID, read
-method, and conversation. Ordering uses full timestamp precision, then
-conversation/System/domain category, then the existing record ID in unsigned
-UTF-8 order. A page contains at most `pageSize` entries. The framework adds no
-page-byte ceiling. Reads made during a handler count toward any configured
-invocation limits for recorded reads and recovery data.
-Agent history is retained through archive and
-logical deletion. System dispatch audit and emitted domain Events use their
-original Event envelopes in repository history.
-
-Declare the Agent ID and state in Proto, with `option (entity).kind = ENTITY;`
-on the state. The [Support example](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/README.md) includes
-complete [domain Protos](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/proto/spine/examples/support/states.proto),
-[a model definition](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/src/model.ts), and
-[an Agent implementation](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/src/index.ts).
-
-The handler invokes a typed model operation, updates its draft only on success,
-and emits a domain outcome. This abbreviated declaration uses the example's
-actual generated messages:
-
-<!-- docs-snippet-path: examples/support/src/index.ts -->
-
-```ts
-import { create } from "@bufbuild/protobuf";
-import { Agent, Assign } from "@spine-event-engine/server";
-import type { DraftSupportReply } from "../generated/spine/examples/support/commands_pb.js";
-import {
-  SupportReplySuggestedSchema,
-  SupportReplyFailedSchema,
-  type SupportReplySuggested,
-  type SupportReplyFailed,
-} from "../generated/spine/examples/support/events_pb.js";
-import { SupportDraftStateSchema } from "../generated/spine/examples/support/states_pb.js";
-import type { SupportTicketId } from "../generated/spine/examples/support/types_pb.js";
-import { draftSupportReply } from "./model.js";
-
-/** Proposes support replies for a person's review. */
-class SupportDraftAgent extends Agent<SupportTicketId, typeof SupportDraftStateSchema> {
-  /**
-   * Drafts a reply from the submitted ticket facts.
-   * @param command Ticket facts and an explicit conversation.
-   * @returns The proposed reply or a recorded failure outcome.
-   */
-  @Assign
-  async draft(command: DraftSupportReply): Promise<SupportReplySuggested | SupportReplyFailed> {
-    if (command.conversation === undefined || command.request === undefined)
-      throw new TypeError("A draft requires ticket facts and a conversation.");
-    const result = await this.ai.invoke(draftSupportReply, {
-      call: "draft-support-reply",
-      conversation: command.conversation,
-      input: command,
-    });
-    const outcome = {
-      id: this.id,
-      request: command.request,
-      conversation: command.conversation,
-      operation: result.operationId,
-    };
-    if (!result.ok) return create(SupportReplyFailedSchema, outcome);
-    this.update((state) =>
-      Object.assign(state, {
-        id: this.id,
-        request: command.request,
-        conversation: command.conversation,
-        reply: result.value,
-      }),
-    );
-    return create(SupportReplySuggestedSchema, { ...outcome, reply: result.value });
-  }
-}
-```
-
-Configure the registry outside the Entity. The Bounded Context requires persisted System
-Events, and the Agent registration supplies its code revision and permitted
-capabilities. The [example Bounded Context factory](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/src/index.ts)
-assembles these settings with the generated handler registry. A server-wide
-`withAi()` default can be supplied when building Bounded Contexts through `Server`;
-Bounded Context configuration can provide its registry directly.
-
-Posting a Command awaits acceptance. Model work and the resulting domain Event
-arrive asynchronously afterward. The handling operation can await a model without
-keeping a database transaction open. See the [Agent execution reference](REFERENCE.md#agent-execution)
-for defaults, recovery and retained history.
-
 For Process Manager's schema-and-columns query form:
 
 ```ts
@@ -287,6 +190,97 @@ for the complete tenant rules and empty-result behavior.
 
 Use `EntityQuery.all(...)` when every predicate must match and
 `EntityQuery.either(...)` when any branch may match.
+
+## Draft with an Agent
+
+An Agent is a stateful Entity that can ask a model for help while handling a
+Command or Event. For example, a support Agent drafts a reply from ticket facts
+and emits an Event for a person to review. It keeps provider credentials out of
+the handler and records the model interaction. Like other Entities, its ID and
+state are declared in Proto and its handlers use generated registration.
+
+An Agent can read its recorded interactions and emitted domain Events through
+its repository. See the [Agent execution reference](REFERENCE.md#agent-execution)
+for history methods, paging, and recovery behavior.
+
+Declare the Agent ID and state in Proto, with `option (entity).kind = ENTITY;`
+on the state. The [Support example](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/README.md) includes
+complete [domain Protos](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/proto/spine/examples/support/states.proto),
+[a model definition](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/src/model.ts), and
+[an Agent implementation](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/src/index.ts).
+
+The handler invokes a typed model operation, updates its draft only on success,
+and emits a domain outcome. This abbreviated declaration uses the example's
+actual generated messages:
+
+<!-- prettier-ignore-start -->
+
+<!-- docs-snippet-path: examples/support/src/index.ts -->
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import { Agent, Assign } from "@spine-event-engine/server";
+import type { DraftSupportReply } from "../generated/spine/examples/support/commands_pb.js";
+import {
+    SupportReplySuggestedSchema,
+    SupportReplyFailedSchema,
+    type SupportReplySuggested,
+    type SupportReplyFailed,
+} from "../generated/spine/examples/support/events_pb.js";
+import { SupportDraftStateSchema } from "../generated/spine/examples/support/states_pb.js";
+import type { SupportTicketId } from "../generated/spine/examples/support/types_pb.js";
+import { draftSupportReply } from "./model.js";
+
+/** Proposes support replies for a person's review. */
+class SupportDraftAgent extends Agent<SupportTicketId, typeof SupportDraftStateSchema> {
+    /**
+     * Drafts a reply from the submitted ticket facts.
+     *
+     * @param command Ticket facts and an explicit conversation.
+     * @returns The proposed reply or a recorded failure outcome.
+     */
+    @Assign
+    async draft(command: DraftSupportReply): Promise<SupportReplySuggested | SupportReplyFailed> {
+        if (command.conversation === undefined || command.request === undefined)
+            throw new TypeError("A draft requires ticket facts and a conversation.");
+        const result = await this.ai.invoke(draftSupportReply, {
+            call: "draft-support-reply",
+            conversation: command.conversation,
+            input: command,
+        });
+        const outcome = {
+            id: this.id,
+            request: command.request,
+            conversation: command.conversation,
+            operation: result.operationId,
+        };
+        if (!result.ok) return create(SupportReplyFailedSchema, outcome);
+        this.update((state) =>
+            Object.assign(state, {
+                id: this.id,
+                request: command.request,
+                conversation: command.conversation,
+                reply: result.value,
+            }),
+        );
+        return create(SupportReplySuggestedSchema, { ...outcome, reply: result.value });
+    }
+}
+```
+
+<!-- prettier-ignore-end -->
+
+Configure the registry outside the Entity. The Bounded Context requires persisted System
+Events, and the Agent registration supplies its code revision and permitted
+capabilities. The [example Bounded Context factory](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/src/index.ts)
+assembles these settings with the generated handler registry. A server-wide
+`withAi()` default can be supplied when building Bounded Contexts through `Server`;
+Bounded Context configuration can provide its registry directly.
+
+Posting a Command awaits acceptance. Model work and the resulting domain Event
+arrive asynchronously afterward. The handling operation can await a model without
+keeping a database transaction open. See the [Agent execution reference](REFERENCE.md#agent-execution)
+for defaults, recovery and retained history.
 
 ## Native lifecycle and routing
 

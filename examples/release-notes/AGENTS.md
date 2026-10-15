@@ -14,3 +14,7 @@ For native end-to-end tests, read the installed
 testing guides under `node_modules/@mobrowser/api/docs/`. Use the official
 `@mobrowser/cli/e2e` fixture. Repository instructions take precedence over
 vendor guidance.
+
+For this example's Agent, model, and history contracts, use the
+[coding-agent reference](REFERENCE.md). The [README](README.md) guides users
+through the desktop application.

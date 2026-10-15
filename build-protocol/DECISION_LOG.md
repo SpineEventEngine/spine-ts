@@ -6138,7 +6138,7 @@ Date: 2026-10-09
 
 The initial Electron packaging and persisted-credential design is superseded.
 Studio now uses MōBrowser and keeps credentials only in memory for the current
-app session. See [the Studio guide](../examples/release-notes/USER_GUIDE.md).
+app session. See [the Studio guide](../examples/release-notes/REFERENCE.md).
 
 ## D-0134: Production Agent History And Execution Reads
 

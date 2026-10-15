@@ -1,7 +1,6 @@
 # @spine-event-engine/server reference
 
-This reference gives application developers and coding agents the detailed
-server contracts. For an introduction and examples, start with the
+This reference gives coding agents the detailed server contracts. For an introduction and examples, start with the
 [server README](README.md).
 
 ## Testing entry point

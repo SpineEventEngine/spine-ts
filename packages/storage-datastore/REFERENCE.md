@@ -1,6 +1,6 @@
 # @spine-event-engine/storage-datastore reference
 
-This reference is for agents configuring the Google Cloud Datastore adapter.
+This reference is for coding agents configuring the Google Cloud Datastore adapter.
 
 ## Public entry point
 

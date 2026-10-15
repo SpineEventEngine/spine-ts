@@ -1,23 +1,10 @@
-# Release Notes Studio: an Agent tutorial
+# Release Notes Studio technical reference
 
-A Git log tells a maintainer what changed. It rarely explains those changes in
-language suitable for a release announcement. Release Notes Studio lets a
-maintainer select two committed revisions, ask for a draft, edit arbitrary
-Markdown, preview it, and export the exact current bytes. The validated citation
-evidence remains available through recorded history APIs and the desktop history
-drawer.
+Audience: coding agents implementing or checking the Release Notes Studio example. The [README](README.md) is the human walkthrough and contains build and launch instructions. This reference records the domain messages, Agent invocation, account and tool boundaries, execution status, history reads, and test seams. It does not replace the application's permission checks.
 
-The model proposes text. The application decides which proposal to accept, and
-the person decides which text to publish. There is no background generation.
+## Accepted generation sequence
 
-This tutorial explains the implemented domain and integration APIs. See the
-[README](README.md) for the current desktop build and launch instructions.
-
-## 1. Follow one generation through the application
-
-Suppose a document-conversion library added password-protected PDF support,
-fixed page rotation, and removed a deprecated option. A maintainer chooses the
-release range and asks for notes aimed at library users.
+A generation begins only after the trusted desktop service resolves the selected Git revisions and submits `RequestReleaseGeneration`. The Aggregate accepts the inputs before the Agent reacts. The sequence below names the code responsible for each transition and whether completion is synchronous or asynchronous.
 
 | Step                 | Responsible code                        | What happens                                                                              | Timing                                                                             |
 | -------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
@@ -34,7 +21,7 @@ An acknowledgement from `Client.post()` is not proof that all those steps have
 finished. The desktop service reads the committed outcome and the Agent's
 execution status. It never treats a successful submission as completed drafting.
 
-## 2. Give the Agent an ID and state
+## Agent identity and state
 
 There is one Agent instance per draft. It uses the same domain ID type as the
 Aggregate, but has a separate Entity state and repository.
@@ -63,7 +50,7 @@ The conversation records do not go into this state message. They are retained
 separately by the Agent repository, together with System Events and the domain
 Events this Agent emits.
 
-## 3. Describe the model interaction
+## Typed model operation and validation
 
 An `AiModel` describes a typed operation: its input and output messages,
 instructions, permitted tools, limits, and application validation. It does not
@@ -136,7 +123,7 @@ review remains necessary.
 Applications may configure model and invocation-wide ceilings. Tool continuation
 and correction both count toward a configured model-request ceiling.
 
-## 4. React to the accepted Event
+## Agent reaction and domain outcome
 
 The Agent uses `@React`, just as a Process Manager reacts to an Event. The
 handler receives the accepted inputs and explicitly invokes the model operation.
@@ -223,7 +210,7 @@ responses, tool calls, and outcomes as they happen. The returned domain Event
 expresses what this application does with the result. A model failure does not
 erase the recorded interaction.
 
-## 5. Keep proposal acceptance in the application
+## Proposal acceptance rules
 
 While the model is working, the maintainer might edit the draft. The old
 proposal must not silently replace that edit.
@@ -287,7 +274,7 @@ asks before replacing an existing file. If the app stops after writing but
 before showing success, inspect the destination: the file may already exist.
 Reopening the app never repeats an export automatically.
 
-## 6. Connect an authenticated model
+## Authenticated model registration
 
 The model definition above says what to do. A deployment registration says
 which account, endpoint, and provider model can do it.
@@ -296,7 +283,7 @@ The desktop's [PlanModelSelection](src/trusted/plan-model-selection.ts) uses
 `session.model()` from `VercelAx.chatgptPlanSession()`. It selects a model returned
 by the signed-in account's catalog, constructs a credential-free identity, and
 checks that selection before use. The session retrieves or refreshes the grant
-inside the trusted connection path. See the [session registration example](../../packages/ai-vercel-ax/README.md#sign-in-with-a-chatgpt-plan)
+inside the trusted connection path. See the [session registration example](../../packages/ai-vercel-ax/REFERENCE.md#sign-in-with-a-chatgpt-plan)
 for the adapter API.
 
 Sign-in and inference are separate operations:
@@ -326,7 +313,7 @@ profile rejects native-schema mode and an explicit output-token ceiling;
 request, tool, byte, and deadline limits remain available. It does not retry
 inference outside the recorded Agent operation.
 
-## 7. Permit only the Git tools needed for this draft
+## Git tool permissions and evidence
 
 The private [Git registration](src/trusted/git-mcp-registration.ts) configures a
 local stdio MCP worker. The Agent's model definition permits only four tools:
@@ -352,7 +339,7 @@ application action, not something the model can do through these tools.
 Repository text is untrusted input. Instructions found in a commit message,
 patch, or file do not grant additional tools or authorize publishing.
 
-## 8. Read what happened
+## History and execution status
 
 The desktop keeps the writing view focused on the current release. The recorded
 history remains available through the repository API: use the methods below to
@@ -452,7 +439,7 @@ authorization denial terminates the execution and records
 and no application domain Event is invented for that denial. The desktop can
 read the terminal status and its System Event even though the handler did not run.
 
-## 9. Test through BlackBox
+## BlackBox and adapter tests
 
 Use `BlackBox` to post Commands, inspect domain outcomes, and inspect retained
 Agent history. A scripted AI backend is useful for application decisions; real
@@ -471,7 +458,7 @@ See the [testing reference](../../packages/testing/REFERENCE.md) for
 must use domain-correct Commands and Events; an Entity state is not a Command
 just because its fields resemble one.
 
-## 10. Understand what lasts
+## Storage lifetime and shutdown
 
 Drafts, Entity state, generation receipts, conversation records, Event history,
 OAuth grants, issued client IDs, and the host ID use in-memory storage. Reloading

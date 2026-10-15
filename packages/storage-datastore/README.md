@@ -11,10 +11,10 @@ record schemas, and a configured Google Datastore client.
 For exact query limits, entity-storage behavior, and failure handling, see
 [REFERENCE documentation for agents](REFERENCE.md).
 
-Agent repositories need the Agent history and execution indexes supplied in
-`index.yaml`, plus support for queries inside transactions. Spine checks those
-query capabilities before admitting Agent work. Model calls happen outside the
-database transaction.
+For an application using Agents, this provider keeps the Agent's accepted
+work and recorded interactions across restarts. Deploy the supplied `index.yaml`
+for Agent history and execution queries; see the [coding-agent reference](REFERENCE.md)
+for provider requirements.
 
 ## 💡 Why use it?
 

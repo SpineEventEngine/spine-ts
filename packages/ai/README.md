@@ -1,48 +1,74 @@
-# Spine AI facade
+# Describe an AI task for an Agent
 
-Application developers use this SDK-free package to define typed Agent capabilities and configure deployments. The package currently ships as an experimental snapshot.
+An Agent can ask a model to help with a domain task, such as drafting a reply to a support ticket. This package describes the task: the input and result messages, instructions, and checks the result must pass. It does not choose a provider or store credentials. The package is currently an experimental snapshot.
 
 ## Install
 
-Install it alongside the Protobuf package and generated application messages:
+Install it with the Protobuf package and your generated application messages:
 
 ```sh
 pnpm add @spine-event-engine/ai@snapshot @spine-event-engine/proto@snapshot @bufbuild/protobuf
 ```
 
-## First success: define a typed generation capability
+## Define the task
 
-The input and output descriptors below are generated from your application's domain Protos. The import points to this repository's support-ticket fixture; replace it with your application's generated path.
+The support example accepts a `DraftSupportReply` Command containing the ticket facts and expects a typed `SupportReply`. These descriptors come from the application's domain Protos.
 
 <!-- prettier-ignore-start -->
 
-<!-- docs-snippet-path: packages/ai/test/public-contracts.test.ts -->
+<!-- docs-snippet-path: examples/support/src/model.ts -->
 
 ```ts
 import { AiModel } from "@spine-event-engine/ai";
-import {
-    SupportTicketFactsSchema,
-    ProposedSupportReplySchema,
-} from "../../server/test-fixtures/generated/entity-metadata/support_ai_types_pb.js";
+import { DraftSupportReplySchema } from "../generated/spine/examples/support/commands_pb.js";
+import { SupportReplySchema } from "../generated/spine/examples/support/types_pb.js";
 
-const draftReply = AiModel.define({
+const draftSupportReply = AiModel.define({
     name: "draft-support-reply",
-    version: "v1",
+    version: "1",
     kind: "generation",
-    input: SupportTicketFactsSchema,
-    output: ProposedSupportReplySchema,
-    instructions: "Draft a support reply for human review.",
-    outputMode: "native-schema",
+    input: DraftSupportReplySchema,
+    output: SupportReplySchema,
+    outputMode: "prompt-and-validate",
+    instructions: "Draft a reply for a support person to review using the supplied ticket facts.",
 });
 ```
 
 <!-- prettier-ignore-end -->
 
-`AiModel.define()` validates the capability and snapshots its settings before a model request. To check the facade in this repository without credentials or network access, run `pnpm exec vitest run packages/ai/test` from the root. See [REFERENCE.md](REFERENCE.md) for supported contracts and limits.
+`prompt-and-validate` asks the provider for a result and checks the parsed message locally. A provider that supports native schema output can use `native-schema` instead; local output validation still applies. The [support application](../../examples/support/README.md) adds a domain rule so a blank reply cannot become a proposal. Defining a task does not make a model request.
 
-For an Agent that uses the capability through an actual Command handler, see the
-[warehouse support example](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/README.md). Its BlackBox test
-registers a scripted deployment, submits a ticket, and checks the resulting
-domain Event, query state, and recorded conversation. Application handlers use
-`this.ai.invoke(...)`; provider authentication and SDK setup belong in the
-deployment configuration.
+## Connect a deployment
+
+The task above says what input and output mean. A deployment says which permitted provider account and model will do that task. The [adapter guide](../ai-vercel-ax/README.md) returns a registration with a model reference, credential setup, and authorization check. Build an `AiRegistry` outside the Agent and attach it to the Bounded Context:
+
+<!-- prettier-ignore-start -->
+
+<!-- docs-snippet-path: examples/support/test/support-blackbox.test.ts -->
+
+```ts
+import {
+    AiRegistry,
+    type AiBackendRegistration,
+} from "@spine-event-engine/ai";
+
+/**
+ * Selects a registered provider model for generation tasks.
+ *
+ * @param registration Deployment configured by the trusted application.
+ * @returns Registry to install while building the Bounded Context.
+ */
+function generationRegistry(registration: AiBackendRegistration): AiRegistry {
+    return AiRegistry.create({
+        defaultModels: { generation: registration.ref },
+    }).register(registration);
+}
+```
+
+<!-- prettier-ignore-end -->
+
+The [support context factory](../../examples/support/src/index.ts) calls `withAi(registry)` when it builds its Agent repository. The [support walkthrough](../../examples/support/README.md#3-invoke-the-task-from-the-agent) shows the actual handler calling `this.ai.invoke(draftSupportReply, { call, conversation, input })` and turning its result into a domain Event. The [BlackBox step](../../examples/support/README.md#4-configure-and-test-the-full-flow) shows the same path with a controlled test deployment. The handler does not need a provider SDK or credential.
+
+An Agent task can also allow named tools. **MCP** is a protocol that lets a model ask the application to run one of those tools and return its result. The application explicitly lists permitted tools and checks access before a tool runs; model text alone grants no permission. [Release Notes Studio](../../examples/release-notes/README.md#6-let-the-model-ask-for-git-details) uses read-only Git tools to supply evidence for a draft.
+
+For exact definition fields, deployment selection, optional application limits, tool registration, and result types, see the [coding-agent reference](REFERENCE.md).

@@ -20,6 +20,11 @@ Implemented in [PR #18](https://github.com/SpineEventEngine/spine-ts/pull/18).
   sign-in, generation, Markdown editing, Preview, and export in MōBrowser.
   Credentials, drafts, and histories remain in memory for the app session.
 
+Human-facing package and example READMEs should explain the task before setup, then walk
+through actual application code. Adjacent `REFERENCE.md` files hold detailed
+contracts for coding agents. Keep the established framework and To-Do guides;
+do not add a second guide that repeats a new example README.
+
 ## Maintenance references
 
 - [Agent API and configuration](../../packages/server/REFERENCE.md)
@@ -28,7 +33,7 @@ Implemented in [PR #18](https://github.com/SpineEventEngine/spine-ts/pull/18).
 - [Agent testing](../../packages/testing/REFERENCE.md)
 - [Support-ticket example](../../examples/support/README.md)
 - [Release Notes Studio](../../examples/release-notes/README.md)
-- [Studio workflow and implementation](../../examples/release-notes/USER_GUIDE.md)
+- [Studio workflow and implementation](../../examples/release-notes/REFERENCE.md)
 
 General physical Entity deletion remains a separate deferred task. This feature
 introduces no Agent-specific purge API.

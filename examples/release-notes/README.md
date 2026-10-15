@@ -538,8 +538,8 @@ provider responses cannot demonstrate that a particular account has access.
 | Conversation records, System Events, execution progress, and indexed history reads. | The history panel's grouping, labels, message previews, and dialogs.                       |
 | Commands, Events, and Entity Versions.                                              | Proposal acceptance, cancellation, Markdown editing, and file export.                      |
 
-For more detail on individual decisions and failure cases, continue with the
-[Agent tutorial](USER_GUIDE.md). For the reusable APIs, see the
+For implementation details and failure cases, continue with the
+[coding-agent reference](REFERENCE.md). For the reusable APIs, see the
 [AI API reference](../../packages/ai/REFERENCE.md),
 [adapter guide](../../packages/ai-vercel-ax/README.md), and
 [testing reference](../../packages/testing/REFERENCE.md).

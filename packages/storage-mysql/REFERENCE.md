@@ -1,6 +1,6 @@
 # @spine-event-engine/storage-mysql reference
 
-This reference is for agents configuring the supported MySQL storage adapter.
+This reference is for coding agents configuring the supported MySQL storage adapter.
 
 ## Public entry point
 

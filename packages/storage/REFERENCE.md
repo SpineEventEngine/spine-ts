@@ -1,6 +1,6 @@
 # @spine-event-engine/storage reference
 
-This reference is for agents working with the Spine TS storage contract.
+This reference is for coding agents working with the Spine TS storage contract.
 
 ## Public entry point
 
