@@ -28,6 +28,10 @@ const deliverySupervisorAdmissions = new WeakMap<
   (message: InboxMessage) => boolean
 >();
 const deliverySupervisorFinalizers = new WeakMap<DeliverySupervisor, (shard: ShardIndex) => void>();
+const deliverySupervisorMessageSettlers = new WeakMap<
+  DeliverySupervisor,
+  (message: InboxMessage) => void
+>();
 const deliverySupervisors = new WeakSet<DeliverySupervisor>();
 
 interface DeliverySupervisorAccess {
@@ -53,6 +57,16 @@ interface DeliverySupervisorAccess {
   installAdmission(
     supervisor: DeliverySupervisor,
     admission: (message: InboxMessage) => boolean,
+  ): void;
+
+  /**
+   * Sets the callback invoked after one admitted message finishes processing.
+   * @param supervisor The target supervisor.
+   * @param onMessageSettled Releases the completed message's private route reservation.
+   */
+  installMessageSettled(
+    supervisor: DeliverySupervisor,
+    onMessageSettled: (message: InboxMessage) => void,
   ): void;
 
   /**
@@ -481,11 +495,13 @@ export class DeliverySupervisor {
     let failed = true;
     try {
       const admission = deliverySupervisorAdmissions.get(this);
+      const messageSettled = deliverySupervisorMessageSettlers.get(this);
       const finalization = deliverySupervisorFinalizers.get(this);
       const result = await this.#runs.run({
         shard,
         onMessage: this.#onMessage,
         ...(admission === undefined ? {} : { acceptMessage: admission }),
+        ...(messageSettled === undefined ? {} : { onMessageSettled: messageSettled }),
         ...(finalization === undefined
           ? {}
           : {
@@ -728,6 +744,16 @@ export const deliverySupervisorAccess: DeliverySupervisorAccess = Object.freeze(
       throw new TypeError("Delivery supervisor admission requires a DeliverySupervisor instance.");
     }
     deliverySupervisorAdmissions.set(supervisor, admission);
+  },
+
+  installMessageSettled(
+    supervisor: DeliverySupervisor,
+    onMessageSettled: (message: InboxMessage) => void,
+  ): void {
+    if (!deliverySupervisors.has(supervisor)) {
+      throw new TypeError("Delivery supervisor settlement requires a DeliverySupervisor instance.");
+    }
+    deliverySupervisorMessageSettlers.set(supervisor, onMessageSettled);
   },
 
   installFinalization(

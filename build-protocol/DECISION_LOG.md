@@ -6084,3 +6084,31 @@ Keep readiness distinct from activation lifetime with private state. Preserve or
 Use the high-level Client's existing bounded Cancel, delay, Subscribe, and readiness sequence. Do not add a server retry scheduler, new public API or wire contract, persistence, automatic Event replay, or a new retry budget. Entity resynchronization and Event gap notices retain their existing meaning; healthy sibling streams can be interrupted while the logical subscription recovers. Already delivered updates are not rolled back.
 
 The demonstrated fixed-backend child failure and a separate client-facing transport cut are distinct regressions. Both require evidence, as do cancellation races, late-joining children, cleanup failure, stale generations, and managed relays. The existing client classifier retries Errors except ClientProtocolError; this correction does not claim status-code-specific permanent-error filtering.
+
+## D-0134: Match Spine JVM Reception Monitoring
+
+Date: 2026-10-16. Status: accepted framework-author correction.
+
+The `DeliveryMonitor` default marks a failed receptor reception delivered. A
+custom monitor may select immediate repeat; each failed repeat consults the
+monitor again. Monitor and selected action errors propagate. Normal completion
+of a custom action completes delivery, with at most one durable acknowledgement
+for that message. A rejected selected action propagates its original error and
+leaves the Inbox row `TO_DELIVER`. These rules supersede D-0084's historical `KEEP_PENDING`
+default and the later `leavePending()` policy. No pending outcome or public
+acknowledgement inspection is added.
+
+Managed repository replay distinguishes an actual Aggregate, Process Manager,
+or Projection handler throw from repository and storage infrastructure errors.
+The monitor receives only the former; infrastructure errors propagate while
+their Inbox rows remain `TO_DELIVER`. Direct public `onMessage` callbacks remain endpoint
+receptions. A successful handler's failed acknowledgement receives at most
+three acknowledgement-only attempts; exhaustion leaves the row pending and
+does not re-enter the reception monitor. No persisted attempt state or new
+serialized status is introduced.
+
+Managed delivery reserves the exact persisted Inbox row for its selected route
+until that message and any immediate monitor-selected repeats settle. Settlement
+releases the reservation before the shard run ends, so retiring a route waits
+only for its admitted work. If monitor or action processing fails, shard release
+is still attempted and the original failure propagates even when release fails.

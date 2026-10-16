@@ -781,10 +781,13 @@ exclusion; it creates neither a per-message claim nor a separate dedup record.
 Delivered rows are the deduplication fact. Handler effects and the delivered-row
 compare-and-set are not transactional, so a lost acknowledgement can redeliver
 after restart and downstream handling must be idempotent. `DeliveryMonitor`
-defines reception-failure policy: its default leaves a failed reception pending
+defines reception-failure policy: its default marks a failed reception delivered
 and continues independent targets; applications may choose an immediate repeat
-of failed processing or deliberate terminal discard. A successful handler with
-failed acknowledgement gets finite acknowledgement-only retries. The supervisor
+of failed processing. Managed repository infrastructure errors propagate while
+their Inbox rows remain `TO_DELIVER`. A custom reception action that completes
+normally also completes delivery and is followed by delivered acknowledgement.
+A successful handler with failed acknowledgement gets finite
+acknowledgement-only retries. The supervisor
 rescans pending shards every 10 seconds by default, separately from the
 60-second stale-session threshold and the configurable Delivery server processing
 timeout, which is disabled by default. These [recovery timers](../../packages/delivery-server/REFERENCE.md#recovery-timers)

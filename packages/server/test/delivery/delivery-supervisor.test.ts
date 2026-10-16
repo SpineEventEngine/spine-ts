@@ -578,17 +578,17 @@ describe("DeliverySupervisor", () => {
     await supervisor.close();
   });
 
-  it("does not spin on a failed pending row after repeated shard availability notifications", async () => {
+  it("does not spin on a pending row after an Inbox read failure and repeated shard notifications", async () => {
     const fixture = realDeliveryFixture();
     const shard = ShardIndex.single();
     await fixture.receive("permanent-failure", 1n, shard);
-    fixture.onMessage = () => Promise.reject(new Error("recipient unavailable"));
+    fixture.inbox.failAt = 1;
     const supervisor = fixture.supervisor();
     await supervisor.start();
 
     supervisor.notify(shard);
     await supervisor.whenIdle();
-    expect(fixture.delivered).toEqual(["permanent-failure"]);
+    expect(fixture.delivered).toEqual([]);
     expect(fixture.registry.releases).toHaveLength(1);
     const firstAdmissionCount = fixture.inbox.admissions;
     await Promise.resolve();
@@ -597,7 +597,7 @@ describe("DeliverySupervisor", () => {
     supervisor.notify(shard);
     supervisor.notify(shard);
     await supervisor.whenIdle();
-    expect(fixture.delivered).toHaveLength(3);
+    expect(fixture.delivered).toEqual(["permanent-failure"]);
     expect(fixture.registry.releases).toHaveLength(3);
     expect(fixture.inbox.admissions).toBeLessThan(firstAdmissionCount + 6);
     await supervisor.close();
@@ -608,12 +608,9 @@ describe("DeliverySupervisor", () => {
     const shard = ShardIndex.single();
     const observations = new ReleaseObservationQueue();
     await fixture.receive("permanent-failure", 1n, shard);
-    fixture.onMessage = (signalId) =>
-      signalId === "permanent-failure"
-        ? Promise.reject(new Error("recipient unavailable"))
-        : Promise.resolve();
+    fixture.inbox.failAt = 1;
     fixture.registry.onRelease = () => {
-      if (fixture.registry.releases.length <= 6) observations.emit(pendingUpdate(shard));
+      if (fixture.registry.releases.length === 1) observations.emit(pendingUpdate(shard));
     };
     const supervisor = fixture.supervisor(
       {
@@ -625,7 +622,7 @@ describe("DeliverySupervisor", () => {
     try {
       await supervisor.start();
       await supervisor.whenIdle();
-      expect(fixture.delivered).toEqual(["permanent-failure"]);
+      expect(fixture.delivered).toEqual([]);
       expect(fixture.registry.releases).toHaveLength(1);
 
       observations.emit(pendingUpdate(shard));
@@ -639,7 +636,7 @@ describe("DeliverySupervisor", () => {
       expect(fixture.delivered).not.toContain("independent");
       await new Promise<void>((resolve) => setTimeout(resolve, 30));
       await supervisor.whenIdle();
-      expect(fixture.delivered).toContain("independent");
+      expect(fixture.delivered).toEqual(["permanent-failure", "independent"]);
       expect(fixture.registry.releases.length).toBeLessThan(5);
     } finally {
       await supervisor.close();
@@ -654,22 +651,19 @@ describe("DeliverySupervisor", () => {
     const supervisor = fixture.supervisor({
       observeShardUpdates: (options) => observations.stream(options?.signal),
     });
-    let calls = 0;
-    fixture.onMessage = async () => {
-      calls += 1;
-      if (calls === 1) {
+    fixture.inbox.failAt = 1;
+    fixture.registry.onRelease = () => {
+      if (fixture.registry.releases.length === 1) {
         observations.emit(pendingUpdate(shard));
         observations.emit(pendingUpdate(shard));
-        await new Promise<void>((resolve) => setImmediate(resolve));
         supervisor.notify(shard);
       }
-      throw new Error("recipient unavailable");
     };
     try {
       await supervisor.start();
       supervisor.notify(shard);
       await supervisor.whenIdle();
-      expect(calls).toBe(2);
+      expect(fixture.delivered).toEqual(["permanent-failure"]);
       expect(fixture.registry.releases).toHaveLength(2);
     } finally {
       await supervisor.close();

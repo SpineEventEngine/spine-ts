@@ -622,7 +622,6 @@ describe("LocalProjectionInbox", () => {
     const unrelatedProjectionTypeUrl = "type.example.dev/Tasks.OtherProjection";
     const shard = ShardIndex.single();
     const seen: InboxMessage[] = [];
-    const unrelatedSeen: InboxMessage[] = [];
 
     inbox.register({
       targetTypeUrl,
@@ -631,14 +630,6 @@ describe("LocalProjectionInbox", () => {
         return Promise.resolve();
       },
     });
-    inbox.register({
-      targetTypeUrl: unrelatedProjectionTypeUrl,
-      replay(message) {
-        unrelatedSeen.push(message);
-        return Promise.reject(new Error("unrelated projection should not replay"));
-      },
-    });
-
     await delivery.inbox.receive({
       inboxId: {
         targetId: Identifiers.pack("string", "pm-0"),
@@ -676,7 +667,10 @@ describe("LocalProjectionInbox", () => {
     });
 
     expect(seen).toHaveLength(1);
-    expect(unrelatedSeen).toHaveLength(1);
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
+      { signalId: "signal-0" },
+      { signalId: "event-0" },
+    ]);
     expect(seen[0]).toMatchObject({
       signalId: "event-1",
       label: "UPDATE_SUBSCRIBER",

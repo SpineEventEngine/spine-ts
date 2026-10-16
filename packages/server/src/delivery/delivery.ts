@@ -34,9 +34,14 @@ import { InboxStorage, InboxStorageClock } from "./inbox-storage.js";
 import { ShardIndex } from "./shard-index.js";
 import { ShardedWorkRegistry } from "./sharded-work-registry.js";
 import { withDeliveryCommitFence } from "../repository/commit-fence.js";
+import { receptionObservation, type ReceptionObservation } from "./reception-observation.js";
 import type { DeliveryResult, DeliveryRunOptions, DeliveryStrategy } from "./delivery-builder.js";
 
 const deliveryFailureLimit = 100;
+const controlledMessageSettlers = new WeakMap<
+  DeliveryDrainOptions,
+  (message: InboxMessage) => void
+>();
 
 /**
  * Describes an endpoint snapshot supplied for direct Inbox delivery.
@@ -251,23 +256,30 @@ export class Delivery {
    */
   runControlled(options: DeliveryControlledRun): Promise<DeliveryResult> {
     const shard = options.shard;
-    return this.drain(shard, {
+    const drainOptions: DeliveryDrainOptions = {
       onMessage: options.onMessage,
       ...(options.acceptMessage === undefined ? {} : { acceptMessage: options.acceptMessage }),
       operation: { signal: options.signal },
-    }).then((run) => {
-      options.onDrainResult?.(run);
-      return Object.freeze({
-        status:
-          run.status === "SKIPPED"
-            ? "SKIPPED"
-            : run.status === "FAILED"
-              ? "FAILED"
-              : run.status === "STOPPED"
-                ? "STOPPED"
-                : "COMPLETED",
+    };
+    if (options.onMessageSettled !== undefined)
+      controlledMessageSettlers.set(drainOptions, options.onMessageSettled);
+    return this.drain(shard, drainOptions)
+      .then((run) => {
+        options.onDrainResult?.(run);
+        return Object.freeze({
+          status:
+            run.status === "SKIPPED"
+              ? "SKIPPED"
+              : run.status === "FAILED"
+                ? "FAILED"
+                : run.status === "STOPPED"
+                  ? "STOPPED"
+                  : "COMPLETED",
+        });
+      })
+      .finally(() => {
+        controlledMessageSettlers.delete(drainOptions);
       });
-    });
   }
 
   /**
@@ -396,7 +408,7 @@ class DeliveryDrain {
     try {
       run = (await this.#canStart()) ? await this.#readPages() : this.#complete("STOPPED");
     } catch (error) {
-      if (!(await this.#release())) return this.#complete("FAILED");
+      await this.#release();
       throw error;
     }
     return (await this.#release()) ? run : this.#complete("FAILED");
@@ -498,12 +510,16 @@ class DeliveryDrain {
   async #processMessage(message: InboxMessage, page: ReturnType<DeliveryDeduplication["page"]>) {
     if (this.input.options.operation?.signal?.aborted) return false;
     if (this.#shouldSkip(message)) return true;
-    const target = this.#targetKey(message);
-    if (this.#blockedTargets.has(target)) return true;
-    this.#statistics.processed += 1;
-    if (!(await this.#mayProcess())) return false;
-    if (page.isDuplicate(message)) return this.#removeDuplicate(message, target);
-    return this.#deliver(message, target);
+    try {
+      const target = this.#targetKey(message);
+      if (this.#blockedTargets.has(target)) return true;
+      this.#statistics.processed += 1;
+      if (!(await this.#mayProcess())) return false;
+      if (page.isDuplicate(message)) return await this.#removeDuplicate(message, target);
+      return await this.#deliver(message, target);
+    } finally {
+      controlledMessageSettlers.get(this.input.options)?.(message);
+    }
   }
 
   /**
@@ -570,65 +586,91 @@ class DeliveryDrain {
    * @returns Whether processing may continue.
    */
   async #deliver(message: InboxMessage, target: string): Promise<boolean> {
-    try {
-      this.#statistics.accepted += 1;
-      await this.#dispatch(message);
-    } catch (error) {
-      await this.#handleReceptionFailure(message, target, error, "PROCESSING");
-      if (this.#ownershipLost) return false;
-      return true;
-    }
-    if (this.input.options.operation?.signal?.aborted || !(await this.#validate())) return false;
-    try {
-      await this.#acknowledgeWithRetry(message);
-    } catch (error) {
-      await this.#handleReceptionFailure(message, target, error, "ACKNOWLEDGEMENT");
-      if (this.#ownershipLost) return false;
-    }
-    return true;
+    const acknowledgement = { completed: false, exhausted: false };
+    await this.#processAttempt(message, target, acknowledgement);
+    return !this.#ownershipLost && !this.input.options.operation?.signal?.aborted;
   }
 
   /**
-   * Records endpoint failure and runs the configured recovery action.
+   * Executes one dispatch attempt and the monitor-selected response to a receptor failure.
    *
-   * @param message Supplies the failed inbox message.
-   * @param target Identifies the message target.
-   * @param error Supplies the endpoint or acknowledgement failure.
-   * @param phase Distinguishes processing from acknowledgement failure.
-   * @returns Completion after the recovery action finishes.
+   * @param message The persisted Inbox message.
+   * @param target The target key used to isolate acknowledgement failure.
+   * @param acknowledgement Shared status across immediate repeats.
+   * @returns Completion of the attempt and its selected action.
    */
-  async #handleReceptionFailure(
+  async #processAttempt(
     message: InboxMessage,
     target: string,
-    error: unknown,
-    phase: "PROCESSING" | "ACKNOWLEDGEMENT",
+    acknowledgement: { completed: boolean; exhausted: boolean },
   ): Promise<void> {
-    this.#recordFailure(message, error);
-    const reception = new FailedReception(
-      message,
-      error,
-      () => this.#acknowledge(message),
-      phase === "PROCESSING" ? () => this.#repeat(message) : undefined,
-    );
-    const action = await safelyValue(
-      () => this.input.monitor.onReceptionFailure(reception),
-      reception.leavePending(),
-    );
-    if (!(await safely(() => action.execute())) || !reception.acknowledged())
+    const observation = receptionObservation.create();
+    try {
+      this.#statistics.accepted += 1;
+      await this.#dispatch(message, observation);
+    } catch (error) {
+      if (this.#ownershipLost || this.input.options.operation?.signal?.aborted) {
+        this.#recordFailure(message, error);
+        return;
+      }
+      if (!receptionObservation.isReceptorFailure(observation, error)) throw error;
+      this.#recordFailure(message, error);
+      const reception = new FailedReception(
+        message,
+        error,
+        () => this.#acknowledgeOnce(message, acknowledgement),
+        () => this.#processAttempt(message, target, acknowledgement),
+      );
+      const action = await this.input.monitor.onReceptionFailure(reception);
+      await action.execute();
+    }
+    await this.#completeAttempt(message, target, acknowledgement);
+  }
+
+  /**
+   * Marks completed processing once, including nested repeat recovery.
+   *
+   * @param message The processed Inbox message.
+   * @param target The target key used to isolate acknowledgement failure.
+   * @param acknowledgement Shared status across immediate repeats.
+   * @returns Completion after acknowledgement or exhausted retry containment.
+   */
+  async #completeAttempt(
+    message: InboxMessage,
+    target: string,
+    acknowledgement: { completed: boolean; exhausted: boolean },
+  ): Promise<void> {
+    if (
+      acknowledgement.completed ||
+      acknowledgement.exhausted ||
+      this.input.options.operation?.signal?.aborted
+    )
+      return;
+    if (!(await this.#validate())) return;
+    try {
+      await this.#acknowledgeWithRetry(message, acknowledgement);
+    } catch (error) {
+      acknowledgement.exhausted = true;
+      this.#recordFailure(message, error);
       this.#blockedTargets.add(target);
+    }
   }
 
   /**
    * Retries only durable acknowledgement after processing has completed.
    *
    * @param message Supplies the successfully processed message.
+   * @param acknowledgement Shared status across immediate repeats.
    * @returns Completion after acknowledgement.
    */
-  async #acknowledgeWithRetry(message: InboxMessage): Promise<void> {
+  async #acknowledgeWithRetry(
+    message: InboxMessage,
+    acknowledgement: { completed: boolean; exhausted: boolean },
+  ): Promise<void> {
     let firstError: unknown;
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
-        await this.#acknowledge(message);
+        await this.#acknowledgeOnce(message, acknowledgement);
         return;
       } catch (error) {
         firstError ??= error;
@@ -650,28 +692,39 @@ class DeliveryDrain {
   }
 
   /**
-   * Dispatches the message again and acknowledges it.
+   * Marks a message delivered once across nested monitor-selected repeats.
    *
-   * @param message Supplies the inbox message to repeat.
-   * @returns Completion after dispatch and acknowledgement.
+   * @param message The message to mark delivered.
+   * @param acknowledgement Shared status across immediate repeats.
+   * @returns Completion after acknowledgement.
    */
-  async #repeat(message: InboxMessage): Promise<void> {
-    await this.#dispatch(message);
+  async #acknowledgeOnce(
+    message: InboxMessage,
+    acknowledgement: { completed: boolean; exhausted: boolean },
+  ): Promise<void> {
+    if (acknowledgement.completed) return;
     await this.#acknowledge(message);
+    acknowledgement.completed = true;
   }
 
   /**
    * Dispatches a message while validating the shard session before the call.
    *
    * @param message Supplies the inbox message for the endpoint.
+   * @param observation Records failure origin for this attempt.
    * @returns Completion after endpoint dispatch.
    */
-  async #dispatch(message: InboxMessage): Promise<void> {
-    await withDeliveryCommitFence(
-      async () => {
-        if (!(await this.#validate())) throw new Error("Shard ownership was lost.");
-      },
-      () => Promise.resolve(this.input.options.onMessage(message)),
+  async #dispatch(message: InboxMessage, observation: ReceptionObservation): Promise<void> {
+    await receptionObservation.run(observation, () =>
+      withDeliveryCommitFence(
+        async () => {
+          if (!(await this.#validate())) throw new Error("Shard ownership was lost.");
+        },
+        () => {
+          observation.entered = true;
+          return Promise.resolve(this.input.options.onMessage(message));
+        },
+      ),
     );
   }
 

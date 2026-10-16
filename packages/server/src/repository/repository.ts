@@ -106,6 +106,7 @@ import type { CommandDispatcher } from "../bus/command-dispatcher.js";
 import type { EventDispatcher } from "../bus/event-dispatcher.js";
 import { EventDispatcherOriginSchemas } from "../bus/event-dispatcher-origin-schemas.js";
 import { Delivery } from "../delivery/delivery.js";
+import { receptionObservation } from "../delivery/reception-observation.js";
 import { commitFenced } from "./commit-fence.js";
 import { InboxTargets, type InboxMessage, type InboxMessageInput } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
@@ -5040,7 +5041,24 @@ const EntityInvocation = {
       throw new TypeError(`Repository entity execution requires method "${methodName}".`);
     }
 
-    return Reflect.apply(method, entity, parameterCount === 2 ? [message, context] : [message]);
+    let result: unknown;
+    try {
+      result = Reflect.apply(method, entity, parameterCount === 2 ? [message, context] : [message]);
+    } catch (error) {
+      receptionObservation.recordHandlerFailure(error);
+      throw error;
+    }
+    if (
+      result !== null &&
+      (typeof result === "object" || typeof result === "function") &&
+      typeof (result as PromiseLike<unknown>).then === "function"
+    ) {
+      return Promise.resolve(result).catch((error: unknown) => {
+        receptionObservation.recordHandlerFailure(error);
+        throw error;
+      });
+    }
+    return result;
   },
 
   /**

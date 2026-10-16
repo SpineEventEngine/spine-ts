@@ -43,7 +43,14 @@ describe("Delivery direct worker", () => {
     const shard = ShardIndex.single();
     const whenReceived = create(TimestampSchema, { seconds: 1n, nanos: 123_456_000 });
     const row = { ...message("precise", "target", shard), whenReceived };
-    const delivery = createDelivery({ rows: [row], mark: async () => undefined });
+    const rows = [row];
+    const delivery = createDelivery({
+      rows,
+      mark: async (candidate) => {
+        remove(rows, candidate);
+        return candidate;
+      },
+    });
     const run = await delivery.drain(shard, {
       onMessage: () => {
         throw new Error("failed");
@@ -929,7 +936,7 @@ describe("Delivery direct worker", () => {
     expect(received).toBe(controller.signal);
   });
 
-  it("keeps failed processing pending by default while an unrelated target progresses", async () => {
+  it("marks failed processing delivered by default while an unrelated target progresses", async () => {
     const shard = ShardIndex.single();
     const failed = message("failed", "target", shard);
     const other = message("other", "other-target", shard);
@@ -948,12 +955,12 @@ describe("Delivery direct worker", () => {
         if (row.id.value === "failed") throw new Error("dispatch failed");
       },
     });
-    expect(run).toMatchObject({ status: "DRAINED", failed: 1, delivered: 1 });
+    expect(run).toMatchObject({ status: "DRAINED", failed: 1, delivered: 2 });
     expect(seen).toEqual(["failed", "other"]);
-    expect(rows).toEqual([failed]);
+    expect(rows).toEqual([]);
   });
 
-  it("keeps processing pending when the failure monitor throws", async () => {
+  it("propagates a failure monitor error without acknowledging", async () => {
     const shard = ShardIndex.single();
     const failed = message("failed", "target", shard);
     const rows = [failed];
@@ -971,22 +978,133 @@ describe("Delivery direct worker", () => {
         }
       })(),
     });
-    const run = await delivery.drain(shard, {
-      onMessage: () => {
-        throw new Error("processing failed");
-      },
-    });
-    expect(run).toMatchObject({ failed: 1, delivered: 0 });
+    await expect(
+      delivery.drain(shard, {
+        onMessage: () => {
+          throw new Error("processing failed");
+        },
+      }),
+    ).rejects.toThrow("monitor failed");
     expect(acknowledgements).toBe(0);
     expect(rows).toEqual([failed]);
   });
 
-  it("keeps a failed selected repeat pending without a fallback acknowledgement", async () => {
+  it.each([false, new Error("release failed")])(
+    "preserves a monitor failure when shard release returns or throws %s",
+    async (releaseResult) => {
+      const shard = ShardIndex.single();
+      const row = message("failed", "target", shard);
+      const rows = [row];
+      const monitorFailure = new Error("monitor decision failed");
+      let releases = 0;
+      let acknowledgements = 0;
+      const delivery = createDelivery({
+        rows,
+        registry: {
+          pickUp: async () => session(shard),
+          release: async () => {
+            releases += 1;
+            if (releaseResult instanceof Error) throw releaseResult;
+            return releaseResult;
+          },
+        },
+        mark: async (candidate) => {
+          acknowledgements += 1;
+          return candidate;
+        },
+        monitor: new (class extends DeliveryMonitor {
+          override onReceptionFailure(): never {
+            throw monitorFailure;
+          }
+        })(),
+      });
+
+      await expect(
+        delivery.drain(shard, { onMessage: () => Promise.reject(new Error("handler failed")) }),
+      ).rejects.toBe(monitorFailure);
+      expect(releases).toBe(1);
+      expect(acknowledgements).toBe(0);
+      expect(rows).toEqual([row]);
+    },
+  );
+
+  it.each([false, new Error("release failed")])(
+    "preserves a selected action failure when shard release returns or throws %s",
+    async (releaseResult) => {
+      const shard = ShardIndex.single();
+      const row = message("failed", "target", shard);
+      const rows = [row];
+      const actionFailure = new Error("selected action failed");
+      let releases = 0;
+      let acknowledgements = 0;
+      const delivery = createDelivery({
+        rows,
+        registry: {
+          pickUp: async () => session(shard),
+          release: async () => {
+            releases += 1;
+            if (releaseResult instanceof Error) throw releaseResult;
+            return releaseResult;
+          },
+        },
+        mark: async (candidate) => {
+          acknowledgements += 1;
+          return candidate;
+        },
+        monitor: new (class extends DeliveryMonitor {
+          override onReceptionFailure() {
+            return {
+              execute: () => Promise.reject(actionFailure),
+            };
+          }
+        })(),
+      });
+
+      await expect(
+        delivery.drain(shard, { onMessage: () => Promise.reject(new Error("handler failed")) }),
+      ).rejects.toBe(actionFailure);
+      expect(releases).toBe(1);
+      expect(acknowledgements).toBe(0);
+      expect(rows).toEqual([row]);
+    },
+  );
+
+  it("marks a failed reception delivered after a custom action resolves normally", async () => {
+    const shard = ShardIndex.single();
+    const row = message("failed", "target", shard);
+    const rows = [row];
+    let acknowledgements = 0;
+    const delivery = createDelivery({
+      rows,
+      mark: async (candidate) => {
+        acknowledgements += 1;
+        remove(rows, candidate);
+        return candidate;
+      },
+      monitor: new (class extends DeliveryMonitor {
+        override onReceptionFailure() {
+          return { execute: () => Promise.resolve() };
+        }
+      })(),
+    });
+
+    const run = await delivery.drain(shard, {
+      onMessage: () => Promise.reject(new Error("handler failed")),
+    });
+    expect(run).toMatchObject({ status: "DRAINED", failed: 1, delivered: 1 });
+    expect(acknowledgements).toBe(1);
+    expect(rows).toEqual([]);
+  });
+
+  it("consults the monitor again after a failed repeat and marks once", async () => {
     const shard = ShardIndex.single();
     const failed = message("failed", "target", shard);
     const rows = [failed];
     let calls = 0;
     let acknowledgements = 0;
+    const failures: unknown[] = [];
+    const firstFailure = new Error("first processing failure");
+    const secondFailure = new Error("second processing failure");
     const delivery = createDelivery({
       rows,
       mark: async (row) => {
@@ -998,20 +1116,22 @@ describe("Delivery direct worker", () => {
         override onReceptionFailure(
           reception: Parameters<DeliveryMonitor["onReceptionFailure"]>[0],
         ) {
-          return reception.repeatDispatching();
+          failures.push(reception.error);
+          return failures.length === 1 ? reception.repeatDispatching() : reception.markDelivered();
         }
       })(),
     });
     const run = await delivery.drain(shard, {
       onMessage: () => {
         calls += 1;
-        throw new Error("processing failed");
+        throw calls === 1 ? firstFailure : secondFailure;
       },
     });
-    expect(run).toMatchObject({ failed: 1, delivered: 0 });
+    expect(run).toMatchObject({ failed: 2, delivered: 1 });
     expect(calls).toBe(2);
-    expect(acknowledgements).toBe(0);
-    expect(rows).toEqual([failed]);
+    expect(failures).toEqual([firstFailure, secondFailure]);
+    expect(acknowledgements).toBe(1);
+    expect(rows).toEqual([]);
   });
 
   it("retries acknowledgement without rerunning successful processing", async () => {
@@ -1095,12 +1215,13 @@ describe("Delivery direct worker", () => {
     expect(rows).toEqual([row]);
   });
 
-  it("leaves an exhausted acknowledgement pending even when a monitor requests repeat dispatch", async () => {
+  it("leaves exhausted acknowledgement pending without consulting the reception monitor", async () => {
     const shard = ShardIndex.single();
     const row = message("accepted", "target", shard);
     const rows = [row];
     let calls = 0;
     let acknowledgements = 0;
+    let monitorCalls = 0;
     const delivery = createDelivery({
       rows,
       mark: async () => {
@@ -1111,6 +1232,7 @@ describe("Delivery direct worker", () => {
         override onReceptionFailure(
           reception: Parameters<DeliveryMonitor["onReceptionFailure"]>[0],
         ) {
+          monitorCalls += 1;
           return reception.repeatDispatching();
         }
       })(),
@@ -1122,6 +1244,44 @@ describe("Delivery direct worker", () => {
     });
     expect(run).toMatchObject({ failed: 1, delivered: 0 });
     expect(calls).toBe(1);
+    expect(monitorCalls).toBe(0);
+    expect(acknowledgements).toBe(3);
+    expect(rows).toEqual([row]);
+  });
+
+  it("limits acknowledgement retries to three after a monitor-selected repeat succeeds", async () => {
+    const shard = ShardIndex.single();
+    const row = message("repeated", "target", shard);
+    const rows = [row];
+    let calls = 0;
+    let acknowledgements = 0;
+    let monitorCalls = 0;
+    const delivery = createDelivery({
+      rows,
+      mark: async () => {
+        acknowledgements += 1;
+        throw new Error("acknowledgement unavailable");
+      },
+      monitor: new (class extends DeliveryMonitor {
+        override onReceptionFailure(
+          reception: Parameters<DeliveryMonitor["onReceptionFailure"]>[0],
+        ) {
+          monitorCalls += 1;
+          return reception.repeatDispatching();
+        }
+      })(),
+    });
+
+    const run = await delivery.drain(shard, {
+      onMessage: () => {
+        calls += 1;
+        if (calls === 1) throw new Error("first reception failed");
+      },
+    });
+
+    expect(run).toMatchObject({ failed: 2, delivered: 0 });
+    expect(calls).toBe(2);
+    expect(monitorCalls).toBe(1);
     expect(acknowledgements).toBe(3);
     expect(rows).toEqual([row]);
   });
@@ -1184,7 +1344,14 @@ describe("Delivery direct worker", () => {
     const shard = ShardIndex.single();
     const row = { ...message("failed", "target", shard), keepUntil: new Date(10_000) };
     const firstSignalByte = row.signal?.value[0];
-    const delivery = createDelivery({ rows: [row], mark: async () => undefined });
+    const rows = [row];
+    const delivery = createDelivery({
+      rows,
+      mark: async (candidate) => {
+        remove(rows, candidate);
+        return candidate;
+      },
+    });
     const run = await delivery.drain(shard, {
       onMessage: () => {
         throw new Error("failed");
@@ -1328,7 +1495,6 @@ describe("Delivery direct worker", () => {
     await delivery.drain(shard, {
       onMessage: (row) => {
         seen.push(row.signalId);
-        if (row.signalId === "first") throw new Error("dispatch failed");
       },
     });
     expect(seen).toEqual(["first", "blocked", "other"]);
@@ -1362,7 +1528,6 @@ describe("Delivery direct worker", () => {
     const run = await delivery.drain(shard, {
       onMessage: (row) => {
         seen.push(row.signalId);
-        if (row.signalId === "blocked") throw new Error("dispatch failed");
       },
     });
     expect(run).toMatchObject({ status: "DRAINED", delivered: 1, failed: 1 });

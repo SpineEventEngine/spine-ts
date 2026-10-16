@@ -920,14 +920,21 @@ the remote server.
 `DeliveryMonitor` is an instantiable, customizable policy seam exposing
 asynchronous continuation, start/completion, failed-reception, pickup-failure,
 and already-picked hooks.
-`FailedReception` supplies `leavePending()`, explicit terminal
-`markDelivered()`, and one immediate `repeatDispatching()` action for failed
-processing. The default leaves a failed row pending and blocks that target for
-the finite drain; independent targets continue. A successful handler followed
-by a failed acknowledgement retries acknowledgement up to three times without
-deliberately rerunning the handler. Explicit `markDelivered()` discards the failed
-row as a custom terminal policy; it does not mean processing succeeded. Handler
-effects and acknowledgement are separate, so a crash between them may redeliver.
+`FailedReception` supplies `markDelivered()` and immediate
+`repeatDispatching()` actions for failed processing. The default marks a failed
+reception delivered; independent targets continue. A custom monitor may repeat
+the dispatch and is consulted again if that attempt fails. Monitor and selected
+action errors propagate. A successful handler followed by a failed acknowledgement
+retries acknowledgement up to three times without deliberately rerunning the
+handler. Exhausted acknowledgement leaves the row pending and does not call the
+reception monitor. A custom reception action that completes normally completes
+delivery and the enclosing stage acknowledges the row. An action that rejects
+propagates its error and leaves the row `TO_DELIVER`. `markDelivered()` does not
+mean domain processing succeeded.
+Managed repository replay sends actual handler failures to the monitor while
+storage and replay infrastructure errors propagate. A direct `onMessage` callback
+is treated as the endpoint. Handler effects and acknowledgement are separate,
+so a crash between them may redeliver.
 The framework adds no persisted attempts, quarantine, dead-letter, receipt, or
 marker policy. The supervisor rescans pending shards every 10 seconds by default;
 the stale-session threshold is separately 60 seconds.

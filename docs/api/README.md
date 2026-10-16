@@ -308,11 +308,16 @@ is the only concurrent-delivery exclusion; there is no per-message claim or
 separate dedup record. Delivered rows are the deduplication fact. Handler
 effects and the delivered-row compare-and-set are not one transaction, so a
 lost acknowledgement can redeliver after restart and downstream handling must
-be idempotent. `DeliveryMonitor` is the explicit failure-policy seam: by
-default it leaves failed processing pending and continues independent targets.
-A custom monitor may repeat failed processing or deliberately mark the row
-delivered as a terminal discard. Successful processing followed by failed
-acknowledgement gets finite acknowledgement-only retries.
+be idempotent. `DeliveryMonitor` is the explicit failure-policy seam: by default
+it marks failed reception delivered and continues independent targets. A custom
+monitor may repeat failed processing; each failed repeat consults it again.
+Any custom reception action that returns normally completes delivery and the
+enclosing stage acknowledges the row. Monitor and selected action errors
+propagate. Managed repository infrastructure
+errors propagate without consulting the reception monitor, and their Inbox rows
+remain `TO_DELIVER`.
+Successful processing followed by failed acknowledgement gets finite
+acknowledgement-only retries; exhaustion leaves the row pending.
 Normal local and remote delivery reads every status in a bounded page. It
 removes a pending duplicate when its signal ID and typed Inbox target match a
 delivered row in that page or one of the 1,000 most recent deliveries remembered
@@ -644,9 +649,9 @@ session, then marks the Inbox row delivered in a separate operation. Another
 worker may take the shard between those operations. The same complete `WorkerId`
 can recover its unexpired session;
 a different worker is excluded until it expires, and a previous worker cannot
-release a newer session. `DeliveryMonitor` leaves failed reception pending by
+release a newer session. `DeliveryMonitor` marks failed reception delivered by
 default and continues independent targets; a custom monitor may choose an
-immediate repeat of failed processing or terminal discard. The supervisor
+immediate repeat of failed processing. The supervisor
 rescans pending shards every 10 seconds by default, independently of its
 60-second stale-session threshold and the configurable Delivery server processing
 timeout, which is disabled by default. See [recovery timers](../../packages/delivery-server/REFERENCE.md#recovery-timers)
@@ -657,12 +662,15 @@ rescan, while other shards continue. Other processes can each make a failed
 attempt before applying their local suppression. The interval is not a
 per-message delivery deadline.
 
-`DeliveryMonitor` contains endpoint failures. Its default reception action
-leaves the row pending; a custom monitor may repeat failed processing or
-explicitly mark the row delivered as terminal discard. After successful
-processing, a failed acknowledgement is retried without deliberate handler
-rerun. Later messages for that target stop, independent targets continue, and a
-later run can retry. Shard coordination protects concurrent workers, not
+`DeliveryMonitor` handles endpoint failures. Its default reception action
+marks the row delivered; a custom monitor may repeat failed processing.
+Any selected reception action that completes normally leads to delivered
+acknowledgement; a rejected action leaves the row `TO_DELIVER` and propagates.
+Managed repository infrastructure failures propagate and leave the row pending.
+After successful processing, a failed acknowledgement is retried without
+deliberate handler rerun. Exhausted acknowledgement blocks later messages for
+that target in the current run; a later run can retry. Shard coordination
+protects concurrent workers, not
 endpoint effects. Therefore a
 lost acknowledgement can redeliver after a handler runs, and downstream effects
 must be idempotent. The delivery model has no persisted attempt history,

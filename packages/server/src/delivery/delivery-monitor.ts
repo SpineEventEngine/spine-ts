@@ -16,7 +16,8 @@ import type { InboxMessage } from "./inbox.js";
 import type { ShardIndex } from "./shard-index.js";
 
 /**
- * Executes a monitor-selected asynchronous reception outcome.
+ * Executes a monitor-selected asynchronous reception outcome. A normal return
+ * completes delivery and the enclosing delivery stage acknowledges the row.
  */
 export interface ReceptionAction {
   // prettier-ignore
@@ -24,7 +25,7 @@ export interface ReceptionAction {
   /**
    * Executes the selected reception outcome.
    *
-   * @returns A promise that settles when the outcome has completed.
+   * @returns A promise that settles when the outcome has completed; rejection propagates.
    */
   execute(): Promise<void>;
 }
@@ -49,40 +50,20 @@ export interface PickUpAction {
 export class FailedReception {
   // prettier-ignore
 
-  #acknowledged = false;
-
   /**
-   * Creates facts and fallback actions for a failed reception.
+   * Creates facts and actions for a failed reception.
    *
    * @param message The message whose dispatch failed.
    * @param error The dispatch failure.
    * @param mark Marks the message delivered under the current shard session.
-   * @param repeat Repeats processing once when processing failed; omitted after successful processing.
+   * @param repeat Repeats processing under the current shard session.
    */
   constructor(
     readonly message: InboxMessage,
     readonly error: unknown,
     private readonly mark: () => Promise<void>,
-    private readonly repeat: (() => Promise<void>) | undefined,
+    private readonly repeat: () => Promise<void>,
   ) {}
-
-  /**
-   * Returns whether a selected action durably acknowledged the message.
-   *
-   * @returns Whether acknowledgement completed.
-   */
-  acknowledged(): boolean {
-    return this.#acknowledged;
-  }
-
-  /**
-   * Returns an action that leaves failed processing pending for a later drain.
-   *
-   * @returns An action with no acknowledgement.
-   */
-  leavePending(): ReceptionAction {
-    return Object.freeze({ execute: () => Promise.resolve() });
-  }
 
   /**
    * Returns durable acknowledgement of the failed row.
@@ -91,26 +72,18 @@ export class FailedReception {
    */
   markDelivered(): ReceptionAction {
     return Object.freeze({
-      execute: async () => {
-        await this.mark();
-        this.#acknowledged = true;
-      },
+      execute: () => this.mark(),
     });
   }
 
   /**
-   * Returns one immediate repeat of the failed dispatch.
+   * Returns an immediate repeat of the failed dispatch.
    *
    * @returns The repeat-dispatch action.
    */
   repeatDispatching(): ReceptionAction {
     return Object.freeze({
-      execute: async () => {
-        if (this.repeat === undefined)
-          throw new Error("Successful processing cannot be dispatched again after ack failure.");
-        await this.repeat();
-        this.#acknowledged = true;
-      },
+      execute: () => this.repeat(),
     });
   }
 }
@@ -196,8 +169,10 @@ export interface DeliveryStatistics {
  * Controls finite delivery failure actions without scheduling retries.
  *
  * Subclasses can return direct values or promises from every hook. The default
- * reception policy leaves a failed row pending and blocks its target for the
- * finite drain. It never persists attempts, receipts, markers, or quarantine data.
+ * reception policy marks a failed row delivered. A custom action that completes
+ * normally also completes delivery and the enclosing stage acknowledges the row.
+ * It never persists attempts,
+ * receipts, markers, or quarantine data.
  */
 export class DeliveryMonitor {
   // prettier-ignore
@@ -234,13 +209,13 @@ export class DeliveryMonitor {
   }
 
   /**
-   * Returns an action after endpoint dispatch or acknowledgement fails.
+   * Returns an action after endpoint dispatch fails.
    *
-   * @param reception The failure facts and one-shot actions.
+   * @param reception The failure facts and actions; a failed repeat calls this hook again.
    * @returns The selected asynchronous reception action.
    */
   onReceptionFailure(reception: FailedReception): ReceptionAction | Promise<ReceptionAction> {
-    return reception.leavePending();
+    return reception.markDelivered();
   }
 
   /**

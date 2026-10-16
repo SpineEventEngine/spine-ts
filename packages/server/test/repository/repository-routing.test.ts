@@ -132,6 +132,7 @@ import { LocalEntityInbox } from "../../src/context/entity-inbox.js";
 import { CommandValidationError } from "../../src/bus/command-errors.js";
 import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
 import { Delivery } from "../../src/delivery/delivery.js";
+import { DeliveryMonitor } from "../../src/delivery/delivery-monitor.js";
 import { InboxTargets } from "../../src/delivery/inbox.js";
 import { describeEntityMetadata } from "../../src/entity/entity-metadata.js";
 import {
@@ -3588,23 +3589,26 @@ describe("repository signal routing", () => {
         return forged;
       },
     },
-  ])("keeps $label as technical aggregate failures", async ({ failure }) => {
-    const thrown = failure();
-    ManagedProjectAggregate.reset(thrown);
-    const factory = new InMemoryStorageFactory();
-    const context = BoundedContext.singleTenant("Tasks")
-      .add(createManagedRepository())
-      .withStorageFactory(factory)
-      .build();
-    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+  ])(
+    "treats $label as failed aggregate reception without a rejection event",
+    async ({ failure }) => {
+      const thrown = failure();
+      ManagedProjectAggregate.reset(thrown);
+      const factory = new InMemoryStorageFactory();
+      const context = BoundedContext.singleTenant("Tasks")
+        .add(createManagedRepository())
+        .withStorageFactory(factory)
+        .build();
+      const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
-    await expect(
-      context.commandBus().post(createAggregateCommand("command-technical", "task-technical")),
-    ).rejects.toThrow();
+      await expect(
+        context.commandBus().post(createAggregateCommand("command-technical", "task-technical")),
+      ).resolves.toBeUndefined();
 
-    await expect(eventStore.read()).resolves.toEqual([]);
-    ManagedProjectAggregate.reset();
-  });
+      await expect(eventStore.read()).resolves.toEqual([]);
+      ManagedProjectAggregate.reset();
+    },
+  );
 
   it("uses the typed message-valued entity ID as the rejection producer", async () => {
     RejectionObservingProjection.reset();
@@ -4596,7 +4600,7 @@ describe("repository signal routing", () => {
     await expect(storage.readCurrent("task-async-rejected")).resolves.toBeUndefined();
 
     RejectedAsyncAssigneeAggregate.rejectCommand?.(failure);
-    await expect(completion).rejects.toBe(failure);
+    await expect(completion).resolves.toBeUndefined();
     await expect(storage.readCurrent("task-async-rejected")).resolves.toBeUndefined();
     await expect(eventStore.read()).resolves.toEqual([]);
   });
@@ -6746,6 +6750,13 @@ describe("repository signal routing", () => {
 
   it("retains one command diagnostic when an admitted Process Manager assignment fails", async () => {
     const failure = new Error("admitted Process Manager assignment failed");
+    const monitored: unknown[] = [];
+    const monitor = vi
+      .spyOn(DeliveryMonitor.prototype, "onReceptionFailure")
+      .mockImplementation((reception) => {
+        monitored.push(reception.error);
+        return reception.markDelivered();
+      });
     const diagnostics: SpineEvent[] = [];
     const command = createAggregateCommand("pm-command-diagnostic-failure", "pm-command-failure");
     const context = BoundedContext.singleTenant("Tasks")
@@ -6761,10 +6772,11 @@ describe("repository signal routing", () => {
 
     try {
       RoutingProcessManager.reset(failure);
-      await expect(context.commandBus().post(command)).rejects.toThrow();
+      await expect(context.commandBus().post(command)).resolves.toBeUndefined();
       await context.close();
 
       expect(RoutingProcessManager.commandCalls).toBe(1);
+      expect(monitored).toEqual([failure]);
       expect(diagnostics).toHaveLength(1);
       expect(
         AnyMessages.unpack(diagnostics[0]?.message as never, CommandDispatchedToHandlerSchema),
@@ -6773,6 +6785,7 @@ describe("repository signal routing", () => {
         payload: command,
       });
     } finally {
+      monitor.mockRestore();
       RoutingProcessManager.reset();
       await context.close();
     }
@@ -6820,6 +6833,13 @@ describe("repository signal routing", () => {
 
   it("retains one command diagnostic when an admitted handler fails", async () => {
     const failure = new Error("admitted command handler failed");
+    const monitored: unknown[] = [];
+    const monitor = vi
+      .spyOn(DeliveryMonitor.prototype, "onReceptionFailure")
+      .mockImplementation((reception) => {
+        monitored.push(reception.error);
+        return reception.markDelivered();
+      });
     const diagnostics: SpineEvent[] = [];
     const command = createAggregateCommand("command-diagnostic-failure", "diagnostic-failure");
     const context = BoundedContext.singleTenant("Tasks")
@@ -6835,15 +6855,17 @@ describe("repository signal routing", () => {
 
     try {
       ExecutingProjectAggregate.reset(failure);
-      await expect(context.commandBus().post(command)).rejects.toThrow();
+      await expect(context.commandBus().post(command)).resolves.toBeUndefined();
       await waitForCondition(() => diagnostics.length === 1);
 
       expect(ExecutingProjectAggregate.assigneeCalls).toBe(1);
+      expect(monitored).toEqual([failure]);
       expect(diagnostics).toHaveLength(1);
       expect(
         AnyMessages.unpack(diagnostics[0]?.message as never, CommandDispatchedToHandlerSchema),
       ).toMatchObject({ payload: command });
     } finally {
+      monitor.mockRestore();
       ExecutingProjectAggregate.reset();
       await context.close();
     }
@@ -8046,7 +8068,7 @@ describe("repository signal routing", () => {
     );
   });
 
-  it("retains technical process-manager failures pending after reporting them", async () => {
+  it("marks failed process-manager reception delivered by default", async () => {
     RoutingProcessManager.reset(new Error("technical process-manager failure"));
     const factory = new InMemoryStorageFactory();
     const context = BoundedContext.singleTenant("Tasks")
@@ -8062,19 +8084,19 @@ describe("repository signal routing", () => {
     try {
       await expect(
         context.commandBus().post(createAggregateCommand("command-pm-technical", "pm-technical")),
-      ).rejects.toThrow();
+      ).resolves.toBeUndefined();
 
       await expect(
         context.stand().read(ProjectQueueStateSchema, "pm-technical"),
       ).resolves.toBeUndefined();
       await expect(eventStore.read()).resolves.toEqual([]);
       await expect(
-        delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+        delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
       ).resolves.toContainEqual(
         expect.objectContaining({
           signalId: "command-pm-technical",
           label: "HANDLE_COMMAND",
-          status: "TO_DELIVER",
+          status: "DELIVERED",
         }),
       );
     } finally {
@@ -8191,7 +8213,7 @@ describe("repository signal routing", () => {
     ]);
   });
 
-  it("exact-drains later process-manager event rows while retaining an earlier routed failure", async () => {
+  it("exact-drains later process-manager event rows after a failed receptor is marked delivered", async () => {
     SplitRouteProcessManager.reset();
     const factory = new InMemoryStorageFactory();
     const repository = createSplitPmRepo();
@@ -8220,17 +8242,16 @@ describe("repository signal routing", () => {
 
     const posted = dispatcher.dispatch(createProjectCreated("event-pm-split", "pm-source"));
 
-    await expect(posted).rejects.toThrow();
+    await expect(posted).resolves.toBeUndefined();
     expect(SplitRouteProcessManager.startedIds).toEqual(["pm-fail", "pm-later"]);
     expect(SplitRouteProcessManager.completedIds).toEqual(["pm-later"]);
 
     const delivered = await delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] });
-    const pending = await delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] });
-    const failed = pending.find(
+    const failed = delivered.find(
       (message) =>
         message.signalId === "event-pm-split" &&
         message.label === "REACT_UPON_EVENT" &&
-        message.status === "TO_DELIVER" &&
+        message.status === "DELIVERED" &&
         Identifiers.unpack("string", message.inboxId.targetId) === "pm-fail",
     );
     expect(failed?.inboxId.targetTypeUrl).toBe(TypeUrls.derive(ProjectQueueStateSchema));
@@ -8590,7 +8611,7 @@ describe("repository signal routing", () => {
     await secondContext.close();
   });
 
-  it("retains failed delivery for retry without a pre-handler journal marker", async () => {
+  it("does not write a journal marker for failed handler reception", async () => {
     const preJournalFactory = new InMemoryStorageFactory();
     const preJournalRepository = createGuardedProcessManagerReactRepository();
     RoutingProcessManager.reset(new Error("handler failed before journal"));
@@ -8606,7 +8627,7 @@ describe("repository signal routing", () => {
       "pm-guard-before-journal",
     );
 
-    await expect(preJournalDispatcher.dispatch(preJournalEvent)).rejects.toThrow();
+    await expect(preJournalDispatcher.dispatch(preJournalEvent)).resolves.toBeUndefined();
     const preJournal = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: preJournalFactory,
@@ -8617,7 +8638,7 @@ describe("repository signal routing", () => {
     await preJournalDispatcher.dispatch(
       createProjectCreated("event-guard-before-journal-retry", "pm-guard-before-journal"),
     );
-    expect(RoutingProcessManager.eventCalls).toBe(2);
+    expect(RoutingProcessManager.eventCalls).toBe(1);
     await expect(preJournal.readEvents("pm-guard-before-journal")).resolves.toEqual([]);
     await preJournalContext.close();
 
@@ -8904,6 +8925,13 @@ describe("repository signal routing", () => {
 
   it("retains one reactor diagnostic when an admitted Process Manager reactor fails", async () => {
     const failure = new Error("admitted Process Manager reactor failed");
+    const monitored: unknown[] = [];
+    const monitor = vi
+      .spyOn(DeliveryMonitor.prototype, "onReceptionFailure")
+      .mockImplementation((reception) => {
+        monitored.push(reception.error);
+        return reception.markDelivered();
+      });
     const diagnostics: SpineEvent[] = [];
     const event = createProjectCreated("pm-reactor-diagnostic-failure", "pm-reactor-failure");
     const context = BoundedContext.singleTenant("Tasks")
@@ -8919,10 +8947,11 @@ describe("repository signal routing", () => {
 
     try {
       RoutingProcessManager.reset(failure);
-      await expect(context.eventBus().post(event)).rejects.toThrow();
+      await expect(context.eventBus().post(event)).resolves.toBeUndefined();
       await context.close();
 
       expect(RoutingProcessManager.eventCalls).toBe(1);
+      expect(monitored).toEqual([failure]);
       expect(diagnostics).toHaveLength(1);
       expect(
         AnyMessages.unpack(diagnostics[0]?.message as never, EventDispatchedToReactorSchema),
@@ -8931,6 +8960,7 @@ describe("repository signal routing", () => {
         payload: event,
       });
     } finally {
+      monitor.mockRestore();
       RoutingProcessManager.reset();
       await context.close();
     }
@@ -9750,6 +9780,13 @@ describe("repository signal routing", () => {
 
   it("retains one subscriber diagnostic when an admitted subscriber fails", async () => {
     const failure = new Error("admitted projection subscriber failed");
+    const monitored: unknown[] = [];
+    const monitor = vi
+      .spyOn(DeliveryMonitor.prototype, "onReceptionFailure")
+      .mockImplementation((reception) => {
+        monitored.push(reception.error);
+        return reception.markDelivered();
+      });
     const diagnostics: SpineEvent[] = [];
     const event = createProjectCreated(
       "subscriber-diagnostic-failure",
@@ -9768,14 +9805,16 @@ describe("repository signal routing", () => {
 
     try {
       ThrowingTaskProjection.reset(failure);
-      await expect(context.eventBus().post(event)).rejects.toThrow();
+      await expect(context.eventBus().post(event)).resolves.toBeUndefined();
       await waitForCondition(() => diagnostics.length === 1);
 
       expect(diagnostics).toHaveLength(1);
+      expect(monitored).toEqual([failure]);
       expect(
         AnyMessages.unpack(diagnostics[0]?.message as never, EventDispatchedToSubscriberSchema),
       ).toMatchObject({ payload: event });
     } finally {
+      monitor.mockRestore();
       ThrowingTaskProjection.reset();
       await context.close();
     }
@@ -9934,14 +9973,32 @@ describe("repository signal routing", () => {
       })
       .withStorageFactory(factory)
       .build();
-
-    await expect(
-      context.eventBus().post(createProjectCreated("projection-commit-fails", "projection-fails")),
-    ).rejects.toThrow();
-    await expect(
-      context.stand().read(ProjectOverviewStateSchema, "projection-fails"),
-    ).resolves.toBeUndefined();
-    expect(changes).toEqual([]);
+    const monitor = vi.spyOn(DeliveryMonitor.prototype, "onReceptionFailure");
+    try {
+      await expect(
+        context
+          .eventBus()
+          .post(createProjectCreated("projection-commit-fails", "projection-fails")),
+      ).rejects.toThrow("forced Entity commit failure");
+      expect(ExecutingTaskProjection.subscriberCalls).toBe(1);
+      expect(monitor).not.toHaveBeenCalled();
+      await expect(
+        context.stand().read(ProjectOverviewStateSchema, "projection-fails"),
+      ).resolves.toBeUndefined();
+      expect(changes).toEqual([]);
+      const delivery = new Delivery({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory: factory,
+      });
+      await expect(
+        delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+      ).resolves.toContainEqual(
+        expect.objectContaining({ signalId: "projection-commit-fails", status: "TO_DELIVER" }),
+      );
+    } finally {
+      monitor.mockRestore();
+      await context.close();
+    }
   });
 
   it("does not expose aggregate state or state notifications when its atomic commit throws", async () => {
@@ -11145,7 +11202,7 @@ describe("repository signal routing", () => {
       context
         .eventBus()
         .post(createProjectCreated("event-catch-up-failure", "task-catch-up-failure")),
-    ).rejects.toThrow();
+    ).resolves.toBeUndefined();
 
     await expect(context.catchUpReadSide()).rejects.toMatchObject({
       name: "ReadCatchUpReplayError",
@@ -11174,7 +11231,7 @@ describe("repository signal routing", () => {
         context
           .eventBus()
           .post(createProjectCreated("event-catch-up-string-failure", "task-string-failure")),
-      ).rejects.toThrow();
+      ).resolves.toBeUndefined();
 
       await expect(context.catchUpReadSide()).rejects.toMatchObject({
         name: "ReadCatchUpReplayError",

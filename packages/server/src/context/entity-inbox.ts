@@ -20,6 +20,7 @@ import type { TenantId } from "@spine-event-engine/proto";
 import { TenantBoundary } from "@spine-event-engine/storage/provider";
 
 import { Delivery } from "../delivery/delivery.js";
+import { receptionObservation } from "../delivery/reception-observation.js";
 import { type DeliveryStrategy, UniformAcrossAllShards } from "../delivery/delivery-builder.js";
 import type { InboxMessage } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
@@ -496,6 +497,7 @@ export class LocalEntityInbox implements EntityInbox {
     runFollowUp = true,
     expectedShard = this.#expectedShard(message),
   ): Promise<(() => Promise<void>) | undefined> {
+    receptionObservation.markManaged();
     LocalEntityInbox.#assert(message);
 
     const target = this.#targets.get(message.inboxId.targetTypeUrl);

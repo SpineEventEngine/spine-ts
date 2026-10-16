@@ -87,7 +87,7 @@ describe("live SQL Inbox delivery faults", () => {
     expect(failures).toEqual([factoryFailure, connectionFailure]);
   });
 
-  it("retains a failed recipient while delivering an unrelated recipient", async () => {
+  it("marks a failed recipient delivered while delivering an unrelated recipient", async () => {
     await withSqlDelivery(async ({ build, inbox }) => {
       const failed = createMessage(`failed-${randomUUID()}`, `event-${randomUUID()}`, 1n);
       const unrelated = {
@@ -117,30 +117,34 @@ describe("live SQL Inbox delivery faults", () => {
       });
       expect(result.status).toBe("COMPLETED");
       expect(entries).toEqual([failed.id.value, unrelated.id.value]);
-      expect(statistics).toMatchObject({ processed: 2, delivered: 1, failed: 1 });
-      expect(await inbox.readMessage(failed.id)).toMatchObject({ status: "TO_DELIVER" });
+      expect(statistics).toMatchObject({ processed: 2, delivered: 2, failed: 1 });
+      expect(await inbox.readMessage(failed.id)).toBeUndefined();
       expect(await inbox.readMessage(unrelated.id)).toBeUndefined();
     });
   });
 
   it.each([
     { policy: "throwing-monitor", expectedEntries: 1, expectedStatus: "TO_DELIVER" },
-    { policy: "failed-repeat", expectedEntries: 2, expectedStatus: "TO_DELIVER" },
+    { policy: "failed-repeat", expectedEntries: 2, expectedStatus: undefined },
     { policy: "successful-repeat", expectedEntries: 2, expectedStatus: undefined },
   ] as const)(
-    "applies $policy without silently acknowledging a failed SQL Inbox row",
+    "applies $policy without falling back from the selected monitor action",
     async ({ policy, expectedEntries, expectedStatus }) => {
       await withSqlDelivery(async ({ build, inbox }) => {
         const message = createMessage(`policy-${randomUUID()}`, `event-${randomUUID()}`, 1n);
         await inbox.storage.write(message);
         let entries = 0;
+        let monitorCalls = 0;
         const monitor = new (class extends DeliveryMonitor {
           override onReceptionFailure(failure: FailedReception) {
+            monitorCalls += 1;
             if (policy === "throwing-monitor") throw new Error("monitor failed");
-            return failure.repeatDispatching();
+            return policy === "failed-repeat" && monitorCalls === 2
+              ? failure.markDelivered()
+              : failure.repeatDispatching();
           }
         })();
-        const result = await build(monitor).run({
+        const run = build(monitor).run({
           onMessage: () => {
             entries += 1;
             if (policy !== "successful-repeat" || entries === 1)
@@ -148,8 +152,12 @@ describe("live SQL Inbox delivery faults", () => {
           },
         });
 
-        expect(result.status).toBe("COMPLETED");
+        if (policy === "throwing-monitor") await expect(run).rejects.toThrow("monitor failed");
+        else await expect(run).resolves.toMatchObject({ status: "COMPLETED" });
         expect(entries).toBe(expectedEntries);
+        expect(monitorCalls).toBe(
+          policy === "throwing-monitor" ? 1 : policy === "failed-repeat" ? 2 : 1,
+        );
         const remaining = await inbox.readMessage(message.id);
         expect(remaining?.status).toBe(expectedStatus);
       });
@@ -157,33 +165,21 @@ describe("live SQL Inbox delivery faults", () => {
   );
 
   it.each([
-    { failures: 2, expectedStatus: undefined, monitorCalls: 0 },
-    { failures: 9, expectedStatus: "TO_DELIVER", monitorCalls: 1 },
+    { failures: 2, expectedStatus: undefined },
+    { failures: 9, expectedStatus: "TO_DELIVER" },
   ] as const)(
     "does not rerun successful processing when SQL acknowledgement rejects $failures attempts",
-    async ({ failures, expectedStatus, monitorCalls }) => {
+    async ({ failures, expectedStatus }) => {
       await withSqlDelivery(async ({ build, inbox, sql, inboxTable, postgres }) => {
         const message = createMessage(`ack-${randomUUID()}`, `event-${randomUUID()}`, 1n);
         await inbox.storage.write(message);
         await installAckFault(sql, inboxTable, postgres, failures);
         let handlerEntries = 0;
         let observedFailures = 0;
-        const observedCodes: (string | undefined)[] = [];
-        const forbiddenRepeatOutcomes: unknown[] = [];
         const monitor = new (class extends DeliveryMonitor {
-          override async onReceptionFailure(failure: FailedReception) {
+          override onReceptionFailure(failure: FailedReception) {
             observedFailures += 1;
-            observedCodes.push(causeCode(failure.error));
-            forbiddenRepeatOutcomes.push(
-              await failure
-                .repeatDispatching()
-                .execute()
-                .then(
-                  () => "resolved",
-                  (error: unknown) => error,
-                ),
-            );
-            return failure.leavePending();
+            return failure.repeatDispatching();
           }
         })();
         const outcome = await build(monitor).run({
@@ -194,15 +190,7 @@ describe("live SQL Inbox delivery faults", () => {
 
         expect(outcome.status).toBe("COMPLETED");
         expect(handlerEntries).toBe(1);
-        expect(observedFailures).toBe(monitorCalls);
-        expect(observedCodes).toEqual(
-          monitorCalls === 0 ? [] : [postgres ? "40P01" : "ER_LOCK_DEADLOCK"],
-        );
-        expect(forbiddenRepeatOutcomes).toHaveLength(monitorCalls);
-        if (monitorCalls === 1)
-          expect(forbiddenRepeatOutcomes[0]).toMatchObject({
-            message: "Successful processing cannot be dispatched again after ack failure.",
-          });
+        expect(observedFailures).toBe(0);
         // MySQL retries a deadlock-class CAS three times inside each of the
         // Delivery worker's three acknowledgement attempts.
         expect(await ackAttempts(sql, postgres)).toBe(!postgres && failures === 9 ? 9 : 3);
@@ -378,15 +366,4 @@ async function ackAttempts(sql: SqlClient, postgres: boolean): Promise<number> {
   const value = rows[0]?.attempts;
   if (value === undefined) throw new Error("Expected a durable SQL acknowledgement counter.");
   return Number(value);
-}
-
-function causeCode(error: unknown): string | undefined {
-  let current = error;
-  for (let depth = 0; depth < 8; depth += 1) {
-    if (typeof current !== "object" || current === null) return undefined;
-    const value = current as { code?: unknown; cause?: unknown };
-    if (typeof value.code === "string") return value.code;
-    current = value.cause;
-  }
-  return undefined;
 }

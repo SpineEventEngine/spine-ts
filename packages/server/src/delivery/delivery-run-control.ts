@@ -104,6 +104,14 @@ export interface DeliveryControlledRun extends DeliveryRunOptions {
   readonly acceptMessage?: (message: InboxMessage) => boolean;
 
   /**
+   * Completes one admitted message after its processing and selected action.
+   *
+   * @param message The message whose processing settled.
+   * @internal
+   */
+  readonly onMessageSettled?: (message: InboxMessage) => void;
+
+  /**
    * Completes private admission cleanup when the controlled run settles before dispatch.
    *
    * @internal

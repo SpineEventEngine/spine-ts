@@ -30,6 +30,7 @@ import { runInNewContext } from "node:vm";
 import { describe, expect, it, vi } from "vitest";
 
 import { Delivery } from "../../src/delivery/delivery.js";
+import { DeliveryMonitor } from "../../src/delivery/delivery-monitor.js";
 import type { DeliveryStrategy } from "../../src/delivery/delivery-builder.js";
 import { DeliveryLoop } from "../../src/delivery/delivery-loop.js";
 import { ShardIndex, type InboxMessage } from "../../src/index.js";
@@ -283,10 +284,18 @@ describe("LocalEntityInbox", () => {
     await expect(inbox.receive(delivery, input)).rejects.toBe(failure);
   });
 
-  it("continues a batch after one reception fails while retaining the failed row", async () => {
+  it("preserves a batch replay infrastructure failure and pending rows", async () => {
+    const monitor = vi.fn();
+    class ObservingMonitor extends DeliveryMonitor {
+      override onReceptionFailure(reception: Parameters<DeliveryMonitor["onReceptionFailure"]>[0]) {
+        monitor(reception.error);
+        return reception.markDelivered();
+      }
+    }
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
+      monitor: new ObservingMonitor(),
     });
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
     const drainFailure = new Error("first drain failed");
@@ -309,11 +318,13 @@ describe("LocalEntityInbox", () => {
         ["first", "second"].map((targetId) => processInput(targetTypeUrl, targetId)),
       ),
     ).rejects.toBe(drainFailure);
-    expect(replayed).toEqual(["first", "second"]);
+    expect(replayed).toEqual(["first", "first"]);
+    expect(monitor).not.toHaveBeenCalled();
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
     ).resolves.toEqual([
       expect.objectContaining({ signalId: "signal-first", status: "TO_DELIVER" }),
+      expect.objectContaining({ signalId: "signal-second", status: "TO_DELIVER" }),
     ]);
   });
 
@@ -1262,7 +1273,7 @@ describe("LocalEntityInbox", () => {
       labels: processManagerLabels,
       replay(message) {
         unrelatedSeen.push(message);
-        return Promise.reject(new Error("unrelated process-manager should not replay"));
+        return Promise.resolve(undefined);
       },
     });
 
@@ -1314,11 +1325,6 @@ describe("LocalEntityInbox", () => {
         label: "UPDATE_SUBSCRIBER",
         status: "TO_DELIVER",
       }),
-      expect.objectContaining({
-        signalId: "signal-0",
-        label: "HANDLE_COMMAND",
-        status: "TO_DELIVER",
-      }),
     ]);
     await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
   });
@@ -1353,20 +1359,21 @@ describe("LocalEntityInbox", () => {
     ).resolves.toMatchObject([{ signalId: "signal-2", status: "TO_DELIVER" }]);
   });
 
-  it("normalizes a non-Error reception failure and retains the pending row", async () => {
+  it("preserves a primitive replay infrastructure failure and pending row", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
     const inbox = new LocalEntityInbox("Tasks");
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
+    const reason = "not-an-error";
 
     inbox.register({
       targetTypeUrl,
       labels: processManagerLabels,
       replay() {
-        const reason = "not-an-error" as unknown as Error;
-
+        // The primitive rejection is intentional: managed replay must preserve its identity.
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
         return Promise.reject(reason);
       },
     });
@@ -1379,7 +1386,7 @@ describe("LocalEntityInbox", () => {
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
       }),
-    ).rejects.toThrow("Entity Inbox replay failed.");
+    ).rejects.toBe(reason);
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
     ).resolves.toMatchObject([{ signalId: "signal-3", status: "TO_DELIVER" }]);
