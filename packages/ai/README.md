@@ -36,11 +36,11 @@ const draftSupportReply = AiModel.define({
 
 <!-- prettier-ignore-end -->
 
-`prompt-and-validate` asks the provider for a result and checks the parsed message locally. A provider that supports native schema output can use `native-schema` instead; local output validation still applies. The [support application](../../examples/support/README.md) adds a domain rule so a blank reply cannot become a proposal. Defining a task does not make a model request.
+`prompt-and-validate` asks the provider for a result and checks the parsed message locally. A provider that supports native schema output can use `native-schema` instead; local output validation still applies. The [support application](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/README.md) adds a domain rule so a blank reply cannot become a proposal. Defining a task does not make a model request.
 
 ## Connect a deployment
 
-The task above says what input and output mean. A deployment says which permitted provider account and model will do that task. The [adapter guide](../ai-vercel-ax/README.md) returns a registration with a model reference, credential setup, and authorization check. Build an `AiRegistry` outside the Agent and attach it to the Bounded Context:
+The task above says what input and output mean. A deployment says which permitted provider account and model will do that task. The [adapter guide](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/ai-vercel-ax/README.md) returns a registration with a model reference, credential setup, and authorization check. Build an `AiRegistry` outside the Agent and attach it to the Bounded Context:
 
 <!-- prettier-ignore-start -->
 
@@ -67,8 +67,8 @@ function generationRegistry(registration: AiBackendRegistration): AiRegistry {
 
 <!-- prettier-ignore-end -->
 
-The [support context factory](../../examples/support/src/index.ts) calls `withAi(registry)` when it builds its Agent repository. The [support walkthrough](../../examples/support/README.md#3-invoke-the-task-from-the-agent) shows the actual handler calling `this.ai.invoke(draftSupportReply, { call, conversation, input })` and turning its result into a domain Event. The [BlackBox step](../../examples/support/README.md#4-configure-and-test-the-full-flow) shows the same path with a controlled test deployment. The handler does not need a provider SDK or credential.
+The [support context factory](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/src/index.ts) calls `withAi(registry)` when it builds its Agent repository. The [support walkthrough](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/README.md#3-invoke-the-task-from-the-agent) shows the actual handler calling `this.ai.invoke(draftSupportReply, { call, conversation, input })` and turning its result into a domain Event. The [BlackBox step](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/README.md#4-configure-and-test-the-full-flow) shows the same path with a controlled test deployment. The handler does not need a provider SDK or credential.
 
-An Agent task can also allow named tools. **MCP** is a protocol that lets a model ask the application to run one of those tools and return its result. The application explicitly lists permitted tools and checks access before a tool runs; model text alone grants no permission. [Release Notes Studio](../../examples/release-notes/README.md#6-let-the-model-ask-for-git-details) uses read-only Git tools to supply evidence for a draft.
+An Agent task can also allow named tools. **MCP** is a protocol that lets a model ask the application to run one of those tools and return its result. The application explicitly lists permitted tools and checks access before a tool runs; model text alone grants no permission. [Release Notes Studio](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/release-notes/README.md#6-let-the-model-ask-for-git-details) uses read-only Git tools to supply evidence for a draft.
 
 For exact definition fields, deployment selection, optional application limits, tool registration, and result types, see the [coding-agent reference](REFERENCE.md).

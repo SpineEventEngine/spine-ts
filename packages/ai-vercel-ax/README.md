@@ -62,7 +62,7 @@ function createSupportRegistry(
 
 <!-- prettier-ignore-end -->
 
-Pass this registry to the application's Bounded Context with `withAi(registry)`. The Agent can then invoke the [typed support reply task](../ai/README.md). Its handler inspects the result and constructs a domain Event for review. Registration itself does not send a request. The application supplies a real model ID and decides authorization for each accepted request.
+Pass this registry to the application's Bounded Context with `withAi(registry)`. The Agent can then invoke the [typed support reply task](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/ai/README.md). Its handler inspects the result and constructs a domain Event for review. Registration itself does not send a request. The application supplies a real model ID and decides authorization for each accepted request.
 
 ## Use a ChatGPT plan
 
@@ -118,7 +118,7 @@ async function selectPlanModel(
 
 <!-- prettier-ignore-end -->
 
-The example chooses the first returned model only to show the wiring; a UI should let the person select from `models(clientId)`. Register the returned deployment with `AiRegistry` as above. Close the local callback listener after sign-in, and keep the session and credential store in the trusted process. ChatGPT plan generation uses `prompt-and-validate`; see [Release Notes Studio](../../examples/release-notes/README.md) for the complete desktop flow.
+The example chooses the first returned model only to show the wiring; a UI should let the person select from `models(clientId)`. Register the returned deployment with `AiRegistry` as above. Close the local callback listener after sign-in, and keep the session and credential store in the trusted process. ChatGPT plan generation uses `prompt-and-validate`; see [Release Notes Studio](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/release-notes/README.md) for the complete desktop flow.
 
 ## Use Anthropic Messages
 

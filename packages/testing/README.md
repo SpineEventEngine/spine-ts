@@ -12,7 +12,7 @@ For exact methods and failure behavior, see the [coding-agent reference](REFEREN
 
 ## Test a model-assisted outcome
 
-The [warehouse support example](../../examples/support/README.md) asks an Agent to draft a reply. A test can supply a controlled model response with `AiTestBackend`, post `DraftSupportReply`, and wait for `SupportReplySuggested`. This exercises the real Agent, Event delivery, and output validation without a provider account.
+The [warehouse support example](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/README.md) asks an Agent to draft a reply. A test can supply a controlled model response with `AiTestBackend`, post `DraftSupportReply`, and wait for `SupportReplySuggested`. This exercises the real Agent, Event delivery, and output validation without a provider account.
 
 <!-- prettier-ignore-start -->
 
