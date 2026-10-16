@@ -13,12 +13,7 @@
  */
 
 import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
-import {
-  AnySchema,
-  StringValueSchema,
-  TimestampSchema,
-  type Timestamp,
-} from "@bufbuild/protobuf/wkt";
+import { AnySchema, TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import {
   EventIdSchema,
   EventSchema,
@@ -31,6 +26,13 @@ import {
   type EntityRecord,
 } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { describe, expect, it, vi } from "vitest";
+import {
+  TaskIdSchema,
+  TaskListIdSchema,
+} from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
+import { TaskCreatedSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
+import { TaskListSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_list_pb.js";
+import { TaskSchema } from "../../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 
 import { EventStore } from "../../src/event/event-store.js";
 import { stateHistorySpec } from "../../src/entity/entity-history-record-spec.js";
@@ -105,6 +107,59 @@ describe("MemoryEntityCommitStorage", () => {
     );
     commits.close();
     entity.close();
+  });
+
+  it("allows a prepared save for the same Entity to finish while an earlier current write is blocked", async () => {
+    const factory = new InMemoryStorageFactory();
+    const input = entityInput();
+    const entity = factory.createEntityStorage(input) as EntityHandle;
+    const commits = commitStorage(factory, input);
+    const entered = deferred();
+    const release = deferred();
+    const original = Object.getOwnPropertyDescriptor(MemoryEntityRecordStorage.prototype, "write")
+      ?.value as MemoryEntityRecordStorage<unknown>["write"];
+    let writes = 0;
+    const write = vi
+      .spyOn(MemoryEntityRecordStorage.prototype, "write")
+      .mockImplementation(async function (this: MemoryEntityRecordStorage<unknown>, record) {
+        if (++writes === 1) {
+          entered.resolve(undefined);
+          await release.promise;
+        }
+        return original.call(this, record);
+      });
+    try {
+      const first = commits.commit({
+        context: input.context,
+        entity: input,
+        entityId: "task",
+        next: current("first", 1n),
+        states: [state("first", 1n)],
+      });
+      await entered.promise;
+      await expect(
+        commits.commit({
+          context: input.context,
+          entity: input,
+          entityId: "task",
+          next: current("second", 2n),
+          states: [state("second", 2n)],
+        }),
+      ).resolves.toBeUndefined();
+      await expect(entity.current.read("task")).resolves.toEqual(current("second", 2n));
+      await expect(entity.states.backward("task", 2)).resolves.toEqual([
+        state("second", 2n),
+        state("first", 1n),
+      ]);
+      release.resolve(undefined);
+      await first;
+      await expect(entity.current.read("task")).resolves.toEqual(current("first", 1n));
+    } finally {
+      release.resolve(undefined);
+      write.mockRestore();
+      commits.close();
+      entity.close();
+    }
   });
 
   it("isolates current, history, and delivery records from caller mutation", async () => {
@@ -370,21 +425,20 @@ describe("MemoryEntityCommitStorage", () => {
     entity.close();
   });
 
-  it("restores affected entries if live application throws after an earlier write", async () => {
+  it("retains history and diagnostic records if a later delivery Event insert fails", async () => {
     const factory = new InMemoryStorageFactory();
     const input = entityInput();
     const entity = factory.createEntityStorage(input) as EntityHandle;
     const commits = commitStorage(factory, input);
-    let applications = 0;
-    const original = Reflect.get(TenantRecords.prototype, "apply");
-    const apply = vi.spyOn(TenantRecords.prototype, "apply").mockImplementation(function (
-      this: TenantRecords<unknown, Message>,
-      slot,
-    ) {
-      applications++;
-      if (applications === 5) throw new Error("injected live write failure");
-      original.call(this, slot);
-    });
+    const original = Object.getOwnPropertyDescriptor(TenantRecords.prototype, "compareAndSet")
+      ?.value as TenantRecords<unknown, Message>["compareAndSet"];
+    const compareAndSet = vi
+      .spyOn(TenantRecords.prototype, "compareAndSet")
+      .mockImplementation(function (this: TenantRecords<unknown, Message>, id, expected, next) {
+        if ((next as { record: Message } | undefined)?.record.$typeName === EventSchema.typeName)
+          throw new Error("injected delivery Event failure");
+        return original.call(this, id, expected, next);
+      });
     try {
       await expect(
         commits.commit({
@@ -396,13 +450,15 @@ describe("MemoryEntityCommitStorage", () => {
           diagnostics: [diagnostic("partial-diagnostic", 1n)],
           events: [event("partial-delivery")],
         }),
-      ).rejects.toThrow(/injected live write failure/);
+      ).rejects.toThrow(/injected delivery Event failure/);
     } finally {
-      apply.mockRestore();
+      compareAndSet.mockRestore();
     }
     await expect(entity.current.read("task")).resolves.toBeUndefined();
-    await expect(entity.states.backward("task", 1)).resolves.toEqual([]);
-    await expect(entity.events.backward("task", 1)).resolves.toEqual([]);
+    await expect(entity.states.backward("task", 1)).resolves.toEqual([state("partial", 1n)]);
+    await expect(entity.events.backward("task", 1)).resolves.toMatchObject([
+      { id: { value: "partial-diagnostic" } },
+    ]);
     const events = new EventStore(input.context, factory);
     await expect(events.read()).resolves.toEqual([]);
     events.close();
@@ -447,7 +503,7 @@ describe("MemoryEntityCommitStorage", () => {
         diagnostics: [diagnostic("diagnostic-1", 1n)],
         events: [delivery],
       }),
-    ).rejects.toThrow(/unique delivery-event IDs/);
+    ).resolves.toBeUndefined();
     events.close();
     commits.close();
     entity.close();
@@ -472,6 +528,16 @@ describe("MemoryEntityCommitStorage", () => {
       }),
     ).rejects.toThrow(/unique delivery-event IDs/);
 
+    await expect(
+      commits.commit({
+        context: input.context,
+        entity: input,
+        entityId: "task",
+        next: current("partial", 1n),
+        events: [create(EventSchema, { message: event("missing-id").message })],
+      }),
+    ).rejects.toThrow(/unique delivery-event IDs/);
+
     await expect(entity.current.read("task")).resolves.toBeUndefined();
     await expect(entity.states.backward("task", 10)).resolves.toEqual([]);
     await expect(entity.events.backward("task", 10)).resolves.toEqual([]);
@@ -482,7 +548,7 @@ describe("MemoryEntityCommitStorage", () => {
     entity.close();
   });
 
-  it("publishes nothing when a staged history write fails after current state is staged", async () => {
+  it("retains a completed state-history prefix when a later diagnostic write fails", async () => {
     const factory = new InMemoryStorageFactory();
     const input = entityInput();
     const entity = factory.createEntityStorage(input) as EntityHandle;
@@ -500,7 +566,7 @@ describe("MemoryEntityCommitStorage", () => {
     ).rejects.toThrow(/producer ID/);
 
     await expect(entity.current.read("task")).resolves.toBeUndefined();
-    await expect(entity.states.backward("task", 10)).resolves.toEqual([]);
+    await expect(entity.states.backward("task", 10)).resolves.toEqual([state("partial", 1n)]);
     await expect(entity.events.backward("task", 10)).resolves.toEqual([]);
     commits.close();
     entity.close();
@@ -718,7 +784,7 @@ describe("MemoryEntityCommitStorage", () => {
   it("does not consult or close supplied history handles for a current-only commit", async () => {
     const factory = new InMemoryStorageFactory();
     const input = entityInput();
-    const layout = stateHistorySpec(StringValueSchema);
+    const layout = stateHistorySpec(TaskSchema);
     const supplied = factory.createRecordStorage(input.context, layout.spec, layout.group);
     const read = vi.spyOn(supplied, "read");
     const close = vi.spyOn(supplied, "close");
@@ -868,7 +934,7 @@ describe("MemoryEntityCommitStorage", () => {
     const factory = new InMemoryStorageFactory();
     const input = entityInput();
     const commits = commitStorage(factory, input);
-    const incompatible = { ...input, sourceType: EventSchema };
+    const incompatible = { ...input, sourceType: TaskListSchema };
 
     expect(() =>
       commits.commit({
@@ -881,10 +947,35 @@ describe("MemoryEntityCommitStorage", () => {
     commits.close();
   });
 
+  it("rejects absent or mismatched current IDs before writing history or current state", async () => {
+    const factory = new InMemoryStorageFactory();
+    const input = entityInput();
+    const commits = commitStorage(factory, input);
+    const storage = factory.createEntityStorage(input) as EntityHandle;
+    for (const next of [
+      create(EntityRecordSchema, { state: current("missing", 1n).state }),
+      current("other", 1n, undefined, "other-task"),
+    ]) {
+      await expect(
+        commits.commit({
+          context: input.context,
+          entity: input,
+          entityId: "task",
+          next,
+          states: [state("attempted", 1n)],
+        }),
+      ).rejects.toThrow(/another Entity/);
+    }
+    await expect(storage.current.read("task")).resolves.toBeUndefined();
+    await expect(storage.states.backward("task", 1)).resolves.toEqual([]);
+    commits.close();
+    storage.close();
+  });
+
   it("reports when a storage factory has not registered atomic commits", () => {
     expect(() =>
       EntityCommitStorageFactories.create(new UnregisteredStorageFactory(), entityInput()),
-    ).toThrow(/does not provide the required atomic Entity commit storage/);
+    ).toThrow(/does not provide the required Entity commit storage/);
   });
 });
 
@@ -892,50 +983,55 @@ const context = Object.freeze({ name: "Tasks", multitenant: false });
 
 function commitStorage(
   factory: InMemoryStorageFactory,
-  input: EntityStorageInput<string, ReturnType<typeof createString>>,
+  input: EntityStorageInput<string, ReturnType<typeof createTask>>,
 ): EntityCommitStorage {
   return EntityCommitStorageFactories.create(factory, input);
 }
 
-function entityInput(
-  histories = true,
-): EntityStorageInput<string, ReturnType<typeof createString>> {
+function entityInput(histories = true): EntityStorageInput<string, ReturnType<typeof createTask>> {
   return {
     context,
     id: {
       clone: (id) => id,
       key: (id) => id,
-      pack: (id) => packed(createString(id)),
-      unpack: unpackStringId,
+      pack: packedId,
+      unpack: unpackTaskId,
     },
     columns: [],
     recordSpec: new RecordSpec<string, EntityRecord>({
-      sourceType: StringValueSchema,
+      sourceType: TaskSchema,
       recordType: EntityRecordSchema,
       idKind: "string",
       extractId: (record) => {
         if (record.entityId === undefined) throw new Error("EntityRecord.entityId is required.");
-        const id = unpackStringId(record.entityId);
+        const id = unpackTaskId(record.entityId);
         if (id === undefined) throw new Error("EntityRecord.entityId has the wrong type.");
         return id;
       },
     }),
-    sourceType: StringValueSchema,
-    stateSchema: StringValueSchema,
+    sourceType: TaskSchema,
+    stateSchema: TaskSchema,
     stateHistory: histories,
     eventHistory: histories,
   };
 }
 
-function createString(value: string) {
-  return create(StringValueSchema, { value });
+function createTask(value: string, id = "task") {
+  return create(TaskSchema, {
+    id: create(TaskIdSchema, { value: id }),
+    title: value,
+    taskListId: create(TaskListIdSchema, { value: "list-1" }),
+  });
 }
 
 function current(value: string, version: bigint, timestamp?: Timestamp, id = "task"): EntityRecord {
   return create(EntityRecordSchema, {
-    entityId: packed(createString(id)),
+    entityId: packedId(id),
     lifecycleFlags: { archived: false, deleted: false },
-    state: packed(createString(value)),
+    state: create(AnySchema, {
+      typeUrl: `type.spine.io/${TaskSchema.typeName}`,
+      value: toBinary(TaskSchema, createTask(value, id)),
+    }),
     version: create(VersionSchema, {
       number: Number(version),
       ...(timestamp === undefined ? {} : { timestamp }),
@@ -943,16 +1039,16 @@ function current(value: string, version: bigint, timestamp?: Timestamp, id = "ta
   });
 }
 
-function packed(value: ReturnType<typeof createString>) {
+function packedId(value: string) {
   return create(AnySchema, {
-    typeUrl: "type.spine.io/google.protobuf.StringValue",
-    value: toBinary(StringValueSchema, value),
+    typeUrl: `type.spine.io/${TaskIdSchema.typeName}`,
+    value: toBinary(TaskIdSchema, create(TaskIdSchema, { value })),
   });
 }
 
-function unpackStringId(id: NonNullable<EntityRecord["entityId"]>) {
-  return id.typeUrl === "type.spine.io/google.protobuf.StringValue"
-    ? fromBinary(StringValueSchema, id.value).value
+function unpackTaskId(id: NonNullable<EntityRecord["entityId"]>) {
+  return id.typeUrl === `type.spine.io/${TaskIdSchema.typeName}`
+    ? fromBinary(TaskIdSchema, id.value).value
     : undefined;
 }
 
@@ -964,15 +1060,33 @@ function diagnostic(id: string, version: bigint, producer = "task") {
   return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     context: {
-      producerId: packed(createString(producer)),
+      producerId: packedId(producer),
       version: create(VersionSchema, { number: Number(version) }),
       timestamp: create(TimestampSchema, { seconds: version }),
     },
+    message: taskCreated(id),
   });
 }
 
 function event(id: string) {
-  return create(EventSchema, { id: create(EventIdSchema, { value: id }) });
+  return create(EventSchema, {
+    id: create(EventIdSchema, { value: id }),
+    message: taskCreated(id),
+  });
+}
+
+function taskCreated(id: string) {
+  return create(AnySchema, {
+    typeUrl: `type.spine.io/${TaskCreatedSchema.typeName}`,
+    value: toBinary(
+      TaskCreatedSchema,
+      create(TaskCreatedSchema, {
+        id: create(TaskIdSchema, { value: id }),
+        title: id,
+        taskListId: create(TaskListIdSchema, { value: "list-1" }),
+      }),
+    ),
+  });
 }
 
 interface EntityHandle {

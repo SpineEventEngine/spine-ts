@@ -13,13 +13,23 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
-import { create, toBinary } from "@bufbuild/protobuf";
-import { AnySchema } from "@bufbuild/protobuf/wkt";
+import { create } from "@bufbuild/protobuf";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
-import { EventSchema } from "@spine-event-engine/proto";
-import { Identifiers } from "@spine-event-engine/core";
+import {
+  EventContextSchema,
+  EventIdSchema,
+  EventSchema,
+  VersionSchema,
+} from "@spine-event-engine/proto";
+import { AnyMessages, Identifiers, TypeUrls } from "@spine-event-engine/core";
 import type { WorkerId } from "@spine-event-engine/proto/delivery";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
+import {
+  TaskIdSchema,
+  TaskListIdSchema,
+} from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
+import { TaskCreatedSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
+import { TaskSchema } from "../../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 
 import {
   DeliveryBuilder,
@@ -51,6 +61,128 @@ import type {
 } from "../../src/delivery/inbox.js";
 
 describe("DeliverySupervisor", () => {
+  it("rescans missed notifications after ten seconds independently of stale-session age", async () => {
+    vi.useFakeTimers();
+    try {
+      const staleAges: number[] = [];
+      let snapshots = 0;
+      let runs = 0;
+      const supervisor = new DeliverySupervisor({
+        source: {
+          releaseExpired: (age) => {
+            staleAges.push(age);
+            return Promise.resolve([]);
+          },
+          shardSnapshot: () => {
+            snapshots += 1;
+            return Promise.resolve(
+              snapshots === 1
+                ? []
+                : [{ shard: newShard(0), status: "NOT_PICKED" as const, messages: 1 }],
+            );
+          },
+          observeShardUpdates: (options) => updatesUntilAborted(options?.signal),
+        },
+        delivery: qualifiedDelivery({
+          run: () => {
+            runs += 1;
+            return Promise.resolve({ status: "COMPLETED" as const, pages: [] });
+          },
+        }),
+        onMessage: () => Promise.resolve(),
+      });
+
+      await supervisor.start();
+      expect(snapshots).toBe(1);
+      await vi.advanceTimersByTimeAsync(9_999);
+      expect(snapshots).toBe(1);
+      await vi.advanceTimersByTimeAsync(1);
+      await supervisor.whenIdle();
+      expect(snapshots).toBe(2);
+      expect(runs).toBe(1);
+      expect(staleAges).toEqual([60_000, 60_000]);
+      await supervisor.close({ graceMs: 100 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not overlap a periodic rescan with an unsettled source snapshot", async () => {
+    vi.useFakeTimers();
+    const held = Promise.withResolvers<readonly DeliveryShardUpdate[]>();
+    let snapshots = 0;
+    const supervisor = new DeliverySupervisor({
+      recoveryMs: 10,
+      source: {
+        shardSnapshot: () => {
+          snapshots += 1;
+          return snapshots === 2 ? held.promise : Promise.resolve([]);
+        },
+        observeShardUpdates: (options) => updatesUntilAborted(options?.signal),
+        releaseExpired: () => Promise.resolve([]),
+      },
+      delivery: qualifiedDelivery({
+        run: () => Promise.resolve({ status: "COMPLETED", pages: [] }),
+      }),
+      onMessage: () => Promise.resolve(),
+    });
+    try {
+      await supervisor.start();
+      await vi.advanceTimersByTimeAsync(10);
+      expect(snapshots).toBe(2);
+      await vi.advanceTimersByTimeAsync(50);
+      expect(snapshots).toBe(2);
+      held.resolve([]);
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(10);
+      expect(snapshots).toBe(3);
+    } finally {
+      held.resolve([]);
+      await supervisor.close({ graceMs: 100 });
+      vi.useRealTimers();
+    }
+  });
+
+  it("finds work written after a shard run released without a fresh notification", async () => {
+    vi.useFakeTimers();
+    try {
+      const shard = newShard(0);
+      let available = true;
+      let runs = 0;
+      const supervisor = new DeliverySupervisor({
+        source: {
+          releaseExpired: () => Promise.resolve([]),
+          shardSnapshot: () =>
+            Promise.resolve(
+              available ? [{ shard, status: "NOT_PICKED" as const, messages: 1 }] : [],
+            ),
+          observeShardUpdates: (options) => updatesUntilAborted(options?.signal),
+        },
+        delivery: qualifiedDelivery({
+          run: () => {
+            runs += 1;
+            available = false;
+            return Promise.resolve({ status: "COMPLETED" as const, pages: [] });
+          },
+        }),
+        onMessage: () => Promise.resolve(),
+      });
+
+      await supervisor.start();
+      await supervisor.whenIdle();
+      expect(runs).toBe(1);
+      available = true; // The final shard read already completed; no notification follows.
+      await vi.advanceTimersByTimeAsync(9_999);
+      expect(runs).toBe(1);
+      await vi.advanceTimersByTimeAsync(1);
+      await supervisor.whenIdle();
+      expect(runs).toBe(2);
+      await supervisor.close({ graceMs: 100 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("does not log returned failed delivery evidence as a terminal detached run", async () => {
     const error = vi.fn();
     const logger = { withMetadata: vi.fn(() => ({ error })) };
@@ -446,6 +578,98 @@ describe("DeliverySupervisor", () => {
     await supervisor.close();
   });
 
+  it("does not spin on a pending row after an Inbox read failure and repeated shard notifications", async () => {
+    const fixture = realDeliveryFixture();
+    const shard = ShardIndex.single();
+    await fixture.receive("permanent-failure", 1n, shard);
+    fixture.inbox.failAt = 1;
+    const supervisor = fixture.supervisor();
+    await supervisor.start();
+
+    supervisor.notify(shard);
+    await supervisor.whenIdle();
+    expect(fixture.delivered).toEqual([]);
+    expect(fixture.registry.releases).toHaveLength(1);
+    const firstAdmissionCount = fixture.inbox.admissions;
+    await Promise.resolve();
+    expect(fixture.inbox.admissions).toBe(firstAdmissionCount);
+
+    supervisor.notify(shard);
+    supervisor.notify(shard);
+    await supervisor.whenIdle();
+    expect(fixture.delivered).toEqual(["permanent-failure"]);
+    expect(fixture.registry.releases).toHaveLength(3);
+    expect(fixture.inbox.admissions).toBeLessThan(firstAdmissionCount + 6);
+    await supervisor.close();
+  });
+
+  it("defers release-generated failed-row observations but recovers a later independent message", async () => {
+    const fixture = realDeliveryFixture();
+    const shard = ShardIndex.single();
+    const observations = new ReleaseObservationQueue();
+    await fixture.receive("permanent-failure", 1n, shard);
+    fixture.inbox.failAt = 1;
+    fixture.registry.onRelease = () => {
+      if (fixture.registry.releases.length === 1) observations.emit(pendingUpdate(shard));
+    };
+    const supervisor = fixture.supervisor(
+      {
+        shardSnapshot: () => Promise.resolve([pendingUpdate(shard)]),
+        observeShardUpdates: (options) => observations.stream(options?.signal),
+      },
+      { recoveryMs: 25 },
+    );
+    try {
+      await supervisor.start();
+      await supervisor.whenIdle();
+      expect(fixture.delivered).toEqual([]);
+      expect(fixture.registry.releases).toHaveLength(1);
+
+      observations.emit(pendingUpdate(shard));
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      await supervisor.whenIdle();
+      expect(fixture.registry.releases).toHaveLength(1);
+
+      await fixture.receive("independent", 2n, shard, "other-target");
+      observations.emit(pendingUpdate(shard));
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(fixture.delivered).not.toContain("independent");
+      await new Promise<void>((resolve) => setTimeout(resolve, 30));
+      await supervisor.whenIdle();
+      expect(fixture.delivered).toEqual(["permanent-failure", "independent"]);
+      expect(fixture.registry.releases.length).toBeLessThan(5);
+    } finally {
+      await supervisor.close();
+    }
+  });
+
+  it("keeps an explicit notification queued behind a failed run and its source observation", async () => {
+    const fixture = realDeliveryFixture();
+    const shard = ShardIndex.single();
+    const observations = new ReleaseObservationQueue();
+    await fixture.receive("permanent-failure", 1n, shard);
+    const supervisor = fixture.supervisor({
+      observeShardUpdates: (options) => observations.stream(options?.signal),
+    });
+    fixture.inbox.failAt = 1;
+    fixture.registry.onRelease = () => {
+      if (fixture.registry.releases.length === 1) {
+        observations.emit(pendingUpdate(shard));
+        observations.emit(pendingUpdate(shard));
+        supervisor.notify(shard);
+      }
+    };
+    try {
+      await supervisor.start();
+      supervisor.notify(shard);
+      await supervisor.whenIdle();
+      expect(fixture.delivered).toEqual(["permanent-failure"]);
+      expect(fixture.registry.releases).toHaveLength(2);
+    } finally {
+      await supervisor.close();
+    }
+  });
+
   it("retains a row arriving after the first admission for its queued generation", async () => {
     const fixture = realDeliveryFixture();
     const shard = ShardIndex.single();
@@ -600,6 +824,107 @@ describe("DeliverySupervisor", () => {
 
     expect(seen).toEqual([0, 1]);
     await supervisor.close();
+  });
+
+  it("skips an active shard repeat to start unrelated pending work", async () => {
+    const first = Promise.withResolvers<undefined>();
+    const second = Promise.withResolvers<undefined>();
+    const firstStarted = Promise.withResolvers<undefined>();
+    const secondStarted = Promise.withResolvers<undefined>();
+    const thirdStarted = Promise.withResolvers<undefined>();
+    const seen: number[] = [];
+    const active = new Set<number>();
+    const overlapping: number[] = [];
+    const supervisor = supervisorFor(
+      {
+        run: async ({ shard }) => {
+          const index = requireShard(shard).index;
+          if (active.has(index)) overlapping.push(index);
+          active.add(index);
+          seen.push(index);
+          if (index === 0 && seen.filter((entry) => entry === 0).length === 1) {
+            firstStarted.resolve(undefined);
+            await first.promise;
+          } else if (index === 1) {
+            secondStarted.resolve(undefined);
+            await second.promise;
+          } else if (index === 2) {
+            thirdStarted.resolve(undefined);
+          }
+          active.delete(index);
+          return { status: "COMPLETED", pages: [] };
+        },
+      },
+      { concurrency: 2 },
+    );
+
+    try {
+      await supervisor.start();
+      supervisor.notify(newShard(0));
+      supervisor.notify(newShard(1));
+      await Promise.all([firstStarted.promise, secondStarted.promise]);
+      supervisor.notify(newShard(0));
+      supervisor.notify(newShard(2));
+      second.resolve(undefined);
+      await thirdStarted.promise;
+      expect(seen).toEqual([0, 1, 2]);
+      expect(overlapping).toEqual([]);
+
+      first.resolve(undefined);
+      await supervisor.whenIdle();
+      expect(seen).toEqual([0, 1, 2, 0]);
+      expect(overlapping).toEqual([]);
+    } finally {
+      first.resolve(undefined);
+      second.resolve(undefined);
+      await supervisor.close();
+    }
+  });
+
+  it("retains other pending shards when a completed shard repeat fills capacity", async () => {
+    const first = Promise.withResolvers<undefined>();
+    const second = Promise.withResolvers<undefined>();
+    const repeat = Promise.withResolvers<undefined>();
+    const repeatStarted = Promise.withResolvers<undefined>();
+    const seen: number[] = [];
+    let secondRuns = 0;
+    const supervisor = supervisorFor(
+      {
+        run: async ({ shard }) => {
+          const index = requireShard(shard).index;
+          seen.push(index);
+          if (index === 0) await first.promise;
+          if (index === 1 && ++secondRuns === 1) await second.promise;
+          else if (index === 1) {
+            repeatStarted.resolve(undefined);
+            await repeat.promise;
+          }
+          return { status: "COMPLETED", pages: [] };
+        },
+      },
+      { concurrency: 2 },
+    );
+
+    try {
+      await supervisor.start();
+      supervisor.notify(newShard(0));
+      supervisor.notify(newShard(1));
+      supervisor.notify(newShard(1));
+      supervisor.notify(newShard(2));
+      second.resolve(undefined);
+      await repeatStarted.promise;
+      expect(seen).toEqual([0, 1, 1]);
+
+      repeat.resolve(undefined);
+      first.resolve(undefined);
+      await supervisor.whenIdle();
+      expect(seen).toEqual([0, 1, 1, 2]);
+    } finally {
+      first.resolve(undefined);
+      second.resolve(undefined);
+      repeat.resolve(undefined);
+      await supervisor.close();
+    }
   });
 
   it("rescans an overflowed distinct shard after capacity becomes available", async () => {
@@ -1123,11 +1448,17 @@ class RealDeliveryFixture {
     });
   }
 
-  async receive(signalId: string, version: bigint, shard: ShardIndex): Promise<void> {
+  async receive(
+    signalId: string,
+    version: bigint,
+    shard: ShardIndex,
+    targetId = "target",
+  ): Promise<void> {
+    const taskId = create(TaskIdSchema, { value: targetId });
     await this.inbox.receive({
       inboxId: {
-        targetId: Identifiers.pack("string", "target"),
-        targetTypeUrl: "type.example.dev/Target",
+        targetId: Identifiers.pack(TaskIdSchema, taskId),
+        targetTypeUrl: TypeUrls.derive(TaskSchema),
       },
       signalId,
       label: "UPDATE_SUBSCRIBER",
@@ -1135,10 +1466,24 @@ class RealDeliveryFixture {
       shard,
       whenReceived: timestampFromDate(new Date("2026-07-23T12:00:00.000Z")),
       version,
-      signal: create(AnySchema, {
-        typeUrl: "type.spine.io/spine.core.Event",
-        value: toBinary(EventSchema, create(EventSchema)),
-      }),
+      signal: AnyMessages.pack(
+        EventSchema,
+        create(EventSchema, {
+          id: create(EventIdSchema, { value: signalId }),
+          context: create(EventContextSchema, {
+            producerId: AnyMessages.pack(TaskIdSchema, taskId),
+            version: create(VersionSchema, { number: Number(version) }),
+          }),
+          message: AnyMessages.pack(
+            TaskCreatedSchema,
+            create(TaskCreatedSchema, {
+              id: taskId,
+              title: signalId,
+              taskListId: create(TaskListIdSchema, { value: "list-1" }),
+            }),
+          ),
+        }),
+      ),
     });
   }
 }
@@ -1196,12 +1541,8 @@ class AdmissionInbox implements DeliveryInbox {
     return this.#delegate.markDelivered(message, options);
   }
 
-  removeDuplicate(
-    message: InboxMessage,
-    session: DeliveryWorkSession,
-    options?: DeliveryOperationOptions,
-  ): Promise<boolean> {
-    return this.#delegate.removeDuplicate(message, session, options);
+  removeDuplicate(message: InboxMessage, options?: DeliveryOperationOptions): Promise<boolean> {
+    return this.#delegate.removeDuplicate(message, options);
   }
 }
 
@@ -1214,6 +1555,7 @@ class ObservedRegistry implements DeliveryWorkRegistry {
   readonly sessionKind = "LEASED" as const;
   readonly pickups: string[] = [];
   readonly releases: string[] = [];
+  onRelease: ((shard: ShardIndex) => void) | undefined;
   readonly #delegate: ShardedWorkRegistry;
 
   constructor(delegate: ShardedWorkRegistry) {
@@ -1254,7 +1596,10 @@ class ObservedRegistry implements DeliveryWorkRegistry {
     void options;
     if (session.kind !== "LEASED") throw new Error("Observed registry requires a leased session.");
     const released = await this.#delegate.release(session);
-    if (released) this.releases.push(session.shard.key());
+    if (released) {
+      this.releases.push(session.shard.key());
+      this.onRelease?.(session.shard);
+    }
     return released;
   }
 }
@@ -1270,6 +1615,44 @@ class FixtureMonitor extends DeliveryMonitor {
 
 function pendingUpdate(shard: ShardIndex): DeliveryShardUpdate {
   return { shard, status: "NOT_PICKED", messages: 1 };
+}
+
+class ReleaseObservationQueue {
+  readonly #queued: DeliveryShardUpdate[] = [];
+  #waiting: PromiseWithResolvers<IteratorResult<DeliveryShardUpdate>> | undefined;
+
+  emit(update: DeliveryShardUpdate): void {
+    const waiting = this.#waiting;
+    if (waiting === undefined) this.#queued.push(update);
+    else {
+      this.#waiting = undefined;
+      waiting.resolve({ done: false, value: update });
+    }
+  }
+
+  stream(signal?: AbortSignal): AsyncIterable<DeliveryShardUpdate> {
+    return {
+      [Symbol.asyncIterator]: () => ({ next: () => this.#next(signal) }),
+    };
+  }
+
+  async #next(signal?: AbortSignal): Promise<IteratorResult<DeliveryShardUpdate>> {
+    if (signal?.aborted) return { done: true, value: undefined };
+    const queued = this.#queued.shift();
+    if (queued !== undefined) return { done: false, value: queued };
+    const waiting = Promise.withResolvers<IteratorResult<DeliveryShardUpdate>>();
+    this.#waiting = waiting;
+    const onAbort = () => {
+      waiting.resolve({ done: true, value: undefined });
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+    try {
+      return await waiting.promise;
+    } finally {
+      if (this.#waiting === waiting) this.#waiting = undefined;
+      signal?.removeEventListener("abort", onAbort);
+    }
+  }
 }
 
 function supervisorFor(

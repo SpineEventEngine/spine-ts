@@ -706,7 +706,8 @@ group of complete server replicas when the framework handles process shutdown.
 and installs no process signal handlers; that host closes the returned handle.
 Both require a positive safe-integer
 `processCount` and an ESM `moduleUrl`; it never derives a process count from
-the machine. Its optional `host` and required nonzero `port` bind the public
+the machine. Its optional `host` and required `port` (zero selects an OS-assigned
+port) bind the public
 Coordinator listener. Every child executes that same module and calls the
 module's `createServer({ host: "127.0.0.1", port: 0 })`. The child reports its
 actual loopback endpoint only after its local readiness gates settle. The parent
@@ -725,11 +726,24 @@ inspect CPU availability and does not constrain the application's independently
 chosen `DeliveryStrategy` or shard count. Direct `Server.run()` and browser
 hosting remain independent of managed Node deployment.
 
+Managed close drains Delivery before cancelling subscription relays. Child listeners
+remain available through relay cancellation, and final child close follows relay
+cleanup. A failed cleanup phase can be retried. Private child acknowledgement
+and process reaping retain their finite process-control graces. A permanently
+blocked application effect can keep explicit close pending.
+
 If no child is READY, Command and Query return gRPC `UNAVAILABLE`. The
 Coordinator does not enter application intake and does not retry the selected
 call on a sibling child. Subscription fan-out follows current READY members;
 later and replacement members attach the retained subscription before managed
 admission.
+Each native child sends a response-only successful activation ACK after its
+listener attaches. The Coordinator waits for every required child ACK before
+emitting one ACK with the logical public subscription ID and Topic; a child
+failure before readiness cancels admitted siblings. Business updates do not
+serve as readiness signals, and later joining children do not emit another
+logical ACK. An ACK confirms attachment, not durable replay or delivery of
+future updates.
 
 `ServerOptions` is native-only: it configures contexts, resources, services,
 and the native listener. It has no `browser` option and the root package does
@@ -844,12 +858,15 @@ absent or elapsed (`keepUntil <= now`). Delivery skips per-record mutation check
 and deletion attempts for rows whose deadline is still in the future. Cleanup
 and retained-row duplicate recognition use the same applicable clock. Eligible
 rows still receive final time and shard checks before deletion.
-Direct local storage atomically verifies ownership and
-the exact delivered snapshot during removal. A remote adapter may instead read
-and compare the snapshot before sending a separate best-effort removal request;
-that sequence is not an atomic compare-and-delete guarantee. Pending, retryable,
-non-delivered, and still-protected rows remain. There is no additional retention
-configuration, timer, or scheduler.
+Direct local storage checks the supplied delivered status and deadline again,
+then deletes by ID while the operation is active. It does not re-read the stored
+row or compare its snapshot, and the shard session is not checked again after
+deletion. A row changed between the checks and deletion can therefore be
+removed. Cancellation stops subsequent cleanup attempts; deletions already
+completed remain. The remote adapter sends a separate bounded removal request,
+without an atomic compare-and-delete guarantee from this client. Pending,
+retryable, non-delivered, and still-protected rows are skipped by cleanup. There
+is no additional retention configuration, timer, or scheduler.
 
 `BoundedContextBuilder.withDeliveryStrategy(strategy)` snapshots a validated
 immutable strategy for its Entity Inbox; the default is one shard. For example,
@@ -878,6 +895,11 @@ before source client/storage. `DeliverySource` is not configured on
 durable supervisor state, topology failover, exactly-once effects, or automatic
 retry of unknown remote mutations.
 
+Direct `DeliverySupervisor.close({ graceMs })` stops new admission and source
+activity. Its `graceMs` defaults to 30,000 ms and bounds active-work grace and
+release cleanup separately. After those waits, close may still await entered
+work that has not settled; it is not a hard total close deadline.
+
 Each Inbox read is bounded to one page. That bound does not limit the total
 pending work: an active drain continues from the last row read until that scan
 ends. It restarts from the beginning only if the completed scan delivered
@@ -898,11 +920,39 @@ the remote server.
 `DeliveryMonitor` is an instantiable, customizable policy seam exposing
 asynchronous continuation, start/completion, failed-reception, pickup-failure,
 and already-picked hooks.
-`FailedReception` supplies only `markDelivered()` and one immediate
-`repeatDispatching()` action; the framework adds no attempt history, timer,
-backoff, quarantine, dead-letter, receipt, marker, or scheduler policy. A failed
-durable acknowledgement keeps that row pending, blocks later rows for its
-target during the run, and does not prevent independent targets from running.
+`FailedReception` supplies `markDelivered()` and immediate
+`repeatDispatching()` actions for failed processing. The default marks a failed
+reception delivered; independent targets continue. A custom monitor may repeat
+the dispatch and is consulted again if that attempt fails. Monitor and selected
+action errors propagate. A successful handler followed by a failed acknowledgement
+retries acknowledgement up to three times without deliberately rerunning the
+handler. Exhausted acknowledgement leaves the row pending and does not call the
+reception monitor. A custom reception action that completes normally completes
+delivery and the enclosing stage acknowledges the row. An action that rejects
+propagates its error and leaves the row `TO_DELIVER`. `markDelivered()` does not
+mean domain processing succeeded.
+Managed repository replay sends actual handler failures to the monitor while
+storage and replay infrastructure errors propagate. A direct `onMessage` callback
+is treated as the endpoint. Handler effects and acknowledgement are separate,
+so a crash between them may redeliver.
+The framework adds no persisted attempts, quarantine, dead-letter, receipt, or
+marker policy. The supervisor rescans pending shards every 10 seconds by default;
+the stale-session threshold is separately 60 seconds.
+After a failed finite run, release-generated remote observations of that shard
+are held locally until the next periodic rescan, preventing an immediate
+self-triggered retry loop. Explicit notifications remain admissible. A newly
+enqueued remote row on that shard may wait for the next rescan; other shards
+continue, and other processes may each attempt the failed row before applying
+local suppression. This timing is not a delivery deadline.
+
+`BoundedContext.close()` stops external admission, drains accepted framework
+work, and then closes buses, subscriptions, Stands, and repository bindings.
+Cleanup failures are aggregated and may be retried. A committed Entity Event,
+reactor or Process Manager Event, and System Event receives one first-publication
+attempt; a contained failure is logged and does not schedule publication again.
+Persisted System Events use a separate fixed storage group. Command acceptance
+alone does not promise recipient completion. Processing retries for Inbox rows
+and acknowledgement recovery remain separate Delivery behavior.
 
 `Environment` resolves the Node `local` or `production` profile once from
 `NODE_ENV`. `ServerEnvironment` resolves configured facilities once for that

@@ -14,7 +14,7 @@
 
 import { Code, ConnectError, createClient } from "@connectrpc/connect";
 import { compressionGzip, createGrpcTransport } from "@connectrpc/connect-node";
-import { clone, create, type Message } from "@bufbuild/protobuf";
+import { clone, create, toBinary, type Message } from "@bufbuild/protobuf";
 import {
   BoolValueSchema,
   BytesValueSchema,
@@ -36,6 +36,7 @@ import {
 } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
+  AckSchema,
   CommandSchema,
   CommandContextSchema,
   CommandIdSchema,
@@ -112,6 +113,7 @@ import {
   type RunningServer,
 } from "../../src/index.js";
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
+import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
 import { spineServicesAccess } from "../../src/services/spine-services.js";
 import { TaskAlreadyDone } from "../../../../examples/todo/generated/spine/examples/todo/task_rejections.js";
 import { TaskAlreadyDoneSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_rejections_pb.js";
@@ -127,7 +129,6 @@ import { TaskSchema } from "../../../../examples/todo/generated/spine/examples/t
 import {
   type ProjectOverviewState,
   ProjectOverviewStateSchema,
-  type ProjectState,
   ProjectStateSchema,
 } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 // prettier-ignore
@@ -189,34 +190,32 @@ class ValidatingTaskAggregate extends Aggregate<string, typeof ReviewProjectStat
 }
 
 class TransitionViolatingTaskAggregate extends Aggregate<string, typeof ProjectStateSchema> {
-  assignTask(command: ProjectState) {
+  assignTask(command: CreateReviewProject) {
     this.update((draft) =>
       Object.assign(
         draft,
         create(ProjectStateSchema, {
           id: `${command.id}-changed`,
           name: command.name,
-          archived: command.archived,
         }),
       ),
     );
-    return createAggregateEvent("event-transition-invalid", command.id, command.name);
+    return create(ProjectSubmissionCreatedSchema, { id: command.id, name: command.name });
   }
 }
 
 class RollingBackTransitionTaskAggregate extends TransitionViolatingTaskAggregate {
-  override assignTask(command: ProjectState) {
+  override assignTask(command: CreateReviewProject) {
     this.update((draft) =>
       Object.assign(
         draft,
         create(ProjectStateSchema, {
           id: `${command.id}-changed`,
           name: command.name,
-          archived: command.archived,
         }),
       ),
     );
-    return createAggregateEvent("event-transition-rollback", command.id, command.name);
+    return create(ProjectSubmissionCreatedSchema, { id: command.id, name: command.name });
   }
 }
 
@@ -737,6 +736,111 @@ describe("SpineServices", () => {
     } finally {
       await server.close();
     }
+  });
+
+  it("logs one correlated command failure while keeping the serialized acknowledgement safe", async () => {
+    const driver = Object.assign(new Error("secret SQL, password and payload"), {
+      code: "ER_LOCK_DEADLOCK",
+    });
+    const failure = new Error("Command storage failed.", { cause: driver });
+    const dispatcher: CommandDispatcher = {
+      messageSchemas: () => [CreateReviewProjectSchema],
+      dispatch: () => Promise.reject(failure),
+    };
+    const context = BoundedContext.singleTenant("Tasks").addCommandDispatcher(dispatcher).build();
+    const error = vi.fn();
+    const withMetadata = vi.fn(() => ({ error }));
+    const services = new SpineServices({ contexts: [context] });
+    spineServicesAccess.installLogger(services, { withMetadata } as unknown as ILogLayer);
+    let post: ((command: ReturnType<typeof createProjectionCommand>) => Promise<Ack>) | undefined;
+    services.register({
+      service(schema: unknown, implementation: unknown) {
+        if (schema === CommandService) post = (implementation as { post: typeof post }).post;
+        return this;
+      },
+    } as never);
+    if (post === undefined) throw new Error("CommandService was not registered.");
+
+    const ack = await post(createProjectionCommand("command-diagnostic"));
+    const wire = Buffer.from(toBinary(AckSchema, ack)).toString("utf8");
+
+    expect(ack.status?.status.case).toBe("error");
+    expect(errorMessage(ack.status?.status)).toBe("Command post failed.");
+    expect(wire).not.toContain("secret SQL");
+    expect(wire).not.toContain("password");
+    expect(error).toHaveBeenCalledOnce();
+    expect(withMetadata).toHaveBeenCalledWith({
+      contextName: "Tasks",
+      commandId: "command-diagnostic",
+      commandType: TypeUrls.derive(CreateReviewProjectSchema),
+      operation: "command.post",
+      errorName: "Error",
+      errorCode: "ER_LOCK_DEADLOCK",
+    });
+  });
+
+  it("keeps a safe command status when an error has an unreadable diagnostic code", async () => {
+    const failure = new Error("secret driver text");
+    Object.defineProperty(failure, "code", {
+      get() {
+        throw new Error("diagnostic getter failed");
+      },
+    });
+    const context = BoundedContext.singleTenant("Tasks")
+      .addCommandDispatcher({
+        messageSchemas: () => [CreateReviewProjectSchema],
+        dispatch: () => Promise.reject(failure),
+      })
+      .build();
+    const error = vi.fn();
+    const services = new SpineServices({ contexts: [context] });
+    spineServicesAccess.installLogger(services, {
+      withMetadata: () => ({ error }),
+    } as unknown as ILogLayer);
+    let post: ((command: ReturnType<typeof createProjectionCommand>) => Promise<Ack>) | undefined;
+    services.register({
+      service(schema: unknown, implementation: unknown) {
+        if (schema === CommandService) post = (implementation as { post: typeof post }).post;
+        return this;
+      },
+    } as never);
+    if (post === undefined) throw new Error("CommandService was not registered.");
+
+    const ack = await post(createProjectionCommand("command-unreadable-code"));
+
+    expect(errorMessage(ack.status?.status)).toBe("Command post failed.");
+    expect(error).toHaveBeenCalledOnce();
+  });
+
+  it("omits untrusted custom error names and codes from command diagnostics", async () => {
+    const failure = Object.assign(new Error("secret SQL"), {
+      name: "CustomerPayload",
+      code: "CUSTOMER_PAYLOAD",
+    });
+    const context = BoundedContext.singleTenant("Tasks")
+      .addCommandDispatcher({
+        messageSchemas: () => [CreateReviewProjectSchema],
+        dispatch: () => Promise.reject(failure),
+      })
+      .build();
+    const withMetadata = vi.fn(() => ({ error: vi.fn() }));
+    const services = new SpineServices({ contexts: [context] });
+    spineServicesAccess.installLogger(services, { withMetadata } as unknown as ILogLayer);
+    let post: ((command: ReturnType<typeof createProjectionCommand>) => Promise<Ack>) | undefined;
+    services.register({
+      service(schema: unknown, implementation: unknown) {
+        if (schema === CommandService) post = (implementation as { post: typeof post }).post;
+        return this;
+      },
+    } as never);
+    if (post === undefined) throw new Error("CommandService was not registered.");
+
+    await post(createProjectionCommand("command-custom-error"));
+
+    expect(withMetadata).toHaveBeenCalledOnce();
+    const facts = withMetadata.mock.calls as unknown as readonly [Record<string, unknown>][];
+    expect(facts[0]?.[0]).not.toHaveProperty("errorName");
+    expect(facts[0]?.[0]).not.toHaveProperty("errorCode");
   });
 
   it("returns Spine statuses for empty contexts and malformed read criteria", async () => {
@@ -1636,7 +1740,10 @@ describe("SpineServices", () => {
       createEventTopic(undefined, TaskAlreadyDoneSchema),
     );
     const iterator = subscriptions.activate(subscription)[Symbol.asyncIterator]();
-    const next = withTimeout(iterator.next(), "declared rejection subscription update");
+    const next = withTimeout(
+      nextBusinessUpdate(iterator, subscription),
+      "declared rejection subscription update",
+    );
 
     await delay(25);
     const acknowledgement = await commands.post(
@@ -1729,7 +1836,7 @@ describe("SpineServices", () => {
     expect(validationDetails(ack.status?.status)).toBeUndefined();
   });
 
-  it("contains transition validation failures with an OK Ack", async () => {
+  it("reports transition validation failures in the command Ack", async () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createTransitionViolatingRepository())
       .build();
@@ -1739,10 +1846,12 @@ describe("SpineServices", () => {
       createAggregateCommand("command-transition-invalid", "task-transition-invalid"),
     );
 
-    expect(ack.status?.status.case).toBe("ok");
+    expect(ack.status?.status.case).toBe("error");
+    expect(errorType(ack.status?.status)).toBe("COMMAND_STATE_TRANSITION_VALIDATION_FAILED");
+    expect(validationDetails(ack.status?.status)?.constraintViolation.length).toBeGreaterThan(0);
   });
 
-  it("contains rollback transition validation failures with an OK Ack", async () => {
+  it("reports rollback transition validation failures in the command Ack", async () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createRollingBackTransitionRepository())
       .build();
@@ -1752,7 +1861,9 @@ describe("SpineServices", () => {
       createAggregateCommand("command-transition-rollback", "task-transition-rollback"),
     );
 
-    expect(ack.status?.status.case).toBe("ok");
+    expect(ack.status?.status.case).toBe("error");
+    expect(errorType(ack.status?.status)).toBe("COMMAND_STATE_TRANSITION_VALIDATION_FAILED");
+    expect(validationDetails(ack.status?.status)?.constraintViolation.length).toBeGreaterThan(0);
   });
 
   it("rejects command tenant mismatches without dispatching", async () => {
@@ -2126,7 +2237,10 @@ describe("SpineServices", () => {
       const subscription = await client.subscribe(createTopic());
       const updates = client.activate(subscription);
       const iterator = updates[Symbol.asyncIterator]();
-      const nextUpdate = withTimeout(iterator.next(), "subscription update");
+      const nextUpdate = withTimeout(
+        nextBusinessUpdate(iterator, subscription),
+        "subscription update",
+      );
 
       await delay(25);
       await postEntityStateChanged(
@@ -2239,7 +2353,10 @@ describe("SpineServices", () => {
 
     const subscription = await handlers.subscribe(createEventTopic());
     const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const nextUpdate = withTimeout(iterator.next(), "event subscription update");
+    const nextUpdate = withTimeout(
+      nextBusinessUpdate(iterator, subscription),
+      "event subscription update",
+    );
 
     await delay(25);
     const source = createAggregateEvent("event-created", "aggregate-1", "Created");
@@ -2321,7 +2438,10 @@ describe("SpineServices", () => {
       createEventTopic("tenant-rejected", TaskAlreadyDoneSchema),
     );
     const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const nextUpdate = withTimeout(iterator.next(), "rejection event subscription update");
+    const nextUpdate = withTimeout(
+      nextBusinessUpdate(iterator, subscription),
+      "rejection event subscription update",
+    );
     const command = createAggregateCommand("command-rejected", "task-rejected");
     const source = createRejectionEvent(command, "rejection stack");
 
@@ -2370,7 +2490,7 @@ describe("SpineServices", () => {
     const handlers = registeredSubscriptionHandlers(context);
     const subscription = await handlers.subscribe(createEventTopic("tenant-a"));
     const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const nextUpdate = iterator.next();
+    const nextUpdate = nextBusinessUpdate(iterator, subscription);
     const attachment = await awaitSubscriptionAttachment(context, subscription);
     let settled = false;
     void nextUpdate.then(() => {
@@ -2405,7 +2525,7 @@ describe("SpineServices", () => {
     const handlers = registeredSubscriptionHandlers(context);
     const subscription = await handlers.subscribe(createEventTopic("tenant-past"));
     const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const nextUpdate = iterator.next();
+    const nextUpdate = nextBusinessUpdate(iterator, subscription);
     const attachment = await awaitSubscriptionAttachment(context, subscription);
     let settled = false;
     void nextUpdate.then(() => {
@@ -2442,7 +2562,7 @@ describe("SpineServices", () => {
     const handlers = registeredSubscriptionHandlers(context);
     const subscription = await handlers.subscribe(createEventTopic());
     const primaryIterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const firstUpdate = primaryIterator.next();
+    const firstUpdate = nextBusinessUpdate(primaryIterator, subscription);
 
     await delay(25);
     const duplicateIterator = handlers.activate(subscription)[Symbol.asyncIterator]();
@@ -2525,7 +2645,10 @@ describe("SpineServices", () => {
     topic.fieldMask = create(FieldMaskSchema, { paths: ["does_not_exist"] });
     const subscription = await handlers.subscribe(topic);
     const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const next = withTimeout(iterator.next(), "unknown-mask event subscription update");
+    const next = withTimeout(
+      nextBusinessUpdate(iterator, subscription),
+      "unknown-mask event subscription update",
+    );
     const attachment = await awaitSubscriptionAttachment(context, subscription);
     const source = createAggregateEvent("event-unknown-mask", "aggregate-1", "Full Event");
 
@@ -2571,7 +2694,10 @@ describe("SpineServices", () => {
 
     const subscription = await handlers.subscribe(createTopic());
     const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const nextUpdate = withTimeout(iterator.next(), "projection subscription update");
+    const nextUpdate = withTimeout(
+      nextBusinessUpdate(iterator, subscription),
+      "projection subscription update",
+    );
 
     await delay(25);
     await context.eventBus().post(createProjectionEvent("event-projected", "task-projected"));
@@ -2616,7 +2742,7 @@ describe("SpineServices", () => {
       createFilteredTopic({ id: "task-1", name: "Open" }),
     );
     const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const first = iterator.next();
+    const first = nextBusinessUpdate(iterator, subscription);
 
     await delay(25);
     deliverUpdate?.({
@@ -2665,7 +2791,7 @@ describe("SpineServices", () => {
     const handlers = registeredSubscriptionHandlers(context);
     const subscription = await handlers.subscribe(createFilteredTopic({ name: "Open" }));
     const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const next = iterator.next();
+    const next = nextBusinessUpdate(iterator, subscription);
 
     await delay(25);
     deliverUpdate?.({
@@ -2711,7 +2837,7 @@ describe("SpineServices", () => {
       createFilteredTopic({ name: "Open", fieldMask: ["name"] }),
     );
     const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const first = iterator.next();
+    const first = nextBusinessUpdate(iterator, subscription);
 
     await delay(25);
     deliverUpdate?.({
@@ -2889,7 +3015,10 @@ describe("SpineServices", () => {
     topic.fieldMask = create(FieldMaskSchema, { paths: ["name..value"] });
     const subscription = await handlers.subscribe(topic);
     const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const next = withTimeout(iterator.next(), "malformed-mask state subscription update");
+    const next = withTimeout(
+      nextBusinessUpdate(iterator, subscription),
+      "malformed-mask state subscription update",
+    );
     const attachment = await awaitSubscriptionAttachment(context, subscription);
 
     await context.eventBus().post(createProjectionEvent("event-malformed-mask", "task-mask"));
@@ -3024,9 +3153,10 @@ describe("SpineServices", () => {
     if (subscription.topic === undefined) {
       throw new Error("Expected returned subscription topic.");
     }
+    const originalSubscription = clone(SubscriptionSchema, subscription);
     subscription.topic = createFilteredTopic({ name: "Never", tenantId: "tenant-b" });
     const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const next = iterator.next();
+    const next = nextBusinessUpdate(iterator, originalSubscription);
 
     await delay(25);
     deliverUpdate?.({
@@ -3229,7 +3359,7 @@ describe("SpineServices", () => {
       }),
     );
     const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const next = iterator.next();
+    const next = nextBusinessUpdate(iterator, subscription);
 
     await delay(25);
     deliverUpdate?.({
@@ -3269,7 +3399,7 @@ describe("SpineServices", () => {
       createFilteredTopicWithCriteria({ idFilter: { id: [id] } }),
     );
     const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const next = iterator.next();
+    const next = nextBusinessUpdate(iterator, subscription);
 
     await delay(25);
     deliverUpdate?.({
@@ -3309,7 +3439,7 @@ describe("SpineServices", () => {
       createFilteredTopicWithCriteria({ idFilter: { id: [packBytes(id)] } }),
     );
     const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const next = iterator.next();
+    const next = nextBusinessUpdate(iterator, subscription);
 
     await delay(25);
     deliverUpdate?.({
@@ -3343,7 +3473,7 @@ describe("SpineServices", () => {
     const taskId = create(TaskIdSchema, { value: "task-message-id" });
     const subscription = await handlers.subscribe(createMessageIdFilteredTopic(taskId));
     const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const next = iterator.next();
+    const next = nextBusinessUpdate(iterator, subscription);
     const attachment = await awaitSubscriptionAttachment(context, subscription);
 
     await postEntityStateChanged(
@@ -3407,7 +3537,7 @@ describe("SpineServices", () => {
       }),
     );
     const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const next = iterator.next();
+    const next = nextBusinessUpdate(iterator, subscription);
     const attachment = await awaitSubscriptionAttachment(context, subscription);
 
     await postEntityStateChanged(
@@ -3627,7 +3757,10 @@ describe("SpineServices", () => {
         .update(ProjectOverviewStateSchema, createState("task-queued", "Queued"));
 
       const iterator = client.activate(subscription)[Symbol.asyncIterator]();
-      const nextUpdate = withTimeout(iterator.next(), "post-activation subscription update");
+      const nextUpdate = withTimeout(
+        nextBusinessUpdate(iterator, subscription),
+        "post-activation subscription update",
+      );
       await delay(25);
       await postEntityStateChanged(
         context,
@@ -3937,8 +4070,9 @@ describe("SpineServices", () => {
     const secondSubscription = await handlers.subscribe(createTopic());
     const firstIterator = handlers.activate(firstSubscription)[Symbol.asyncIterator]();
     const secondIterator = handlers.activate(secondSubscription)[Symbol.asyncIterator]();
+    await expectActivationAcknowledgement(firstIterator, firstSubscription);
     const firstNext = firstIterator.next();
-    const secondNext = secondIterator.next();
+    const secondNext = nextBusinessUpdate(secondIterator, secondSubscription);
 
     await delay(25);
     await handlers.cancel(firstSubscription);
@@ -3983,7 +4117,7 @@ describe("SpineServices", () => {
     const handlers = registeredSubscriptionHandlers(context);
     const subscription = await handlers.subscribe(createTopic());
     const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const first = iterator.next();
+    const first = nextBusinessUpdate(iterator, subscription);
     const anyId = AnyMessages.pack(
       TopicIdSchema,
       create(TopicIdSchema, { value: "already-packed" }),
@@ -4365,32 +4499,50 @@ function createValidatingRepository(): Repository<typeof ValidatingTaskAggregate
 function createTransitionViolatingRepository(): Repository<
   typeof TransitionViolatingTaskAggregate
 > {
-  const handlers = EntityHandlers.define(
+  const handlers = HandlerMetadataValues.defineArity(
     TransitionViolatingTaskAggregate,
     ProjectStateSchema,
     (builder) => [builder.assign(CreateReviewProjectSchema, "assignTask")],
+    [
+      {
+        kind: "command-assignment",
+        methodName: "assignTask",
+        parameterCount: 1,
+        outcomes: { returned: [ProjectSubmissionCreatedSchema], thrown: [] },
+      },
+    ],
   );
 
   return new Repository({
     entityType: TransitionViolatingTaskAggregate,
     schema: ProjectStateSchema,
     handlers,
+    events: [ProjectSubmissionCreatedSchema],
   });
 }
 
 function createRollingBackTransitionRepository(): Repository<
   typeof RollingBackTransitionTaskAggregate
 > {
-  const handlers = EntityHandlers.define(
+  const handlers = HandlerMetadataValues.defineArity(
     RollingBackTransitionTaskAggregate,
     ProjectStateSchema,
     (builder) => [builder.assign(CreateReviewProjectSchema, "assignTask")],
+    [
+      {
+        kind: "command-assignment",
+        methodName: "assignTask",
+        parameterCount: 1,
+        outcomes: { returned: [ProjectSubmissionCreatedSchema], thrown: [] },
+      },
+    ],
   );
 
   return new Repository({
     entityType: RollingBackTransitionTaskAggregate,
     schema: ProjectStateSchema,
     handlers,
+    events: [ProjectSubmissionCreatedSchema],
   });
 }
 
@@ -5407,6 +5559,31 @@ async function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
       clearTimeout(timeout);
     }
   }
+}
+
+async function expectActivationAcknowledgement(
+  iterator: AsyncIterator<SubscriptionUpdate>,
+  subscription: Subscription,
+): Promise<void> {
+  const expected = clone(SubscriptionSchema, subscription);
+  const acknowledgement = await withTimeout(
+    iterator.next(),
+    "subscription activation acknowledgement",
+  );
+  if (acknowledgement.done) throw new Error("Subscription ended before its activation ACK.");
+  expect(acknowledgement.done).toBe(false);
+  expect(acknowledgement.value.subscription?.id).toEqual(expected.id);
+  expect(acknowledgement.value.subscription?.topic).toEqual(expected.topic);
+  expect(acknowledgement.value.response?.status?.status.case).toBe("ok");
+  expect(acknowledgement.value.update.case).toBeUndefined();
+}
+
+async function nextBusinessUpdate(
+  iterator: AsyncIterator<SubscriptionUpdate>,
+  subscription: Subscription,
+): Promise<IteratorResult<SubscriptionUpdate>> {
+  await expectActivationAcknowledgement(iterator, subscription);
+  return iterator.next();
 }
 
 function delay(milliseconds: number): Promise<void> {

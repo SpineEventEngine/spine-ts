@@ -34,6 +34,8 @@ const allowedFields = new Set([
   "contextName",
   "operation",
   "reasonCode",
+  "errorName",
+  "errorCode",
   "slot",
   "incarnation",
   "attempt",
@@ -104,6 +106,8 @@ function cleanFacts(facts: Readonly<Record<string, unknown>>): Record<string, st
     }
     if (typeof value !== "string" || Buffer.byteLength(value, "utf8") > 256) continue;
     if ((key === "operation" || key === "reasonCode") && !code.test(value)) continue;
+    if ((key === "errorName" || key === "errorCode") && !/^[A-Za-z0-9_.-]{1,64}$/.test(value))
+      continue;
     cleaned[key] = value;
   }
   return cleaned;

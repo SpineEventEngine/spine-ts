@@ -13,7 +13,6 @@
  */
 
 import { create, type MessageInitShape } from "@bufbuild/protobuf";
-import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { AnyMessages, TypeUrls, type MessageSchema } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
@@ -59,6 +58,11 @@ import {
   AssignReviewTaskSchema,
 } from "../../test-fixtures/generated/handler-registry/commands_pb.js";
 import {
+  type ReviewTaskAssigned,
+  ReviewTaskAssignedSchema,
+} from "../../test-fixtures/generated/handler-registry/events_pb.js";
+import { ProjectIdSchema } from "../../test-fixtures/generated/repository-routing/project_identifiers_pb.js";
+import {
   type TaskAssigned,
   TaskAssignedSchema,
   TaskCreatedSchema,
@@ -90,14 +94,14 @@ class NativeAggregate extends Aggregate<string, typeof NativeProjectStateSchema>
 }
 
 class NativeProjection extends Projection<string, typeof NativeProjectOverviewStateSchema> {
-  project(event: TaskCreated): void {
-    const id = event.id?.value ?? "";
+  project(event: ReviewTaskAssigned): void {
+    const id = event.id;
     this.update((draft) =>
       Object.assign(
         draft,
         create(NativeProjectOverviewStateSchema, {
           id,
-          name: `${event.title} projection`,
+          name: `${event.name} projection`,
           priority: 2,
         }),
       ),
@@ -125,13 +129,13 @@ class NativeProcessManager extends ProcessManager<string, typeof NativeProcessMa
     });
   }
 
-  react(event: TaskCreated): undefined {
+  react(event: ReviewTaskAssigned): undefined {
     this.update((draft) =>
       Object.assign(
         draft,
         create(NativeProcessManagerStateSchema, {
-          id: event.id?.value ?? "",
-          queue: `${event.title} event`,
+          id: event.id,
+          queue: `${event.name} event`,
         }),
       ),
     );
@@ -140,6 +144,36 @@ class NativeProcessManager extends ProcessManager<string, typeof NativeProcessMa
 }
 
 describe("native service subscriptions", () => {
+  it("acknowledges an attached idle subscription before any business update", async () => {
+    const context = BoundedContext.multitenant("NativeIdleAck")
+      .add(
+        new Repository({
+          entityType: NativeAggregate,
+          schema: NativeProjectStateSchema,
+          handlers: nativeAggregateHandlers(),
+          events: [TaskCreatedSchema],
+        }),
+      )
+      .build();
+
+    try {
+      const handlers = registeredSubscriptionHandlers(context);
+      const subscription = await handlers.subscribe(
+        createEntityTopic(NativeProjectStateSchema, "idle-ack"),
+      );
+      const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+      const first = await iterator.next();
+      expect(first.done).toBe(false);
+      const acknowledgement = first.value as SubscriptionUpdate | undefined;
+      expect(acknowledgement?.subscription?.id?.value).toBe(subscription.id?.value);
+      expect(acknowledgement?.response?.status?.status.case).toBe("ok");
+      expect(acknowledgement?.update.case).toBeUndefined();
+      await iterator.return?.();
+    } finally {
+      await context.close();
+    }
+  });
+
   it("delivers an Aggregate commit through the registered command handler", async () => {
     const context = BoundedContext.multitenant("NativeAggregate")
       .add(
@@ -159,8 +193,8 @@ describe("native service subscriptions", () => {
           await handlers.subscribe(createEntityTopic(NativeProjectStateSchema, "aggregate")),
         )
         [Symbol.asyncIterator]();
+      await nextSubscriptionAck(iterator);
       const next = nextSubscriptionUpdate(iterator);
-      await activationTurn();
 
       await context.commandBus().post(createAggregateCommand("aggregate-1", "Aggregate"));
       await context.eventBus().post(createAggregateEvent("aggregate-flush", "Flush"));
@@ -185,7 +219,7 @@ describe("native service subscriptions", () => {
           handlers: EntityHandlers.define(
             NativeProjection,
             NativeProjectOverviewStateSchema,
-            (builder) => [builder.subscribe(TaskCreatedSchema, "project")],
+            (builder) => [builder.subscribe(ReviewTaskAssignedSchema, "project")],
           ),
         }),
       )
@@ -200,8 +234,8 @@ describe("native service subscriptions", () => {
           ),
         )
         [Symbol.asyncIterator]();
+      await nextSubscriptionAck(iterator);
       const next = nextSubscriptionUpdate(iterator);
-      await activationTurn();
 
       await context.eventBus().post(createProjectionTriggerEvent("projection-1", "Projection"));
 
@@ -228,8 +262,8 @@ describe("native service subscriptions", () => {
           ),
         )
         [Symbol.asyncIterator]();
+      await nextSubscriptionAck(iterator);
       const next = nextSubscriptionUpdate(iterator);
-      await activationTurn();
 
       await context.commandBus().post(createAggregateCommand("process-command-1", "Process"));
 
@@ -255,8 +289,8 @@ describe("native service subscriptions", () => {
           ),
         )
         [Symbol.asyncIterator]();
+      await nextSubscriptionAck(iterator);
       const next = nextSubscriptionUpdate(iterator);
-      await activationTurn();
 
       await context.eventBus().post(createProjectionEvent("process-event-1", "Process"));
 
@@ -328,7 +362,7 @@ function nativeProcessManagerHandlers(): EntityHandlersMetadata<
           {
             kind: "event-reaction",
             methodName: "react",
-            input: { schema: TaskCreatedSchema, origin: "domestic" },
+            input: { schema: ReviewTaskAssignedSchema, origin: "domestic" },
             outcomes: { returned: [], thrown: [] },
             parameterCount: 1,
           },
@@ -380,15 +414,11 @@ function createProjectionEvent(id: string, name: string) {
     id: create(EventIdSchema, { value: `event-${id}` }),
     context: create(EventContextSchema, {
       origin: { case: "importContext", value: createActorContext() },
-      producerId: AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id })),
+      producerId: AnyMessages.pack(ProjectIdSchema, create(ProjectIdSchema, { value: id })),
     }),
     message: AnyMessages.pack(
-      TaskCreatedSchema,
-      create(TaskCreatedSchema, {
-        id: create(TaskIdSchema, { value: id }),
-        title: name,
-        taskListId: create(TaskListIdSchema, { value: id }),
-      }),
+      ReviewTaskAssignedSchema,
+      create(ReviewTaskAssignedSchema, { id, name }),
     ),
   });
 }
@@ -398,15 +428,11 @@ function createProjectionTriggerEvent(id: string, title: string) {
     id: create(EventIdSchema, { value: `event-${id}` }),
     context: create(EventContextSchema, {
       origin: { case: "importContext", value: createActorContext() },
-      producerId: AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id })),
+      producerId: AnyMessages.pack(ProjectIdSchema, create(ProjectIdSchema, { value: id })),
     }),
     message: AnyMessages.pack(
-      TaskCreatedSchema,
-      create(TaskCreatedSchema, {
-        id: create(TaskIdSchema, { value: id }),
-        title,
-        taskListId: create(TaskListIdSchema, { value: id }),
-      }),
+      ReviewTaskAssignedSchema,
+      create(ReviewTaskAssignedSchema, { id, name: title }),
     ),
   });
 }
@@ -416,7 +442,7 @@ function createAggregateEvent(id: string, name: string) {
     id: create(EventIdSchema, { value: `event-${id}` }),
     context: create(EventContextSchema, {
       origin: { case: "importContext", value: createActorContext() },
-      producerId: AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id })),
+      producerId: AnyMessages.pack(TaskIdSchema, create(TaskIdSchema, { value: id })),
     }),
     message: AnyMessages.pack(
       TaskCreatedSchema,
@@ -485,6 +511,8 @@ async function nextSubscriptionUpdate(
   return next.value;
 }
 
-function activationTurn(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 25));
+async function nextSubscriptionAck(iterator: AsyncIterator<SubscriptionUpdate>): Promise<void> {
+  const ack = await nextSubscriptionUpdate(iterator);
+  expect(ack.response?.status?.status.case).toBe("ok");
+  expect(ack.update.case).toBeUndefined();
 }

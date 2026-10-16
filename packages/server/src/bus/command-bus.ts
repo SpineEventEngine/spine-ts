@@ -35,12 +35,53 @@ const commandBusAborters = new WeakMap<CommandBus, () => void>();
 const commandBusWorkCounters = new WeakMap<CommandBus, () => number>();
 
 interface CommandBusAccess {
+  /**
+   * Posts an internal Command after normal external intake stops.
+   * @param commandBus Target bus.
+   * @param command Command envelope.
+   * @returns Completion after dispatch.
+   */
   postInternal(commandBus: CommandBus, command: Command): Promise<void>;
+
+  /**
+   * Queues a trusted Command follow-up during graceful drain.
+   * @param commandBus Target bus.
+   * @param command Command envelope.
+   * @returns Completion after dispatch.
+   */
   postInternalFollowUp(commandBus: CommandBus, command: Command): Promise<void>;
+
+  /**
+   * Stops new external Command intake.
+   * @param commandBus Target bus.
+   */
   beginClose(commandBus: CommandBus): void;
+
+  /**
+   * Waits for accepted Command work.
+   * @param commandBus Target bus.
+   * @returns Completion after the queue drains.
+   */
   drain(commandBus: CommandBus): Promise<void>;
+
+  /**
+   * Completes graceful Command-bus closure.
+   * @param commandBus Target bus.
+   * @returns Completion after closure.
+   */
   finishClose(commandBus: CommandBus): Promise<void>;
+
+  /**
+   * Closes a partially assembled bus.
+   * @param commandBus Target bus.
+   */
   abortClose(commandBus: CommandBus): void;
+
+  /**
+   * Returns accepted Command work count for drain stability.
+   * @param commandBus Target bus.
+   * @returns Number of accepted work items.
+   */
   acceptedWorkCount(commandBus: CommandBus): number;
 }
 
@@ -54,10 +95,15 @@ type CommandBusIntakeState = "open" | "closing" | "closed";
  */
 export class CommandBus {
   readonly #registry = new CommandDispatcherRegistry();
+
   readonly #runtime = new SingleProcessServerRuntime();
+
   readonly #started: Promise<void>;
+
   #intakeState: CommandBusIntakeState = "open";
+
   #acceptedWorkCount = 0;
+
   #closed: Promise<void> | undefined;
 
   /**
@@ -89,6 +135,7 @@ export class CommandBus {
   /**
    * Registers a dispatcher.
    *
+   * @typeParam Dispatcher Concrete dispatcher being registered.
    * @param dispatcher the dispatcher to register.
    * @returns the registered dispatcher.
    */

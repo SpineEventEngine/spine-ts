@@ -12,7 +12,7 @@ This reference describes the public in-memory Delivery server API. Read the
 ## Public entry points
 
 `InMemoryDelivery.create(options)` returns `DeliveryCore` with Connect handler
-implementations `inbox` and `shards`. It does not open a listener or install
+implementations `inbox`, `inboxRead`, and `shards`. It does not open a listener or install
 Admin/health handlers. The caller registers these handlers and provides the
 network lifecycle.
 
@@ -36,7 +36,7 @@ which override defaults. Invalid values throw before a listener is created:
 - `maxInboundMessageBytes` / `MAX_INBOUND_MESSAGE_SIZE`: integer 1–2147483647;
   default 4194304;
 - `processingTimeoutSeconds` / `SHARD_PROCESSING_TIMEOUT`: integer
-  0–2147483647; default 0, which disables automatic takeover;
+  0–2147483647; default 0, which disables timeout-based takeover during pickup;
 - retained message/byte limits: integer 1–2147483647; defaults 10000 and
   33554432;
 - tracked shards: integer 1–1000; default 1000.
@@ -47,6 +47,24 @@ MiB. Capacity is finite: an operation that would exceed retained messages,
 bytes, or shards fails atomically with `RESOURCE_EXHAUSTED`; it is not partially
 accepted or silently shortened.
 
+## Recovery timers
+
+The application `DeliverySupervisor` scans for pending work every 10 seconds by
+default; its `recoveryMs` option retains an explicit override. This scan is
+separate from the supervisor's default 60-second stale-session threshold
+(`staleMs`) and `ShardedWorkRegistry`'s default 30-second SQL lease (`leaseMs`).
+The in-memory Delivery server uses a separate processing timeout: `processingTimeoutSeconds` on the listener, or
+`processingTimeoutMs` on `InMemoryDelivery`. Its default is zero, which disables
+automatic pickup takeover; applications may configure a positive timeout.
+This does not disable the application supervisor's separate release of stale
+sessions. A positive server processing timeout alone does not shorten the
+supervisor's stale-session threshold.
+
+A scan can encounter a busy shard, an unexpired session, unavailable storage, or
+failed processing. Request deadlines, retry delays, and Delivery shutdown bounds also
+have separate responsibilities. A 10-second scan interval therefore guarantees
+neither delivery within 10 seconds nor worker takeover within 10 seconds.
+
 ## Delivery semantics
 
 Mutations pass a FIFO admission boundary with 100 waiting slots. Aborting before
@@ -54,8 +72,11 @@ admission commits nothing. Admission is the linearization point: once admitted,
 the synchronous mutation can commit even if the caller aborts or loses its
 response.
 
-Inbox pages are strict after the supplied timestamp and ordered by full wire
-timestamp, version, and UUID. Automatic pickup takeover requires elapsed time
+The JVM `InboxService.FindManyInShard` page RPC uses an exclusive timestamp
+bound. Reads are live and do not promise a snapshot across pages. Distinct
+received timestamps permit continued paging; a full page ending in tied times
+is reported as unsafe continuation.
+Automatic pickup takeover requires elapsed time
 strictly greater than `processingTimeoutMs`; manual expiration accepts elapsed
 time greater than or equal to the supplied interval. Release is not
 pickup-time-conditional, but the supplied worker must match the current owner;

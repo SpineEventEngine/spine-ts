@@ -38,14 +38,14 @@ export class PostgresStorageDataError extends Error {}
 export class PostgresStorageOperationError extends Error {}
 
 /**
- * Preserves classified provider errors and sanitizes raw PostgreSQL failures.
+ * Preserves classified provider errors and wraps raw PostgreSQL failures with an internal cause.
  */
 export const PostgresStorageErrors: Readonly<{ operation(error: unknown): Error }> = Object.freeze({
   /**
    * Preserves a provider error or sanitizes a raw driver failure.
    *
    * @param error Failure raised by a storage operation.
-   * @returns Stable provider error.
+   * @returns Stable provider error with a safe message and original internal cause.
    */
   operation(error: unknown): Error {
     if (
@@ -56,7 +56,9 @@ export const PostgresStorageErrors: Readonly<{ operation(error: unknown): Error 
       error instanceof PostgresStorageOperationError
     )
       return error;
-    return new PostgresStorageOperationError("PostgreSQL storage operation failed.");
+    return new PostgresStorageOperationError("PostgreSQL storage operation failed.", {
+      cause: error,
+    });
   },
 });
 

@@ -415,13 +415,14 @@ export interface Subscription {
   /**
    * Starts the remote subscription and makes its updates available for iteration.
    * @param options Supplies cancellation options for activation.
-   * @returns Completes after remote activation ends.
+   * @returns Completes after a validated activation ACK while the update stream stays live.
    */
   activate(options?: ClientOperationOptions): Promise<void>;
 
   /**
-   * Cancels local iteration and performs one bounded remote cancellation.
-   * @returns Completes after remote cancellation ends.
+   * Stops local iteration immediately and starts bounded remote cancellation.
+   * A failed remote attempt remains retryable through this handle.
+   * @returns Completes when the current remote cancellation attempt ends.
    */
   cancel(): Promise<void>;
 }
@@ -1008,7 +1009,13 @@ class TopicSubscription implements Subscription {
    * @returns Completion after remote cleanup.
    */
   cancel(): Promise<void> {
-    return (this.#cancellation ??= this.#cancelOwned());
+    if (this.#cancellation !== undefined) return this.#cancellation;
+    const attempt = this.#cancelOwned();
+    this.#cancellation = attempt;
+    void attempt.catch(() => {
+      if (this.#cancellation === attempt) this.#cancellation = undefined;
+    });
+    return attempt;
   }
 
   /**
@@ -1028,60 +1035,16 @@ class TopicSubscription implements Subscription {
     this.#signal.addEventListener("abort", abort, { once: true });
     try {
       this.#pushLifecycle({ state: "connecting", generation, attempt: 0 });
-      const pendingSubscription = createClient(
-        SubscriptionService,
-        this.#owner.transport,
-      ).subscribe(this.#topic, { signal: this.#controller.signal });
-      const subscription = await ClientTerminalValues.raceTerminal(
-        pendingSubscription,
-        this.#controller.signal,
-        () => {
-          ClientTerminalValues.cancelLateSubscription(pendingSubscription, this.#owner.transport);
-        },
-      );
-      this.#wire = subscription;
-      BrowserClientValues.validateSubscription(subscription, this.#topic, true);
-      if (generation !== this.#generation) {
-        await this.#cancelWireOnce(subscription);
-        throw new ClientProtocolError("subscription is cancelled.");
-      }
-      const updates = createClient(SubscriptionService, this.#owner.transport).activate(
-        subscription,
-        {
-          signal: this.#controller.signal,
-        },
-      );
-      const iterator = updates[Symbol.asyncIterator]();
-      this.#streamIterator = iterator;
-      void this.consumeUpdates(iterator, subscription, generation).catch(() => undefined);
+      const { subscription, iterator } = await this.#subscribeWire(generation);
       if (this.#cancelled || generation !== this.#generation) {
         await this.#cancelWireOnce(subscription);
         throw new ClientProtocolError("subscription is cancelled.");
       }
       this.#pushLifecycle({ state: "connected", generation });
       this.#connectedAt = this.#runtime.scheduler.now();
+      void this.consumeUpdates(iterator, subscription, generation).catch(() => undefined);
     } catch (error) {
-      if (this.#cancelled) throw error;
-      if (this.#retryable(error) && this.#canRetry()) {
-        await this.#recover(error, this.#wire);
-        return;
-      }
-      this.#failStreams(error, generation);
-      let cleanupFailure: unknown;
-      try {
-        if (this.#wire !== undefined) await this.#cancelWireOnce(this.#wire);
-      } catch (cleanupError) {
-        cleanupFailure = cleanupError;
-      } finally {
-        this.#cancelled = true;
-        this.#owner.remove(this);
-      }
-      if (cleanupFailure !== undefined)
-        throw new AggregateError(
-          [error, cleanupFailure],
-          "Subscription activation cleanup failed.",
-        );
-      throw error;
+      await this.#activationFailure(error, generation);
     } finally {
       signal?.removeEventListener("abort", abort);
       this.#signal.removeEventListener("abort", abort);
@@ -1089,7 +1052,99 @@ class TopicSubscription implements Subscription {
   }
 
   /**
-   * Clears updates, closes lifecycle, aborts work, and cancels the accepted wire once.
+   * Opens one wire subscription and waits for its validated activation ACK.
+   *
+   * @param generation The connection generation.
+   * @returns The accepted subscription and activated update iterator.
+   */
+  async #subscribeWire(generation: number): Promise<{
+    readonly subscription: WireSubscription;
+    readonly iterator: AsyncIterator<SubscriptionUpdate>;
+  }> {
+    const pending = createClient(SubscriptionService, this.#owner.transport).subscribe(
+      this.#topic,
+      { signal: this.#controller.signal },
+    );
+    const subscription = await ClientTerminalValues.raceTerminal(
+      pending,
+      this.#controller.signal,
+      () => {
+        ClientTerminalValues.cancelLateSubscription(pending, this.#owner.transport);
+      },
+    );
+    this.#wire = subscription;
+    BrowserClientValues.validateSubscription(subscription, this.#topic, true);
+    if (this.#cancelled || generation !== this.#generation) {
+      await this.#cancelWireOnce(subscription);
+      throw new ClientProtocolError("subscription is cancelled.");
+    }
+    const updates = createClient(SubscriptionService, this.#owner.transport).activate(
+      subscription,
+      { signal: this.#controller.signal },
+    );
+    const iterator = updates[Symbol.asyncIterator]();
+    this.#streamIterator = iterator;
+    await this.#awaitAck(iterator, subscription, generation);
+    return { subscription, iterator };
+  }
+
+  /**
+   * Retries a transient activation or closes the failed subscription.
+   *
+   * @param error The activation failure.
+   * @param generation The failing connection generation.
+   * @returns Completion after recovery or terminal cleanup.
+   */
+  async #activationFailure(error: unknown, generation: number): Promise<void> {
+    if (this.#cancelled) throw error;
+    if (this.#retryable(error) && this.#canRetry()) return this.#recover(error, this.#wire);
+    this.#failStreams(error, generation);
+    let cleanupFailure: unknown;
+    try {
+      if (this.#wire !== undefined) await this.#cancelWireOnce(this.#wire);
+    } catch (failure) {
+      cleanupFailure = failure;
+    } finally {
+      this.#cancelled = true;
+      this.#owner.remove(this);
+    }
+    if (cleanupFailure !== undefined)
+      throw new AggregateError([error, cleanupFailure], "Subscription activation cleanup failed.");
+    throw error;
+  }
+
+  /**
+   * Waits for the response-only successful activation acknowledgement on one wire generation.
+   *
+   * @param iterator The newly opened subscription update stream.
+   * @param subscription The accepted subscription definition.
+   * @param generation The connection generation that opened this stream.
+   * @returns Completion after a matching successful acknowledgement.
+   */
+  async #awaitAck(
+    iterator: AsyncIterator<SubscriptionUpdate>,
+    subscription: WireSubscription,
+    generation: number,
+  ): Promise<void> {
+    const next = await ClientTerminalValues.raceTerminal(iterator.next(), this.#controller.signal);
+    if (next.done)
+      throw new SubscriptionStreamEndedError("subscription stream ended before activation ACK.");
+    if (this.#cancelled || generation !== this.#generation)
+      throw new ClientProtocolError("subscription is cancelled.");
+    const topic = subscription.topic;
+    if (topic === undefined)
+      throw new ClientProtocolError("accepted subscription topic is missing.");
+    BrowserClientValues.validateSubscription(next.value.subscription, topic, true);
+    if (next.value.subscription?.id?.value !== subscription.id?.value)
+      throw new ClientProtocolError(
+        "subscription ACK ID does not match the accepted subscription.",
+      );
+    if (next.value.update.case !== undefined || next.value.response?.status?.status.case !== "ok")
+      throw new ClientProtocolError("subscription activation ACK is missing or unsuccessful.");
+  }
+
+  /**
+   * Clears updates, closes lifecycle, aborts work, and attempts accepted-wire cleanup.
    *
    * @returns Completion after local and remote cancellation.
    */
@@ -1100,11 +1155,8 @@ class TopicSubscription implements Subscription {
     this.#finishLifecycle({ state: "closed", generation: this.#generation - 1 });
     this.#controller.abort();
     await this.#disposeLateIterator();
-    try {
-      if (this.#wire !== undefined) await this.#cancelWireOnce(this.#wire);
-    } finally {
-      this.#owner.remove(this);
-    }
+    if (this.#wire !== undefined) await this.#cancelWireOnce(this.#wire);
+    this.#owner.remove(this);
   }
 
   /**
@@ -1122,38 +1174,7 @@ class TopicSubscription implements Subscription {
   ): Promise<void> {
     let recovering = false;
     try {
-      for (;;) {
-        const next = await ClientTerminalValues.raceTerminal(
-          updates.next(),
-          this.#controller.signal,
-        );
-        if (next.done)
-          throw new SubscriptionStreamEndedError("subscription stream ended unexpectedly.");
-        if (this.#cancelled || generation !== this.#generation) return;
-        const update = next.value;
-        const topic = subscription.topic;
-        if (topic === undefined)
-          throw new ClientProtocolError("accepted subscription topic is missing.");
-        BrowserClientValues.validateSubscription(update.subscription, topic, true);
-        if (update.subscription?.id?.value !== subscription.id?.value)
-          throw new ClientProtocolError(
-            "subscription update ID does not match the accepted subscription.",
-          );
-        if (
-          update.response?.status?.status.case === "error" &&
-          update.response.status.status.value.type === "backend-unavailable" &&
-          update.update.case === undefined
-        ) {
-          this.#pushLifecycle({ state: "gapPossible", generation });
-          continue;
-        }
-        const delivery = BrowserClientValues.freezeDelivery({
-          kind: "update",
-          update: clone(SubscriptionUpdateSchema, update),
-        });
-        const bytes = toBinary(SubscriptionUpdateSchema, update).byteLength;
-        this.#pushUpdate(delivery, bytes);
-      }
+      await this.#consumeStreamLoop(updates, subscription, generation);
     } catch (error) {
       if (this.#cancelled) return;
       if (this.#retryable(error) && this.#canRetry()) {
@@ -1175,6 +1196,66 @@ class TopicSubscription implements Subscription {
         if (this.#streamIterator === updates) this.#streamIterator = undefined;
       }
     }
+  }
+
+  /**
+   * Reads the active stream until cancellation or a terminal transport result.
+   *
+   * @param updates The active wire update iterator.
+   * @param subscription The accepted subscription.
+   * @param generation The connection generation used to fence late results.
+   * @returns Completion when the stream ends or is cancelled.
+   */
+  async #consumeStreamLoop(
+    updates: AsyncIterator<SubscriptionUpdate>,
+    subscription: WireSubscription,
+    generation: number,
+  ): Promise<void> {
+    for (;;) {
+      const next = await ClientTerminalValues.raceTerminal(updates.next(), this.#controller.signal);
+      if (next.done)
+        throw new SubscriptionStreamEndedError("subscription stream ended unexpectedly.");
+      if (this.#cancelled || generation !== this.#generation) return;
+      this.#acceptStreamUpdate(next.value, subscription, generation);
+    }
+  }
+
+  /**
+   * Validates and delivers one post-readiness stream update.
+   *
+   * @param update The received wire update.
+   * @param subscription The accepted subscription.
+   * @param generation The connection generation for lifecycle notices.
+   */
+  #acceptStreamUpdate(
+    update: SubscriptionUpdate,
+    subscription: WireSubscription,
+    generation: number,
+  ): void {
+    const topic = subscription.topic;
+    if (topic === undefined)
+      throw new ClientProtocolError("accepted subscription topic is missing.");
+    BrowserClientValues.validateSubscription(update.subscription, topic, true);
+    if (update.subscription?.id?.value !== subscription.id?.value)
+      throw new ClientProtocolError(
+        "subscription update ID does not match the accepted subscription.",
+      );
+    if (update.update.case === undefined && update.response?.status?.status.case === "ok")
+      throw new ClientProtocolError("subscription stream sent a duplicate activation ACK.");
+    if (
+      update.response?.status?.status.case === "error" &&
+      update.response.status.status.value.type === "backend-unavailable" &&
+      update.update.case === undefined
+    ) {
+      this.#pushLifecycle({ state: "gapPossible", generation });
+      return;
+    }
+    const delivery = BrowserClientValues.freezeDelivery({
+      kind: "update",
+      update: clone(SubscriptionUpdateSchema, update),
+    });
+    const bytes = toBinary(SubscriptionUpdateSchema, update).byteLength;
+    this.#pushUpdate(delivery, bytes);
   }
 
   /**
@@ -1236,52 +1317,16 @@ class TopicSubscription implements Subscription {
         generation = ++this.#generation;
         await this.#disposeLateIterator();
         if (wire !== undefined) await this.#cancelWireOnce(wire);
-        const delay = this.#runtime.retryPolicy.delayMs(attempt);
-        if (!Number.isSafeInteger(delay) || delay <= 0)
-          throw new ClientProtocolError(
-            "subscription retry delay must be a positive safe integer.",
-          );
-        await ClientTerminalValues.raceTerminal(
-          this.#runtime.scheduler.wait(delay, this.#controller.signal),
-          this.#controller.signal,
-        );
-        if (this.#controller.signal.aborted) throw this.#controller.signal.reason;
-        if (this.#elapsed()) throw failure;
-        await ClientTerminalValues.raceTerminal(
-          this.#owner.onReauthenticateBeforeReconnect(
-            this.#controller.signal,
-            this.#remainingRetryMs(),
-          ),
-          this.#controller.signal,
-        );
-        if (this.#elapsed()) throw failure;
+        await this.#waitRetry(attempt, failure);
         this.#pushLifecycle({ state: "connecting", generation, attempt });
         try {
-          const pending = createClient(SubscriptionService, this.#owner.transport).subscribe(
-            this.#topic,
-            { signal: this.#controller.signal },
-          );
-          const subscription = await ClientTerminalValues.raceTerminal(
-            pending,
-            this.#controller.signal,
-            () => {
-              ClientTerminalValues.cancelLateSubscription(pending, this.#owner.transport);
-            },
-          );
-          this.#wire = subscription;
-          BrowserClientValues.validateSubscription(subscription, this.#topic, true);
-          const updates = createClient(SubscriptionService, this.#owner.transport).activate(
-            subscription,
-            { signal: this.#controller.signal },
-          );
-          const iterator = updates[Symbol.asyncIterator]();
-          this.#streamIterator = iterator;
+          const { subscription, iterator } = await this.#subscribeWire(generation);
           if (this.#options.kind === "entity") await this.#resynchronize(generation);
-          void this.consumeUpdates(iterator, subscription, generation).catch(() => undefined);
           if (this.#options.kind === "event")
             this.#pushLifecycle({ state: "gapPossible", generation });
           this.#pushLifecycle({ state: "connected", generation });
           this.#connectedAt = this.#runtime.scheduler.now();
+          void this.consumeUpdates(iterator, subscription, generation).catch(() => undefined);
           return;
         } catch (retryFailure) {
           failure = retryFailure;
@@ -1290,21 +1335,64 @@ class TopicSubscription implements Subscription {
       }
       throw failure;
     } catch (recoveryError) {
-      if (this.#cancelled) throw recoveryError;
-      const terminalError = recoveryError instanceof Error ? recoveryError : error;
-      await this.#disposeLateIterator();
-      this.#failStreams(terminalError, generation);
-      try {
-        await this.#cancelAfterFailure();
-      } catch {
-        // The terminal failure remains observable when cleanup fails.
-      } finally {
-        this.#updates.close();
-        this.#lifecycle.close();
-        this.#owner.remove(this);
-      }
-      throw terminalError;
+      await this.#recoveryFailure(error, recoveryError, generation);
     }
+  }
+
+  /**
+   * Waits for the retry delay and refreshes credentials within the same deadline.
+   *
+   * @param attempt The retry ordinal.
+   * @param failure The previous transient failure.
+   * @returns Completion when another wire attempt may begin.
+   */
+  async #waitRetry(attempt: number, failure: unknown): Promise<void> {
+    const delay = this.#runtime.retryPolicy.delayMs(attempt);
+    if (!Number.isSafeInteger(delay) || delay <= 0)
+      throw new ClientProtocolError("subscription retry delay must be a positive safe integer.");
+    await ClientTerminalValues.raceTerminal(
+      this.#runtime.scheduler.wait(delay, this.#controller.signal),
+      this.#controller.signal,
+    );
+    if (this.#controller.signal.aborted) throw this.#controller.signal.reason;
+    if (this.#elapsed()) throw failure;
+    await ClientTerminalValues.raceTerminal(
+      this.#owner.onReauthenticateBeforeReconnect(
+        this.#controller.signal,
+        this.#remainingRetryMs(),
+      ),
+      this.#controller.signal,
+    );
+    if (this.#elapsed()) throw failure;
+  }
+
+  /**
+   * Stops an exhausted recovery while containing cleanup failure.
+   *
+   * @param original The failure that started this retry episode.
+   * @param recoveryError The final retry failure.
+   * @param generation The final connection generation.
+   * @returns Rejection with the final terminal failure.
+   */
+  async #recoveryFailure(
+    original: unknown,
+    recoveryError: unknown,
+    generation: number,
+  ): Promise<never> {
+    if (this.#cancelled) throw recoveryError;
+    const terminalError = recoveryError instanceof Error ? recoveryError : original;
+    await this.#disposeLateIterator();
+    this.#failStreams(terminalError, generation);
+    try {
+      await this.#cancelAfterFailure();
+    } catch {
+      // The terminal failure remains observable when cleanup fails.
+    } finally {
+      this.#updates.close();
+      this.#lifecycle.close();
+      this.#owner.remove(this);
+    }
+    throw terminalError;
   }
 
   /**
@@ -1431,7 +1519,7 @@ class TopicSubscription implements Subscription {
   }
 
   /**
-   * Returns the remote cancellation promise for the current accepted wire.
+   * Returns an in-flight remote cancellation and clears failed attempts for a later retry.
    *
    * @param subscription The accepted wire or logical subscription to clean up.
    * @returns The shared remote cancellation promise for this wire.
@@ -1440,6 +1528,9 @@ class TopicSubscription implements Subscription {
     if (this.#wireCleanup?.wire === subscription) return this.#wireCleanup.promise;
     const promise = ClientTerminalValues.cancelWire(this.#owner.transport, subscription);
     this.#wireCleanup = { wire: subscription, promise };
+    void promise.catch(() => {
+      if (this.#wireCleanup?.promise === promise) this.#wireCleanup = undefined;
+    });
     return promise;
   }
 

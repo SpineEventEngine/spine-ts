@@ -18,7 +18,7 @@ import process from "node:process";
 
 const managed = await ManagedServerApplication.run({
   processCount: 1,
-  port: 50_052,
+  port: 0,
   moduleUrl: import.meta.url,
   createServer: async ({ host, port }) => Server.atPort(port, { host }).start(),
 });

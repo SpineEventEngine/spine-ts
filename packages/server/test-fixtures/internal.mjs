@@ -14,6 +14,7 @@
 
 import { commitFenced } from "../dist/repository/commit-fence.js";
 import { managedServerApplicationAccess } from "../dist/server/managed-server-application.js";
+import { NodeCoordinator } from "../dist/server/node-coordinator.js";
 import { serverEnvironmentAccess } from "../dist/server/server-environment.js";
 
-export { commitFenced, managedServerApplicationAccess, serverEnvironmentAccess };
+export { commitFenced, managedServerApplicationAccess, NodeCoordinator, serverEnvironmentAccess };

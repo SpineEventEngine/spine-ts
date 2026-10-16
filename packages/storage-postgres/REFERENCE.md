@@ -42,7 +42,7 @@ altered. Missing, extra, or incompatible columns, defaults, nullability,
 primary keys, or unique constraints reject with `PostgresStorageSchemaError`.
 
 The adapter uses `$1` parameters, `IS NOT DISTINCT FROM`, PostgreSQL upsert,
-transaction advisory locks, and a bounded normalized query plan. It preserves
+independent bounded history maintenance pages, and a normalized query plan. It preserves
 the common 1,000-bind plan budget and 10,000-row default with one
 overflow lookahead row. The database collation controls text ordering; the
 provider does not invent a JavaScript-compatible collation.
@@ -60,13 +60,35 @@ plain, non-reserved ASCII identifiers only. Reserved and quoted-required names
 preserve their spelling; all names reject NUL, unsafe values, 63-byte overflow,
 and collisions before DDL, DML, or catalog inspection.
 
+## Entity commit behavior
+
+The provider captures and validates one Entity commit input before database I/O,
+then prepares its record families. It writes state history, diagnostic Events,
+canonical delivery Events, and finally the current state as ordered independent
+records. A later failure leaves the completed prefix in place; an Event row
+alone does not prove that the current state was written. Concurrent commits can
+interleave, including their current-state writes. This is not one SQL
+transaction across the four families.
+
+After preparation succeeds, a PostgreSQL deadlock (`40P01`) or serialization
+failure (`40001`) during the ordered record writes triggers one replay of the
+captured input. A failure during preparation is not retried. Commit does not
+rerun the handler or create new
+versions or Event IDs. An immutable retry accepts an existing row only when its
+wire bytes match; the same ID with different bytes is a collision. A caller
+retry must likewise reuse the original versions and Event IDs. See the
+[shared storage contract](../storage/REFERENCE.md) for the provider SPI and
+cross-provider limits.
+
 ## Lifecycle and errors
 
 `factory.close()` is idempotent, closes registered handles, prevents new handle
 creation, and drains pools. Record and Entity handles can close independently.
-Acquired clients are released in `finally` blocks and transactions are always
-committed or rolled back before release. Errors do not include URLs,
-credentials, SQL text, or driver internals.
+Acquired clients are released in `finally` blocks. History maintenance applies
+each deletion page independently. Top-level provider error messages and public
+responses omit URLs, credentials, SQL text, and driver details. The original
+driver failure remains available as the internal `cause`; do not expose it in
+public responses or unfiltered logs.
 
 Custom table creation may use `useOperationFactory(factory)` with the exported
 `PostgresTableSpec`, `PostgresCreateOperation`, and

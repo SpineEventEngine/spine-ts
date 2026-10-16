@@ -2016,7 +2016,7 @@ describe("Process Manager querying", () => {
       },
       message: "Entity query predicate exceeds maximum node count 10000.",
     },
-  ])("rejects a $name predicate before reading storage", async ({ predicate, message }) => {
+  ])("validates a $name predicate before reading storage", async ({ predicate, message }) => {
     ProjectLookup.reset();
     ProjectLookup.predicate = predicate;
     const context = BoundedContext.singleTenant("ProcessManagerQueries")
@@ -2029,8 +2029,11 @@ describe("Process Manager querying", () => {
     });
 
     try {
-      await context.commandBus().post(queryCommand("query-id", "invalid"));
-      expect(ProjectLookup.failure).toMatchObject({ message });
+      await expect(
+        context.commandBus().post(queryCommand("query-id", "invalid")),
+      ).resolves.toBeUndefined();
+      expect(ProjectLookup.failure).toBeInstanceOf(Error);
+      expect((ProjectLookup.failure as Error).message).toBe(message);
       expect(reads).toBe(0);
     } finally {
       observation.close();

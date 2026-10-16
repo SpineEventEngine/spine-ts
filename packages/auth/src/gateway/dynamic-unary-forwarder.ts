@@ -14,8 +14,11 @@
 
 import { clone, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { ApplicationNode } from "@spine-event-engine/deployment";
-import { BackendMembershipKernel } from "@spine-event-engine/deployment/spi/backend-membership";
-import { SubscriptionSchema } from "@spine-event-engine/proto/client";
+import {
+  BackendMembershipKernel,
+  type BackendMemberClient,
+} from "@spine-event-engine/deployment/spi/backend-membership";
+import { SubscriptionSchema, SubscriptionUpdateSchema } from "@spine-event-engine/proto/client";
 import type { ILogLayer } from "loglayer";
 
 import type { UnaryForwarder } from "./index.js";
@@ -29,6 +32,8 @@ import type {
 
 /**
  * Represents a connected unary backend with deterministic disposal.
+ * A custom subscription client validates relayed update IDs and Topics against
+ * the actual Subscription accepted by its backend before forwarding updates.
  */
 export interface DynamicUnaryClient extends UnaryForwarder, SubscriptionCreator {
   // prettier-ignore
@@ -102,31 +107,8 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
       BackendSubscriptionEnvelope,
       SubscriptionUpdateWire
     >({
-      create: async (node, signal) => {
-        const client = await options.create(node, signal);
-        return {
-          forward: (request) => client.forward(request),
-          subscribe: (definition, childSignal) =>
-            client.subscribe(
-              { kind: "public-subscription", bytes: definition.slice() },
-              childSignal,
-            ),
-          activate: (child, updates, childSignal) =>
-            client.activate(
-              {
-                wire: { kind: "backend-subscription-envelope", bytes: child.bytes.slice() },
-                updates,
-              },
-              childSignal,
-            ),
-          dispose: (child, childSignal) =>
-            client.dispose(
-              { kind: "backend-subscription-envelope", bytes: child.bytes.slice() },
-              childSignal,
-            ),
-          close: () => client.close(),
-        };
-      },
+      create: async (node, signal) =>
+        DynamicUnaryForwarder.memberClient(await options.create(node, signal)),
       memberKey: (node) => node.id,
       sameMember: (left, right) =>
         left.endpoint === right.endpoint && left.tlsServerName === right.tlsServerName,
@@ -134,6 +116,9 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
       childDefinition: (definition, node) =>
         DynamicUnaryForwarder.childDefinition(definition, node),
       childSize: (child) => child.bytes.byteLength,
+      isActivationAck: (update) => DynamicUnaryForwarder.isActivationAck(update),
+      logicalActivationAck: (definition, childAck) =>
+        DynamicUnaryForwarder.logicalActivationAck(definition, childAck),
       ...(options.maxConcurrentStarts === undefined
         ? {}
         : { maxConcurrentStarts: options.maxConcurrentStarts }),
@@ -141,6 +126,67 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
         ? {}
         : { maxChildBytes: options.maxBackendEnvelopeBytes }),
     });
+  }
+
+  /**
+   * Builds membership operations for one connected gateway client.
+   *
+   * @param client The connected gateway client.
+   * @returns The member's forwarding and subscription operations.
+   */
+  private static memberClient(
+    client: DynamicUnaryClient,
+  ): BackendMemberClient<
+    Parameters<UnaryForwarder["forward"]>[0],
+    BackendSubscriptionEnvelope,
+    SubscriptionUpdateWire
+  > {
+    return {
+      forward: (request) => client.forward(request),
+      subscribe: (definition, signal) =>
+        client.subscribe({ kind: "public-subscription", bytes: definition.slice() }, signal),
+      activate: (child, updates, signal) =>
+        client.activate(
+          {
+            wire: { kind: "backend-subscription-envelope", bytes: child.bytes.slice() },
+            updates,
+          },
+          signal,
+        ),
+      dispose: (child, signal) =>
+        client.dispose(
+          { kind: "backend-subscription-envelope", bytes: child.bytes.slice() },
+          signal,
+        ),
+      close: () => client.close(),
+    };
+  }
+
+  /**
+   * Checks a response-only successful child activation acknowledgement.
+   *
+   * @param update The serialized child update.
+   * @returns Whether the child is attached and ready.
+   */
+  private static isActivationAck(update: SubscriptionUpdateWire): boolean {
+    const decoded = fromBinary(SubscriptionUpdateSchema, update.bytes);
+    return decoded.response?.status?.status.case === "ok" && decoded.update.case === undefined;
+  }
+
+  /**
+   * Transforms a child acknowledgement to the public logical subscription identity.
+   *
+   * @param definition The logical subscription definition.
+   * @param childAck The validated child acknowledgement.
+   * @returns The single logical acknowledgement.
+   */
+  private static logicalActivationAck(
+    definition: Uint8Array,
+    childAck: SubscriptionUpdateWire,
+  ): SubscriptionUpdateWire {
+    const update = fromBinary(SubscriptionUpdateSchema, childAck.bytes);
+    update.subscription = fromBinary(SubscriptionSchema, definition);
+    return { kind: "subscription-update", bytes: toBinary(SubscriptionUpdateSchema, update) };
   }
 
   /**
@@ -224,7 +270,8 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
    * @param wire Supplies the public subscription wire.
    * @param updates Receives relayed subscription updates.
    * @param signal Cancels update relay.
-   * @returns Completion after cancellation.
+   * @returns Completion after cancellation; rejects on unexpected child failure, possibly
+   * including bounded cleanup failure.
    */
   activateDefinition(
     wire: PublicSubscriptionWire,

@@ -54,8 +54,13 @@ examples/message-board/scripts/start-local-single-process.sh
 Open [http://127.0.0.1:5173](http://127.0.0.1:5173), enter a username and a
 message, and post it to `general`. Command+Enter on macOS, or Control+Enter
 elsewhere, posts; plain Enter adds a line. Stop either process with `Ctrl-C`.
+Set `MESSAGE_BOARD_LOCAL_PORT` and `MESSAGE_BOARD_WEB_PORT` to distinct available
+ports when another local service uses the defaults; the launcher passes the
+selected Gateway URL to the UI.
 
-For the local multi-process mode, run:
+Shared Delivery is recommended for multiple application processes. The local
+React single-process mode above needs no shared Delivery server. For the local
+multi-process mode, run:
 
 ```bash
 examples/message-board/scripts/start-local-multi-process.sh
@@ -66,6 +71,20 @@ Delivery server, starts two managed application replicas plus the Gateway and
 stock UI, then prints [http://127.0.0.1:5173](http://127.0.0.1:5173). `Ctrl-C`
 stops every process and container that this launcher created. Multiple replicas
 share Delivery; the in-memory single-process launcher above is the local-only path.
+
+For an isolated eight-process, eight-shard run, select five free local ports and
+a task-specific image tag before starting the same launcher:
+
+```bash
+MESSAGE_BOARD_PROCESS_COUNT=8 MESSAGE_BOARD_DELIVERY_SHARD_COUNT=8 \
+MESSAGE_BOARD_DELIVERY_PORT=28484 MESSAGE_BOARD_DATASTORE_PORT=28081 \
+MESSAGE_BOARD_COORDINATOR_PORT=28091 MESSAGE_BOARD_GATEWAY_PORT=28090 \
+MESSAGE_BOARD_WEB_PORT=25173 MESSAGE_BOARD_IMAGE_TAG=sqlrel-example \
+examples/message-board/scripts/start-local-multi-process.sh
+```
+
+The UI is then at `http://127.0.0.1:25173`. The process and shard counts are
+independent; use ports and an image tag unused by other local runs.
 
 Kubernetes manifests are static deployment references, not a locally runnable
 mode. See [`deploy/kubernetes`](deploy/kubernetes) when a cluster is available.
@@ -237,9 +256,13 @@ application topology, not an additional unary request route.
 Application code selects and manages its storage. The public browser Gateway
 creates process-local subscription bindings. Operators configure TLS,
 image distribution, network policy, and production delivery infrastructure.
-The reference simple delivery server is in-memory and not highly available;
-after a Gateway restart the browser reconnects, queries the current board, and
-then continues listening.
+The reference simple Delivery server is in-memory and not highly available.
+Restarting it can lose accepted pending Commands even when saved application
+business state survives in a separate store. A Gateway restart has a different
+effect: the browser reconnects, queries the current board, and then continues
+listening. That query does not recover Commands lost from the Delivery Inbox.
+See the separate [recovery timers](../../packages/delivery-server/REFERENCE.md#recovery-timers);
+a 10-second scan does not guarantee delivery or worker takeover within 10 seconds.
 
 ### Build local images
 

@@ -13,39 +13,51 @@
  */
 
 import { create, fromBinary, ScalarType } from "@bufbuild/protobuf";
-import { AnySchema, StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { EventIdSchema, EventSchema, TenantIdSchema } from "@spine-event-engine/proto";
 import { Identifiers, StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { ColumnTypes, RecordColumn, RecordSpec } from "@spine-event-engine/storage";
 import { EntityCommitStorageFactories } from "@spine-event-engine/storage/provider";
 import type { EntityStorageInput } from "@spine-event-engine/storage/provider";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import {
+  TaskIdSchema,
+  TaskListIdSchema,
+  type TaskId,
+} from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
+import { TaskCreatedSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
+import {
+  TaskSchema,
+  type Task,
+} from "../../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 
 import { DatastoreStorageFactory } from "../../src/index.js";
+import { DatastoreEntityStorage } from "../../src/datastore/entity-history.js";
 import { HistoryDatastoreBackend } from "./entity-history-fixture.js";
 
+function taskId(value: string): TaskId {
+  return create(TaskIdSchema, { value });
+}
 function input(
   histories = true,
   columns: readonly RecordColumn<ReturnType<typeof create<typeof EntityRecordSchema>>>[] = [],
-): EntityStorageInput<string, ReturnType<typeof create<typeof StringValueSchema>>> {
+): EntityStorageInput<TaskId, Task> {
   const unpack = (id: ReturnType<typeof create<typeof AnySchema>>) =>
-    id.typeUrl.endsWith(StringValueSchema.typeName)
-      ? fromBinary(StringValueSchema, id.value).value
-      : undefined;
+    id.typeUrl.endsWith(TaskIdSchema.typeName) ? fromBinary(TaskIdSchema, id.value) : undefined;
   return {
     context: { name: "GeneratedEntity", multitenant: false },
     id: {
-      clone: (id) => id,
-      key: (id) => id,
-      pack: (id) => pack(id),
+      clone: (id) => create(TaskIdSchema, id),
+      key: (id) => id.value,
+      pack: (id) => packId(id.value),
       unpack,
     },
     columns,
     recordSpec: new RecordSpec({
-      sourceType: StringValueSchema,
+      sourceType: TaskSchema,
       recordType: EntityRecordSchema,
-      idKind: "string",
+      idSchema: TaskIdSchema,
       extractId: (record) => {
         const id = record.entityId === undefined ? undefined : unpack(record.entityId);
         if (id === undefined) throw new Error("Entity record has no matching ID.");
@@ -53,26 +65,37 @@ function input(
       },
       columns,
     }),
-    sourceType: StringValueSchema,
-    stateSchema: StringValueSchema,
+    sourceType: TaskSchema,
+    stateSchema: TaskSchema,
     ...(histories ? { stateHistory: true, eventHistory: true } : {}),
   };
 }
-function pack(value: string) {
-  return Identifiers.pack(StringValueSchema, create(StringValueSchema, { value }));
+function packId(value: string) {
+  return Identifiers.pack(TaskIdSchema, taskId(value));
+}
+function packState(title: string) {
+  return Identifiers.pack(TaskSchema, create(TaskSchema, { id: taskId("task"), title }));
 }
 function record(value: string, version: number) {
   return create(EntityRecordSchema, {
-    entityId: pack("task"),
-    state: pack(value),
+    entityId: packId("task"),
+    state: packState(value),
     version: { number: version, timestamp: create(TimestampSchema, { seconds: BigInt(version) }) },
   });
 }
 function event(id: string, version: number) {
   return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
+    message: Identifiers.pack(
+      TaskCreatedSchema,
+      create(TaskCreatedSchema, {
+        id: taskId("task"),
+        title: id,
+        taskListId: create(TaskListIdSchema, { value: "list-1" }),
+      }),
+    ),
     context: {
-      producerId: pack("task"),
+      producerId: packId("task"),
       timestamp: create(TimestampSchema, { seconds: BigInt(version) }),
       version: { number: version },
     },
@@ -80,7 +103,7 @@ function event(id: string, version: number) {
 }
 function factory(backend: HistoryDatastoreBackend) {
   const stringifiers = new StringifierRegistry();
-  stringifiers.setTypeRegistry(new TypeRegistry([StringValueSchema]));
+  stringifiers.setTypeRegistry(new TypeRegistry([TaskIdSchema, TaskSchema, TaskCreatedSchema]));
   return DatastoreStorageFactory.newBuilder()
     .setClient(backend.client() as never)
     .setStringifierRegistry(stringifiers)
@@ -88,6 +111,47 @@ function factory(backend: HistoryDatastoreBackend) {
 }
 
 describe("Datastore generated Entity records", () => {
+  it("retries an immutable history insert when a colliding row disappears before inspection", async () => {
+    const compareAndSet = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    const read = vi.fn().mockResolvedValue(undefined);
+    const entity = input();
+    const storage = new DatastoreEntityStorage(
+      entity,
+      (spec) =>
+        ({
+          recordSpec: spec,
+          compareAndSet,
+          read,
+          isOpen: () => true,
+          close: () => undefined,
+        }) as never,
+    );
+
+    await expect(storage.states.append(record("one", 1))).resolves.toBeUndefined();
+    expect(compareAndSet).toHaveBeenCalledTimes(2);
+    expect(read).toHaveBeenCalledOnce();
+  });
+
+  it("bounds immutable history insert attempts when each collision disappears", async () => {
+    const compareAndSet = vi.fn().mockResolvedValue(false);
+    const read = vi.fn().mockResolvedValue(undefined);
+    const entity = input();
+    const storage = new DatastoreEntityStorage(
+      entity,
+      (spec) =>
+        ({
+          recordSpec: spec,
+          compareAndSet,
+          read,
+          isOpen: () => true,
+          close: () => undefined,
+        }) as never,
+    );
+
+    await expect(storage.states.append(record("one", 1))).rejects.toThrow(/not retained/);
+    expect(compareAndSet).toHaveBeenCalledTimes(3);
+    expect(read).toHaveBeenCalledTimes(3);
+  });
   it("stores current, state history, diagnostic history, and Event Store in separate generated families", async () => {
     const backend = new HistoryDatastoreBackend();
     const storage = factory(backend).createEntityStorage(input());
@@ -100,9 +164,9 @@ describe("Datastore generated Entity records", () => {
       ),
     ).toEqual(
       expect.arrayContaining([
-        "google.protobuf.StringValue",
-        "google.protobuf.StringValue_EntityRecord",
-        "google.protobuf.StringValue_Event",
+        "spine.examples.todo.Task",
+        "spine.examples.todo.Task_EntityRecord",
+        "spine.examples.todo.Task_Event",
       ]),
     );
     expect([...backend.entities.values()].every((row) => Object.hasOwn(row.data, "bytes"))).toBe(
@@ -111,6 +175,28 @@ describe("Datastore generated Entity records", () => {
     expect([...backend.entities.values()].every((row) => !Object.hasOwn(row.data, "_scope"))).toBe(
       true,
     );
+  });
+
+  it("commits current state with enabled but empty optional history and delivery families", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const store = factory(backend);
+    const entity = input(true);
+    const commits = EntityCommitStorageFactories.create(store, entity);
+
+    await commits.commit({
+      context: entity.context,
+      entity,
+      entityId: taskId("task"),
+      next: record("current-only", 1),
+      states: [],
+      diagnostics: [],
+      events: [],
+    });
+
+    const stored = await store.createEntityStorage(entity).current.read(taskId("task"));
+    expect(stored?.version?.number).toBe(1);
+    expect(stored?.state?.typeUrl).toContain(TaskSchema.typeName);
+    expect(backend.entities).toHaveLength(1);
   });
 
   it("does not open or write disabled history families", async () => {
@@ -133,12 +219,29 @@ describe("Datastore generated Entity records", () => {
       EntityCommitStorageFactories.create(store, entity).commit({
         context: entity.context,
         entity,
-        entityId: "task",
+        entityId: taskId("task"),
         next: record("current", 1),
         states: [record("retained", 1)],
       }),
     ).rejects.toThrow("disabled");
     expect(client.transactionCalls).toBe(0);
+  });
+
+  it("cannot enable history by changing the commit input after opening its handle", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const commits = EntityCommitStorageFactories.create(factory(backend), input(false));
+    const enabled = input(true);
+
+    await expect(
+      commits.commit({
+        context: enabled.context,
+        entity: enabled,
+        entityId: taskId("task"),
+        next: record("current", 1),
+        states: [record("retained", 1)],
+      }),
+    ).rejects.toThrow("disabled");
+    expect(backend.entities).toHaveLength(0);
   });
 
   it("allows an empty disabled-history commit but rejects disabled diagnostic events", async () => {
@@ -151,7 +254,7 @@ describe("Datastore generated Entity records", () => {
       commits.commit({
         context: entity.context,
         entity,
-        entityId: "task",
+        entityId: taskId("task"),
         next: record("current", 1),
         states: [],
         diagnostics: [],
@@ -161,7 +264,7 @@ describe("Datastore generated Entity records", () => {
       commits.commit({
         context: entity.context,
         entity,
-        entityId: "task",
+        entityId: taskId("task"),
         next: record("next", 2),
         diagnostics: [event("diagnostic", 2)],
       }),
@@ -188,7 +291,7 @@ describe("Datastore generated Entity records", () => {
       commits.commit({
         context: differentSource.context,
         entity: differentSource,
-        entityId: "task",
+        entityId: taskId("task"),
         next: record("current", 1),
       } as never),
     ).rejects.toThrow("another Entity source or tenant");
@@ -196,7 +299,7 @@ describe("Datastore generated Entity records", () => {
       commits.commit({
         context: differentTenancy.context,
         entity: differentTenancy,
-        entityId: "task",
+        entityId: taskId("task"),
         next: record("current", 1),
       }),
     ).rejects.toThrow("another Entity source or tenant");
@@ -210,15 +313,18 @@ describe("Datastore generated Entity records", () => {
       create(EventSchema, { id: create(EventIdSchema, { value: "other" }) }),
     );
 
-    await expect(storage.events.backward("task", 1)).resolves.toEqual([]);
+    await expect(storage.events.backward(taskId("task"), 1)).resolves.toEqual([]);
   });
 
   it("rejects a current record whose ID cannot be unpacked", async () => {
     const storage = factory(new HistoryDatastoreBackend()).createEntityStorage(input());
-    const missing = create(EntityRecordSchema, { state: pack("current"), version: { number: 1 } });
+    const missing = create(EntityRecordSchema, {
+      state: packState("current"),
+      version: { number: 1 },
+    });
     const invalid = create(EntityRecordSchema, {
       entityId: create(AnySchema, { typeUrl: "type.spine.test/Other", value: new Uint8Array() }),
-      state: pack("current"),
+      state: packState("current"),
       version: { number: 1 },
     });
 
@@ -233,7 +339,7 @@ describe("Datastore generated Entity records", () => {
       commits.commit({
         context: entity.context,
         entity,
-        entityId: "task",
+        entityId: taskId("task"),
         next: invalid,
       }),
     ).rejects.toThrow("does not match");
@@ -241,7 +347,7 @@ describe("Datastore generated Entity records", () => {
       commits.commit({
         context: entity.context,
         entity,
-        entityId: "task",
+        entityId: taskId("task"),
         next: missing,
       }),
     ).rejects.toThrow("does not match");
@@ -264,7 +370,7 @@ describe("Datastore generated Entity records", () => {
 
     expect(entries).toHaveLength(1);
     expect(entries[0]?.columns.get("state_type")).toBe(
-      `type.googleapis.com/${StringValueSchema.typeName}`,
+      `type.spine.examples.todo/${TaskSchema.typeName}`,
     );
   });
 
@@ -272,7 +378,7 @@ describe("Datastore generated Entity records", () => {
     const backend = new HistoryDatastoreBackend();
     const store = DatastoreStorageFactory.newBuilder()
       .setClient(backend.client() as never)
-      .organizeRecords(StringValueSchema, EntityRecordSchema, { kind: "CurrentTasks" })
+      .organizeRecords(TaskSchema, EntityRecordSchema, { kind: "CurrentTasks" })
       .build();
     await store.createEntityStorage(input()).current.write(record("one", 1));
     expect(
@@ -287,46 +393,46 @@ describe("Datastore generated Entity records", () => {
     await storage.states.append(record("one", 1));
     await storage.states.append(record("two", 2));
     await expect(storage.states.append(record("changed", 2))).rejects.toThrow("divergent");
-    await expect(storage.states.backward("task", 1)).resolves.toMatchObject([
+    await expect(storage.states.backward(taskId("task"), 1)).resolves.toMatchObject([
       { version: { number: 2 } },
     ]);
     await expect(
-      storage.states.stateAt("task", create(TimestampSchema, { seconds: 1n })),
-    ).resolves.toMatchObject({ value: "one" });
-    await storage.states.trim("task", 1);
-    await expect(storage.states.backward("task", 2)).resolves.toHaveLength(1);
+      storage.states.stateAt(taskId("task"), create(TimestampSchema, { seconds: 1n })),
+    ).resolves.toMatchObject({ title: "one" });
+    await storage.states.trim(taskId("task"), 1);
+    await expect(storage.states.backward(taskId("task"), 2)).resolves.toHaveLength(1);
     await storage.states.truncate(create(TimestampSchema, { seconds: 3n }));
-    await expect(storage.states.backward("task", 1)).resolves.toEqual([]);
+    await expect(storage.states.backward(taskId("task"), 1)).resolves.toEqual([]);
   });
 
   it("compares Timestamp nanos when selecting and truncating retained states", async () => {
     const storage = factory(new HistoryDatastoreBackend()).createEntityStorage(input());
     const early = create(EntityRecordSchema, {
-      entityId: pack("task"),
-      state: pack("early"),
+      entityId: packId("task"),
+      state: packState("early"),
       version: { number: 1, timestamp: create(TimestampSchema, { seconds: 4n, nanos: 100 }) },
     });
     const late = create(EntityRecordSchema, {
-      entityId: pack("task"),
-      state: pack("late"),
+      entityId: packId("task"),
+      state: packState("late"),
       version: { number: 2, timestamp: create(TimestampSchema, { seconds: 4n, nanos: 900 }) },
     });
     await storage.states.append(early);
     await storage.states.append(late);
 
     await expect(
-      storage.states.stateAt("task", create(TimestampSchema, { seconds: 4n, nanos: 500 })),
-    ).resolves.toMatchObject({ value: "early" });
+      storage.states.stateAt(taskId("task"), create(TimestampSchema, { seconds: 4n, nanos: 500 })),
+    ).resolves.toMatchObject({ title: "early" });
     await storage.states.truncate(create(TimestampSchema, { seconds: 4n, nanos: 500 }));
-    await expect(storage.states.backward("task", 2)).resolves.toHaveLength(1);
+    await expect(storage.states.backward(taskId("task"), 2)).resolves.toHaveLength(1);
   });
 
   it("selects the state at an exact nanosecond and rejects invalid history retention", async () => {
     const storage = factory(new HistoryDatastoreBackend()).createEntityStorage(input());
     await storage.states.append(
       create(EntityRecordSchema, {
-        entityId: pack("task"),
-        state: pack("exact"),
+        entityId: packId("task"),
+        state: packState("exact"),
         version: {
           number: 1,
           timestamp: create(TimestampSchema, { seconds: 4n, nanos: 500 }),
@@ -335,22 +441,26 @@ describe("Datastore generated Entity records", () => {
     );
 
     await expect(
-      storage.states.stateAt("task", create(TimestampSchema, { seconds: 4n, nanos: 500 })),
-    ).resolves.toMatchObject({ value: "exact" });
-    await expect(storage.states.backward("task", 0)).rejects.toThrow("positive safe integer");
-    await expect(storage.states.trim("task", -1)).rejects.toThrow("non-negative safe integer");
+      storage.states.stateAt(taskId("task"), create(TimestampSchema, { seconds: 4n, nanos: 500 })),
+    ).resolves.toMatchObject({ title: "exact" });
+    await expect(storage.states.backward(taskId("task"), 0)).rejects.toThrow(
+      "positive safe integer",
+    );
+    await expect(storage.states.trim(taskId("task"), -1)).rejects.toThrow(
+      "non-negative safe integer",
+    );
   });
 
   it("reads an unversioned retained state at version zero without duplicating it", async () => {
     const storage = factory(new HistoryDatastoreBackend()).createEntityStorage(input());
     const unversioned = create(EntityRecordSchema, {
-      entityId: pack("task"),
-      state: pack("initial"),
+      entityId: packId("task"),
+      state: packState("initial"),
     });
     await storage.states.append(unversioned);
     await storage.states.append(unversioned);
 
-    await expect(storage.states.backward("task", 1, 0n)).resolves.toHaveLength(1);
+    await expect(storage.states.backward(taskId("task"), 1, 0n)).resolves.toHaveLength(1);
   });
 
   it("reads retained states and diagnostic events across a 128-record keyset boundary", async () => {
@@ -361,8 +471,8 @@ describe("Datastore generated Entity records", () => {
       await storage.events.append(event(`event-${String(version)}`, version));
     }
 
-    const states = await storage.states.backward("task", 129);
-    const events = await storage.events.backward("task", 129);
+    const states = await storage.states.backward(taskId("task"), 129);
+    const events = await storage.events.backward(taskId("task"), 129);
 
     expect(states).toHaveLength(129);
     expect(states.at(0)).toMatchObject({ version: { number: 129 } });
@@ -379,7 +489,9 @@ describe("Datastore generated Entity records", () => {
       await storage.states.append(record(`state-${String(version)}`, version));
 
     backend.malformedQueryAt = 2;
-    await expect(storage.states.backward("task", 129)).rejects.toThrow("continuation is malformed");
+    await expect(storage.states.backward(taskId("task"), 129)).rejects.toThrow(
+      "continuation is malformed",
+    );
   });
 
   it("returns no state when the requested time precedes retained history", async () => {
@@ -387,7 +499,7 @@ describe("Datastore generated Entity records", () => {
     await storage.states.append(record("first", 2));
 
     await expect(
-      storage.states.stateAt("task", create(TimestampSchema, { seconds: 1n })),
+      storage.states.stateAt(taskId("task"), create(TimestampSchema, { seconds: 1n })),
     ).resolves.toBeUndefined();
   });
 
@@ -398,14 +510,14 @@ describe("Datastore generated Entity records", () => {
       await storage.events.append(event(`event-${String(version)}`, version));
     }
 
-    await storage.states.trim("task", 2);
+    await storage.states.trim(taskId("task"), 2);
     await storage.events.truncate(create(TimestampSchema, { seconds: 128n }));
 
-    await expect(storage.states.backward("task", 3)).resolves.toMatchObject([
+    await expect(storage.states.backward(taskId("task"), 3)).resolves.toMatchObject([
       { version: { number: 129 } },
       { version: { number: 128 } },
     ]);
-    await expect(storage.events.backward("task", 3, 129n)).resolves.toMatchObject([
+    await expect(storage.events.backward(taskId("task"), 3, 129n)).resolves.toMatchObject([
       { id: { value: "event-129" } },
       { id: { value: "event-128" } },
     ]);
@@ -415,7 +527,7 @@ describe("Datastore generated Entity records", () => {
     const backend = new HistoryDatastoreBackend();
     const client = backend.client();
     const stringifiers = new StringifierRegistry();
-    stringifiers.setTypeRegistry(new TypeRegistry([StringValueSchema]));
+    stringifiers.setTypeRegistry(new TypeRegistry([TaskIdSchema, TaskSchema, TaskCreatedSchema]));
     const storage = DatastoreStorageFactory.newBuilder()
       .setClient(client as never)
       .setStringifierRegistry(stringifiers)
@@ -425,7 +537,7 @@ describe("Datastore generated Entity records", () => {
       await storage.states.append(record(`state-${String(version)}`, version));
 
     const beforeRead = client.queryCalls;
-    await expect(storage.states.backward("task", 129)).resolves.toHaveLength(129);
+    await expect(storage.states.backward(taskId("task"), 129)).resolves.toHaveLength(129);
     expect(client.queryCalls - beforeRead).toBe(2);
     expect(client.queryLimits.slice(-2)).toEqual([128, 1]);
     expect(
@@ -436,8 +548,8 @@ describe("Datastore generated Entity records", () => {
         ),
     ).toBe(true);
 
-    await storage.states.trim("task", 17);
-    await expect(storage.states.backward("task", 129)).resolves.toHaveLength(17);
+    await storage.states.trim(taskId("task"), 17);
+    await expect(storage.states.backward(taskId("task"), 129)).resolves.toHaveLength(17);
     expect(client.queryLimits.every((limit) => limit <= 128)).toBe(true);
     expect(client.deleteCalls).toBeGreaterThan(0);
   });
@@ -456,11 +568,11 @@ describe("Datastore generated Entity records", () => {
     backend.failDeleteAt = undefined;
     await storage.events.truncate(create(TimestampSchema, { seconds: 2_000n }));
 
-    await expect(storage.events.backward("task", 1)).resolves.toEqual([]);
+    await expect(storage.events.backward(taskId("task"), 1)).resolves.toEqual([]);
     expect(client.queryLimits.every((limit) => limit <= 128)).toBe(true);
   }, 30_000);
 
-  it("commits generated families atomically and converges an identical retry", async () => {
+  it("writes generated families independently and converges an identical retry", async () => {
     const backend = new HistoryDatastoreBackend();
     const store = factory(backend);
     const entity = input();
@@ -468,7 +580,7 @@ describe("Datastore generated Entity records", () => {
     const mutation = {
       context: entity.context,
       entity,
-      entityId: "task",
+      entityId: taskId("task"),
       next: record("one", 1),
       states: [record("one", 1)],
       diagnostics: [event("diagnostic", 1)],
@@ -477,6 +589,74 @@ describe("Datastore generated Entity records", () => {
     await expect(commit.commit(mutation)).resolves.toBeUndefined();
     await expect(commit.commit(mutation)).resolves.toBeUndefined();
     expect(backend.entities).toHaveLength(4);
+  });
+
+  it("retains completed Task state history when the next record write fails", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const client = backend.client();
+    const original = client.transaction.bind(client);
+    client.transaction = () => {
+      const transaction = original();
+      if (client.transactionCalls === 2)
+        transaction.commit = () => Promise.reject(new Error("later record failed"));
+      return transaction;
+    };
+    const stringifiers = new StringifierRegistry();
+    stringifiers.setTypeRegistry(new TypeRegistry([TaskIdSchema, TaskSchema, TaskCreatedSchema]));
+    const store = DatastoreStorageFactory.newBuilder()
+      .setClient(client as never)
+      .setStringifierRegistry(stringifiers)
+      .build();
+    const entity = input();
+    const commit = EntityCommitStorageFactories.create(store, entity);
+    await expect(
+      commit.commit({
+        context: entity.context,
+        entity,
+        entityId: taskId("task"),
+        next: record("next", 1),
+        states: [record("next", 1)],
+        diagnostics: [event("diagnostic", 1)],
+      }),
+    ).rejects.toThrow();
+    expect(backend.entities).toHaveLength(1);
+    const records = store.createEntityStorage(entity);
+    await expect(records.current.read(taskId("task"))).resolves.toBeUndefined();
+  });
+
+  it("reuses captured Task bytes when a completed current write reports an abort", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const client = backend.client();
+    const originalSave = client.save.bind(client);
+    let ambiguous = true;
+    client.save = async (input) => {
+      const saved = await originalSave(input);
+      if (ambiguous) {
+        ambiguous = false;
+        throw Object.assign(new Error("completed write reported aborted"), { code: 10 });
+      }
+      return saved;
+    };
+    const stringifiers = new StringifierRegistry();
+    stringifiers.setTypeRegistry(new TypeRegistry([TaskIdSchema, TaskSchema, TaskCreatedSchema]));
+    const store = DatastoreStorageFactory.newBuilder()
+      .setClient(client as never)
+      .setStringifierRegistry(stringifiers)
+      .build();
+    const entity = input();
+    const next = record("captured", 1);
+    const commit = EntityCommitStorageFactories.create(store, entity);
+    const pending = commit.commit({
+      context: entity.context,
+      entity,
+      entityId: taskId("task"),
+      next,
+    });
+    next.state = packState("mutated");
+    await expect(pending).resolves.toBeUndefined();
+    const stored = await store.createEntityStorage(entity).current.read(taskId("task"));
+    expect(fromBinary(TaskSchema, stored?.state?.value ?? new Uint8Array()).title).toBe("captured");
+    expect(client.saveCalls).toBe(1);
   });
 
   it("rejects a divergent immutable history row inside an Entity commit", async () => {
@@ -489,7 +669,7 @@ describe("Datastore generated Entity records", () => {
     await commits.commit({
       context: entity.context,
       entity,
-      entityId: "task",
+      entityId: taskId("task"),
       next: current,
       states: [record("retained", 1)],
     });
@@ -498,7 +678,7 @@ describe("Datastore generated Entity records", () => {
       commits.commit({
         context: entity.context,
         entity,
-        entityId: "task",
+        entityId: taskId("task"),
         next: current,
         states: [record("changed", 1)],
       }),
@@ -510,125 +690,19 @@ describe("Datastore generated Entity records", () => {
     await storage.events.append(
       create(EventSchema, {
         id: create(EventIdSchema, { value: "unversioned" }),
-        context: { producerId: pack("task") },
+        context: { producerId: packId("task") },
       }),
     );
     await storage.events.append(
       create(EventSchema, {
         id: create(EventIdSchema, { value: "unversioned-second" }),
-        context: { producerId: pack("task") },
+        context: { producerId: packId("task") },
       }),
     );
 
-    await expect(storage.events.backward("task", 2, 0n)).resolves.toHaveLength(2);
+    await expect(storage.events.backward(taskId("task"), 2, 0n)).resolves.toHaveLength(2);
     await storage.events.truncate(create(TimestampSchema, { seconds: 1n }));
-    await expect(storage.events.backward("task", 1)).resolves.toEqual([]);
-  });
-
-  it("replaces current state and rolls back an unapplied provider failure", async () => {
-    const backend = new HistoryDatastoreBackend();
-    const client = backend.client();
-    const store = DatastoreStorageFactory.newBuilder()
-      .setClient(client as never)
-      .build();
-    const entity = input();
-    const commit = EntityCommitStorageFactories.create(store, entity);
-    await commit.commit({
-      context: entity.context,
-      entity,
-      entityId: "task",
-      next: record("one", 1),
-    });
-    await expect(
-      commit.commit({
-        context: entity.context,
-        entity,
-        entityId: "task",
-        next: record("two", 2),
-      }),
-    ).resolves.toBeUndefined();
-    const original = client.transaction.bind(client);
-    client.transaction = () => {
-      const transaction = original();
-      transaction.commit = () => Promise.reject(new Error("provider unavailable"));
-      return transaction;
-    };
-    await expect(
-      commit.commit({
-        context: entity.context,
-        entity,
-        entityId: "task",
-        next: record("two", 2),
-      }),
-    ).rejects.toThrow("Datastore Entity transaction failed");
-    expect(await store.createEntityStorage(entity).current.read("task")).toMatchObject({
-      version: { number: 2 },
-    });
-  });
-
-  it("rejects a 501-row commit before starting a transaction", async () => {
-    const backend = new HistoryDatastoreBackend();
-    const store = factory(backend);
-    const entity = input();
-    await expect(
-      EntityCommitStorageFactories.create(store, entity).commit({
-        context: entity.context,
-        entity,
-        entityId: "task",
-        next: record("one", 1),
-        events: Array.from({ length: 500 }, (_, index) => event(`event-${String(index)}`, 1)),
-      }),
-    ).rejects.toThrow("500-mutation");
-    expect(backend.client().transactionCalls).toBe(0);
-  });
-
-  it("accepts 25 distinct groups when every other limit fits", async () => {
-    const backend = new HistoryDatastoreBackend();
-    const client = backend.client();
-    const entity = input();
-    const store = DatastoreStorageFactory.newBuilder()
-      .setClient(client as never)
-      .build();
-    const events = Array.from({ length: 24 }, (_, index) => event(`event-${String(index)}`, 1));
-    await expect(
-      EntityCommitStorageFactories.create(store, entity).commit({
-        context: entity.context,
-        entity,
-        entityId: "task",
-        next: record("one", 1),
-        events,
-      }),
-    ).resolves.toBeUndefined();
-    expect(backend.maxTransactionGroups).toBe(25);
-  });
-
-  it("rejects 26 groups and a payload over 9 MiB before starting a transaction", async () => {
-    const backend = new HistoryDatastoreBackend();
-    const client = backend.client();
-    const entity = input();
-    const store = DatastoreStorageFactory.newBuilder()
-      .setClient(client as never)
-      .build();
-    const commit = EntityCommitStorageFactories.create(store, entity);
-    await expect(
-      commit.commit({
-        context: entity.context,
-        entity,
-        entityId: "task",
-        next: record("one", 1),
-        events: Array.from({ length: 25 }, (_, index) => event(`event-${String(index)}`, 1)),
-      }),
-    ).rejects.toThrow("25 entity-group");
-    await expect(
-      commit.commit({
-        context: entity.context,
-        entity,
-        entityId: "task",
-        next: record("one", 1),
-        events: [largeEvent()],
-      }),
-    ).rejects.toThrow("payload");
-    expect(client.transactionCalls).toBe(0);
+    await expect(storage.events.backward(taskId("task"), 1)).resolves.toEqual([]);
   });
 
   it("rejects empty and duplicate delivery IDs before a transaction", async () => {
@@ -643,7 +717,7 @@ describe("Datastore generated Entity records", () => {
       commit.commit({
         context: entity.context,
         entity,
-        entityId: "task",
+        entityId: taskId("task"),
         next: record("one", 1),
         events: [event("", 1)],
       }),
@@ -652,63 +726,12 @@ describe("Datastore generated Entity records", () => {
       commit.commit({
         context: entity.context,
         entity,
-        entityId: "task",
+        entityId: taskId("task"),
         next: record("one", 1),
         events: [event("same", 1), event("same", 1)],
       }),
     ).rejects.toThrow("unique");
     expect(client.transactionCalls).toBe(0);
-  });
-
-  it("rolls back failed reads and commits, and retries only three aborted attempts", async () => {
-    const backend = new HistoryDatastoreBackend();
-    const client = backend.client();
-    const entity = input();
-    const store = DatastoreStorageFactory.newBuilder()
-      .setClient(client as never)
-      .build();
-    const commit = EntityCommitStorageFactories.create(store, entity);
-    const mutation = { context: entity.context, entity, entityId: "task", next: record("one", 1) };
-    backend.failTransactionRead = new Error("read failed");
-    await expect(commit.commit(mutation)).rejects.toThrow("Datastore Entity transaction failed");
-    expect(backend.rollbacks).toBe(1);
-    backend.failTransactionRead = undefined;
-    backend.failTransactionCommit = new Error("commit failed");
-    await expect(commit.commit(mutation)).rejects.toThrow("Datastore Entity transaction failed");
-    expect(backend.entities).toHaveLength(0);
-    backend.failTransactionCommit = undefined;
-    backend.abortedTransactions = 2;
-    await expect(commit.commit(mutation)).resolves.toBeUndefined();
-    expect(client.transactionCalls).toBe(5);
-    backend.abortedTransactions = 3;
-    await expect(commit.commit({ ...mutation, next: record("two", 2) })).rejects.toThrow(
-      "Datastore Entity transaction failed",
-    );
-    expect(client.transactionCalls).toBe(8);
-  });
-
-  it("preserves an operation failure when the compensating rollback fails", async () => {
-    const backend = new HistoryDatastoreBackend();
-    const client = backend.client();
-    const entity = input();
-    const commits = EntityCommitStorageFactories.create(
-      DatastoreStorageFactory.newBuilder()
-        .setClient(client as never)
-        .build(),
-      entity,
-    );
-    backend.failTransactionRead = new Error("provider read failed");
-    backend.failRollback = new Error("rollback failed");
-
-    await expect(
-      commits.commit({
-        context: entity.context,
-        entity,
-        entityId: "task",
-        next: record("current", 1),
-      }),
-    ).rejects.toThrow("Datastore Entity transaction failed");
-    expect(backend.rollbacks).toBe(1);
   });
 
   it("closes Entity and commit handles idempotently", async () => {
@@ -719,9 +742,9 @@ describe("Datastore generated Entity records", () => {
     handle.close();
     handle.close();
     expect(handle.isOpen()).toBe(false);
-    await expect(handle.current.read("task")).rejects.toThrow("closed");
-    await expect(handle.states.backward("task", 1)).rejects.toThrow("closed");
-    await expect(handle.events.backward("task", 1)).rejects.toThrow("closed");
+    await expect(handle.current.read(taskId("task"))).rejects.toThrow("closed");
+    await expect(handle.states.backward(taskId("task"), 1)).rejects.toThrow("closed");
+    await expect(handle.events.backward(taskId("task"), 1)).rejects.toThrow("closed");
 
     const commits = EntityCommitStorageFactories.create(store, entity);
     commits.close();
@@ -730,19 +753,9 @@ describe("Datastore generated Entity records", () => {
       commits.commit({
         context: entity.context,
         entity,
-        entityId: "task",
+        entityId: taskId("task"),
         next: record("current", 1),
       }),
     ).rejects.toThrow("closed");
   });
 });
-
-function largeEvent() {
-  return create(EventSchema, {
-    id: create(EventIdSchema, { value: "large" }),
-    message: create(AnySchema, {
-      typeUrl: "type.spine.test/Large",
-      value: new Uint8Array(10 * 1024 * 1024),
-    }),
-  });
-}

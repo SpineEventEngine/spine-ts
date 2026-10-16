@@ -33,13 +33,44 @@ interface ProducedSignalObserver {
  * @internal
  */
 export class SignalPublisher {
+  /**
+   * Bus for produced Commands.
+   */
   readonly #commandBus: CommandBus;
+
+  /**
+   * Bus for produced and stored Events.
+   */
   readonly #eventBus: EventBus;
+
+  /**
+   * Bus for System Events.
+   */
   readonly #systemEventBus: EventBus;
+
+  /**
+   * Context name included in safe diagnostics.
+   */
   readonly #contextName: string;
+
+  /**
+   * Admitted publication work awaited by drain.
+   */
   readonly #inFlight = new Set<Promise<void>>();
+
+  /**
+   * Test observers of produced signals.
+   */
   readonly #observers = new Set<ProducedSignalObserver>();
+
+  /**
+   * Optional internal error logger.
+   */
   #logger: ILogLayer | undefined;
+
+  /**
+   * Current publication lifecycle phase.
+   */
   #state: PublisherState = "open";
 
   /**
@@ -98,65 +129,38 @@ export class SignalPublisher {
   }
 
   /**
-   * Publishes one committed Aggregate Event and records its admission.
-   *
-   * Publishes the committed Event through stored-event handling without treating stored replay as
-   * newly produced output.
-   *
-   * @internal
-   * @param event The committed Aggregate Event envelope.
-   * @returns A promise that settles after stored dispatch handling is contained.
+   * Dispatches a committed Entity Event once after persistence.
+   * @param event The committed Event envelope.
+   * @returns Completion after dispatch or contained failure.
    */
   publishCommittedEvent(event: Event): Promise<void> {
-    return this.#publish("event", event, () => eventBusAccess.postStored(this.#eventBus, event));
+    const snapshot = clone(EventSchema, event);
+    return this.#publish("event", snapshot, () =>
+      eventBusAccess.postStored(this.#eventBus, snapshot),
+    );
   }
 
   /**
-   * Publishes a committed Aggregate reactor Event as stored follow-up work and records it.
-   *
-   * @internal
-   * @param event The committed follow-up Event envelope.
-   * @returns A promise that settles after stored follow-up dispatch is contained.
+   * Dispatches a committed reactor or Process Manager Event once as follow-up work.
+   * @param event The committed Event envelope.
+   * @returns Completion after dispatch or contained failure.
    */
   publishReactorEvent(event: Event): Promise<void> {
-    return this.#publish("event", event, () =>
-      eventBusAccess.postStoredFollowUp(this.#eventBus, event),
+    const snapshot = clone(EventSchema, event);
+    return this.#publish("event", snapshot, () =>
+      eventBusAccess.postStoredFollowUp(this.#eventBus, snapshot),
     );
   }
 
   /**
-   * Publishes a produced System Event for detached handling.
-   *
+   * Dispatches a produced System Event once, persisting it when configured.
    * @param event The produced System Event envelope.
-   * @returns A promise that settles after the Event is handled or its failure is contained.
+   * @returns Completion after dispatch or contained failure.
    */
   publishSystemEvent(event: Event): Promise<void> {
-    return this.#publish("system-event", event, () =>
-      eventBusAccess.postFollowUp(this.#systemEventBus, event),
-    );
-  }
-
-  /**
-   * Publishes a stored Event for detached handling.
-   *
-   * @param event The stored Event envelope.
-   * @returns A promise that settles after the Event is handled or its failure is contained.
-   */
-  redispatchStored(event: Event): Promise<void> {
-    return this.#publish("stored-event", event, () =>
-      eventBusAccess.postStored(this.#eventBus, event),
-    );
-  }
-
-  /**
-   * Publishes a stored Event after current bus work for detached handling.
-   *
-   * @param event The stored Event envelope.
-   * @returns A promise that settles after the Event is handled or its failure is contained.
-   */
-  redispatchStoredFollowUp(event: Event): Promise<void> {
-    return this.#publish("stored-event", event, () =>
-      eventBusAccess.postStoredFollowUp(this.#eventBus, event),
+    const snapshot = clone(EventSchema, event);
+    return this.#publish("system-event", snapshot, () =>
+      eventBusAccess.postFollowUp(this.#systemEventBus, snapshot),
     );
   }
 
@@ -170,15 +174,30 @@ export class SignalPublisher {
   reportFailure(kind: PublicationKind, signal: Command | Event | undefined, error: unknown): void {
     const logger = this.#logger;
     if (logger === undefined) return;
-    emitServerError(logger, "Produced signal handling failed.", {
-      context: this.#contextName,
-      kind,
-      signalId: SignalPublisher.signalId(signal),
-      signalType: signal?.message?.typeUrl ?? "unknown",
-      operation: "signal_publisher.handle",
-      reasonCode: "handled_failure",
-    });
-    void error;
+    const event = kind !== "command";
+    try {
+      emitServerError(logger, "Produced signal handling failed.", {
+        contextName: this.#contextName,
+        ...(event
+          ? {
+              eventId: SignalPublisher.signalId(signal),
+              eventType: signal?.message?.typeUrl ?? "unknown",
+            }
+          : {
+              commandId: SignalPublisher.signalId(signal),
+              commandType: signal?.message?.typeUrl ?? "unknown",
+            }),
+        operation: "signal_publisher.handle",
+        reasonCode: "handled_failure",
+        errorName:
+          error instanceof Error &&
+          ["Error", "TypeError", "RangeError", "AggregateError"].includes(error.name)
+            ? error.name
+            : undefined,
+      });
+    } catch {
+      // Diagnostics cannot turn a contained publication failure into detached rejection.
+    }
   }
 
   /**
@@ -257,7 +276,10 @@ export class SignalPublisher {
     }
     this.#observe(kind, signal);
     const handled = Promise.resolve()
-      .then(publish)
+      .then(() => {
+        if (this.#state === "closed") throw new Error("SignalPublisher is closed.");
+        return publish();
+      })
       .catch((error: unknown) => {
         this.reportFailure(kind, signal, error);
       });

@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { clone, create, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { clone, create, equals, fromBinary, toBinary } from "@bufbuild/protobuf";
 import {
   Code,
   ConnectError,
@@ -76,13 +76,18 @@ const relayDefaults: Required<SubscriptionRelayLimits> = {
  */
 export class SubscriptionUpdateRelay implements AsyncIterable<SubscriptionUpdate> {
   readonly #limits: Required<SubscriptionRelayLimits>;
+
   readonly #queue: Uint8Array[] = [];
+
   readonly #waiters: {
     readonly resolve: (result: IteratorResult<SubscriptionUpdate>) => void;
     readonly reject: (reason: unknown) => void;
   }[] = [];
+
   #bytes = 0;
+
   #terminal: unknown;
+
   #closed = false;
 
   /**
@@ -223,6 +228,12 @@ export class SubscriptionUpdateRelay implements AsyncIterable<SubscriptionUpdate
  * Creates completed native-relay rejection values.
  */
 const NativeRelayValues = Object.freeze({
+  /**
+   * Returns a rejected update relay promise.
+   *
+   * @param reason The original failure reason.
+   * @returns A rejected relay promise.
+   */
   rejectedRelayPromise(reason: unknown): Promise<never> {
     return Promise.resolve().then(() => {
       throw reason;
@@ -310,11 +321,21 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
     for await (const update of createClient(SubscriptionService, this.#transport).activate(
       subscription,
       { signal },
-    ))
+    )) {
+      const topic = subscription.topic;
+      const updateTopic = update.subscription?.topic;
+      if (
+        update.subscription?.id?.value !== subscription.id?.value ||
+        topic === undefined ||
+        updateTopic === undefined ||
+        !equals(TopicSchema, updateTopic, topic)
+      )
+        throw new Error("Backend child update does not match its subscription.");
       await request.updates({
         kind: "subscription-update",
         bytes: toBinary(SubscriptionUpdateSchema, update),
       });
+    }
   }
 
   /**
@@ -487,6 +508,14 @@ export function createNativeGatewayServices(
  * Converts native Connect gateway inputs, responses, and errors.
  */
 const NativeGatewayValues = Object.freeze({
+  /**
+   * Resolves authenticated context for a public request.
+   *
+   * @param options Configuration for this transport operation.
+   * @param request The admitted or incoming request.
+   * @param context The authenticated or RPC context.
+   * @returns The trusted actor context.
+   */
   async resolveContext(
     options: NativeGatewayServicesOptions,
     request: Parameters<ServiceImpl<typeof AuthenticationService>["resolveContext"]>[0],
@@ -508,6 +537,14 @@ const NativeGatewayValues = Object.freeze({
     return fromBinary(AuthenticationService.method.resolveContext.output, result.value);
   },
 
+  /**
+   * Maps a forwarded Command result to the public response.
+   *
+   * @param options Configuration for this transport operation.
+   * @param request The admitted or incoming request.
+   * @param context The authenticated or RPC context.
+   * @returns The public Command response.
+   */
   async commandResponse(
     options: NativeGatewayServicesOptions,
     request: Command,
@@ -525,6 +562,14 @@ const NativeGatewayValues = Object.freeze({
     return fromBinary(CommandService.method.post.output, result.value);
   },
 
+  /**
+   * Maps a forwarded Query result to the public response.
+   *
+   * @param options Configuration for this transport operation.
+   * @param request The admitted or incoming request.
+   * @param context The authenticated or RPC context.
+   * @returns The public Query response.
+   */
   async queryResponse(
     options: NativeGatewayServicesOptions,
     request: Query,
@@ -542,6 +587,14 @@ const NativeGatewayValues = Object.freeze({
     return fromBinary(QueryService.method.read.output, result.value);
   },
 
+  /**
+   * Activates the authenticated subscription stream.
+   *
+   * @param options Configuration for this transport operation.
+   * @param request The admitted or incoming request.
+   * @param context The authenticated or RPC context.
+   * @returns Completion or stream of activation updates.
+   */
   activate(
     options: NativeGatewayServicesOptions,
     request: Subscription,
@@ -620,11 +673,23 @@ const NativeGatewayValues = Object.freeze({
     });
   },
 
+  /**
+   * Wraps a relay as an asynchronous update stream.
+   *
+   * @param relay The bounded update relay.
+   * @param onClose Callback invoked when the stream closes.
+   * @returns An asynchronous stream of subscription updates.
+   */
   activationStream(
     relay: SubscriptionUpdateRelay,
     onClose: (reason: unknown) => void,
   ): AsyncIterable<SubscriptionUpdate> {
     return {
+      /**
+       * Returns the public subscription update iterator.
+       *
+       * @returns The public update iterator.
+       */
       [Symbol.asyncIterator](): AsyncIterator<SubscriptionUpdate> {
         const iterator = relay[Symbol.asyncIterator]();
         return {
@@ -642,6 +707,15 @@ const NativeGatewayValues = Object.freeze({
     };
   },
 
+  /**
+   * Builds a gateway request from the authenticated RPC.
+   *
+   * @param method The subscription RPC method.
+   * @param bytes Serialized subscription request bytes.
+   * @param context The authenticated or RPC context.
+   * @param requests The authenticated request handler.
+   * @returns The gateway request.
+   */
   subscriptionRequest(
     method: "Subscribe" | "Activate" | "Cancel",
     bytes: Uint8Array,
@@ -660,6 +734,12 @@ const NativeGatewayValues = Object.freeze({
     };
   },
 
+  /**
+   * Maps a failed unary forwarding result to a Connect error.
+   *
+   * @param result The gateway operation result.
+   * @returns The unary Connect error.
+   */
   unaryError(result: Extract<UnaryGatewayResult, { readonly kind: "rejected" }>): ConnectError {
     const code =
       result.reason === "unauthenticated"
@@ -674,6 +754,12 @@ const NativeGatewayValues = Object.freeze({
     return new ConnectError(`gateway rejected ${result.reason}`, code);
   },
 
+  /**
+   * Maps a rejected gateway result to a Connect error.
+   *
+   * @param result The gateway operation result.
+   * @returns The public Connect error.
+   */
   gatewayResultError(result: SubscriptionGatewayResult): ConnectError {
     if (result.kind !== "rejected")
       return new ConnectError(
@@ -695,6 +781,12 @@ const NativeGatewayValues = Object.freeze({
     return new ConnectError(`gateway rejected ${result.reason}`, code);
   },
 
+  /**
+   * Validates and fills the update relay limits.
+   *
+   * @param input Caller-supplied limits.
+   * @returns Validated relay limits.
+   */
   relayLimits(input: SubscriptionRelayLimits): Required<SubscriptionRelayLimits> {
     const limits = { ...relayDefaults, ...input };
     for (const limit of Object.values(limits))
@@ -703,6 +795,12 @@ const NativeGatewayValues = Object.freeze({
     return limits;
   },
 
+  /**
+   * Converts an unknown terminal failure to a Connect error.
+   *
+   * @param reason The original failure reason.
+   * @returns The terminal Connect error.
+   */
   terminalError(reason: unknown): Error {
     return reason instanceof Error
       ? reason

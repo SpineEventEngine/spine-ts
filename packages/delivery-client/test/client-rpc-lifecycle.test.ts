@@ -156,6 +156,39 @@ describe("DeliveryClient RPC and lifecycle", () => {
     ).rejects.toBeInstanceOf(DeliveryProtocolError);
   });
 
+  it("normalizes an invalid peer timestamp with the original decoding cause", async () => {
+    const fake = transport();
+    const client = DeliveryClient.usingTransport(fake.transport);
+    const invalid = create(InboxMessageSchema, {
+      ...message("command"),
+      whenReceived: create(TimestampSchema, { seconds: 253_402_300_800n }),
+    });
+    fake.reply(create(PageOfMessagesSchema, { message: [invalid] }));
+
+    let failure: unknown;
+    try {
+      await client.readPage(ShardIndex.single());
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toBeInstanceOf(DeliveryProtocolError);
+    expect((failure as DeliveryProtocolError).cause).toBeInstanceOf(TypeError);
+    expect(fake.unary).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects invalid time, shard, and page bounds before transport", async () => {
+    const fake = transport();
+    const client = DeliveryClient.usingTransport(fake.transport);
+    await expect(client.readPage(ShardIndex.single(), { pageSize: 0 })).rejects.toThrow();
+    await expect(client.readPage({} as ShardIndex)).rejects.toThrow();
+    await expect(
+      client.readPage(ShardIndex.single(), {
+        sinceWhen: create(TimestampSchema, { seconds: 253_402_300_800n }),
+      }),
+    ).rejects.toThrow();
+    expect(fake.unary).not.toHaveBeenCalled();
+  });
+
   it("rejects malformed wire messages with a sanitized protocol error", async () => {
     const fake = transport();
     const client = DeliveryClient.usingTransport(fake.transport);

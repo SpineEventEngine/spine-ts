@@ -43,9 +43,11 @@ import {
   InMemoryRecordStorage,
   type RecordSpec,
   type RecordStorage,
+  type StorageGroup,
   type StorageContext,
   StorageFactory,
 } from "@spine-event-engine/storage";
+import { InboxMessageSchema } from "@spine-event-engine/proto/delivery";
 import type { EntityRecordStorage } from "@spine-event-engine/storage/provider";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
@@ -320,15 +322,31 @@ class ReplayTaskProcessManager extends ProcessManager<string, typeof ProcessMana
   }
 }
 
-const pendingFreshRecovery = new Error("leave dynamic tenant row for fresh recovery");
+const inboxReadFailure = new Error("Inbox read unavailable before dispatch");
 
-class FailingRecoveryProcessManager extends ProcessManager<
-  string,
-  typeof ProcessManagerStateSchema
-> {
-  assignTask(command: AssignReviewTask): void {
-    void command;
-    throw pendingFreshRecovery;
+class FailingInboxReadStorageFactory extends InMemoryStorageFactory {
+  #failNextInboxQuery = false;
+
+  failNextInboxQuery(): void {
+    this.#failNextInboxQuery = true;
+  }
+
+  protected override onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+    group?: StorageGroup,
+  ): RecordStorage<I, R> {
+    const storage = super.onCreateRecordStorage(context, recordSpec, group);
+    if (recordSpec.sourceType.typeName !== InboxMessageSchema.typeName) return storage;
+    const queryEntries = storage.queryEntries.bind(storage);
+    vi.spyOn(storage, "queryEntries").mockImplementation((query) => {
+      if (this.#failNextInboxQuery) {
+        this.#failNextInboxQuery = false;
+        return Promise.reject(inboxReadFailure);
+      }
+      return queryEntries(query);
+    });
+    return storage;
   }
 }
 
@@ -1391,12 +1409,12 @@ describe("BoundedContext assembly", () => {
     }
   });
 
-  it("marks a failed dynamic-tenant row delivered without fresh-runtime recovery", async () => {
-    const storageFactory = new InMemoryStorageFactory();
+  it("retains a dynamic-tenant row after an Inbox read fault for fresh-runtime recovery", async () => {
+    const storageFactory = new FailingInboxReadStorageFactory();
     const tenantId = tenant("tenant-first-row");
     const contextName = "FreshRecoveryTasks";
-    const failingRegistry = createGeneratedRegistryFixture([
-      processManagerRegistry(FailingRecoveryProcessManager),
+    const firstRegistry = createGeneratedRegistryFixture([
+      processManagerRegistry(FreshRecoveryProcessManager),
     ]);
     const recoveryRegistry = createGeneratedRegistryFixture([
       processManagerRegistry(FreshRecoveryProcessManager),
@@ -1407,30 +1425,34 @@ describe("BoundedContext assembly", () => {
     try {
       first = await BoundedContext.multitenant(contextName)
         .withStorageFactory(storageFactory)
-        .withGeneratedRegistryRoot(failingRegistry.root)
-        .add(FailingRecoveryProcessManager)
+        .withGeneratedRegistryRoot(firstRegistry.root)
+        .add(FreshRecoveryProcessManager)
         .addEventDispatcher(createEventDispatcher([ReviewTaskAssignedSchema], () => undefined))
         .buildAsync();
 
+      storageFactory.failNextInboxQuery();
       await expect(
         first
           .commandBus()
           .post(createAggregateCommand("dynamic-command", "dynamic-task", "tenant-first-row")),
-      ).resolves.toBeUndefined();
+      ).rejects.toBe(inboxReadFailure);
       const firstDescriptor = internalDeliveryDescriptor(first);
       const durable = new Delivery({
         context: firstDescriptor.storageContext({ tenantId }),
         storageFactory,
       });
-      const delivered = await durable.inbox.read(ShardIndex.single(), {
-        statuses: ["DELIVERED"],
+      const pending = await durable.inbox.read(ShardIndex.single(), {
+        statuses: ["TO_DELIVER"],
       });
-      expect(delivered).toHaveLength(1);
-      expect(delivered[0]).toMatchObject({
+      expect(pending).toHaveLength(1);
+      expect(pending[0]).toMatchObject({
         inboxId: { targetId: Identifiers.pack("string", "dynamic-task") },
         signalId: "dynamic-command",
         version: 1n,
       });
+      await expect(
+        first.stand().read(ProcessManagerStateSchema, "dynamic-task", { tenantId }),
+      ).resolves.toBeUndefined();
       await first.close();
       first = undefined;
 
@@ -1449,26 +1471,27 @@ describe("BoundedContext assembly", () => {
       });
 
       expect(attachment.startup.scopes).toHaveLength(1);
+      await waitForCondition(
+        async () =>
+          (await recovered
+            ?.stand()
+            .read(ProcessManagerStateSchema, "dynamic-task", { tenantId })) !== undefined,
+        "fresh dynamic-tenant recovery",
+      );
+      await expect(
+        recovered.stand().read(ProcessManagerStateSchema, "dynamic-task", { tenantId }),
+      ).resolves.toMatchObject({ queue: "Task Ready recovered" });
       await expect(
         new Delivery({
           context: descriptor.storageContext({ tenantId }),
           storageFactory,
         }).inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
-      ).resolves.toMatchObject([
-        {
-          inboxId: { targetId: Identifiers.pack("string", "dynamic-task") },
-          signalId: "dynamic-command",
-          version: 1n,
-        },
-      ]);
-      await expect(
-        recovered.stand().read(ProcessManagerStateSchema, "dynamic-task", { tenantId }),
-      ).resolves.toBeUndefined();
+      ).resolves.toHaveLength(1);
       await serverEnvironmentAccess.detach(ServerEnvironment.instance(), attachment);
     } finally {
       await first?.close();
       await recovered?.close();
-      removeGeneratedRegistry(failingRegistry);
+      removeGeneratedRegistry(firstRegistry);
       removeGeneratedRegistry(recoveryRegistry);
     }
   });
@@ -2440,6 +2463,30 @@ describe("BoundedContext assembly", () => {
     expect(storageFactory.storages.every((storage) => !storage.isOpen())).toBe(true);
   });
 
+  it("waits for an entered Stand close without imposing a context deadline", async () => {
+    vi.useFakeTimers();
+    const release = Promise.withResolvers<undefined>();
+    const closeStand = vi.spyOn(Stand.prototype, "close").mockImplementation(() => release.promise);
+    const context = BoundedContext.singleTenant("Tasks").build();
+    try {
+      const close = context.close();
+      await vi.advanceTimersByTimeAsync(5_001);
+      let settled = false;
+      void close
+        .finally(() => {
+          settled = true;
+        })
+        .catch(() => undefined);
+      await Promise.resolve();
+      expect(settled).toBe(false);
+      release.resolve(undefined);
+      await expect(close).resolves.toBeUndefined();
+    } finally {
+      closeStand.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it("closes Stand before the registry without an internal tenant-record storage", async () => {
     const order: string[] = [];
     const storageFactory = new OrderedStorageFactory(order);
@@ -3061,9 +3108,7 @@ function createEntityStateChangedEvent(schema: GenMessage<Message>, state: Messa
   });
 }
 
-function processManagerRegistry(
-  entityType: typeof FailingRecoveryProcessManager | typeof FreshRecoveryProcessManager,
-) {
+function processManagerRegistry(entityType: typeof FreshRecoveryProcessManager) {
   return {
     entityType,
     stateSchema: ProcessManagerStateSchema,

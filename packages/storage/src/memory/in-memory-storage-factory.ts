@@ -34,15 +34,28 @@ import {
   EntityCommitStorageFactories,
   type EntityCommitStorage,
 } from "../internal/entity-commit.js";
-import { DeliveryCleanupStorageFactories } from "../internal/delivery-cleanup.js";
-import { MemoryDeliveryCleanupStorage } from "./memory-delivery-cleanup.js";
 
 /**
  * In-memory factory for record storages and framework delegates such as the event store.
  */
 export class InMemoryStorageFactory extends StorageFactory implements TenantCatalogProvider {
+  /**
+   * Shared in-memory record and Entity backend.
+   */
   readonly #backend: InMemoryStorageBackend;
+
+  /**
+
+   * Opens Entity current and history records.
+
+   */
   readonly #entities: MemoryEntityStorageFactory;
+
+  /**
+
+   * Reports admitted in-memory tenant slices.
+
+   */
   readonly #catalog: MemoryTenantCatalog;
 
   /**
@@ -56,12 +69,6 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
     this.#catalog = new MemoryTenantCatalog(backend);
     EntityCommitStorageFactories.register(this, {
       createEntityCommitStorage: (input) => this.createEntityCommitStorage(input),
-    });
-    DeliveryCleanupStorageFactories.register(this, {
-      createDeliveryCleanupStorage: () =>
-        new MemoryDeliveryCleanupStorage((context, spec, group) =>
-          this.tenantRecords(context, spec, group),
-        ),
     });
   }
 
@@ -119,8 +126,10 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
   }
 
   /**
-   * Creates the provider-only atomic Entity commit seam used by repositories.
+   * Creates the provider-only ordered Entity commit seam used by repositories.
    *
+   * @typeParam I Entity identifier type.
+   * @typeParam S Entity state message type.
    * @param input Supplies the internal Entity storage configuration.
    * @returns The independently closeable in-memory commit handle.
    */
@@ -130,7 +139,6 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
     if (!this.isOpen()) throw new Error("StorageFactory is closed.");
     return new MemoryEntityCommitStorage(
       this.#entities,
-      this,
       (context, spec, group) => this.tenantRecords(context, spec, group),
       input as unknown as EntityStorageInput<unknown, Message>,
     );
@@ -139,6 +147,8 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
   /**
    * Creates an in-memory record storage.
    *
+   * @typeParam I Record identifier type.
+   * @typeParam R Stored record message type.
    * @param context The storage context.
    * @param recordSpec The record specification.
    * @param group Separates records that share a source type.
@@ -154,6 +164,16 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
     );
   }
 
+  /**
+   * Returns the tenant-scoped records for one family.
+   *
+   * @typeParam I Record identifier type.
+   * @typeParam R Stored record message type.
+   * @param context Selects the tenant boundary.
+   * @param recordSpec Defines the record family.
+   * @param group Selects an optional grouped family.
+   * @returns Tenant-scoped in-memory records.
+   */
   private tenantRecords<I, R extends Message>(
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,
@@ -171,11 +191,29 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
   }
 }
 
+/**
+
+ * Provides admitted tenant slices from an in-memory backend.
+
+ */
 class MemoryTenantCatalog implements TenantCatalog {
+  /**
+   * Whether this catalog accepts operations.
+   */
   #open = true;
 
+  /**
+   * Connects the catalog to its backend.
+   *
+   * @param backend Supplies admitted tenant slices.
+   */
   constructor(private readonly backend: InMemoryStorageBackend) {}
 
+  /**
+   * Returns all admitted tenant boundaries.
+   *
+   * @returns The admitted tenant boundaries.
+   */
   all(): Promise<readonly TenantBoundary[]> {
     return Promise.resolve().then(() => {
       this.requireOpen();
@@ -183,6 +221,12 @@ class MemoryTenantCatalog implements TenantCatalog {
     });
   }
 
+  /**
+   * Admits one complete tenant boundary.
+   *
+   * @param boundary Identifies the tenant to retain.
+   * @returns Completion after admission.
+   */
   keep(boundary: TenantBoundary): Promise<void> {
     return Promise.resolve().then(() => {
       this.requireOpen();
@@ -191,11 +235,21 @@ class MemoryTenantCatalog implements TenantCatalog {
     });
   }
 
+  /**
+   * Closes this catalog.
+   *
+   * @returns Completion after closing.
+   */
   close(): Promise<void> {
     this.#open = false;
     return Promise.resolve();
   }
 
+  /**
+
+   * Rejects catalog access after closing.
+
+   */
   private requireOpen(): void {
     if (!this.#open) throw new Error("In-memory tenant catalog is closed.");
   }

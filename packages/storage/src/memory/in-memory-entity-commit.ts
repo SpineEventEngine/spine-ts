@@ -12,38 +12,34 @@
  * the License.
  */
 
-import { clone, type Message } from "@bufbuild/protobuf";
+import { toBinary, type Message } from "@bufbuild/protobuf";
 import { EventSchema, type Event, type EventId } from "@spine-event-engine/proto";
-import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
-
-import { eventStoreAccess, eventStoreRecordSpec } from "../event/event-store.js";
+import type { EntityStateKey } from "@spine-event-engine/proto/generated/spine/server/entity/state_key_pb.js";
+import { eventStoreRecordSpec } from "../event/event-store.js";
 import { eventHistorySpec, stateHistorySpec } from "../entity/entity-history-record-spec.js";
+import {
+  EntityCommitSnapshots,
+  type EntityCommitInput,
+  type EntityCommitStorage,
+} from "../internal/entity-commit.js";
+import { TenantBoundary } from "../internal/tenancy.js";
 import type { EntityRecord } from "../entity/entity-record.js";
-import type { EntityCommitInput, EntityCommitStorage } from "../internal/entity-commit.js";
 import type { RecordSpec } from "../record/record-spec.js";
 import type { StorageGroup } from "../record/storage-group.js";
 import type { StorageContext } from "../storage/storage.js";
-import type { StorageFactory } from "../storage/storage-factory.js";
-import { TenantBoundary } from "../internal/tenancy.js";
 import {
-  InMemoryEntityStorage,
-  KeyedSerialQueue,
   MemoryEntityStorageFactory,
-  ENTITY_SCOPE_MUTATION_KEY,
-  type EntityBackend,
   type EntityStorageInput,
+  type InMemoryEntityStorage,
 } from "./in-memory-entity-history.js";
 import { InMemoryRecordStorage } from "./in-memory-record-storage.js";
 import { TenantRecords } from "./tenant-records.js";
 
 /**
- * Opens the in-memory tenant slice for a generated record family.
+ * Opens one tenant slice for a generated record family.
+ *
  * @typeParam I Record identifier type.
- * @typeParam R Record message type.
- * @param context Supplies the storage and tenant context.
- * @param spec Supplies the materialized record layout.
- * @param group Selects a grouped history family when present.
- * @returns The tenant record slice.
+ * @typeParam R Stored message type.
  */
 type OpenRecords = <I, R extends Message>(
   context: StorageContext,
@@ -52,362 +48,226 @@ type OpenRecords = <I, R extends Message>(
 ) => TenantRecords<I, R>;
 
 /**
- * Implements provider Entity commits for one shared in-memory backend.
+ * Handles opened for one ordered Entity mutation.
+ *
+ * @typeParam I Entity identifier type.
+ * @typeParam S Entity state type.
+ */
+type CommitHandles<I, S extends Message> = readonly [
+  InMemoryEntityStorage<I, S>,
+  InMemoryRecordStorage<EntityStateKey, EntityRecord> | undefined,
+  InMemoryRecordStorage<EventId, Event> | undefined,
+  InMemoryRecordStorage<EventId, Event> | undefined,
+];
+
+/**
+ * Writes in-memory Entity records in order and retains a completed prefix.
  */
 export class MemoryEntityCommitStorage implements EntityCommitStorage {
-  readonly #entities: MemoryEntityStorageFactory;
-
-  readonly #factory: StorageFactory;
-
-  readonly #openRecords: OpenRecords;
-
-  readonly #input: EntityStorageInput<unknown, Message>;
-
+  /**
+   * Tenant boundary selected by this handle.
+   */
   readonly #tenantKey: TenantBoundary["key"];
 
+  /**
+
+   * Whether this handle uses multitenant storage.
+
+   */
   readonly #multitenant: boolean;
 
+  /**
+
+   * Whether this handle accepts commits.
+
+   */
   #open = true;
 
   /**
-   * Creates a commit handle bound to one Entity source type.
+   * Creates one source- and tenant-bound commit handle.
    *
-   * @param entities Opens the matching current Entity storage.
-   * @param factory Provides the Event Store coordination lock.
-   * @param openRecords Opens exact generic-record backing slices.
-   * @param input Defines the Entity storage source type.
+   * @param entities Opens current Entity storage.
+   * @param openRecords Opens generated history and Event record slices.
+   * @param input Captures the Entity source and tenant boundary.
    */
   constructor(
-    entities: MemoryEntityStorageFactory,
-    factory: StorageFactory,
-    openRecords: OpenRecords,
-    input: EntityStorageInput<unknown, Message>,
+    private readonly entities: MemoryEntityStorageFactory,
+    private readonly openRecords: OpenRecords,
+    private readonly input: EntityStorageInput<unknown, Message>,
   ) {
-    this.#entities = entities;
-    this.#factory = factory;
-    this.#openRecords = openRecords;
-    this.#input = input;
     this.#tenantKey = TenantBoundary.of(input.context).key;
     this.#multitenant = input.context.multitenant;
   }
 
   /**
-   * Applies one fully preflighted in-memory Entity commit.
+   * Writes history, diagnostics, delivery Events, then current state.
    *
    * @typeParam I Entity identifier type.
    * @typeParam S Entity state type.
-   * @param input Defines the current record, retained histories, and delivery events.
-   * @returns Completion after the in-memory commit.
+   * @param input Supplies the proposed mutation.
+   * @returns Completion after every record has been stored.
    */
   commit<I, S extends Message>(input: EntityCommitInput<I, S>): Promise<void> {
-    this.#requireOpen();
-    this.#requireCompatible(input);
-    const tenant = TenantBoundary.of(input.context);
-    const context: StorageContext =
-      tenant.tenantId === undefined
-        ? { name: input.context.name, multitenant: false }
-        : { name: input.context.name, multitenant: true, tenantId: tenant.tenantId };
-    const snapshot: EntityCommitInput<I, S> = {
-      ...input,
-      context,
-      entity: { ...input.entity, context },
-      entityId: input.entity.id.clone(input.entityId),
-      next: clone(EntityRecordSchema, input.next),
-      ...(input.states === undefined
-        ? {}
-        : { states: input.states.map((record) => clone(EntityRecordSchema, record)) }),
-      ...(input.diagnostics === undefined
-        ? {}
-        : { diagnostics: input.diagnostics.map((event) => clone(EventSchema, event)) }),
-      ...(input.events === undefined
-        ? {}
-        : { events: input.events.map((event) => clone(EventSchema, event)) }),
-    };
-    const backend = this.#entities.backend(snapshot.entity);
-    const work = () =>
-      backend.mutationQueue.run(ENTITY_SCOPE_MUTATION_KEY, () => this.#commit(snapshot, backend));
-    return snapshot.events === undefined || snapshot.events.length === 0
-      ? work()
-      : eventStoreAccess.withLock(this.#factory, snapshot.context, work);
+    this.requireOpen();
+    this.requireCompatible(input);
+    return this.apply(EntityCommitSnapshots.capture(input));
   }
 
   /**
-   * Closes this commit handle without closing sibling handles.
+   * Closes this handle to new commits.
    */
   close(): void {
     this.#open = false;
   }
 
   /**
-   * Prepares and publishes one affected-record Entity commit under its existing queue.
+   * Applies one captured mutation without cross-record compensation.
    *
    * @typeParam I Entity identifier type.
    * @typeParam S Entity state type.
-   * @param input Supplies current and immutable records.
-   * @param liveBackend Supplies the live current-record map and queue.
+   * @param input Supplies immutable record snapshots.
+   * @returns Completion after every requested record write.
    */
-  async #commit<I, S extends Message>(
-    input: EntityCommitInput<I, S>,
-    liveBackend: EntityBackend,
-  ): Promise<void> {
-    const stage = this.stage(input, liveBackend);
+  private async apply<I, S extends Message>(input: EntityCommitInput<I, S>): Promise<void> {
+    this.requireEnabledHistories(input);
+    this.validateRows(input);
+    const [entity, stateStorage, diagnosticStorage, eventStorage] = this.openCommit(input);
     try {
-      await this.#writeStage(input, stage);
-      this.#publish(stage, liveBackend);
+      for (const state of input.states ?? []) await entity.states.append(state);
+      for (const diagnostic of input.diagnostics ?? []) await entity.events.append(diagnostic);
+      for (const event of input.events ?? []) {
+        if (event.id === undefined || eventStorage === undefined)
+          throw new Error("Entity commit requires delivery-event IDs.");
+        await this.appendEvent(eventStorage, event.id, event);
+      }
+      await entity.current.write(input.next);
     } finally {
-      stage.entity.close();
+      entity.close();
+      stateStorage?.close();
+      diagnosticStorage?.close();
+      eventStorage?.close();
     }
   }
 
   /**
-   * Opens only record families used by one commit.
+   * Opens the record families needed by one captured mutation.
    *
    * @typeParam I Entity identifier type.
    * @typeParam S Entity state type.
-   * @param input Supplies configured histories and delivery Events.
-   * @returns Live affected record families and their layouts.
+   * @param input Supplies requested history and delivery records.
+   * @returns Entity and record handles to close after the mutation.
    */
-  private live<I, S extends Message>(input: EntityCommitInput<I, S>) {
-    this.#requireEnabledHistories(input);
-    const stateLayout = input.states?.length
-      ? stateHistorySpec(input.entity.stateSchema)
-      : undefined;
-    const eventLayout = input.diagnostics?.length
+  private openCommit<I, S extends Message>(input: EntityCommitInput<I, S>): CommitHandles<I, S> {
+    const states = input.states?.length ? stateHistorySpec(input.entity.stateSchema) : undefined;
+    const diagnostics = input.diagnostics?.length
       ? eventHistorySpec(input.entity.stateSchema)
       : undefined;
-    const states =
-      stateLayout === undefined
+    const stateStorage =
+      states === undefined
         ? undefined
-        : this.#openRecords(input.context, stateLayout.spec, stateLayout.group);
-    const diagnostics =
-      eventLayout === undefined
+        : new InMemoryRecordStorage(input.context, states.spec, () =>
+            this.openRecords(input.context, states.spec, states.group),
+          );
+    const diagnosticStorage =
+      diagnostics === undefined
         ? undefined
-        : this.#openRecords(input.context, eventLayout.spec, eventLayout.group);
-    const events = input.events?.length
-      ? this.#openRecords(input.context, eventStoreRecordSpec)
+        : new InMemoryRecordStorage(input.context, diagnostics.spec, () =>
+            this.openRecords(input.context, diagnostics.spec, diagnostics.group),
+          );
+    const eventStorage = input.events?.length
+      ? new InMemoryRecordStorage(input.context, eventStoreRecordSpec, () =>
+          this.openRecords(input.context, eventStoreRecordSpec),
+        )
       : undefined;
-    return { stateLayout, eventLayout, states, diagnostics, events };
-  }
-
-  /**
-   * Captures affected rows and creates isolated adapters for preparation.
-   *
-   * @typeParam I Entity identifier type.
-   * @typeParam S Entity state type.
-   * @param input Supplies the proposed record changes.
-   * @param backend Supplies the live current-record map.
-   * @returns The prepared affected-record workspace.
-   */
-  private stage<I, S extends Message>(input: EntityCommitInput<I, S>, backend: EntityBackend) {
-    const live = this.live(input);
-    const key = input.entity.id.key(input.entityId);
-    const previous = backend.current.get(key);
-    const ids = this.#ids(input, live);
-    const stagedBackend: EntityBackend = {
-      current: new Map(previous === undefined ? [] : [[key, previous]]),
-      mutationQueue: new KeyedSerialQueue(),
-    };
-    const stagedStates = InMemoryCommitValues.stage(live.states, ids.stateIds);
-    const stagedDiagnostics = InMemoryCommitValues.stage(live.diagnostics, ids.diagnosticIds);
-    const stagedEvents = InMemoryCommitValues.stage(live.events, ids.deliveryIds);
-    const entity = new InMemoryEntityStorage(
-      this.#stagedInput(
-        input.entity,
-        live.stateLayout,
-        stagedStates,
-        live.eventLayout,
-        stagedDiagnostics,
-      ),
-      stagedBackend,
-    );
-    return {
-      live,
-      key,
-      previous,
-      ...ids,
-      stagedBackend,
-      stagedStates,
-      stagedDiagnostics,
-      stagedEvents,
-      entity,
-    };
-  }
-
-  /**
-   * Materializes the storage identities and delivery rows before live application.
-   *
-   * @typeParam I Entity identifier type.
-   * @typeParam S Entity state type.
-   * @param input Supplies the changed records.
-   * @param live Supplies generated history layouts.
-   * @returns Affected keys and cloned delivery rows.
-   */
-  #ids<I, S extends Message>(
-    input: EntityCommitInput<I, S>,
-    live: ReturnType<MemoryEntityCommitStorage["live"]>,
-  ) {
-    const stateIds = (input.states ?? []).map((record) => {
-      const layout = live.stateLayout;
-      if (layout === undefined)
-        throw new TypeError("Cannot read properties of undefined (reading 'spec')");
-      return layout.spec.materialize(record).id;
+    const entityInput = { ...input.entity };
+    delete entityInput.stateHistoryStorage;
+    delete entityInput.eventHistoryStorage;
+    const entity = this.entities.create({
+      ...entityInput,
+      ...(stateStorage === undefined ? {} : { stateHistoryStorage: stateStorage }),
+      ...(diagnosticStorage === undefined ? {} : { eventHistoryStorage: diagnosticStorage }),
     });
-    const diagnosticIds = (input.diagnostics ?? []).map((event) => {
-      const layout = live.eventLayout;
-      if (layout === undefined)
-        throw new TypeError("Cannot read properties of undefined (reading 'spec')");
-      return layout.spec.materialize(event).id;
-    });
-    const materialized = (input.events ?? []).map((event) =>
-      eventStoreRecordSpec.materialize(clone(eventStoreRecordSpec.recordType, event)),
-    );
-    const deliveryIds = materialized.map((record) => record.id);
-    return { stateIds, diagnosticIds, materialized, deliveryIds };
+    return [entity, stateStorage, diagnosticStorage, eventStorage];
   }
 
   /**
-   * Validates and writes only staged records before any live change.
+   * Writes one immutable delivery Event or accepts an identical retry.
    *
-   * @typeParam I Entity identifier type.
-   * @typeParam S Entity state type.
-   * @param input Supplies the proposed record changes.
-   * @param stage Supplies affected-record adapters and materialized Events.
+   * @param storage Supplies atomic single-record insertion.
+   * @param id Identifies the delivery Event.
+   * @param event Supplies the captured Event.
+   * @returns Completion after an identical Event is stored.
    */
-  async #writeStage<I, S extends Message>(
-    input: EntityCommitInput<I, S>,
-    stage: {
-      readonly key: string;
-      readonly deliveryIds: readonly EventId[];
-      readonly stagedEvents: TenantRecords<EventId, Event> | undefined;
-      readonly entity: InMemoryEntityStorage<I, S>;
-      readonly materialized: readonly ReturnType<typeof eventStoreRecordSpec.materialize>[];
-    },
+  private async appendEvent(
+    storage: InMemoryRecordStorage<EventId, Event>,
+    id: EventId,
+    event: Event,
   ): Promise<void> {
+    if (await storage.compareAndSet(id, undefined, event)) return;
+    const prior = await storage.read(id);
+    if (
+      prior === undefined ||
+      !this.sameBytes(toBinary(EventSchema, prior), toBinary(EventSchema, event))
+    ) {
+      throw new Error("Entity commit requires unique delivery-event IDs.");
+    }
+  }
+
+  /**
+   * Compares two stored Protobuf byte sequences.
+   *
+   * @param left First byte sequence.
+   * @param right Second byte sequence.
+   * @returns Whether every byte matches.
+   */
+  private sameBytes(left: Uint8Array, right: Uint8Array): boolean {
+    return left.length === right.length && left.every((value, index) => value === right[index]);
+  }
+
+  /**
+   * Validates current identity and duplicate delivery IDs before writes.
+   *
+   * @typeParam I Entity identifier type.
+   * @typeParam S Entity state type.
+   * @param input Supplies the captured mutation.
+   */
+  private validateRows<I, S extends Message>(input: EntityCommitInput<I, S>): void {
     const nextId =
       input.next.entityId === undefined ? undefined : input.entity.id.unpack(input.next.entityId);
-    if (nextId === undefined || input.entity.id.key(nextId) !== stage.key)
+    if (nextId === undefined || input.entity.id.key(nextId) !== input.entity.id.key(input.entityId))
       throw new Error("Entity commit current record identifies another Entity.");
-    if (
-      new Set(stage.deliveryIds.map((id) => id.value)).size !== stage.deliveryIds.length ||
-      stage.deliveryIds.some((id) => stage.stagedEvents?.read(id) !== undefined)
-    )
+    const ids = (input.events ?? []).map((event) => event.id?.value);
+    if (ids.some((id) => id === undefined || id.trim() === "") || new Set(ids).size !== ids.length)
       throw new Error("Entity commit requires unique delivery-event IDs.");
-    await stage.entity.current.write(input.next);
-    for (const state of input.states ?? []) await stage.entity.states.append(state);
-    for (const diagnostic of input.diagnostics ?? []) await stage.entity.events.append(diagnostic);
-    stage.stagedEvents?.writeAll(stage.materialized);
   }
 
   /**
-   * Applies prepared rows synchronously and restores affected entries on failure.
-   *
-   * @param stage Supplies the complete affected-record preparation.
-   * @param backend Supplies the live current-record map.
-   */
-  #publish(
-    stage: Omit<ReturnType<MemoryEntityCommitStorage["stage"]>, "entity">,
-    backend: EntityBackend,
-  ): void {
-    const changes = [
-      ...InMemoryCommitValues.changes(stage.live.states, stage.stagedStates, stage.stateIds),
-      ...InMemoryCommitValues.changes(
-        stage.live.diagnostics,
-        stage.stagedDiagnostics,
-        stage.diagnosticIds,
-      ),
-      ...InMemoryCommitValues.changes(stage.live.events, stage.stagedEvents, stage.deliveryIds),
-    ];
-    const next = stage.stagedBackend.current.get(stage.key);
-    try {
-      for (const change of changes) change.apply();
-      backend.current.set(stage.key, next);
-    } catch (error) {
-      if (stage.previous === undefined) backend.current.delete(stage.key);
-      else backend.current.set(stage.key, stage.previous);
-      for (const change of changes.reverse()) change.restore();
-      throw error;
-    }
-  }
-
-  /**
-   * Connects affected staged history slices to the existing Entity adapters.
+   * Rejects disabled history families.
    *
    * @typeParam I Entity identifier type.
    * @typeParam S Entity state type.
-   * @param entity Supplies the Entity storage layout.
-   * @param stateLayout Supplies the enabled state-history layout.
-   * @param states Supplies the affected staged state rows.
-   * @param eventLayout Supplies the enabled diagnostic-history layout.
-   * @param diagnostics Supplies the affected staged diagnostic rows.
-   * @returns The staged Entity storage layout.
+   * @param input Supplies the proposed histories.
    */
-  #stagedInput<I, S extends Message>(
-    entity: EntityStorageInput<I, S>,
-    stateLayout: ReturnType<typeof stateHistorySpec> | undefined,
-    states:
-      | TenantRecords<
-          import("@spine-event-engine/proto/generated/spine/server/entity/state_key_pb.js").EntityStateKey,
-          EntityRecord
-        >
-      | undefined,
-    eventLayout: ReturnType<typeof eventHistorySpec> | undefined,
-    diagnostics: TenantRecords<EventId, Event> | undefined,
-  ): EntityStorageInput<I, S> {
-    const base = { ...entity };
-    delete base.stateHistoryStorage;
-    delete base.eventHistoryStorage;
-    return {
-      ...base,
-      ...(stateLayout === undefined || states === undefined
-        ? {}
-        : {
-            stateHistoryStorage: new InMemoryRecordStorage(
-              entity.context,
-              stateLayout.spec,
-              () => states,
-            ),
-          }),
-      ...(eventLayout === undefined || diagnostics === undefined
-        ? {}
-        : {
-            eventHistoryStorage: new InMemoryRecordStorage(
-              entity.context,
-              eventLayout.spec,
-              () => diagnostics,
-            ),
-          }),
-    };
-  }
-
-  /**
-   * Rejects history rows when their corresponding history is disabled.
-   *
-   * @typeParam I Entity identifier type.
-   * @typeParam S Entity state type.
-   * @param input Supplies the requested histories.
-   */
-  #requireEnabledHistories<I, S extends Message>(input: EntityCommitInput<I, S>): void {
-    if ((input.states?.length ?? 0) > 0 && !input.entity.stateHistory) {
+  private requireEnabledHistories<I, S extends Message>(input: EntityCommitInput<I, S>): void {
+    if ((input.states?.length ?? 0) > 0 && !input.entity.stateHistory)
       throw new Error("Entity commit cannot append state history when it is disabled.");
-    }
-    if ((input.diagnostics?.length ?? 0) > 0 && !input.entity.eventHistory) {
+    if ((input.diagnostics?.length ?? 0) > 0 && !input.entity.eventHistory)
       throw new Error("Entity commit cannot append event history when it is disabled.");
-    }
   }
 
   /**
-   * Checks the tenant and Entity source type captured by this handle.
+   * Checks the tenant and source captured by this handle.
    *
    * @typeParam I Entity identifier type.
    * @typeParam S Entity state type.
    * @param input Supplies the requested scope.
    */
-  #requireCompatible<I, S extends Message>(input: EntityCommitInput<I, S>): void {
+  private requireCompatible<I, S extends Message>(input: EntityCommitInput<I, S>): void {
     if (
       input.context.multitenant !== this.#multitenant ||
       TenantBoundary.of(input.context).key !== this.#tenantKey ||
       TenantBoundary.of(input.entity.context).key !== this.#tenantKey ||
-      input.entity.sourceType.typeName !== this.#input.sourceType.typeName
+      input.entity.sourceType.typeName !== this.input.sourceType.typeName
     ) {
       throw new Error("Entity commit handle cannot commit another Entity storage scope.");
     }
@@ -416,92 +276,7 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
   /**
    * Rejects commits after this handle closes.
    */
-  #requireOpen(): void {
+  private requireOpen(): void {
     if (!this.#open) throw new Error("Entity commit storage is closed.");
-  }
-}
-
-/**
- * Prepares only affected materialized rows for an in-memory commit.
- */
-const InMemoryCommitValues = Object.freeze({
-  /**
-   * Captures the affected live rows in an isolated tenant slice.
-   *
-   * @typeParam I Record identifier type.
-   * @typeParam R Record message type.
-   * @param live Supplies the live tenant slice when enabled.
-   * @param ids Identifies affected slots.
-   * @returns An isolated slice with only affected prior entries.
-   */
-  stage<I, R extends Message>(
-    live: TenantRecords<I, R> | undefined,
-    ids: readonly I[],
-  ): TenantRecords<I, R> | undefined {
-    if (live === undefined) return undefined;
-    const staged = new TenantRecords<I, R>();
-    for (const id of ids) staged.apply(live.capture(id));
-    return staged;
-  },
-
-  /**
-   * Builds synchronous apply and restore operations for affected slots.
-   *
-   * @typeParam I Record identifier type.
-   * @typeParam R Record message type.
-   * @param live Supplies the live tenant slice when enabled.
-   * @param staged Supplies fully prepared replacements.
-   * @param ids Identifies affected slots.
-   * @returns Operations that preserve complete prior entries and absence.
-   */
-  changes<I, R extends Message>(
-    live: TenantRecords<I, R> | undefined,
-    staged: TenantRecords<I, R> | undefined,
-    ids: readonly I[],
-  ): MemoryCommitChange<I, R>[] {
-    if (live === undefined || staged === undefined) return [];
-    const seen = new Set<string>();
-    return ids.flatMap((id) => {
-      const prior = live.capture(id);
-      if (seen.has(prior.key)) return [];
-      seen.add(prior.key);
-      const prepared = staged.capture(id);
-      return [new MemoryCommitChange(live, prepared, prior)];
-    });
-  },
-});
-
-/**
- * Applies one affected materialized row and restores its complete prior slot.
- *
- * @typeParam I Record identifier type.
- * @typeParam R Record message type.
- */
-class MemoryCommitChange<I, R extends Message> {
-  /**
-   * Captures the prepared and prior versions of one slot.
-   *
-   * @param live Supplies the affected tenant slice.
-   * @param prepared Supplies the replacement entry or absence.
-   * @param prior Supplies the complete prior entry or absence.
-   */
-  constructor(
-    private readonly live: TenantRecords<I, R>,
-    private readonly prepared: ReturnType<TenantRecords<I, R>["capture"]>,
-    private readonly prior: ReturnType<TenantRecords<I, R>["capture"]>,
-  ) {}
-
-  /**
-   * Applies the fully prepared materialized row.
-   */
-  apply(): void {
-    this.live.apply(this.prepared);
-  }
-
-  /**
-   * Restores the complete prior row or absence.
-   */
-  restore(): void {
-    this.live.apply(this.prior);
   }
 }

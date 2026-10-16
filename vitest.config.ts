@@ -20,6 +20,7 @@ export default defineConfig({
   test: {
     include: [
       "packages/*/test/**/*.test.ts",
+      "packages/*/test/**/*.test.mjs",
       "examples/*/src/**/*.test.ts",
       "examples/*/src/**/*.test.tsx",
       "examples/*/test/**/*.test.ts",

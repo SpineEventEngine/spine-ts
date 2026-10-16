@@ -398,8 +398,10 @@ Process Managers also expose protected `select()` reads of Entity state.
 One Server resolves each queried Entity type to its registered context and
 rejects duplicate type registrations. Queries preserve the handler's effective
 tenant, reject incompatible destinations before reading, and require query
-visibility for foreign targets. Routes are installed before recovery; shutdown
-drains accepted handlers across contexts before closing any target read-side.
+visibility for foreign targets. Routes are installed before recovery. The server
+drains accepted handlers across contexts before closing target
+read-sides, and continues independent cleanup after a context drain failure.
+An entered application effect can keep explicit close pending.
 See the [query contract](../../packages/server/REFERENCE.md#handler-routing-and-operations)
 for the single-tenant identity and the limits of eventually consistent reads.
 Aggregates and Process Managers provide protected Event-history reads backed
@@ -780,9 +782,17 @@ Delivered rows are the deduplication fact. Handler effects and the delivered-row
 compare-and-set are not transactional, so a lost acknowledgement can redeliver
 after restart and downstream handling must be idempotent. `DeliveryMonitor`
 defines reception-failure policy: its default marks a failed reception delivered
-and continues independent targets; applications may choose the immediate repeat
-action. It adds no attempts, quarantine, receipts, markers, timers, backoff,
-dead-letter storage, or scheduler policy. Callback snapshots copy `Date` values
+and continues independent targets; applications may choose an immediate repeat
+of failed processing. Managed repository infrastructure errors propagate while
+their Inbox rows remain `TO_DELIVER`. A custom reception action that completes
+normally also completes delivery and is followed by delivered acknowledgement.
+A successful handler with failed acknowledgement gets finite
+acknowledgement-only retries. The supervisor
+rescans pending shards every 10 seconds by default, separately from the
+60-second stale-session threshold and the configurable Delivery server processing
+timeout, which is disabled by default. These [recovery timers](../../packages/delivery-server/REFERENCE.md#recovery-timers)
+do not guarantee a delivery or takeover deadline. It adds no persisted attempts,
+quarantine, receipts, markers, or dead-letter storage. Callback snapshots copy `Date` values
 and `Any.value` bytes. The package exposes no raw worker callback API; replay
 stays behind validated endpoints. Local posting handoffs cover command rows,
 projection subscriber rows, and process-manager event rows. Command

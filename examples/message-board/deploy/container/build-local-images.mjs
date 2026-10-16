@@ -43,6 +43,9 @@ const targets = [
   "simple-delivery-server",
   "message-board-web",
 ];
+const imageTag = process.env.MESSAGE_BOARD_IMAGE_TAG ?? "local";
+if (!/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/u.test(imageTag))
+  throw new Error("MESSAGE_BOARD_IMAGE_TAG must be a valid Docker image tag.");
 const targetPlans = {
   "simple-delivery-server": {
     packages: ["packages/proto", "packages/core", "packages/delivery-server"],
@@ -224,7 +227,7 @@ function build(target) {
     "--target",
     target,
     "--tag",
-    `spine-ts/${target}:local`,
+    `spine-ts/${target}:${imageTag}`,
     context,
   ];
   console.log(`Building local image target: ${target}`);

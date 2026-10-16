@@ -70,6 +70,7 @@ import {
 import {
   type StorageContext,
   type StorageFactory,
+  EventStore,
   type StorageMode,
   type NormalizedQueryPlan,
   type NormalizedQueryEntry,
@@ -105,6 +106,7 @@ import type { CommandDispatcher } from "../bus/command-dispatcher.js";
 import type { EventDispatcher } from "../bus/event-dispatcher.js";
 import { EventDispatcherOriginSchemas } from "../bus/event-dispatcher-origin-schemas.js";
 import { Delivery } from "../delivery/delivery.js";
+import { receptionObservation } from "../delivery/reception-observation.js";
 import { commitFenced } from "./commit-fence.js";
 import { InboxTargets, type InboxMessage, type InboxMessageInput } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
@@ -3578,18 +3580,26 @@ class ProcessManagerExecutionSupport {
    *
    * @param loaded Process Manager and commit storage.
    * @param options Stand tenant selection.
-   * @param events Produced or diagnostic Events to retain when configured.
+   * @param diagnostics Input and produced Events to retain when configured.
+   * @param producedEvents Delivery Events to save before current state.
    * @returns `true` after a successful commit or unchanged no-op.
    */
   async commit(
     loaded: LoadedRepositoryEntity,
     options: { readonly tenantId?: TenantId },
-    events: readonly Event[],
+    diagnostics: readonly Event[],
+    producedEvents: readonly Event[],
   ): Promise<boolean> {
     const version = RepositoryEntities.repositoryVersion(loaded.entity);
     const priorNumber = loaded.current?.version?.number ?? 0;
     if (version.number === priorNumber) {
-      await this.#appendUnchangedDiagnostics(loaded, events);
+      await this.#appendUnchangedDiagnostics(loaded, diagnostics);
+      const store = new EventStore(this.#runtime.context, this.#runtime.storageFactory);
+      try {
+        await store.appendAll(producedEvents);
+      } finally {
+        store.close();
+      }
       return true;
     }
     const entityId = (loaded.entity as { readonly id: unknown }).id;
@@ -3602,8 +3612,8 @@ class ProcessManagerExecutionSupport {
       RepositoryStand.standUpdateOptions(options.tenantId, version, lifecycle),
       this.#repository.metadata,
     );
-    await this.#storeProcessManagerRecord(loaded, entityId, events, deferred);
-    this.#notifyProcessManager(deferred, events);
+    await this.#storeProcessManagerRecord(loaded, entityId, diagnostics, producedEvents, deferred);
+    this.#notifyProcessManager(deferred, diagnostics);
     return true;
   }
 
@@ -3628,18 +3638,26 @@ class ProcessManagerExecutionSupport {
    *
    * @param loaded Process Manager and commit storage.
    * @param entityId Process Manager identifier.
-   * @param events Diagnostic Events to retain when configured.
+   * @param diagnostics Diagnostic Events to retain when configured.
+   * @param producedEvents Delivery Events to save before current state.
    * @param deferred Stand update to notify or cancel.
    * @returns Completion after durable persistence.
    */
   async #storeProcessManagerRecord(
     loaded: LoadedRepositoryEntity,
     entityId: unknown,
-    events: readonly Event[],
+    diagnostics: readonly Event[],
+    producedEvents: readonly Event[],
     deferred: Awaited<ReturnType<typeof standAccess.deferUpdate>>,
   ): Promise<void> {
     try {
-      await this.#commitProcessManagerRecord(loaded, entityId, events, deferred);
+      await this.#commitProcessManagerRecord(
+        loaded,
+        entityId,
+        diagnostics,
+        producedEvents,
+        deferred,
+      );
       entityStateHistoryCaches.get(loaded.entity)?.clear();
     } catch (error) {
       deferred.cancel();
@@ -3652,14 +3670,16 @@ class ProcessManagerExecutionSupport {
    *
    * @param loaded Loaded Process Manager and commit storage.
    * @param entityId Process Manager identifier.
-   * @param events Diagnostic Events to retain when configured.
+   * @param diagnostics Diagnostic Events to retain when configured.
+   * @param producedEvents Delivery Events to save before current state.
    * @param deferred Stand update containing the prepared record.
    * @returns Completion after the storage commit.
    */
   #commitProcessManagerRecord(
     loaded: LoadedRepositoryEntity,
     entityId: unknown,
-    events: readonly Event[],
+    diagnostics: readonly Event[],
+    producedEvents: readonly Event[],
     deferred: Awaited<ReturnType<typeof standAccess.deferUpdate>>,
   ): Promise<void> {
     const history = RepositoryStorage.historyConfiguration(this.#repository);
@@ -3671,8 +3691,9 @@ class ProcessManagerExecutionSupport {
       next: record,
       ...(history.stateHistory ? { states: [record] } : {}),
       ...(history.processManagerEventHistory
-        ? { diagnostics: events.map((event) => clone(EventSchema, event)) }
+        ? { diagnostics: diagnostics.map((event) => clone(EventSchema, event)) }
         : {}),
+      events: producedEvents.map((event) => clone(EventSchema, event)),
     });
   }
 
@@ -3831,7 +3852,7 @@ class ProcessManagerCommandExecution {
       intake.route.entityId,
       RepositoryEntities.priorVersion(loaded.current),
     );
-    const committed = await this.#support.commit(loaded, tenantOptions, events);
+    const committed = await this.#support.commit(loaded, tenantOptions, events, events);
     if (!committed) return undefined;
     this.#publishChangedState(loaded, intake.route.entityId);
     this.#postEvents(events);
@@ -4090,7 +4111,7 @@ class ProcessManagerCommandExecution {
   #postEvents(events: readonly Event[]): void {
     for (const event of events) {
       // spine-log-boundary: server.repository_event_follow_up
-      void this.#runtime.publisher.publishEvent(event);
+      void this.#runtime.publisher.publishReactorEvent(event);
     }
   }
 }
@@ -4262,7 +4283,7 @@ class ProcessManagerEventExecution {
       DispatchGuards.guardedJournalEvent(this.#repository, this.#event, entityId),
       ...events,
     ];
-    const committed = await this.#support.commit(loaded, tenantOptions, diagnostics);
+    const committed = await this.#support.commit(loaded, tenantOptions, diagnostics, events);
     if (!committed) return;
     this.#publishChangedState(loaded, entityId);
     this.#postEvents(events);
@@ -4546,7 +4567,7 @@ class ProcessManagerEventExecution {
   #postEvents(events: readonly Event[]): void {
     for (const event of events) {
       // spine-log-boundary: server.process_manager_event_follow_up
-      void this.#runtime.publisher.publishEvent(event);
+      void this.#runtime.publisher.publishReactorEvent(event);
     }
   }
 }
@@ -5020,7 +5041,24 @@ const EntityInvocation = {
       throw new TypeError(`Repository entity execution requires method "${methodName}".`);
     }
 
-    return Reflect.apply(method, entity, parameterCount === 2 ? [message, context] : [message]);
+    let result: unknown;
+    try {
+      result = Reflect.apply(method, entity, parameterCount === 2 ? [message, context] : [message]);
+    } catch (error) {
+      receptionObservation.recordHandlerFailure(error);
+      throw error;
+    }
+    if (
+      result !== null &&
+      (typeof result === "object" || typeof result === "function") &&
+      typeof (result as PromiseLike<unknown>).then === "function"
+    ) {
+      return Promise.resolve(result).catch((error: unknown) => {
+        receptionObservation.recordHandlerFailure(error);
+        throw error;
+      });
+    }
+    return result;
   },
 
   /**

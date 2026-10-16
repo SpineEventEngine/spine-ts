@@ -33,7 +33,10 @@ import { describe, expect, it, vi } from "vitest";
 import { CreateProjectSchema } from "../generated/spine/examples/projects/commands_pb.js";
 import { ProjectSummarySchema } from "../generated/spine/examples/projects/read_models_pb.js";
 import { CreateTaskSchema } from "../generated/spine/examples/projects/commands_pb.js";
-import { TaskAssignmentSchema } from "../generated/spine/examples/projects/read_models_pb.js";
+import {
+  TaskAssignmentSchema,
+  TaskListSchema,
+} from "../generated/spine/examples/projects/read_models_pb.js";
 import { TaskSchema } from "../generated/spine/examples/projects/entities_pb.js";
 
 const metadata = new SignalMetadata();
@@ -63,6 +66,12 @@ describe("project-management load example", () => {
         }),
       );
       await expect(context.stand().read(TaskSchema, taskId)).resolves.toBeDefined();
+      await vi.waitFor(async () => {
+        expect(await context.stand().read(TaskListSchema, "weighted-project")).toMatchObject({
+          id: "weighted-project",
+          name: taskId,
+        });
+      });
       await context.commandBus().post(
         SignalEnvelopes.command({
           context: metadata.commandContext({ actorContext }),
@@ -107,6 +116,37 @@ describe("project-management load example", () => {
           version: { number: 2 },
         });
       });
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("routes two task Events to the same project-keyed TaskList row", async () => {
+    const { createProjectManagementContext } = await import("../dist/src/index.js");
+    const context = await createProjectManagementContext();
+    const projectId = "shared-project";
+    const actorContext = metadata.actorContext({
+      actor: create(UserIdSchema, { value: "project-list-user" }),
+    });
+    try {
+      for (const taskId of ["shared-task-one", "shared-task-two"]) {
+        await context.commandBus().post(
+          SignalEnvelopes.command({
+            context: metadata.commandContext({ actorContext }),
+            schema: CreateTaskSchema,
+            message: create(CreateTaskSchema, { id: taskId, projectId }),
+          }),
+        );
+        await vi.waitFor(async () => {
+          expect(await context.stand().read(TaskListSchema, projectId)).toMatchObject({
+            id: projectId,
+            name: taskId,
+          });
+        });
+      }
+      await expect(
+        context.stand().read(TaskListSchema, "shared-task-one"),
+      ).resolves.toBeUndefined();
     } finally {
       await context.close();
     }
@@ -162,6 +202,12 @@ describe("project-management load example", () => {
     const updates = subscriptions
       .activate(subscription, { signal: controller.signal })
       [Symbol.asyncIterator]();
+    const ready = await updates.next();
+    expect(ready.done).toBe(false);
+    if (ready.done) throw new Error("Expected subscription activation acknowledgement.");
+    expect(ready.value.subscription?.id?.value).toBe(subscription.id?.value);
+    expect(ready.value.response?.status?.status.case).toBe("ok");
+    expect(ready.value.update.case).toBeUndefined();
     const nextUpdate = updates.next();
 
     try {
@@ -184,6 +230,16 @@ describe("project-management load example", () => {
 
       const update = await nextUpdate;
       expect(update.done).toBe(false);
+      if (update.done) throw new Error("Expected a ProjectSummary update.");
+      expect(update.value.update.case).toBe("entityUpdates");
+      if (update.value.update.case === "entityUpdates")
+        expect(
+          update.value.update.value.update.some(
+            (row) =>
+              row.kind.case === "state" &&
+              AnyMessages.unpack(row.kind.value, ProjectSummarySchema)?.id === id,
+          ),
+        ).toBe(true);
     } finally {
       controller.abort();
       await updates.return?.();

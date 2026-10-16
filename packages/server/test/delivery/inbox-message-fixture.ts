@@ -12,10 +12,16 @@
  * the License.
  */
 
-import { create, toBinary } from "@bufbuild/protobuf";
-import { AnySchema, StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { AnyMessages } from "@spine-event-engine/core";
-import { EventSchema } from "@spine-event-engine/proto";
+import { create } from "@bufbuild/protobuf";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
+import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
+import { TaskCreatedSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
+import {
+  TaskIdSchema,
+  TaskListIdSchema,
+} from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
+import { TaskListSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_list_pb.js";
 
 import type { InboxMessage } from "../../src/delivery/inbox.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
@@ -26,23 +32,29 @@ export function createMessage(
   version: bigint,
   whenReceived = new Date("2026-07-02T08:00:00.000Z"),
 ): InboxMessage {
+  const taskListId = create(TaskListIdSchema, { value: "list-1" });
+  const event = create(EventSchema, {
+    id: create(EventIdSchema, { value: signalId }),
+    message: AnyMessages.pack(
+      TaskCreatedSchema,
+      create(TaskCreatedSchema, {
+        id: create(TaskIdSchema, { value: id }),
+        taskListId,
+        title: `Task ${id}`,
+      }),
+    ),
+  });
   return Object.freeze({
     id: Object.freeze({
       value: id,
       shard: ShardIndex.single(),
     }),
     inboxId: Object.freeze({
-      targetId: AnyMessages.pack(
-        StringValueSchema,
-        create(StringValueSchema, { value: "projection-1" }),
-      ),
-      targetTypeUrl: "type.example.dev/tasks.Projection",
+      targetId: AnyMessages.pack(TaskListIdSchema, taskListId),
+      targetTypeUrl: TypeUrls.derive(TaskListSchema),
     }),
     signalId,
-    signal: create(AnySchema, {
-      typeUrl: "type.spine.io/spine.core.Event",
-      value: toBinary(EventSchema, create(EventSchema)),
-    }),
+    signal: AnyMessages.pack(EventSchema, event, { validate: false }),
     label: "UPDATE_SUBSCRIBER" as const,
     status: "TO_DELIVER" as const,
     shard: ShardIndex.single(),

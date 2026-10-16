@@ -34,7 +34,29 @@ class Client {
 }
 
 describe("RemoteInbox direct behavior", () => {
-  it("continues after a microsecond-precise remote Inbox cursor", async () => {
+  it("returns complete tied-time pages without requiring another timestamp page", async () => {
+    const client = new Client();
+    const inbox = new RemoteInbox(client as never);
+    const received = create(TimestampSchema, { seconds: 1n, nanos: 123_456_000 });
+    const first = { ...domainMessage("first"), whenReceived: received };
+    const second = { ...domainMessage("second"), whenReceived: received };
+    client.readPage.mockResolvedValueOnce([first, second]).mockResolvedValueOnce([first, second]);
+
+    await expect(inbox.read(ShardIndex.single(), { limit: 2 })).resolves.toEqual([first, second]);
+    await expect(
+      inbox.read(ShardIndex.single(), {
+        after: {
+          messageId: first.id.value,
+          whenReceived: first.whenReceived,
+          version: first.version,
+        },
+        limit: 1,
+      }),
+    ).resolves.toEqual([second]);
+    expect(client.readPage).toHaveBeenCalledTimes(2);
+  });
+
+  it("continues through the JVM timestamp page request", async () => {
     const client = new Client();
     const inbox = new RemoteInbox(client as never);
     const first = {
@@ -57,10 +79,11 @@ describe("RemoteInbox direct behavior", () => {
     expect(read).toEqual([second]);
     expect(read[0]?.whenReceived.seconds).toBe(1n);
     expect(read[0]?.whenReceived.nanos).toBe(123_457_000);
-    expect(client.readPage).toHaveBeenCalledWith(
-      ShardIndex.single(),
-      expect.objectContaining({
-        sinceWhen: create(TimestampSchema, { seconds: 1n, nanos: 123_455_999 }),
+    expect(client.readPage.mock.calls[0]?.[0]).toEqual(ShardIndex.single());
+    expect(client.readPage.mock.calls[0]?.[1]?.sinceWhen).toEqual(
+      create(TimestampSchema, {
+        seconds: first.whenReceived.seconds,
+        nanos: first.whenReceived.nanos - 1,
       }),
     );
   });
@@ -85,7 +108,7 @@ describe("RemoteInbox direct behavior", () => {
       DeliveryPagingError,
     );
     client.pageSize = 1;
-    client.readPage.mockReset().mockResolvedValueOnce([first]);
+    client.readPage.mockReset().mockResolvedValueOnce([]);
     await expect(
       inbox.read(ShardIndex.single(), {
         after: {
@@ -94,12 +117,11 @@ describe("RemoteInbox direct behavior", () => {
           version: first.version,
         },
       }),
-    ).resolves.toEqual([]);
+    ).rejects.toBeInstanceOf(DeliveryPagingError);
     client.pageSize = 2;
-    client.readPage
-      .mockReset()
-      .mockResolvedValueOnce([first, { ...first, id: { ...first.id, value: "tied" } }]);
-    await expect(inbox.read(ShardIndex.single())).rejects.toBeInstanceOf(DeliveryPagingError);
+    const tied = { ...domainMessage("tied"), whenReceived: timestampFromDate(new Date(2_000)) };
+    client.readPage.mockReset().mockResolvedValueOnce([first, tied]);
+    await expect(inbox.read(ShardIndex.single())).resolves.toEqual([first, tied]);
     client.findOne.mockResolvedValueOnce(first);
     await expect(inbox.readMessage(first.id)).resolves.toBe(first);
   });
@@ -137,86 +159,59 @@ describe("RemoteInbox direct behavior", () => {
     expect(client.writeOne).not.toHaveBeenCalled();
   });
 
-  it("continues a bounded page from an exact cursor and forwards remote read bounds", async () => {
+  it("settles an in-flight read when its transport ignores cancellation or the total deadline", async () => {
     const client = new Client();
     const inbox = new RemoteInbox(client as never);
-    const first = domainMessage("first");
-    const second = { ...domainMessage("second"), whenReceived: timestampFromDate(new Date(2_000)) };
-    const third = { ...domainMessage("third"), whenReceived: timestampFromDate(new Date(3_000)) };
+    client.readPage.mockImplementation(() => new Promise(() => undefined));
+    const controller = new AbortController();
+    const cancelled = inbox.read(ShardIndex.single(), {
+      signal: controller.signal,
+      timeoutMs: 100,
+    });
+    controller.abort(new Error("caller cancelled"));
+    await expect(cancelled).rejects.toThrow("caller cancelled");
 
-    client.readPage.mockResolvedValueOnce([first, second, third]);
-    await expect(
-      inbox.read(ShardIndex.single(), {
-        after: {
-          messageId: first.id.value,
-          whenReceived: first.whenReceived,
-          version: first.version,
-        },
-        limit: 2,
-        statuses: ["TO_DELIVER"],
-        signal: new AbortController().signal,
-        timeoutMs: 25,
-      }),
-    ).resolves.toEqual([second, third]);
-    expect(client.readPage).toHaveBeenNthCalledWith(
-      1,
-      ShardIndex.single(),
-      expect.objectContaining({ pageSize: 3, timeoutMs: 25 }),
+    await expect(inbox.read(ShardIndex.single(), { timeoutMs: 10 })).rejects.toThrow(
+      "Delivery Inbox read timed out.",
     );
+  }, 500);
 
-    client.readPage.mockResolvedValueOnce([second]);
-    await expect(
-      inbox.read(ShardIndex.single(), {
-        after: { messageId: "absent", whenReceived: second.whenReceived, version: second.version },
-      }),
-    ).rejects.toBeInstanceOf(DeliveryPagingError);
-    await expect(
-      inbox.read(ShardIndex.single(), {
-        after: {
-          messageId: second.id.value,
-          whenReceived: create(TimestampSchema, { seconds: -62_135_596_800n }),
-          version: 0n,
-        },
-      }),
-    ).rejects.toBeInstanceOf(DeliveryPagingError);
-  });
-
-  it("fills a 1000-message logical page past an inclusive remote cursor", async () => {
+  it("rejects invalid or already-cancelled positions before a remote page call", async () => {
     const client = new Client();
     const inbox = new RemoteInbox(client as never);
     const anchor = domainMessage("anchor");
-    const earlier = Array.from({ length: 2_000 }, (_, index): ReturnType<typeof domainMessage> => ({
-      ...domainMessage(`earlier-${String(index)}`),
-      status: "DELIVERED" as const,
-      version: BigInt(index + 2),
-      whenReceived: timestampFromDate(new Date((index + 2) * 1_000)),
-    }));
-    const pendingSource = earlier[999];
-    const continuationAnchor = earlier[998];
-    if (pendingSource === undefined || continuationAnchor === undefined) {
-      throw new Error("Expected the generated remote page rows.");
-    }
-    const pending: ReturnType<typeof domainMessage> = {
-      ...pendingSource,
-      status: "TO_DELIVER",
-    };
-    earlier[999] = pending;
-
-    client.readPage
-      .mockResolvedValueOnce([anchor, ...earlier.slice(0, 999)])
-      .mockResolvedValueOnce([continuationAnchor, ...earlier.slice(999, 1_999)]);
-
     await expect(
       inbox.read(ShardIndex.single(), {
-        after: {
-          messageId: anchor.id.value,
-          whenReceived: anchor.whenReceived,
-          version: anchor.version,
-        },
-        limit: 1_000,
+        after: { messageId: " ", whenReceived: anchor.whenReceived, version: anchor.version },
       }),
-    ).resolves.toEqual([...earlier.slice(0, 999), pending]);
-    expect(client.readPage).toHaveBeenCalledTimes(2);
+    ).rejects.toThrow("Delivery page cursor is invalid.");
+    const controller = new AbortController();
+    controller.abort(new Error("already cancelled"));
+    await expect(inbox.read(ShardIndex.single(), { signal: controller.signal })).rejects.toThrow(
+      "already cancelled",
+    );
+    expect(client.readPage).not.toHaveBeenCalled();
+  });
+
+  it("stops between full excluded-status pages without requesting the next page", async () => {
+    const client = new Client();
+    const inbox = new RemoteInbox(client as never);
+    const controller = new AbortController();
+    const excluded = [
+      { ...domainMessage("first"), status: "DELIVERED" as const },
+      { ...domainMessage("second"), status: "DELIVERED" as const },
+    ];
+    client.readPage.mockImplementationOnce(() => {
+      controller.abort(new Error("between pages"));
+      return Promise.resolve(excluded);
+    });
+    await expect(
+      inbox.read(ShardIndex.single(), {
+        statuses: ["TO_DELIVER"],
+        signal: controller.signal,
+      }),
+    ).rejects.toThrow("between pages");
+    expect(client.readPage).toHaveBeenCalledTimes(1);
   });
 
   it("fences changed authoritative rows and returns an immutable delivered acknowledgement", async () => {
@@ -243,36 +238,24 @@ describe("RemoteInbox direct behavior", () => {
     );
   });
 
-  it("removes an exact pending duplicate without acknowledging it", async () => {
+  it("removes a pending duplicate by ID without acknowledging it", async () => {
     const client = new Client();
     const inbox = new RemoteInbox(client as never);
     const duplicate = domainMessage("duplicate");
-    client.findOne.mockResolvedValueOnce(duplicate);
 
-    await expect(
-      inbox.removeDuplicate(duplicate, { kind: "EXCLUSIVE", shard: duplicate.shard }),
-    ).resolves.toBe(true);
+    await expect(inbox.removeDuplicate(duplicate)).resolves.toBe(true);
     expect(client.removeOne).toHaveBeenCalledWith(duplicate, undefined);
+    expect(client.findOne).not.toHaveBeenCalled();
     expect(client.writeOne).not.toHaveBeenCalled();
   });
 
-  it("does not remove a changed row or a row outside the current shard session", async () => {
+  it("sends one removal by ID without reading a mutable row", async () => {
     const client = new Client();
     const inbox = new RemoteInbox(client as never);
     const duplicate = domainMessage("duplicate");
-    client.findOne.mockResolvedValueOnce({ ...duplicate, version: duplicate.version + 1n });
-
-    await expect(
-      inbox.removeDuplicate(duplicate, { kind: "EXCLUSIVE", shard: duplicate.shard }),
-    ).resolves.toBe(false);
-    await expect(
-      inbox.removeDuplicate(duplicate, {
-        kind: "EXCLUSIVE",
-        shard: new ShardIndex(0, duplicate.shard.ofTotal + 1),
-      }),
-    ).resolves.toBe(false);
-    expect(client.removeOne).not.toHaveBeenCalled();
-    expect(client.findOne).toHaveBeenCalledTimes(1);
+    await expect(inbox.removeDuplicate(duplicate)).resolves.toBe(true);
+    expect(client.removeOne).toHaveBeenCalledOnce();
+    expect(client.findOne).not.toHaveBeenCalled();
   });
 
   it("retains delivered rows until their finite expiration", async () => {
@@ -285,16 +268,11 @@ describe("RemoteInbox direct behavior", () => {
     };
     const expired = { ...retained, keepUntil: new Date(Date.now() - 1) };
 
-    await expect(inbox.removeDelivered(retained, {} as never)).resolves.toBe(false);
-    client.findOne.mockResolvedValueOnce(expired);
-    await expect(
-      inbox.removeDelivered(expired, { kind: "EXCLUSIVE", shard: expired.shard } as never),
-    ).resolves.toBe(true);
+    await expect(inbox.removeDelivered(retained)).resolves.toBe(false);
+    await expect(inbox.removeDelivered(expired)).resolves.toBe(true);
     expect(client.removeOne).toHaveBeenCalledWith(expired, undefined);
 
-    await expect(
-      inbox.removeDelivered(expired, { kind: "LEASED", shard: expired.shard } as never),
-    ).resolves.toBe(false);
+    await expect(inbox.removeDelivered(expired)).resolves.toBe(true);
   });
 
   it("rejects malformed shard observations before they can change remote ownership", () => {

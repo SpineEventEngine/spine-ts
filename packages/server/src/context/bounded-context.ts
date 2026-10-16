@@ -36,11 +36,14 @@ import {
   EventStore,
   InMemoryStorageFactory,
   RecordColumn,
+  StorageGroup,
   type StorageContext,
   type StorageFactory,
   type StorageMode,
 } from "@spine-event-engine/storage";
 import { TenantBoundary } from "@spine-event-engine/storage/provider";
+
+const systemEventGroup = new StorageGroup("spine_system_events");
 
 import { CommandBus, commandBusAccess } from "../bus/command-bus.js";
 import type { CommandDispatcher } from "../bus/command-dispatcher.js";
@@ -1131,7 +1134,7 @@ export class BoundedContext {
    * - single-tenant contexts reject `tenantId`;
    * - multitenant contexts require the exact non-blank `tenantId`;
    * - process-local sequential execution on the same EventBus runtime queue as
-   *   live event intake and stored redispatch.
+   *   live event intake.
    *
    * Unsupported boundary:
    * - Delivery jobs, schedulers, inbox lifecycle, retries, and transport
@@ -1182,14 +1185,8 @@ export class BoundedContext {
   }
 
   /**
-   * Closes this context's buses, Stand, and repository storage and runtime bindings.
-   *
-   * Close is idempotent and returns the same close outcome on repeated calls.
-   * The context attempts every close hook; when any hook fails, the
-   * returned promise rejects with an `AggregateError` after the remaining hooks
-   * have also been attempted.
-   *
-   * @returns A promise that settles after all resources close.
+   * Closes this context's buses, Stand, repository storage, and runtime bindings.
+   * @returns Completion or an aggregate of close failures.
    */
   close(): Promise<void> {
     this.#beginClose();
@@ -1198,7 +1195,7 @@ export class BoundedContext {
   }
 
   /**
-   * Stops admission to this context's signal and bus work.
+   * Stops external admission while accepted follow-ups drain.
    */
   #beginClose(): void {
     closingContexts.add(this);
@@ -1214,9 +1211,10 @@ export class BoundedContext {
    * @returns Completion after the context's accepted work settles.
    */
   async #drainWork(): Promise<void> {
+    this.#beginClose();
     const errors: unknown[] = [];
-    await ContextParts.closeContextPart(() => ContextParts.closeIntegration(this), errors);
-    await ContextParts.closeContextPart(
+    await this.#closePart(() => ContextParts.closeIntegration(this), errors);
+    await this.#closePart(
       () =>
         ContextParts.drainContextWork(
           this.#commandBus,
@@ -1237,27 +1235,14 @@ export class BoundedContext {
   async #closeOnce(): Promise<void> {
     const errors: unknown[] = [];
 
-    await ContextParts.closeContextPart(() => this.#drainWork(), errors);
-    this.#publisher.finishClose();
-    await ContextParts.closeContextPart(
-      () => commandBusAccess.finishClose(this.#commandBus),
-      errors,
-    );
-    await ContextParts.closeContextPart(() => eventBusAccess.finishClose(this.#eventBus), errors);
-    this.#subscriptionRuntime.beginClose();
-    await ContextParts.closeContextPart(() => eventBusAccess.drain(this.#systemEventBus), errors);
-    await ContextParts.closeContextPart(() => this.#subscriptionRuntime.drainClose(), errors);
-    await ContextParts.closeContextPart(
-      () => eventBusAccess.finishClose(this.#systemEventBus),
-      errors,
-    );
-    await ContextParts.closeContextPart(() => this.#stand.close(), errors);
-    await ContextParts.closeContextPart(() => this.#systemStand.close(), errors);
-    await ContextParts.closeContextPart(() => this.#subscriptionRuntime.finishClose(), errors);
-    await ContextParts.closeContextPart(() => {
+    await this.#closePart(() => this.#drainWork(), errors);
+    await this.#closeBuses(errors);
+    await this.#closePart(() => this.#stand.close(), errors);
+    await this.#closePart(() => this.#systemStand.close(), errors);
+    await this.#closePart(() => this.#subscriptionRuntime.finishClose(), errors);
+    await this.#closePart(() => {
       ContextParts.requireTenantIndex(this).close();
     }, errors);
-
     await this.#closeRepositories(errors);
     if (errors.length > 0) {
       this.#closed = undefined;
@@ -1267,17 +1252,42 @@ export class BoundedContext {
   }
 
   /**
+   * Closes bus intake and subscription drains before the Stands.
+   *
+   * @param errors Collects independent close failures.
+   * @returns Completion after bounded bus close attempts.
+   */
+  async #closeBuses(errors: unknown[]): Promise<void> {
+    this.#publisher.finishClose();
+    await this.#closePart(() => commandBusAccess.finishClose(this.#commandBus), errors);
+    await this.#closePart(() => eventBusAccess.finishClose(this.#eventBus), errors);
+    this.#subscriptionRuntime.beginClose();
+    await this.#closePart(() => eventBusAccess.drain(this.#systemEventBus), errors);
+    await this.#closePart(() => this.#subscriptionRuntime.drainClose(), errors);
+    await this.#closePart(() => eventBusAccess.finishClose(this.#systemEventBus), errors);
+  }
+
+  /**
    * Clears repository runtime registration after Stand closure.
    *
    * @param errors Failures collected during context closure.
    */
   async #closeRepositories(errors: unknown[]): Promise<void> {
     for (const repository of this.#repositoryViews) {
-      await ContextParts.closeContextPart(() => {
+      await this.#closePart(() => {
         repositoryAccess.clearRuntime(repository);
         registeredRepositories.delete(repository);
       }, errors);
     }
+  }
+
+  /**
+   * Calls a close action and collects its failure before later cleanup.
+   * @param work Close action.
+   * @param errors Collects close failures.
+   */
+  async #closePart(work: () => unknown, errors: unknown[]): Promise<void> {
+    await ContextParts.closeContextPart(work, errors);
   }
 }
 
@@ -1959,7 +1969,7 @@ export class BoundedContextBuilder {
   ): ContextSystemBuses {
     const systemSpec = ContextParts.createSystemSpec(this.#specSnapshot, this.#persistSystemEvents);
     const systemEventStore = systemSpec.storesEvents
-      ? new EventStore(ContextParts.createStorageMode(systemSpec), storageFactory)
+      ? new EventStore(ContextParts.createStorageMode(systemSpec), storageFactory, systemEventGroup)
       : undefined;
     if (systemEventStore !== undefined) resources.systemEventStore = systemEventStore;
     const systemEventBus = eventBusAccess.createSystemBus(systemEventStore);
@@ -2461,11 +2471,7 @@ const ContextParts = Object.freeze({
     deliveryStrategy: DeliveryStrategy,
   ): BoundedContext {
     return constructBoundedContext({
-      snapshot: {
-        name: specSnapshot.name,
-        tenantMode: ContextParts.toTenantMode(specSnapshot.multitenant),
-        spec: specSnapshot,
-      },
+      snapshot: ContextParts.snapshotFor(specSnapshot),
       commandBus,
       eventBus,
       systemEventBus,
@@ -2479,6 +2485,20 @@ const ContextParts = Object.freeze({
       deliveryStrategy,
       token: frameworkConstructionToken,
     });
+  },
+
+  /**
+   * Captures public context identity from the build specification.
+   *
+   * @param specSnapshot Prepared context specification.
+   * @returns Immutable context metadata input.
+   */
+  snapshotFor(specSnapshot: ContextSpecSnapshot): BoundedContextSnapshot {
+    return {
+      name: specSnapshot.name,
+      tenantMode: ContextParts.toTenantMode(specSnapshot.multitenant),
+      spec: specSnapshot,
+    };
   },
 
   /**

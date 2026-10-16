@@ -43,6 +43,7 @@ import {
   SubscriptionUpdateSchema,
   EntityUpdatesSchema,
   EntityStateUpdateSchema,
+  type Subscription,
   TopicIdSchema,
   TargetSchema,
   type Topic,
@@ -2189,6 +2190,217 @@ describe("Client", () => {
     expect(cancels).toBe(1);
   });
 
+  it("waits for a validated idle subscription ACK before activation and connected", async () => {
+    const releaseAck = Promise.withResolvers<undefined>();
+    const streamStarted = Promise.withResolvers<undefined>();
+    const topic = create(TopicSchema);
+    const subscriptionWire = create(SubscriptionSchema, {
+      id: create(SubscriptionIdSchema, { value: "s-idle-ack" }),
+      topic,
+    });
+    let first = true;
+    const client = Client.usingTransport({
+      transport: unaryTransport(
+        (method) => (method.name === "Subscribe" ? subscriptionWire : create(ResponseSchema)),
+        undefined,
+        () => ({
+          [Symbol.asyncIterator]: () => ({
+            next: async () => {
+              if (!first) return never<IteratorResult<Message>>();
+              first = false;
+              streamStarted.resolve(undefined);
+              await releaseAck.promise;
+              return {
+                done: false,
+                value: create(SubscriptionUpdateSchema, {
+                  subscription: subscriptionWire,
+                  response: create(ResponseSchema, {
+                    status: create(StatusSchema, { status: { case: "ok", value: {} } }),
+                  }),
+                }),
+              };
+            },
+            return: () => Promise.resolve({ done: true, value: undefined }),
+          }),
+        }),
+        false,
+      ),
+    });
+    const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
+    const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
+    const activation = subscription.activate();
+    let activated = false;
+    void activation.then(() => {
+      activated = true;
+    });
+    try {
+      await streamStarted.promise;
+      await Promise.resolve();
+      expect(activated).toBe(false);
+      await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
+      releaseAck.resolve(undefined);
+      await activation;
+      await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connected" } });
+    } finally {
+      releaseAck.resolve(undefined);
+      await activation.catch(() => undefined);
+      await client.close();
+    }
+  });
+
+  it("rejects a second response-only activation ACK after readiness", async () => {
+    const topic = create(TopicSchema);
+    const wire = create(SubscriptionSchema, {
+      id: create(SubscriptionIdSchema, { value: "s-duplicate-ack" }),
+      topic,
+    });
+    const ack = create(SubscriptionUpdateSchema, {
+      subscription: wire,
+      response: create(ResponseSchema, {
+        status: create(StatusSchema, { status: { case: "ok", value: {} } }),
+      }),
+    });
+    let cancels = 0;
+    const client = Client.usingTransport({
+      transport: unaryTransport(
+        (method) => {
+          if (method.name === "Subscribe") return wire;
+          if (method.name === "Cancel") cancels++;
+          return create(ResponseSchema);
+        },
+        undefined,
+        () =>
+          (async function* () {
+            yield ack;
+            await Promise.resolve();
+            yield ack;
+          })(),
+        false,
+      ),
+    });
+    const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
+    const updates = subscription.updates[Symbol.asyncIterator]();
+    const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
+    await subscription.activate();
+    await expect(updates.next()).rejects.toThrow("duplicate activation ACK");
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connected" } });
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "failed" } });
+    expect(cancels).toBe(1);
+    await client.close();
+  });
+
+  it.each([
+    [
+      "missing response",
+      (wire: Subscription) => create(SubscriptionUpdateSchema, { subscription: wire }),
+    ],
+    [
+      "unsuccessful response",
+      (wire: Subscription) =>
+        create(SubscriptionUpdateSchema, {
+          subscription: wire,
+          response: create(ResponseSchema, {
+            status: create(StatusSchema, {
+              status: { case: "error", value: create(ErrorSchema) },
+            }),
+          }),
+        }),
+    ],
+    [
+      "mismatched ID",
+      (wire: Subscription) =>
+        create(SubscriptionUpdateSchema, {
+          subscription: create(SubscriptionSchema, {
+            id: create(SubscriptionIdSchema, { value: "other" }),
+            topic: wire.topic,
+          }),
+          response: create(ResponseSchema, {
+            status: create(StatusSchema, { status: { case: "ok", value: {} } }),
+          }),
+        }),
+    ],
+    [
+      "business update before ACK",
+      (wire: Subscription) =>
+        create(SubscriptionUpdateSchema, {
+          subscription: wire,
+          response: create(ResponseSchema, {
+            status: create(StatusSchema, { status: { case: "ok", value: {} } }),
+          }),
+          update: { case: "eventUpdates", value: create(EventUpdatesSchema) },
+        }),
+    ],
+  ])("rejects an activation %s", async (_name, invalid) => {
+    const topic = create(TopicSchema);
+    const wire = create(SubscriptionSchema, {
+      id: create(SubscriptionIdSchema, { value: "s-invalid-ack" }),
+      topic,
+    });
+    let cancels = 0;
+    const client = Client.usingTransport({
+      transport: unaryTransport(
+        (method) => {
+          if (method.name === "Subscribe") return wire;
+          if (method.name === "Cancel") cancels++;
+          return create(ResponseSchema);
+        },
+        undefined,
+        () =>
+          (async function* () {
+            await Promise.resolve();
+            yield invalid(wire);
+          })(),
+        false,
+      ),
+    });
+    const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
+    await expect(subscription.activate()).rejects.toThrow(/ACK|ID/);
+    expect(cancels).toBe(1);
+    await client.close();
+  });
+
+  it("never reports connected when every Activate stream ends before ACK", async () => {
+    const topic = create(TopicSchema);
+    let subscribes = 0;
+    let cancels = 0;
+    const client = Client.usingTransport(
+      {
+        transport: unaryTransport(
+          (method) => {
+            if (method.name === "Subscribe") {
+              subscribes++;
+              return create(SubscriptionSchema, {
+                id: create(SubscriptionIdSchema, { value: `s-before-ack-${String(subscribes)}` }),
+                topic,
+              });
+            }
+            if (method.name === "Cancel") cancels++;
+            return create(ResponseSchema);
+          },
+          undefined,
+          emptyUpdates,
+          false,
+        ),
+      },
+      {
+        subscriptions: {
+          retryPolicy: { maxAttempts: 1, maxElapsedMs: 1_000, delayMs: () => 1 },
+          scheduler: { now: () => 0, wait: () => Promise.resolve() },
+        },
+      },
+    );
+    const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
+    const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
+    await expect(subscription.activate()).rejects.toThrow("before activation ACK");
+    expect(subscribes).toBe(2);
+    expect(cancels).toBe(2);
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "failed" } });
+    await client.close();
+  });
+
   it("bounds a stalled remote cancellation", async () => {
     vi.useFakeTimers();
     const topic = create(TopicSchema);
@@ -2221,6 +2433,68 @@ describe("Client", () => {
     await vi.advanceTimersByTimeAsync(1_000);
     await rejected;
     vi.useRealTimers();
+  });
+
+  it("coalesces one failed Cancel attempt then retries from the same handle", async () => {
+    const topic = create(TopicSchema);
+    let cancels = 0;
+    const client = Client.usingTransport({
+      transport: unaryTransport((method) => {
+        if (method.name === "Subscribe")
+          return create(SubscriptionSchema, {
+            id: create(SubscriptionIdSchema, { value: "s-cancel-retry" }),
+            topic,
+          });
+        if (method.name === "Cancel" && ++cancels === 1)
+          throw new Error("temporary Cancel failure");
+        return create(ResponseSchema);
+      }),
+    });
+    const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
+    await subscription.activate();
+    const first = subscription.cancel();
+    expect(subscription.cancel()).toBe(first);
+    await expect(first).rejects.toThrow("temporary Cancel failure");
+    await expect(subscription.cancel()).resolves.toBeUndefined();
+    expect(cancels).toBe(2);
+    await client.close();
+    expect(cancels).toBe(2);
+  });
+
+  it("coalesces explicit Cancel, iterator return, and client close while stopping updates locally", async () => {
+    const topic = create(TopicSchema);
+    const cancelGate = Promise.withResolvers<undefined>();
+    let cancels = 0;
+    const client = Client.usingTransport({
+      transport: unaryTransport(async (method) => {
+        if (method.name === "Subscribe")
+          return create(SubscriptionSchema, {
+            id: create(SubscriptionIdSchema, { value: "s-overlap" }),
+            topic,
+          });
+        if (method.name === "Cancel") {
+          cancels++;
+          await cancelGate.promise;
+        }
+        return create(ResponseSchema);
+      }),
+    });
+    const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
+    await subscription.activate();
+    const iterator = subscription.updates[Symbol.asyncIterator]();
+    const next = iterator.next();
+    const cancellation = subscription.cancel();
+    const returned = iterator.return?.();
+    const closing = client.close();
+    await expect(next).resolves.toMatchObject({ done: true });
+    await returned;
+    await vi.waitFor(() => {
+      expect(cancels).toBe(1);
+    });
+    cancelGate.resolve(undefined);
+    await Promise.all([cancellation, closing]);
+    expect(cancels).toBe(1);
+    await expect(iterator.next()).resolves.toMatchObject({ done: true });
   });
 
   it("settles cancellation when a non-cooperative transport ignores abort", async () => {
@@ -3284,29 +3558,48 @@ function unaryTransport(
   ) => Message | Promise<Message>,
   read?: (query: Message) => Message | Promise<Message>,
   updates?: () => AsyncIterable<Message>,
+  acknowledge = true,
 ): Transport {
+  let accepted: Subscription | undefined;
   return {
     async unary(method, signal, _timeoutMs, _header, input) {
+      const message =
+        method.name === "Read" && read !== undefined
+          ? await read(input as Message)
+          : await handler(method, input as Message, signal ?? new AbortController().signal);
+      if (method.name === "Subscribe") accepted = message as Subscription;
       return {
         stream: false,
         method,
         header: new Headers(),
         trailer: new Headers(),
         service: method.parent,
-        message:
-          method.name === "Read" && read !== undefined
-            ? await read(input as Message)
-            : await handler(method, input as Message, signal ?? new AbortController().signal),
+        message,
       } as never;
     },
     stream(method) {
+      const source = updates?.() ?? emptyUpdates();
+      const subscription = accepted;
+      const message =
+        !acknowledge || method.name !== "Activate"
+          ? source
+          : (async function* () {
+              if (subscription === undefined) throw new Error("Subscribe must precede Activate.");
+              yield create(SubscriptionUpdateSchema, {
+                subscription,
+                response: create(ResponseSchema, {
+                  status: create(StatusSchema, { status: { case: "ok", value: {} } }),
+                }),
+              });
+              yield* source;
+            })();
       return Promise.resolve({
         stream: true,
         method,
         header: new Headers(),
         trailer: new Headers(),
         service: method.parent,
-        message: updates?.() ?? emptyUpdates(),
+        message,
       } as never);
     },
   };

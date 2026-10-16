@@ -28,7 +28,11 @@ Gateway admits this example's requests from their request actor and creates
 process-local subscription bindings. A Gateway restart makes the browser
 reconnect, query the current board, replace its local copy, and then resume live
 updates. The supplied simple delivery server is in-memory and not highly
-available.
+available. Shared Delivery is recommended for multiple application processes,
+but restarting this simple server can lose accepted pending Commands despite
+separately persisted business state. Gateway query recovery does not restore
+lost Inbox work. See [Delivery restart limits](../../../packages/delivery-server/README.md)
+and the separate [recovery timers](../../../packages/delivery-server/REFERENCE.md#recovery-timers).
 
 For the smaller runnable development topology of exactly two identical
 applications and one Gateway, use
@@ -44,6 +48,22 @@ Build the local-only images first:
 pnpm typecheck:build
 pnpm images:build:local
 ```
+
+For concurrent task runs, select a distinct `MESSAGE_BOARD_IMAGE_TAG` for the
+image build and each Compose command, a distinct `MESSAGE_BOARD_PUBLIC_PORT`,
+and a distinct Compose project name. The web runtime URL and Gateway browser
+origin follow the selected public port. For example:
+
+```bash
+export MESSAGE_BOARD_IMAGE_TAG=sqlrel-example MESSAGE_BOARD_PUBLIC_PORT=28080
+pnpm images:build:local
+docker compose --project-name sqlrel-example \
+  --file examples/message-board/deploy/compose/combined.compose.yaml up --detach
+```
+
+Open `http://localhost:28080`, then use the same variables, project name and
+file with `down --volumes --remove-orphans`. The default tag and port remain
+`local` and `18080` for a single tutorial run.
 
 ```bash
 docker compose --file examples/message-board/deploy/compose/combined.compose.yaml up --detach

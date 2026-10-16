@@ -32,21 +32,33 @@ import {
 import type { NormalizedQueryEntry, NormalizedQueryPlan } from "@spine-event-engine/storage";
 import { MysqlRecordStorage } from "./record-storage.js";
 
-interface EntityFamilyCommitCapability<I> {
-  prepare(): Promise<void>;
-  tableNames(): readonly string[];
-  withConnection<T>(
-    connection: import("mysql2/promise").PoolConnection,
-    work: () => Promise<T>,
-  ): Promise<T>;
-  readCurrentLocked(id: I): Promise<EntityRecord | undefined>;
-  preflightImmutable(states: readonly EntityRecord[], diagnostics: readonly Event[]): Promise<void>;
-  appendStateImmutable(record: EntityRecord): Promise<void>;
-  appendDiagnosticImmutable(record: Event): Promise<void>;
+/**
+
+ * Opens one MySQL record family for Entity storage.
+
+ */
+interface OpenRecords {
+  /**
+   * Creates a scoped record handle.
+   *
+   * @typeParam Id Record identifier type.
+   * @typeParam R Stored record message type.
+   * @param spec Defines the record family.
+   * @param group Selects an optional history group.
+   * @returns The MySQL record handle.
+   */
+  // eslint-disable-next-line @typescript-eslint/prefer-function-type -- Documented generic call signature.
+  <Id, R extends Message>(
+    spec: RecordSpec<Id, R>,
+    group?: import("@spine-event-engine/storage").StorageGroup,
+  ): MysqlRecordStorage<Id, R>;
 }
 
 /**
  * Describes MySQL-backed Entity record-family handles.
+ *
+ * @typeParam I Entity identifier type.
+ * @typeParam S Entity state message type.
  */
 export interface MysqlEntityStorageHandle<I, S extends Message> {
   // prettier-ignore
@@ -81,6 +93,9 @@ export interface MysqlEntityStorageHandle<I, S extends Message> {
 
 /**
  * Provides MySQL-backed Entity current and history storage.
+ *
+ * @typeParam I Entity identifier type.
+ * @typeParam S Entity state message type.
  */
 export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStorageHandle<I, S> {
   // prettier-ignore
@@ -89,8 +104,26 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
    * Exposes current Entity records.
    */
   readonly current: EntityRecordStorage<I>;
+
+  /**
+
+   * Current record-family handle.
+
+   */
   readonly #current: CurrentStorage<I, S>;
+
+  /**
+
+   * Optional state-history handle.
+
+   */
   readonly #states: States<I, S> | undefined;
+
+  /**
+
+   * Optional diagnostic-history handle.
+
+   */
   readonly #events: Events<I, S> | undefined;
 
   /**
@@ -102,6 +135,12 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
    * Exposes Entity event history records.
    */
   readonly events: EntityEventHistoryPort<I>;
+
+  /**
+
+   * Whether this Entity storage accepts operations.
+
+   */
   #open = true;
 
   /**
@@ -113,10 +152,7 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
    */
   constructor(
     input: EntityStorageInput<I, S>,
-    open: <Id, R extends Message>(
-      spec: RecordSpec<Id, R>,
-      group?: import("@spine-event-engine/storage").StorageGroup,
-    ) => MysqlRecordStorage<Id, R>,
+    open: OpenRecords,
     private readonly onClose: () => void = () => undefined,
   ) {
     this.#current = new CurrentStorage(input, open(input.recordSpec));
@@ -129,16 +165,6 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
       events === undefined ? undefined : new Events(input, open(events.spec, events.group));
     this.states = this.#states ?? disabledStates();
     this.events = this.#events ?? disabledEvents();
-  }
-
-  /**
-   * Reads the current Entity record while the coordinator owns its row lock.
-   *
-   * @param id Identifies the Entity.
-   * @returns Resolves to the current record when present.
-   */
-  readCurrentLocked(id: I): Promise<EntityRecord | undefined> {
-    return this.#current.readLocked(id);
   }
 
   /**
@@ -163,40 +189,6 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
   }
 
   /**
-   * Binds all Entity handles to one connection for work.
-   *
-   * @param connection Provides the coordinator-owned connection.
-   * @param work Performs the bound storage work.
-   * @returns Returns the work result.
-   */
-  async withConnection<T>(
-    connection: import("mysql2/promise").PoolConnection,
-    work: () => Promise<T>,
-  ): Promise<T> {
-    return this.#current.withConnection(connection, () =>
-      this.#states === undefined
-        ? this.#events === undefined
-          ? work()
-          : this.#events.withConnection(connection, work)
-        : this.#states.withConnection(connection, () =>
-            this.#events === undefined ? work() : this.#events.withConnection(connection, work),
-          ),
-    );
-  }
-
-  /**
-   * Returns the physical tables used by the Entity families.
-   *
-   * @returns Returns the resolved table names.
-   */
-  tableNames(): readonly string[] {
-    const result = [this.#current.tableName()];
-    if (this.#states !== undefined) result.push(this.#states.tableName());
-    if (this.#events !== undefined) result.push(this.#events.tableName());
-    return result;
-  }
-
-  /**
    * Prepares every Entity record-family table.
    *
    * @returns Resolves after the tables are ready.
@@ -206,55 +198,52 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
     await this.#states?.prepare();
     await this.#events?.prepare();
   }
-
-  /**
-   * Checks immutable state and diagnostic records before a nontransactional write.
-   *
-   * @param states Lists state history records to check.
-   * @param diagnostics Lists diagnostic history records to check.
-   * @returns Resolves when every record is compatible.
-   */
-  async preflightImmutable(
-    states: readonly EntityRecord[],
-    diagnostics: readonly Event[],
-  ): Promise<void> {
-    for (const state of states) await this.#states?.assertImmutable(state);
-    for (const diagnostic of diagnostics) await this.#events?.assertImmutable(diagnostic);
-  }
-
-  /**
-   * Exposes the private MySQL operations required by atomic Entity commit.
-   *
-   * @internal
-   * @returns Returns the private Entity-family commit capability.
-   */
-  commitCapability(): EntityFamilyCommitCapability<I> {
-    return {
-      prepare: () => this.prepare(),
-      tableNames: () => this.tableNames(),
-      withConnection: (connection, work) => this.withConnection(connection, work),
-      readCurrentLocked: (id) => this.#current.readLocked(id),
-      preflightImmutable: (states, diagnostics) => this.preflightImmutable(states, diagnostics),
-      appendStateImmutable: (record) => this.#states?.appendImmutable(record) ?? Promise.resolve(),
-      appendDiagnosticImmutable: (record) =>
-        this.#events?.appendImmutable(record) ?? Promise.resolve(),
-    };
-  }
 }
+
+/**
+ * Provides current Entity records through a MySQL record family.
+ *
+ * @typeParam I Entity identifier type.
+ * @typeParam S Entity state message type.
+ */
 class CurrentStorage<I, S extends Message> implements EntityRecordStorage<I> {
+  /**
+   * Connects the Entity layout to its current-record handle.
+   *
+   * @param input Defines the Entity layout.
+   * @param records Stores current Entity records.
+   */
   constructor(
     private readonly input: EntityStorageInput<I, S>,
     private readonly records: MysqlRecordStorage<I, EntityRecord>,
   ) {}
+
+  /**
+   * Reads the current record for an Entity ID.
+   *
+   * @param id Identifies the Entity.
+   * @returns The current record when present.
+   */
   read(id: I): Promise<EntityRecord | undefined> {
     return this.records.read(id);
   }
-  readLocked(id: I): Promise<EntityRecord | undefined> {
-    return this.records.readLocked(id);
-  }
+
+  /**
+   * Writes the current Entity record.
+   *
+   * @param record Supplies the next current state.
+   * @returns Completion after the write.
+   */
   write(record: EntityRecord): Promise<void> {
     return this.records.write(record);
   }
+
+  /**
+   * Reads current records with a normalized provider plan.
+   *
+   * @param plan Supplies filters, ordering, and bounds.
+   * @returns Matching records and mapped column values.
+   */
   async query(
     plan: NormalizedQueryPlan<I>,
   ): Promise<readonly NormalizedQueryEntry<I, EntityRecord>[]> {
@@ -272,33 +261,62 @@ class CurrentStorage<I, S extends Message> implements EntityRecordStorage<I> {
       };
     });
   }
-  withConnection<T>(
-    connection: import("mysql2/promise").PoolConnection,
-    work: () => Promise<T>,
-  ): Promise<T> {
-    return this.records.withConnection(connection, work);
-  }
-  tableName(): string {
-    return this.records.tableName;
-  }
+
+  /**
+   * Prepares the current record table.
+   *
+   * @returns Completion after table preparation.
+   */
   prepare(): Promise<void> {
     return this.records.prepare();
   }
+
+  /**
+
+   * Closes the current record handle.
+
+   */
   close(): void {
     this.records.close();
   }
 }
+
+/**
+ * Provides retained Entity state history through immutable records.
+ *
+ * @typeParam I Entity identifier type.
+ * @typeParam S Entity state message type.
+ */
 class States<I, S extends Message> implements EntityStateHistoryPort<I, S> {
+  /**
+   * Connects the Entity layout to its state-history handle.
+   *
+   * @param input Defines the Entity ID and state schemas.
+   * @param records Stores immutable state-history records.
+   */
   constructor(
     private readonly input: EntityStorageInput<I, S>,
     private readonly records: MysqlRecordStorage<EntityStateKey, EntityRecord>,
   ) {}
+
+  /**
+   * Writes one immutable state record.
+   *
+   * @param record Supplies the retained state.
+   * @returns Completion after insertion or identical retry.
+   */
   append(record: EntityRecord): Promise<void> {
-    return this.records.write(record);
-  }
-  appendImmutable(record: EntityRecord): Promise<void> {
     return this.records.writeImmutable(record);
   }
+
+  /**
+   * Reads retained states backward from an optional version.
+   *
+   * @param id Identifies the Entity.
+   * @param depth Limits returned states.
+   * @param startingFromVersion Includes states at or below this version.
+   * @returns Matching states in descending version order.
+   */
   async backward(
     id: I,
     depth: number,
@@ -315,6 +333,14 @@ class States<I, S extends Message> implements EntityStateHistoryPort<I, S> {
       )
       .slice(0, depth);
   }
+
+  /**
+   * Reads the latest state at or before a timestamp.
+   *
+   * @param id Identifies the Entity.
+   * @param time Specifies the inclusive timestamp.
+   * @returns Decoded state when present.
+   */
   async stateAt(id: I, time: Timestamp): Promise<S | undefined> {
     const records = await this.backward(id, Number.MAX_SAFE_INTEGER);
     const found = records.find((record) => {
@@ -329,6 +355,14 @@ class States<I, S extends Message> implements EntityStateHistoryPort<I, S> {
       ? undefined
       : fromBinary(this.input.stateSchema, found.state.value);
   }
+
+  /**
+   * Removes older states beyond the requested retained count.
+   *
+   * @param id Identifies the Entity.
+   * @param keep Counts newest states to retain.
+   * @returns Completion after independent deletions.
+   */
   async trim(id: I, keep: number): Promise<void> {
     const records = await this.backward(id, Number.MAX_SAFE_INTEGER);
     for (const record of records.slice(keep)) {
@@ -341,6 +375,13 @@ class States<I, S extends Message> implements EntityStateHistoryPort<I, S> {
         );
     }
   }
+
+  /**
+   * Removes states older than a timestamp.
+   *
+   * @param olderThan Specifies the exclusive cutoff.
+   * @returns Completion after independent deletions.
+   */
   async truncate(olderThan: Timestamp): Promise<void> {
     const all = await this.records.query();
     for (const record of all) {
@@ -359,36 +400,62 @@ class States<I, S extends Message> implements EntityStateHistoryPort<I, S> {
         );
     }
   }
+
+  /**
+
+   * Closes the state-history handle.
+
+   */
   close(): void {
     this.records.close();
   }
-  withConnection<T>(
-    connection: import("mysql2/promise").PoolConnection,
-    work: () => Promise<T>,
-  ): Promise<T> {
-    return this.records.withConnection(connection, work);
-  }
-  tableName(): string {
-    return this.records.tableName;
-  }
-  assertImmutable(record: EntityRecord): Promise<void> {
-    return this.records.assertImmutable(record);
-  }
+
+  /**
+   * Prepares the state-history table.
+   *
+   * @returns Completion after table preparation.
+   */
   prepare(): Promise<void> {
     return this.records.prepare();
   }
 }
+
+/**
+ * Provides retained diagnostic Event history through immutable records.
+ *
+ * @typeParam I Entity identifier type.
+ * @typeParam S Entity state message type.
+ */
 class Events<I, S extends Message> implements EntityEventHistoryPort<I> {
+  /**
+   * Connects the Entity layout to its diagnostic-history handle.
+   *
+   * @param input Defines the Entity ID and state schemas.
+   * @param records Stores immutable diagnostic Events.
+   */
   constructor(
     private readonly input: EntityStorageInput<I, S>,
     private readonly records: MysqlRecordStorage<EventId, Event>,
   ) {}
+
+  /**
+   * Writes one immutable diagnostic Event.
+   *
+   * @param record Supplies the retained Event.
+   * @returns Completion after insertion or identical retry.
+   */
   append(record: Event): Promise<void> {
-    return this.records.write(record);
-  }
-  appendImmutable(record: Event): Promise<void> {
     return this.records.writeImmutable(record);
   }
+
+  /**
+   * Reads retained Events backward from an optional version.
+   *
+   * @param id Identifies the producer Entity.
+   * @param depth Limits returned Events.
+   * @param startingFromVersion Includes Events at or below this version.
+   * @returns Matching Events in descending version order.
+   */
   async backward(id: I, depth: number, startingFromVersion?: bigint): Promise<readonly Event[]> {
     const all = await this.records.query({ sort: [{ field: "version", direction: "desc" }] });
     return all
@@ -401,6 +468,13 @@ class Events<I, S extends Message> implements EntityEventHistoryPort<I> {
       )
       .slice(0, depth);
   }
+
+  /**
+   * Removes diagnostic Events older than a timestamp.
+   *
+   * @param olderThan Specifies the exclusive cutoff.
+   * @returns Completion after independent deletions.
+   */
   async truncate(olderThan: Timestamp): Promise<void> {
     const all = await this.records.query();
     for (const event of all) {
@@ -414,25 +488,33 @@ class Events<I, S extends Message> implements EntityEventHistoryPort<I> {
         await this.records.delete(event.id);
     }
   }
+
+  /**
+
+   * Closes the diagnostic-history handle.
+
+   */
   close(): void {
     this.records.close();
   }
-  withConnection<T>(
-    connection: import("mysql2/promise").PoolConnection,
-    work: () => Promise<T>,
-  ): Promise<T> {
-    return this.records.withConnection(connection, work);
-  }
-  tableName(): string {
-    return this.records.tableName;
-  }
-  assertImmutable(record: Event): Promise<void> {
-    return this.records.assertImmutable(record);
-  }
+
+  /**
+   * Prepares the diagnostic-history table.
+   *
+   * @returns Completion after table preparation.
+   */
   prepare(): Promise<void> {
     return this.records.prepare();
   }
 }
+
+/**
+ * Creates a rejecting state-history port when retention is disabled.
+ *
+ * @typeParam I Entity identifier type.
+ * @typeParam S Entity state message type.
+ * @returns A disabled state-history port.
+ */
 function disabledStates<I, S extends Message>(): EntityStateHistoryPort<I, S> {
   return {
     append: () => Promise.reject(new Error("Entity state history is disabled.")),
@@ -443,6 +525,13 @@ function disabledStates<I, S extends Message>(): EntityStateHistoryPort<I, S> {
     close: () => undefined,
   };
 }
+
+/**
+ * Creates a rejecting diagnostic-history port when retention is disabled.
+ *
+ * @typeParam I Entity identifier type.
+ * @returns A disabled diagnostic-history port.
+ */
 function disabledEvents<I>(): EntityEventHistoryPort<I> {
   return {
     append: () => Promise.reject(new Error("Entity event history is disabled.")),
@@ -451,6 +540,17 @@ function disabledEvents<I>(): EntityEventHistoryPort<I> {
     close: () => undefined,
   };
 }
+
+/**
+ * Compares a packed producer ID with an Entity identifier.
+ *
+ * @typeParam I Entity identifier type.
+ * @typeParam S Entity state message type.
+ * @param input Supplies the Entity ID codec.
+ * @param packed Supplies the stored producer ID.
+ * @param expected Supplies the requested Entity ID.
+ * @returns Whether both IDs address the same Entity.
+ */
 function sameEntityId<I, S extends Message>(
   input: EntityStorageInput<I, S>,
   packed: NonNullable<EntityRecord["entityId"]>,

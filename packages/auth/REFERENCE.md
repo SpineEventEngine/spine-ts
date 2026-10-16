@@ -18,12 +18,17 @@ queries, and native subscription streams. A fixed backend list is static
 membership input and is not capped; dynamic discovery replaces it with later
 complete snapshots. Notices can be duplicated, missing, or lost.
 Browser code must treat notices as refresh hints and use Queries as the
-authoritative state source. The owner keeps one native child stream for every
+authoritative state source. The gateway keeps one native child stream for every
 active logical subscription on every current node. Membership changes converge
-through one latest-only generation owner: removed or stale nodes cannot revive
-their children, while a zero-node interval retains an existing definition for
-later recovery. New subscription creation reports backend unavailability while
-membership is empty.
+through one latest-only generation: removed or stale nodes cannot revive their
+children, while a zero-node interval retains an existing definition for later
+recovery. New subscription creation reports backend unavailability while
+membership is empty. The gateway emits one logical activation ACK only after all
+required native children attach and acknowledge. Child ACKs from later joins stay internal. A child
+failure before readiness cleans up admitted siblings, while generic unary
+membership routing remains independent of subscription readiness. Concurrent
+Cancel requests for the same trusted context and ID share one bounded attempt;
+a failed remote cleanup remains retryable.
 
 ## Unary requests
 
@@ -52,6 +57,8 @@ ResolveContext returns informational trusted actor and tenant facts in both mode
 ## Subscription and native adapters
 
 `SubscriptionGateway` and `InMemorySubscriptionBindings` compose subscription creation, activation, cancellation, and relaying at the gateway boundary. The Gateway accepts a logical `SubscriptionCoordinator`; native `SubscriptionCreator` instances remain a per-node implementation seam. This is an intentional replacement of the former public native-creator input, with no compatibility adapter because Spine TS has no deployed users. In-memory bindings are local to one process and have finite operation limits; they do not provide cross-machine propagation. `createNativeGatewayServices`, `NativeSubscriptionCreator`, and `SubscriptionUpdateRelay` adapt these public contracts to the native service layer. They do not make a deployment secure by themselves: applications choose how their listener accepts only gateway-routed traffic.
+
+`BackendSubscriptionEnvelope` is opaque to the Gateway. A custom `SubscriptionCreator` or `DynamicUnaryClient` must validate each forwarded update's subscription ID and Topic against the actual Subscription accepted by its backend. The built-in native creator performs this validation; a custom envelope does not imply the backend reused the requested child ID.
 
 `DurableSubscriptionBindings` from `@spine-event-engine/server/browser` retains one approved
 `GatewayAuthenticatedSubscription` per public Subscription. The retained Topic

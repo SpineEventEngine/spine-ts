@@ -40,6 +40,9 @@ import {
   type OnDeliveryReady,
 } from "../../src/context/local-inbox-handoff.js";
 import { Delivery, type DeliveryEndpointMessage } from "../../src/delivery/delivery.js";
+import { DeliveryBuilder } from "../../src/delivery/delivery-builder.js";
+import { DeliveryMonitor } from "../../src/delivery/delivery-monitor.js";
+import { receptionObservation } from "../../src/delivery/reception-observation.js";
 import type { DeliveryWorkRegistry } from "../../src/delivery/delivery-ports.js";
 import type { DeliverySource } from "../../src/delivery/delivery-supervisor.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
@@ -1004,6 +1007,7 @@ describe("EnvironmentDeliveryWorker", () => {
       scopes: [siblingScope],
     });
     await worker.start({ scopes: [scope] }, [scope.ready.shard]);
+    const receipt = await delivery.inbox.receive(message(target.ready, "retirement-reservation"));
     // Captures native Map#set before the temporary test spy.
     // eslint-disable-next-line @typescript-eslint/unbound-method
     const originalSet = Reflect.apply.bind(null, Map.prototype.set) as (
@@ -1013,12 +1017,7 @@ describe("EnvironmentDeliveryWorker", () => {
     let fenced = false;
     let retired = false;
     let retiring: Promise<void> | undefined;
-    const reservationKey = `retirement-reservation/${JSON.stringify([
-      target.ready.label,
-      target.ready.targetTypeUrl,
-      target.ready.shard.index,
-      target.ready.shard.ofTotal,
-    ])}`;
+    const reservationKey = `${receipt.message.id.shard.key()}/${receipt.message.id.value}`;
     const mapSet = vi.spyOn(Map.prototype, "set").mockImplementation(function (
       this: Map<unknown, unknown>,
       key: unknown,
@@ -1034,7 +1033,6 @@ describe("EnvironmentDeliveryWorker", () => {
       }
       return result;
     });
-    await delivery.inbox.receive(message(target.ready, "retirement-reservation"));
     try {
       worker.notify(scope);
       await until(() => target.replayed.includes("retirement-reservation"));
@@ -1109,12 +1107,8 @@ describe("EnvironmentDeliveryWorker", () => {
     });
     await worker.start({ scopes: [scope] }, [scope.ready.shard]);
     let admitted = false;
-    const reservationKey = `reservation-lease-loss/${JSON.stringify([
-      target.ready.label,
-      target.ready.targetTypeUrl,
-      target.ready.shard.index,
-      target.ready.shard.ofTotal,
-    ])}`;
+    const receipt = await delivery.inbox.receive(message(target.ready, "reservation-lease-loss"));
+    const reservationKey = `${receipt.message.id.shard.key()}/${receipt.message.id.value}`;
     // Captures native Map#set before the temporary test spy.
     // eslint-disable-next-line @typescript-eslint/unbound-method
     const originalSet = Reflect.apply.bind(null, Map.prototype.set) as (
@@ -1132,21 +1126,7 @@ describe("EnvironmentDeliveryWorker", () => {
       }
       return result;
     });
-    let reservationCleared = false;
-    // Captures native Map#clear before the temporary test spy.
-    // eslint-disable-next-line @typescript-eslint/unbound-method
-    const originalClear = Reflect.apply.bind(null, Map.prototype.clear) as (
-      thisArgument: Map<unknown, unknown>,
-      argumentsList: readonly unknown[],
-    ) => void;
-    const mapClear = vi.spyOn(Map.prototype, "clear").mockImplementation(function (
-      this: Map<unknown, unknown>,
-    ): void {
-      if (this.has(reservationKey)) reservationCleared = true;
-      originalClear(this, []);
-    });
     try {
-      await delivery.inbox.receive(message(target.ready, "reservation-lease-loss"));
       worker.notify(scope);
       await until(() => admitted && validations > 0);
       expect(target.replayed).toEqual([]);
@@ -1158,10 +1138,9 @@ describe("EnvironmentDeliveryWorker", () => {
 
       worker.stopOwners([scope.owner.key]);
       await worker.retireOwners([scope.owner.key]);
-      expect(reservationCleared).toBe(true);
+      expect(target.replayed).toEqual([]);
     } finally {
       mapSet.mockRestore();
-      mapClear.mockRestore();
     }
 
     const recoveryScope = runScope("reservation-lease-recovery", target.ready);
@@ -1272,6 +1251,163 @@ describe("EnvironmentDeliveryWorker", () => {
     worker.stop();
     await worker.awaitSettled();
     await worker.retire();
+  });
+
+  it("reuses its admitted managed route when the monitor repeats a failed reception", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const failure = new Error("managed receptor failed");
+    const seen: unknown[] = [];
+    const target = descriptor("RepeatRoute", "type.example.dev/RepeatRoute", storageFactory, {
+      onReplay: () => {
+        if (target.replayed.length === 1) {
+          receptionObservation.recordHandlerFailure(failure);
+          return Promise.reject(failure);
+        }
+        return Promise.resolve();
+      },
+    });
+    const scope = runScope("repeat-route-owner", target.ready);
+    class RepeatMonitor extends DeliveryMonitor {
+      override onReceptionFailure(reception: Parameters<DeliveryMonitor["onReceptionFailure"]>[0]) {
+        seen.push(reception.error);
+        return reception.repeatDispatching();
+      }
+    }
+    // The original method is invoked with the builder under test below.
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    const originalBuild = DeliveryBuilder.prototype.build;
+    const build = vi.spyOn(DeliveryBuilder.prototype, "build").mockImplementation(function (
+      this: DeliveryBuilder,
+    ) {
+      this.withMonitor(new RepeatMonitor());
+      return originalBuild.call(this);
+    });
+    const worker = new EnvironmentDeliveryWorker();
+    try {
+      worker.add({
+        owner: scope.owner,
+        descriptor: target.value,
+        storageFactory,
+        tenant: {},
+        context: target.context,
+        scopes: [scope],
+      });
+    } finally {
+      build.mockRestore();
+    }
+    await worker.start({ scopes: [scope] }, [scope.ready.shard]);
+    const delivery = new Delivery({ context: target.context, storageFactory });
+    await delivery.inbox.receive(message(target.ready, "repeat-managed"));
+    worker.notify(scope);
+    await vi.waitFor(() => {
+      expect(seen).toHaveLength(1);
+    });
+    await vi.waitFor(() => {
+      expect(target.replayed).toHaveLength(2);
+    });
+    await vi.waitFor(async () => {
+      expect(await delivery.inbox.read(scope.ready.shard, { statuses: ["TO_DELIVER"] })).toEqual(
+        [],
+      );
+    });
+
+    worker.stop();
+    await worker.awaitSettled();
+    await worker.retire();
+
+    expect(target.replayed).toEqual(["repeat-managed", "repeat-managed"]);
+    expect(seen).toEqual([failure]);
+    expect(await delivery.inbox.read(scope.ready.shard, { statuses: ["TO_DELIVER"] })).toEqual([]);
+  });
+
+  it("settles one owner's exact row before a colliding signal reaches another owner", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const delivery = new Delivery({
+      context: { name: "SharedRoute", multitenant: false },
+      storageFactory,
+    });
+    const Worker = EnvironmentDeliveryWorker as unknown as new (options: {
+      readonly ports: {
+        readonly inbox: typeof delivery.inbox;
+        readonly workRegistry: typeof delivery.shards;
+        readonly source: DeliverySource;
+      };
+    }) => EnvironmentDeliveryWorker;
+    const worker = new Worker({
+      ports: {
+        inbox: delivery.inbox,
+        workRegistry: delivery.shards,
+        source: inertDeliverySource(),
+      },
+    });
+    let retirement: Promise<void> | undefined;
+    let retired = false;
+    const secondEntered = Promise.withResolvers<undefined>();
+    const releaseSecond = Promise.withResolvers<undefined>();
+    const targetTypeUrl = "type.example.dev/SharedRoute";
+    const first = descriptor("SharedRoute", targetTypeUrl, storageFactory, {
+      onReplay: () => {
+        worker.stopOwners([firstScope.owner.key]);
+        retirement = worker.retireOwners([firstScope.owner.key]).then(() => {
+          retired = true;
+        });
+        return Promise.resolve();
+      },
+    });
+    const second = descriptor("SharedRoute", targetTypeUrl, storageFactory, {
+      onReplay: () => {
+        secondEntered.resolve(undefined);
+        return releaseSecond.promise;
+      },
+    });
+    const firstScope = runScope("shared-route-first", {
+      ...first.ready,
+      tenantId: tenant("first"),
+    });
+    const secondScope = runScope("shared-route-second", {
+      ...second.ready,
+      tenantId: tenant("second"),
+    });
+    for (const [target, scope] of [
+      [first, firstScope],
+      [second, secondScope],
+    ] as const) {
+      worker.add({
+        owner: scope.owner,
+        descriptor: target.value,
+        storageFactory,
+        tenant: scope.ready.tenantId === undefined ? {} : { tenantId: scope.ready.tenantId },
+        context: target.context,
+        scopes: [scope],
+      });
+    }
+    await worker.start({ scopes: [firstScope] }, [firstScope.ready.shard]);
+    await worker.start({ scopes: [secondScope] }, [secondScope.ready.shard]);
+    await delivery.inbox.receive(message(firstScope.ready, "same-signal"));
+    await delivery.inbox.receive({
+      ...message(secondScope.ready, "same-signal"),
+      inboxId: {
+        targetTypeUrl,
+        targetId: Identifiers.pack("string", "second-target"),
+      },
+    });
+    worker.notify(firstScope);
+    await secondEntered.promise;
+    try {
+      await vi.waitFor(() => {
+        expect(retirement).toBeDefined();
+      });
+      await vi.waitFor(() => {
+        expect(retired).toBe(true);
+      });
+      expect(first.replayed).toEqual(["same-signal"]);
+      expect(second.replayed).toEqual(["same-signal"]);
+    } finally {
+      releaseSecond.resolve(undefined);
+      worker.stop();
+      await worker.awaitSettled();
+      await worker.retire();
+    }
   });
 
   it("recovers local pending work on the real supervisor interval", async () => {

@@ -20,12 +20,8 @@ const repoRoot = new URL("..", import.meta.url).pathname;
 const checkerPath = new URL("./check-api-docs.mjs", import.meta.url).pathname;
 
 const expectedStorageProviderExports = [
-  "CleanupOperation",
-  "DeliveryCleanupInput",
-  "DeliveryCleanupStorage",
-  "DeliveryCleanupStorageFactories",
-  "DeliveryCleanupStorageFactory",
   "EntityCommitInput",
+  "EntityCommitSnapshots",
   "EntityCommitStorage",
   "EntityCommitStorageFactories",
   "EntityCommitStorageFactory",
@@ -42,11 +38,9 @@ const expectedStorageProviderExports = [
   "TenantBoundary",
   "TenantCatalog",
   "TenantCatalogProvider",
-  "cleanupOperationActive",
   "disabledEventHistoryPort",
   "disabledStateHistoryPort",
   "eventHistorySpec",
-  "eventStoreAccess",
   "eventStoreRecordSpec",
   "stateHistorySpec",
 ];

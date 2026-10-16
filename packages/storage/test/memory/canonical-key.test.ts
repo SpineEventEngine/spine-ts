@@ -162,4 +162,77 @@ describe("canonical tenant record keys", () => {
     expect(records.delete(sameSlot)).toBe(true);
     expect(records.read(sameSlot)).toBeUndefined();
   });
+
+  it("keeps bounded and continued ID ordering consistent across identity shapes", () => {
+    const identities = new Map<string, unknown>([
+      ["undefined", undefined],
+      ["null", null],
+      ["false", false],
+      ["true", true],
+      ["zero", 0],
+      ["one", 1],
+      ["text-a", "a"],
+      ["text-b", "b"],
+      ["big-zero", 0n],
+      ["big-one", 1n],
+      ["bytes-a", new Uint8Array([1])],
+      ["bytes-b", new Uint8Array([1, 2])],
+      ["array-a", [1]],
+      ["array-b", [1, 2]],
+      ["array-c", [2]],
+      ["object-a", { a: 1 }],
+      ["object-b", { a: 2 }],
+      ["object-c", { b: 1 }],
+    ]);
+    const spec = new RecordSpec<unknown, StringValue>({
+      recordType: StringValueSchema,
+      idKind: "variant",
+      extractId: (record) => identities.get(record.value),
+    });
+    const records = new TenantRecords<unknown, StringValue>();
+    for (const label of [...identities.keys()].reverse()) {
+      records.write(spec.materialize(create(StringValueSchema, { value: label })));
+    }
+    const sort = [{ field: "id", direction: "asc" as const }];
+    const full = records.queryEntries(spec, { sort });
+    expect(full).toHaveLength(identities.size);
+    expect(full.map((entry) => entry.record.value)).toEqual(
+      records.queryEntries(spec, { sort }).map((entry) => entry.record.value),
+    );
+    expect(records.queryEntries(spec, { sort, offset: 3, limit: 7 })).toEqual(full.slice(3, 10));
+    const cursor = full[7];
+    if (cursor === undefined) throw new Error("Expected a cursor in the ordered result.");
+    const after = { values: [{ field: "id", value: cursor.id }], id: cursor.id };
+    expect(records.queryEntries(spec, { sort, after, limit: 5 })).toEqual(full.slice(8, 13));
+    expect(records.queryEntries(spec, { sort, after })).toEqual(full.slice(8));
+    for (const cursorId of [null, false, true]) {
+      const index = full.findIndex((entry) => Object.is(entry.id, cursorId));
+      if (index < 0) throw new Error("Expected a primitive cursor in the ordered result.");
+      expect(
+        records.queryEntries(spec, {
+          sort,
+          after: { values: [{ field: "id", value: cursorId }], id: cursorId },
+          limit: 3,
+        }),
+      ).toEqual(full.slice(index + 1, index + 4));
+    }
+
+    const descending = [{ field: "id", direction: "desc" as const }];
+    const reverse = records.queryEntries(spec, { sort: descending });
+    expect(reverse.map((entry) => entry.record.value)).toEqual(
+      full.map((entry) => entry.record.value).reverse(),
+    );
+    const reverseCursor = reverse[4];
+    if (reverseCursor === undefined) throw new Error("Expected a descending cursor.");
+    const afterDescending = {
+      values: [{ field: "id", value: reverseCursor.id }],
+      id: reverseCursor.id,
+    };
+    expect(
+      records.queryEntries(spec, { sort: descending, after: afterDescending, limit: 4 }),
+    ).toEqual(reverse.slice(5, 9));
+    expect(records.queryEntries(spec, { sort: descending, after: afterDescending })).toEqual(
+      reverse.slice(5),
+    );
+  });
 });

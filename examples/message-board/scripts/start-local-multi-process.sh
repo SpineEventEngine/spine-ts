@@ -1,10 +1,36 @@
 #!/usr/bin/env bash
 # Starts every local multi-process dependency: Datastore, shared Delivery,
-# two managed replicas, the public Gateway, and the stock browser UI.
+# the selected managed replicas, the public Gateway, and the stock browser UI.
 set -euo pipefail
 
 root=${MESSAGE_BOARD_REPO_ROOT:-$(cd "$(dirname "$0")/../../.." && pwd)}
 name="message-board-local-$(node -e 'process.stdout.write(require("node:crypto").randomUUID())')"
+delivery_port=${MESSAGE_BOARD_DELIVERY_PORT:-8484}
+datastore_port=${MESSAGE_BOARD_DATASTORE_PORT:-8081}
+coordinator_port=${MESSAGE_BOARD_COORDINATOR_PORT:-8091}
+gateway_port=${MESSAGE_BOARD_GATEWAY_PORT:-8090}
+web_port=${MESSAGE_BOARD_WEB_PORT:-5173}
+process_count=${MESSAGE_BOARD_PROCESS_COUNT:-2}
+shard_count=${MESSAGE_BOARD_DELIVERY_SHARD_COUNT:-2}
+image_tag=${MESSAGE_BOARD_IMAGE_TAG:-local}
+for port in "$delivery_port" "$datastore_port" "$coordinator_port" "$gateway_port" "$web_port"; do
+  [[ "$port" =~ ^[1-9][0-9]{0,4}$ ]] && (( port <= 65535 )) || {
+    echo "Message Board ports must be between 1 and 65535." >&2
+    exit 1
+  }
+done
+if [[ $(printf '%s\n' "$delivery_port" "$datastore_port" "$coordinator_port" "$gateway_port" "$web_port" | sort -u | wc -l | tr -d ' ') != 5 ]]; then
+  echo "Message Board ports must be distinct." >&2
+  exit 1
+fi
+[[ "$process_count" =~ ^[1-9][0-9]*$ && "$shard_count" =~ ^[1-9][0-9]*$ ]] || {
+  echo "Message Board process and shard counts must be positive integers." >&2
+  exit 1
+}
+[[ "$image_tag" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]] || {
+  echo "Message Board image tag is invalid." >&2
+  exit 1
+}
 datastore_id=
 delivery_id=
 app_pid=
@@ -32,9 +58,9 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-pnpm -C "$root" images:build:local --target simple-delivery-server
-delivery_id=$(docker run --detach --name "$name-delivery" -p 8484:8484 \
-  --env HOST=0.0.0.0 --env PORT=8484 spine-ts/simple-delivery-server:local)
+MESSAGE_BOARD_IMAGE_TAG="$image_tag" pnpm -C "$root" images:build:local --target simple-delivery-server
+delivery_id=$(docker run --detach --name "$name-delivery" -p "127.0.0.1:$delivery_port:8484" \
+  --env HOST=0.0.0.0 --env PORT=8484 "spine-ts/simple-delivery-server:$image_tag")
 for attempt in $(seq 1 30); do
   docker logs "$delivery_id" 2>&1 | grep -q 'Delivery server listening' && break
   docker inspect --format '{{.State.Running}}' "$delivery_id" 2>/dev/null | grep -qx true || {
@@ -48,27 +74,27 @@ docker logs "$delivery_id" 2>&1 | grep -q 'Delivery server listening' || {
   exit 1
 }
 
-datastore_id=$(docker run --detach --name "$name-datastore" -p 8081:8081 \
+datastore_id=$(docker run --detach --name "$name-datastore" -p "127.0.0.1:$datastore_port:8081" \
   google/cloud-sdk:578.0.0-emulators \
   gcloud emulators firestore start --database-mode=datastore-mode --host-port=0.0.0.0:8081 --quiet)
 for attempt in $(seq 1 30); do
-  curl --fail --silent http://127.0.0.1:8081 >/dev/null 2>&1 && break
+  curl --fail --silent "http://127.0.0.1:$datastore_port" >/dev/null 2>&1 && break
   docker inspect --format '{{.State.Running}}' "$datastore_id" 2>/dev/null | grep -qx true || {
     docker logs "$datastore_id" >&2 || true
     exit 1
   }
   sleep 1
 done
-curl --fail --silent http://127.0.0.1:8081 >/dev/null 2>&1 || {
+curl --fail --silent "http://127.0.0.1:$datastore_port" >/dev/null 2>&1 || {
   docker logs "$datastore_id" >&2 || true
   exit 1
 }
 
 pnpm -C "$root" typecheck:build
-env NODE_ENV=production DELIVERY_SERVER_URL=http://127.0.0.1:8484 \
-  HOST=127.0.0.1 PORT=8091 DATASTORE_PROJECT_ID=message-board-local \
-  DATASTORE_EMULATOR_HOST=127.0.0.1:8081 PROCESS_COUNT="${MESSAGE_BOARD_PROCESS_COUNT:-2}" \
-  DELIVERY_SHARD_COUNT=2 node "$root/examples/message-board/app/dist/src/multi-process-app.js" \
+env NODE_ENV=production DELIVERY_SERVER_URL="http://127.0.0.1:$delivery_port" \
+  HOST=127.0.0.1 PORT="$coordinator_port" DATASTORE_PROJECT_ID="$name" \
+  DATASTORE_EMULATOR_HOST="127.0.0.1:$datastore_port" PROCESS_COUNT="$process_count" \
+  DELIVERY_SHARD_COUNT="$shard_count" node "$root/examples/message-board/app/dist/src/multi-process-app.js" \
   >"$coordinator_log" 2>&1 & app_pid=$!
 for attempt in $(seq 1 30); do
   grep -q 'MessageBoard managed coordinator ready' "$coordinator_log" && break
@@ -80,9 +106,9 @@ grep -q 'MessageBoard managed coordinator ready' "$coordinator_log" || {
   exit 1
 }
 
-HOST=127.0.0.1 PORT=8090 BROWSER_ORIGIN=http://127.0.0.1:5173 BACKEND_URLS=http://127.0.0.1:8091 \
-  DATASTORE_PROJECT_ID=message-board-local \
-  DATASTORE_EMULATOR_HOST=127.0.0.1:8081 node "$root/examples/message-board/app/dist/src/gateway-server.js" \
+HOST=127.0.0.1 PORT="$gateway_port" BROWSER_ORIGIN="http://127.0.0.1:$web_port" BACKEND_URLS="http://127.0.0.1:$coordinator_port" \
+  DATASTORE_PROJECT_ID="$name" \
+  DATASTORE_EMULATOR_HOST="127.0.0.1:$datastore_port" node "$root/examples/message-board/app/dist/src/gateway-server.js" \
   >"$gateway_log" 2>&1 & gateway_pid=$!
 for attempt in $(seq 1 30); do
   grep -q 'MessageBoard gateway ready' "$gateway_log" && break
@@ -91,14 +117,14 @@ for attempt in $(seq 1 30); do
 done
 grep -q 'MessageBoard gateway ready' "$gateway_log" || { cat "$gateway_log" >&2; exit 1; }
 
-VITE_MESSAGE_BOARD_GATEWAY_URL=http://127.0.0.1:8090 \
-  pnpm -C "$root/examples/message-board/web" start:dev-server >"$ui_log" 2>&1 & ui_pid=$!
+VITE_MESSAGE_BOARD_GATEWAY_URL="http://127.0.0.1:$gateway_port" \
+  node "$root/examples/message-board/web/node_modules/vite/bin/vite.js" "$root/examples/message-board/web" --host 127.0.0.1 --port "$web_port" --strictPort >"$ui_log" 2>&1 & ui_pid=$!
 for attempt in $(seq 1 30); do
-  curl --fail --silent http://127.0.0.1:5173 >/dev/null 2>&1 && break
+  curl --fail --silent "http://127.0.0.1:$web_port" >/dev/null 2>&1 && break
   kill -0 "$ui_pid" 2>/dev/null || { cat "$ui_log" >&2; exit 1; }
   sleep 1
 done
-curl --fail --silent http://127.0.0.1:5173 >/dev/null 2>&1 || { cat "$ui_log" >&2; exit 1; }
+curl --fail --silent "http://127.0.0.1:$web_port" >/dev/null 2>&1 || { cat "$ui_log" >&2; exit 1; }
 
-echo 'Message Board local multi-process UI: http://127.0.0.1:5173'
+echo "Message Board local multi-process UI: http://127.0.0.1:$web_port"
 wait "$ui_pid"

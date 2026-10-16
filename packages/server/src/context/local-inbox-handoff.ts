@@ -97,12 +97,39 @@ export interface EnvironmentDeliveryPorts {
  * Coordinates readiness notifications while delivery ownership changes hands.
  */
 export class DeliveryReadiness {
+  /**
+   * Callback for a newly available delivery scope.
+   */
   #onReady: OnDeliveryReady;
+
+  /**
+   * Direct drains admitted before readiness transfer.
+   */
   readonly #active = new Set<Promise<void>>();
+
+  /**
+   * Current readiness transition phase.
+   */
   #mode: "direct" | "transition" | "routed" | "failed" = "direct";
+
+  /**
+   * Scopes configured for the transfer.
+   */
   #configured = new Map<string, DeliveryReady>();
+
+  /**
+   * Notifications buffered while direct drains settle.
+   */
   #buffered = new Map<string, DeliveryReady>();
+
+  /**
+   * Whether a transition received an unconfigured scope.
+   */
   #invalidTransition = false;
+
+  /**
+   * Remote ports installed after a successful transfer.
+   */
   #ports: EnvironmentDeliveryPorts | undefined;
 
   /**
@@ -438,6 +465,7 @@ export const InboxHandoff: Readonly<{
       readonly shard: { readonly index: number; readonly ofTotal: number };
     },
   ): boolean;
+  sameDelivery(left: InboxMessage, right: InboxMessage): boolean;
   messageIdKey(message: Pick<InboxMessage, "id">): string;
   endpoint(input: {
     readonly label: SupportedDeliveryLabel;
@@ -539,7 +567,7 @@ export const InboxHandoff: Readonly<{
     )
       return "ACKNOWLEDGED";
     const failure = direct.run.failures.find(({ message }) =>
-      InboxHandoff.sameMessageId(message.id, options.received.id),
+      InboxHandoff.sameDelivery(message, options.received),
     );
     if (failure !== undefined)
       throw InboxHandoff.replayFailure(failure.error, options.replayFailureMessage);
@@ -588,6 +616,18 @@ export const InboxHandoff: Readonly<{
   ): boolean {
     return (
       left.value === right.value &&
+      left.shard.index === right.shard.index &&
+      left.shard.ofTotal === right.shard.ofTotal
+    );
+  },
+
+  sameDelivery(left: InboxMessage, right: InboxMessage): boolean {
+    return (
+      (InboxHandoff.sameMessageId(left.id, right.id) ||
+        (left.signalId === right.signalId &&
+          left.label === right.label &&
+          left.inboxId.targetTypeUrl === right.inboxId.targetTypeUrl &&
+          InboxTargets.equal(left.inboxId.targetId, right.inboxId.targetId))) &&
       left.shard.index === right.shard.index &&
       left.shard.ofTotal === right.shard.ofTotal
     );

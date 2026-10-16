@@ -19,7 +19,7 @@ const priorSigint = new Set(process.listeners("SIGINT"));
 const priorSigterm = new Set(process.listeners("SIGTERM"));
 const managed = await ManagedServerApplication.start({
   processCount: 1,
-  port: 50_053,
+  port: 0,
   moduleUrl: import.meta.url,
   createServer: async ({ host, port }) => Server.atPort(port, { host }).start(),
 });

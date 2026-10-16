@@ -1,7 +1,8 @@
 services:
   web:
-    image: spine-ts/message-board-web:local
-    environment: { VITE_MESSAGE_BOARD_GATEWAY_URL: http://localhost:18080 }
+    image: spine-ts/message-board-web:${MESSAGE_BOARD_IMAGE_TAG:-local}
+    environment:
+      { MESSAGE_BOARD_GATEWAY_URL: "http://localhost:${MESSAGE_BOARD_PUBLIC_PORT:-18080}" }
 
   datastore:
     image: google/cloud-sdk:578.0.0-emulators
@@ -20,7 +21,7 @@ services:
       retries: 30
 
   delivery:
-    image: spine-ts/simple-delivery-server:local
+    image: spine-ts/simple-delivery-server:${MESSAGE_BOARD_IMAGE_TAG:-local}
     environment:
       HOST: 0.0.0.0
       PORT: 8484
@@ -35,7 +36,7 @@ services:
       retries: 30
 
   application-node:
-    image: spine-ts/message-board:local
+    image: spine-ts/message-board:${MESSAGE_BOARD_IMAGE_TAG:-local}
     command:
       ["node_modules/@spine-event-engine/example-message-board-app/dist/src/multi-process-app.js"]
     environment: &application-environment
@@ -54,12 +55,12 @@ services:
         condition: service_healthy
 
   gateway:
-    image: spine-ts/standalone-gateway:local
+    image: spine-ts/standalone-gateway:${MESSAGE_BOARD_IMAGE_TAG:-local}
     environment: &gateway-environment
       HOST: 0.0.0.0
       PORT: 8080
       NODE_ENV: production
-      BROWSER_ORIGIN: http://localhost:18080
+      BROWSER_ORIGIN: "http://localhost:${MESSAGE_BOARD_PUBLIC_PORT:-18080}"
       BACKEND_URLS: http://application-node:8080
       DATASTORE_PROJECT_ID: message-board-compose
       DATASTORE_EMULATOR_HOST: datastore:8081
@@ -77,7 +78,7 @@ services:
     image: envoyproxy/envoy:v1.38.3@sha256:5f7c43e1147412fdb3af578c651c67478a3df818eae89d2261e707e06c209cdb
     command: ["-c", "/etc/envoy/envoy.yaml"]
     ports:
-      - "18080:8080"
+      - "127.0.0.1:${MESSAGE_BOARD_PUBLIC_PORT:-18080}:8080"
     volumes:
       - ./standalone-envoy.yaml:/etc/envoy/envoy.yaml:ro
     depends_on:

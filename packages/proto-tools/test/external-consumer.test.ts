@@ -26,7 +26,7 @@ import {
 } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { packFrameworkArtifacts } from "../../../scripts/snapshot-artifacts.mjs";
@@ -285,9 +285,13 @@ function assertIsolatedInstalledTree(directory: string, allowLocalSymlinks = fal
         );
       } else {
         expect(lstatSync(path).isSymbolicLink(), relative(directory, path)).toBe(false);
-        expect(resolve(path).startsWith(resolve(repositoryRoot)), relative(directory, path)).toBe(
-          false,
-        );
+        const withinFixture = relative(resolvedDirectory, realpathSync(path));
+        expect(
+          withinFixture !== ".." &&
+            !withinFixture.startsWith(`..${sep}`) &&
+            !isAbsolute(withinFixture),
+          relative(directory, path),
+        ).toBe(true);
       }
       if (entry.isDirectory()) pending.push(path);
     }

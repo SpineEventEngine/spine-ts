@@ -23,7 +23,7 @@ one value can be reused across scopes and clients.
 
 ## Subscriptions
 
-`createSubscription(topic, options)` returns an inactive handle. `activate()` performs Subscribe; `cancel()` is terminal, ends local iteration, and performs at most one bounded remote Cancel per accepted wire. `updates` and `lifecycle` are independent single-consumer async streams with no cross-stream ordering guarantee. `client.close()` terminally closes every subscription it created.
+`createSubscription(topic, options)` returns an inactive handle. `activate()` performs Subscribe and waits for a matching response-only successful ACK before reporting `connected`; an idle subscription can therefore become ready without a business update. A malformed, mismatched, failed, or missing ACK never establishes readiness. A duplicate ACK after readiness is a protocol error, not a business update. Cancel during a pending Subscribe or ACK rejects pending `activate()`. `cancel()` ends local iteration immediately and coalesces concurrent remote Cancel attempts. A failed attempt can be retried from the same handle; successful cleanup is terminal and idempotent. `updates` and `lifecycle` are independent single-consumer async streams with no cross-stream ordering guarantee. `client.close()` terminally closes every subscription it created.
 
 For Entity subscriptions, `authoritativeQuery` may return a generated query value and is evaluated
 during authoritative reads, including recovery after reconnect. Its target must be byte-equivalent

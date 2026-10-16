@@ -331,7 +331,7 @@ const InboxMessages: Readonly<{
     if (received !== 0) return received;
     const version = left.version - right.version;
     if (version !== 0) return version;
-    return (left.id?.uuid ?? "").localeCompare(right.id?.uuid ?? "");
+    return InboxIds.compare(left.id?.uuid ?? "", right.id?.uuid ?? "");
   },
   validPayload: (message: InboxMessage): boolean => {
     const payload = message.payload;
@@ -452,9 +452,30 @@ const InboxTime: Readonly<{
 });
 
 /**
+ * Compares IDs by unsigned UTF-8 bytes without locale-dependent collation.
+ */
+const InboxIds = Object.freeze({
+  /**
+   * Compares two message IDs.
+   * @param left The first ID.
+   * @param right The second ID.
+   * @returns The bytewise ordering.
+   */
+  compare(left: string, right: string): number {
+    return Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"));
+  },
+});
+
+/**
  * Computes a pending-message count delta from an Inbox status transition.
  */
 const InboxTransitions = Object.freeze({
+  /**
+   * Returns the change in pending-message count for one row transition.
+   * @param prior The previous row, if present.
+   * @param next The next row.
+   * @returns The pending-message count delta.
+   */
   delta(prior: InboxMessage | undefined, next: InboxMessage): 1 | -1 | 0 {
     const wasPending = prior?.status === InboxMessageStatus.TO_DELIVER;
     const isPending = next.status === InboxMessageStatus.TO_DELIVER;
@@ -465,47 +486,23 @@ const InboxTransitions = Object.freeze({
 /**
  * Bounds Inbox responses and creates RPC errors.
  */
-const InboxResponses: Readonly<{
-  // prettier-ignore
-
+const InboxResponses = Object.freeze({
   /**
-   * Creates a response after enforcing its encoded size limit.
-   *
+   * Creates a bounded response message.
+   * @typeParam Schema The generated response schema.
    * @param schema Defines the response message type.
    * @param initializer Holds the response fields.
    * @param errorMessage Describes an oversized response.
    * @returns The bounded response message.
    */
-  bounded: <Schema extends GenMessage<Message>>(
-    schema: Schema,
-    initializer: MessageInitShape<Schema>,
-    errorMessage?: string,
-  ) => MessageShape<Schema>;
-
-  /**
-   * Creates an invalid-argument RPC error.
-   *
-   * @param message Describes the invalid request.
-   * @returns The invalid-argument error.
-   */
-  invalid: (message: string) => ConnectError;
-
-  /**
-   * Creates a resource-exhausted RPC error.
-   *
-   * @param message Describes the exhausted resource.
-   * @returns The resource-exhausted error.
-   */
-  exhausted: (message: string) => ConnectError;
-}> = Object.freeze({
-  bounded: <Schema extends GenMessage<Message>>(
+  bounded<Schema extends GenMessage<Message>>(
     schema: Schema,
     initializer: MessageInitShape<Schema>,
     errorMessage = "Delivery response exceeds the 4 MiB limit.",
-  ): MessageShape<Schema> => {
+  ): MessageShape<Schema> {
     const response = create(schema, initializer);
     if (toBinary(schema, response).byteLength > MAX_DELIVERY_RPC_BYTES)
-      throw InboxResponses.exhausted(errorMessage);
+      throw new ConnectError(errorMessage, Code.ResourceExhausted);
     return response;
   },
   invalid: (message: string): ConnectError => new ConnectError(message, Code.InvalidArgument),

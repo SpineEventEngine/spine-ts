@@ -63,6 +63,14 @@ export const RecordQuery: Readonly<{
    * @param query The query to validate.
    */
   validate<I>(query: RecordQuery<I>): void;
+
+  /**
+   * Expands a legacy scalar-column filter into its accepted values.
+   *
+   * @param filter The legacy equality or membership filter.
+   * @returns Scalar choices; an empty array matches no records.
+   */
+  acceptedValues(filter: RecordFilter): readonly unknown[];
 }> = Object.freeze({
   // prettier-ignore
 
@@ -96,6 +104,16 @@ export const RecordQuery: Readonly<{
         }
       }
     }
+  },
+
+  /**
+   * Expands a legacy scalar-column filter into its accepted values.
+   *
+   * @param filter The legacy equality or membership filter.
+   * @returns Scalar choices; an empty array matches no records.
+   */
+  acceptedValues(filter: RecordFilter): readonly unknown[] {
+    return Array.isArray(filter.value) ? filter.value : [filter.value];
   },
 });
 
@@ -157,7 +175,7 @@ export interface RecordContinuationValue {
 }
 
 /**
- * Equality filter against one stored column or the `id` field.
+ * Equality or membership filter against one scalar stored column or the `id` field.
  */
 export interface RecordFilter {
   // prettier-ignore
@@ -168,7 +186,8 @@ export interface RecordFilter {
   readonly column: string;
 
   /**
-   * One accepted value or a small accepted set.
+   * One accepted scalar value or an array of accepted scalar values. An empty
+   * array matches no records. Normalized query plans retain literal array equality.
    */
   readonly value: unknown;
 }

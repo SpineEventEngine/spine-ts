@@ -24,12 +24,12 @@ import {
   AdminService,
   ShardService,
   PageOfMessagesSchema,
+  ReadMessagesSinceTimeSchema as ReadSinceTimeSchema,
   OptionalInboxMessageSchema,
   ShardInfoListSchema,
   LiquorPickUpOutcomeSchema as PickUpOutcomeSchema,
   ExpiredSessionsReleasedSchema,
   PickUpShardSchema,
-  ReadMessagesSinceTimeSchema as ReadMessagesSchema,
   RemoveMessageSchema,
   RemoveMessagesSchema,
   ReleaseExpiredSessionsSchema,
@@ -278,12 +278,9 @@ export class DeliveryClient {
   }
 
   /**
-   * Reads and decodes the first bounded ordered page for one shard.
-   *
-   * A server rejects an encoded response above 4 MiB with `RESOURCE_EXHAUSTED`;
-   * retry this safe read with a smaller `pageSize`.
+   * Reads one bounded page through the JVM InboxService timestamp query.
    * @param shardIndex Identifies the shard to read.
-   * @param options Supplies page continuation, size, and read bounds.
+   * @param options Supplies the exclusive time bound, page size, and read bounds.
    * @returns Detached messages in remote timestamp order.
    */
   async readPage(
@@ -298,12 +295,12 @@ export class DeliveryClient {
       options.sinceWhen === undefined
         ? undefined
         : DeliveryRequestCodec.timestamp(options.sinceWhen);
-    const request = create(ReadMessagesSchema, {
+    const request = create(ReadSinceTimeSchema, {
       shard: DeliveryShardCodec.encode(shardIndex),
       pageSize: size,
       ...(sinceWhen === undefined ? {} : { sinceWhen }),
     });
-    DeliveryRequestCodec.requestBytes(ReadMessagesSchema, request);
+    DeliveryRequestCodec.requestBytes(ReadSinceTimeSchema, request);
     const response = await this.#read(options, (signal, timeoutMs) =>
       this.#inbox.findManyInShard(request, { timeoutMs, signal }),
     );

@@ -18,8 +18,8 @@ import { Time } from "@spine-event-engine/core/time";
 
 import { create, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, TimestampSchema, timestampFromDate } from "@bufbuild/protobuf/wkt";
-import { Identifiers } from "@spine-event-engine/core";
-import { EventSchema } from "@spine-event-engine/proto";
+import { AnyMessages, Identifiers, TypeUrls } from "@spine-event-engine/core";
+import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 import { WorkerIdSchema, type WorkerId } from "@spine-event-engine/proto/delivery";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
@@ -31,13 +31,26 @@ import { Inbox, type InboxMessage, type InboxReadOptions } from "../../src/deliv
 import { InboxStorage } from "../../src/delivery/inbox-storage.js";
 import { commitFenced } from "../../src/repository/commit-fence.js";
 import { ShardIndex } from "../../src/index.js";
+import {
+  TaskIdSchema,
+  TaskListIdSchema,
+} from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
+import { TaskCreatedSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
+import { TaskSchema } from "../../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 
 describe("Delivery direct worker", () => {
   it("preserves microsecond receive time in a retained delivery failure", async () => {
     const shard = ShardIndex.single();
     const whenReceived = create(TimestampSchema, { seconds: 1n, nanos: 123_456_000 });
     const row = { ...message("precise", "target", shard), whenReceived };
-    const delivery = createDelivery({ rows: [row], mark: async () => undefined });
+    const rows = [row];
+    const delivery = createDelivery({
+      rows,
+      mark: async (candidate) => {
+        remove(rows, candidate);
+        return candidate;
+      },
+    });
     const run = await delivery.drain(shard, {
       onMessage: () => {
         throw new Error("failed");
@@ -524,26 +537,38 @@ describe("Delivery direct worker", () => {
     expect(removals).toBe(1);
   });
 
-  it("stops cleanup when cancellation or ownership loss occurs and leaves the row for retry", async () => {
+  it("keeps a completed cleanup deletion when cancellation stops later work", async () => {
     const shard = ShardIndex.single();
     const delivered = { ...message("delivered", "target", shard), status: "DELIVERED" as const };
+    const pending = message("pending", "other-target", shard);
+    const rows = [delivered, pending];
     const controller = new AbortController();
     let removals = 0;
+    let dispatched = 0;
     const delivery = createDelivery({
-      read: async () => [delivered],
-      remove: async () => {
+      pageSize: 1,
+      read: async (options) => {
+        const cursor = options?.after?.messageId;
+        return rows.filter((row) => cursor === undefined || row.id.value > cursor).slice(0, 1);
+      },
+      remove: async (row) => {
         removals += 1;
+        remove(rows, row);
         controller.abort();
         return true;
       },
     });
     await expect(
       delivery.drain(shard, {
-        onMessage: () => undefined,
+        onMessage: () => {
+          dispatched += 1;
+        },
         operation: { signal: controller.signal },
       }),
     ).resolves.toMatchObject({ status: "STOPPED", delivered: 0 });
     expect(removals).toBe(1);
+    expect(dispatched).toBe(0);
+    expect(rows).toEqual([pending]);
   });
 
   it("leaves a delivered row retryable when cancellation arrives before cleanup deletion", async () => {
@@ -623,13 +648,17 @@ describe("Delivery direct worker", () => {
     expect(removed).toEqual(["eligible"]);
   });
 
-  it("stops when a refused cleanup deletion is followed by lost ownership", async () => {
+  it("retains a delivered row when cleanup refuses deletion without a post-delete lease check", async () => {
     const shard = ShardIndex.single();
     const delivered = { ...message("delivered", "target", shard), status: "DELIVERED" as const };
     let validations = 0;
+    let removals = 0;
     const delivery = createDelivery({
       read: async () => [delivered],
-      remove: async () => false,
+      remove: async () => {
+        removals += 1;
+        return false;
+      },
       registry: {
         pickUp: async () => session(shard),
         renew: async () => (validations++ < 2 ? session(shard) : undefined),
@@ -638,8 +667,10 @@ describe("Delivery direct worker", () => {
     });
 
     await expect(delivery.drain(shard, { onMessage: () => undefined })).resolves.toMatchObject({
-      status: "STOPPED",
+      status: "DRAINED",
     });
+    expect(removals).toBe(1);
+    expect(validations).toBe(2);
   });
 
   it("omits cleanup for custom Inbox ports and forwards operation deadlines to cleanup reads", async () => {
@@ -905,9 +936,12 @@ describe("Delivery direct worker", () => {
     expect(received).toBe(controller.signal);
   });
 
-  it("defaults a failed reception to durable acknowledgement", async () => {
+  it("marks failed processing delivered by default while an unrelated target progresses", async () => {
     const shard = ShardIndex.single();
-    const rows = [message("failed", "target", shard)];
+    const failed = message("failed", "target", shard);
+    const other = message("other", "other-target", shard);
+    const rows = [failed, other];
+    const seen: string[] = [];
     const delivery = createDelivery({
       rows,
       mark: async (row) => {
@@ -916,22 +950,408 @@ describe("Delivery direct worker", () => {
       },
     });
     const run = await delivery.drain(shard, {
+      onMessage: (row) => {
+        seen.push(row.id.value);
+        if (row.id.value === "failed") throw new Error("dispatch failed");
+      },
+    });
+    expect(run).toMatchObject({ status: "DRAINED", failed: 1, delivered: 2 });
+    expect(seen).toEqual(["failed", "other"]);
+    expect(rows).toEqual([]);
+  });
+
+  it("propagates a failure monitor error without acknowledging", async () => {
+    const shard = ShardIndex.single();
+    const failed = message("failed", "target", shard);
+    const rows = [failed];
+    let acknowledgements = 0;
+    const delivery = createDelivery({
+      rows,
+      mark: async (row) => {
+        acknowledgements += 1;
+        remove(rows, row);
+        return row;
+      },
+      monitor: new (class extends DeliveryMonitor {
+        override onReceptionFailure(): never {
+          throw new Error("monitor failed");
+        }
+      })(),
+    });
+    await expect(
+      delivery.drain(shard, {
+        onMessage: () => {
+          throw new Error("processing failed");
+        },
+      }),
+    ).rejects.toThrow("monitor failed");
+    expect(acknowledgements).toBe(0);
+    expect(rows).toEqual([failed]);
+  });
+
+  it.each([false, new Error("release failed")])(
+    "preserves a monitor failure when shard release returns or throws %s",
+    async (releaseResult) => {
+      const shard = ShardIndex.single();
+      const row = message("failed", "target", shard);
+      const rows = [row];
+      const monitorFailure = new Error("monitor decision failed");
+      let releases = 0;
+      let acknowledgements = 0;
+      const delivery = createDelivery({
+        rows,
+        registry: {
+          pickUp: async () => session(shard),
+          release: async () => {
+            releases += 1;
+            if (releaseResult instanceof Error) throw releaseResult;
+            return releaseResult;
+          },
+        },
+        mark: async (candidate) => {
+          acknowledgements += 1;
+          return candidate;
+        },
+        monitor: new (class extends DeliveryMonitor {
+          override onReceptionFailure(): never {
+            throw monitorFailure;
+          }
+        })(),
+      });
+
+      await expect(
+        delivery.drain(shard, { onMessage: () => Promise.reject(new Error("handler failed")) }),
+      ).rejects.toBe(monitorFailure);
+      expect(releases).toBe(1);
+      expect(acknowledgements).toBe(0);
+      expect(rows).toEqual([row]);
+    },
+  );
+
+  it.each([false, new Error("release failed")])(
+    "preserves a selected action failure when shard release returns or throws %s",
+    async (releaseResult) => {
+      const shard = ShardIndex.single();
+      const row = message("failed", "target", shard);
+      const rows = [row];
+      const actionFailure = new Error("selected action failed");
+      let releases = 0;
+      let acknowledgements = 0;
+      const delivery = createDelivery({
+        rows,
+        registry: {
+          pickUp: async () => session(shard),
+          release: async () => {
+            releases += 1;
+            if (releaseResult instanceof Error) throw releaseResult;
+            return releaseResult;
+          },
+        },
+        mark: async (candidate) => {
+          acknowledgements += 1;
+          return candidate;
+        },
+        monitor: new (class extends DeliveryMonitor {
+          override onReceptionFailure() {
+            return {
+              execute: () => Promise.reject(actionFailure),
+            };
+          }
+        })(),
+      });
+
+      await expect(
+        delivery.drain(shard, { onMessage: () => Promise.reject(new Error("handler failed")) }),
+      ).rejects.toBe(actionFailure);
+      expect(releases).toBe(1);
+      expect(acknowledgements).toBe(0);
+      expect(rows).toEqual([row]);
+    },
+  );
+
+  it("marks a failed reception delivered after a custom action resolves normally", async () => {
+    const shard = ShardIndex.single();
+    const row = message("failed", "target", shard);
+    const rows = [row];
+    let acknowledgements = 0;
+    const delivery = createDelivery({
+      rows,
+      mark: async (candidate) => {
+        acknowledgements += 1;
+        remove(rows, candidate);
+        return candidate;
+      },
+      monitor: new (class extends DeliveryMonitor {
+        override onReceptionFailure() {
+          return { execute: () => Promise.resolve() };
+        }
+      })(),
+    });
+
+    const run = await delivery.drain(shard, {
+      onMessage: () => Promise.reject(new Error("handler failed")),
+    });
+    expect(run).toMatchObject({ status: "DRAINED", failed: 1, delivered: 1 });
+    expect(acknowledgements).toBe(1);
+    expect(rows).toEqual([]);
+  });
+
+  it("consults the monitor again after a failed repeat and marks once", async () => {
+    const shard = ShardIndex.single();
+    const failed = message("failed", "target", shard);
+    const rows = [failed];
+    let calls = 0;
+    let acknowledgements = 0;
+    const failures: unknown[] = [];
+    const firstFailure = new Error("first processing failure");
+    const secondFailure = new Error("second processing failure");
+    const delivery = createDelivery({
+      rows,
+      mark: async (row) => {
+        acknowledgements += 1;
+        remove(rows, row);
+        return row;
+      },
+      monitor: new (class extends DeliveryMonitor {
+        override onReceptionFailure(
+          reception: Parameters<DeliveryMonitor["onReceptionFailure"]>[0],
+        ) {
+          failures.push(reception.error);
+          return failures.length === 1 ? reception.repeatDispatching() : reception.markDelivered();
+        }
+      })(),
+    });
+    const run = await delivery.drain(shard, {
       onMessage: () => {
-        throw new Error("dispatch failed");
+        calls += 1;
+        throw calls === 1 ? firstFailure : secondFailure;
+      },
+    });
+    expect(run).toMatchObject({ failed: 2, delivered: 1 });
+    expect(calls).toBe(2);
+    expect(failures).toEqual([firstFailure, secondFailure]);
+    expect(acknowledgements).toBe(1);
+    expect(rows).toEqual([]);
+  });
+
+  it("retries acknowledgement without rerunning successful processing", async () => {
+    const shard = ShardIndex.single();
+    const row = message("accepted", "target", shard);
+    const rows = [row];
+    let calls = 0;
+    let acknowledgements = 0;
+    const delivery = createDelivery({
+      rows,
+      mark: async (candidate) => {
+        acknowledgements += 1;
+        if (acknowledgements < 3) throw new Error("acknowledgement unavailable");
+        remove(rows, candidate);
+        return candidate;
+      },
+    });
+    const run = await delivery.drain(shard, {
+      onMessage: () => {
+        calls += 1;
+      },
+    });
+    expect(run).toMatchObject({ delivered: 1, failed: 0 });
+    expect(calls).toBe(1);
+    expect(acknowledgements).toBe(3);
+    expect(rows).toEqual([]);
+  });
+
+  it("does not acknowledge when cancellation follows successful processing", async () => {
+    const shard = ShardIndex.single();
+    const row = message("accepted", "target", shard);
+    const rows = [row];
+    const controller = new AbortController();
+    let acknowledgements = 0;
+    const delivery = createDelivery({
+      rows,
+      mark: async (candidate) => {
+        acknowledgements += 1;
+        remove(rows, candidate);
+        return candidate;
+      },
+    });
+
+    await expect(
+      delivery.drain(shard, {
+        onMessage: () => {
+          controller.abort();
+        },
+        operation: { signal: controller.signal },
+      }),
+    ).resolves.toMatchObject({ status: "STOPPED", delivered: 0 });
+    expect(acknowledgements).toBe(0);
+    expect(rows).toEqual([row]);
+  });
+
+  it("stops acknowledgement retries after cancellation of an entered write", async () => {
+    const shard = ShardIndex.single();
+    const row = message("accepted", "target", shard);
+    const rows = [row];
+    const controller = new AbortController();
+    let processing = 0;
+    let acknowledgements = 0;
+    const delivery = createDelivery({
+      rows,
+      mark: async () => {
+        acknowledgements += 1;
+        controller.abort();
+        throw new Error("acknowledgement unavailable");
+      },
+    });
+
+    const run = await delivery.drain(shard, {
+      onMessage: () => {
+        processing += 1;
+      },
+      operation: { signal: controller.signal },
+    });
+    expect(run).toMatchObject({ failed: 1, delivered: 0 });
+    expect(processing).toBe(1);
+    expect(acknowledgements).toBe(1);
+    expect(rows).toEqual([row]);
+  });
+
+  it("leaves exhausted acknowledgement pending without consulting the reception monitor", async () => {
+    const shard = ShardIndex.single();
+    const row = message("accepted", "target", shard);
+    const rows = [row];
+    let calls = 0;
+    let acknowledgements = 0;
+    let monitorCalls = 0;
+    const delivery = createDelivery({
+      rows,
+      mark: async () => {
+        acknowledgements += 1;
+        throw new Error("acknowledgement unavailable");
+      },
+      monitor: new (class extends DeliveryMonitor {
+        override onReceptionFailure(
+          reception: Parameters<DeliveryMonitor["onReceptionFailure"]>[0],
+        ) {
+          monitorCalls += 1;
+          return reception.repeatDispatching();
+        }
+      })(),
+    });
+    const run = await delivery.drain(shard, {
+      onMessage: () => {
+        calls += 1;
+      },
+    });
+    expect(run).toMatchObject({ failed: 1, delivered: 0 });
+    expect(calls).toBe(1);
+    expect(monitorCalls).toBe(0);
+    expect(acknowledgements).toBe(3);
+    expect(rows).toEqual([row]);
+  });
+
+  it("limits acknowledgement retries to three after a monitor-selected repeat succeeds", async () => {
+    const shard = ShardIndex.single();
+    const row = message("repeated", "target", shard);
+    const rows = [row];
+    let calls = 0;
+    let acknowledgements = 0;
+    let monitorCalls = 0;
+    const delivery = createDelivery({
+      rows,
+      mark: async () => {
+        acknowledgements += 1;
+        throw new Error("acknowledgement unavailable");
+      },
+      monitor: new (class extends DeliveryMonitor {
+        override onReceptionFailure(
+          reception: Parameters<DeliveryMonitor["onReceptionFailure"]>[0],
+        ) {
+          monitorCalls += 1;
+          return reception.repeatDispatching();
+        }
+      })(),
+    });
+
+    const run = await delivery.drain(shard, {
+      onMessage: () => {
+        calls += 1;
+        if (calls === 1) throw new Error("first reception failed");
+      },
+    });
+
+    expect(run).toMatchObject({ failed: 2, delivered: 0 });
+    expect(calls).toBe(2);
+    expect(monitorCalls).toBe(1);
+    expect(acknowledgements).toBe(3);
+    expect(rows).toEqual([row]);
+  });
+
+  it("permits an explicit terminal monitor action after processing failure", async () => {
+    const shard = ShardIndex.single();
+    const row = message("failed", "target", shard);
+    const rows = [row];
+    const delivery = createDelivery({
+      rows,
+      mark: async (candidate) => {
+        remove(rows, candidate);
+        return candidate;
+      },
+      monitor: new (class extends DeliveryMonitor {
+        override onReceptionFailure(
+          reception: Parameters<DeliveryMonitor["onReceptionFailure"]>[0],
+        ) {
+          return reception.markDelivered();
+        }
+      })(),
+    });
+    const run = await delivery.drain(shard, {
+      onMessage: () => {
+        throw new Error("terminal policy selected");
       },
     });
     expect(run).toMatchObject({ failed: 1, delivered: 1 });
     expect(rows).toEqual([]);
   });
 
+  it("does not retry acknowledged processing when a post-ack observer throws", async () => {
+    const shard = ShardIndex.single();
+    const row = message("accepted", "target", shard);
+    const rows = [row];
+    let calls = 0;
+    let acknowledgements = 0;
+    const delivery = createDelivery({
+      rows,
+      mark: async (candidate) => {
+        acknowledgements += 1;
+        remove(rows, candidate);
+        return candidate;
+      },
+    });
+    const run = await delivery.drain(shard, {
+      onMessage: () => {
+        calls += 1;
+      },
+      onDelivered: () => {
+        throw new Error("observer failed");
+      },
+    });
+    expect(run).toMatchObject({ delivered: 1, failed: 0 });
+    expect(calls).toBe(1);
+    expect(acknowledgements).toBe(1);
+  });
+
   it("retains a failure message independently from later caller mutation", async () => {
     const shard = ShardIndex.single();
-    const row = {
-      ...message("failed", "target", shard),
-      signal: create(AnySchema, { typeUrl: "type.example/signal", value: new Uint8Array([1, 2]) }),
-      keepUntil: new Date(10_000),
-    };
-    const delivery = createDelivery({ rows: [row], mark: async () => undefined });
+    const row = { ...message("failed", "target", shard), keepUntil: new Date(10_000) };
+    const firstSignalByte = row.signal?.value[0];
+    const rows = [row];
+    const delivery = createDelivery({
+      rows,
+      mark: async (candidate) => {
+        remove(rows, candidate);
+        return candidate;
+      },
+    });
     const run = await delivery.drain(shard, {
       onMessage: () => {
         throw new Error("failed");
@@ -958,12 +1378,14 @@ describe("Delivery direct worker", () => {
     const fact = run.failures[0]!.message;
     expect(fact).toMatchObject({
       id: { value: "failed" },
-      inboxId: { targetId: Identifiers.pack("string", "target") },
+      inboxId: {
+        targetId: Identifiers.pack(TaskIdSchema, create(TaskIdSchema, { value: "target" })),
+      },
     });
     expect(fact.shard).toMatchObject({ index: 0, ofTotal: 1 });
     expect(fact.whenReceived).toEqual(received);
     expect(fact.keepUntil?.getTime()).toBe(10_000);
-    expect(fact.signal?.value[0]).toBe(1);
+    expect(fact.signal?.value[0]).toBe(firstSignalByte);
     expect(() => {
       (fact.id as { value: string }).value = "changed";
     }).toThrow();
@@ -1073,7 +1495,6 @@ describe("Delivery direct worker", () => {
     await delivery.drain(shard, {
       onMessage: (row) => {
         seen.push(row.signalId);
-        if (row.signalId === "first") throw new Error("dispatch failed");
       },
     });
     expect(seen).toEqual(["first", "blocked", "other"]);
@@ -1107,7 +1528,6 @@ describe("Delivery direct worker", () => {
     const run = await delivery.drain(shard, {
       onMessage: (row) => {
         seen.push(row.signalId);
-        if (row.signalId === "blocked") throw new Error("dispatch failed");
       },
     });
     expect(run).toMatchObject({ status: "DRAINED", delivered: 1, failed: 1 });
@@ -1344,10 +1764,26 @@ function message(
   shard: ShardIndex,
   label: DeliveryEndpointMessage["label"] = "UPDATE_SUBSCRIBER",
 ): DeliveryEndpointMessage {
+  const id = create(TaskIdSchema, { value: targetId });
+  const event = create(EventSchema, {
+    id: create(EventIdSchema, { value: signalId }),
+    message: AnyMessages.pack(
+      TaskCreatedSchema,
+      create(TaskCreatedSchema, {
+        id,
+        title: signalId,
+        taskListId: create(TaskListIdSchema, { value: "list-1" }),
+      }),
+    ),
+  });
   return {
     id: { value: signalId, shard },
-    inboxId: { targetId: Identifiers.pack("string", targetId), targetTypeUrl: "type" },
+    inboxId: {
+      targetId: Identifiers.pack(TaskIdSchema, id),
+      targetTypeUrl: TypeUrls.derive(TaskSchema),
+    },
     signalId,
+    signal: AnyMessages.pack(EventSchema, event, { validate: false }),
     label,
     status: "TO_DELIVER",
     shard,

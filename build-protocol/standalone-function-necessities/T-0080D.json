@@ -199,15 +199,6 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/storage/src/internal/delivery-cleanup.ts",
-    "kind": "function-declaration",
-    "identity": "cleanupOperationActive()#1",
-    "name": "cleanupOperationActive",
-    "disposition": "necessity",
-    "reason": "TypeScript provider-neutral correctness boundary: cleanupOperationActive shares exact deadline semantics across memory, MySQL, and Datastore without class ownership."
-  },
-  {
-    "rule": "standalone-function",
     "file": "packages/transport/src/memory/message-transport.ts",
     "kind": "function-declaration",
     "identity": "copyChannel()#1",

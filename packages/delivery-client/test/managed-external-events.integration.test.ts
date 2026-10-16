@@ -20,7 +20,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { create } from "@bufbuild/protobuf";
+import { create, fromBinary } from "@bufbuild/protobuf";
 import { createClient } from "@connectrpc/connect";
 import { connectNodeAdapter, createGrpcTransport } from "@connectrpc/connect-node";
 import { SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
@@ -33,6 +33,7 @@ import { UserIdSchema } from "@spine-event-engine/proto";
 import {
   CommandService,
   SubscriptionService,
+  type SubscriptionUpdate,
   TargetSchema,
   TopicIdSchema,
   TopicSchema,
@@ -90,22 +91,33 @@ it(
     const transport = createGrpcTransport({ baseUrl: endpoint });
     const subscriptions = createClient(SubscriptionService, transport);
     const subscription = await subscriptions.subscribe(externalStateTopic());
-    const updates = subscriptions.activate(subscription)[Symbol.asyncIterator]();
+    // The generated stream iterator leaves its return value as `any`; the tests check `done`.
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    const updates: AsyncIterator<SubscriptionUpdate, void> = subscriptions
+      .activate(subscription)
+      [Symbol.asyncIterator]();
     const commands = createClient(CommandService, transport);
+    await expectActivationAck(updates);
 
     await bounded(
       commands.post(createProjectCommand("t0210-domestic-one")),
       "first domestic command",
     );
-    await expect(bounded(updates.next(), "first external state update")).resolves.toMatchObject({
-      done: false,
+    const first = await bounded(updates.next(), "first external state update");
+    if (first.done) throw new Error("First external Project update was missing.");
+    expect(externalState(first.value)).toEqual({
+      id: "t0210-domestic-one",
+      name: "external:t0210-domestic-one",
     });
     await bounded(
       commands.post(createProjectCommand("t0210-domestic-two")),
       "second domestic command",
     );
-    await expect(bounded(updates.next(), "second external state update")).resolves.toMatchObject({
-      done: false,
+    const second = await bounded(updates.next(), "second external state update");
+    if (second.done) throw new Error("Second external Project update was missing.");
+    expect(externalState(second.value)).toEqual({
+      id: "t0210-domestic-two",
+      name: "external:t0210-domestic-two",
     });
 
     expect(child.connected).toBe(true);
@@ -121,17 +133,41 @@ it(
     const transport = createGrpcTransport({ baseUrl: endpoint });
     const subscriptions = createClient(SubscriptionService, transport);
     const subscription = await subscriptions.subscribe(externalStateTopic());
-    const updates = subscriptions.activate(subscription)[Symbol.asyncIterator]();
+    // The generated stream iterator leaves its return value as `any`; the tests check `done`.
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    const updates: AsyncIterator<SubscriptionUpdate, void> = subscriptions
+      .activate(subscription)
+      [Symbol.asyncIterator]();
+    await expectActivationAck(updates);
 
     await writeFile(join(directory, "third-party-request"), "");
-    await expect(
-      bounded(updates.next(), "third-party external state update"),
-    ).resolves.toMatchObject({
-      done: false,
+    const thirdParty = await bounded(updates.next(), "third-party external state update");
+    if (thirdParty.done) throw new Error("ThirdParty Project update was missing.");
+    expect(externalState(thirdParty.value)).toEqual({
+      id: "t0210-third-party",
+      name: "external:t0210-third-party",
     });
   },
   20_000,
 );
+
+async function expectActivationAck(
+  updates: AsyncIterator<SubscriptionUpdate, void>,
+): Promise<void> {
+  const acknowledgement = await bounded(updates.next(), "external subscription activation ACK");
+  if (acknowledgement.done) throw new Error("External activation ended before its ACK.");
+  expect(acknowledgement.value.response?.status?.status.case).toBe("ok");
+  expect(acknowledgement.value.update.case).toBeUndefined();
+}
+
+function externalState(update: SubscriptionUpdate): { id: string; name: string } | undefined {
+  if (update.update.case !== "entityUpdates") return undefined;
+  const state = update.update.value.update[0]?.kind;
+  if (state?.case !== "state") return undefined;
+  if (state.value.typeUrl !== TypeUrls.derive(ProjectOverviewStateSchema)) return undefined;
+  const decoded = fromBinary(ProjectOverviewStateSchema, state.value.value);
+  return { id: decoded.id, name: decoded.name };
+}
 
 async function start(): Promise<{
   readonly child: ChildProcess;
