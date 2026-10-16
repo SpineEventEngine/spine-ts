@@ -14,7 +14,15 @@ evidence of completed work and are not current operating instructions. Every
 future `master` merge triggers NPM publication and therefore carries a new
 common workspace version under D-0115.
 
-Current approved work: [Process Manager queries across contexts](planning/cross-context-queries.md)
+Current work: [Signal-driven Agent entities](planning/agent-entities.md),
+implemented on `agent-entities` in
+[PR #18](https://github.com/SpineEventEngine/spine-ts/pull/18).
+The feature includes the AI facade, provider adapters, MCP, repository-indexed
+history, recovery, BlackBox support, and the
+[Release Notes Studio example](../examples/release-notes/README.md).
+General physical Entity deletion remains a separate deferred task.
+
+Previous completed work: [Process Manager queries across Bounded Contexts](planning/cross-context-queries.md)
 on `cross-context-queries`, based on official master `2324311be8`. Preserve the
 current effective tenant, reject duplicate Entity registrations and incompatible
 query destinations, and drain handlers before closing queried contexts. The

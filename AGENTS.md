@@ -23,6 +23,15 @@ a Command, treats a Command as an Event, or substitutes one identifier type for
 another is invalid because it hides contract mistakes and teaches the wrong
 API.
 
+## Artificial Limits
+
+Do not introduce artificial limits anywhere in the code unless the human has
+explicitly approved the specific limit. This includes hard-coded caps, default
+caps, truncation, timeouts, and retry budgets. Making a limit configurable does
+not substitute for approval. Do not raise an unapproved limit to another
+arbitrary value. Distinguish externally required protocol constraints from
+application-imposed limits, and identify the source of required constraints.
+
 ## Wording
 
 Avoid `own`, `owns`, `owned`, `owner`, and `ownership` unless the possession or
@@ -30,6 +39,35 @@ responsibility distinction is necessary for technical accuracy. Prefer direct
 wording that names the responsible class, module, package, agent, or person.
 This rule applies to code, documentation, review records, and user-facing chat
 responses.
+
+Use “Bounded Context” when naming the DDD boundary. Do not shorten it to
+“context”: Command contexts, Event contexts, Actor contexts, storage contexts,
+and System Context name different concepts. Preserve actual API identifiers.
+
+## Pull Request Descriptions
+
+Write pull request descriptions for human framework users. Explain the concrete
+behavior and how to use it. For significant features, include practical code
+examples, configuration, and authentication where relevant. Check examples
+against the implemented public API. Assume readers know the framework basics:
+start with the problem and explain the new behavior. Omit statements that are
+obvious in this repository, avoid repeatedly naming Spine, and rephrase rather
+than mechanically replacing its name with “framework”. Format code examples
+according to CODE_QUALITY.md, including multi-line TSDoc, declaration spacing,
+readable line lengths, and short methods. In PR examples, use four-space code
+indentation and a blank TSDoc line before the parameter/tag section.
+
+Do not add a Verification section, test counts, coverage totals, audit results,
+or agent review records to a pull request description unless the human explicitly
+asks for them. Keep any useful verification summary short and in the task file.
+
+## Repository Artifacts
+
+Do not commit execution diaries, review transcripts, temporary artifacts, or
+detailed verification reports. Keep task files limited to requirements,
+decisions, remaining work, and links useful for future maintenance. Include a
+short verification summary only when it is useful for future work. Superseded
+plans and progress reports should be removed rather than archived in Git.
 
 ## Model Allocation
 

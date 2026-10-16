@@ -1,6 +1,6 @@
 {
   "name": "@spine-event-engine/proto",
-  "version": "2.0.0-snapshot.22",
+  "version": "2.0.0-snapshot.23",
   "license": "Apache-2.0",
   "type": "module",
   "repository": {
@@ -37,6 +37,10 @@
     "./deployment": {
       "types": "./dist/src/deployment/index.d.ts",
       "default": "./dist/src/deployment/index.js"
+    },
+    "./agent": {
+      "types": "./dist/src/agent/index.d.ts",
+      "default": "./dist/src/agent/index.js"
     },
     "./spine-proto-manifest.json": "./spine-proto-manifest.json",
     "./proto/*": "./proto/*",

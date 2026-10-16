@@ -5,6 +5,8 @@ docs/api/reference
 packages/proto/src/generated
 packages/*/generated
 examples/*/generated
+examples/release-notes/src/main/gen
+examples/release-notes/src/renderer/gen
 **/spine-proto-manifest.json
 pnpm-lock.yaml
 build-protocol/CODE_QUALITY.md

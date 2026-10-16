@@ -1,0 +1,412 @@
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+
+syntax = "proto3";
+
+package spine.ts.agent;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/wrappers.proto";
+import "spine/options.proto";
+import "spine/ts/agent/model.proto";
+
+option (type_url_prefix) = "type.spine.io";
+
+// The actual prepared generation request, including a corrective request.
+message GenerationRequest {
+  // Typed application facts supplied to this request.
+  google.protobuf.Any input = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Rendered developer instructions sent to the model.
+  string instructions = 2 [(required) = true];
+
+  // Canonical JSON schema supplied to the provider.
+  string output_schema_json = 3 [(required) = true];
+
+  // Actual prepared conversation and advertised tool definitions as canonical JSON.
+  // Includes model-visible names mapped to configured server/tool names, without credentials.
+  string prompt_json = 4 [(required) = true];
+
+  // Correction target; absent on the first attempt.
+  AiAttemptId corrects = 5 [(validate) = true];
+
+  // Digest of the actual prepared request.
+  AiContentDigest digest = 6 [
+    (required) = true,
+    (validate) = true
+  ];
+}
+
+// One model-proposed external call before tool policy and argument validation.
+// Received content is not evidence of authorization or dispatch.
+message ModelToolCall {
+  // Exact provider correlation ID; blank or duplicate IDs remain recorded but cannot be dispatched.
+  string provider_call_id = 1;
+
+  // Exact model-facing name, including unsupported or blank names.
+  string tool_name = 2;
+
+  // Exact received argument text, including malformed JSON or empty text.
+  string arguments_json = 3;
+}
+
+// Exact assistant content returned by the Anthropic Messages profile.
+message AnthropicAssistantContent {
+  // Blocks in provider order, including incomplete blocks on a failed receipt.
+  repeated AnthropicContentBlock blocks = 1 [(validate) = true];
+}
+
+// One typed Anthropic assistant block before any tool result is sent.
+message AnthropicContentBlock {
+  oneof content {
+    option (choice).required = true;
+
+    string text = 1;
+    ModelToolCall tool_call = 2 [(validate) = true];
+    AnthropicThinking thinking = 3 [(validate) = true];
+    AnthropicRedactedThinking redacted_thinking = 4 [(validate) = true];
+  }
+}
+
+// Provider reasoning text and its opaque signature.
+message AnthropicThinking {
+  string text = 1;
+  string signature = 2;
+}
+
+// Provider-encrypted reasoning retained without transformation.
+message AnthropicRedactedThinking {
+  string data = 1;
+}
+
+// Ordered assistant items received through ChatGPT plan Responses.
+message OpenAiAssistantContent {
+  // Provider items in output index order, including items on an interrupted receipt.
+  repeated OpenAiOutputItem items = 1 [(validate) = true];
+
+  // True only after response.completed and coherent closure of every item.
+  bool complete = 2;
+}
+
+// One Responses assistant output item with its exact provider item ID.
+message OpenAiOutputItem {
+  string item_id = 1 [(required) = true];
+
+  oneof content {
+    option (choice).required = true;
+
+    OpenAiMessageItem message = 2 [(validate) = true];
+    OpenAiReasoningItem reasoning = 3 [(validate) = true];
+    OpenAiFunctionCallItem function_call = 4 [(validate) = true];
+  }
+}
+
+// Output text and refusals in provider order.
+message OpenAiMessageItem {
+  enum Phase {
+    PHASE_UNSPECIFIED = 0;
+    COMMENTARY = 1;
+    FINAL_ANSWER = 2;
+  }
+
+  Phase phase = 1;
+  repeated OpenAiMessagePart parts = 2 [(validate) = true];
+}
+
+// One visible or refused message part.
+message OpenAiMessagePart {
+  oneof content {
+    option (choice).required = true;
+
+    string output_text = 1;
+    string refusal = 2;
+  }
+}
+
+// Reasoning summaries and encrypted continuation state.
+message OpenAiReasoningItem {
+  repeated string summary = 1;
+  string encrypted_content = 2 [(required) = true];
+}
+
+// Namespaced local function proposal.
+message OpenAiFunctionCallItem {
+  ModelToolCall call = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+  string namespace = 2 [(required) = true];
+}
+
+// Provider generation content, admitted or rejected after local validation.
+message GenerationResponse {
+  // Exact received assistant text, including text accompanying tool proposals.
+  string raw_output = 1;
+
+  // Outcome after provider and local validation; TOOL_REQUESTED is nonterminal.
+  AiOutcome outcome = 2 [(required) = true];
+
+  // Typed admitted result; absent when any tool proposal remains outstanding.
+  google.protobuf.Any admitted_output = 3 [(validate) = true];
+
+  // Provider token counts when known.
+  AiUsage usage = 4 [(validate) = true];
+
+  // Digest of the received content when available.
+  AiContentDigest digest = 5 [(validate) = true];
+
+  // Safe diagnostic reference, never a raw provider exception.
+  AiDiagnosticId diagnostic_id = 6 [(validate) = true];
+
+  // Concrete provider model identity when the provider reports it.
+  AiProviderModelName actual_model = 7 [(validate) = true];
+
+  // Received model proposals in order, including malformed or denied proposals.
+  // Presence does not imply authorization or execution.
+  repeated ModelToolCall tool_calls = 8 [(validate) = true];
+
+  // Ordered Anthropic assistant content, present for Anthropic Messages receipts.
+  AnthropicAssistantContent anthropic_content = 9 [(validate) = true];
+
+  // Ordered ChatGPT plan response items, present only for that profile.
+  OpenAiAssistantContent openai_content = 10 [(validate) = true];
+}
+
+// Application-assigned identity of one non-generative question.
+message DecisionQuestionId {
+  string value = 1 [(required) = true];
+}
+
+// Choice key or zero-based rubric-level index in a decision distribution.
+message DecisionAlternativeKey {
+  string value = 1 [(required) = true];
+}
+
+// Kind of one non-generative decision question.
+enum DecisionQuestionKind {
+  // Unknown questions are invalid.
+  DECISION_QUESTION_KIND_UNSPECIFIED = 0;
+
+  // Probability that a proposition is true.
+  BOOLEAN = 1;
+
+  // One selection from named alternatives.
+  CHOICE = 2;
+
+  // Fractional score against an ordered rubric.
+  SCORE = 3;
+}
+
+// One named alternative in a choice question.
+message DecisionChoice {
+  // Application-defined choice key.
+  DecisionAlternativeKey key = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Meaning of the alternative.
+  string description = 2 [(required) = true];
+}
+
+// One typed question sent to a decision backend.
+message DecisionQuestion {
+  // Application-defined question identity.
+  DecisionQuestionId id = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Decision contract for the answer.
+  DecisionQuestionKind kind = 2 [(required) = true];
+
+  // Proposition or assessment instructions.
+  string instructions = 3 [(required) = true];
+
+  // Permitted choices for a choice question.
+  repeated DecisionChoice choices = 4 [(validate) = true];
+
+  // Ordered rubric levels for a score question.
+  repeated string rubric = 5;
+}
+
+// Actual non-generative decision request.
+message DecisionRequest {
+  // Typed facts supplied by the application.
+  google.protobuf.Any input = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Exact questions sent to the backend.
+  repeated DecisionQuestion questions = 2 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Digest of the materialized request.
+  AiContentDigest digest = 3 [
+    (required) = true,
+    (validate) = true
+  ];
+}
+
+// One reported probability in a choice or score distribution.
+message DecisionProbability {
+  // Choice key or decimal rubric-level index.
+  DecisionAlternativeKey key = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Finite inclusive zero-to-one probability, checked by the facade.
+  double probability = 2;
+}
+
+// Provider answer to one declared decision question.
+message DecisionAnswer {
+  // Application-defined question identity.
+  DecisionQuestionId id = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Declared question and answer kind.
+  DecisionQuestionKind kind = 2 [(required) = true];
+
+  // Exactly one value consistent with the declared question kind.
+  oneof value {
+    option (choice).required = true;
+
+    // Probability of true for a boolean answer, including zero.
+    double boolean_probability = 3;
+
+    // Selected key for a choice answer.
+    DecisionAlternativeKey choice = 4 [(validate) = true];
+
+    // Fractional score for a score answer, including zero.
+    double score = 5;
+  }
+
+  // Full reported distribution when available; absent means unknown.
+  DecisionDistribution distribution = 6 [(validate) = true];
+
+  // Provider confidence when separately reported; absent means unknown.
+  google.protobuf.DoubleValue confidence = 7;
+}
+
+// Present distribution over declared choice keys or rubric levels.
+message DecisionDistribution {
+  // One entry for each declared alternative.
+  repeated DecisionProbability probabilities = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+}
+
+// Provider-declared decimal precision used to assess decision answers.
+message DecisionRounding {
+  // Decimal places for reported probabilities; absent means unspecified.
+  google.protobuf.UInt32Value probability_decimals = 1;
+
+  // Decimal places for reported scores; absent means unspecified.
+  google.protobuf.UInt32Value score_decimals = 2;
+}
+
+// Provider decision content and validation outcome.
+message DecisionResponse {
+  // Answers received from the backend, including invalid answers.
+  repeated DecisionAnswer answers = 1 [(validate) = true];
+
+  // Outcome after local answer and mapped Proto validation; TOOL_REQUESTED is invalid here.
+  AiOutcome outcome = 2 [(required) = true];
+
+  // Typed admitted mapped result when validation succeeds.
+  google.protobuf.Any admitted_output = 3 [(validate) = true];
+
+  // Provider token usage if supplied by the decision backend.
+  AiUsage usage = 4 [(validate) = true];
+
+  // Safe diagnostic reference for a failed outcome.
+  AiDiagnosticId diagnostic_id = 5 [(validate) = true];
+
+  // Provider-declared precision applied during answer admission.
+  DecisionRounding rounding = 6 [(validate) = true];
+}
+
+// Actual authorized external tool request.
+message ToolRequest {
+  // Logical call identity preserved across recovery.
+  AiToolCallId call = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Configured MCP server identifier.
+  McpServerId server = 2 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Exact configured tool name.
+  McpToolName tool = 3 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Validated canonical JSON arguments, without credentials.
+  string arguments_json = 4 [(required) = true];
+
+  // Application-established read or write effect.
+  ToolEffect effect = 5 [(required) = true];
+}
+
+// Effect category established by application policy, not remote annotations.
+enum ToolEffect {
+  // Unknown effects cannot be dispatched.
+  TOOL_EFFECT_UNSPECIFIED = 0;
+
+  // Tool call does not mutate remote business state.
+  READ = 1;
+
+  // Tool call may mutate remote business state.
+  WRITE = 2;
+}
+
+// External tool response or unresolved write outcome.
+message ToolResponse {
+  // Logical call associated with this response.
+  AiToolCallId call = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Tool or transport outcome; TOOL_REQUESTED is invalid here.
+  AiOutcome outcome = 2 [(required) = true];
+
+  // Supported text returned by the tool, when available.
+  repeated string text = 3;
+
+  // Canonical structured JSON returned by the tool, when available.
+  string structured_json = 4;
+
+  // Whether MCP reported a tool execution error.
+  bool tool_error = 5;
+
+  // Safe diagnostic reference; never an HTTP body with credentials.
+  AiDiagnosticId diagnostic_id = 6 [(validate) = true];
+}

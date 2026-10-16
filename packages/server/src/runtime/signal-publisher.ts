@@ -34,12 +34,19 @@ interface ProducedSignalObserver {
  */
 export class SignalPublisher {
   readonly #commandBus: CommandBus;
+
   readonly #eventBus: EventBus;
+
   readonly #systemEventBus: EventBus;
+
   readonly #contextName: string;
+
   readonly #inFlight = new Set<Promise<void>>();
+
   readonly #observers = new Set<ProducedSignalObserver>();
+
   #logger: ILogLayer | undefined;
+
   #state: PublisherState = "open";
 
   /**
@@ -241,6 +248,21 @@ export class SignalPublisher {
   observe(observer: ProducedSignalObserver): { readonly close: () => void } {
     this.#observers.add(observer);
     return Object.freeze({ close: () => this.#observers.delete(observer) });
+  }
+
+  /**
+   * Records one saved Agent output after its original ID is durably acknowledged.
+   *
+   * @param signal Saved Command or Event with an acknowledged original ID.
+   */
+  recordAcceptedSaved(signal: Command | Event): void {
+    const kind: PublicationKind =
+      "uuid" in (signal.id ?? {})
+        ? "command"
+        : (signal as Event).context?.rejection === undefined
+          ? "event"
+          : "rejection-event";
+    this.#observe(kind, signal);
   }
 
   #publish(

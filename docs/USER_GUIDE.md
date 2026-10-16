@@ -37,7 +37,8 @@ deployment, or another product's rules.
 
 Use an Aggregate for a consistency boundary, a Projection for a query-side view,
 and a Process Manager when a long-running reaction coordinates work across
-entities. Start with the smallest boundary that makes the command and event
+entities. An Agent handles signals when the application needs an AI model to
+interpret facts, propose text, or evaluate a decision. Start with the smallest boundary that makes the command and event
 names unambiguous.
 
 Continue with the [architecture notes](architecture/README.md) for the runtime
@@ -87,10 +88,10 @@ application assembly and lifecycle.
 Proto is the shared language between your server and clients. Define identifiers,
 commands, events, and entity state there. A command says what a caller wants;
 an event records a fact that happened; entity state is the current readable
-form of an Aggregate, Projection, or Process Manager.
+form of an Aggregate, Projection, Process Manager, or Agent.
 
 Keep each Bounded Context's domain language in its model package. The server
-application combines the contexts' Proto modules into one `TypeRegistry`.
+application combines the Bounded Contexts' Proto modules into one `TypeRegistry`.
 A client imports only the published model modules it needs. Register these
 modules explicitly when setting up the application; Spine does not discover
 them by scanning installed packages.
@@ -117,8 +118,8 @@ message MessagePosted {
 Declare a domain rejection in a `rejections.proto` file when a valid command
 breaks a business rule. For example, `MessageAlreadyPosted` communicates a
 duplicate message ID. This differs from invalid input: validation failures are
-non-OK command responses, while a handled domain rejection rolls back the
-state change and is published independently on a best-effort event path.
+non-OK command responses, while a handled domain rejection leaves the previous
+state in place and is published independently on a best-effort event path.
 
 Mark only fields that must be queried or sorted with `(column)`. The complete
 Proto record is still stored in full; a field does not become a physical
@@ -316,8 +317,8 @@ system.
 
 Do not manually start or commit transactions in application handlers. Return
 generated domain messages, let the framework wrap them, and throw the generated
-rejection when the domain rule fails. The framework rolls back the rejected
-transition before the typed rejection event is scheduled.
+rejection when the domain rule fails. The framework discards the rejected
+draft before the typed rejection event is scheduled.
 
 Continue with the [server reference](../packages/server/REFERENCE.md) for
 handlers, routing, filters, logging, and rejection contracts.
@@ -427,34 +428,34 @@ the complete BlackBox contract and limits.
 
 Handlers may return their normal result directly or as exactly one built-in `Promise<T>`.
 Nested promises and thenable lookalikes are rejected during handler analysis.
-The Entity transaction stays open until the promise settles. A rejected promise
-rolls back framework state and produced output, but it cannot undo an HTTP call
-or another external side effect already started by the handler.
+The Entity's handling operation waits until the promise settles. A rejected promise
+discards its draft and produced output, but it cannot undo an HTTP call
+or another external side effect already started by the handler. Database
+transactions cover the short reads and writes, not the asynchronous handler wait.
 
-Only a Process Manager may use its protected `select()` read API. It reads
+Process Managers and Agents provide protected `select()` read APIs. They read
 eventually consistent Entity state, so an Aggregate must never use that data
 for an invariant. Order a bounded query before applying `limit()`; Process
 Manager reads have a maximum of 1,000 results.
 
 For example, an order process can read a product registered in a catalogue
-context. Register both contexts with the same `Server`; the queried Entity type
-identifies the destination, without adding a context name to `select()`. The
-destination Entity must have `query` or `full` visibility for a cross-context
-read. Registering the same Entity type in two contexts is an error, rather than
+Bounded Context. Register both Bounded Contexts with the same `Server`; the queried Entity type
+identifies the destination, without adding a Bounded Context name to `select()`. The
+destination Entity must have `query` or `full` visibility for a read across Bounded Contexts. Registering the same Entity type in two Bounded Contexts is an error, rather than
 a choice determined by registration order. Separately running servers are not
-searched. A context used without a Server continues to query its local state.
+searched. A Bounded Context used without a Server continues to query its local state.
 
 See the [Orders example](../examples/orders/README.md#cross-context-order-review)
-for the two context builders, the handler, and a test of the complete workflow.
+for the two Bounded Context builders, the handler, and a test of the complete workflow.
 
 The query keeps the triggering signal's actor and effective tenant. An Acme
 process reads only Acme's data in a multitenant destination; querying a
 single-tenant destination instead is a tenant mismatch and fails before a read.
 Single-tenant execution uses the built-in `SINGLE_TENANT` identity even when
-the request omits a tenant field. It can read another single-tenant context or
-the `SINGLE_TENANT` partition of a multitenant context. There is no tenant override.
+the request omits a tenant field. It can read another single-tenant Bounded Context or
+the `SINGLE_TENANT` partition of a multitenant Bounded Context. There is no tenant override.
 No matching records means an empty result, not a tenant mismatch. Finding the
-right context does not wait for its read-side to catch up with recent Events.
+right Bounded Context does not wait for its read-side to catch up with recent Events.
 
 ## 7a. Connect bounded contexts with external events
 
@@ -517,6 +518,50 @@ Unknown local generated message schemas fail clearly; a valid event with no inte
 external receptor is simply not delivered. See the [server reference](../packages/server/REFERENCE.md)
 and [transport reference](../packages/transport/REFERENCE.md) for exact
 contracts.
+
+## 7b. Ask an Agent to draft a support reply
+
+An Agent is an Entity that can ask a model to help with a domain task and record what happened. Use one when a normal handler needs a model-generated proposal, while the application still decides what to do with that proposal. The [warehouse support example](../examples/support/README.md) drafts a reply about broken label printers for a support person to review; it never sends the reply.
+
+The application first records the reported facts as a ticket. It then posts a separate `DraftSupportReply` Command with the ticket ID, those facts, and an explicit conversation ID:
+
+<!-- prettier-ignore-start -->
+
+<!-- docs-snippet-path: examples/support/test/support-blackbox.test.ts -->
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import { ConversationIdSchema } from "@spine-event-engine/proto/agent";
+import { DraftSupportReplySchema } from "../generated/spine/examples/support/commands_pb.js";
+import {
+    SupportRequestSchema,
+    SupportTicketIdSchema,
+} from "../generated/spine/examples/support/types_pb.js";
+
+const command = create(DraftSupportReplySchema, {
+    id: create(SupportTicketIdSchema, { value: "SUP-47" }),
+    conversation: create(ConversationIdSchema, { value: "SUP-47-draft-1" }),
+    request: create(SupportRequestSchema, {
+        incident: "Neither packing station can print shipping labels.",
+        attemptedSteps: ["Restarted both printers", "Restarted both PCs"],
+        impact: "Orders are waiting for the carrier.",
+    }),
+});
+```
+
+<!-- prettier-ignore-end -->
+
+```text
+DraftSupportReply → SupportDraftAgent → model proposal
+                                          ↓
+                       SupportReplySuggested or SupportReplyFailed
+                                          ↓
+                              SupportReview query
+```
+
+The Agent's `@Assign` handler calls `this.ai.invoke(...)` with a typed task defined by `AiModel.define()`. It checks the reply before emitting `SupportReplySuggested`; unusable output leads to `SupportReplyFailed`. The review Projection stores the outcome for a person to inspect. Command acceptance means the work was saved, so the client waits for the later Event or queries the Projection to find the draft.
+
+A model can still be wrong about facts it cannot verify. Keep the review decision in application code. Configure the permitted provider and its credentials outside the Agent. For local tests, `AiTestBackend` supplies controlled replies without a paid model request. The example's [BlackBox test](../examples/support/test/support-blackbox.test.ts) checks the proposal, failure, review query, and recorded interaction history. See the [AI package guide](../packages/ai/README.md) for the task definition, [adapter guide](../packages/ai-vercel-ax/README.md) for deployment, and [Agent reference](../packages/server/REFERENCE.md#agent-execution) for exact runtime contracts.
 
 ## 8. Run and observe it
 
@@ -588,6 +633,7 @@ Use the examples to choose the next narrow learning step:
 | [To-Do](../examples/todo/README.md)                                          | What is the smallest server-side command/query application?              |
 | [Orders](../examples/orders/README.md)                                       | How do provider-oriented records and durable storage fit an application? |
 | [Projects](../examples/projects/README.md)                                   | How do queries and data-oriented views shape a larger model?             |
+| [Support](../examples/support/README.md)                                     | How does an Agent turn ticket facts into an auditable draft for review?  |
 
 Keep the loop small: model one command and event, implement one visible
 behavior, test it, observe it, and only then add another boundary. The detailed

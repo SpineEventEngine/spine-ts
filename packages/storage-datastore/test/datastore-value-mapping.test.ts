@@ -63,7 +63,9 @@ describe("Spine JVM Datastore value mappings", () => {
         ColumnTypes.message(TimestampSchema),
         timestamp,
       ) as Date;
-      expect(Math.trunc(value.getMilliseconds() * 1_000_000)).toBe(timestamp.nanos);
+      const nanos = Math.trunc(value.getMilliseconds() * 1_000_000);
+      if (nanos !== timestamp.nanos)
+        throw new Error(`Microsecond ${String(microsecond)} decoded as ${String(nanos)} nanos.`);
     }
   });
 
