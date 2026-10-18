@@ -68,11 +68,11 @@ async function readRegistry(fetchResponse, path, limitMs, timeoutMs) {
 }
 
 /**
- * Creates a reader for exact versions, npm tags, and npm-hosted attestations.
+ * Creates a reader for exact versions, npm tags from package metadata, and npm-hosted attestations.
  *
  * @param fetchResponse Fetch implementation for public registry reads.
  * @param timeoutMs Maximum duration of each GET attempt.
- * @returns Registry reader keyed by resource kind and package.
+ * @returns Registry reader keyed by resource kind and package; tags are undefined when package metadata is 404.
  */
 export function createPublicRegistry(fetchResponse, timeoutMs = 10_000) {
   return async (kind, entry, limitMs) => {
@@ -95,14 +95,11 @@ export function createPublicRegistry(fetchResponse, timeoutMs = 10_000) {
       return record;
     }
     if (kind === "tags") {
-      const tags = await readRegistry(
-        fetchResponse,
-        "-/package/" + encoded + "/dist-tags",
-        bound,
-        timeoutMs,
-      );
-      if (tags === undefined) return {};
+      const metadata = await readRegistry(fetchResponse, encoded, bound, timeoutMs);
+      if (metadata === undefined) return undefined;
+      const tags = metadata?.["dist-tags"];
       if (
+        metadata?.name !== entry.name ||
         tags === null ||
         typeof tags !== "object" ||
         Array.isArray(tags) ||
@@ -345,7 +342,10 @@ async function packageState(registry, entry, release, limitMs) {
   const artifact = await registry("artifact", entry, limitMs);
   const tags = await registry("tags", entry, limitMs);
   const opposite = release.tag === "snapshot" ? "latest" : "snapshot";
-  if (artifact === undefined) return { status: "missing", tags };
+  if (artifact === undefined)
+    return { status: "missing", tags: tags ?? {}, packageAbsent: tags === undefined };
+  if (tags === undefined)
+    throw new Error("Exact version exists without package metadata for " + entry.name);
   if (artifact.dist.integrity !== entry.integrity)
     throw new Error("Registry integrity mismatch for " + entry.name);
   if (tags[release.tag] !== release.version)
@@ -423,6 +423,12 @@ async function publicationPreflight(release, registry, report, save) {
     }
     const selected = state.tags[release.tag];
     const opposite = release.tag === "snapshot" ? "latest" : "snapshot";
+    if (state.packageAbsent)
+      throw new Error(
+        "First publish " +
+          entry.name +
+          " before trusted publishing; see docs/release-publishing.md",
+      );
     if (record.status === "already present" && state.status === "missing")
       throw new Error("Prior published version is missing for " + entry.name);
     checkWriteTags(state, release, entry);
@@ -490,6 +496,8 @@ async function publishEntry(release, entry, initial, report, registry, invoke, s
   const opposite = release.tag === "snapshot" ? "latest" : "snapshot";
   for (let attempt = record.attempts.length; attempt < 2; attempt++) {
     const tags = await registry("tags", entry);
+    if (tags === undefined)
+      throw new Error("Package metadata disappeared before publication for " + entry.name);
     if (
       tags[release.tag] !== initial.tags[release.tag] ||
       tags[opposite] !== initial.tags[opposite]

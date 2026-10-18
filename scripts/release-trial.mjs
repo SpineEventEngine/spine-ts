@@ -156,7 +156,6 @@ function resources(release) {
     const encoded = encodeURIComponent(entry.name);
     paths.set(registryUrl + encoded, { kind: "packument", entry });
     paths.set(registryUrl + encoded + "/" + entry.version, { kind: "artifact", entry });
-    paths.set(registryUrl + "-/package/" + encoded + "/dist-tags", { kind: "tags", entry });
     paths.set(
       registryUrl + "-/npm/v1/attestations/" + entry.name.replace("/", "%2f") + "@" + entry.version,
       { kind: "attestations", entry },
@@ -202,7 +201,7 @@ export function createTrialServices(release, input, interruptAfter = Infinity, f
       faultUsed = true;
       return { status: 200, ok: true, json: () => new Promise(() => {}) };
     }
-    if (!interrupted && published.size === interruptAfter && kind === "tags") {
+    if (!interrupted && published.size === interruptAfter && kind === "packument") {
       interrupted = true;
       throw new Error("Simulated registry interruption");
     }
@@ -244,17 +243,17 @@ function trialResponse(kind, entry, published, release, paths) {
   if (kind === "packument")
     return response(
       published.has(entry.name)
-        ? { versions: { [entry.version]: {} }, "dist-tags": { [release.tag]: entry.version } }
-        : undefined,
+        ? {
+            name: entry.name,
+            versions: { [entry.version]: {} },
+            "dist-tags":
+              release.tag === "latest"
+                ? { latest: entry.version }
+                : { snapshot: entry.version, latest: "1.0.0" },
+          }
+        : { name: entry.name, versions: { "1.0.0": {} }, "dist-tags": { latest: "1.0.0" } },
     );
-  if (!published.has(entry.name))
-    return response(kind === "tags" ? { latest: "1.0.0" } : undefined);
-  if (kind === "tags")
-    return response(
-      release.tag === "latest"
-        ? { latest: entry.version }
-        : { snapshot: entry.version, latest: "1.0.0" },
-    );
+  if (!published.has(entry.name)) return response(undefined);
   if (kind === "attestations") return response(attestations(entry, release.sourceSha));
   const url = [...paths].find(
     ([, value]) => value.kind === "attestations" && value.entry === entry,

@@ -39,6 +39,8 @@ before it can have a trusted publisher. Therefore, the first version of every
 new package must be published once by a human maintainer. This is the only
 exception to the rule against local npm login. Do not add an npm token to the
 repository or to GitHub Actions.
+The publishing preflight detects this prerequisite; it does not create
+the package or configure its trusted publisher.
 
 The maintainer needs publish access to the npm organization and account-level
 two-factor authentication. The repository's pinned npm `11.16.0` supports the
@@ -141,6 +143,10 @@ installation scripts remain disabled.
 
 Before a first publication attempt, the job checks all 21 packages against
 npm's public registry. A rerun skips public reads for validated accepted uploads.
+Tag checks read the `dist-tags` field from public package metadata. A 404 for
+that package means it has not appeared publicly; the publishing preflight stops
+before any upload so a maintainer can complete its first publication and trusted
+publisher setup. Other HTTP errors and malformed metadata also stop publication.
 Each registry GET has a 10-second request-and-body limit and at most three
 attempts for temporary transport failures, HTTP 429, or HTTP 5xx, with short
 delays between attempts. Exhaustion stops publication; it never establishes

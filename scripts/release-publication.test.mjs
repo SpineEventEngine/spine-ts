@@ -783,26 +783,69 @@ describe("npm publication recovery", () => {
     expect(calls).toBe(0);
   });
 
-  it("reads exact npm resources and fails closed on malformed or denied responses", async () => {
+  it("stops before any upload when a release package has never been published", async () => {
+    const read = createPublicRegistry(async (url) => {
+      if (url === `https://registry.npmjs.org/${encodeURIComponent(base.name)}`)
+        return {
+          status: 200,
+          ok: true,
+          json: async () => ({ name: base.name, "dist-tags": { latest: "1.0.0" } }),
+        };
+      return { status: 404, ok: false };
+    });
+    let uploads = 0;
+    await expect(
+      publishPrepared({
+        release,
+        registry: read,
+        save: async () => {},
+        invoke: async () => {
+          uploads++;
+          return { status: 0, stdout: "{}" };
+        },
+      }),
+    ).rejects.toThrow(`First publish ${dependent.name} before trusted publishing`);
+    expect(uploads).toBe(0);
+  });
+
+  it("reads public package metadata for tags and treats only package 404 as absence", async () => {
     const paths = [];
     const read = createPublicRegistry(async (url) => {
       paths.push(url);
       return { status: 404, ok: false };
     });
     expect(await read("artifact", base)).toBeUndefined();
-    expect(await read("tags", base)).toEqual({});
+    expect(await read("tags", base)).toBeUndefined();
     expect(paths).toEqual([
       `https://registry.npmjs.org/%40spine-event-engine%2Fproto/${version}`,
-      "https://registry.npmjs.org/-/package/%40spine-event-engine%2Fproto/dist-tags",
+      "https://registry.npmjs.org/%40spine-event-engine%2Fproto",
     ]);
+    const published = createPublicRegistry(async () => ({
+      status: 200,
+      ok: true,
+      json: async () => ({ name: base.name, "dist-tags": { snapshot: version } }),
+    }));
+    expect(await published("tags", base)).toEqual({ snapshot: version });
     const denied = createPublicRegistry(async () => ({ status: 401, ok: false }));
-    await expect(denied("artifact", base)).rejects.toThrow("401");
+    await expect(denied("tags", base)).rejects.toThrow("401");
     const malformed = createPublicRegistry(async () => ({
       status: 200,
       ok: true,
       json: async () => [],
     }));
     await expect(malformed("tags", base)).rejects.toThrow("Invalid registry tags");
+    for (const metadata of [
+      { name: dependent.name, "dist-tags": { snapshot: version } },
+      { name: base.name },
+      { name: base.name, "dist-tags": { snapshot: 1 } },
+    ]) {
+      const invalid = createPublicRegistry(async () => ({
+        status: 200,
+        ok: true,
+        json: async () => metadata,
+      }));
+      await expect(invalid("tags", base)).rejects.toThrow("Invalid registry tags");
+    }
   });
 
   it("keeps a timed-out confirmation unconfirmed and recovers within the shared window", async () => {
@@ -812,8 +855,12 @@ describe("npm publication recovery", () => {
     report.packages[0].attempts.push({ result: "accepted" });
     let failures = 0;
     const registry = createPublicRegistry(async (url) => {
-      if (url.includes("/dist-tags"))
-        return { status: 200, ok: true, json: async () => ({ snapshot: version }) };
+      if (url === `https://registry.npmjs.org/${encodeURIComponent(base.name)}`)
+        return {
+          status: 200,
+          ok: true,
+          json: async () => ({ name: base.name, "dist-tags": { snapshot: version } }),
+        };
       if (url.includes("/attestations/"))
         return { status: 200, ok: true, json: async () => attestations(base) };
       if (failures++ < 3) return { status: 200, ok: true, json: () => new Promise(() => {}) };

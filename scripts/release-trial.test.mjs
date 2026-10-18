@@ -110,8 +110,11 @@ describe("offline release trial boundaries", () => {
     expect(
       (await services.fetch(`https://registry.npmjs.org/${encoded}/${entry.version}`)).status,
     ).toBe(404);
-    const tags = await services.fetch(`https://registry.npmjs.org/-/package/${encoded}/dist-tags`);
-    expect(await tags.json()).toEqual({ latest: "1.0.0" });
+    expect(await (await services.fetch(`https://registry.npmjs.org/${encoded}`)).json()).toEqual({
+      name: entry.name,
+      versions: { "1.0.0": {} },
+      "dist-tags": { latest: "1.0.0" },
+    });
     expect(services.published.has(entry.name)).toBe(true);
     expect(services.calls).toBe(0);
   });
@@ -125,7 +128,11 @@ describe("offline release trial boundaries", () => {
     try {
       const services = createTrialServices(release, directory);
       const encoded = encodeURIComponent(entry.name);
-      expect((await services.fetch(`https://registry.npmjs.org/${encoded}`)).status).toBe(404);
+      expect(await (await services.fetch(`https://registry.npmjs.org/${encoded}`)).json()).toEqual({
+        name: entry.name,
+        versions: { "1.0.0": {} },
+        "dist-tags": { latest: "1.0.0" },
+      });
       const result = services.spawn(
         "npm",
         [
@@ -148,10 +155,12 @@ describe("offline release trial boundaries", () => {
       expect(result.status).toBe(0);
       expect(services.published.has(entry.name)).toBe(true);
       expect(readFileSync(userConfig, "utf8")).toBe("");
-      const tags = await services.fetch(
-        `https://registry.npmjs.org/-/package/${encoded}/dist-tags`,
-      );
-      expect(await tags.json()).toEqual({ snapshot: entry.version, latest: "1.0.0" });
+      const metadata = await services.fetch(`https://registry.npmjs.org/${encoded}`);
+      expect(await metadata.json()).toEqual({
+        name: entry.name,
+        versions: { [entry.version]: {} },
+        "dist-tags": { snapshot: entry.version, latest: "1.0.0" },
+      });
       const response = await services.fetch(
         `https://registry.npmjs.org/${encoded}/${entry.version}`,
       );
@@ -170,8 +179,8 @@ describe("offline release trial boundaries", () => {
     );
     services.published.add(stable.name);
     const encoded = encodeURIComponent(entry.name);
-    const tags = await services.fetch(`https://registry.npmjs.org/-/package/${encoded}/dist-tags`);
-    expect(await tags.json()).toEqual({ latest: stable.version });
+    const metadata = await services.fetch(`https://registry.npmjs.org/${encoded}`);
+    expect((await metadata.json())["dist-tags"]).toEqual({ latest: stable.version });
   });
 
   it("rejects a simulated npm upload that skips dependency order", () => {
