@@ -808,6 +808,67 @@ describe("npm publication recovery", () => {
     expect(uploads).toBe(0);
   });
 
+  it("rejects an exact version without public package metadata before npm", async () => {
+    const one = { ...release, packages: [base] };
+    const read = createPublicRegistry(async (url) =>
+      url.endsWith(`/${version}`)
+        ? {
+            status: 200,
+            ok: true,
+            json: async () => ({
+              name: base.name,
+              version,
+              dist: { integrity: base.integrity },
+            }),
+          }
+        : { status: 404, ok: false },
+    );
+    let uploads = 0;
+    await expect(
+      publishPrepared({
+        release: one,
+        registry: read,
+        save: async () => {},
+        invoke: async () => {
+          uploads++;
+          return { status: 0, stdout: "{}" };
+        },
+      }),
+    ).rejects.toThrow(`Exact version exists without package metadata for ${base.name}`);
+    expect(uploads).toBe(0);
+  });
+
+  it("rejects package metadata disappearing after preflight before npm", async () => {
+    const one = { ...release, packages: [base] };
+    let metadataReads = 0;
+    const read = createPublicRegistry(async (url) => {
+      if (
+        url === `https://registry.npmjs.org/${encodeURIComponent(base.name)}` &&
+        ++metadataReads === 1
+      )
+        return {
+          status: 200,
+          ok: true,
+          json: async () => ({ name: base.name, "dist-tags": { latest: "1.0.0" } }),
+        };
+      return { status: 404, ok: false };
+    });
+    let uploads = 0;
+    await expect(
+      publishPrepared({
+        release: one,
+        registry: read,
+        save: async () => {},
+        invoke: async () => {
+          uploads++;
+          return { status: 0, stdout: "{}" };
+        },
+      }),
+    ).rejects.toThrow(`Package metadata disappeared before publication for ${base.name}`);
+    expect(metadataReads).toBe(2);
+    expect(uploads).toBe(0);
+  });
+
   it("reads public package metadata for tags and treats only package 404 as absence", async () => {
     const paths = [];
     const read = createPublicRegistry(async (url) => {
@@ -915,6 +976,28 @@ describe("npm publication recovery", () => {
     });
     expect(report.packages[0].status).toBe("unconfirmed");
     expect(reads.every(({ limit }) => limit <= 3)).toBe(true);
+  });
+
+  it("keeps an accepted upload unconfirmed while public package metadata is 404", async () => {
+    const one = { ...release, packages: [base] };
+    const report = createPublicationReport(one);
+    report.packages[0].status = "unconfirmed";
+    report.packages[0].attempts.push({ result: "accepted" });
+    const read = createPublicRegistry(async () => ({ status: 404, ok: false }));
+    let time = 0;
+    const result = await confirmPrepared({
+      release: one,
+      report,
+      registry: read,
+      save: async () => {},
+      now: () => time,
+      sleep: async (ms) => {
+        time += ms;
+      },
+      windowMs: 3,
+    });
+    expect(result.packages[0].status).toBe("unconfirmed");
+    expect(result.packages[0].attempts).toEqual([{ result: "accepted" }]);
   });
 
   it("publishes and confirms all 21 public packages in dependency order", async () => {
