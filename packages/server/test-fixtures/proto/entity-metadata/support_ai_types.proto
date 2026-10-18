@@ -1,0 +1,84 @@
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+syntax = "proto3";
+
+package spine.server.testing;
+
+import "google/protobuf/wrappers.proto";
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.server.testing";
+
+// Identifies a customer's support ticket.
+message SupportTicketNumber {
+  // Assigned ticket number.
+  string value = 1 [(required) = true];
+}
+
+// Identifies the support queue selected by a routing decision.
+message SupportQueueName {
+  // Configured queue name.
+  string value = 1 [(required) = true];
+}
+
+// Facts supplied to a support-ticket Agent capability.
+message SupportTicketFacts {
+  // Ticket being handled.
+  SupportTicketNumber ticket_number = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Customer's question to answer.
+  string customer_question = 2 [(required) = true];
+}
+
+// Draft proposed for human review, not a framework transport response.
+message ProposedSupportReply {
+  // Text proposed for a human support reviewer.
+  string reply_text = 1 [(required) = true];
+}
+
+// Application routing decision for a support ticket.
+message SupportRoutingResult {
+  // Support queue that should handle the ticket.
+  SupportQueueName queue = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+}
+
+// Integer evidence in a support-ticket calculation.
+message SupportTicketNumericEvidence {
+  // Exact external reference numbers associated with the ticket.
+  repeated int64 exact_reference_numbers = 1;
+
+  // Preferred external reference number, when known.
+  google.protobuf.Int64Value preferred_reference_number = 2;
+
+  // Related external reference numbers supplied by a partner.
+  repeated google.protobuf.Int64Value related_reference_numbers = 3;
+
+  // Integer urgency tier assigned during triage.
+  int32 priority_level = 4;
+
+  // Fractional confidence in the triage outcome.
+  double confidence = 5;
+}
+
+// Deliberately recursive ticket context for unsupported-schema tests.
+message RecursiveSupportTicketContext {
+  // Earlier context in this ticket's chain.
+  RecursiveSupportTicketContext parent = 1;
+}

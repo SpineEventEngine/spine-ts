@@ -5,6 +5,13 @@ includes an in-memory implementation for local development and tests. Use it
 when an application needs a small record store, or when an adapter needs to
 implement the same storage contract for a durable provider.
 
+Agents use the configured storage provider to retain accepted work and the
+recorded model interaction. The in-memory factory keeps these records only while
+the process runs; choose a database provider when they must survive a restart.
+Applications read an Agent's history through its repository, as shown in the
+[support example](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/README.md). Adapter implementation
+details are in the [coding-agent reference](REFERENCE.md#provider-spi).
+
 This is an experimental snapshot package. Use Node 24 or newer and generated
 Protobuf record schemas before configuring storage.
 

@@ -1,0 +1,22 @@
+{
+  "app": {
+    "name": "Release Notes Studio",
+    "version": { "major": "2", "minor": "0", "patch": "0" },
+    "description": "Plan-account release notes from verified Git changes",
+    "copyright": "Copyright 2026 CodeMatters",
+    "locales": ["en-US"],
+    "trustedOrigins": [],
+    "schemes": [],
+    "bundle": {
+      "macOS": {
+        "bundleID": "io.spine.releasenotesstudio",
+        "extras": [
+          { "from": "resources/node", "to": "Resources/studio/node", "sign": true },
+          { "from": "resources/node-LICENSE", "to": "Resources/studio/node-LICENSE" },
+          { "from": ".studio-build/", "to": "Resources/studio/main/" }
+        ]
+      }
+    }
+  },
+  "automation": { "mode": "interactive" }
+}

@@ -803,6 +803,26 @@ describe("proto-workflow", () => {
     }
   });
 
+  it("routes only Spine domain Proto through Buf formatting, leaving vendor desktop IPC separate", () => {
+    const fixture = formatFixture();
+    try {
+      const desktop = "examples/release-notes/src/renderer/proto/studio.proto";
+      const domain = "examples/todo/proto/todo.proto";
+      mkdirSync(join(fixture.root, "examples/release-notes/src/renderer/proto"), {
+        recursive: true,
+      });
+      writeFileSync(join(fixture.root, desktop), 'syntax = "proto3";\n');
+      expect(authoredProtoFormatCommands(fixture.root, gitResponses([desktop, domain]))).toEqual([
+        {
+          label: "buf format workspace",
+          args: ["format", "--diff", "--exit-code", "--path", domain],
+        },
+      ]);
+    } finally {
+      rmSync(fixture.root, { recursive: true, force: true });
+    }
+  });
+
   it("excludes frozen, deleted, and generated Proto files", () => {
     const fixture = formatFixture({ frozen: ["packages/proto/proto/frozen.proto"] });
     try {
@@ -1156,6 +1176,8 @@ describe("proto-workflow", () => {
       "examples/todo/generated",
       "examples/projects/generated",
       "examples/orders/generated",
+      "examples/support/generated",
+      "examples/release-notes/generated",
       "examples/message-board/model/generated",
     ]);
     expect(atomicGeneratedTargets.map((target) => target.displayPath)).toEqual([
@@ -1167,6 +1189,8 @@ describe("proto-workflow", () => {
       "examples/todo/generated",
       "examples/projects/generated",
       "examples/orders/generated",
+      "examples/support/generated",
+      "examples/release-notes/generated",
       "examples/message-board/model/generated",
       "examples/message-board/app/generated",
     ]);
@@ -2166,15 +2190,6 @@ describe("proto-workflow", () => {
       expect(readFileSync(manifest.target, "utf8")).toBe("previous\n");
   });
 
-  it("includes Todo in the root atomic publication boundary without restoring it as a legacy generator", () => {
-    expect(generatedTargets.map((target) => target.displayPath)).not.toContain(
-      "examples/todo/generated",
-    );
-    expect(atomicGeneratedTargets.map((target) => target.displayPath)).toContain(
-      "examples/todo/generated",
-    );
-  });
-
   it("publishes Todo output and both manifests in the root transaction", () => {
     const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
     const rootGenerated = join(repoRoot, "packages/proto/generated");
@@ -2440,6 +2455,7 @@ describe("proto-workflow", () => {
       "examples/todo/proto",
       "examples/projects/proto",
       "examples/orders/proto",
+      "examples/support/proto",
     ];
 
     for (const modulePath of modulePaths) {
@@ -2456,6 +2472,7 @@ describe("proto-workflow", () => {
     const validExampleModules = [
       ["examples/projects/proto/spine/examples/projects", "projects"],
       ["examples/orders/proto/spine/examples/orders", "orders"],
+      ["examples/support/proto/spine/examples/support", "support"],
     ];
     for (const [directory, packageSegment] of validExampleModules) {
       const absoluteDirectory = join(repoRoot, directory);

@@ -11,6 +11,10 @@ record schemas, and a reachable MySQL database.
 For database requirements, query limits, lifecycle, and error details, see
 [REFERENCE documentation for agents](REFERENCE.md).
 
+For an application using Agents, this provider keeps the Agent's accepted
+work and recorded interactions across restarts. Use InnoDB for Agent repositories;
+see the [coding-agent reference](REFERENCE.md) for database requirements.
+
 ## 💡 Why use it?
 
 - ✅ Stores Spine records durably in a MySQL database.

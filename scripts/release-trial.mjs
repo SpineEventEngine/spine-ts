@@ -473,7 +473,7 @@ export async function runTrial(input, output) {
     });
     process.stdout.write(
       "Offline publication trial: normal, partial failure, rerun, delayed read recovery, " +
-        "fatal reads, and read-only checks passed for 19 packages.\n",
+        `fatal reads, and read-only checks passed for ${frameworkPackageNames.length} packages.\n`,
     );
   } finally {
     globalThis.fetch = previousFetch;

@@ -1,6 +1,6 @@
 {
   "name": "@spine-event-engine/server-blackbox-tests",
-  "version": "2.0.0-snapshot.22",
+  "version": "2.0.0-snapshot.23",
   "private": true,
   "type": "module",
   "exports": {
@@ -11,9 +11,23 @@
   },
   "dependencies": {
     "@bufbuild/protobuf": "2.12.1",
+    "@spine-event-engine/ai": "workspace:*",
     "@spine-event-engine/core": "workspace:*",
-    "@spine-event-engine/proto": "2.0.0-snapshot.22",
+    "@spine-event-engine/proto": "2.0.0-snapshot.23",
     "@spine-event-engine/server": "workspace:*",
+    "@spine-event-engine/storage": "workspace:*",
+    "@spine-event-engine/storage-datastore": "workspace:*",
+    "@spine-event-engine/storage-mysql": "workspace:*",
+    "@spine-event-engine/storage-postgres": "workspace:*",
     "@spine-event-engine/testing": "workspace:*"
+  },
+  "devDependencies": {
+    "@ai-sdk/anthropic": "4.0.72",
+    "@ai-sdk/openai": "4.0.84",
+    "@google-cloud/datastore": "10.1.1",
+    "@spine-event-engine/ai-vercel-ax": "workspace:*",
+    "@types/pg": "8.23.1",
+    "mysql2": "3.23.1",
+    "pg": "8.23.0"
   }
 }

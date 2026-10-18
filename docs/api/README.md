@@ -29,22 +29,22 @@ registration.
 Use one detailed source for each subject rather than treating this page as a
 tutorial:
 
-| Need                                                     | Canonical detail                                                                             |
-| -------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| Runtime and Bounded Context boundaries                   | [Architecture notes](../architecture/README.md)                                              |
-| Server assembly, handlers, routing, filters, and logging | [Server reference](../../packages/server/REFERENCE.md)                                       |
-| Cross-context external-event exchange                    | [Server external-event guide](../../packages/server/README.md#cross-context-external-events) |
-| Integration message transport                            | [Transport reference](../../packages/transport/REFERENCE.md)                                 |
-| Exact integration Protobuf contracts                     | [Proto reference](../../packages/proto/REFERENCE.md#integration-broker-contracts)            |
-| Node client contract                                     | [Node client reference](../../packages/client-node/REFERENCE.md)                             |
-| Browser client contract                                  | [Browser client reference](../../packages/client-web/REFERENCE.md)                           |
-| React client contract                                    | [React client reference](../../packages/client-react/REFERENCE.md)                           |
-| Storage, queries, provider layouts, and tenancy          | [Storage reference](../../packages/storage/REFERENCE.md)                                     |
-| Remote delivery client and coordination contract         | [Delivery client reference](../../packages/delivery-client/REFERENCE.md)                     |
-| Local in-memory Delivery server limits and lifecycle     | [Delivery server reference](../../packages/delivery-server/REFERENCE.md)                     |
-| Common deployment and discovery contract                 | [Deployment reference](../../packages/deployment/REFERENCE.md)                               |
-| GCE deployment operation                                 | [GCE deployment reference](../../packages/deployment-gce/REFERENCE.md)                       |
-| GKE deployment operation                                 | [GKE deployment reference](../../packages/deployment-gke/REFERENCE.md)                       |
+| Need                                                     | Canonical detail                                                                                      |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Runtime and Bounded Context boundaries                   | [Architecture notes](../architecture/README.md)                                                       |
+| Server assembly, handlers, routing, filters, and logging | [Server reference](../../packages/server/REFERENCE.md)                                                |
+| External Events across Bounded Contexts                  | [Server external-event guide](../../packages/server/REFERENCE.md#integration-broker-and-event-origin) |
+| Integration message transport                            | [Transport reference](../../packages/transport/REFERENCE.md)                                          |
+| Exact integration Protobuf contracts                     | [Proto reference](../../packages/proto/REFERENCE.md#integration-broker-contracts)                     |
+| Node client contract                                     | [Node client reference](../../packages/client-node/REFERENCE.md)                                      |
+| Browser client contract                                  | [Browser client reference](../../packages/client-web/REFERENCE.md)                                    |
+| React client contract                                    | [React client reference](../../packages/client-react/REFERENCE.md)                                    |
+| Storage, queries, provider layouts, and tenancy          | [Storage reference](../../packages/storage/REFERENCE.md)                                              |
+| Remote delivery client and coordination contract         | [Delivery client reference](../../packages/delivery-client/REFERENCE.md)                              |
+| Local in-memory Delivery server limits and lifecycle     | [Delivery server reference](../../packages/delivery-server/REFERENCE.md)                              |
+| Common deployment and discovery contract                 | [Deployment reference](../../packages/deployment/REFERENCE.md)                                        |
+| GCE deployment operation                                 | [GCE deployment reference](../../packages/deployment-gce/REFERENCE.md)                                |
+| GKE deployment operation                                 | [GKE deployment reference](../../packages/deployment-gke/REFERENCE.md)                                |
 
 For the end-to-end browser/authentication extension contract, including the
 exact trust-boundary limitations that TypeDoc declarations cannot convey, see
@@ -337,7 +337,7 @@ catch-up operation ID or implement durable progress, overlap admission, live
 event coordination, delivery jobs, schedulers, inbox lifecycle, retries,
 restart, resumption, or transport topology.
 Server exports also include the abstract `Entity`, `TransactionalEntity`,
-`Aggregate`, `Projection`, `ProcessManager`, `EntityFamily`,
+`Aggregate`, `Projection`, `ProcessManager`, `Agent`, `EntityFamily`,
 `TransactionalEntityScopeError`, `EntityScopeReason`,
 `TransactionalEntityScopeOperation`, `EntityOptions`, and `EntityLifecycleFlags`.
 An Entity has an ID, a descriptor-backed state schema, cloned state snapshots,
@@ -352,15 +352,16 @@ lifecycle flags, not the version. Accepted commits update state, version, and
 lifecycle together. Rejected commits apply nothing. The `changed` property
 reports accepted state or lifecycle changes; repository handling also considers
 returned Events when deciding whether to advance the version.
-`Aggregate`, `Projection`, and `ProcessManager` are abstract Entity family
+`Aggregate`, `Projection`, `ProcessManager`, and `Agent` are abstract Entity family
 classes over `TransactionalEntity` with the same `<Id, Schema>` generic
 shape and a stable readonly `entityFamily` property typed by `EntityFamily`.
-Repositories and bounded contexts handle dispatch, persistence, and message
+Repositories and Bounded Contexts handle dispatch, persistence, and message
 publication; these classes do not expose public transaction controls.
-Aggregates and Process Managers provide the protected, repository-bound
-event-history methods documented below; Projections intentionally do not.
-Process Managers also provide protected `select()` reads of Entity state.
-The target type identifies its context among those registered with the same
+Aggregates and Process Managers provide protected repository-bound Event-history
+methods. Agents provide separate full, conversation, System Event, and domain Event
+history reads. Projections do not expose these history methods.
+Process Managers and Agents also provide protected `select()` reads of Entity state.
+The target type identifies its Bounded Context among those registered with the same
 `Server`, while the query preserves the handler's effective tenant. See the
 [query contract](../../packages/server/REFERENCE.md#handler-routing-and-operations)
 for visibility, tenant compatibility, result limits and eventual consistency.
@@ -369,7 +370,7 @@ To pass an application service to an Entity constructor, supply `onCreate` in
 `BoundedContextBuilder.add(EntityClass, options)`. Spine supplies typed
 `EntityOptions`; the callback passes them to a fresh instance together with the
 service. The callback is required if the constructor cannot accept framework
-options alone. It runs for fresh and restored objects of all three Entity
+options alone. It runs for fresh and restored objects of all four Entity
 families, including Projection rebuilds. It is synchronous, returns the
 registered class, and does not replace framework history or query setup.
 Application services are not persisted or closed by Spine. See the
@@ -380,15 +381,15 @@ for lifecycle and failure behavior.
 `RepositoryIdentitySnapshot`, `RepositoryIdentityError`,
 `RepositoryIdentityErrorCode`, `RepositoryCommandRoute`,
 `RepositoryEventRoute`, `RepositoryRouteInvocation`, and `RepositoryView` form
-the repository identity and context registration seam. A repository records one
-entity constructor, the inferred aggregate/projection/process-manager family,
+the repository identity and Bounded Context registration seam. A repository records one
+entity constructor, the inferred Aggregate/Projection/Process Manager/Agent family,
 the matching descriptor-backed state schema, descriptor metadata, state full
 type name, and ID-field metadata. Snapshots are frozen fresh-copy values for
-bounded-context duplicate/conflict checks. The seam rejects unsupported
+Bounded Context duplicate/conflict checks. The seam rejects unsupported
 constructors and entity-family/state-kind mismatches with simple
-`RepositoryIdentityError` code/message diagnostics. Bounded-context assembly
-rejects duplicate repository identities in one context build, spoofed structural
-repository objects, and multi-context registration with ordinary registration
+`RepositoryIdentityError` code/message diagnostics. Bounded Context assembly
+rejects duplicate repository identities in one Bounded Context build, spoofed structural
+repository objects, and registration across multiple Bounded Contexts with ordinary registration
 errors. Family inference trusts same-realm class constructor and instance
 prototype metadata, so alias imports, member expressions, intermediate domain
 base classes, and explicitly reparented ES classes with matching same-realm

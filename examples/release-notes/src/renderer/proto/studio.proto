@@ -1,0 +1,505 @@
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+syntax = "proto3";
+
+package studio.desktop;
+
+// A request or result without fields.
+message Empty {
+}
+
+// Identifies one signed-in provider account.
+message AccountRef {
+    // Provider account identifier.
+    string client_id = 1;
+}
+
+// Selects a discovered model for an account.
+message ModelSelection {
+    // Provider account identifier.
+    string client_id = 1;
+
+    // Discovered model slug.
+    string model = 2;
+}
+
+// The public status of one provider account.
+message Account {
+    // Provider account identifier.
+    string client_id = 1;
+
+    // Provider subject identifier.
+    string subject = 2;
+
+    // Email is absent when the provider did not supply it.
+    oneof email_value {
+        // Email supplied by the provider.
+        string email = 3;
+    }
+
+    // Whether the account can use a paid plan.
+    bool plan_enabled = 4;
+}
+
+// The in-memory sign-in state exposed to the renderer.
+message AccountStatus {
+    // The selected account is absent when no account is selected.
+    oneof selected_account {
+        // Selected provider account identifier.
+        string selected_client_id = 1;
+    }
+
+    // Whether the selected account can use a paid plan.
+    bool plan_enabled = 2;
+
+    // Issued OAuth client identifiers awaiting sign-in completion.
+    repeated string pending_client_ids = 3;
+
+    // Accounts visible in this application session.
+    repeated Account accounts = 4;
+}
+
+// One model returned by account discovery.
+message ModelChoice {
+    // Model slug returned by account discovery.
+    string slug = 1;
+
+    // Label displayed to the user.
+    string display_name = 2;
+}
+
+// Discovered models for an account.
+message ModelsResult {
+    // Models available to the selected account.
+    repeated ModelChoice models = 1;
+}
+
+// The currently selected model.
+message CurrentModelResult {
+    // Model slug, empty when none is selected.
+    string model = 1;
+}
+
+// Sign-out outcome and refreshed account status.
+message SignOutResult {
+    // Current account status.
+    AccountStatus status = 1;
+
+    // Whether provider revocation was confirmed.
+    bool revocation_confirmed = 2;
+}
+
+// Identifies one release-note draft.
+message DraftRef {
+    // Draft identifier.
+    string id = 1;
+}
+
+// Identifies one generation attempt.
+message GenerationRef {
+    // Generation identifier.
+    string generation = 1;
+}
+
+// Requests generation of a draft from an instruction.
+message GenerationRequest {
+    // Draft identifier.
+    string id = 1;
+
+    // User instruction.
+    string instruction = 2;
+}
+
+// Cancels an active generation for a draft.
+message CancelRequest {
+    // Draft identifier.
+    string id = 1;
+
+    // Generation identifier.
+    string generation = 2;
+}
+
+// Reports receipt, phase, or rejection for generation.
+message GenerationObservation {
+    // Whether a generation receipt is available.
+    bool receipt = 1;
+
+    // Phase is absent before the generation starts.
+    oneof phase_value {
+        // Current generation phase.
+        string phase = 2;
+    }
+
+    // Rejection is absent when generation was accepted.
+    oneof rejection_value {
+        // Reason generation was rejected.
+        string rejection = 3;
+    }
+}
+
+// Edits exact Markdown against the displayed domain Version.
+message EditRequest {
+    // Draft identifier.
+    string id = 1;
+
+    // Binary spine.core.Version, retaining Timestamp nanoseconds.
+    bytes version = 2;
+
+    // Exact UTF-8 Markdown bytes.
+    bytes markdown = 3;
+}
+
+// Exports the displayed version of a draft.
+message ExportRequest {
+    // Draft identifier.
+    string id = 1;
+
+    // Binary spine.core.Version, retaining Timestamp nanoseconds.
+    bytes version = 2;
+}
+
+// Reports whether the user saved an export.
+message ExportResult {
+    // True when a file was saved.
+    bool saved = 1;
+}
+
+// Copies the current editor buffer to the system clipboard.
+message CopyMarkdownRequest {
+    // Exact editor text, including unsaved changes and whitespace.
+    string markdown = 1;
+}
+
+// Authoritative Markdown preview for a draft.
+message PreviewResult {
+    // Binary spine.core.Version, retaining Timestamp nanoseconds.
+    bytes version = 1;
+
+    // Exact UTF-8 Markdown bytes.
+    bytes markdown = 2;
+
+    // Content digest.
+    string digest = 3;
+}
+
+// Session-local drafts and active generations.
+message SessionResult {
+    // Draft identifiers.
+    repeated string drafts = 1;
+
+    // Generation identifier by draft identifier.
+    map<string, string> generations = 2;
+}
+
+// A Git project available for comparison.
+message Project {
+    // Session-local project handle.
+    string handle = 1;
+
+    // Display name.
+    string name = 2;
+
+    // Git references available for selection.
+    repeated string refs = 3;
+}
+
+// Project picker result, absent on cancellation.
+message ProjectChoice {
+    // Chosen project, if any.
+    Project project = 1;
+}
+
+// Selects two references in a Git project.
+message CompareRequest {
+    // Session-local project handle.
+    string handle = 1;
+
+    // Base Git reference.
+    string base = 2;
+
+    // Target Git reference.
+    string target = 3;
+}
+
+// Selects a comparison using only the two reference hints shown in the picker.
+message ChooseComparisonRequest {
+    // Base Git reference shown in the picker.
+    string base = 1;
+
+    // Target Git reference shown in the picker.
+    string target = 2;
+}
+
+// Comparison picker result, absent on cancellation.
+message ComparisonChoice {
+    // Chosen comparison, if any.
+    Comparison comparison = 1;
+}
+
+// A changed path in a Git comparison.
+message Change {
+    // Current path.
+    string path = 1;
+
+    // Git change status.
+    string status = 2;
+
+    // Previous path is present for a rename.
+    oneof previous_path_value {
+        // Previous Git path before rename.
+        string previous_path = 3;
+    }
+}
+
+// A commit that contributes to a comparison.
+message Commit {
+    // Commit identifier.
+    string commit = 1;
+
+    // Parent commit identifiers.
+    repeated string parents = 2;
+
+    // Commit subject.
+    string subject = 3;
+}
+
+// Evidence of a change in a particular commit.
+message Evidence {
+    // Current path.
+    string path = 1;
+
+    // Git change status.
+    string status = 2;
+
+    // Previous path is present for a rename.
+    oneof previous_path_value {
+        // Previous Git path before rename.
+        string previous_path = 3;
+    }
+
+    // Commit identifier.
+    string commit = 4;
+
+    // Parent commit identifier.
+    string parent = 5;
+}
+
+// One selected Git comparison and its review evidence.
+message Comparison {
+    // Session-local selection identifier.
+    string selection_id = 1;
+
+    // Project display name.
+    string project_name = 2;
+
+    // Base display label.
+    string base_label = 3;
+
+    // Target display label.
+    string target_label = 4;
+
+    // Base Git reference.
+    string base = 5;
+
+    // Target Git reference.
+    string target = 6;
+
+    // Changed paths.
+    repeated Change changes = 7;
+
+    // Contributing commits.
+    repeated Commit commits = 8;
+
+    // Commit-level change evidence.
+    repeated Evidence evidence = 9;
+}
+
+// Requests one evidence patch by index.
+message EvidenceRequest {
+    // Session-local comparison selection identifier.
+    string selection_id = 1;
+
+    // Zero-based evidence index.
+    uint32 index = 2;
+}
+
+// Bounded patch result for a selected evidence item.
+message EvidencePatchResult {
+    // Whether the complete patch was returned.
+    bool complete = 1;
+
+    // Patch is absent if it could not be retrieved.
+    oneof patch_value {
+        // Patch text for this evidence item.
+        string patch = 2;
+    }
+
+    // Reason is absent when the patch is complete.
+    oneof reason_value {
+        // Reason the patch is incomplete.
+        string reason = 3;
+    }
+}
+
+// Opens a draft for a selected comparison.
+message OpenDraftRequest {
+    // Draft identifier.
+    string id = 1;
+
+    // Session-local comparison selection identifier.
+    string selection_id = 2;
+
+    // Draft title.
+    string title = 3;
+
+    // Intended audience.
+    string audience = 4;
+}
+
+// The authoritative release-note draft.
+message Draft {
+    // Draft identifier.
+    string id = 1;
+
+    // Binary spine.core.Version, retaining Timestamp nanoseconds.
+    bytes version = 2;
+
+    // Draft title.
+    string title = 3;
+
+    // Intended audience.
+    string audience = 4;
+
+    // Chosen Git comparison.
+    Comparison comparison = 5;
+
+    // Current generation status.
+    string generation_status = 6;
+
+    // Exact UTF-8 Markdown bytes.
+    bytes markdown = 7;
+
+    // Last edit time is absent before the first edit.
+    oneof last_edited_at_value {
+        // Last editor change time in UTC.
+        string last_edited_at = 8;
+    }
+
+    // Original confirmed creation time in UTC.
+    oneof created_at_value {
+        string created_at = 9;
+    }
+}
+
+// Requests one page of draft history.
+message HistoryRequest {
+    // Draft identifier.
+    string id = 1;
+
+    // History category.
+    string category = 2;
+
+    // Requested page size.
+    uint32 page_size = 3;
+
+    // Cursor is absent on the first page.
+    oneof cursor_value {
+        // Opaque continuation for an older history page.
+        string cursor = 4;
+    }
+}
+
+// One page of history entries.
+message HistoryPage {
+    // Typed domain history entries serialized as JSON.
+    repeated string items_json = 1;
+
+    // Cursor is absent after the final page.
+    oneof cursor_value {
+        // Opaque continuation for an older history page.
+        string cursor = 2;
+    }
+}
+
+// Fixed desktop application operations between trusted main and renderer.
+service StudioService {
+    // Reads current account status.
+    rpc Status(Empty) returns (AccountStatus);
+
+    // Reads the selected model.
+    rpc CurrentModel(Empty) returns (CurrentModelResult);
+
+    // Begins or resumes sign-in.
+    rpc SignIn(Empty) returns (AccountStatus);
+
+    // Discovers models for an account.
+    rpc Models(AccountRef) returns (ModelsResult);
+
+    // Selects a discovered model.
+    rpc SelectModel(ModelSelection) returns (CurrentModelResult);
+
+    // Revokes an account session.
+    rpc SignOut(AccountRef) returns (SignOutResult);
+
+    // Opens the provider usage page.
+    rpc ManageUsage(Empty) returns (Empty);
+
+    // Reads this application session.
+    rpc Session(Empty) returns (SessionResult);
+
+    // Opens the project picker.
+    rpc ChooseProject(Empty) returns (ProjectChoice);
+
+    // Compares two Git references.
+    rpc CompareProject(CompareRequest) returns (Comparison);
+
+    // Opens the comparison picker.
+    rpc ChooseComparison(ChooseComparisonRequest) returns (ComparisonChoice);
+
+    // Reads a patch for one evidence item.
+    rpc EvidencePatch(EvidenceRequest) returns (EvidencePatchResult);
+
+    // Opens a draft for a comparison.
+    rpc OpenDraft(OpenDraftRequest) returns (Draft);
+
+    // Reads an existing draft.
+    rpc ReadDraft(DraftRef) returns (Draft);
+
+    // Starts generation for a draft.
+    rpc Generate(GenerationRequest) returns (GenerationRef);
+
+    // Repeats a generation attempt.
+    rpc RepeatGeneration(GenerationRef) returns (GenerationRef);
+
+    // Cancels an active generation attempt.
+    rpc CancelGeneration(CancelRequest) returns (Draft);
+
+    // Observes a generation attempt.
+    rpc Phase(GenerationRef) returns (GenerationObservation);
+
+    // Reads a page of draft history.
+    rpc History(HistoryRequest) returns (HistoryPage);
+
+    // Edits exact Markdown against a domain Version.
+    rpc Edit(EditRequest) returns (Draft);
+
+    // Reads the current Markdown preview.
+    rpc Preview(DraftRef) returns (PreviewResult);
+
+    // Exports Markdown against the displayed Version.
+    rpc ExportMarkdown(ExportRequest) returns (ExportResult);
+
+    // Copies exact current editor text.
+    rpc CopyMarkdown(CopyMarkdownRequest) returns (Empty);
+}

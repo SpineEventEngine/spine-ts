@@ -39,6 +39,46 @@ import {
 import { eventStoreAccess } from "../../src/internal/event-store.js";
 
 describe("EventStore", () => {
+  it("retries only a byte-identical saved Event while public append still rejects duplicates", async () => {
+    const factory = new InMemoryStorageFactory();
+    const store = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    const original = createEvent("saved-1", "type.spine.io/tasks.TaskCreated", 1n);
+    await expect(eventStoreAccess.appendOrVerifyOriginal(store, original)).resolves.toEqual(
+      original,
+    );
+    await expect(eventStoreAccess.appendOrVerifyOriginal(store, original)).resolves.toEqual(
+      original,
+    );
+    await expect(store.append(original)).rejects.toThrow(/unique event IDs/);
+    const changed = createEvent("saved-1", "type.spine.io/tasks.TaskCreated", 2n);
+    await expect(eventStoreAccess.appendOrVerifyOriginal(store, changed)).rejects.toThrow(
+      /conflicts/,
+    );
+    await expect(store.read()).resolves.toEqual([original]);
+  });
+
+  it("converges concurrent saved retries and isolates complete tenant scopes", async () => {
+    const backend = new InMemoryStorageBackend();
+    const context = { name: "Tasks", multitenant: true } as const;
+    const first = new EventStore(context, new InMemoryStorageFactory(backend));
+    const second = new EventStore(context, new InMemoryStorageFactory(backend));
+    const a = createEvent("shared-saved", "type.spine.io/tasks.TaskCreated", 1n, "tenant-a");
+    const b = createEvent("shared-saved", "type.spine.io/tasks.TaskCreated", 2n, "tenant-b");
+    await expect(
+      Promise.all([
+        eventStoreAccess.appendOrVerifyOriginal(first, a),
+        eventStoreAccess.appendOrVerifyOriginal(second, a),
+        eventStoreAccess.appendOrVerifyOriginal(second, b),
+      ]),
+    ).resolves.toHaveLength(3);
+    await expect(
+      readTenantEvents(new InMemoryStorageFactory(backend), tenant("tenant-a")),
+    ).resolves.toEqual([a]);
+    await expect(
+      readTenantEvents(new InMemoryStorageFactory(backend), tenant("tenant-b")),
+    ).resolves.toEqual([b]);
+  });
+
   it("preserves a caller result through the provider-only Event Store lock", async () => {
     const factory = new InMemoryStorageFactory();
     await expect(

@@ -12,6 +12,8 @@ const dependencyGroups = [
  * Lists the exact public npm package names released by this repository.
  */
 export const frameworkPackageNames = [
+  "@spine-event-engine/ai",
+  "@spine-event-engine/ai-vercel-ax",
   "@spine-event-engine/auth",
   "@spine-event-engine/client-node",
   "@spine-event-engine/client-react",

@@ -35,6 +35,18 @@ const packageDirectories = frameworkPackageNames.map((name) => "packages/" + nam
  */
 export function packFrameworkArtifacts({ root, destination, run }) {
   run("pnpm", ["--dir", "packages/proto-tools", "exec", "tsc", "-b"], root);
+  return packBuiltFrameworkArtifacts({ root, destination, run });
+}
+
+/**
+ * Packs and validates framework artifacts already built by the caller.
+ *
+ * @param root Repository root containing built workspace packages.
+ * @param destination Directory that receives the generated tarballs.
+ * @param run Command runner used for pnpm packing and archive inspection.
+ * @returns Validated package entries derived from the generated tarballs.
+ */
+export function packBuiltFrameworkArtifacts({ root, destination, run }) {
   for (const directory of packageDirectories)
     run(
       "pnpm",

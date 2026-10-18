@@ -2075,6 +2075,43 @@ describe("BoundedContext assembly", () => {
     expect(storageFactory.creationsFor(ProjectStateSchema.typeName)).toEqual([]);
   });
 
+  it("returns only this context's exact registered repository without opening storage", async () => {
+    const storageFactory = new ObservingStorageFactory([]);
+    const repository = new Repository({ entityType: TaskAggregate, schema: ProjectStateSchema });
+    const context = BoundedContext.singleTenant("Tasks")
+      .withStorageFactory(storageFactory)
+      .add(repository)
+      .build();
+    const other = BoundedContext.singleTenant("Other")
+      .add(new Repository({ entityType: TaskAggregate, schema: ProjectStateSchema }))
+      .build();
+    expectTypeOf(context.getRepository(TaskAggregate)).toEqualTypeOf<
+      Repository<typeof TaskAggregate>
+    >();
+    expect(context.getRepository(TaskAggregate)).toBe(repository);
+    expect(context.getRepository(TaskAggregate)).not.toBe(other.getRepository(TaskAggregate));
+    const SameName = class TaskAggregate extends Aggregate<string, typeof ProjectStateSchema> {};
+    expect(() => context.getRepository(SameName)).toThrow(/not registered/);
+    expect(() => context.getRepository(DuplicateTaskAggregate)).toThrow(/not registered/);
+    expect(storageFactory.creationsFor(ProjectStateSchema.typeName)).toEqual([]);
+    const closing = context.close();
+    expect(() => context.getRepository(TaskAggregate)).toThrow(/closing|closed/);
+    await closing;
+    await other.close();
+  });
+
+  it("retrieves the actual repository assembled from generated handlers", async () => {
+    const registryRoot = createGeneratedRegistryRoot([
+      { entityType: GeneratedTaskAggregate, stateSchema: ProjectStateSchema, handlers: [] },
+    ]);
+    const context = await BoundedContext.singleTenant("Tasks")
+      .withGeneratedRegistryRoot(registryRoot)
+      .add(GeneratedTaskAggregate)
+      .buildAsync();
+    expect(context.getRepository(GeneratedTaskAggregate).entityType).toBe(GeneratedTaskAggregate);
+    await context.close();
+  });
+
   it("rejects duplicate repository entity or state identities when building", () => {
     const firstTaskRepository = new Repository({
       entityType: TaskAggregate,

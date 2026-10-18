@@ -1,6 +1,13 @@
 {
   "boundaries": [
     {
+      "id": "server.agent_lease_renewal",
+      "source": "../../packages/server/src/repository/repository.ts",
+      "operation": "repository.agent_lease_renewal",
+      "disposition": "no-log",
+      "test": "packages/server/test/agent/agent-registration.test.ts"
+    },
+    {
       "id": "server.repository_history_prefetch",
       "source": "../../packages/server/src/repository/repository.ts",
       "operation": "repository.history",

@@ -435,7 +435,7 @@ describe("release CLI", () => {
     expect(report.packages[0].status).toBe("already present");
   });
 
-  it("retains a complete 19-package report when the first npm upload fails", async () => {
+  it("retains a complete 21-package report when the first npm upload fails", async () => {
     const root = new URL("..", import.meta.url).pathname;
     const model = expectedReleaseModel(readReleaseManifests(root));
     const release = {
@@ -466,7 +466,9 @@ describe("release CLI", () => {
         },
       }),
     ).rejects.toThrow("Publication remains unconfirmed");
-    expect(saved.packages).toHaveLength(19);
+    expect(saved.packages).toHaveLength(21);
+    expect(saved.packages.map(({ name }) => name)).toContain("@spine-event-engine/ai");
+    expect(saved.packages.map(({ name }) => name)).toContain("@spine-event-engine/ai-vercel-ax");
     expect(saved.packages[0].status).toBe("unconfirmed");
     expect(saved.packages.slice(1).every(({ status }) => status === "not attempted")).toBe(true);
   });

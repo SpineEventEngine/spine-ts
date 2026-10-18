@@ -6027,3 +6027,366 @@ task. Agent work remains a separate task.
 
 See [the Time task](planning/spine-time-task.md) and
 [its status](planning/spine-time-worklog.md).
+
+## D-0129: Bounded Tenant Paging For Agent Recovery
+
+Status: Implemented
+
+Date: 2026-10-08
+
+Agent recovery uses mandatory provider tenant paging instead of `all()` or a
+periodically rebuilt tenant/repository product. A page has a native candidate
+limit, cancellation signal and opaque continuation tied to its catalog instance.
+Memory and configured SQL catalogs page existing indexed collections; Datastore
+uses limited native metadata queries and a finite page deadline. Existing
+unrelated callers retain `all()`; there is no paging fallback to that operation.
+
+The scheduler constructs scopes lazily and retains a fixed-size scan window.
+It finishes a traversal before restarting, preserves periodic work during new
+arrivals, and detaches from discovery waits on shutdown. Late results cannot
+submit work. These guarantees do not promise cancellation of a native request
+already issued by a provider, nor a fixed recovery latency across any backlog.
+
+## D-0130: Add Anthropic Messages To The Initial Agent Adapter
+
+Status: Implemented
+
+Date: 2026-10-08
+
+Add the immutable anthropicMessages provider profile to VercelAx with
+@ai-sdk/anthropic 4.0.72, matching the existing AI SDK dependency set. Retain
+Agent, AiModel, adapter SPI and Proto contracts. Use the existing guarded direct
+provider stream and journal-before-tool/continuation boundaries.
+
+Native schema mode forces outputFormat and admits an explicit documented model
+set. Prompted validation remains available for other Anthropic model IDs.
+Record Anthropic-specific lowering metadata in existing prepared request JSON;
+retain the original schema for local validation because the SDK simplifies its
+wire representation. Keep existing OpenAI prepared requests unchanged. No
+provider login flow, SDK retry loop, hosted tools or additional Entity API is
+introduced. Supported model data can expand with package/documentation evidence
+and actual-SDK request fixtures without repeating the architecture pass.
+
+See [the adapter reference](../packages/ai-vercel-ax/REFERENCE.md).
+
+## D-0131: Preserve Anthropic Thinking In Recorded Continuations
+
+Status: Implemented
+
+Date: 2026-10-08
+
+Anthropic tool continuations must carry the complete ordered assistant content,
+including signed and redacted thinking. Disabling thinking is unsupported by
+some admitted models. Ax separates text, thoughts and tool calls, so its response
+projection alone cannot preserve the order required by the provider.
+
+Add typed ordered Anthropic content to GenerationResponse. Preserve its text and
+tool-call fields as checked projections. Collect content within the existing
+output bounds, include the new content in digest and storage-capacity accounting,
+and reconstruct provider assistant turns only from journaled or replayed
+responses. A package-internal bridge resolver checks the Ax projection before
+replacing it with recorded ordered content. Both tool and correction turns use
+the same reconstruction. Incomplete content never permits tool continuation.
+
+## D-0132: ChatGPT Plan Responses Profile And Recorded Continuations
+
+Status: Implemented
+
+Date: 2026-10-09
+
+Add a distinct subscription profile inside ai-vercel-ax. Its dedicated
+VercelAx.chatgptPlanModel registration retains identity and authorization hooks;
+connect supplies an explicit nonblank access token and matching identity. The
+adapter constructs the pinned OpenAI SDK model with its guarded fetch. Generic
+VercelAx.model rejects this profile, preventing accidental ambient-key fallback.
+No new published package, Electron dependency, login flow, or credential store.
+The published OpenAI SDK's apiKey option carries the application's OAuth access
+token as a Bearer credential; its parameter name does not require platform API
+billing. Reject missing tokens in the dedicated connection before invoking the SDK,
+rather than relying on application examples to prevent environment fallback.
+The application establishes that the explicit credential belongs to the selected
+ChatGPT registration; the adapter does not infer OAuth scopes from token syntax.
+Move the pinned OpenAI SDK dependency to this existing package runtime dependencies.
+
+Generation output-token ceilings become optional. Request, tool, byte, and deadline limits apply when explicitly configured. The subscription profile
+rejects explicit token ceilings and initially supports prompt-and-validation
+only. It uses public Responses with streaming, store:false, developer messages,
+namespace tools, and explicit encrypted-reasoning inclusion. SDK lowering occurs
+before guarded materialization/admission; no unrecorded retries or transport
+rewrite after journal admission.
+
+Extend GenerationResponse additively with typed ordered OpenAI message,
+reasoning, and function-call items plus completion state. Keep exact received
+item IDs, summary parts, encrypted reasoning, function correlation and namespace
+in bounded history. Validate raw stream items because the SDK's normalized parts
+can omit refusal/unsupported content. Record complete only after coherent item
+closure and response.completed. Include typed content in receipt digest and byte
+accounting, without changing other profiles' digest contracts.
+
+Continuation uses deterministic published-SDK lowering of validated recorded
+content. The SDK may omit message/function item IDs, reserialize arguments and
+omit empty summaries from outgoing input; those transformations do not require
+a new transport layer. Received values remain in history, and prepared request
+metadata records the reconstruction/lowering revision. Replay validates recorded
+content, completeness, projections and digest before another request or tool.
+
+## D-0133: Local Desktop Authentication And Packaging
+
+Status: Superseded by D-0140 and the session-only credential requirement
+
+Date: 2026-10-09
+
+The initial Electron packaging and persisted-credential design is superseded.
+Studio now uses MōBrowser and keeps credentials only in memory for the current
+app session. See [the Studio guide](../examples/release-notes/REFERENCE.md).
+
+## D-0134: Production Agent History And Execution Reads
+
+Status: Implemented
+
+Date: 2026-10-09
+
+Add two read-only methods on the existing registered Agent Repository:
+agentHistory(typedId, explicitScope) returns a reader with fullHistory,
+conversationHistory, systemEventHistory and domainEventHistory; agentExecution
+(typedId, sourceCommandOrEventId, explicitScope) returns the current execution
+phase or undefined. Reuse existing history request/page/Proto/cursor contracts
+and exact indexed execution reads. Do not create or restore an Entity to read.
+Scope explicitly supplies the tenant when required; validate typed IDs,
+repository kind, tenant and lifecycle, and capture detached input values.
+These trusted server APIs rely on application authorization, as Stand does;
+actor metadata alone is not authorization.
+
+Expose only the execution phase as a small TypeScript string union: accepted,
+active, completed-pending-delivery, completed, or terminated. Missing is unknown.
+The existing execution-status Proto is private SPI, and AiOutcome is a different
+concept. Do not export the execution record, claim token, journal bookkeeping,
+or add a serialized state hierarchy. Read failures and missing evidence never
+release application admission. Completed/terminated release it; accepted,
+active and completed-pending-delivery do not. Pre-handler termination can be
+observed if recorded. Failures before admission or still-retryable accepted work
+are not terminal; the app does not invent recovery or silently repeat inference.
+
+Use public SpineServices plus client-node Client.usingTransport and Connect's
+createRouterTransport for desktop in-process posting/query/subscription. No new
+HTTP listener or IPC transport package. Subscribe to ReleaseGenerationRequested
+before posting, correlate the domain draft/generation IDs, and capture the
+original Event ID from the subscription envelope. Immediate Command acknowledgement
+is not domain acceptance or execution completion. Domain rejection releases an
+admission only when authoritative acceptance state excludes active accepted work;
+duplicate accepted generations remain attached to their original execution.
+
+## D-0135: Deployments Added After Startup And Signal-Specific Selection
+
+Status: Implemented
+
+Date: 2026-10-09
+
+Allow AiRegistry.register() to append factory-created deployments after Bounded
+Context build. Preserve rejection of every duplicate ModelRef, including repeat
+registration of the same object. Existing deployments, defaults, limits and MCP
+policies remain immutable; registerTools() still rejects after build. Do not add
+a second registration method, replacement/removal API or general hot reload.
+
+Add RepositoryAiOptions.resolveModel(kind, scope, sourceMessage, control), using
+existing generation/decision strings, AiScope, google.protobuf.Any and AiControl.
+A concrete ModelRef overrides preference/default precedence for this accepted
+signal; undefined preserves that precedence. Supply a detached copy of the
+accepted source payload. The existing scope identifies its source ID/type, Agent,
+actor and tenant. Validate and clone the returned reference, enforce allowlists,
+capabilities and selection authorization, then resolve/authorize its connection.
+Save the existing AgentSelectedModel before the handler. A saved selection skips
+the resolver on continuation/replay. No new Proto or stored journal field.
+
+This callback is needed because model selection precedes all Agent handlers;
+Ai.select() changes preferences for later signals and cannot bootstrap an Agent
+with no configured default. Append-only registration alone cannot solve this.
+The accepted payload is needed because Event subscriptions have no ordering
+guarantee ahead of Agent selection. EventBus notifies subscribers after handler
+dispatch, while the Agent scheduler may already run. Never use observer timing
+as authority for account/model selection or terminate valid work because the UI
+subscriber has not received an Event yet.
+
+Enforce the already documented authorizeSelection callback. Concrete resolver
+results require authorization before selection is saved. Keep Ai.select()
+synchronous; authorize each effective staged preference change, including reset
+to inheritance, before completion commits the Entity transition, preference and
+selection/domain Events. Denial, exception or timeout prevents that completion.
+No-op assignments change nothing. Bound resolver/authorization callbacks by the
+smaller of invocation deadline and hookTimeoutMs, supply linked cancellation,
+race uncooperative callbacks and ignore late results.
+
+The desktop creates its immutable admission record before posting. Its resolver
+unpacks ReleaseGenerationRequested and checks generation, Agent, actor/tenant
+and reference against that record, then binds the exact source Event ID directly
+from scope. Subscription updates are for observation. Retain the mapping through
+uncertain submission, queueing and pre-selection retries; remove it only after
+authoritative rejection without accepted work or recorded completed/terminated.
+Each ModelRef remains one registration/account/endpoint/concrete-model binding.
+Adding accounts never rebuilds the Bounded Context or drops draft state.
+
+## D-0136: Acknowledging Repeated Release Generations
+
+Status: Implemented
+
+Date: 2026-10-09
+
+A successful `@Assign` handler must emit at least one normal Event. Repeating an
+accepted generation request therefore emits `ReleaseGenerationAlreadyRequested`,
+containing its typed draft ID, generation ID and retained request digest. It
+does not emit another `ReleaseGenerationRequested` or schedule another model
+operation. No framework return-type change or empty-result workaround is needed.
+
+Compare the submitted request with its retained receipt before checking current
+expected Entity Version or conversation eligibility. The same input acknowledges the
+original acceptance without changing state, pending generation,
+approval, receipts or the accepted input snapshot. Different input under the
+same ID remains `ReleaseGenerationConflict`. Framework Entity Version can advance
+when the acknowledgement is emitted; pending input Version remains a historical
+reference, as clarified in D-0138.
+
+The Agent and draft Projection ignore the acknowledgement. The trusted service
+may use it to confirm acceptance, but must preserve the original source Event
+binding and active admission. Its new Event ID does not identify a new execution.
+A conflicting repeat cannot release admission for the original accepted work.
+Tests await the acknowledgement, then assert no second requested Event or model
+call, including older IDs after newer requests and fresh command envelopes.
+
+## D-0137: Recorded MCP Setup Outcomes
+
+Status: Implemented
+
+Date: 2026-10-09
+
+A policy denial or unsupported tool catalog discovered after an Agent operation
+starts must yield an ordinary recorded AI failure so the handler can produce
+its domain outcome. The previous setup path threw before saving that result,
+leaving only the operation-start record until existing execution failure rules
+applied. Do not treat every sanitized exception as an operational result.
+
+Introduce one internal `AiMcpSetupFailure` exported only through the existing
+adapter SPI, containing an existing failure code and fixed safe message. Explicit
+`authorizeConnect === false` uses `AUTHENTICATION_REQUIRED`; unsupported input
+or output schema, invalid bounded listing, and missing configured tools use
+`UNSUPPORTED_CAPABILITY`. These outcomes are not automatically retryable by the
+accepted signal. Keep request I/O outside catalog-validation classification:
+raw connection/listTools failures can originate in storage, budgets or execution
+fencing and remain exceptions. Preserve `AgentExecutionFault` through cleanup.
+
+Catch only this explicit category around execution preparation. Require an
+active execution and use the existing diagnostic, failed System Event and saved
+named-operation result paths before returning its existing operation ID. Failed
+persistence, identity drift, cancellation and replay faults continue to reject.
+Replaying the saved failed operation returns its retained outcome without another
+authorization callback, MCP discovery or provider request. No public application
+API, Proto, storage format, recovery scheme or time utility is added.
+
+## D-0138: Entity Versions in Release Notes Studio
+
+Status: Implemented
+
+Date: 2026-10-09
+
+These are Release Notes Studio application rules. The framework must not retain
+or propagate an originating Aggregate's Version through AI input/results or
+decide whether the result applies. The application explicitly models the facts
+and evaluates them in its own handlers. This responsibility boundary was
+clarified by the human after the initial decision.
+
+Human correction: use existing Entity versions, not an application revision
+mechanism, and name Commands, Events, Rejections and Queries precisely. Remove
+`DraftRevision` and the speculative Projection `applied_event_version` watermark.
+The local EventBus serializes admitted dispatch through the runtime queue and
+awaits Projection handoff; no demonstrated requirement justifies that watermark.
+Projection outcomes follow ordinary Aggregate subscriptions, including progress.
+
+Commands targeting an existing draft carry `expected_version: spine.core.Version`,
+copied from the actual Aggregate state/version pair returned by public Query or
+trusted Stand.readVersioned. Compare it with `this.version` in the handler.
+This is a historical reference to a framework-managed Version, not a counter.
+The Proto `CommandContext.targetVersion` exists, but the public Client/BlackBox
+post options expose only cancellation. The earlier proposal to use that native
+field through the current client was incorrect. Avoid both a private envelope
+bypass and a client API expansion for this example.
+
+Retain the accepted generation ID and its actual input Version as pending state;
+copy that Version through accepted-generation, Agent proposal and failure Events.
+Admit a result only against the pending pair. Material edits/input changes and
+approval clear pending work; a newer generation replaces it. Never compare the
+pending historical Version with the current Aggregate Version: acknowledgement
+Events advance Entity Version without changing accepted inputs. Exact repeated
+Commands keep their original expected Version in the input fingerprint and are
+acknowledged before current-Version checks. Changed Version under the same
+generation ID is a conflict. This corrects the earlier D-0136 revision wording.
+
+Approval retains exact bytes/digest and the actual reviewed Version. Export
+checks its current expected Version and matching approved content, not equality
+between historical approval Version and current Entity Version. Approval,
+acknowledgement and prior export preparation can advance Entity Version without
+changing the document. Editor content and version must come from one Aggregate
+snapshot, never from different Aggregate/Projection reads.
+
+Accepted application follow-up: a generation rejected before acceptance emits
+`ReleaseGenerationInputsConflict` with the draft and generation IDs. The desktop
+subscribes before posting Commands and retains the observed rejection beside its
+private admission. It can then distinguish a known rejection from an unknown
+outcome, including after renderer reload. Only that correlated rejection frees
+admission; a timeout does not. Existing `ReleaseGenerationConflict` still means
+conflicting reuse of accepted input and never establishes that accepted work
+stopped. Rejection of one repeated submission must not erase accepted work.
+The private status response may carry the rejection separately; framework
+`AgentExecutionStatus` remains unchanged. A fresh action uses a new generation
+ID and current draft snapshot; no automatic repost or framework policy is added.
+
+## D-0139: Access to an already registered repository
+
+Status: Implemented
+
+Date: 2026-10-09
+
+Normal `.add(EntityClass, options)` registration creates the repository, while
+`registeredRepositories()` exposes immutable metadata. Agent history and execution
+reads already exist on Repository, but application code cannot reach them through
+normal generated registration. Manually assembling Repository/handler metadata
+is prohibited in end-user examples and is not a suitable workaround.
+
+Add `BoundedContext.getRepository(EntityClass)` returning the existing typed
+Repository for that exact constructor in this Bounded Context. Preserve Entity
+ID/schema inference and Agent-only read constraints. Do not construct another
+repository, restore an Entity, perform a storage read, match class names, or
+search other Bounded Contexts. Missing registration throws a descriptive error.
+New lookup fails when closing begins; retained handles preserve their existing
+runtime lifecycle checks. Metadata enumeration stays unchanged.
+
+This is trusted server-side access to the existing Repository API, including its
+existing administration/routing operations. It is not a remote endpoint or an
+authorization mechanism. Add no reader facade, Agent service, storage format,
+application-policy hook, or cleanup-checker exception. Replace the example's
+unfinished manual assembly with normal registration plus this lookup.
+
+## D-0140: MōBrowser desktop shell for Release Notes Studio
+
+Status: Implemented
+
+Date: 2026-10-13
+
+The human requested replacing Electron with MōBrowser. Use the official 2.18.0
+API, CLI and generated desktop IPC. Retain the existing React screens, domain
+Entities, memory-only account service and Git worker protocol. Vendor desktop
+messages are generated separately from the domain's Buf messages, with explicit
+conversion at that boundary. Package an official, checksum-verified standalone
+Node executable for the stdio worker; the desktop executable is not Node CLI.
+
+Keep the generated handler registry and main entry in one module graph. Native
+close decisions must await existing cancellation/cleanup and apply to Cmd+Q too.
+Credentials, drafts and histories remain in memory. MōBrowser's default browser
+cache is persistent; clearing it at startup/normal close is not crash-safe
+incognito and must not be documented as such.
+
+Custom protocol response headers enforce Permissions-Policy, but exact custom origins tested
+did not expose generated IPC. Use the documented application origin, restrictive
+CSP, fixed navigation, blocked popups, denied external permission requests and
+cancelled media-device selection. MōBrowser automatically grants website
+permissions to its application origin; the external deny callback does not
+change that vendor behavior. Do not claim a universal deny policy. No remote
+origin is added to the trusted-origin list.

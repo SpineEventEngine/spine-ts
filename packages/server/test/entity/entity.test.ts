@@ -254,6 +254,10 @@ describe("entities", () => {
     expect(serverRoot.ProcessManager).toBe(ProcessManager);
   });
 
+  it("exports an Agent family sibling for transactional Entity state", () => {
+    expect(serverRoot).toHaveProperty("Agent");
+  });
+
   it("exposes identity, descriptor metadata, state snapshots, version, and active lifecycle defaults", () => {
     const initialState = createProjectOverviewState();
     const entity = new TestEntity({
