@@ -44,16 +44,16 @@
     "@bufbuild/protobuf": "2.12.1",
     "@connectrpc/connect": "2.1.2",
     "@connectrpc/connect-node": "2.1.2",
-    "@spine-event-engine/ai": "2.0.0-snapshot.23",
-    "@spine-event-engine/core": "2.0.0-snapshot.23",
-    "@spine-event-engine/deployment": "2.0.0-snapshot.23",
-    "@spine-event-engine/proto": "2.0.0-snapshot.23",
-    "@spine-event-engine/storage": "2.0.0-snapshot.23",
-    "@spine-event-engine/transport": "2.0.0-snapshot.23",
+    "@spine-event-engine/ai": "2.0.0-snapshot.24",
+    "@spine-event-engine/core": "2.0.0-snapshot.24",
+    "@spine-event-engine/deployment": "2.0.0-snapshot.24",
+    "@spine-event-engine/proto": "2.0.0-snapshot.24",
+    "@spine-event-engine/storage": "2.0.0-snapshot.24",
+    "@spine-event-engine/transport": "2.0.0-snapshot.24",
     "loglayer": "9.4.0"
   },
   "peerDependencies": {
-    "@spine-event-engine/auth": "2.0.0-snapshot.23"
+    "@spine-event-engine/auth": "2.0.0-snapshot.24"
   },
   "peerDependenciesMeta": {
     "@spine-event-engine/auth": {
@@ -61,10 +61,10 @@
     }
   },
   "devDependencies": {
-    "@spine-event-engine/ai-vercel-ax": "2.0.0-snapshot.23",
-    "@spine-event-engine/storage-datastore": "2.0.0-snapshot.23",
-    "@spine-event-engine/storage-postgres": "2.0.0-snapshot.23",
-    "@spine-event-engine/storage-mysql": "2.0.0-snapshot.23",
+    "@spine-event-engine/ai-vercel-ax": "2.0.0-snapshot.24",
+    "@spine-event-engine/storage-datastore": "2.0.0-snapshot.24",
+    "@spine-event-engine/storage-postgres": "2.0.0-snapshot.24",
+    "@spine-event-engine/storage-mysql": "2.0.0-snapshot.24",
     "@connectrpc/connect-web": "2.1.2",
     "@spine-event-engine/delivery-server": "workspace:*",
     "@spine-event-engine/proto-tools": "workspace:*",
