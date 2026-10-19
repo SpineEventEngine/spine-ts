@@ -146,6 +146,32 @@ describe("Client", () => {
     await client.close();
   });
 
+  it("fails and cancels both members when an unread group lifecycle overflows", async () => {
+    const calls: string[] = [];
+    const gap = Promise.withResolvers<undefined>();
+    const client = Client.usingTransport(
+      {
+        transport: groupedTransport(calls, [], "ok", undefined, {
+          gapAfterActivation: { typeName: ProjectCreatedSchema.typeName, deliver: gap.promise },
+        }),
+      },
+      { subscriptions: { lifecycleBufferCapacity: 2 } },
+    );
+    const handle = await client
+      .asGuest()
+      .createSubscription([ProjectCreatedSchema, ProjectRegisteredSchema], { kind: "event" });
+    await handle.activate();
+    await Promise.resolve();
+    gap.resolve(undefined);
+    await expect(handle.updates[Symbol.asyncIterator]().next()).rejects.toThrow(
+      "lifecycle buffer overflow",
+    );
+    await vi.waitFor(() => {
+      expect(calls.filter((method) => method === "Cancel")).toHaveLength(2);
+    });
+    await client.close();
+  });
+
   it("closes a grouped consumer deliberately when the client closes", async () => {
     const calls: string[] = [];
     const client = Client.usingTransport({ transport: groupedTransport(calls, []) });
@@ -254,6 +280,48 @@ describe("Client", () => {
     });
     await vi.advanceTimersByTimeAsync(20);
     expect(notify).toHaveBeenCalledTimes(1);
+    await handle.cancel();
+    await client.close();
+    vi.useRealTimers();
+  });
+
+  it("keeps a grouped Event stream live after its timeout callback rejects", async () => {
+    vi.useFakeTimers();
+    let wire: Subscription | undefined;
+    const pending = Promise.withResolvers<SubscriptionUpdate>();
+    const client = Client.usingTransport({
+      transport: unaryTransport(
+        (method, input) => {
+          if (method.name === "Subscribe") {
+            wire = create(SubscriptionSchema, {
+              id: create(SubscriptionIdSchema, { value: "group-notice-failure" }),
+              topic: input as Topic,
+            });
+            return wire;
+          }
+          return create(ResponseSchema);
+        },
+        undefined,
+        () => delayedOutcomeThenIdle(pending.promise),
+      ),
+    });
+    const handle = await client.asGuest().createSubscription([ProjectCreatedSchema], {
+      kind: "event",
+      firstUpdateTimeoutMs: 10,
+      onFirstUpdateTimeout: () => Promise.reject(new Error("notice callback failed")),
+    });
+    await handle.activate();
+    const lifecycle = handle.lifecycle[Symbol.asyncIterator]();
+    await vi.advanceTimersByTimeAsync(10);
+    const notices = await Promise.all([lifecycle.next(), lifecycle.next(), lifecycle.next()]);
+    const failure = notices.at(-1)?.value as SubscriptionLifecycle | undefined;
+    if (failure?.state !== "notificationFailed")
+      throw new Error("Expected a nonterminal notification failure.");
+    expect(failure.error.message).toBe("notice callback failed");
+    pending.resolve(projectOutcome(requireValue(wire, "accepted subscription"), "after-notice"));
+    await expect(handle.updates[Symbol.asyncIterator]().next()).resolves.toMatchObject({
+      value: { kind: "update", update: { update: { case: "eventUpdates" } } },
+    });
     await handle.cancel();
     await client.close();
     vi.useRealTimers();
@@ -4171,7 +4239,14 @@ function groupedTransport(
   topics: Topic[],
   postStatus: "ok" | "error" = "ok",
   failTypeName?: string,
-  control?: { readonly failSubscribeTypeName?: string; readonly failCancelOnce?: boolean },
+  control?: {
+    readonly failSubscribeTypeName?: string;
+    readonly failCancelOnce?: boolean;
+    readonly gapAfterActivation?: {
+      readonly typeName: string;
+      readonly deliver: Promise<undefined>;
+    };
+  },
 ): Transport {
   let cancels = 0;
   return {
@@ -4219,27 +4294,52 @@ function groupedTransport(
       if (firstWire.done) throw new Error("Expected a subscription request.");
       const wire = firstWire.value;
       let first = true;
+      let sentGap = false;
       const message: AsyncIterable<Message> = {
         [Symbol.asyncIterator]() {
           return {
-            next: () =>
-              first
-                ? ((first = false),
-                  Promise.resolve({
-                    done: false,
-                    value: create(SubscriptionUpdateSchema, {
-                      subscription: wire,
-                      response: create(ResponseSchema, {
-                        status: create(StatusSchema, {
-                          status: { case: "ok", value: {} },
-                        }),
+            next: () => {
+              if (first) {
+                first = false;
+                return Promise.resolve({
+                  done: false,
+                  value: create(SubscriptionUpdateSchema, {
+                    subscription: wire,
+                    response: create(ResponseSchema, {
+                      status: create(StatusSchema, {
+                        status: { case: "ok", value: {} },
                       }),
                     }),
-                  }))
-                : failTypeName !== undefined &&
-                    wire.topic?.target?.type.endsWith(`/${failTypeName}`)
-                  ? Promise.reject(new ClientProtocolError("member failed"))
-                  : never<IteratorResult<Message>>(),
+                  }),
+                });
+              }
+              const gap = control?.gapAfterActivation;
+              if (
+                gap !== undefined &&
+                !sentGap &&
+                wire.topic?.target?.type.endsWith(`/${gap.typeName}`)
+              ) {
+                sentGap = true;
+                return gap.deliver.then(() => ({
+                  done: false,
+                  value: create(SubscriptionUpdateSchema, {
+                    subscription: wire,
+                    response: create(ResponseSchema, {
+                      status: create(StatusSchema, {
+                        status: {
+                          case: "error",
+                          value: create(ErrorSchema, { type: "backend-unavailable" }),
+                        },
+                      }),
+                    }),
+                  }),
+                }));
+              }
+              return failTypeName !== undefined &&
+                wire.topic?.target?.type.endsWith(`/${failTypeName}`)
+                ? Promise.reject(new ClientProtocolError("member failed"))
+                : never<IteratorResult<Message>>();
+            },
             return: () => Promise.resolve({ done: true, value: undefined }),
           };
         },

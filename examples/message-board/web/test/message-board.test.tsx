@@ -160,6 +160,21 @@ describe("MessageBoardApp", () => {
     expect(request.subscription.cancel).not.toHaveBeenCalled();
   });
 
+  it("preserves an accepted post draft when confirmation ends without an outcome", async () => {
+    const request = requestFixture({ deferredConfirmation: true });
+    render(createElement(MessageBoardApp, { actor: "ada", request, board: "general" }));
+    await screen.findByText("general message");
+    fillPost("Unconfirmed draft");
+    fireEvent.click(screen.getByRole("button", { name: "Post message" }));
+    await screen.findByText("Message accepted; waiting for confirmation…");
+    await request.postSubscription.cancel();
+    await screen.findByText("Confirmation was interrupted. Check the board before retrying.");
+    expect((screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement).value).toBe(
+      "Unconfirmed draft",
+    );
+    expect(request.postCalls).toHaveBeenCalledTimes(1);
+  });
+
   it("re-queries authoritatively after a lifecycle gap", async () => {
     const request = requestFixture();
     render(createElement(MessageBoardApp, { actor: "ada", request, board: "general" }));

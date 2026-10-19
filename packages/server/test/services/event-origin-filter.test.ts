@@ -243,6 +243,56 @@ describe("Event origin filters", () => {
         ),
       ),
     ).toThrow("only context.past_message EQUAL Origin");
+    expect(() =>
+      EventOriginFilters.compile(
+        singleOriginCriterion(create(FilterSchema, { ...criterion, fieldPath: undefined })),
+      ),
+    ).toThrow("only context.past_message EQUAL Origin");
+    expect(() =>
+      EventOriginFilters.compile(
+        create(TargetFiltersSchema, {
+          filter: [
+            create(CompositeFilterSchema, { operator: CompositeFilter_CompositeOperator.ALL }),
+          ],
+        }),
+      ),
+    ).toThrow("empty or exceeds subscription limits");
+    expect(() =>
+      EventOriginFilters.compile(
+        create(TargetFiltersSchema, {
+          filter: [
+            create(CompositeFilterSchema, {
+              operator: 99 as CompositeFilter_CompositeOperator,
+              filter: [criterion],
+            }),
+          ],
+        }),
+      ),
+    ).toThrow("composite operator is unsupported");
+    let overdeep = create(CompositeFilterSchema, {
+      operator: CompositeFilter_CompositeOperator.ALL,
+      filter: [criterion],
+    });
+    for (let depth = 0; depth < 8; depth++)
+      overdeep = create(CompositeFilterSchema, {
+        operator: CompositeFilter_CompositeOperator.ALL,
+        compositeFilter: [overdeep],
+      });
+    expect(() =>
+      EventOriginFilters.compile(create(TargetFiltersSchema, { filter: [overdeep] })),
+    ).toThrow("exceeds subscription limits");
+    expect(() =>
+      EventOriginFilters.compile(
+        create(TargetFiltersSchema, {
+          filter: [
+            create(CompositeFilterSchema, {
+              operator: CompositeFilter_CompositeOperator.ALL,
+              filter: Array.from({ length: 17 }, () => criterion),
+            }),
+          ],
+        }),
+      ),
+    ).toThrow("only context.past_message EQUAL Origin");
   });
 });
 
