@@ -327,6 +327,57 @@ describe("Client", () => {
     vi.useRealTimers();
   });
 
+  for (const form of ["topic", "group"] as const)
+    it(`keeps a canceled ${form} closed when its pending timeout callback rejects`, async () => {
+      vi.useFakeTimers();
+      const calls: string[] = [];
+      const callbackStarted = Promise.withResolvers<undefined>();
+      const finishCallback = Promise.withResolvers<undefined>();
+      const callbackSettled = Promise.withResolvers<undefined>();
+      const client = Client.usingTransport({ transport: groupedTransport(calls, []) });
+      try {
+        const options = {
+          kind: "event" as const,
+          firstUpdateTimeoutMs: 10,
+          onFirstUpdateTimeout: async () => {
+            callbackStarted.resolve(undefined);
+            try {
+              await finishCallback.promise;
+            } finally {
+              callbackSettled.resolve(undefined);
+            }
+          },
+        };
+        const handle =
+          form === "topic"
+            ? await client.asGuest().createSubscription(create(TopicSchema), options)
+            : await client
+                .asGuest()
+                .createSubscription([ProjectCreatedSchema, ProjectRegisteredSchema], options);
+        await handle.activate();
+        await vi.advanceTimersByTimeAsync(10);
+        await callbackStarted.promise;
+        await handle.cancel();
+        finishCallback.reject(new Error("late application callback failure"));
+        await callbackSettled.promise;
+        await Promise.resolve();
+        const lifecycle: SubscriptionLifecycle[] = [];
+        for await (const notice of handle.lifecycle) lifecycle.push(notice);
+        expect(lifecycle.at(-1)?.state).toBe("closed");
+        expect(lifecycle.some((notice) => notice.state === "notificationFailed")).toBe(false);
+        await expect(handle.updates[Symbol.asyncIterator]().next()).resolves.toMatchObject({
+          done: true,
+        });
+        expect(calls.filter((method) => method === "Cancel")).toHaveLength(
+          form === "topic" ? 1 : 2,
+        );
+      } finally {
+        finishCallback.resolve(undefined);
+        await client.close();
+        vi.useRealTimers();
+      }
+    });
+
   it("buffers an outcome received after Post starts but before its acknowledgement", async () => {
     let wire: Subscription | undefined;
     const posted = Promise.withResolvers<Command>();
