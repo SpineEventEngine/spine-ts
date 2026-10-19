@@ -163,8 +163,18 @@ class CommandingSupportAgent extends Agent<
   static calls = 0;
   static reviewCalls = 0;
 
-  onTicketUpdated(event: SupportTicketUpdated): [ReviewSupportReply, SupportReplyDrafted] {
+  onTicketUpdated(
+    event: SupportTicketUpdated,
+  ):
+    | [ReviewSupportReply, SupportReplyDrafted]
+    | [ReviewSupportReply, ReviewSupportReply, SupportReplyDrafted] {
     CommandingSupportAgent.calls += 1;
+    if (event.question === "Two reviews")
+      return [
+        create(ReviewSupportReplySchema, { agent: event.agent }),
+        create(ReviewSupportReplySchema, { agent: event.agent }),
+        create(SupportReplyDraftedSchema, { agent: event.agent, reply: "Ready for review" }),
+      ];
     return [
       create(ReviewSupportReplySchema, { agent: event.agent }),
       create(SupportReplyDraftedSchema, { agent: event.agent, reply: "Ready for review" }),
@@ -228,6 +238,7 @@ class RecordingExecutionFactory extends InMemoryStorageFactory {
   failAdmission = false;
   failUpdateOnce = false;
   failMarkDeliveryOnce = false;
+  failMarkDeliveryErrors: Error[] = [];
   suppressSchedulerDiscovery = false;
   admittedKeys: AgentInvocationKey[] = [];
   pendingPage?: () => Promise<AgentPendingPage>;
@@ -259,6 +270,8 @@ class RecordingExecutionFactory extends InMemoryStorageFactory {
     };
     const markDelivered = storage.markDelivered.bind(storage);
     storage.markDelivered = async (...args) => {
+      const failure = this.failMarkDeliveryErrors.shift();
+      if (failure !== undefined) throw failure;
       if (this.failMarkDeliveryOnce) {
         this.failMarkDeliveryOnce = false;
         throw new Error("Agent delivery acknowledgement unavailable.");
@@ -2198,6 +2211,131 @@ describe("Agent registration readiness", () => {
       await repositoryAccess.runAcceptedAgent(configured, undefined, downstream);
       await repositoryAccess.runAcceptedAgent(configured, undefined, downstream);
       expect(CommandingSupportAgent.reviewCalls).toBe(1);
+    } finally {
+      observation.close();
+      await context.close();
+      Time.setProvider(previousTime);
+    }
+  });
+
+  it("hands a later Event after a failed Command acknowledgement and retries both original Commands", async () => {
+    CommandingSupportAgent.calls = 0;
+    CommandingSupportAgent.reviewCalls = 0;
+    const factory = new RecordingExecutionFactory();
+    const first = new Error("first Command acknowledgement failed");
+    factory.failMarkDeliveryErrors = [first];
+    let seconds = 1_782_979_201n;
+    const previousTime = Time.setProvider({
+      currentTime: () => create(TimestampSchema, { seconds }),
+    });
+    const configured = new Repository({
+      entityType: CommandingSupportAgent,
+      schema: SupportReplyAgentStateSchema,
+      handlers: HandlerMetadataValues.defineArity(
+        CommandingSupportAgent,
+        SupportReplyAgentStateSchema,
+        (builder) => [
+          builder.command(SupportTicketUpdatedSchema, "onTicketUpdated"),
+          builder.assign(ReviewSupportReplySchema, "review"),
+        ],
+        [
+          {
+            kind: "command-reaction",
+            methodName: "onTicketUpdated",
+            parameterCount: 1,
+            origin: "domestic",
+            outcomes: {
+              returned: [SupportReplyDraftedSchema, ReviewSupportReplySchema],
+              thrown: [],
+            },
+          },
+          {
+            kind: "command-assignment",
+            methodName: "review",
+            parameterCount: 1,
+            origin: "domestic",
+            outcomes: { returned: [], thrown: [] },
+          },
+        ],
+      ),
+      agentCodeRevision: "support-command-agent-v1",
+      ai: { models: [] },
+      events: [SupportReplyDraftedSchema],
+    });
+    const context = BoundedContext.singleTenant("MultipleCommandFailures")
+      .withAi(ai())
+      .persistSystemEvents()
+      .withStorageFactory(factory)
+      .add(configured)
+      .build();
+    const emitted: Event[] = [];
+    const observation = observeProducedSignals(context, {
+      onEvent: (candidate) => {
+        if (candidate.message?.typeUrl === TypeUrls.derive(SupportReplyDraftedSchema))
+          emitted.push(candidate);
+      },
+    });
+    try {
+      const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-two-reviews" });
+      const event = SignalEnvelopes.event({
+        schema: SupportTicketUpdatedSchema,
+        message: create(SupportTicketUpdatedSchema, { agent: id, question: "Two reviews" }),
+        context: create(EventContextSchema, {
+          producerId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+          version: create(VersionSchema, { number: 1 }),
+        }),
+      });
+      await repositoryAccess.entityInboxTarget(configured)?.replay({
+        ...createMessage("agent-two-command-failures", event.id?.value ?? "", 5n),
+        inboxId: {
+          targetId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+          targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
+        },
+        signal: AnyMessages.pack(EventSchema, event, { validate: false }),
+        label: "REACT_UPON_EVENT",
+        status: "TO_DELIVER",
+      });
+      const key = factory.admittedKeys[0];
+      if (key === undefined) throw new Error("Expected accepted source Event.");
+      await expect(repositoryAccess.runAcceptedAgent(configured, undefined, key)).rejects.toBe(
+        first,
+      );
+      const waiting = await factory.readAccepted?.(key);
+      expect(waiting?.completion?.commands).toHaveLength(2);
+      const originals =
+        waiting?.completion?.commands.map((output) => output.command?.id?.uuid) ?? [];
+      expect(originals).toHaveLength(2);
+      expect(originals.every((id) => id !== undefined)).toBe(true);
+      expect(new Set(originals).size).toBe(2);
+      expect(waiting?.completion?.commands[0]?.plan).toBeDefined();
+      expect(waiting?.completion?.commands[1]?.plan).toBeUndefined();
+      expect(factory.admittedKeys).toHaveLength(2);
+      expect(factory.failMarkDeliveryErrors).toEqual([]);
+      await vi.waitFor(() => {
+        expect(emitted).toHaveLength(1);
+      });
+      expect(waiting?.completion?.commands.every((output) => !output.delivered)).toBe(true);
+      const acceptedCommandIds = () =>
+        factory.admittedKeys.flatMap((candidate) =>
+          candidate.sourceSignal?.id.case === "command"
+            ? [candidate.sourceSignal.id.value.uuid]
+            : [],
+        );
+      expect(acceptedCommandIds()).toEqual([originals[0]]);
+
+      seconds += 31n;
+      await repositoryAccess.runAcceptedAgent(configured, undefined, key);
+      const completed = await factory.readAccepted?.(key);
+      expect(acceptedCommandIds()).toEqual([originals[0], ...originals]);
+      expect(completed?.completion?.commands.every((output) => output.delivered)).toBe(true);
+      expect(CommandingSupportAgent.calls).toBe(1);
+      expect(emitted).toHaveLength(1);
+      const downstream = factory.admittedKeys.filter(
+        (candidate) => candidate.sourceSignal?.id.case === "command",
+      );
+      for (const candidate of downstream)
+        await repositoryAccess.runAcceptedAgent(configured, undefined, candidate);
+      expect(CommandingSupportAgent.reviewCalls).toBe(2);
     } finally {
       observation.close();
       await context.close();

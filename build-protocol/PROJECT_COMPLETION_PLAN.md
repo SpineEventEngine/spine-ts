@@ -18,10 +18,10 @@ Current work: [SQL delivery and subscription reliability](tasks/sql-delivery-rel
 on `sql-delivery-subscription-reliability` in
 [PR #19](https://github.com/SpineEventEngine/spine-ts/pull/19). The author requested
 integration of official `master`, including the Agent feature from PR #18.
-Integration and review corrections are in progress. Agents hand emitted Events
+The integration includes the author's correction: Agents hand emitted Events
 to their Bounded Context Event Bus without retaining publication or recovery
 obligations; saved outgoing Commands retain their separate recovery behavior.
-Immutable Event history remains available for reading. The next common release
+Immutable Event history remains available for reading. The common workspace
 version is `2.0.0-snapshot.24`. General physical Entity deletion remains deferred.
 
 Previous completed work: [Process Manager queries across Bounded Contexts](planning/cross-context-queries.md)

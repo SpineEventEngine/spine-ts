@@ -5,10 +5,13 @@ processing and acknowledgement failure handling, subscription activation and
 cancellation, and SQL-backed multiprocess examples. Shared Delivery remains
 in-memory.
 
-Author corrections: Event publication makes one initial attempt, with no
-republishing API or publication retry. Context and managed close await admitted
-work without total shutdown deadlines. Remote Inbox paging retains the JVM
-timestamp RPC and emulated Time.
+Author corrections: every Entity hands emitted Events to its Bounded Context
+Event Bus without retaining delivery flags, recipient plans, or recovery
+obligations. There is no Event republishing API or retry. Immutable Event history
+remains readable; saved outgoing Commands retain their separate recovery
+behavior. Bounded Context and managed close await admitted work without total
+shutdown deadlines. Remote Inbox paging retains the JVM timestamp RPC and
+emulated Time.
 
 `DeliveryMonitor` follows Spine JVM: failed reception defaults to
 `markDelivered()`, each failed repeat consults the monitor again, and monitor or
@@ -19,30 +22,20 @@ successful handler, only acknowledgement is retried, for at most three attempts.
 There is no `leavePending()` policy or new status. Private route reservations
 survive immediate retries and settle after each message completes.
 
-Independent runtime, API, documentation, and test reviews addressed the changed
-behavior. Focused tests, PostgreSQL 16/18, MySQL, MariaDB, two/eight-process
-configurations, crash scenarios, and real subscription transports have passed.
-Before the subscription API addition, the monitor correction passed independent
-review, live reruns, the full release profile, and the then-current PR checks.
-Disposable evidence stays out of Git.
-
-The [subscription API addition](SUBSCRIPTION_API_PLAN.md) is complete on this
-branch. `postAndSubscribe` observes multiple Event/rejection types using exact
-immediate Origin matching; existing subscriptions support optional activation
-and first-update timeouts, with no defaults. Subscriptions continue after the
-first update or its timeout. Browser, Node, React, BlackBox, public documentation,
+The [subscription API addition](SUBSCRIPTION_API_PLAN.md) provides
+`postAndSubscribe` for multiple Event/rejection types using exact immediate
+Origin matching. Existing subscriptions support optional activation and
+first-update timeouts, with no defaults. Subscriptions continue after the first
+update or its timeout. Browser, Node, React, BlackBox, public documentation,
 Message Board, and Todo use the supported APIs.
 
-Independent API, lifecycle, documentation, test, and security reviews are resolved.
-The full release checks passed with 5,383 tests and 90.00% branch coverage; three
-tests are intentionally skipped. Live PostgreSQL 16/18, MySQL, MariaDB, all 16
-process/Delivery configurations, and real browser transports passed. All 19
-snapshot 25 packages passed external-consumer checks and the offline release
-trial. No packages were published. Disposable evidence remains ignored.
+Official `master`, including the Agent feature, is integrated. The common
+workspace version is `2.0.0-snapshot.24`, following master's snapshot 23.
 
-The author authorized back-merging current official `master` and correcting
-Agent Event publication. Integration is in progress. Every Entity hands Events
-to its Bounded Context Event Bus; it must not retain Event delivery flags,
-recipient plans or recovery obligations afterward. Immutable Event history
-remains separate from delivery. The next unpublished release after master's
-snapshot 23 is snapshot 24; the merged workspace will use that version.
+Independent runtime, API, documentation, test, and security reviews resolved
+confirmed findings. Live PostgreSQL 16/18, MySQL, MariaDB, two/eight-process
+configurations, crash scenarios, and real subscription transports passed.
+Agent Datastore checks passed; the pre-existing Datastore history-trimming test
+still times out with the emulator. Release checks are recorded in
+[PR #19](https://github.com/SpineEventEngine/spine-ts/pull/19/checks).
+Detailed verification records remain disposable and outside Git.

@@ -922,9 +922,22 @@ class Request implements BlackBoxScope {
     options: PostAndSubscribeOptions,
   ): Promise<PostAndSubscribeResult> {
     this.#internals.assertOpen();
-    const result = await this.#request.postAndSubscribe(schema, message, options);
-    if (result.kind === "refused") return result;
-    return { ...result, subscription: this.#trackSubscription(result.subscription) };
+    const timeout = this.#trackedTimeout(options.onFirstUpdateTimeout);
+    try {
+      const forwarded =
+        timeout.notify === undefined
+          ? options
+          : { ...options, onFirstUpdateTimeout: timeout.notify };
+      const result = await this.#request.postAndSubscribe(schema, message, forwarded);
+      if (result.kind === "refused") {
+        await timeout.release().catch(() => undefined);
+        return result;
+      }
+      return { ...result, subscription: timeout.track(result.subscription) };
+    } catch (error) {
+      await timeout.release().catch(() => undefined);
+      throw error;
+    }
   }
 
   /**
@@ -1012,13 +1025,39 @@ class Request implements BlackBoxScope {
     options: CreateSubscriptionOptions,
   ): Promise<Subscription> {
     this.#internals.assertOpen();
+    const timeout = this.#trackedTimeout(options.onFirstUpdateTimeout);
+    const forwarded =
+      timeout.notify === undefined ? options : { ...options, onFirstUpdateTimeout: timeout.notify };
     const subscription = Array.isArray(topicOrSchemas)
       ? await this.#request.createSubscription(
           topicOrSchemas,
-          options as Extract<CreateSubscriptionOptions, { readonly kind: "event" }>,
+          forwarded as Extract<CreateSubscriptionOptions, { readonly kind: "event" }>,
         )
-      : await this.#request.createSubscription(topicOrSchemas as Topic, options);
-    return this.#trackSubscription(subscription);
+      : await this.#request.createSubscription(topicOrSchemas as Topic, forwarded);
+    return timeout.track(subscription);
+  }
+
+  /**
+   * Routes first-update notices through the same tracked handle returned to callers.
+   * @param callback Optional application notice callback.
+   * @returns Stable tracking and callback functions for one logical stream.
+   */
+  #trackedTimeout(callback: ((subscription: Subscription) => void | Promise<void>) | undefined) {
+    let tracked: Subscription | undefined;
+    const track = (subscription: Subscription): Subscription => {
+      tracked ??= this.#trackSubscription(subscription);
+      return tracked;
+    };
+    return {
+      track,
+      notify:
+        callback === undefined
+          ? undefined
+          : (subscription: Subscription) => callback(track(subscription)),
+      release: async () => {
+        await tracked?.cancel();
+      },
+    };
   }
 
   /**
