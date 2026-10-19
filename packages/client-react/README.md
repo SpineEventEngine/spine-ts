@@ -173,7 +173,7 @@ first-update timeout. For Event subscriptions, first-update options go in the
 factory's `createSubscription` call. Entity hooks accept them in their final
 options object together with `activationTimeoutMs`.
 
-Post Commands from user actions. The [Message Board form](../../examples/message-board/web/src/post-form.tsx)
+Post Commands from user actions. The [Message Board form](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/message-board/web/src/post-form.tsx)
 calls `postAndSubscribe` in its submit handler, receives updates asynchronously with error handling, and cancels when its outcome is handled
 or the component retires. Its continuing board-view subscription is independent.
 Do not post from `useRequest` or another effect: React can restart effects.

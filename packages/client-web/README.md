@@ -130,7 +130,7 @@ and `rejections` accept several generated schemas.
 
 This example receives a generated Message Board Command from application code.
 It keeps listening after the first update; application code decides when to
-call `subscription.cancel()`. The actual [Message Board form](../../examples/message-board/web/src/post-form.tsx)
+call `subscription.cancel()`. The actual [Message Board form](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/message-board/web/src/post-form.tsx)
 uses the same API and cancels after it handles its post's outcome.
 
 <!-- docs-snippet-path: examples/message-board/web/src/post-form.tsx -->

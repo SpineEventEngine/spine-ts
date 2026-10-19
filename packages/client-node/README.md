@@ -86,13 +86,13 @@ receiving one update does not close the subscription.
 
 `activationTimeoutMs` and `firstUpdateTimeoutMs` are optional, with no defaults.
 The first-update callback is named `onFirstUpdateTimeout`; it notifies once and
-allows late updates to arrive. See the [complete browser-safe API examples](../client-web/README.md#observe-command-outcomes)
+allows late updates to arrive. See the [complete browser-safe API examples](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/client-web/README.md#observe-command-outcomes)
 for the same request methods and non-blocking update consumers. Change client
 construction to `Client.connectTo()` for native Node transport.
 
-The runnable [Todo smoke client](../../examples/todo/scripts/smoke.mjs) uses
+The runnable [Todo smoke client](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/todo/scripts/smoke.mjs) uses
 this API for actual Commands, multiple Events, and rejections, then checks the
-TaskList Projection. Run it using the [Todo instructions](../../examples/todo/README.md).
+TaskList Projection. Run it using the [Todo instructions](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/todo/README.md).
 
 ## 🔎 Query generated entities
 
