@@ -33,6 +33,6 @@
   },
   "dependencies": {
     "@spine-event-engine/client-web": "workspace:*",
-    "@spine-event-engine/proto": "2.0.0-snapshot.23"
+    "@spine-event-engine/proto": "2.0.0-snapshot.24"
   }
 }
