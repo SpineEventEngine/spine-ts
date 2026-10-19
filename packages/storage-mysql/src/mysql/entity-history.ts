@@ -198,6 +198,69 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
     await this.#states?.prepare();
     await this.#events?.prepare();
   }
+
+  /**
+   * Returns physical Entity-family tables for an Agent transaction.
+   *
+   * @returns Current and configured history table names.
+   */
+  tableNames(): readonly string[] {
+    return [
+      this.#current.tableName(),
+      ...(this.#states ? [this.#states.tableName()] : []),
+      ...(this.#events ? [this.#events.tableName()] : []),
+    ];
+  }
+
+  /**
+   * Binds Entity-family work to the Agent transaction connection.
+   *
+   * @typeParam T Result of the bound work.
+   * @param connection Active Agent transaction connection.
+   * @param work Entity work to run on that connection.
+   * @returns Result of the work.
+   */
+  withConnection<T>(
+    connection: import("mysql2/promise").PoolConnection,
+    work: () => Promise<T>,
+  ): Promise<T> {
+    return this.#current.withConnection(connection, () =>
+      this.#states === undefined
+        ? this.#events === undefined
+          ? work()
+          : this.#events.withConnection(connection, work)
+        : this.#states.withConnection(connection, () =>
+            this.#events === undefined ? work() : this.#events.withConnection(connection, work),
+          ),
+    );
+  }
+
+  /**
+   * Reads current Entity state with the Agent transaction lock.
+   *
+   * @param id Typed Entity ID.
+   * @returns Current record when present.
+   */
+  readCurrentLocked(id: I): Promise<EntityRecord | undefined> {
+    return this.#current.readLocked(id);
+  }
+
+  /**
+   * Returns configured Entity history writers for the Agent transaction.
+   *
+   * @returns Transaction-bound immutable history appenders.
+   */
+  commitCapability(): {
+    appendStateImmutable(record: EntityRecord): Promise<void>;
+    appendDiagnosticImmutable(record: Event): Promise<void>;
+  } {
+    return {
+      appendStateImmutable: (record: EntityRecord) =>
+        this.#states?.append(record) ?? Promise.resolve(),
+      appendDiagnosticImmutable: (record: Event) =>
+        this.#events?.append(record) ?? Promise.resolve(),
+    };
+  }
 }
 
 /**
@@ -217,6 +280,40 @@ class CurrentStorage<I, S extends Message> implements EntityRecordStorage<I> {
     private readonly input: EntityStorageInput<I, S>,
     private readonly records: MysqlRecordStorage<I, EntityRecord>,
   ) {}
+
+  /**
+   * Returns the current-record table name.
+   *
+   * @returns Physical table name.
+   */
+  tableName(): string {
+    return this.records.tableName;
+  }
+
+  /**
+   * Executes current-record work on the Agent transaction connection.
+   *
+   * @typeParam T Result of the bound work.
+   * @param connection Active Agent transaction connection.
+   * @param work Current-record work to run.
+   * @returns Result of the work.
+   */
+  withConnection<T>(
+    connection: import("mysql2/promise").PoolConnection,
+    work: () => Promise<T>,
+  ): Promise<T> {
+    return this.records.withConnection(connection, work);
+  }
+
+  /**
+   * Reads and locks one current Entity record.
+   *
+   * @param id Typed Entity ID.
+   * @returns Current record when present.
+   */
+  readLocked(id: I): Promise<EntityRecord | undefined> {
+    return this.records.readLocked(id);
+  }
 
   /**
    * Reads the current record for an Entity ID.
@@ -298,6 +395,30 @@ class States<I, S extends Message> implements EntityStateHistoryPort<I, S> {
     private readonly input: EntityStorageInput<I, S>,
     private readonly records: MysqlRecordStorage<EntityStateKey, EntityRecord>,
   ) {}
+
+  /**
+   * Returns the state-history table name.
+   *
+   * @returns Physical table name.
+   */
+  tableName(): string {
+    return this.records.tableName;
+  }
+
+  /**
+   * Executes state-history work on the Agent transaction connection.
+   *
+   * @typeParam T Result of the bound work.
+   * @param connection Active Agent transaction connection.
+   * @param work State-history work to run.
+   * @returns Result of the work.
+   */
+  withConnection<T>(
+    connection: import("mysql2/promise").PoolConnection,
+    work: () => Promise<T>,
+  ): Promise<T> {
+    return this.records.withConnection(connection, work);
+  }
 
   /**
    * Writes one immutable state record.
@@ -437,6 +558,30 @@ class Events<I, S extends Message> implements EntityEventHistoryPort<I> {
     private readonly input: EntityStorageInput<I, S>,
     private readonly records: MysqlRecordStorage<EventId, Event>,
   ) {}
+
+  /**
+   * Returns the diagnostic Event-history table name.
+   *
+   * @returns Physical table name.
+   */
+  tableName(): string {
+    return this.records.tableName;
+  }
+
+  /**
+   * Executes Event-history work on the Agent transaction connection.
+   *
+   * @typeParam T Result of the bound work.
+   * @param connection Active Agent transaction connection.
+   * @param work Event-history work to run.
+   * @returns Result of the work.
+   */
+  withConnection<T>(
+    connection: import("mysql2/promise").PoolConnection,
+    work: () => Promise<T>,
+  ): Promise<T> {
+    return this.records.withConnection(connection, work);
+  }
 
   /**
    * Writes one immutable diagnostic Event.

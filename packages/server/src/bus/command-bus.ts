@@ -12,9 +12,13 @@
  * the License.
  */
 
-import { clone } from "@bufbuild/protobuf";
+import { clone, create } from "@bufbuild/protobuf";
 import { ValidationException, Validate, AnyMessages } from "@spine-event-engine/core";
 import { CommandSchema, type Command } from "@spine-event-engine/proto";
+import {
+  AgentSavedDispatchPlanSchema as SavedPlanSchema,
+  type AgentSavedDispatchPlan,
+} from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
 
 import {
   runtimeAccess,
@@ -25,9 +29,18 @@ import { CommandValidationError } from "./command-errors.js";
 import { ImplicitRequiredIds } from "../entity/implicit-required-id.js";
 import { CommandDispatcherRegistry } from "./command-dispatcher-registry.js";
 import type { CommandDispatcher } from "./command-dispatcher.js";
+import { SavedDispatcherBindings } from "./saved-dispatcher-binding.js";
 
 const internalCommandPosters = new WeakMap<CommandBus, (command: Command) => Promise<void>>();
 const commandFollowUpPosters = new WeakMap<CommandBus, (command: Command) => Promise<void>>();
+const savedPreparers = new WeakMap<
+  CommandBus,
+  (command: Command) => Promise<AgentSavedDispatchPlan>
+>();
+const savedFollowUps = new WeakMap<
+  CommandBus,
+  (command: Command, plan: AgentSavedDispatchPlan) => Promise<void>
+>();
 const commandBusCloseStarters = new WeakMap<CommandBus, () => void>();
 const commandBusDrainers = new WeakMap<CommandBus, () => Promise<void>>();
 const commandBusCloseFinishers = new WeakMap<CommandBus, () => Promise<void>>();
@@ -36,51 +49,81 @@ const commandBusWorkCounters = new WeakMap<CommandBus, () => number>();
 
 interface CommandBusAccess {
   /**
-   * Posts an internal Command after normal external intake stops.
-   * @param commandBus Target bus.
-   * @param command Command envelope.
-   * @returns Completion after dispatch.
+   * Posts an accepted internal command.
+   *
+   * @param commandBus Command bus receiving this internal operation.
+   * @param command Command envelope to prepare or dispatch.
+   * @returns A promise for completion of the accepted command dispatch.
    */
   postInternal(commandBus: CommandBus, command: Command): Promise<void>;
 
   /**
-   * Queues a trusted Command follow-up during graceful drain.
-   * @param commandBus Target bus.
-   * @param command Command envelope.
-   * @returns Completion after dispatch.
+   * Posts an internal command after intake begins closing.
+   *
+   * @param commandBus Command bus receiving this internal operation.
+   * @param command Command envelope to prepare or dispatch.
+   * @returns A promise for completion of the command follow-up.
    */
   postInternalFollowUp(commandBus: CommandBus, command: Command): Promise<void>;
 
   /**
-   * Stops new external Command intake.
-   * @param commandBus Target bus.
+   * Prepares a dispatch plan before persisting accepted output.
+   *
+   * @param commandBus Command bus receiving this internal operation.
+   * @param command Command envelope to prepare or dispatch.
+   * @returns The exact saved recipient plan.
+   */
+  prepareSaved(commandBus: CommandBus, command: Command): Promise<AgentSavedDispatchPlan>;
+
+  /**
+   * Posts a prepared dispatch after its Agent result is saved.
+   *
+   * @param commandBus Command bus receiving this internal operation.
+   * @param command Command envelope to prepare or dispatch.
+   * @param plan Persisted recipient plan for this dispatch.
+   * @returns A promise for completion of the saved dispatch.
+   */
+  postSavedFollowUp(
+    commandBus: CommandBus,
+    command: Command,
+    plan: AgentSavedDispatchPlan,
+  ): Promise<void>;
+
+  /**
+   * Stops accepting new external work.
+   *
+   * @param commandBus Command bus receiving this internal operation.
    */
   beginClose(commandBus: CommandBus): void;
 
   /**
-   * Waits for accepted Command work.
-   * @param commandBus Target bus.
-   * @returns Completion after the queue drains.
+   * Waits for accepted dispatches to settle.
+   *
+   * @param commandBus Command bus receiving this internal operation.
+   * @returns A promise that settles when accepted work drains.
    */
   drain(commandBus: CommandBus): Promise<void>;
 
   /**
-   * Completes graceful Command-bus closure.
-   * @param commandBus Target bus.
-   * @returns Completion after closure.
+   * Completes the bus shutdown.
+   *
+   * @param commandBus Command bus receiving this internal operation.
+   * @returns A promise that settles when shutdown completes.
    */
   finishClose(commandBus: CommandBus): Promise<void>;
 
   /**
-   * Closes a partially assembled bus.
-   * @param commandBus Target bus.
+   * Restores intake after an aborted shutdown.
+   *
+   * @param commandBus Command bus receiving this internal operation.
    */
   abortClose(commandBus: CommandBus): void;
 
   /**
-   * Returns accepted Command work count for drain stability.
-   * @param commandBus Target bus.
-   * @returns Number of accepted work items.
+   * Returns the number of accepted dispatches still in progress.
+   *
+   * @param commandBus Command bus receiving this internal operation.
+   * @returns The number of accepted dispatches still in progress.
    */
   acceptedWorkCount(commandBus: CommandBus): number;
 }
@@ -115,6 +158,8 @@ export class CommandBus {
     this.#started = this.#runtime.start();
     internalCommandPosters.set(this, (command) => this.#postInternal(command));
     commandFollowUpPosters.set(this, (command) => this.#postInternalFollowUp(command));
+    savedPreparers.set(this, (command) => this.#prepareSaved(command));
+    savedFollowUps.set(this, (command, plan) => this.#postSavedFollowUp(command, plan));
     commandBusCloseStarters.set(this, () => {
       this.#beginClose();
     });
@@ -135,7 +180,7 @@ export class CommandBus {
   /**
    * Registers a dispatcher.
    *
-   * @typeParam Dispatcher Concrete dispatcher being registered.
+   * @typeParam Dispatcher Concrete Command dispatcher type returned to the caller.
    * @param dispatcher the dispatcher to register.
    * @returns the registered dispatcher.
    */
@@ -174,6 +219,7 @@ export class CommandBus {
    *
    * Close is idempotent and returns the same close outcome on repeated calls.
    * Runtime close failures reject the returned promise.
+   *
    * @returns A promise that settles after the command bus closes.
    *
    */
@@ -201,6 +247,37 @@ export class CommandBus {
     return this.#started.then(() =>
       runtimeAccess.enqueueFollowUp(this.#runtime, () => this.#dispatch(accepted)),
     );
+  }
+
+  async #prepareSaved(command: Command): Promise<AgentSavedDispatchPlan> {
+    const dispatcher = this.#checkedDispatcher(command);
+    const binding = SavedDispatcherBindings.forCommand(dispatcher);
+    if (binding === undefined)
+      throw new Error("Saved Agent Command matches a dispatcher without durable metadata.");
+    return create(SavedPlanSchema, {
+      targets: [await binding.prepare(clone(CommandSchema, command))],
+    });
+  }
+
+  #postSavedFollowUp(command: Command, plan: AgentSavedDispatchPlan): Promise<void> {
+    const accepted = clone(CommandSchema, command);
+    const frozen = clone(SavedPlanSchema, plan);
+    if (this.#intakeState === "closed")
+      return Promise.reject(new ServerRuntimeStateError("enqueue", "closed"));
+    this.#acceptedWorkCount++;
+    return this.#started.then(() =>
+      runtimeAccess.enqueueFollowUp(this.#runtime, () => this.#dispatchSaved(accepted, frozen)),
+    );
+  }
+
+  async #dispatchSaved(command: Command, plan: AgentSavedDispatchPlan): Promise<void> {
+    const dispatcher = this.#checkedDispatcher(command);
+    const target = plan.targets[0];
+    const binding = SavedDispatcherBindings.forCommand(dispatcher);
+    if (plan.targets.length !== 1 || target === undefined || !binding?.matches(target))
+      throw new Error("Saved Agent Command dispatcher binding changed before delivery.");
+    const deliver = await binding.bind(clone(CommandSchema, command), target);
+    await deliver();
   }
 
   #enqueueAccepted(command: Command): Promise<void> {
@@ -237,6 +314,10 @@ export class CommandBus {
   }
 
   async #dispatch(command: Command): Promise<void> {
+    await this.#checkedDispatcher(command).dispatch(command);
+  }
+
+  #checkedDispatcher(command: Command): CommandDispatcher {
     const packed = command.message;
 
     if (packed === undefined || packed.typeUrl === "") {
@@ -269,7 +350,7 @@ export class CommandBus {
       throw new CommandValidationError(implicitId.error);
     }
 
-    await registration.dispatcher.dispatch(clone(CommandSchema, command));
+    return registration.dispatcher;
   }
 }
 
@@ -295,6 +376,23 @@ export const commandBusAccess: CommandBusAccess = Object.freeze({
       throw new TypeError("Internal command follow-up requires a CommandBus instance.");
     }
     return post(command);
+  },
+
+  prepareSaved(commandBus: CommandBus, command: Command): Promise<AgentSavedDispatchPlan> {
+    const prepare = savedPreparers.get(commandBus);
+    if (prepare === undefined)
+      throw new TypeError("Saved Command preparation requires a CommandBus.");
+    return prepare(command);
+  },
+
+  postSavedFollowUp(
+    commandBus: CommandBus,
+    command: Command,
+    plan: AgentSavedDispatchPlan,
+  ): Promise<void> {
+    const post = savedFollowUps.get(commandBus);
+    if (post === undefined) throw new TypeError("Saved Command delivery requires a CommandBus.");
+    return post(command, plan);
   },
 
   beginClose(commandBus: CommandBus): void {

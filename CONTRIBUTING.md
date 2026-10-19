@@ -35,6 +35,9 @@ complete release policy.
 
 ## Verify locally
 
+On macOS, install the Xcode Command Line Tools first. The pinned MōBrowser SDK
+uses `swiftc` during package installation to build its DMG icon helper.
+
 Install the frozen dependency graph and run the task-appropriate verification:
 
 ```sh

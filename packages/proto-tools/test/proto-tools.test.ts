@@ -404,17 +404,7 @@ function packedHandlerTarballs(): readonly string[] {
   return readdirSync(destination).map((name) => join(destination, name));
 }
 
-type PackageCommandRunner = (
-  command: string,
-  args: readonly string[],
-  options: { readonly cwd: string; readonly stdio: "pipe"; readonly timeout: number },
-) => void;
-
-function packHandlerFrameworkPackages(
-  destination: string,
-  run: PackageCommandRunner = runPackageCommand,
-): void {
-  run("pnpm", ["--dir", "packages/proto-tools", "run", "build"], packageCommandOptions());
+function packHandlerFrameworkPackages(destination: string): void {
   const packages = [
     "packages/proto-tools",
     "packages/server",
@@ -425,7 +415,7 @@ function packHandlerFrameworkPackages(
     "examples/message-board/model",
   ];
   for (const packagePath of packages) {
-    run(
+    runPackageCommand(
       "pnpm",
       [
         "--dir",
@@ -576,26 +566,6 @@ function linkThirdParty(app: string): void {
 }
 
 describe("spine proto model tooling", () => {
-  it("builds current proto-tools output before packing with lifecycle scripts disabled", () => {
-    const commands: string[][] = [];
-
-    packHandlerFrameworkPackages("/tmp/handler-tarballs", (_command, args) => {
-      commands.push([...args]);
-    });
-
-    expect(commands[0]).toEqual(["--dir", "packages/proto-tools", "run", "build"]);
-    expect(commands.slice(1)).toEqual(
-      expect.arrayContaining([
-        expect.arrayContaining([
-          "--dir",
-          "packages/proto-tools",
-          "pack",
-          "--config.ignore-scripts=true",
-        ]),
-      ]),
-    );
-  });
-
   it("removes proprietary block and line preambles from direct package output", () => {
     const rendered = generatedSource(
       [

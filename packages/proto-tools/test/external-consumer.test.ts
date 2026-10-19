@@ -29,7 +29,7 @@ import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { packFrameworkArtifacts } from "../../../scripts/snapshot-artifacts.mjs";
+import { packBuiltFrameworkArtifacts } from "../../../scripts/snapshot-artifacts.mjs";
 
 const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const spineVersion = (
@@ -61,12 +61,6 @@ interface PackedPackage {
   readonly name: string;
   readonly tarball: string;
 }
-
-const typedPackFrameworkArtifacts = packFrameworkArtifacts as unknown as (options: {
-  root: string;
-  destination: string;
-  run: (command: string, args: readonly string[], cwd: string) => void;
-}) => readonly PackedPackage[];
 
 describe("Windows spine-proto shim", () => {
   it("requires one quoted command string for a shim path containing spaces", () => {
@@ -101,7 +95,7 @@ function run(command: string, args: readonly string[], cwd: string): void {
 }
 
 function packSpinePackages(destination: string): readonly PackedPackage[] {
-  return typedPackFrameworkArtifacts({
+  return packBuiltFrameworkArtifacts({
     root: repositoryRoot,
     destination,
     run: (command, args, cwd) => {

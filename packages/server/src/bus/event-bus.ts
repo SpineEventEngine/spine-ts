@@ -15,6 +15,7 @@
 import { clone } from "@bufbuild/protobuf";
 import { AnyMessages, Validate, type MessageSchema } from "@spine-event-engine/core";
 import { EventSchema, type Event } from "@spine-event-engine/proto";
+import * as AgentInteraction from "@spine-event-engine/proto/agent";
 import type { EventStore } from "@spine-event-engine/storage";
 import type { ILogLayer } from "loglayer";
 
@@ -60,6 +61,27 @@ const eventBusRoles = new WeakMap<EventBus, EventBusRole>();
 const eventBusLoggers = new WeakMap<EventBus, ILogLayer>();
 
 type EventBusRole = "domain" | "system";
+
+const agentSystemTypes = new Set<string>([
+  AgentInteraction.AgentAiOperationStartedSchema.typeName,
+  AgentInteraction.AgentModelAttemptStartedSchema.typeName,
+  AgentInteraction.AgentModelAttemptFinishedSchema.typeName,
+  AgentInteraction.AgentAiResultAdmittedSchema.typeName,
+  AgentInteraction.AgentAiOperationFailedSchema.typeName,
+  AgentInteraction.AgentToolCallStartedSchema.typeName,
+  AgentInteraction.AgentToolCallFinishedSchema.typeName,
+  AgentInteraction.AgentModelSelectionChangedSchema.typeName,
+  AgentInteraction.AgentInvocationTerminatedSchema.typeName,
+]);
+
+/**
+ * Checks whether a schema defines a framework System Event, including Agent interactions.
+ *
+ * @param schema Event payload schema.
+ * @returns Whether the Event belongs to the System bus.
+ */
+export const isSystemEventSchema = (schema: MessageSchema): boolean =>
+  schema.typeName.startsWith("spine.system.") || agentSystemTypes.has(schema.typeName);
 
 interface AcceptedEventDispatcher {
   readonly dispatcher: EventDispatcher;
@@ -672,7 +694,7 @@ const EventBusRoles = Object.freeze({
    */
   validateSchema(role: EventBusRole, schema: MessageSchema): void {
     const typeUrl = `type.${schema.typeName}`;
-    const systemSchema = typeUrl.startsWith("type.spine.system.");
+    const systemSchema = isSystemEventSchema(schema);
     if (role === "domain" && systemSchema)
       throw new Error(`Domain EventBus rejects system event schema "${typeUrl}".`);
     if (role === "system" && !systemSchema)

@@ -9,6 +9,11 @@
     "packages/deployment-gke/src/index.ts",
     "packages/deployment-gce/src/index.ts",
     "packages/auth/src/index.ts",
+    "packages/ai/src/index.ts",
+    "packages/ai/src/spi/adapter.ts",
+    "packages/ai/src/spi/runtime.ts",
+    "packages/ai-vercel-ax/src/index.ts",
+    "packages/proto/src/agent/index.ts",
     "packages/client-web/src/index.ts",
     "packages/client-react/src/index.ts",
     "packages/client-node/src/index.ts",
@@ -39,7 +44,10 @@
     "**/dist/**",
     "**/coverage/**",
     "**/*.test.ts",
-    "packages/*/generated/**",
+    "packages/!(proto)/generated/**",
+    "packages/proto/generated/!(spine)/**",
+    "packages/proto/generated/spine/!(ts)/**",
+    "packages/proto/generated/spine/ts/!(agent)/**",
     "examples/*/generated/**"
   ],
   "blockTags": [

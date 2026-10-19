@@ -144,6 +144,7 @@ describe("@spine-event-engine/server", () => {
         "AbstractCommander",
         "AbstractEventReactor",
         "AbstractEventSubscriber",
+        "Agent",
         "Aggregate",
         "AlreadyPickedUp",
         "Assign",

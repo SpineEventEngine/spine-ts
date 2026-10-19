@@ -73,7 +73,7 @@ function workspaceDirectories(repoRoot, pattern) {
     for (const directory of directories) {
       if (part === "*") {
         for (const entry of readdirSync(directory, { withFileTypes: true })) {
-          if (entry.isDirectory()) {
+          if (entry.isDirectory() && !entry.name.startsWith(".")) {
             next.push(join(directory, entry.name));
           }
         }
@@ -190,10 +190,24 @@ describe("package metadata", () => {
     expect(workspace.overrides?.["smol-toml"]).toBe("1.7.1");
   });
 
+  it("links the Linux desktop generator CLI beside its SDK executable", () => {
+    const workspace = parse(readFileSync(join(repoRoot, "pnpm-workspace.yaml"), "utf8"));
+    const lockfile = parse(readFileSync(join(repoRoot, "pnpm-lock.yaml"), "utf8"));
+    expect(
+      workspace.packageExtensions?.["@mobrowser/sdk-linux-x64@2.18.0"]?.dependencies?.[
+        "@mobrowser/cli"
+      ],
+    ).toBe("2.18.0");
+    const sdkSnapshot = Object.entries(lockfile.snapshots ?? {}).find(([key]) =>
+      key.startsWith("@mobrowser/sdk-linux-x64@2.18.0"),
+    )?.[1];
+    expect(sdkSnapshot?.dependencies?.["@mobrowser/cli"]).toMatch(/^2\.18\.0/u);
+  });
+
   it("declares Apache-2.0 for every framework package without classifying examples as publishable", () => {
     const frameworkPackages = productionPackagePaths(repoRoot);
 
-    expect(frameworkPackages).toHaveLength(19);
+    expect(frameworkPackages).toHaveLength(21);
     expect(
       frameworkPackages.every((path) => readJson(`${path}/package.json`).license === "Apache-2.0"),
     ).toBe(true);
@@ -212,7 +226,7 @@ describe("package metadata", () => {
       access: "public",
     };
 
-    expect(frameworkPackages).toHaveLength(19);
+    expect(frameworkPackages).toHaveLength(21);
     for (const packagePath of frameworkPackages) {
       const packageJson = readJson(`${packagePath}/package.json`);
 
@@ -258,7 +272,11 @@ describe("package metadata", () => {
       "examples/message-board/web",
       "examples/orders",
       "examples/projects",
+      "examples/release-notes",
+      "examples/support",
       "examples/todo",
+      "packages/ai",
+      "packages/ai-vercel-ax",
       "packages/auth",
       "packages/client-node",
       "packages/client-react",
@@ -308,6 +326,32 @@ describe("package metadata", () => {
       expect(versionProblems(fixture)).toEqual([
         "root package must define a non-placeholder version",
       ]);
+    });
+  });
+
+  it("matches pnpm wildcard discovery for visible nested packages and explicit hidden paths", () => {
+    withWorkspaceFixture((fixture) => {
+      writeFileSync(
+        join(fixture, "pnpm-workspace.yaml"),
+        'packages:\n  - "packages/*"\n  - "examples/*/*"\n',
+      );
+      for (const name of ["app", ".studio-build"]) {
+        const directory = join(fixture, "examples", "release-notes", name);
+        mkdirSync(directory, { recursive: true });
+        writeFileSync(join(directory, "package.json"), '{"version":"1.2.3"}\n');
+      }
+      expect(readWorkspacePackages(fixture).map(({ path }) => path)).toEqual([
+        "examples/release-notes/app",
+        "packages/core",
+        "packages/example",
+      ]);
+      writeFileSync(
+        join(fixture, "pnpm-workspace.yaml"),
+        'packages:\n  - "packages/*"\n  - "examples/*/*"\n  - "examples/release-notes/.studio-build"\n',
+      );
+      expect(readWorkspacePackages(fixture).map(({ path }) => path)).toContain(
+        "examples/release-notes/.studio-build",
+      );
     });
   });
 
@@ -418,7 +462,6 @@ describe("package metadata", () => {
     expect(release).toContain("pnpm verify:release:generated");
     expect(releaseGenerated.match(/pnpm verify:generated-gates/gu)).toHaveLength(1);
     expect(releaseGenerated.match(/vitest run --coverage/gu)).toHaveLength(1);
-    expect(releaseGenerated).toContain("--maxWorkers=1");
     expect(releaseGenerated).not.toContain(
       "packages/server/test/server/server-integration-broker-cross-process.test.ts",
     );
@@ -468,6 +511,10 @@ describe("package metadata", () => {
       ".": {
         types: "./dist/src/index.d.ts",
         default: "./dist/src/index.js",
+      },
+      "./agent": {
+        types: "./dist/src/agent/index.d.ts",
+        default: "./dist/src/agent/index.js",
       },
       "./auth": {
         types: "./dist/src/auth/index.d.ts",

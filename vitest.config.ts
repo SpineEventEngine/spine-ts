@@ -15,8 +15,12 @@
 import { configDefaults, defineConfig } from "vitest/config";
 
 import { infrastructureTestFiles } from "./scripts/test-inventory.mjs";
+import { typescriptVitestPlugin } from "./scripts/vitest-typescript.mjs";
 
 export default defineConfig({
+  oxc: false,
+  esbuild: false,
+  plugins: [typescriptVitestPlugin()],
   test: {
     include: [
       "packages/*/test/**/*.test.ts",
@@ -34,29 +38,40 @@ export default defineConfig({
     ],
     // Provider tests must be selected only by their explicit package commands;
     // environment variables never broaden the release suite.
-    exclude: [...configDefaults.exclude, ...infrastructureTestFiles],
+    exclude: [
+      ...configDefaults.exclude,
+      ...infrastructureTestFiles,
+      "examples/release-notes/test/e2e/**",
+    ],
     coverage: {
       provider: "v8",
       reporter: ["text", "lcov"],
       include: [
         "packages/*/src/**/*.ts",
         "packages/*/src/**/*.tsx",
+        "packages/*/dist/**/*.js",
         "examples/*/src/**/*.ts",
         "examples/*/src/**/*.tsx",
+        "examples/*/dist/**/*.js",
         "examples/*/*/src/**/*.ts",
         "examples/*/*/src/**/*.tsx",
+        "examples/*/*/dist/**/*.js",
       ],
+      excludeAfterRemap: true,
       exclude: [
         "**/*.test.ts",
+        "**/*.d.ts",
         "packages/*/generated/**",
+        "packages/*/dist/generated/**",
         "examples/*/generated/**",
+        "examples/*/dist/generated/**",
+        "examples/release-notes/src/main/gen/**",
+        "examples/release-notes/src/renderer/gen/**",
         "examples/*/*/generated/**",
+        "examples/*/*/dist/generated/**",
         // The build-time handler analyzer is a TypeScript compiler integration
         // with focused tests; keep global thresholds centered on runtime code.
         "packages/proto-tools/src/generation/build-time-handler-analyzer.ts",
-        // Vitest cannot execute raw TypeScript standard decorators here; the
-        // example test covers this source through its `tsc` output.
-        "examples/todo/src/index.ts",
       ],
       thresholds: {
         branches: 90,

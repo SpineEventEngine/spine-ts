@@ -69,7 +69,7 @@ function expandWorkspacePattern(root, pattern) {
       directories = directories.flatMap((directory) =>
         existsSync(directory)
           ? readdirSync(directory, { withFileTypes: true })
-              .filter((entry) => entry.isDirectory())
+              .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
               .map((entry) => join(directory, entry.name))
           : [],
       );
@@ -84,6 +84,7 @@ function expandWorkspacePattern(root, pattern) {
 }
 
 const finalPublicSurfaces = new Map([
+  ["@spine-event-engine/ai", ["./spi/adapter", "./spi/runtime"]],
   ["@spine-event-engine/server", ["./spi/handler-registry", "./spi/delivery", "./browser"]],
   ["@spine-event-engine/core", ["./spi/subscription-lifecycle"]],
   ["@spine-event-engine/deployment", ["./spi/backend-membership"]],
@@ -91,6 +92,8 @@ const finalPublicSurfaces = new Map([
 ]);
 
 const exactFrameworkPackages = [
+  "ai",
+  "ai-vercel-ax",
   "auth",
   "client-node",
   "client-react",

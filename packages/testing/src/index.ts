@@ -19,3 +19,5 @@ export {
   type BlackBoxOptions,
   type BlackBoxScope,
 } from "./black-box/black-box.js";
+export { AiTestBackend } from "./ai-test/ai-test-backend.js";
+export type { AiTestGate, AiTestRequest, AiTestResponses } from "./ai-test/ai-test-backend.js";

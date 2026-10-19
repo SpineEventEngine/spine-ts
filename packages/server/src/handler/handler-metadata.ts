@@ -14,10 +14,11 @@
 
 import type { EntityMetadata, DescriptorMessageSchema } from "../entity/entity-metadata.js";
 import { describeEntityMetadata, isEntitySchema } from "../entity/entity-metadata.js";
-import { ProcessManager, Projection } from "../entity/entity.js";
+import { Agent, ProcessManager, Projection } from "../entity/entity.js";
 
 /**
  * Entity class value accepted by explicit handler metadata registration.
+ *
  * @typeParam Instance Entity receiver type.
  */
 export interface EntityClass<Instance extends object = object> {
@@ -60,6 +61,7 @@ export type HandlerOrigin = "domestic" | "external";
  * that return functions or other callable instance properties. Runtime
  * registration therefore applies the narrower public contract: handler names
  * must be own prototype data methods declared with normal class method syntax.
+ *
  * @typeParam Instance Entity receiver type.
  */
 export type HandlerMethodName<Instance extends object> = Extract<
@@ -78,7 +80,8 @@ export type HandlerMetadataErrorCode =
   | "UNKNOWN_HANDLER_METHOD"
   | "INVALID_PARAMETER_COUNT"
   | "UNSUPPORTED_COMMAND_HANDLER"
-  | "UNSUPPORTED_ASSIGN_HANDLER";
+  | "UNSUPPORTED_ASSIGN_HANDLER"
+  | "UNSUPPORTED_SUBSCRIBE_HANDLER";
 
 /**
  * Error thrown when explicit handler metadata cannot be defined.
@@ -107,6 +110,7 @@ export class HandlerMetadataError extends Error {
 
 /**
  * Common fields shared by every explicit handler metadata record.
+ *
  * @typeParam Kind Handler role type.
  * @typeParam MethodName Type parameter for this declaration.
  * @typeParam Schema Generated message schema type.
@@ -178,6 +182,7 @@ export interface WhereOptions {
 
 /**
  * Metadata for a command assignee method.
+ *
  * @typeParam MethodName Type parameter for this declaration.
  * @typeParam Schema Generated message schema type.
  */
@@ -188,6 +193,7 @@ export type CommandAssignmentHandlerMetadata<
 
 /**
  * Metadata for a command-reacting method.
+ *
  * @typeParam MethodName Type parameter for this declaration.
  * @typeParam Schema Generated message schema type.
  */
@@ -198,6 +204,7 @@ export type CommandReactionHandlerMetadata<
 
 /**
  * Command-input `@Command` metadata that produces Commands after commit.
+ *
  * @typeParam MethodName Type parameter for this declaration.
  * @typeParam Schema Generated message schema type.
  */
@@ -208,6 +215,7 @@ export type CommandSubstitutionHandlerMetadata<
 
 /**
  * Metadata for an event subscription method.
+ *
  * @typeParam MethodName Type parameter for this declaration.
  * @typeParam Schema Generated message schema type.
  */
@@ -218,6 +226,7 @@ export type EventSubscriptionHandlerMetadata<
 
 /**
  * Metadata for an Entity-state subscription method.
+ *
  * @typeParam MethodName Type parameter for this declaration.
  * @typeParam Schema Generated message schema type.
  */
@@ -228,6 +237,7 @@ export type StateSubscriptionHandlerMetadata<
 
 /**
  * Metadata for an event reactor method.
+ *
  * @typeParam MethodName Type parameter for this declaration.
  * @typeParam Schema Generated message schema type.
  */
@@ -238,6 +248,7 @@ export type EventReactionHandlerMetadata<
 
 /**
  * Union of all explicit handler metadata records.
+ *
  * @typeParam MethodName Type parameter for this declaration.
  * @typeParam Schema Generated message schema type.
  */
@@ -257,6 +268,7 @@ export type HandlerMetadata<
  *
  * Builder methods accept the compile-time callable-name approximation, then
  * validate that the selected name is an own prototype data method.
+ *
  * @typeParam Instance Entity receiver type.
  */
 export interface HandlerRegistrationBuilder<Instance extends object> {
@@ -280,9 +292,11 @@ export interface HandlerRegistrationBuilder<Instance extends object> {
    *
    * @param schema Event, rejection, or descriptor-marked Entity state schema
    * accepted by the method.
+   *
    * @param methodName Entity method name.
    * @returns Event-subscription metadata for signals, or state-subscription
    * metadata for descriptor-marked Entity state schemas.
+   *
    * @typeParam Schema Generated message schema type.
    */
   subscribe<Schema extends DescriptorMessageSchema>(
@@ -346,6 +360,7 @@ export interface GeneratedHandlerRegistrationBuilder<
 
 /**
  * Frozen handler metadata for one explicitly registered entity class.
+ *
  * @typeParam Instance Entity receiver type.
  * @typeParam StateSchema Generated message schema type.
  */
@@ -433,6 +448,7 @@ export class HandlerMetadataRegistryError extends Error {
 
 /**
  * A handler metadata record paired with the entity metadata that declared it.
+ *
  * @typeParam Handler Handler metadata type.
  */
 export interface RegisteredHandlerMetadata<Handler extends HandlerMetadata = HandlerMetadata> {
@@ -1193,12 +1209,23 @@ class EntityHandlersOwner {
   }
 
   /**
-   * Rejects Assign on Projections and Command handlers outside Process Managers.
+   * Validates handler roles against the receiving Entity family.
    *
    * @param entityType Entity constructor determining supported handler roles.
    * @param handlers Handler declarations to validate.
    */
   #validateCommandHandlers(entityType: EntityClass, handlers: readonly HandlerMetadata[]): void {
+    if (
+      entityType.prototype instanceof Agent &&
+      handlers.some(
+        (handler) => handler.kind === "event-subscription" || handler.kind === "state-subscription",
+      )
+    ) {
+      throw new HandlerMetadataError(
+        "UNSUPPORTED_SUBSCRIBE_HANDLER",
+        "Agent entities cannot use @Subscribe handlers.",
+      );
+    }
     if (
       entityType.prototype instanceof Projection &&
       handlers.some((handler) => handler.kind === "command-assignment")
@@ -1212,11 +1239,12 @@ class EntityHandlersOwner {
       handlers.some(
         (handler) => handler.kind === "command-substitution" || handler.kind === "command-reaction",
       ) &&
-      !(entityType.prototype instanceof ProcessManager)
+      !(entityType.prototype instanceof ProcessManager) &&
+      !(entityType.prototype instanceof Agent)
     ) {
       throw new HandlerMetadataError(
         "UNSUPPORTED_COMMAND_HANDLER",
-        "Only Process Manager entities support @Command handlers.",
+        "Only Process Manager and Agent entities support @Command handlers.",
       );
     }
   }
@@ -1319,6 +1347,7 @@ interface EntityHandlerDefinitions {
 
 /**
  * Defines metadata for explicitly registered entity handlers.
+ *
  * @typeParam Instance Entity receiver type.
  * @typeParam StateSchema Generated message schema type.
  */

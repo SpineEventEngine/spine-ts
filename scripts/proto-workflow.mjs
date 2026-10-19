@@ -51,6 +51,7 @@ export const modelAtomicTargets = [
     displayPath: "packages/server-blackbox-tests/generated",
     packagePath: "packages/server-blackbox-tests",
     moduleName: "ServerBlackBoxTests",
+    handlerProjectPath: "packages/server-blackbox-tests/tsconfig.json",
   },
   {
     displayPath: "packages/server/test-fixtures/generated",
@@ -84,6 +85,18 @@ export const modelAtomicTargets = [
     packagePath: "examples/orders",
     moduleName: "Orders",
     handlerProjectPath: "examples/orders/tsconfig.json",
+  },
+  {
+    displayPath: "examples/support/generated",
+    packagePath: "examples/support",
+    moduleName: "Support",
+    handlerProjectPath: "examples/support/tsconfig.json",
+  },
+  {
+    displayPath: "examples/release-notes/generated",
+    packagePath: "examples/release-notes",
+    moduleName: "ReleaseNotes",
+    handlerProjectPath: "examples/release-notes/tsconfig.json",
   },
   {
     displayPath: "examples/message-board/model/generated",
@@ -239,6 +252,8 @@ const workspaceProtoRoots = [
   "examples/todo/proto",
   "examples/projects/proto",
   "examples/orders/proto",
+  "examples/support/proto",
+  "examples/release-notes/proto",
 ];
 const externalProtoRoots = [
   "packages/server/test-fixtures/proto",
@@ -283,6 +298,7 @@ export function authoredProtoFormatCommands(
         path.endsWith(".proto") &&
         existsSync(join(root, path)) &&
         !frozen.has(path) &&
+        !path.startsWith("examples/release-notes/src/renderer/proto/") &&
         !isGeneratedProtoPath(path)
       )
         paths.add(path);

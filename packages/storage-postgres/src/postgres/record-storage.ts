@@ -28,6 +28,7 @@ import {
   type StorageQueryCapabilities,
 } from "@spine-event-engine/storage";
 import type { PoolClient } from "pg";
+import { createHash } from "node:crypto";
 
 import { PostgresColumnMapping } from "./column-mapping.js";
 import {
@@ -70,14 +71,70 @@ export interface PostgresRecordLifecycle {
  * This capability deliberately stays outside the package root: Entity history
  * uses it to keep its SQL on the PostgreSQL provider.
  *
+ * @typeParam I Record identifier type.
  * @typeParam R The stored Protobuf record type.
  */
-export interface PostgresRecordExecutor<R extends Message> {
+export interface PostgresRecordExecutor<I, R extends Message> {
   /**
    * Prepares the backing table before acquiring an operation client.
    * @returns A promise that resolves when the table is compatible.
    */
   prepare(): Promise<void>;
+
+  /**
+   * Executes Agent record mutations on one rollback-capable transaction client.
+   *
+   * @typeParam T Result of the transaction work.
+   * @param work Operations to run on the transaction client.
+   * @returns Result after transaction commit.
+   */
+  transaction<T>(work: (client: PoolClient) => Promise<T>): Promise<T>;
+
+  /**
+   * Reads a record on the Agent transaction client.
+   *
+   * @param client Active transaction client.
+   * @param id Typed record ID.
+   * @param lock Whether to lock the selected row.
+   * @returns Stored record when present.
+   */
+  read(client: PoolClient, id: I, lock?: "for-update"): Promise<R | undefined>;
+
+  /**
+   * Checks an immutable record on the Agent transaction client.
+   *
+   * @param client Active transaction client.
+   * @param record Proposed immutable record.
+   * @returns Completion after collision validation.
+   */
+  assertImmutable(client: PoolClient, record: R): Promise<void>;
+
+  /**
+   * Writes an immutable record on the Agent transaction client.
+   *
+   * @param client Active transaction client.
+   * @param record Immutable record to append.
+   * @returns Completion after insertion or identical retry.
+   */
+  appendImmutable(client: PoolClient, record: R): Promise<void>;
+
+  /**
+   * Writes a record on the Agent transaction client.
+   *
+   * @param client Active transaction client.
+   * @param record Record to write.
+   * @returns Completion after the write.
+   */
+  write(client: PoolClient, record: R): Promise<void>;
+
+  /**
+   * Calculates an Agent transaction lock identity.
+   *
+   * @param domain Lock namespace within the provider.
+   * @param identity Components of the lock identity.
+   * @returns Stable advisory lock key.
+   */
+  lock(domain: string, ...identity: readonly string[]): bigint;
 
   /**
    * Returns bounded work on one acquired PostgreSQL client.
@@ -189,13 +246,23 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    * @internal
    * @returns PostgreSQL-only history execution capabilities.
    */
-  historyExecutor(): PostgresRecordExecutor<R> {
+  historyExecutor(): PostgresRecordExecutor<I, R> {
     return {
       prepare: () => this.prepare(),
+      transaction: (work) => this.transaction(work),
       using: (work) => this.using(work),
+      read: (client, id, lock) => this.readOn(client, id, lock === "for-update"),
+      assertImmutable: async (client, record) => {
+        const existing = await this.readOn(client, this.recordSpec.idValueIn(record));
+        if (existing !== undefined && !this.same(existing, record))
+          throw new PostgresStorageOperationError("PostgreSQL immutable record collides.");
+      },
+      appendImmutable: (client, record) => this.appendImmutableOn(client, record),
+      write: (client, record) => this.writeOn(client, record),
       query: (client, sql, values) => this.historyEntries(client, sql, values),
       column: (name, value) => this.historyColumn(name, value),
       table: () => this.qualified(),
+      lock: (domain, ...identity) => this.historyKey(domain, identity),
     };
   }
 
@@ -440,15 +507,63 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
   }
 
   /**
+   * Executes Agent-scoped record work under one PostgreSQL transaction.
+   *
+   * @typeParam T Result of the transaction work.
+   * @param work Operations to run on the acquired client.
+   * @returns Result after commit.
+   */
+  private async transaction<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
+    await this.prepare();
+    const client = await this.lifecycle.acquire();
+    let releaseFailure: Error | undefined;
+    try {
+      await client.query("BEGIN");
+      const result = await work(client);
+      await client.query("COMMIT");
+      return result;
+    } catch (error) {
+      try {
+        await client.query("ROLLBACK");
+      } catch {
+        releaseFailure = new Error("PostgreSQL Agent transaction rollback failed.");
+      }
+      throw error;
+    } finally {
+      client.release(releaseFailure);
+    }
+  }
+
+  /**
+   * Calculates a stable Agent advisory key in this database and schema.
+   *
+   * @param domain Lock namespace within the provider.
+   * @param identity Components of the lock identity.
+   * @returns Stable advisory lock key.
+   */
+  private historyKey(domain: string, identity: readonly string[]): bigint {
+    return createHash("sha256")
+      .update(`spine-postgres-${domain}\0`)
+      .update(this.lifecycle.databaseName)
+      .update("\0")
+      .update(this.lifecycle.schema)
+      .update("\0")
+      .update(identity.join("\0"))
+      .digest()
+      .readBigInt64BE();
+  }
+
+  /**
    * Reads and decodes one record on the supplied client.
    *
    * @param client Provides the active client.
    * @param id Identifies the record.
+   * @param locked Whether to lock the selected row in the Agent transaction.
    * @returns The decoded record, when present.
    */
-  private async readOn(client: PoolClient, id: I): Promise<R | undefined> {
+  private async readOn(client: PoolClient, id: I, locked = false): Promise<R | undefined> {
     const result = await client.query<Row>(
-      `SELECT "bytes" FROM ${this.qualified()} WHERE "ID" = $1`,
+      `SELECT "bytes" FROM ${this.qualified()} WHERE "ID" = $1${locked ? " FOR UPDATE" : ""}`,
       [this.id(id)],
     );
     if (result.rows[0] === undefined) return undefined;

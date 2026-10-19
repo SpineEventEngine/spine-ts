@@ -1,0 +1,8 @@
+{
+  "extends": "../../tsconfig.eslint.json",
+  "compilerOptions": {
+    "skipLibCheck": true
+  },
+  "include": ["test/agent-vercel-mcp-blackbox.test.ts"],
+  "exclude": []
+}

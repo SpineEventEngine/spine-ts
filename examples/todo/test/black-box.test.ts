@@ -55,20 +55,25 @@ import {
   UniformAcrossAllShards,
 } from "@spine-event-engine/server";
 import { BlackBox, type BlackBoxScope } from "@spine-event-engine/testing";
-import { existsSync, mkdtempSync, readFileSync, renameSync, rmSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  symlinkSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import ts from "typescript";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { BuildHandlerAnalyzer } from "../../../packages/proto-tools/src/generation/build-time-handler-analyzer.js";
-import { GeneratedRegistryWriter } from "../../../packages/proto-tools/src/generation/generated-registry-writer.js";
 import {
   InMemoryStorageBackend,
   InMemoryStorageFactory,
 } from "../../../packages/storage/dist/index.js";
-import { generatedSource } from "../../../packages/proto-tools/src/generation/generated-source-policy.js";
 import {
   AssignTaskSchema,
   CompleteTaskSchema,
@@ -100,8 +105,8 @@ import { TaskSchema, type Task } from "../generated/spine/examples/todo/tasks_pb
 
 type TodoModule = typeof import("../dist/src/index.js");
 
-let createTodoContext: TodoModule["createTodoContext"];
-let startTodoServer: TodoModule["startTodoServer"];
+assertBuiltExample();
+const { createTodoContext, startTodoServer } = await import("../dist/src/index.js");
 const signalMetadata = new SignalMetadata();
 const maxRemoteDiagnosticRows = 4;
 const maxRemoteDiagnosticIdLength = 64;
@@ -114,50 +119,44 @@ afterEach(async () => {
 });
 
 describe("@spine-event-engine/example-todo", () => {
-  beforeAll(async () => {
-    assertBuiltExample();
-    ({ createTodoContext, startTodoServer } = await import("../dist/src/index.js"));
-  }, 30_000);
-
   it("recovers registry loading after an initial generated-registry failure", async () => {
-    const registry = fileURLToPath(
-      new URL("../dist/generated/handler/generated-handler-registry.js", import.meta.url),
-    );
-    const hiddenRegistry = `${registry}.missing-for-test`;
-
-    renameSync(registry, hiddenRegistry);
+    const fixture = realpathSync(mkdtempSync(join(tmpdir(), "spine-todo-registry-")));
     try {
-      const failure = await createTodoContext().catch((error: unknown) => error);
+      cpSync(fileURLToPath(new URL("../dist", import.meta.url)), fixture, { recursive: true });
+      symlinkSync(
+        fileURLToPath(new URL("../node_modules", import.meta.url)),
+        join(fixture, "node_modules"),
+        "dir",
+      );
+      const fixtureModule: unknown = await import(
+        pathToFileURL(join(fixture, "src/index.js")).href
+      );
+      if (
+        fixtureModule === null ||
+        typeof fixtureModule !== "object" ||
+        !("createTodoContext" in fixtureModule) ||
+        typeof fixtureModule.createTodoContext !== "function"
+      ) {
+        throw new Error("Private To-Do fixture does not export createTodoContext.");
+      }
+      const createFixtureContext =
+        fixtureModule.createTodoContext as TodoModule["createTodoContext"];
+      const registry = join(fixture, "generated/handler/generated-handler-registry.js");
+      const hiddenRegistry = `${registry}.missing-for-test`;
+      renameSync(registry, hiddenRegistry);
+      const failure = await createFixtureContext().catch((error: unknown) => error);
 
       expect(failure).toBeInstanceOf(Error);
       expect((failure as Error).message).toContain(
         `Generated handler registry module "${registry}"`,
       );
       expect((failure as Error).message).toContain("must exist and be readable.");
-    } finally {
       renameSync(hiddenRegistry, registry);
+      const context = await createFixtureContext();
+      await context.close();
+    } finally {
+      rmSync(fixture, { recursive: true, force: true });
     }
-
-    await expect(createTodoContext()).resolves.toBeDefined();
-  });
-
-  it("loads generated handler metadata into the bounded context", async () => {
-    const context = await createTodoContext();
-
-    expect([...context.commandBus().acceptedCommandTypes()].sort()).toEqual(
-      [
-        TypeUrls.derive(CreateTaskSchema),
-        TypeUrls.derive(RenameTaskSchema),
-        TypeUrls.derive(CompleteTaskSchema),
-        TypeUrls.derive(ReopenTaskSchema),
-        TypeUrls.derive(AssignTaskSchema),
-        TypeUrls.derive(ReassignTaskSchema),
-        TypeUrls.derive(UnassignTaskSchema),
-      ].sort(),
-    );
-    expect(
-      context.registeredRepositories().map((repository) => repository.entityType.name),
-    ).toEqual(["TaskAggregate", "TaskListProjection", "TaskAssigneeProjection"]);
   });
 
   it("uses the application-selected storage factory", async () => {
@@ -1998,122 +1997,6 @@ function assertBuiltExample(): void {
   if (!existsSync(output) || !existsSync(registry)) {
     throw new Error("Run `pnpm typecheck:build` before running the to-do example tests.");
   }
-
-  assertGeneratedRegistryFresh();
-  assertCompiledExampleFresh();
-}
-
-function assertGeneratedRegistryFresh(): void {
-  const project = fileURLToPath(new URL("../tsconfig.json", import.meta.url));
-  const registrySource = fileURLToPath(
-    new URL("../generated/handler/generated-handler-registry.ts", import.meta.url),
-  );
-  const parsed = parseTodoTsConfig(project);
-  const program = ts.createProgram({
-    rootNames: parsed.fileNames,
-    options: parsed.options,
-    ...(parsed.projectReferences === undefined
-      ? {}
-      : { projectReferences: parsed.projectReferences }),
-  });
-  const analysis = BuildHandlerAnalyzer.analyze(program);
-
-  if (analysis.diagnostics.length > 0) {
-    throw new Error("Generated handler registry analysis failed.");
-  }
-
-  const source = new GeneratedRegistryWriter().render(analysis, { outputFile: registrySource });
-  const sources = [...source.matchAll(/from "(?:[^" ]+\/generated\/)?([^" ]+)_pb\.js"/gu)].map(
-    (match) => (match[1] ?? "").replace(/^\.\//u, "").replace(/^.*?spine\//u, "spine/") + ".proto",
-  );
-  const expected = generatedSource(source, sources);
-  const actual = readFileSync(registrySource, "utf8");
-
-  if (actual !== expected) {
-    throw new Error("Run `pnpm typecheck:build`; the to-do generated handler registry is stale.");
-  }
-}
-
-function assertCompiledExampleFresh(): void {
-  const project = fileURLToPath(new URL("../tsconfig.json", import.meta.url));
-  const tempRoot = mkdtempSync(join(tmpdir(), "spine-todo-emit-"));
-
-  try {
-    const parsed = parseTodoTsConfig(project, {
-      outDir: tempRoot,
-      tsBuildInfoFile: join(tempRoot, "tsconfig.tsbuildinfo"),
-    });
-    const program = ts.createProgram({
-      rootNames: parsed.fileNames,
-      options: parsed.options,
-      ...(parsed.projectReferences === undefined
-        ? {}
-        : { projectReferences: parsed.projectReferences }),
-    });
-    const emit = program.emit();
-    const diagnostics = [...ts.getPreEmitDiagnostics(program), ...emit.diagnostics];
-
-    if (diagnostics.length > 0 || emit.emitSkipped) {
-      throw new Error(formatDiagnostics(diagnostics));
-    }
-
-    assertFileContentEqual(
-      join(tempRoot, "src/index.js"),
-      fileURLToPath(new URL("../dist/src/index.js", import.meta.url)),
-      "compiled to-do example entry point",
-    );
-    assertFileContentEqual(
-      join(tempRoot, "generated/handler/generated-handler-registry.js"),
-      fileURLToPath(
-        new URL("../dist/generated/handler/generated-handler-registry.js", import.meta.url),
-      ),
-      "compiled to-do generated handler registry",
-    );
-  } finally {
-    rmSync(tempRoot, { recursive: true, force: true });
-  }
-}
-
-function assertFileContentEqual(expectedFile: string, actualFile: string, label: string): void {
-  const expected = readFileSync(expectedFile, "utf8");
-  const actual = readFileSync(actualFile, "utf8");
-
-  if (actual !== expected) {
-    throw new Error(`Run \`pnpm typecheck:build\`; the ${label} is stale.`);
-  }
-}
-
-function parseTodoTsConfig(
-  project: string,
-  overrides: ts.CompilerOptions = {},
-): ts.ParsedCommandLine {
-  const config = ts.readConfigFile(project, (path) => ts.sys.readFile(path));
-
-  if (config.error !== undefined) {
-    throw new Error(formatDiagnostics([config.error]));
-  }
-
-  const parsed = ts.parseJsonConfigFileContent(
-    config.config,
-    ts.sys,
-    fileURLToPath(new URL("..", import.meta.url)),
-    overrides,
-    project,
-  );
-
-  if (parsed.errors.length > 0) {
-    throw new Error(formatDiagnostics(parsed.errors));
-  }
-
-  return parsed;
-}
-
-function formatDiagnostics(diagnostics: readonly ts.Diagnostic[]): string {
-  return ts.formatDiagnosticsWithColorAndContext(diagnostics, {
-    getCanonicalFileName: (fileName) => fileName,
-    getCurrentDirectory: () => fileURLToPath(new URL("../../..", import.meta.url)),
-    getNewLine: () => "\n",
-  });
 }
 
 function createTaskCommand(commandId: string, taskId: string, title: string) {

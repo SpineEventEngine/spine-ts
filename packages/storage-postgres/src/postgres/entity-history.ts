@@ -170,7 +170,7 @@ export class PostgresEntityStorage<I, S extends Message> implements PostgresEnti
  * @typeParam S Entity state message type.
  */
 class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, S> {
-  readonly #executor: PostgresRecordExecutor<EntityRecord>;
+  readonly #executor: PostgresRecordExecutor<EntityStateKey, EntityRecord>;
 
   #open = true;
 
@@ -542,7 +542,7 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
  * @typeParam S Entity state message type used to derive the history family.
  */
 class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> {
-  readonly #executor: PostgresRecordExecutor<Event>;
+  readonly #executor: PostgresRecordExecutor<EventId, Event>;
 
   #open = true;
 

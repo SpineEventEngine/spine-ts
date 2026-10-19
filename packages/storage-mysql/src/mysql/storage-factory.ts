@@ -23,11 +23,24 @@ import {
   type StorageContext,
   type StorageGroup,
 } from "@spine-event-engine/storage";
-import { TenantBoundary, type TenantCatalog } from "@spine-event-engine/storage/provider";
+import {
+  TenantBoundary,
+  TenantCatalogReads,
+  type TenantCatalog,
+  type TenantCatalogCursor,
+  type TenantCatalogPage,
+  type TenantCatalogRead,
+} from "@spine-event-engine/storage/provider";
+import { AgentExecutionRecords, AgentHistoryRecords } from "@spine-event-engine/storage/provider";
 import {
   EntityCommitStorageFactories,
   EntityCommitSnapshots,
   type EntityCommitStorage,
+} from "@spine-event-engine/storage/provider";
+import { AgentHistoryStorageFactories } from "@spine-event-engine/storage/provider";
+import {
+  AgentExecutionStorageFactories,
+  type AgentExecutionStorageInput,
 } from "@spine-event-engine/storage/provider";
 import type { EntityStorageInput } from "@spine-event-engine/storage/provider";
 import { eventStoreRecordSpec } from "@spine-event-engine/storage/provider";
@@ -40,6 +53,9 @@ import {
 import { MysqlRecordStorage, type MysqlRecordLifecycle } from "./record-storage.js";
 import { MysqlTableResolver } from "./table-resolver.js";
 import { MysqlEntityStorage } from "./entity-history.js";
+import { MysqlAgentHistory, AgentHistoryHash } from "./agent-history.js";
+import { MysqlAgentExecution } from "./agent-execution.js";
+import { MysqlAgentTransaction } from "./agent-transaction.js";
 import { resolvedMysqlTableSpec, type MysqlTableSpec } from "./table-spec.js";
 import { MysqlStorageOperationError, mysqlError } from "./errors.js";
 
@@ -236,6 +252,123 @@ export { MysqlStorageDataError } from "./errors.js";
 export { MysqlStorageOperationError } from "./errors.js";
 
 /**
+ * Pages the configured MySQL tenant databases without materializing the catalog.
+ */
+class MysqlTenantCatalog implements TenantCatalog {
+  readonly #cursorIdentity = {};
+
+  /**
+   * Stores configured database mappings for bounded catalog pages.
+   *
+   * @param databases Configured databases in deterministic order.
+   * @param byTenant Exact boundary-to-database lookup.
+   */
+  constructor(
+    private readonly databases: readonly MysqlDatabase[],
+    private readonly byTenant: ReadonlyMap<string | symbol, MysqlDatabase>,
+  ) {}
+
+  /**
+   * Returns every configured boundary for legacy catalog callers.
+   *
+   * @returns All configured tenant boundaries.
+   */
+  all(): Promise<readonly TenantBoundary[]> {
+    return Promise.resolve(this.databases.map(({ boundary }) => boundary));
+  }
+
+  /**
+   * Reads one bounded configured-database page.
+   *
+   * @param request Page size, cancellation, and continuation.
+   * @returns The selected complete tenant boundaries.
+   */
+  page(request: TenantCatalogRead): Promise<TenantCatalogPage> {
+    return Promise.resolve().then(() => {
+      TenantCatalogReads.require(request);
+      const after = request.after;
+      if (after !== undefined && !(after instanceof MysqlTenantCursor))
+        throw new TypeError("MySQL tenant catalog continuation is invalid.");
+      const cursor = after?.state(this.#cursorIdentity);
+      const length = cursor?.length ?? this.databases.length;
+      const start = cursor?.index ?? 0;
+      const end = Math.min(length, start + request.count);
+      const boundaries = this.databases.slice(start, end).map(({ boundary }) => boundary);
+      request.signal.throwIfAborted();
+      return {
+        boundaries,
+        ...(end < length
+          ? { after: new MysqlTenantCursor(this.#cursorIdentity, end, length) }
+          : {}),
+        hasMore: end < length,
+      };
+    });
+  }
+
+  /**
+   * Checks that this factory has a database for the supplied boundary.
+   *
+   * @param boundary Complete tenant boundary to verify.
+   * @returns Completion when that tenant is configured.
+   */
+  keep(boundary: TenantBoundary): Promise<void> {
+    return this.byTenant.has(boundary.key)
+      ? Promise.resolve()
+      : Promise.reject(
+          new MysqlStorageConfigurationError("MySQL storage has no configured tenant."),
+        );
+  }
+
+  /**
+   * Closes the catalog without releasing a separate resource.
+   *
+   * @returns Completion of the catalog close.
+   */
+  close(): Promise<void> {
+    return Promise.resolve();
+  }
+}
+
+/**
+ * Immutable continuation issued by one configured MySQL catalog.
+ */
+class MysqlTenantCursor implements TenantCatalogCursor {
+  readonly [Symbol.toStringTag] = "TenantCatalogCursor" as const;
+
+  readonly #identity: object;
+
+  readonly #index: number;
+
+  readonly #length: number;
+
+  /**
+   * Captures one configured-database sweep position.
+   *
+   * @param identity Private catalog issuance identity.
+   * @param index Next database position.
+   * @param length Fixed database count for this sweep.
+   */
+  constructor(identity: object, index: number, length: number) {
+    this.#identity = identity;
+    this.#index = index;
+    this.#length = length;
+    Object.freeze(this);
+  }
+
+  /**
+   * Verifies issuance before exposing the fixed sweep position.
+   *
+   * @param identity Private identity of the reading catalog.
+   * @returns Fixed database count and next position.
+   */
+  state(identity: object): { index: number; length: number } {
+    if (this.#identity !== identity)
+      throw new TypeError("MySQL tenant catalog continuation is invalid.");
+    return { index: this.#index, length: this.#length };
+  }
+}
+
+/**
  * Provides MySQL record-family storage.
  */
 export class MysqlStorageFactory extends StorageFactory {
@@ -266,21 +399,83 @@ export class MysqlStorageFactory extends StorageFactory {
     super();
     this.#resolver = resolver;
     this.#databases = new Map(databases.map((database) => [database.boundary.key, database]));
-    this.#catalog = Object.freeze({
-      all: () => Promise.resolve(databases.map(({ boundary }) => boundary)),
-      close: () => Promise.resolve(),
-      keep: (boundary: TenantBoundary) => {
-        if (!this.#databases.has(boundary.key)) {
-          return Promise.reject(
-            new MysqlStorageConfigurationError("MySQL storage has no configured tenant."),
-          );
-        }
-        return Promise.resolve();
-      },
-    });
+    this.#catalog = new MysqlTenantCatalog(databases, this.#databases);
     EntityCommitStorageFactories.register(this, {
       createEntityCommitStorage: (input) => this.createEntityCommitStorage(input),
     });
+    this.registerAgentHistory();
+    this.registerAgentExecution();
+  }
+
+  /**
+   * Registers the required provider-only Agent history capability.
+   */
+  private registerAgentHistory(): void {
+    AgentHistoryStorageFactories.register(this, {
+      createAgentHistoryStorage: (input) => {
+        if (!this.isOpen()) throw new Error("StorageFactory is closed.");
+        return new MysqlAgentHistory(
+          input,
+          this.createMysqlRecordStorage(
+            input.context,
+            AgentHistoryRecords.spec((value) => AgentHistoryHash.value(value)),
+            AgentHistoryRecords.group,
+          ),
+        );
+      },
+    });
+  }
+
+  /**
+   * Registers durable Agent execution over the selected tenant database.
+   */
+  private registerAgentExecution(): void {
+    AgentExecutionStorageFactories.register(this, {
+      createAgentExecutionStorage: (input) => this.createAgentExecution(input),
+    });
+  }
+
+  /**
+   * Opens all record families required by fenced Agent completion.
+   *
+   * @param input Requested fenced execution change.
+   * @returns Tenant-scoped Agent execution storage handle.
+   * @typeParam I Typed entity identifier.
+   * @typeParam S Generated Entity state.
+   */
+  private createAgentExecution<I, S extends Message>(
+    input: AgentExecutionStorageInput<I, S>,
+  ): MysqlAgentExecution<I, S> {
+    if (!this.isOpen()) throw new Error("StorageFactory is closed.");
+    const database = this.database(input.entity.context);
+    const context = input.entity.context;
+    const digest = (value: string) => AgentHistoryHash.value(value);
+    return new MysqlAgentExecution(
+      input,
+      {
+        invocation: this.createMysqlRecordStorage(
+          context,
+          AgentExecutionRecords.invocationSpec(digest),
+          AgentExecutionRecords.invocationGroup,
+          database,
+        ),
+        head: this.createMysqlRecordStorage(
+          context,
+          AgentExecutionRecords.headSpec(digest),
+          AgentExecutionRecords.headGroup,
+          database,
+        ),
+        history: this.createMysqlRecordStorage(
+          context,
+          AgentHistoryRecords.spec(digest),
+          AgentHistoryRecords.group,
+          database,
+        ),
+        entity: this.createEntityStorage(input.entity),
+        events: this.createMysqlRecordStorage(context, eventStoreRecordSpec, undefined, database),
+      },
+      new MysqlAgentTransaction(this.connections(database)),
+    );
   }
 
   /**
@@ -296,6 +491,7 @@ export class MysqlStorageFactory extends StorageFactory {
 
   /**
    * Returns the provider-owned configured tenant catalog.
+   *
    * @returns The factory-owned tenant catalog.
    */
   tenantCatalog(): TenantCatalog {
@@ -550,6 +746,7 @@ class Builder implements MysqlStorageFactoryBuilder {
 
   /**
    * Sets the complete multitenant database registry.
+   *
    * @param entries Assign generated tenants to distinct physical databases.
    * @returns Returns this builder.
    */

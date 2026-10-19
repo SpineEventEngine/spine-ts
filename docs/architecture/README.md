@@ -275,7 +275,7 @@ that run the workflow.
 `@spine-event-engine/server` provides descriptor-derived entity metadata,
 explicit handler metadata, a handler registry supplied by the caller, a
 standard decorator adapter, and built-in set-once transition validation. It
-also provides Aggregate, Projection, and Process Manager base classes with
+also provides Aggregate, Projection, Process Manager, and Agent base classes with
 transactional state and family-specific helpers. The package consumes curated
 option exports from `@spine-event-engine/proto` and delegates transition result shaping
 to `@spine-event-engine/core`.
@@ -386,15 +386,15 @@ repository storage decisions. Scope errors are deterministic
 transactions. This shared base class does not implement handler invocation, repositories, storage,
 lifecycle events, Java builders, transaction
 listeners, recent history, async-local/global transaction state, and
-entity-family-specific aggregate/projection/process-manager behavior.
+entity-family-specific Aggregate/Projection/Process Manager/Agent behavior.
 
-`Aggregate`, `Projection`, and `ProcessManager` are public abstract Entity
+`Aggregate`, `Projection`, `ProcessManager`, and `Agent` are public abstract Entity
 families. Each extends `TransactionalEntity<Id, Schema>` and exposes a stable
 readonly `entityFamily` property typed by `EntityFamily`. Every family uses
 the generated Spine `Version`; application code supplies no third version type.
 Repository and bounded-context collaborators perform handler dispatch,
 transactions, persistence, Event publication, and produced-Command delivery.
-Process Managers also expose protected `select()` reads of Entity state.
+Process Managers and Agents also expose protected `select()` reads of Entity state.
 One Server resolves each queried Entity type to its registered context and
 rejects duplicate type registrations. Queries preserve the handler's effective
 tenant, reject incompatible destinations before reading, and require query
@@ -404,8 +404,9 @@ read-sides, and continues independent cleanup after a context drain failure.
 An entered application effect can keep explicit close pending.
 See the [query contract](../../packages/server/REFERENCE.md#handler-routing-and-operations)
 for the single-tenant identity and the limits of eventually consistent reads.
-Aggregates and Process Managers provide protected Event-history reads backed
-by their repositories.
+Aggregates and Process Managers provide protected repository-backed Event-history
+reads. Agents expose separate full, conversation, System Event, and domain Event
+history reads through the Agent repository.
 These classes do not give application code public transaction controls.
 Aggregates update state directly rather than rebuilding it by replaying Events.
 
@@ -413,7 +414,7 @@ Aggregates update state directly rather than rebuilding it by replaying Events.
 It accepts one entity constructor and one
 descriptor-backed state schema, infers the family from a declared ES class
 constructor whose constructor and instance prototype chains reach `Aggregate`,
-`Projection`, or `ProcessManager`, and verifies that the state schema's
+`Projection`, `ProcessManager`, or `Agent`, and verifies that the state schema's
 `(entity).kind` matches that family. Alias imports, namespace/member base-class
 expressions, and intermediate domain base classes are valid because the runtime
 trusts the actual same-realm prototype metadata rather than parsing source base

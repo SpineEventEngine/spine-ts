@@ -11,6 +11,11 @@ record schemas, and a configured Google Datastore client.
 For exact query limits, entity-storage behavior, and failure handling, see
 [REFERENCE documentation for agents](REFERENCE.md).
 
+For an application using Agents, this provider keeps the Agent's accepted
+work and recorded interactions across restarts. Deploy the supplied `index.yaml`
+for Agent history and execution queries; see the [coding-agent reference](REFERENCE.md)
+for provider requirements.
+
 ## 💡 Why use it?
 
 - ✅ Stores Spine records in Google Cloud Datastore or Firestore in Datastore mode.

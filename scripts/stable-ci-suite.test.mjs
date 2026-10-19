@@ -26,8 +26,14 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 const expectedInfrastructureFiles = [
   "packages/storage-datastore/test/datastore-cloud.test.ts",
   "packages/storage-datastore/test/datastore-emulator.test.ts",
+  "packages/storage-datastore/test/datastore-agent-history.test.ts",
+  "packages/storage-datastore/test/datastore-agent-execution.test.ts",
   "packages/storage-postgres/test/postgresql-integration.test.ts",
+  "packages/storage-postgres/test/postgres-agent-history.test.ts",
+  "packages/storage-postgres/test/postgres-agent-execution.test.ts",
   "packages/storage-mysql/test/mysql-integration.test.ts",
+  "packages/storage-mysql/test/mysql-agent-history.test.ts",
+  "packages/storage-mysql/test/mysql-agent-execution.test.ts",
   "packages/server/test/delivery/inbox-provider-cleanup.test.ts",
   "packages/server/test/delivery/inbox-provider-faults.integration.test.ts",
   "packages/server/test/delivery/sql-recovery-clock.integration.test.ts",
@@ -35,6 +41,7 @@ const expectedInfrastructureFiles = [
   "packages/server-blackbox-tests/test/project-process-faults.integration.test.ts",
   "packages/server-blackbox-tests/test/project-shared-takeover.integration.test.ts",
   "packages/server-blackbox-tests/test/project-subscription-transports.integration.test.ts",
+  "packages/server-blackbox-tests/test/agent-recovery/response-saved.test.ts",
 ];
 
 describe("stable CI test inventory", () => {
@@ -65,6 +72,7 @@ describe("stable CI test inventory", () => {
       /^node scripts\/verify-emulator-config\.mjs && SPINE_TS_INBOX_PROVIDER=datastore pnpm /u,
     );
     expect(datastore.scripts["test:emulator"]).toContain("inbox-provider-cleanup.test.ts");
+    expect(datastore.scripts["test:emulator"]).toContain("datastore-agent-history.test.ts");
 
     const mysql = JSON.parse(readFileSync(join(root, "packages/storage-mysql/package.json")));
     expect(mysql.scripts["test:mysql"]).toContain("vitest.infrastructure.config.ts");
@@ -73,6 +81,7 @@ describe("stable CI test inventory", () => {
     );
     expect(mysql.scripts["test:mysql"]).toContain("inbox-provider-cleanup.test.ts");
     expect(mysql.scripts["test:mysql"]).toContain("inbox-provider-faults.integration.test.ts");
+    expect(mysql.scripts["test:mysql"]).toContain("mysql-agent-history.test.ts");
 
     const postgres = JSON.parse(readFileSync(join(root, "packages/storage-postgres/package.json")));
     expect(postgres.scripts["test:postgresql"]).toMatch(
@@ -83,6 +92,7 @@ describe("stable CI test inventory", () => {
     expect(postgres.scripts["test:postgresql"]).toContain(
       "inbox-provider-faults.integration.test.ts",
     );
+    expect(postgres.scripts["test:postgresql"]).toContain("postgres-agent-history.test.ts");
     expect(postgres.scripts["test:postgresql:16"]).toMatch(
       /^SPINE_TS_POSTGRESQL_EXPECTED_MAJOR=16 pnpm test:postgresql$/u,
     );

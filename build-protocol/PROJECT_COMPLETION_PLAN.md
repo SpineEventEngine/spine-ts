@@ -14,7 +14,17 @@ evidence of completed work and are not current operating instructions. Every
 future `master` merge triggers NPM publication and therefore carries a new
 common workspace version under D-0115.
 
-Current approved work: [Process Manager queries across contexts](planning/cross-context-queries.md)
+Current work: [SQL delivery and subscription reliability](tasks/sql-delivery-reliability/TASK.md)
+on `sql-delivery-subscription-reliability` in
+[PR #19](https://github.com/SpineEventEngine/spine-ts/pull/19). The author requested
+integration of official `master`, including the Agent feature from PR #18.
+Integration and review corrections are in progress. Agents hand emitted Events
+to their Bounded Context Event Bus without retaining publication or recovery
+obligations; saved outgoing Commands retain their separate recovery behavior.
+Immutable Event history remains available for reading. The next common release
+version is `2.0.0-snapshot.24`. General physical Entity deletion remains deferred.
+
+Previous completed work: [Process Manager queries across Bounded Contexts](planning/cross-context-queries.md)
 on `cross-context-queries`, based on official master `2324311be8`. Preserve the
 current effective tenant, reject duplicate Entity registrations and incompatible
 query destinations, and drain handlers before closing queried contexts. The

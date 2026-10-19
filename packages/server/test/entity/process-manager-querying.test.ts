@@ -1796,7 +1796,7 @@ describe("Process Manager querying", () => {
     );
 
     expect(() => lookup.query()).toThrow(
-      "Process Manager queries are available only during repository handler execution.",
+      "Entity queries are available only during repository handler execution.",
     );
 
     const release = processManagerQueryAccess.bind(
@@ -1832,17 +1832,17 @@ describe("Process Manager querying", () => {
         .query()
         .byId(...manyIds)
         .read(),
-    ).rejects.toThrow("Process Manager query ID filter may contain at most 1000 IDs.");
+    ).rejects.toThrow("Entity query ID filter may contain at most 1000 IDs.");
     const detached = ProjectOverviewStateQuery.create()
       .byId(...manyIds)
       .build();
     await expect(lookup.queryShared(detached).read()).rejects.toThrow(
-      "Process Manager query ID filter may contain at most 1000 IDs.",
+      "Entity query ID filter may contain at most 1000 IDs.",
     );
 
     release();
     await expect(query.read()).rejects.toThrow(
-      "Process Manager queries are available only during repository handler execution.",
+      "Entity queries are available only during repository handler execution.",
     );
   });
 

@@ -20,6 +20,35 @@ const repoRoot = new URL("..", import.meta.url).pathname;
 const checkerPath = new URL("./check-api-docs.mjs", import.meta.url).pathname;
 
 const expectedStorageProviderExports = [
+  "AgentExecutionCapacity",
+  "AgentExecutionClaim",
+  "AgentExecutionComplete",
+  "AgentExecutionRecords",
+  "AgentExecutionSizes",
+  "AgentExecutionStorage",
+  "AgentExecutionStorageFactories",
+  "AgentExecutionStorageFactory",
+  "AgentExecutionStorageInput",
+  "AgentExecutionTransitions",
+  "AgentExecutionUpdate",
+  "AgentExecutionValues",
+  "AgentHistoryConformance",
+  "AgentHistoryConformanceAdapter",
+  "AgentHistoryKeys",
+  "AgentHistoryOrderKey",
+  "AgentHistoryPage",
+  "AgentHistoryPages",
+  "AgentHistoryRead",
+  "AgentHistoryRecords",
+  "AgentHistoryStorage",
+  "AgentHistoryStorageFactories",
+  "AgentHistoryStorageFactory",
+  "AgentHistoryStorageInput",
+  "AgentHistoryView",
+  "AgentPendingCursor",
+  "AgentPendingKey",
+  "AgentPendingPage",
+  "AgentPendingRead",
   "EntityCommitInput",
   "EntityCommitSnapshots",
   "EntityCommitStorage",
@@ -37,7 +66,12 @@ const expectedStorageProviderExports = [
   "StorageQueryValues",
   "TenantBoundary",
   "TenantCatalog",
+  "TenantCatalogCursor",
+  "TenantCatalogPage",
   "TenantCatalogProvider",
+  "TenantCatalogRead",
+  "TenantCatalogReads",
+  "TenantCatalogSignal",
   "disabledEventHistoryPort",
   "disabledStateHistoryPort",
   "eventHistorySpec",
@@ -91,6 +125,8 @@ describe("storage API documentation inventory", () => {
 
     expect(typedoc.entryPoints).toEqual(
       expect.arrayContaining([
+        "packages/ai/src/spi/adapter.ts",
+        "packages/ai/src/spi/runtime.ts",
         "packages/core/src/spi/subscription-lifecycle.ts",
         "packages/deployment/src/spi/backend-membership.ts",
         "packages/server/src/spi/handler-registry.ts",
@@ -103,7 +139,16 @@ describe("storage API documentation inventory", () => {
     const rootExports = moduleExports(resolve(repoRoot, "packages/storage/src/index.ts"));
     const providerExports = moduleExports(resolve(repoRoot, "packages/storage/src/provider.ts"));
 
-    for (const name of ["TenantBoundary", "TenantCatalog", "TenantCatalogProvider"]) {
+    for (const name of [
+      "TenantBoundary",
+      "TenantCatalog",
+      "TenantCatalogCursor",
+      "TenantCatalogPage",
+      "TenantCatalogProvider",
+      "TenantCatalogRead",
+      "TenantCatalogReads",
+      "TenantCatalogSignal",
+    ]) {
       expect(rootExports).not.toContain(name);
     }
     expect(providerExports).toEqual(

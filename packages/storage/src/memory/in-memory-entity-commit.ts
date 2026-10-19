@@ -15,6 +15,7 @@
 import { toBinary, type Message } from "@bufbuild/protobuf";
 import { EventSchema, type Event, type EventId } from "@spine-event-engine/proto";
 import type { EntityStateKey } from "@spine-event-engine/proto/generated/spine/server/entity/state_key_pb.js";
+import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { eventStoreRecordSpec } from "../event/event-store.js";
 import { eventHistorySpec, stateHistorySpec } from "../entity/entity-history-record-spec.js";
 import {
@@ -29,6 +30,8 @@ import type { StorageGroup } from "../record/storage-group.js";
 import type { StorageContext } from "../storage/storage.js";
 import {
   MemoryEntityStorageFactory,
+  ENTITY_SCOPE_MUTATION_KEY,
+  type EntityBackend,
   type EntityStorageInput,
   type InMemoryEntityStorage,
 } from "./in-memory-entity-history.js";
@@ -111,6 +114,116 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
     this.requireOpen();
     this.requireCompatible(input);
     return this.apply(EntityCommitSnapshots.capture(input));
+  }
+
+  /**
+   * Commits one Agent transition under the Entity scope queue and Version fence.
+   *
+   * @typeParam I Entity identifier type.
+   * @typeParam S Entity state type.
+   * @param entity Configured Entity storage layout.
+   * @param entityId Typed Agent Entity identifier.
+   * @param expectedVersion Version read before the Agent handler ran.
+   * @param input Optional changed Entity state and history.
+   * @param extra Applies or restores the Agent execution record with the Entity state.
+   * @returns Completion after the fenced transition is stored.
+   */
+  commitAgentConditional<I, S extends Message>(
+    entity: EntityStorageInput<I, S>,
+    entityId: I,
+    expectedVersion: number,
+    input: EntityCommitInput<I, S> | undefined,
+    extra: { apply(): void; restore(): void },
+  ): Promise<void> {
+    this.requireOpen();
+    const backend = this.entities.backend(entity);
+    const key = entity.id.key(entityId);
+    const snapshot = input === undefined ? undefined : EntityCommitSnapshots.capture(input);
+    if (snapshot !== undefined) {
+      this.requireCompatible(snapshot);
+      this.requireEnabledHistories(snapshot);
+      this.validateRows(snapshot);
+      if (snapshot.diagnostics?.length || snapshot.events?.length)
+        throw new Error(
+          "Agent completion cannot save delivery Events as Entity commit obligations.",
+        );
+    }
+    return backend.mutationQueue.run(ENTITY_SCOPE_MUTATION_KEY, () =>
+      this.applyAgentConditional(entity, backend, key, expectedVersion, snapshot, extra),
+    );
+  }
+
+  /**
+   * Applies one prepared Agent transition and restores affected rows on failure.
+   *
+   * @typeParam I Entity identifier type.
+   * @typeParam S Entity state type.
+   * @param entity Configured Entity storage layout.
+   * @param backend Shared current records for this Entity scope.
+   * @param key Canonical Entity ID key.
+   * @param expectedVersion Version read before handler execution.
+   * @param snapshot Optional captured Entity state transition.
+   * @param extra Applies or restores the Agent execution record.
+   * @returns Completion after the transition is stored.
+   */
+  private applyAgentConditional<I, S extends Message>(
+    entity: EntityStorageInput<I, S>,
+    backend: EntityBackend,
+    key: string,
+    expectedVersion: number,
+    snapshot: EntityCommitInput<I, S> | undefined,
+    extra: { apply(): void; restore(): void },
+  ): Promise<void> {
+    const prior = backend.current.get(key) as EntityRecord | undefined;
+    if ((prior?.version?.number ?? 0) !== expectedVersion)
+      throw new Error("Agent execution initial Entity Version is no longer current.");
+    const layout = snapshot?.states?.length ? stateHistorySpec(entity.stateSchema) : undefined;
+    const states =
+      layout === undefined
+        ? undefined
+        : this.openRecords(entity.context, layout.spec, layout.group);
+    const prepared =
+      layout === undefined
+        ? []
+        : (snapshot?.states ?? []).map((record) => layout.spec.materialize(record));
+    const priorStates = prepared.map((record) => states?.capture(record.id));
+    try {
+      this.writeAgentStates(states, prepared);
+      if (snapshot !== undefined) backend.current.set(key, snapshot.next);
+      extra.apply();
+    } catch (error) {
+      extra.restore();
+      if (prior === undefined) backend.current.delete(key);
+      else backend.current.set(key, prior);
+      for (const priorState of priorStates) if (priorState !== undefined) states?.apply(priorState);
+      throw error;
+    }
+    return Promise.resolve();
+  }
+
+  /**
+   * Writes immutable Agent state history after checking each Version slot.
+   *
+   * @param states State-history records when that family is configured.
+   * @param prepared Materialized state rows from the captured transition.
+   */
+  private writeAgentStates(
+    states: TenantRecords<EntityStateKey, EntityRecord> | undefined,
+    prepared: readonly ReturnType<RecordSpec<EntityStateKey, EntityRecord>["materialize"]>[],
+  ): void {
+    if (states === undefined) return;
+    for (const record of prepared) {
+      const existing = states.read(record.id);
+      if (
+        existing !== undefined &&
+        !this.sameBytes(
+          toBinary(EntityRecordSchema, existing),
+          toBinary(EntityRecordSchema, record.record),
+        )
+      )
+        throw new Error("Agent state history collides with another Version.");
+      states.write(record);
+    }
   }
 
   /**

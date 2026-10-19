@@ -32,6 +32,7 @@ import {
 } from "@spine-event-engine/storage/provider";
 import { PostgresStorageErrors, PostgresStorageOperationError } from "./errors.js";
 import { PostgresRecordStorage } from "./record-storage.js";
+import type { PoolClient } from "pg";
 
 /**
  * Opens one PostgreSQL record family used by an Entity commit.
@@ -86,6 +87,34 @@ class PostgresCommitRecords<I, S extends Message> {
    */
   async prepare(): Promise<void> {
     for (const handle of this.#handles) await handle.prepare();
+  }
+
+  /**
+   * Writes the fenced Entity mutation through the transaction's client.
+   *
+   * @param client Existing conditional-completion transaction client.
+   * @param snapshot Captured immutable Entity mutation.
+   * @param expectedVersion Version checked under the current-record lock.
+   * @returns Completion after current and history records are written.
+   */
+  async applyConditional(
+    client: PoolClient,
+    snapshot: EntityCommitInput<I, S>,
+    expectedVersion: number,
+  ): Promise<void> {
+    const current = await this.current
+      .historyExecutor()
+      .read(client, snapshot.entityId, "for-update");
+    if ((current?.version?.number ?? 0) !== expectedVersion)
+      throw new Error("Agent execution initial Entity Version is no longer current.");
+    for (const state of snapshot.states ?? [])
+      await this.states?.historyExecutor().appendImmutable(client, state);
+    for (const diagnostic of snapshot.diagnostics ?? [])
+      await this.diagnostics?.historyExecutor().appendImmutable(client, diagnostic);
+    for (const event of snapshot.events ?? [])
+      await this.events?.historyExecutor().appendImmutable(client, event);
+    if (!PostgresCommitValues.same(current, snapshot.next))
+      await this.current.historyExecutor().write(client, snapshot.next);
   }
 
   /**
@@ -197,6 +226,38 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
     } finally {
       records.close();
     }
+  }
+
+  /**
+   * Prepares one Agent-fenced Entity mutation for its existing transaction client.
+   *
+   * @typeParam Id Typed Entity identifier.
+   * @typeParam State Entity state message type.
+   * @param input Changed Entity state and immutable history.
+   * @returns A transaction-bound conditional mutation and its close callback.
+   */
+  async prepareAgentConditional<Id, State extends Message>(
+    input: EntityCommitInput<Id, State>,
+  ): Promise<{
+    apply(client: PoolClient, expectedVersion: number): Promise<void>;
+    close(): void;
+  }> {
+    this.validate(input);
+    const snapshot = EntityCommitSnapshots.capture(input);
+    const records = new PostgresCommitRecords(snapshot, this.open);
+    try {
+      await records.prepare();
+    } catch (error) {
+      records.close();
+      throw error;
+    }
+    return {
+      apply: (client, expectedVersion) =>
+        records.applyConditional(client, snapshot, expectedVersion),
+      close: () => {
+        records.close();
+      },
+    };
   }
 
   /**

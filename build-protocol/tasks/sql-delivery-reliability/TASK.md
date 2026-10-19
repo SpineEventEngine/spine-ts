@@ -40,7 +40,9 @@ process/Delivery configurations, and real browser transports passed. All 19
 snapshot 25 packages passed external-consumer checks and the offline release
 trial. No packages were published. Disposable evidence remains ignored.
 
-The PR still conflicts with newer official `master`; GitHub checks have not run
-on this addition. The new Agent recovery on `master` republishes saved Events,
-contrary to the author's prohibition, so integration needs a separate decision.
-No merge has started.
+The author authorized back-merging current official `master` and correcting
+Agent Event publication. Integration is in progress. Every Entity hands Events
+to its Bounded Context Event Bus; it must not retain Event delivery flags,
+recipient plans or recovery obligations afterward. Immutable Event history
+remains separate from delivery. The next unpublished release after master's
+snapshot 23 is snapshot 24; the merged workspace will use that version.

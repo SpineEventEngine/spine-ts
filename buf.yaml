@@ -4,6 +4,7 @@ modules:
   - path: examples/todo/proto
   - path: examples/projects/proto
   - path: examples/orders/proto
+  - path: examples/support/proto
 lint:
   use:
     - STANDARD

@@ -262,6 +262,15 @@ export class SignalPublisher {
     return Object.freeze({ close: () => this.#observers.delete(observer) });
   }
 
+  /**
+   * Records one saved Agent Command after its original ID is durably acknowledged.
+   *
+   * @param signal Saved Command with an acknowledged original ID.
+   */
+  recordAcceptedSaved(signal: Command): void {
+    this.#observe("command", signal);
+  }
+
   #publish(
     kind: PublicationKind,
     signal: Command | Event,

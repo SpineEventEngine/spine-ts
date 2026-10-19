@@ -22,7 +22,14 @@ type Equal<Left, Right> =
     : false;
 type PublicBlackBoxMember = keyof BlackBox;
 type ExpectedPublicBlackBoxMember =
-  "asGuest" | "onBehalfOf" | "assertCommands" | "assertEvents" | "eventually" | "close";
+  | "asGuest"
+  | "onBehalfOf"
+  | "assertCommands"
+  | "assertEvents"
+  | "readAgentHistory"
+  | "readSystemEvents"
+  | "eventually"
+  | "close";
 
 type BlackBoxHasNoInternalMembers = Assert<
   Exclude<PublicBlackBoxMember, ExpectedPublicBlackBoxMember> extends never ? true : false

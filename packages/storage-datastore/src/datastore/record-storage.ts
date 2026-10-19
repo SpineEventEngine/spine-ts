@@ -15,6 +15,7 @@
 import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import { and, Datastore, or, PropertyFilter } from "@google-cloud/datastore";
 import { StringifierRegistry } from "@spine-event-engine/core";
+import { AgentHistoryRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
 import {
   ColumnMappings,
   defaultQueryCandidateLimit,
@@ -207,6 +208,7 @@ class FlatEntityCodec<I, R extends Message> {
 
   /**
    * Returns the canonical Datastore key name for a logical record ID.
+   *
    * @param id Typed record identifier.
    * @returns Key name shared by equivalent logical IDs.
    */
@@ -271,6 +273,8 @@ class FlatEntityCodec<I, R extends Message> {
    */
   unindexedProperties(data: Readonly<Record<string, unknown>>): readonly string[] {
     void data;
+    if (this.recordSpec.recordType.typeName === AgentHistoryRecordSchema.typeName)
+      return [payloadProperty, "state_type", "agent_key", "conversation_key"];
     return [payloadProperty];
   }
 
@@ -372,7 +376,8 @@ class FlatEntityCodec<I, R extends Message> {
     }
 
     try {
-      return fromBinary(this.recordSpec.recordType, payload, { readUnknownFields: false });
+      const bytes = Buffer.isBuffer(payload) ? Uint8Array.from(payload) : payload;
+      return fromBinary(this.recordSpec.recordType, bytes, { readUnknownFields: false });
     } catch {
       throw new Error("Datastore entity cannot be decoded.");
     }
@@ -487,11 +492,22 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     readonly excludeFromIndexes: readonly string[];
   } {
     const materialized = this.recordSpec.materialize(record);
+    const data = this.#codec.encode(materialized.record, materialized.columns);
     return {
       key: this.#codec.key(this.client, materialized.id),
-      data: this.#codec.encode(materialized.record, materialized.columns),
-      excludeFromIndexes: [payloadProperty],
+      data,
+      excludeFromIndexes: this.#codec.unindexedProperties(data),
     };
+  }
+
+  /**
+   * Returns the exact tenant-scoped native key for a typed record ID.
+   *
+   * @param id Complete persisted record identity.
+   * @returns Native key for the typed record identity.
+   */
+  transactionKey(id: I): ReturnType<Datastore["key"]> {
+    return this.#codec.key(this.client, id);
   }
 
   /**
@@ -576,6 +592,34 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
   }
 
   /**
+   * Reads at most two indexed successor records inside the caller's transaction.
+   *
+   * @param filters Native indexed query predicates.
+   * @param orderProperty Native property containing the complete order key.
+   * @param transaction Current native transaction.
+   * @returns Earliest scoped rows in native order.
+   */
+  async queryTransactionSuccessors(
+    transaction: ReturnType<Datastore["transaction"]>,
+    filters: readonly DatastoreRangeFilter[],
+    orderProperty: string,
+  ): Promise<readonly R[]> {
+    const query = this.#codec.createQuery(this.client);
+    for (const filter of filters)
+      query.filter(
+        new PropertyFilter(
+          filter.property,
+          filter.operator,
+          this.#codec.columnValue(filter.property, filter.value),
+        ),
+      );
+    query.order(orderProperty);
+    query.limit(2);
+    const response = await transaction.runQuery(query, wrappedReadOptions);
+    return DatastoreResults.entities(response).map((entity) => this.#codec.decode(entity));
+  }
+
+  /**
    * Deletes a bounded group of provider entries.
    *
    * @param entries The entries selected by a preceding provider page.
@@ -593,6 +637,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
 
   /**
    * Deletes the record at one storage slot.
+   *
    * @param id The storage slot identifier.
    * @returns Whether a record was deleted.
    */
@@ -612,6 +657,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
 
   /**
    * Returns records matching a query.
+   *
    * @param _query The record query.
    * @returns The matching storage entries.
    */
@@ -647,6 +693,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
 
   /**
    * Returns the supported Datastore query capabilities.
+   *
    * @returns The supported query capabilities.
    */
   protected override queryCapabilities(): StorageQueryCapabilities {
@@ -658,6 +705,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
 
   /**
    * Returns candidate records for a normalized query plan.
+   *
    * @param plan The normalized query plan.
    * @returns The candidate storage entries.
    */
@@ -793,6 +841,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
 
   /**
    * Reads the record at one storage slot.
+   *
    * @param id The storage slot identifier.
    * @returns The stored record, if present.
    */
@@ -808,6 +857,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
 
   /**
    * Compares and conditionally replaces the record at one storage slot.
+   *
    * @param id The storage slot identifier.
    * @param expected The expected materialized record.
    * @param next The replacement materialized record, if any.
@@ -878,6 +928,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
 
   /**
    * Writes materialized records.
+   *
    * @param records The materialized records to write.
    * @returns Completes when the records are written.
    */
@@ -899,6 +950,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
 
   /**
    * Writes one materialized record.
+   *
    * @param record The materialized record to write.
    * @returns Completes when the record is written.
    */

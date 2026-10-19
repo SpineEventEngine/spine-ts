@@ -52,6 +52,12 @@ import * as transportSchemas from "../generated/spine/server/transport/transport
 import * as nodeDiscoverySchemas from "../generated/spine/deployment/node_discovery_pb.js";
 import * as systemEventSchemas from "../generated/spine/system/server/entity_log_events_pb.js";
 import * as systemTypeSchemas from "../generated/spine/system/server/entity_type_pb.js";
+import * as agentExecutionSchemas from "../generated/spine/server/agent/execution_record_pb.js";
+import * as agentHistorySchemas from "../generated/spine/server/agent/history_record_pb.js";
+import * as agentContentSchemas from "../generated/spine/ts/agent/content_pb.js";
+import * as agentHistoryPublicSchemas from "../generated/spine/ts/agent/history_pb.js";
+import * as agentInteractionSchemas from "../generated/spine/ts/agent/interaction_events_pb.js";
+import * as agentModelSchemas from "../generated/spine/ts/agent/model_pb.js";
 import { spineProtoModule } from "../generated/proto-module.js";
 
 interface SpineManifest {
@@ -104,7 +110,7 @@ describe("spineProtoModule", () => {
       dependencies: [],
       moduleExport: "spineProtoModule",
     });
-    expect(manifest.protoFiles).toHaveLength(50);
+    expect(manifest.protoFiles).toHaveLength(56);
     expect(manifest.generationId).toEqual(expect.stringMatching(/\S/u));
     expect(
       JSON.parse(
@@ -163,6 +169,12 @@ describe("spineProtoModule", () => {
       ...schemaNames(nodeDiscoverySchemas),
       ...schemaNames(systemEventSchemas),
       ...schemaNames(systemTypeSchemas),
+      ...schemaNames(agentExecutionSchemas),
+      ...schemaNames(agentHistorySchemas),
+      ...schemaNames(agentContentSchemas),
+      ...schemaNames(agentHistoryPublicSchemas),
+      ...schemaNames(agentInteractionSchemas),
+      ...schemaNames(agentModelSchemas),
     ].sort();
 
     expect(spineProtoModule.name).toBe("@spine-event-engine/proto");

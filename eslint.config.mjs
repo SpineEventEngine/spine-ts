@@ -2,6 +2,8 @@ import js from "@eslint/js";
 import eslintConfigPrettier from "eslint-config-prettier";
 import tseslint from "typescript-eslint";
 
+const typedFiles = ["**/*.ts", "examples/release-notes/{src,test}/**/*.tsx"];
+
 export default tseslint.config(
   {
     ignores: [
@@ -13,6 +15,11 @@ export default tseslint.config(
       "packages/*/test-fixtures/generated/**",
       "examples/*/generated/**",
       "examples/*/*/generated/**",
+      "examples/release-notes/src/main/gen/**",
+      "examples/release-notes/src/renderer/gen/**",
+      "examples/release-notes/.studio-build/**",
+      "examples/release-notes/out/**",
+      "examples/release-notes/build/**",
       "eslint.config.mjs",
       "vitest.config.ts",
     ],
@@ -20,11 +27,11 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.strictTypeChecked.map((config) => ({
     ...config,
-    files: ["**/*.ts"],
+    files: typedFiles,
   })),
   ...tseslint.configs.stylisticTypeChecked.map((config) => ({
     ...config,
-    files: ["**/*.ts"],
+    files: typedFiles,
   })),
   {
     files: ["**/*.ts"],
@@ -36,10 +43,42 @@ export default tseslint.config(
     },
   },
   {
-    files: ["scripts/**/*.mjs"],
+    files: ["packages/ai-vercel-ax/{src,test}/**/*.ts"],
+    languageOptions: {
+      parserOptions: {
+        project: "./packages/ai-vercel-ax/tsconfig.tooling.json",
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+  },
+  {
+    files: [
+      "examples/release-notes/{src,test}/**/*.ts",
+      "examples/release-notes/{src,test}/**/*.tsx",
+      "examples/release-notes/vite.config.ts",
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: "./examples/release-notes/tsconfig.tooling.json",
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+  },
+  {
+    files: ["packages/server-blackbox-tests/test/agent-vercel-mcp-blackbox.test.ts"],
+    languageOptions: {
+      parserOptions: {
+        project: "./packages/server-blackbox-tests/tsconfig.provider-tests.json",
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+  },
+  {
+    files: ["scripts/**/*.mjs", "examples/release-notes/scripts/**/*.mjs"],
     languageOptions: {
       globals: {
         console: "readonly",
+        fetch: "readonly",
         process: "readonly",
         URL: "readonly",
       },

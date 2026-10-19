@@ -1,0 +1,50 @@
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+syntax = "proto3";
+
+package spine.examples.support;
+
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.examples.support";
+
+// Identifies a warehouse support ticket.
+message SupportTicketId {
+  // Identifier assigned when the ticket is opened.
+  string value = 1 [(required) = true];
+}
+
+// Facts supplied by the warehouse employee for this request.
+message SupportRequest {
+  // Incident observed at both packing stations.
+  string incident = 1 [(required) = true];
+
+  // Troubleshooting already attempted, not advice to repeat.
+  repeated string attempted_steps = 2;
+
+  // Operational impact while shipping labels cannot print.
+  string impact = 3 [(required) = true];
+}
+
+// Reply proposed for review by a support person.
+message SupportReply {
+  // Short subject for the proposed reply.
+  string subject = 1 [(required) = true];
+
+  // Draft response, never an automatically sent message.
+  string body = 2 [(required) = true];
+
+  // Questions about facts still needed to diagnose the incident.
+  repeated string questions = 3;
+}

@@ -1,0 +1,1774 @@
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+
+import { randomUUID } from "node:crypto";
+import { basename } from "node:path";
+import {
+  clone,
+  create,
+  createRegistry,
+  equals,
+  toJson,
+  type MessageShape,
+} from "@bufbuild/protobuf";
+import { createRouterTransport } from "@connectrpc/connect";
+import {
+  AiRegistry,
+  AgentHistoryCursorSchema,
+  type HistoryRead,
+  type AiScope,
+  type ModelRef,
+} from "@spine-event-engine/ai";
+import { Client, type SubscriptionDelivery } from "@spine-event-engine/client-node";
+import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
+import {
+  ActorContextSchema,
+  EventIdSchema,
+  EventSchema,
+  UserIdSchema,
+  VersionSchema,
+  type EventId,
+} from "@spine-event-engine/proto";
+import { TargetSchema, TopicIdSchema, TopicSchema } from "@spine-event-engine/proto/client";
+import {
+  AgentHistoryEntrySchema,
+  ConversationIdSchema,
+  ConversationRecordSchema,
+} from "@spine-event-engine/proto/agent";
+import { file_spine_core_event as coreEventFile } from "@spine-event-engine/proto/generated/spine/core/event_pb.js";
+import { file_spine_core_command as coreCommandFile } from "@spine-event-engine/proto/generated/spine/core/command_pb.js";
+import { file_spine_system_server_entity_log_events as entityEventsFile } from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
+import { file_spine_ts_agent_history as agentHistoryFile } from "@spine-event-engine/proto/generated/spine/ts/agent/history_pb.js";
+import { file_spine_ts_agent_interaction_events as interactionEventsFile } from "@spine-event-engine/proto/generated/spine/ts/agent/interaction_events_pb.js";
+import { file_spine_ts_agent_content as agentContentFile } from "@spine-event-engine/proto/generated/spine/ts/agent/content_pb.js";
+import {
+  SignalMetadata,
+  SpineServices,
+  type AgentExecutionStatus,
+  type AgentHistoryReader,
+} from "@spine-event-engine/server";
+import { InMemoryStorageFactory } from "@spine-event-engine/storage";
+
+import {
+  CancelReleaseGenerationSchema,
+  EditReleaseNotesSchema,
+  OpenReleaseDraftSchema,
+  PrepareReleaseNotesExportSchema as PrepareExportSchema,
+  RequestReleaseGenerationSchema,
+  type OpenReleaseDraft,
+} from "../../generated/spine/examples/releasenotes/commands_pb.js";
+import {
+  file_spine_examples_releasenotes_events as releaseEventsFile,
+  ReleaseGenerationCanceledSchema,
+  ReleaseGenerationCancelIgnoredSchema as CancelIgnoredSchema,
+  ReleaseGenerationRequestedSchema,
+  ReleaseNotesExportPreparedSchema as ExportPreparedSchema,
+} from "../../generated/spine/examples/releasenotes/events_pb.js";
+import { file_spine_examples_releasenotes_types as releaseTypesFile } from "../../generated/spine/examples/releasenotes/types_pb.js";
+import { ReleaseGenerationInputsConflictSchema as GenerationInputsConflictSchema } from "../../generated/spine/examples/releasenotes/rejections_pb.js";
+import { ReleaseDraftStateSchema } from "../../generated/spine/examples/releasenotes/states_pb.js";
+import {
+  GitCommitIdSchema,
+  ReleaseChangeSchema,
+  ReleaseCommitSchema,
+  ReleaseComparisonPolicy,
+  ReleaseComparisonSchema,
+  ReleaseDraftIdSchema,
+  ReleaseEvidenceCatalogSchema,
+  ReleaseEvidenceSchema,
+  ReleaseGenerationIdSchema,
+  ReleaseInstructionSchema,
+  ReleaseModelSelectionSchema,
+  ReleaseMarkdownContentSchema,
+  ReleaseTitleSchema,
+  RepositorySelectionIdSchema,
+} from "../../generated/spine/examples/releasenotes/types_pb.js";
+import { ReleaseNotesAgent, ReleaseNotesContext } from "../domain/index.js";
+import { ReleaseMarkdown } from "../domain/markdown.js";
+import {
+  GitReleaseComparison,
+  GitProject,
+  type GitChange,
+  type GitCommit,
+  type GitEvidence,
+} from "./git-release.js";
+import { ReleaseGitRegistration } from "./git-mcp-registration.js";
+import type { PlanModelSelection } from "./plan-model-selection.js";
+
+const openDraftCommand = (
+  id: string,
+  selectionId: string,
+  title: string,
+  audience: string,
+  comparison: GitReleaseComparison,
+): OpenReleaseDraft =>
+  create(OpenReleaseDraftSchema, {
+    id: create(ReleaseDraftIdSchema, { value: id }),
+    title: create(ReleaseTitleSchema, { value: title }),
+    comparison: create(ReleaseComparisonSchema, {
+      repository: create(RepositorySelectionIdSchema, { value: selectionId }),
+      base: create(GitCommitIdSchema, { value: comparison.baseCommit }),
+      target: create(GitCommitIdSchema, { value: comparison.targetCommit }),
+      policy: ReleaseComparisonPolicy.SELECTED_NET_TREE,
+    }),
+    audience,
+  });
+
+const historyTypes = createRegistry(
+  releaseEventsFile,
+  releaseTypesFile,
+  coreEventFile,
+  coreCommandFile,
+  entityEventsFile,
+  agentHistoryFile,
+  interactionEventsFile,
+  agentContentFile,
+);
+
+/**
+ * Fixed local process paths and the trusted account selection service.
+ */
+export interface StudioStartOptions {
+  /**
+   * Git executable selected by the trusted desktop process.
+   */
+  readonly gitExecutable: string;
+
+  /**
+   * Bundled Node executable used for the scoped Git worker.
+   */
+  readonly workerExecutable: string;
+
+  /**
+   * Absolute path to the packaged worker entry.
+   */
+  readonly workerPath: string;
+
+  /**
+   * Fixed working directory passed to the worker process.
+   */
+  readonly workerCwd: string;
+
+  /**
+   * Generated handler registry root for the packaged Bounded Context.
+   */
+  readonly registryRoot?: URL;
+
+  /**
+   * Trusted account model selection and credential connection.
+   */
+  readonly plan: Pick<PlanModelSelection, "activeBinding"> &
+    Partial<Pick<PlanModelSelection, "beginGeneration" | "abortGeneration">>;
+}
+
+/**
+ * Complete selected comparison without exposing the repository path to the renderer.
+ */
+export interface StudioComparison {
+  /**
+   * Trusted project basename for human display.
+   */
+  readonly projectName: string;
+
+  /**
+   * Selected from revision label.
+   */
+  readonly baseLabel: string;
+
+  /**
+   * Selected to revision label.
+   */
+  readonly targetLabel: string;
+
+  /**
+   * Identifier retained for the selected immutable comparison.
+   */
+  readonly selectionId: string;
+
+  /**
+   * Resolved base commit identifier.
+   */
+  readonly base: string;
+
+  /**
+   * Resolved target commit identifier.
+   */
+  readonly target: string;
+
+  /**
+   * Net committed file changes in the accepted range.
+   */
+  readonly changes: readonly GitChange[];
+
+  /**
+   * Commits reachable from target beyond the selected base.
+   */
+  readonly commits: readonly GitCommit[];
+
+  /**
+   * Per-parent committed evidence available to the Agent and editor.
+   */
+  readonly evidence: readonly GitEvidence[];
+}
+
+/**
+ * Atomic draft state and framework Version for editor concurrency checks.
+ */
+export interface StudioDraft {
+  /**
+   * Typed release draft identifier transported as a string.
+   */
+  readonly id: string;
+
+  /**
+   * Actual framework Version paired with this state snapshot.
+   */
+  readonly version: MessageShape<typeof VersionSchema>;
+
+  /**
+   * Release title supplied by the editor.
+   */
+  readonly title: string;
+
+  /**
+   * Reader audience supplied by the editor.
+   */
+  readonly audience: string;
+
+  /**
+   * Immutable comparison selected when the draft was opened.
+   */
+  readonly comparison: StudioComparison;
+
+  /**
+   * Latest authoritative generation status for this draft.
+   */
+  readonly generationStatus: string;
+
+  /**
+   * Exact editable Markdown bytes from the authoritative draft.
+   */
+  readonly markdown: Uint8Array;
+
+  /**
+   * Timestamp of the latest observed content change, or initial creation.
+   */
+  readonly lastEditedAt?: string | undefined;
+
+  /**
+   * Timestamp of the original confirmed draft state in this session.
+   */
+  readonly createdAt?: string | undefined;
+}
+
+/**
+ * One bounded indexed history page encoded as Protobuf JSON for the renderer.
+ */
+export interface StudioHistoryPage {
+  /**
+   * Bounded history records encoded as Protobuf JSON.
+   */
+  readonly items: readonly unknown[];
+
+  /**
+   * Cursor for the next older page, when available.
+   */
+  readonly cursor?: string;
+}
+
+interface GenerationAdmission {
+  readonly draftId: string;
+  readonly comparison: GitReleaseComparison;
+  readonly comparisonValue: MessageShape<typeof ReleaseComparisonSchema>;
+  readonly command: MessageShape<typeof RequestReleaseGenerationSchema>;
+  readonly model: ModelRef;
+  actor?: AiScope["actor"];
+  sourceEventId?: EventId;
+  rejection?: "inputs-conflict";
+}
+
+const Admission = {
+  /**
+   * Matches an accepted generation Event against its submitted Command snapshot.
+   *
+   * @param admission Immutable comparison and Command retained at admission.
+   * @param event Authoritative generation Event delivered by the Bounded Context.
+   * @returns Whether every model-visible input field remains identical.
+   */
+  eventMatches(
+    admission: GenerationAdmission,
+    event: MessageShape<typeof ReleaseGenerationRequestedSchema>,
+  ): boolean {
+    return (
+      event.id?.value === admission.draftId &&
+      event.generation?.value === admission.command.generation?.value &&
+      event.inputVersion !== undefined &&
+      admission.command.expectedVersion !== undefined &&
+      event.comparison !== undefined &&
+      event.catalog !== undefined &&
+      admission.command.catalog !== undefined &&
+      event.selection !== undefined &&
+      admission.command.selection !== undefined &&
+      equals(VersionSchema, event.inputVersion, admission.command.expectedVersion) &&
+      equals(ReleaseComparisonSchema, event.comparison, admission.comparisonValue) &&
+      equals(ReleaseEvidenceCatalogSchema, event.catalog, admission.command.catalog) &&
+      equals(ReleaseModelSelectionSchema, event.selection, admission.command.selection) &&
+      event.instruction?.value === admission.command.instruction?.value &&
+      event.conversation?.value === admission.command.conversation?.value
+    );
+  },
+
+  /**
+   * Checks the Agent scope and accepted source Event before model resolution.
+   *
+   * @param admission Immutable generation admission.
+   * @param event Authoritative source Event for the Agent operation.
+   * @param scope Framework actor, tenant, and Agent scope.
+   * @returns Whether this operation matches the accepted draft and actor.
+   */
+  matches(
+    admission: GenerationAdmission,
+    event: MessageShape<typeof ReleaseGenerationRequestedSchema>,
+    scope: AiScope,
+  ): boolean {
+    const agent = scope.agent.id && AnyMessages.unpack(scope.agent.id, ReleaseDraftIdSchema);
+    return (
+      scope.tenant.kind === "single-tenant" &&
+      scope.actor.actor?.value === "guest" &&
+      agent?.value === admission.draftId &&
+      Admission.eventMatches(admission, event)
+    );
+  },
+};
+
+/**
+ * Trusted in-memory release workflow over the public in-process Spine client.
+ */
+export class ReleaseStudio {
+  /**
+   * Comparisons pinned to accepted Git object identifiers.
+   */
+  private readonly comparisons = new Map<string, GitReleaseComparison>();
+
+  private readonly comparisonLabels = new Map<string, { base: string; target: string }>();
+
+  private readonly projects = new Map<string, string>();
+
+  private readonly draftSelections = new Map<string, string>();
+
+  private currentProjectHandle: string | undefined;
+
+  private currentComparisonId: string | undefined;
+
+  private comparisonSequence = 0;
+
+  private projectSequence = 0;
+
+  /**
+   * Model registrations already appended to this Bounded Context.
+   */
+  private readonly registeredModels = new Set<string>();
+
+  /**
+   * Draft identifiers retained for the current in-memory session.
+   */
+  private readonly drafts = new Set<string>();
+
+  /**
+   * Draft Commands retained until their Aggregate is confirmed.
+   */
+  private readonly pendingDrafts = new Map<string, OpenReleaseDraft>();
+
+  /**
+   * In-flight submissions shared by matching retries for the same draft ID.
+   */
+  private readonly openingDrafts = new Map<string, Promise<StudioDraft>>();
+
+  /**
+   * Session-only timestamps paired with the last observed document bytes.
+   */
+  private readonly contentTimes = new Map<
+    string,
+    { markdown: Uint8Array; at?: string | undefined }
+  >();
+
+  /**
+   * Original confirmed Version timestamp for each session draft.
+   */
+  private readonly creationTimes = new Map<string, string>();
+
+  /**
+   * Latest generation identifier for each draft in this session.
+   */
+  private readonly generations = new Map<string, string>();
+
+  /**
+   * Source Event subscription activated before generation Commands are posted.
+   */
+  private sourceSubscription?: { cancel(): Promise<void> };
+
+  /**
+   * Typed rejection observation activated before generation Commands are posted.
+   */
+  private rejectionSubscription?: { cancel(): Promise<void> };
+
+  /**
+   * Prevents overlapping selection and generation admission.
+   */
+  private selectingGeneration = false;
+
+  /**
+   * Reserves account and model mutation until its trusted action settles.
+   */
+  private accountTransition = false;
+
+  /**
+   * Synchronously fences generation admission during a native close decision.
+   */
+  private closeAdmission: "open" | "reserved" | "accepted" = "open";
+
+  /**
+   * Shared completion for Bounded Context shutdown.
+   */
+  private closing?: Promise<void>;
+
+  /**
+   * Stops outcome waits when this in-memory Studio session closes.
+   */
+  private readonly lifecycle = new AbortController();
+
+  /**
+   * Binds the public client, Bounded Context, and accepted-source maps for one session.
+   *
+   * @param options Fixed worker and account services.
+   * @param context Running release-notes Bounded Context.
+   * @param client Public in-process client for Commands and subscriptions.
+   * @param registry AI registrations available to this Bounded Context.
+   * @param admissions Accepted generation snapshots by generation identifier.
+   * @param bySource Accepted generation snapshots by source Event identifier.
+   */
+  private constructor(
+    private readonly options: StudioStartOptions,
+    private readonly context: Awaited<ReturnType<typeof ReleaseNotesContext.create>>,
+    private readonly client: ReturnType<typeof Client.usingTransport>,
+    private readonly registry: AiRegistry,
+    private readonly admissions: Map<string, GenerationAdmission>,
+    private readonly bySource: Map<string, GenerationAdmission>,
+  ) {}
+
+  /**
+   * Starts a fresh in-memory session without restoring drafts or inference.
+   *
+   * @param options Fixed worker and account services from the trusted desktop process.
+   * @returns Ready trusted release workflow.
+   */
+  static async start(options: StudioStartOptions): Promise<ReleaseStudio> {
+    const registry = ReleaseStudio.aiRegistry();
+    const admissions = new Map<string, GenerationAdmission>();
+    const bySource = new Map<string, GenerationAdmission>();
+    ReleaseStudio.registerGit(registry, options, bySource);
+    const context = await ReleaseNotesContext.create(registry, new InMemoryStorageFactory(), {
+      ...(options.registryRoot ? { registryRoot: options.registryRoot } : {}),
+      resolveModel: (kind, scope, source) =>
+        ReleaseStudio.bindModel(kind, scope, source, admissions, bySource),
+    });
+    const services = new SpineServices({ contexts: [context] });
+    const client = Client.usingTransport(
+      createRouterTransport((router) => services.register(router)),
+      // The embedded Node runtime may not expose an IANA system zone.
+      { zoneId: "UTC" },
+    );
+    const studio = new ReleaseStudio(options, context, client, registry, admissions, bySource);
+    try {
+      await studio.startSourceObservation();
+      await studio.startRejectionObservation();
+      return studio;
+    } catch (error) {
+      await studio.close();
+      throw error;
+    }
+  }
+
+  /**
+   * Creates the bounded AI registry with source-aware model resolution.
+   *
+   * @returns Registry configured for the release-notes Agent.
+   */
+  private static aiRegistry(): AiRegistry {
+    return AiRegistry.create({
+      defaultModels: {},
+    });
+  }
+
+  /**
+   * Registers the scoped Git MCP worker without accepting model-selected paths.
+   *
+   * @param registry AI registry for this Bounded Context.
+   * @param options Fixed executable and worker paths.
+   * @param bySource Accepted comparison binding indexed by source Event.
+   */
+  private static registerGit(
+    registry: AiRegistry,
+    options: StudioStartOptions,
+    bySource: ReadonlyMap<string, GenerationAdmission>,
+  ): void {
+    registry.registerTools(
+      ReleaseGitRegistration.create({
+        executable: options.workerExecutable,
+        workerPath: options.workerPath,
+        cwd: options.workerCwd,
+        resolveComparison: (scope) => {
+          const event = scope.source.id && AnyMessages.unpack(scope.source.id, EventIdSchema);
+          const admission = event ? bySource.get(event.value) : undefined;
+          const agent = scope.agent.id && AnyMessages.unpack(scope.agent.id, ReleaseDraftIdSchema);
+          return admission &&
+            admission.draftId === agent?.value &&
+            admission.actor &&
+            scope.tenant.kind === "single-tenant" &&
+            equals(ActorContextSchema, scope.actor, admission.actor)
+            ? admission.comparison
+            : undefined;
+        },
+      }),
+    );
+  }
+
+  /**
+   * Resolves only the selected model bound to an accepted generation Event.
+   *
+   * @param kind Agent operation kind being resolved.
+   * @param scope Framework actor, tenant, and Agent scope.
+   * @param source Original accepted source Event payload.
+   * @param admissions Generation snapshots retained before Command posting.
+   * @param bySource Accepted source Event bindings for MCP lookup.
+   * @returns Authorized model reference, or no model for an unrelated Event.
+   */
+  private static bindModel(
+    kind: string,
+    scope: AiScope,
+    source: Parameters<
+      NonNullable<NonNullable<Parameters<typeof ReleaseNotesContext.create>[2]>["resolveModel"]>
+    >[2],
+    admissions: ReadonlyMap<string, GenerationAdmission>,
+    bySource: Map<string, GenerationAdmission>,
+  ): ModelRef | undefined {
+    if (kind !== "generation") return undefined;
+    const event = AnyMessages.unpack(source, ReleaseGenerationRequestedSchema);
+    if (!event) return undefined;
+    const admission = admissions.get(event.generation?.value ?? "");
+    if (!admission || !Admission.matches(admission, event, scope))
+      throw new Error("Accepted release generation identity does not match its binding.");
+    const sourceId = scope.source.id && AnyMessages.unpack(scope.source.id, EventIdSchema);
+    if (
+      !sourceId?.value ||
+      (admission.sourceEventId && admission.sourceEventId.value !== sourceId.value)
+    )
+      throw new Error("Accepted release generation source Event does not match its binding.");
+    admission.actor = scope.actor;
+    admission.sourceEventId = sourceId;
+    bySource.set(sourceId.value, admission);
+    return admission.model;
+  }
+
+  /**
+   * Activates source Event observation before any generation Command is posted.
+   *
+   * @returns Completion once the subscription can receive authoritative Events.
+   */
+  private async startSourceObservation(): Promise<void> {
+    const topic = create(TopicSchema, {
+      id: create(TopicIdSchema, { value: randomUUID() }),
+      target: create(TargetSchema, {
+        type: TypeUrls.derive(ReleaseGenerationRequestedSchema),
+        criterion: { case: "includeAll", value: true },
+      }),
+      context: new SignalMetadata().actorContext({
+        actor: create(UserIdSchema, { value: "guest" }),
+      }),
+    });
+    const subscription = await this.client.asGuest().createSubscription(topic, { kind: "event" });
+    this.sourceSubscription = subscription;
+    await subscription.activate();
+    void this.observeSources(subscription.updates);
+  }
+
+  /**
+   * Records source Event identifiers independently of model resolution timing.
+   *
+   * @param updates Activated public Event delivery stream.
+   * @returns Completion when observation stops.
+   */
+  private async observeSources(updates: AsyncIterable<SubscriptionDelivery>): Promise<void> {
+    try {
+      for await (const delivery of updates) {
+        const update = delivery.kind === "update" ? delivery.update : undefined;
+        const events = update?.update.case === "eventUpdates" ? update.update.value.event : [];
+        for (const event of events) {
+          const value =
+            event.message && AnyMessages.unpack(event.message, ReleaseGenerationRequestedSchema);
+          const admission = this.admissions.get(value?.generation?.value ?? "");
+          if (
+            admission &&
+            value &&
+            event.id?.value &&
+            Admission.eventMatches(admission, value) &&
+            (!admission.sourceEventId || admission.sourceEventId.value === event.id.value)
+          )
+            admission.sourceEventId = event.id;
+        }
+      }
+    } catch {
+      // An unobserved source stays unknown and therefore locked.
+    }
+  }
+
+  /**
+   * Activates the typed generation rejection stream before Command admission.
+   *
+   * @returns Completion once the subscription can receive rejection Events.
+   */
+  private async startRejectionObservation(): Promise<void> {
+    const topic = create(TopicSchema, {
+      id: create(TopicIdSchema, { value: randomUUID() }),
+      target: create(TargetSchema, {
+        type: TypeUrls.derive(GenerationInputsConflictSchema),
+        criterion: { case: "includeAll", value: true },
+      }),
+      context: new SignalMetadata().actorContext({
+        actor: create(UserIdSchema, { value: "guest" }),
+      }),
+    });
+    const subscription = await this.client.asGuest().createSubscription(topic, { kind: "event" });
+    this.rejectionSubscription = subscription;
+    await subscription.activate();
+    void this.observeRejections(subscription.updates);
+  }
+
+  /**
+   * Records only rejections that match a submitted draft and generation.
+   *
+   * @param updates Activated public Event delivery stream.
+   * @returns Completion when rejection observation stops.
+   */
+  private async observeRejections(updates: AsyncIterable<SubscriptionDelivery>): Promise<void> {
+    try {
+      for await (const delivery of updates) {
+        const update = delivery.kind === "update" ? delivery.update : undefined;
+        const events = update?.update.case === "eventUpdates" ? update.update.value.event : [];
+        for (const event of events) {
+          const rejected =
+            event.message && AnyMessages.unpack(event.message, GenerationInputsConflictSchema);
+          const admission = this.admissions.get(rejected?.generation?.value ?? "");
+          if (admission && rejected?.id?.value === admission.draftId)
+            admission.rejection = "inputs-conflict";
+        }
+      }
+    } catch {
+      // A lost observation remains unknown and keeps admission locked.
+    }
+  }
+
+  /**
+   * Records one native-selected repository comparison using full commit object IDs.
+   *
+   * @param repository Directory returned by the trusted native picker.
+   * @param base Revision selector entered by the editor.
+   * @param target Revision selector entered by the editor.
+   * @returns Selection reference and bounded verified change summary.
+   */
+  async compare(repository: string, base: string, target: string): Promise<StudioComparison> {
+    const sequence = ++this.comparisonSequence;
+    const comparison = await GitReleaseComparison.open({
+      repository,
+      gitExecutable: this.options.gitExecutable,
+      base,
+      target,
+    });
+    const selectionId = randomUUID();
+    if (sequence === this.comparisonSequence) {
+      this.comparisons.set(selectionId, comparison);
+      this.comparisonLabels.set(selectionId, { base, target });
+      this.currentComparisonId = selectionId;
+      this.pruneComparisons();
+    }
+    return this.selection(selectionId, comparison);
+  }
+
+  /**
+   * Deletes evidence catalogs not referenced by drafts or the current selection.
+   */
+  private pruneComparisons(): void {
+    const retained = new Set(this.draftSelections.values());
+    if (this.currentComparisonId) retained.add(this.currentComparisonId);
+    for (const key of this.comparisons.keys()) {
+      if (retained.has(key)) continue;
+      this.comparisons.delete(key);
+      this.comparisonLabels.delete(key);
+    }
+  }
+
+  /**
+   * Opens a native-picked project without revealing its path to the renderer.
+   *
+   * @param repository Native-picked directory path.
+   * @returns Opaque handle, display name, and real local revisions.
+   */
+  async selectProject(
+    repository: string,
+  ): Promise<{ handle: string; name: string; refs: readonly string[] }> {
+    const sequence = ++this.projectSequence;
+    const selected = await GitProject.select(repository, this.options.gitExecutable);
+    const handle = randomUUID();
+    if (sequence === this.projectSequence) {
+      this.projects.clear();
+      this.projects.set(handle, selected.repository);
+      this.currentProjectHandle = handle;
+      this.currentComparisonId = undefined;
+      this.comparisonSequence++;
+      this.pruneComparisons();
+    }
+    return { handle, name: selected.name, refs: selected.refs };
+  }
+
+  /**
+   * Resolves a selected project's real local refs into a pinned comparison.
+   *
+   * @param handle Opaque selected project identifier.
+   * @param base Selected from revision.
+   * @param target Selected to revision.
+   * @returns Pinned comparison and evidence metadata.
+   */
+  async compareProject(handle: string, base: string, target: string): Promise<StudioComparison> {
+    const repository = handle === this.currentProjectHandle ? this.projects.get(handle) : undefined;
+    if (!repository) throw new Error("Selected project is unavailable.");
+    return this.compare(repository, base, target);
+  }
+
+  /**
+   * Reads only an indexed entry of a pinned, recorded evidence catalog.
+   *
+   * @param selectionId Trusted comparison reference.
+   * @param index Evidence position presented by the read-only catalog.
+   * @returns Bounded committed patch or explicit reason for unavailable text.
+   */
+  async evidencePatch(
+    selectionId: string,
+    index: number,
+  ): Promise<{ complete: boolean; patch?: string; reason?: string }> {
+    const comparison = this.comparisons.get(selectionId);
+    if (!comparison || !Number.isInteger(index) || index < 0 || index >= comparison.evidence.length)
+      throw new Error("Selected evidence is unavailable.");
+    const evidence = comparison.evidence[index];
+    if (!evidence) throw new Error("Selected evidence is unavailable.");
+    return comparison.readChangePatch(evidence);
+  }
+
+  /**
+   * Opens one draft with the public client using a pinned comparison.
+   *
+   * @param selectionId Trusted comparison reference returned by compare.
+   * @param title Nonblank release title from the editor.
+   * @param audience Nonblank intended readership from the editor.
+   * @param draftId Draft identifier retained through uncertain acknowledgment.
+   * @returns State and Version read together after the Command is accepted.
+   */
+  async openDraft(
+    selectionId: string,
+    title: string,
+    audience: string,
+    draftId: string = randomUUID(),
+  ): Promise<StudioDraft> {
+    const comparison = this.comparisons.get(selectionId);
+    if (!comparison) throw new Error("Selected comparison is unavailable.");
+    if (!title.trim() || !audience.trim())
+      throw new Error("Release title and audience must be nonblank.");
+    const id = draftId;
+    if (this.drafts.has(id)) return this.reopenDraft(id, selectionId, title, audience);
+    const command = openDraftCommand(id, selectionId, title, audience, comparison);
+    this.pendingDrafts.set(id, command);
+    this.drafts.add(id);
+    this.draftSelections.set(id, selectionId);
+    return this.sharedOpenDraft(id, command);
+  }
+
+  /**
+   * Returns a committed draft or reconciles its retained admission Command.
+   *
+   * @param id Draft identifier.
+   * @param selectionId Selected comparison.
+   * @param title Release title.
+   * @param audience Intended readers.
+   * @returns The confirmed draft.
+   */
+  private async reopenDraft(
+    id: string,
+    selectionId: string,
+    title: string,
+    audience: string,
+  ): Promise<StudioDraft> {
+    const prior = this.pendingDrafts.get(id);
+    const previous = prior ? undefined : await this.readDraft(id);
+    if (
+      (prior?.comparison?.repository?.value ?? previous?.comparison.selectionId) !== selectionId ||
+      (prior?.title?.value ?? previous?.title) !== title ||
+      (prior?.audience ?? previous?.audience) !== audience
+    )
+      throw new Error("Release draft identity conflicts with different inputs.");
+    return previous ?? this.openingDrafts.get(id) ?? this.readDraft(id);
+  }
+
+  /**
+   * Returns the shared opening Command submission for a draft identifier.
+   *
+   * @param id Draft identifier.
+   * @param command Original immutable opening Command.
+   * @returns One confirmed draft for every matching caller.
+   */
+  private sharedOpenDraft(id: string, command: OpenReleaseDraft): Promise<StudioDraft> {
+    const pending = this.openingDrafts.get(id);
+    if (pending) return pending;
+    const opening = this.submitOpenDraft(id, command);
+    this.openingDrafts.set(id, opening);
+    void opening
+      .finally(() => {
+        if (this.openingDrafts.get(id) === opening) this.openingDrafts.delete(id);
+      })
+      .catch(() => undefined);
+    return opening;
+  }
+
+  /**
+   * Posts the retained Command and waits for its Aggregate state.
+   *
+   * @param id Draft identifier.
+   * @param command Original domain Command.
+   * @returns The confirmed draft.
+   */
+  private async submitOpenDraft(id: string, command: OpenReleaseDraft): Promise<StudioDraft> {
+    const result = await this.client.asGuest().post(OpenReleaseDraftSchema, command);
+    if (result.kind !== "ok") {
+      this.pendingDrafts.delete(id);
+      this.drafts.delete(id);
+      this.draftSelections.delete(id);
+      this.pruneComparisons();
+      throw new Error("Opening the release draft was not accepted.");
+    }
+    return this.awaitDraft(id, () => true);
+  }
+
+  /**
+   * Reads the authoritative Aggregate state and Version as one committed snapshot.
+   *
+   * @param id Draft identifier issued by this session.
+   * @returns Detached editor snapshot with its exact Version.
+   */
+  async readDraft(id: string): Promise<StudioDraft> {
+    if (!this.drafts.has(id)) throw new Error("Release draft is unavailable.");
+    const record = await this.context
+      .stand()
+      .readVersioned(ReleaseDraftStateSchema, create(ReleaseDraftIdSchema, { value: id }));
+    if (!record?.state || !record.version) {
+      const pending = this.pendingDrafts.get(id);
+      if (pending) return this.sharedOpenDraft(id, pending);
+      throw new Error("Release draft is unavailable.");
+    }
+    this.pendingDrafts.delete(id);
+    const selectionId = record.state.comparison?.repository?.value ?? "";
+    this.draftSelections.set(id, selectionId);
+    const comparison = this.comparisons.get(selectionId);
+    if (!comparison) throw new Error("Release comparison is unavailable.");
+    const markdown = new Uint8Array(record.state.markdown?.utf8 ?? []);
+    this.observeCreationTime(id, record.version.timestamp);
+    this.observeContentTime(id, markdown, record.version.timestamp);
+    return {
+      id,
+      version: record.version,
+      title: record.state.title?.value ?? "",
+      audience: record.state.audience,
+      comparison: this.selection(selectionId, comparison),
+      generationStatus: record.state.generationStatus,
+      markdown,
+      lastEditedAt: this.contentTimes.get(id)?.at,
+      createdAt: this.creationTimes.get(id),
+    };
+  }
+
+  /**
+   * Records the first confirmed Version timestamp separately from later edits.
+   *
+   * @param id Session draft identifier.
+   * @param stamp Timestamp of the current authoritative Version.
+   */
+  private observeCreationTime(
+    id: string,
+    stamp: MessageShape<typeof VersionSchema>["timestamp"],
+  ): void {
+    if (this.creationTimes.has(id) || !stamp) return;
+    this.creationTimes.set(
+      id,
+      new Date(Number(stamp.seconds) * 1_000 + Math.floor(stamp.nanos / 1_000_000)).toISOString(),
+    );
+  }
+
+  /**
+   * Records the authoritative content-change timestamp for dashboard display.
+   *
+   * @param id Draft identifier.
+   * @param markdown Current authoritative bytes.
+   * @param timestamp Version timestamp of those bytes.
+   */
+  private observeContentTime(
+    id: string,
+    markdown: Uint8Array,
+    timestamp: MessageShape<typeof VersionSchema>["timestamp"],
+  ): void {
+    const previous = this.contentTimes.get(id);
+    if (previous && ReleaseMarkdown.matches(previous.markdown, markdown)) return;
+    const at = timestamp
+      ? new Date(
+          Number(timestamp.seconds) * 1_000 + Math.floor(timestamp.nanos / 1_000_000),
+        ).toISOString()
+      : undefined;
+    this.contentTimes.set(id, { markdown: new Uint8Array(markdown), at });
+  }
+
+  /**
+   * Replaces exact UTF-8 Markdown at the displayed Version.
+   *
+   * @param id Selected draft identifier.
+   * @param version Version read with the displayed state.
+   * @param markdown Complete exact-byte replacement.
+   * @returns Committed draft snapshot after acceptance.
+   */
+  async edit(
+    id: string,
+    version: MessageShape<typeof VersionSchema>,
+    markdown: Uint8Array,
+  ): Promise<StudioDraft> {
+    if (!this.drafts.has(id)) throw new Error("Release draft or Markdown is unavailable.");
+    await this.assertCurrentVersion(id, version);
+    const result = await this.client.asGuest().post(
+      EditReleaseNotesSchema,
+      create(EditReleaseNotesSchema, {
+        id: create(ReleaseDraftIdSchema, { value: id }),
+        expectedVersion: clone(VersionSchema, version),
+        markdown: create(ReleaseMarkdownContentSchema, { utf8: new Uint8Array(markdown) }),
+      }),
+    );
+    if (result.kind !== "ok") throw new Error("The displayed draft Version is stale.");
+    return this.awaitDraft(
+      id,
+      (draft) =>
+        !equals(VersionSchema, draft.version, version) &&
+        ReleaseMarkdown.matches(draft.markdown, markdown),
+    );
+  }
+
+  /**
+   * Reads exact current Markdown bytes from one authoritative draft snapshot.
+   *
+   * @param id Selected draft identifier.
+   * @returns Version, immutable Markdown bytes, and matching digest.
+   */
+  async preview(id: string): Promise<{
+    readonly version: MessageShape<typeof VersionSchema>;
+    readonly markdown: Uint8Array;
+    readonly digest: string;
+  }> {
+    if (!this.drafts.has(id)) throw new Error("Release draft is unavailable.");
+    const read = await this.context
+      .stand()
+      .readVersioned(ReleaseDraftStateSchema, create(ReleaseDraftIdSchema, { value: id }));
+    if (!read?.state.markdown || !read.version) throw new Error("Release draft is unavailable.");
+    const markdown = new Uint8Array(read.state.markdown.utf8);
+    return {
+      version: read.version,
+      markdown,
+      digest: ReleaseMarkdown.digest(markdown),
+    };
+  }
+
+  /**
+   * Returns only bytes from a newly correlated authoritative export Event.
+   * A missing or uncertain Event never grants permission to write a file.
+   *
+   * @param id Selected draft identifier.
+   * @param version Version displayed with the current draft.
+   * @returns Exact immutable current Markdown bytes.
+   */
+  async prepareExport(
+    id: string,
+    version: MessageShape<typeof VersionSchema>,
+  ): Promise<Uint8Array> {
+    if (!this.drafts.has(id)) throw new Error("Release draft is unavailable.");
+    await this.assertCurrentVersion(id, version);
+    const topic = create(TopicSchema, {
+      id: create(TopicIdSchema, { value: randomUUID() }),
+      target: create(TargetSchema, {
+        type: TypeUrls.derive(ExportPreparedSchema),
+        criterion: { case: "includeAll", value: true },
+      }),
+      context: new SignalMetadata().actorContext({
+        actor: create(UserIdSchema, { value: "guest" }),
+      }),
+    });
+    const subscription = await this.client.asGuest().createSubscription(topic, { kind: "event" });
+    try {
+      await subscription.activate();
+      const iterator = subscription.updates[Symbol.asyncIterator]();
+      const next = iterator.next();
+      const result = await this.client.asGuest().post(
+        PrepareExportSchema,
+        create(PrepareExportSchema, {
+          id: create(ReleaseDraftIdSchema, { value: id }),
+          expectedVersion: clone(VersionSchema, version),
+        }),
+      );
+      if (result.kind !== "ok") throw new Error("Export preparation was not accepted.");
+      return await this.awaitExport(next, iterator, id, version);
+    } finally {
+      await subscription.cancel();
+    }
+  }
+
+  /**
+   * Awaits a newly delivered export Event that matches the draft and predispatch Version.
+   *
+   * @param first Delivery already requested before posting the export Command.
+   * @param iterator Activated public Event subscription iterator.
+   * @param id Draft identifier being exported.
+   * @param version Framework Version submitted with export preparation.
+   * @returns Exact export bytes from the correlated Event.
+   */
+  private async awaitExport(
+    first: Promise<IteratorResult<SubscriptionDelivery>>,
+    iterator: AsyncIterator<SubscriptionDelivery>,
+    id: string,
+    version: MessageShape<typeof VersionSchema>,
+  ): Promise<Uint8Array> {
+    let pending = first;
+    for (;;) {
+      const delivery = await this.awaitWhileOpen(pending, "Export Event is not yet confirmed.");
+      if (delivery.done) break;
+      const update = delivery.value.kind === "update" ? delivery.value.update : undefined;
+      const events = update?.update.case === "eventUpdates" ? update.update.value.event : [];
+      for (const event of events) {
+        const bytes = this.exportBytes(event, id, version);
+        if (bytes) return bytes;
+      }
+      pending = iterator.next();
+    }
+    throw new Error("Export Event is not yet confirmed.");
+  }
+
+  /**
+   * Waits for an outcome until this Studio session closes.
+   *
+   * @typeParam Result Pending outcome type.
+   * @param pending Pending authoritative read or Event delivery.
+   * @param message Fixed error when the Studio closes before confirmation.
+   * @returns The outcome observed before shutdown.
+   */
+  private async awaitWhileOpen<Result>(pending: Promise<Result>, message: string): Promise<Result> {
+    const signal = this.lifecycle.signal;
+    if (signal.aborted) throw new Error(message);
+    let onClose: (() => void) | undefined;
+    const closed = new Promise<never>((_resolve, reject) => {
+      onClose = () => {
+        reject(new Error(message));
+      };
+      signal.addEventListener("abort", onClose, { once: true });
+    });
+    try {
+      return await Promise.race([pending, closed]);
+    } finally {
+      if (onClose) signal.removeEventListener("abort", onClose);
+    }
+  }
+
+  /**
+   * Reads bytes only from the correlated authoritative export Event.
+   *
+   * @param event Delivered Event envelope.
+   * @param id Draft identifier expected as event producer and payload.
+   * @param version Predispatch Version of the submitted export Command.
+   * @returns Detached export bytes, or undefined for an unrelated Event.
+   */
+  private exportBytes(
+    event: MessageShape<typeof EventSchema>,
+    id: string,
+    version: MessageShape<typeof VersionSchema>,
+  ): Uint8Array | undefined {
+    const prepared = event.message && AnyMessages.unpack(event.message, ExportPreparedSchema);
+    const producer =
+      event.context?.producerId &&
+      AnyMessages.unpack(event.context.producerId, ReleaseDraftIdSchema);
+    return prepared?.id?.value === id &&
+      producer?.value === id &&
+      event.context?.version &&
+      equals(VersionSchema, event.context.version, version) &&
+      prepared.snapshot?.sourceVersion &&
+      equals(VersionSchema, prepared.snapshot.sourceVersion, version) &&
+      ReleaseMarkdown.digest(prepared.snapshot.markdown) === prepared.snapshot.digest
+      ? new Uint8Array(prepared.snapshot.markdown)
+      : undefined;
+  }
+
+  /**
+   * Rejects an editor action when its displayed framework Version is stale.
+   *
+   * @param id Draft identifier to reread authoritatively.
+   * @param expected Version paired with the displayed editor snapshot.
+   * @returns Completion after the equality check.
+   */
+  private async assertCurrentVersion(
+    id: string,
+    expected: MessageShape<typeof VersionSchema>,
+  ): Promise<void> {
+    const read = await this.readDraft(id);
+    if (!equals(VersionSchema, read.version, expected))
+      throw new Error("The displayed draft Version is stale.");
+  }
+
+  /**
+   * Awaits the authoritative Aggregate outcome matching one accepted editor action.
+   *
+   * @param id Draft identifier to reread through Stand.
+   * @param accepted Predicate matching the intended outcome, beyond a Version change.
+   * @returns Confirmed current draft snapshot.
+   */
+  private async awaitDraft(
+    id: string,
+    accepted: (draft: StudioDraft) => boolean,
+  ): Promise<StudioDraft> {
+    const message = "Draft outcome is not yet confirmed; read current state before another action.";
+    for (;;) {
+      const record = await this.awaitWhileOpen(
+        this.context
+          .stand()
+          .readVersioned(ReleaseDraftStateSchema, create(ReleaseDraftIdSchema, { value: id })),
+        message,
+      );
+      if (record?.state && record.version) {
+        const draft = await this.awaitWhileOpen(this.readDraft(id), message);
+        if (accepted(draft)) return draft;
+      }
+      await this.awaitWhileOpen(new Promise((done) => setTimeout(done, 20)), message);
+    }
+  }
+
+  /**
+   * Admits a complete pinned snapshot only for an active plan account and model.
+   *
+   * @param id Existing draft in this in-memory session.
+   * @param instruction Bounded editor instruction for the model.
+   * @returns Generation identifier retained for later status and history reads.
+   */
+  async requestGeneration(id: string, instruction: string): Promise<string> {
+    if (!this.drafts.has(id)) throw new Error("Release draft is unavailable.");
+    if (this.selectingGeneration || this.accountTransition || this.closeAdmission !== "open")
+      throw new Error("Wait for the active generation or stop it before closing.");
+    this.selectingGeneration = true;
+    try {
+      if (await this.hasActiveGeneration())
+        throw new Error("Wait for the active generation or stop it before closing.");
+      return await this.submitGeneration(id, instruction);
+    } finally {
+      this.selectingGeneration = false;
+    }
+  }
+
+  /**
+   * Retries only the retained generation Command after an uncertain acknowledgment.
+   *
+   * @param generation Identifier retained before the first submission.
+   * @returns The original identifier after its Aggregate receipt is confirmed.
+   */
+  async repeatGeneration(generation: string): Promise<string> {
+    const admission = this.admissions.get(generation);
+    if (!admission || this.generations.get(admission.draftId) !== generation)
+      throw new Error("The original generation Command is unavailable.");
+    if (admission.rejection) throw new Error("Generation inputs changed; read the current draft.");
+    if (this.selectingGeneration || this.accountTransition || this.closeAdmission !== "open")
+      throw new Error("Wait for the current account or generation action.");
+    this.selectingGeneration = true;
+    try {
+      return await this.sendGeneration(generation, admission.draftId, admission);
+    } finally {
+      this.selectingGeneration = false;
+    }
+  }
+
+  /**
+   * Cancels only a matching pending draft generation and preserves current Markdown.
+   *
+   * @param id Draft in this session.
+   * @param generation Exact generation to stop.
+   * @returns Authoritative draft after the cancellation decision.
+   */
+  async cancelGeneration(id: string, generation: string): Promise<StudioDraft> {
+    if (!this.drafts.has(id) || this.generations.get(id) !== generation)
+      throw new Error("Release generation is unavailable.");
+    const canceled = await this.cancellationSubscription(
+      TypeUrls.derive(ReleaseGenerationCanceledSchema),
+    );
+    let ignored: Awaited<ReturnType<typeof this.cancellationSubscription>> | undefined;
+    try {
+      ignored = await this.cancellationSubscription(TypeUrls.derive(CancelIgnoredSchema));
+      this.options.plan.abortGeneration?.(generation);
+      const result = await this.client.asGuest().post(
+        CancelReleaseGenerationSchema,
+        create(CancelReleaseGenerationSchema, {
+          id: create(ReleaseDraftIdSchema, { value: id }),
+          generation: create(ReleaseGenerationIdSchema, { value: generation }),
+        }),
+      );
+      if (result.kind !== "ok") throw new Error("Cancel outcome is unconfirmed; check this draft.");
+      const decision = await this.awaitCancellation(
+        canceled.updates,
+        ignored.updates,
+        id,
+        generation,
+      );
+      return decision === "canceled"
+        ? await this.awaitDraft(id, (draft) => draft.generationStatus === "canceled")
+        : await this.readDraft(id);
+    } finally {
+      await Promise.allSettled([canceled.cancel(), ignored?.cancel()]);
+    }
+  }
+
+  /**
+   * Activates a typed cancellation outcome subscription before posting.
+   *
+   * @param type Domain Event type URL for one cancellation outcome.
+   * @returns Active public Client subscription.
+   */
+  private async cancellationSubscription(type: string) {
+    const topic = create(TopicSchema, {
+      id: create(TopicIdSchema, { value: randomUUID() }),
+      target: create(TargetSchema, { type, criterion: { case: "includeAll", value: true } }),
+      context: new SignalMetadata().actorContext({
+        actor: create(UserIdSchema, { value: "guest" }),
+      }),
+    });
+    const subscription = await this.client.asGuest().createSubscription(topic, { kind: "event" });
+    try {
+      await subscription.activate();
+      return subscription;
+    } catch (error) {
+      await subscription.cancel();
+      throw error;
+    }
+  }
+
+  /**
+   * Waits for the outcome correlated to one draft and generation.
+   *
+   * @param canceled Cancellation Event stream.
+   * @param ignored Ignored-cancellation Event stream.
+   * @param id Draft identifier.
+   * @param generation Generation identifier.
+   * @returns Whether cancellation changed the draft.
+   */
+  private async awaitCancellation(
+    canceled: AsyncIterable<SubscriptionDelivery>,
+    ignored: AsyncIterable<SubscriptionDelivery>,
+    id: string,
+    generation: string,
+  ): Promise<"canceled" | "ignored"> {
+    const streams = [canceled[Symbol.asyncIterator](), ignored[Symbol.asyncIterator]()];
+    const next = streams.map((stream, index) =>
+      stream.next().then((result) => ({ index, result })),
+    );
+    for (;;) {
+      const { index, result } = await this.awaitWhileOpen(
+        Promise.race(next),
+        "Cancel Event is not yet confirmed.",
+      );
+      if (result.done) throw new Error("Cancel Event is not yet confirmed.");
+      const stream = streams[index];
+      if (!stream) throw new Error("Cancel Event stream is unavailable.");
+      next[index] = stream.next().then((value) => ({ index, result: value }));
+      const update = result.value.kind === "update" ? result.value.update : undefined;
+      const events = update?.update.case === "eventUpdates" ? update.update.value.event : [];
+      for (const event of events) {
+        const matched = this.cancellationKind(event, id, generation);
+        if (matched) return matched;
+      }
+    }
+  }
+
+  /**
+   * Returns a cancellation outcome only for the submitted draft and generation.
+   *
+   * @param event Domain Event envelope.
+   * @param id Submitted draft identifier.
+   * @param generation Submitted generation identifier.
+   * @returns Matched outcome or undefined for an unrelated Event.
+   */
+  private cancellationKind(
+    event: MessageShape<typeof EventSchema>,
+    id: string,
+    generation: string,
+  ): "canceled" | "ignored" | undefined {
+    const producer =
+      event.context?.producerId &&
+      AnyMessages.unpack(event.context.producerId, ReleaseDraftIdSchema);
+    if (producer?.value !== id || !event.message) return undefined;
+    const canceled = AnyMessages.unpack(event.message, ReleaseGenerationCanceledSchema);
+    if (canceled?.id?.value === id && canceled.generation?.value === generation) return "canceled";
+    const ignored = AnyMessages.unpack(event.message, CancelIgnoredSchema);
+    if (ignored?.id?.value === id && ignored.generation?.value === generation) return "ignored";
+    return undefined;
+  }
+
+  /**
+   * Acquires account mutation before admission can begin, through the trusted action.
+   *
+   * @typeParam Result Result returned by the account or model operation.
+   * @param action Validated trusted account or model action.
+   * @returns Action result after the reservation is released.
+   */
+  async withAccountTransition<Result>(action: () => Promise<Result>): Promise<Result> {
+    if (this.accountTransition || this.selectingGeneration || this.closeAdmission !== "open")
+      throw new Error("Wait for the current account or generation action.");
+    this.accountTransition = true;
+    try {
+      return await action();
+    } finally {
+      this.accountTransition = false;
+    }
+  }
+
+  /**
+   * Captures a complete comparison, account, model, and Version before posting generation.
+   *
+   * @param id Draft identifier already checked in this session.
+   * @param instruction Editor instruction recorded in the Command.
+   * @returns Generation identifier after the exact receipt is observed.
+   */
+  private async submitGeneration(id: string, instruction: string): Promise<string> {
+    const binding = await this.options.plan.activeBinding();
+    if (!binding) throw new Error("Select an available ChatGPT plan model.");
+    const read = await this.context
+      .stand()
+      .readVersioned(ReleaseDraftStateSchema, create(ReleaseDraftIdSchema, { value: id }));
+    const selectionId = read?.state.comparison?.repository?.value ?? "";
+    const comparison = this.comparisons.get(selectionId);
+    if (!read?.state || !read.version || !read.state.comparison || !comparison)
+      throw new Error("Release draft or comparison is unavailable.");
+    this.registerModel(binding.registration);
+    const ref = binding.registration.ref;
+    const generation = randomUUID();
+    const command = create(RequestReleaseGenerationSchema, {
+      id: create(ReleaseDraftIdSchema, { value: id }),
+      generation: create(ReleaseGenerationIdSchema, { value: generation }),
+      expectedVersion: read.version,
+      catalog: this.catalog(comparison),
+      instruction: create(ReleaseInstructionSchema, {
+        value: instruction.trim() || "Summarize the selected release changes.",
+      }),
+      conversation:
+        read.state.conversation ?? create(ConversationIdSchema, { value: randomUUID() }),
+      selection: this.selectedModel(binding),
+    });
+    this.options.plan.beginGeneration?.(generation);
+    return this.sendGeneration(generation, id, {
+      draftId: id,
+      comparison,
+      comparisonValue: read.state.comparison,
+      command,
+      model: ref,
+    });
+  }
+
+  /**
+   * Captures the account and model reference selected for this generation.
+   *
+   * @param binding Trusted account registration and model choice.
+   * @returns Protobuf model selection retained in the accepted Command.
+   */
+  private selectedModel(
+    binding: NonNullable<Awaited<ReturnType<PlanModelSelection["activeBinding"]>>>,
+  ): MessageShape<typeof ReleaseModelSelectionSchema> {
+    return create(ReleaseModelSelectionSchema, {
+      registration: binding.clientId,
+      account: binding.subject,
+      model: binding.registration.ref,
+    });
+  }
+
+  /**
+   * Registers an authorized model once, even after Bounded Context build.
+   *
+   * @param registration Authorized plan model registration.
+   */
+  private registerModel(
+    registration: NonNullable<
+      Awaited<ReturnType<PlanModelSelection["activeBinding"]>>
+    >["registration"],
+  ): void {
+    const ref = registration.ref;
+    const key = `${ref.name?.value ?? ""}\0${ref.revision?.value ?? ""}`;
+    if (this.registeredModels.has(key)) return;
+    this.registry.register(registration);
+    this.registeredModels.add(key);
+  }
+
+  /**
+   * Posts one generation Command while retaining its immutable admission snapshot.
+   *
+   * @param generation Identifier assigned to this accepted generation.
+   * @param id Draft identifier paired with the generation.
+   * @param admission Accepted account, model, comparison, and Command snapshot.
+   * @returns Identifier after authoritative receipt confirmation.
+   */
+  private async sendGeneration(
+    generation: string,
+    id: string,
+    admission: GenerationAdmission,
+  ): Promise<string> {
+    this.admissions.set(generation, admission);
+    this.generations.set(id, generation);
+    const result = await this.client
+      .asGuest()
+      .post(RequestReleaseGenerationSchema, admission.command);
+    if (result.kind !== "ok") throw new Error("Release generation outcome requires review.");
+    await this.awaitReceipt(id, generation);
+    return generation;
+  }
+
+  /**
+   * Lists only the drafts and latest generation identifiers in this live session.
+   *
+   * @returns Credential-free references for a reloaded renderer.
+   */
+  session(): { drafts: readonly string[]; generations: Readonly<Record<string, string>> } {
+    return { drafts: [...this.drafts], generations: Object.fromEntries(this.generations) };
+  }
+
+  /**
+   * Verifies the Aggregate retained the exact generation receipt before reporting admission.
+   *
+   * @param id Draft identifier to read authoritatively.
+   * @param generation Submitted generation identifier.
+   * @returns Completion when the receipt is visible.
+   */
+  private async awaitReceipt(id: string, generation: string): Promise<void> {
+    const message = "Generation acceptance is unconfirmed; do not start another generation.";
+    for (;;) {
+      if (this.admissions.get(generation)?.rejection)
+        throw new Error("Generation inputs changed; read the current draft.");
+      if (await this.awaitWhileOpen(this.hasReceipt(id, generation), message)) return;
+      await this.awaitWhileOpen(new Promise((done) => setTimeout(done, 20)), message);
+    }
+  }
+
+  /**
+   * Checks the Aggregate's retained generation receipt without inferring Agent completion.
+   *
+   * @param id Release draft identifier in this live session.
+   * @param generation Submitted generation identifier.
+   * @returns Whether the exact generation was accepted by the Aggregate.
+   */
+  private async hasReceipt(id: string, generation: string): Promise<boolean> {
+    const record = await this.context
+      .stand()
+      .readVersioned(ReleaseDraftStateSchema, create(ReleaseDraftIdSchema, { value: id }));
+    return record?.state.receipts.some((item) => item.generation?.value === generation) ?? false;
+  }
+
+  /**
+   * Reads Aggregate acceptance, correlated rejection, and exact Agent execution status.
+   *
+   * @param generation Generation retained before its Command was posted.
+   * @returns Receipt, rejection, and Agent phase when its source Event is known.
+   */
+  async generationObservation(generation: string): Promise<{
+    receipt: boolean;
+    phase: AgentExecutionStatus | undefined;
+    rejection?: "inputs-conflict";
+  }> {
+    const admission = this.admissions.get(generation);
+    if (!admission) return { receipt: false, phase: undefined };
+    if (admission.rejection)
+      return { receipt: false, phase: undefined, rejection: admission.rejection };
+    const receipt = await this.hasReceipt(admission.draftId, generation);
+    const phase = receipt ? await this.generationPhase(generation) : undefined;
+    return { receipt, phase };
+  }
+
+  /**
+   * Reads the exact Agent execution phase for an accepted generation Event.
+   * Missing records and accepted-but-unobserved events remain nonterminal.
+   *
+   * @param generation Generation identifier returned after Command acceptance.
+   * @returns Recorded phase, or undefined while the source Event is unknown.
+   */
+  async generationPhase(generation: string): Promise<AgentExecutionStatus | undefined> {
+    const admission = this.admissions.get(generation);
+    if (!admission?.sourceEventId) return undefined;
+    return this.context
+      .getRepository(ReleaseNotesAgent)
+      .agentExecution(
+        create(ReleaseDraftIdSchema, { value: admission.draftId }),
+        admission.sourceEventId,
+        {},
+      );
+  }
+
+  /**
+   * Checks whether account, model, and new-generation changes must remain locked.
+   * Unknown and completed-pending-commands phases remain locked.
+   *
+   * @returns Whether any accepted or uncertain generation is nonterminal.
+   */
+  async hasActiveGeneration(): Promise<boolean> {
+    for (const admission of this.admissions.values()) {
+      if (admission.rejection) continue;
+      const phase = await this.generationPhase(admission.command.generation?.value ?? "");
+      if (phase !== "completed" && phase !== "terminated") return true;
+    }
+    return false;
+  }
+
+  /**
+   * Checks whether account and model changes must remain fenced.
+   *
+   * @returns Whether selecting another plan binding is unsafe.
+   */
+  async selectionLocked(): Promise<boolean> {
+    return this.selectingGeneration || this.hasActiveGeneration();
+  }
+
+  /**
+   * Acquires a generation-admission fence before an asynchronous native close decision.
+   */
+  reserveClose(): void {
+    if (this.closeAdmission === "open") this.closeAdmission = "reserved";
+  }
+
+  /**
+   * Restores admission when the user chooses Wait or a close decision fails.
+   */
+  releaseCloseReservation(): void {
+    if (this.closeAdmission === "reserved") this.closeAdmission = "open";
+  }
+
+  /**
+   * Marks an accepted native close terminal before cleanup begins.
+   */
+  acceptClose(): void {
+    this.closeAdmission = "accepted";
+  }
+
+  /**
+   * Returns whether trusted RPC actions may still begin.
+   *
+   * @returns Whether close has already been accepted.
+   */
+  isClosing(): boolean {
+    return this.closeAdmission === "accepted";
+  }
+
+  /**
+   * Reads one newest-first category page from the production Agent history index.
+   *
+   * @param id Draft identifier issued by this session.
+   * @param category History category selected by the editor.
+   * @param pageSize Requested bounded page length.
+   * @param cursor Optional opaque continuation returned by the repository.
+   * @returns Detached indexed history page.
+   */
+  async history(
+    id: string,
+    category: "all" | "conversation" | "system" | "domain",
+    pageSize: number,
+    cursor?: string,
+  ): Promise<StudioHistoryPage> {
+    if (!this.drafts.has(id)) throw new Error("Release draft is unavailable.");
+    if (!Number.isSafeInteger(pageSize) || pageSize < 1)
+      throw new Error("History page size must be a positive safe integer.");
+    const read = this.context
+      .getRepository(ReleaseNotesAgent)
+      .agentHistory(create(ReleaseDraftIdSchema, { value: id }), {});
+    const request: HistoryRead = {
+      pageSize,
+      ...(cursor === undefined
+        ? {}
+        : {
+            cursor: create(AgentHistoryCursorSchema, { value: cursor }),
+          }),
+    };
+    if (category === "all") return this.fullHistory(read, request);
+    if (category === "system" || category === "domain")
+      return this.eventHistory(read, request, category);
+    return this.conversationHistory(read, request, id);
+  }
+
+  /**
+   * Reads and encodes one indexed full-history page for the renderer.
+   *
+   * @param read Agent repository history reader.
+   * @param request Positive page size and optional older cursor.
+   * @returns Detached Protobuf JSON records and continuation.
+   */
+  private async fullHistory(
+    read: AgentHistoryReader,
+    request: HistoryRead,
+  ): Promise<StudioHistoryPage> {
+    const page = await read.fullHistory(request);
+    return {
+      items: page.items.map((item) =>
+        toJson(AgentHistoryEntrySchema, item, { registry: historyTypes }),
+      ),
+      ...(page.nextCursor ? { cursor: page.nextCursor.value } : {}),
+    };
+  }
+
+  /**
+   * Reads one indexed system or domain Event page.
+   *
+   * @param read Agent repository history reader.
+   * @param request Positive page size and optional older cursor.
+   * @param category System or domain Event category.
+   * @returns Detached Event records and continuation.
+   */
+  private async eventHistory(
+    read: AgentHistoryReader,
+    request: HistoryRead,
+    category: "system" | "domain",
+  ): Promise<StudioHistoryPage> {
+    const page =
+      category === "system"
+        ? await read.systemEventHistory(request)
+        : await read.domainEventHistory(request);
+    return {
+      items: page.items.map((item) => toJson(EventSchema, item, { registry: historyTypes })),
+      ...(page.nextCursor ? { cursor: page.nextCursor.value } : {}),
+    };
+  }
+
+  /**
+   * Reads the draft's indexed model and tool conversation page.
+   *
+   * @param read Agent repository history reader.
+   * @param request Positive page size and optional older cursor.
+   * @param id Draft whose conversation identifier is read authoritatively.
+   * @returns Detached conversation records and continuation.
+   */
+  private async conversationHistory(
+    read: AgentHistoryReader,
+    request: HistoryRead,
+    id: string,
+  ): Promise<StudioHistoryPage> {
+    const draft = await this.context
+      .stand()
+      .readVersioned(ReleaseDraftStateSchema, create(ReleaseDraftIdSchema, { value: id }));
+    if (!draft?.state.conversation) {
+      if (request.cursor) throw new Error("No generation conversation is available.");
+      return { items: [] };
+    }
+    const page = await read.conversationHistory({
+      ...request,
+      conversation: draft.state.conversation,
+    });
+    return {
+      items: page.items.map((item) =>
+        toJson(ConversationRecordSchema, item, { registry: historyTypes }),
+      ),
+      ...(page.nextCursor ? { cursor: page.nextCursor.value } : {}),
+    };
+  }
+
+  /**
+   * Copies the accepted Git evidence into the typed Agent input catalog.
+   *
+   * @param comparison Immutable committed comparison for this draft.
+   * @returns Model-visible evidence catalog with typed commit identifiers.
+   */
+  private catalog(
+    comparison: GitReleaseComparison,
+  ): MessageShape<typeof ReleaseEvidenceCatalogSchema> {
+    return create(ReleaseEvidenceCatalogSchema, {
+      commits: comparison.commits.map((item) =>
+        create(ReleaseCommitSchema, {
+          id: create(GitCommitIdSchema, { value: item.commit }),
+          parents: item.parents.map((value) => create(GitCommitIdSchema, { value })),
+          subject: item.subject,
+        }),
+      ),
+      changes: comparison.changes.map((item) => create(ReleaseChangeSchema, item)),
+      evidence: comparison.evidence.map((item) =>
+        create(ReleaseEvidenceSchema, {
+          ...item,
+          commit: create(GitCommitIdSchema, { value: item.commit }),
+          parent: create(GitCommitIdSchema, { value: item.parent }),
+        }),
+      ),
+    });
+  }
+
+  /**
+   * Closes the client and Bounded Context without persisting session drafts.
+   *
+   * @returns Completion after the source subscription and runtime close.
+   */
+  async close(): Promise<void> {
+    this.acceptClose();
+    this.closing ??= (async () => {
+      this.lifecycle.abort();
+      const cancellations = await Promise.allSettled([
+        this.sourceSubscription?.cancel(),
+        this.rejectionSubscription?.cancel(),
+      ]);
+      let failure = cancellations.find((item) => item.status === "rejected");
+      try {
+        await this.client.close();
+      } catch (error) {
+        failure ??= { status: "rejected", reason: error };
+      }
+      try {
+        await this.context.close();
+      } catch (error) {
+        failure ??= { status: "rejected", reason: error };
+      }
+      if (failure?.status === "rejected") throw failure.reason;
+    })();
+    await this.closing;
+  }
+
+  /**
+   * Maps a pinned comparison into bounded renderer evidence metadata.
+   *
+   * @param id Identifier assigned to the selected comparison.
+   * @param comparison Immutable Git comparison and evidence catalog.
+   * @returns Credential-free comparison summary.
+   */
+  private selection(id: string, comparison: GitReleaseComparison): StudioComparison {
+    const labels = this.comparisonLabels.get(id);
+    return {
+      selectionId: id,
+      projectName: basename(comparison.workerBinding().repository),
+      baseLabel: labels?.base ?? "Base",
+      targetLabel: labels?.target ?? "Target",
+      base: comparison.baseCommit,
+      target: comparison.targetCommit,
+      changes: comparison.changes.map((change) => ({ ...change })),
+      commits: comparison.commits.map((commit) => ({ ...commit, parents: [...commit.parents] })),
+      evidence: comparison.evidence.map((entry) => ({ ...entry })),
+    };
+  }
+}

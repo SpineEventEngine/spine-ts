@@ -59,3 +59,26 @@ export function packFrameworkArtifacts(options: {
    */
   readonly run: (command: string, args: readonly string[], cwd: string) => void;
 }): readonly SnapshotArtifact[];
+
+/**
+ * Packs and validates framework workspaces after the caller has built them.
+ *
+ * @param options Repository paths and command runner used during packing.
+ * @returns Validated framework artifacts derived from the packed tarballs.
+ */
+export function packBuiltFrameworkArtifacts(options: {
+  /**
+   * Repository root containing built framework workspaces.
+   */
+  readonly root: string;
+
+  /**
+   * Directory that receives the packed tarballs.
+   */
+  readonly destination: string;
+
+  /**
+   * Executes one package-manager command in the requested working directory.
+   */
+  readonly run: (command: string, args: readonly string[], cwd: string) => void;
+}): readonly SnapshotArtifact[];

@@ -8,8 +8,9 @@
     "types": ["node"],
     "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
   },
-  "include": ["generated/**/*.ts", "test-fixtures/**/*.ts"],
+  "include": ["src/**/*.ts", "generated/**/*.ts", "test-fixtures/**/*.ts"],
   "references": [
+    { "path": "../ai-vercel-ax" },
     { "path": "../core" },
     { "path": "../proto" },
     { "path": "../server" },
