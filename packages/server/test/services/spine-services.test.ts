@@ -47,6 +47,7 @@ import {
   EventSchema,
   FieldPathSchema,
   InternetDomainSchema,
+  MessageIdSchema,
   OriginSchema,
   RejectionEventContextSchema,
   TenantIdSchema,
@@ -55,6 +56,7 @@ import {
   ValidationErrorSchema,
   VersionSchema,
   type Event,
+  type Origin,
 } from "@spine-event-engine/proto";
 import { CommandService } from "@spine-event-engine/proto/client";
 import {
@@ -117,6 +119,7 @@ import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
 import { spineServicesAccess } from "../../src/services/spine-services.js";
 import { TaskAlreadyDone } from "../../../../examples/todo/generated/spine/examples/todo/task_rejections.js";
 import { TaskAlreadyDoneSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_rejections_pb.js";
+import { CreateTaskSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_commands_pb.js";
 import {
   TaskIdSchema,
   TaskListIdSchema as TodoTaskListIdSchema,
@@ -2555,6 +2558,52 @@ describe("SpineServices", () => {
     await iterator.return?.();
   });
 
+  it("isolates concurrent same-type event streams by full Command origin and tenant", async () => {
+    const context = BoundedContext.multitenant("CommandOriginEvents")
+      .addEventDispatcher(createDomainEventDispatcher(TaskCreatedSchema))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context);
+    const alice = createCommandOrigin("command-alice", "alice", "tenant-a");
+    const bob = createCommandOrigin("command-bob", "bob", "tenant-a");
+    const first = await handlers.subscribe(
+      createOriginEventTopic("origin-alice", alice, "tenant-a"),
+    );
+    const second = await handlers.subscribe(createOriginEventTopic("origin-bob", bob, "tenant-a"));
+    const firstIterator = handlers.activate(first)[Symbol.asyncIterator]();
+    const secondIterator = handlers.activate(second)[Symbol.asyncIterator]();
+    const firstUpdate = nextBusinessUpdate(firstIterator, first);
+    const secondUpdate = nextBusinessUpdate(secondIterator, second);
+    await awaitSubscriptionAttachment(context, first);
+    await awaitSubscriptionAttachment(context, second);
+    await context
+      .eventBus()
+      .post(
+        createOriginAggregateEvent(
+          "wrong-actor",
+          createCommandOrigin("command-alice", "mallory", "tenant-a"),
+        ),
+      );
+    await context
+      .eventBus()
+      .post(
+        createOriginAggregateEvent(
+          "wrong-tenant",
+          createCommandOrigin("command-alice", "alice", "tenant-b"),
+        ),
+      );
+    await context.eventBus().post(createOriginAggregateEvent("alice-event", alice));
+    await context.eventBus().post(createOriginAggregateEvent("bob-event", bob));
+    expect(eventIdsFromUpdate(await withTimeout(firstUpdate, "Alice origin update"))).toEqual([
+      "alice-event",
+    ]);
+    expect(eventIdsFromUpdate(await withTimeout(secondUpdate, "Bob origin update"))).toEqual([
+      "bob-event",
+    ]);
+    await firstIterator.return?.();
+    await secondIterator.return?.();
+    await context.close();
+  });
+
   it("keeps duplicate activation and cancellation behavior for event subscriptions", async () => {
     const context = BoundedContext.singleTenant("EventLifecycle")
       .addEventDispatcher(createDomainEventDispatcher(TaskCreatedSchema))
@@ -2613,7 +2662,7 @@ describe("SpineServices", () => {
     expect(thrown).toBeInstanceOf(ConnectError);
     expect((thrown as ConnectError).code).toBe(Code.InvalidArgument);
     expect((thrown as ConnectError).rawMessage).toBe(
-      "SubscriptionService.Subscribe event topics support only include_all in this runtime slice.",
+      "SubscriptionService.Subscribe Event filters require a nonempty field filter without id_filter.",
     );
   });
 
@@ -4629,6 +4678,59 @@ function createPastMessageAggregateEvent(id: string, tenantId: string) {
       }),
     ),
   });
+}
+
+function createCommandOrigin(commandId: string, actor: string, tenantId: string): Origin {
+  return create(OriginSchema, {
+    message: create(MessageIdSchema, {
+      id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: commandId })),
+      typeUrl: TypeUrls.derive(CreateTaskSchema),
+    }),
+    actorContext: create(ActorContextSchema, {
+      tenantId: tenantValue(tenantId),
+      actor: create(UserIdSchema, { value: actor }),
+      timestamp: create(TimestampSchema, { seconds: 100n }),
+    }),
+  });
+}
+
+function createOriginAggregateEvent(id: string, origin: Origin): Event {
+  const event = createAggregateEvent(id, `task-${id}`, id);
+  event.context = create(EventContextSchema, { origin: { case: "pastMessage", value: origin } });
+  return event;
+}
+
+function createOriginEventTopic(id: string, origin: Origin, tenantId: string): Topic {
+  const topic = createEventTopic(tenantId);
+  topic.id = create(TopicIdSchema, { value: id });
+  topic.target = create(TargetSchema, {
+    type: TypeUrls.derive(TaskCreatedSchema),
+    criterion: {
+      case: "filters",
+      value: create(TargetFiltersSchema, {
+        filter: [
+          create(CompositeFilterSchema, {
+            operator: CompositeFilter_CompositeOperator.ALL,
+            filter: [
+              create(FilterSchema, {
+                fieldPath: { fieldName: ["context", "past_message"] },
+                operator: Filter_Operator.EQUAL,
+                value: AnyMessages.pack(OriginSchema, origin),
+              }),
+            ],
+          }),
+        ],
+      }),
+    },
+  });
+  return topic;
+}
+
+function eventIdsFromUpdate(delivery: IteratorResult<SubscriptionUpdate, undefined>): string[] {
+  const update = delivery.value;
+  return update?.update.case === "eventUpdates"
+    ? update.update.value.event.map((event) => event.id?.value ?? "")
+    : [];
 }
 
 function createRejectionEvent(

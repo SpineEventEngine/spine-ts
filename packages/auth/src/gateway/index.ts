@@ -85,6 +85,7 @@ export interface UnaryForwarder {
 
   /**
    * Routes an authorized request to its backend service.
+   *
    * @param request Holds the canonical request forwarded to the backend.
    * @returns Resolves to the backend response bytes.
    */
@@ -252,13 +253,14 @@ type Operation =
 type ForwardOperation = Exclude<Operation, { readonly kind: "resolve-context" }>;
 
 /**
- * Transport-neutral B2 unary admission and context-replacement pipeline.
+ * Transport-neutral unary admission pipeline for Commands and Queries.
  */
 export class UnaryGateway {
   readonly #options: UnaryGatewayOptions;
 
   /**
    * Creates a unary admission gateway.
+   *
    * @param options Configures admission, authorization, context, and forwarding collaborators.
    */
   constructor(options: UnaryGatewayOptions) {
@@ -271,6 +273,7 @@ export class UnaryGateway {
 
   /**
    * Handles one admitted unary request.
+   *
    * @param request Supplies owned request bytes, credential, and transport facts.
    * @returns Resolves to forwarded bytes, a trusted context, or a rejection.
    */
@@ -325,6 +328,13 @@ export class UnaryGateway {
       ),
     };
   }
+
+  /**
+   * Resolves an authenticated actor context request.
+   *
+   * @param request The incoming context request.
+   * @returns The gateway result.
+   */
   async #resolveContext(request: UnaryGatewayRequest): Promise<UnaryGatewayResult> {
     try {
       fromBinary(ResolveContextRequestSchema, request.value);
@@ -365,9 +375,23 @@ export class UnaryGateway {
 }
 const UnaryGatewayValues = Object.freeze({
   publicPrincipal: Object.freeze({ id: "spine-gateway-public" }),
+
+  /**
+   * Creates a rejected gateway result.
+   *
+   * @param reason The rejection reason.
+   * @returns The rejected result.
+   */
   reject(reason: UnaryGatewayRejection): UnaryGatewayResult {
     return { kind: "rejected", reason };
   },
+
+  /**
+   * Returns a supported unary operation.
+   *
+   * @param request The incoming request.
+   * @returns The operation or undefined for an unsupported method.
+   */
   operationFor(request: UnaryGatewayRequest): Operation | undefined {
     if (request.service === "spine.client.CommandService" && request.method === "Post")
       return { kind: "command", service: request.service, method: request.method };
@@ -380,6 +404,14 @@ const UnaryGatewayValues = Object.freeze({
       return { kind: "resolve-context", service: request.service, method: request.method };
     return undefined;
   },
+
+  /**
+   * Copies allowlisted transport facts for policy inspection.
+   *
+   * @param operation The selected operation.
+   * @param input The incoming transport facts.
+   * @returns A frozen transport snapshot.
+   */
   snapshotTransport(
     operation: ForwardOperation,
     input: TransportRequestContext,
@@ -398,6 +430,16 @@ const UnaryGatewayValues = Object.freeze({
       ) as unknown as TransportRequestContext,
     );
   },
+
+  /**
+   * Decodes a Command or Query for policy inspection.
+   *
+   * @param operation The selected operation.
+   * @param value The encoded request value.
+   * @param transport The safe transport facts.
+   * @param registry The optional domain schema registry.
+   * @returns The decoded request when supported.
+   */
   decode(
     operation: ForwardOperation,
     value: Uint8Array,
@@ -416,12 +458,28 @@ const UnaryGatewayValues = Object.freeze({
     const result = IncomingRequests.decode(input);
     return result?.kind === "command" || result?.kind === "query" ? result : undefined;
   },
+
+  /**
+   * Checks the requested actor and tenant against trusted resolution.
+   *
+   * @param requested The isolated request actor context.
+   * @param trusted The resolved actor and tenant.
+   * @returns Whether both identity fields agree.
+   */
   matches(requested: ActorContext, trusted: AuthorizedRequestContext): boolean {
     return (
       requested.actor?.value === trusted.actor.value &&
       UnaryGatewayValues.tenantsEqual(requested.tenantId, trusted.tenant)
     );
   },
+
+  /**
+   * Compares complete tenant identifiers.
+   *
+   * @param left The requested tenant.
+   * @param right The resolved tenant.
+   * @returns Whether the identifiers are equal.
+   */
   tenantsEqual(left: TenantId | undefined, right: TenantId | undefined): boolean {
     if (left === undefined || right === undefined) return left === right;
     const leftBytes = toBinary(TenantIdSchema, left);
@@ -431,7 +489,25 @@ const UnaryGatewayValues = Object.freeze({
       leftBytes.every((value, index) => value === rightBytes[index])
     );
   },
+
+  /**
+   * Encodes a validated Command with its original context or a trusted Query context.
+   *
+   * @param source The isolated decoded request.
+   * @param trusted The resolved context for identity checks or Query forwarding.
+   * @returns The forwarded request bytes.
+   */
   rewrite(source: IncomingCommand | IncomingQuery, trusted: AuthorizedRequestContext): Uint8Array {
+    if (source.kind === "command") {
+      const command = clone(CommandSchema, source.command);
+      const commandContext =
+        command.context === undefined
+          ? create(CommandContextSchema)
+          : clone(CommandContextSchema, command.context);
+      commandContext.actorContext = clone(ActorContextSchema, source.requestedContext);
+      command.context = commandContext;
+      return toBinary(CommandSchema, command);
+    }
     const context = create(ActorContextSchema, {
       actor: trusted.actor,
       timestamp: trusted.timestamp,
@@ -439,20 +515,19 @@ const UnaryGatewayValues = Object.freeze({
       ...(trusted.zoneId === undefined ? {} : { zoneId: trusted.zoneId }),
       ...(trusted.language === undefined ? {} : { language: trusted.language }),
     });
-    if (source.kind === "command") {
-      const command = clone(CommandSchema, source.command);
-      const commandContext =
-        command.context === undefined
-          ? create(CommandContextSchema)
-          : clone(CommandContextSchema, command.context);
-      commandContext.actorContext = context;
-      command.context = commandContext;
-      return toBinary(CommandSchema, command);
-    }
     const query = clone(QuerySchema, source.query);
     query.context = context;
     return toBinary(QuerySchema, query);
   },
+
+  /**
+   * Awaits an asynchronous gateway effect or request cancellation.
+   *
+   * @typeParam T The effect result.
+   * @param effect The pending effect.
+   * @param signal The optional cancellation signal.
+   * @returns The effect result unless cancellation wins.
+   */
   abortable<T>(effect: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
     if (signal === undefined) return effect;
     if (signal.aborted) return Promise.reject(new Error("unary operation aborted"));

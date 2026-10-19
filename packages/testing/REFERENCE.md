@@ -43,9 +43,13 @@ stops waiting when close begins.
 operations, cancels tracked subscriptions, closes the client, then closes the
 local server. Operations begun after close starts throw `BlackBoxClosedError`.
 
-Subscriptions created by a scope are inactive until `activate()` and must be
-ended with `cancel()`. The box tracks them so cleanup remains safe if a test
-fails before it cancels one.
+Subscriptions returned by `createSubscription` are inactive until `activate()`
+and must be ended with `cancel()`. The same method accepts several Event schemas,
+and activation accepts the optional `activationTimeoutMs`.
+`postAndSubscribe` activates its selected subscriptions before posting, so an
+accepted result contains an already active handle. It uses the same optional
+first-update notification and continuing updates as the Node client. The box
+tracks these handles for cleanup if a test fails before canceling them.
 
 ## Limits
 

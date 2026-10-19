@@ -35,8 +35,27 @@ const subscriptionRuntimeLoggers = new WeakMap<SubscriptionRuntime, ILogLayer>()
 const subscriptionRuntimes = new WeakSet<SubscriptionRuntime>();
 
 interface SubscriptionRuntimeAccess {
+  /**
+   * Registers the server logger for this runtime.
+   *
+   * @param runtime The subscription runtime.
+   * @param logger The server logger.
+   */
   installLogger(runtime: SubscriptionRuntime, logger: ILogLayer): void;
+
+  /**
+   * Removes a logger association during shutdown.
+   *
+   * @param runtime The subscription runtime.
+   */
   clearLogger(runtime: SubscriptionRuntime): void;
+
+  /**
+   * Returns the runtime's active logger.
+   *
+   * @param runtime The subscription runtime.
+   * @returns The server logger.
+   */
   loggerFor(runtime: SubscriptionRuntime): ILogLayer;
 }
 
@@ -44,7 +63,7 @@ interface SubscriptionRuntimeAccess {
  * Coordinates the local delivery side of one paired bounded context's durable
  * subscription registry.
  *
- * The runtime owns exactly one registry snapshot loop, timer, attachment map,
+ * The runtime maintains one registry snapshot loop, timer, attachment map,
  * and consumer map. It classifies a target from domain Stand metadata before
  * attaching it: domain events observe only the domain bus, while entity-state
  * updates observe only the paired System bus. This keeps a subscription ID and
@@ -55,16 +74,27 @@ interface SubscriptionRuntimeAccess {
  */
 export class SubscriptionRuntime {
   readonly #domainStand: Stand;
+
   readonly #systemStand: Stand;
+
   readonly #domainEventBus: EventBus;
+
   readonly #systemEventBus: EventBus;
+
   readonly #registry: StandSubscriptionRegistry;
+
   readonly #consumers = new Map<string, Set<(update: SubscriptionUpdate) => void>>();
+
   readonly #attachments = new Map<string, LocalSubscriptionAttachment>();
+
   #tail: Promise<void> = Promise.resolve();
+
   #timer: ReturnType<typeof setInterval> | undefined;
+
   #timerReconciliation: Promise<void> | undefined;
+
   #closing = false;
+
   #closed: Promise<void> | undefined;
 
   /**
@@ -145,9 +175,10 @@ export class SubscriptionRuntime {
         if (id === undefined) continue;
         seen.add(id);
         if (entry.phase === "active") await this.#attach(id, entry);
-        else this.remove(id);
+        else await this.#reconcileNonactive(id);
       }
-      for (const id of this.#attachments.keys()) if (!seen.has(id)) this.remove(id);
+      for (const id of new Set([...this.#attachments.keys(), ...this.#consumers.keys()]))
+        if (!seen.has(id)) await this.#reconcileNonactive(id);
     });
     // spine-log-boundary: server.subscription_reconcile_tail
     this.#tail = cycle.catch(() => undefined);
@@ -184,6 +215,18 @@ export class SubscriptionRuntime {
   remove(id: string): void {
     this.#consumers.delete(id);
     this.#detach(id);
+  }
+
+  /**
+   * Rechecks a stale pending or absent snapshot entry before dropping local consumers.
+   * @param id The durable subscription ID.
+   * @returns Completion after current registry state is applied.
+   */
+  async #reconcileNonactive(id: string): Promise<void> {
+    const current = await this.#registry.get(create(SubscriptionIdSchema, { value: id }));
+    if (current?.phase === "active") await this.#attach(id, current);
+    else if (current === undefined) this.remove(id);
+    else this.#detach(id);
   }
 
   #detach(id: string): void {
@@ -388,18 +431,34 @@ export class SubscriptionRuntime {
  * @internal
  */
 export const subscriptionRuntimeAccess: SubscriptionRuntimeAccess = Object.freeze({
+  /**
+   * Installs a logger for one validated subscription runtime.
+   * @param runtime The runtime receiving logging metadata.
+   * @param logger The server logger.
+   */
   installLogger(runtime: SubscriptionRuntime, logger: ILogLayer): void {
     if (!subscriptionRuntimes.has(runtime)) {
       throw new TypeError("Subscription runtime logger requires a SubscriptionRuntime instance.");
     }
     subscriptionRuntimeLoggers.set(runtime, logger);
   },
+
+  /**
+   * Clears logger metadata for one validated subscription runtime.
+   * @param runtime The runtime whose logger is removed.
+   */
   clearLogger(runtime: SubscriptionRuntime): void {
     if (!subscriptionRuntimes.has(runtime)) {
       throw new TypeError("Subscription runtime logger requires a SubscriptionRuntime instance.");
     }
     subscriptionRuntimeLoggers.delete(runtime);
   },
+
+  /**
+   * Returns the installed logger for a validated subscription runtime.
+   * @param runtime The runtime to inspect.
+   * @returns The installed server logger.
+   */
   loggerFor(runtime: SubscriptionRuntime): ILogLayer {
     if (!subscriptionRuntimes.has(runtime)) {
       throw new TypeError("Subscription runtime logger requires a SubscriptionRuntime instance.");

@@ -13,7 +13,8 @@
  */
 
 // @vitest-environment jsdom
-import { create } from "@bufbuild/protobuf";
+import { create, fromBinary, toBinary, type Message, type MessageShape } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import {
   BoardMessageViewSchema,
@@ -21,22 +22,32 @@ import {
   MessageIdSchema,
 } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/message_board_pb.js";
 import { UserIdSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/user_pb.js";
+import { MessagePostedSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/events_pb.js";
+import { MessageAlreadyPostedSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/rejections_pb.js";
+import {
+  PostMessageSchema,
+  type PostMessage,
+} from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/commands_pb.js";
 import { AnyMessages } from "@spine-event-engine/core";
 import {
   ConstraintViolationSchema,
   ErrorSchema,
+  EventSchema,
   FieldPathSchema,
   TemplateStringSchema,
   ValidationErrorSchema,
 } from "@spine-event-engine/proto";
 import type {
   ClientOperationOptions,
-  ClientOutcome,
+  CommandAcknowledgement,
   ClientRequest,
+  PostAndSubscribeOptions,
+  PostAndSubscribeResult,
 } from "@spine-event-engine/client-web";
 import {
   EntityStateUpdateSchema,
   EntityUpdatesSchema,
+  EventUpdatesSchema,
   SubscriptionUpdateSchema,
   type Query,
 } from "@spine-event-engine/proto/client";
@@ -52,10 +63,10 @@ type FixtureSend = (
   options?: FixtureOptions,
 ) => ReturnType<ClientRequest["send"]>;
 type FixturePost = (
-  schema: Parameters<ClientRequest["post"]>[0],
-  message: Parameters<ClientRequest["post"]>[1],
-  options?: FixtureOptions,
-) => Promise<ClientOutcome>;
+  schema: typeof PostMessageSchema,
+  message: PostMessage,
+  options: PostAndSubscribeOptions,
+) => Promise<PostAndSubscribeResult>;
 
 describe("MessageBoardApp", () => {
   afterEach(() => {
@@ -71,14 +82,17 @@ describe("MessageBoardApp", () => {
     await screen.findByText("general message");
     fillPost("Hello board");
     fireEvent.click(screen.getByRole("button", { name: "Post message" }));
-    await waitFor(() => expect(request.post).toHaveBeenCalledTimes(1));
-    expect(request.post.mock.calls[0]?.[0].typeName).toBe(
+    await waitFor(() => expect(request.postCalls).toHaveBeenCalledTimes(1));
+    expect(request.postCalls.mock.calls[0]?.[0].typeName).toBe(
       "spine.examples.messageboard.PostMessage",
     );
     expect((request.send.mock.calls[0]?.[0] as Query).format?.orderBy).toEqual([
       expect.objectContaining({ column: "posted_at", direction: 1 }),
     ]);
-    expect(request.post.mock.calls[0]?.[1]).toMatchObject({ username: "Ada", text: "Hello board" });
+    expect(request.postCalls.mock.calls[0]?.[1]).toMatchObject({
+      username: "Ada",
+      text: "Hello board",
+    });
     await waitFor(() => {
       expect((screen.getByRole("textbox", { name: "Username" }) as HTMLInputElement).value).toBe(
         "Ada",
@@ -89,6 +103,61 @@ describe("MessageBoardApp", () => {
     });
     expect(screen.getByText("general message")).toBeTruthy();
     expect(screen.queryByText("other board message")).toBeNull();
+  });
+
+  it("keeps a post pending after its admission acknowledgement and late notice", async () => {
+    const request = requestFixture({ deferredConfirmation: true });
+    render(createElement(MessageBoardApp, { actor: "ada", request, board: "general" }));
+    await screen.findByText("general message");
+    fillPost("Confirm me");
+    fireEvent.click(screen.getByRole("button", { name: "Post message" }));
+    await waitFor(() => expect(request.postCalls).toHaveBeenCalledTimes(1));
+    await screen.findByText("Message accepted; waiting for confirmation…");
+    expect((screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement).value).toBe(
+      "Confirm me",
+    );
+    const options = request.postCalls.mock.calls[0]?.[2];
+    await options?.onFirstUpdateTimeout?.(request.postSubscription);
+    await screen.findByText("Still waiting for confirmation. Do not repost yet.");
+    const message = request.postCalls.mock.calls[0]?.[1];
+    if (message === undefined) throw new Error("Expected posted message.");
+    request.postSubscription.emitUpdate(
+      eventUpdate(
+        MessagePostedSchema,
+        create(MessagePostedSchema, {
+          id: message.id,
+          board: message.board,
+          author: message.author,
+          username: message.username,
+          text: message.text,
+          postedAt: message.postedAt,
+        }),
+      ),
+    );
+    await waitFor(() => expect(request.postSubscription.cancel).toHaveBeenCalledTimes(1));
+    expect((screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement).value).toBe(
+      "",
+    );
+  });
+
+  it("shows a matching MessageAlreadyPosted rejection and cancels only its post stream", async () => {
+    const request = requestFixture({ deferredConfirmation: true });
+    render(createElement(MessageBoardApp, { actor: "ada", request, board: "general" }));
+    await screen.findByText("general message");
+    fillPost("Duplicate");
+    fireEvent.click(screen.getByRole("button", { name: "Post message" }));
+    await screen.findByText("Message accepted; waiting for confirmation…");
+    const message = request.postCalls.mock.calls[0]?.[1];
+    if (message?.id === undefined) throw new Error("Expected posted message ID.");
+    request.postSubscription.emitUpdate(
+      eventUpdate(
+        MessageAlreadyPostedSchema,
+        create(MessageAlreadyPostedSchema, { id: message.id }),
+      ),
+    );
+    await screen.findByText("This message was already posted.");
+    await waitFor(() => expect(request.postSubscription.cancel).toHaveBeenCalledTimes(1));
+    expect(request.subscription.cancel).not.toHaveBeenCalled();
   });
 
   it("re-queries authoritatively after a lifecycle gap", async () => {
@@ -292,7 +361,7 @@ describe("MessageBoardApp", () => {
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
     fillPost("posted after rejected refresh");
     fireEvent.click(screen.getByRole("button", { name: "Post message" }));
-    await waitFor(() => expect(request.post).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(request.postCalls).toHaveBeenCalledTimes(1));
 
     request.query.rejectAt(1, new Error("hint unavailable"));
 
@@ -378,14 +447,14 @@ describe("MessageBoardApp", () => {
     fireEvent.click(screen.getByRole("button", { name: "Post message" }));
     fireEvent.submit(screen.getByRole("textbox", { name: "Message" }).closest("form")!);
     await screen.findByRole("alert");
-    expect(request.post).toHaveBeenCalledTimes(1);
+    expect(request.postCalls).toHaveBeenCalledTimes(1);
     expect((screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement).value).toBe(
       " keep this ",
     );
     fireEvent.click(screen.getByRole("button", { name: "Post message" }));
-    await waitFor(() => expect(request.post).toHaveBeenCalledTimes(2));
-    const first = postPayload(request.post.mock.calls[0]?.[1]);
-    const second = postPayload(request.post.mock.calls[1]?.[1]);
+    await waitFor(() => expect(request.postCalls).toHaveBeenCalledTimes(2));
+    const first = postPayload(request.postCalls.mock.calls[0]?.[1]);
+    const second = postPayload(request.postCalls.mock.calls[1]?.[1]);
     expect(second).toMatchObject(first);
     await waitFor(() =>
       expect((screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement).value).toBe(
@@ -399,8 +468,8 @@ describe("MessageBoardApp", () => {
     render(createElement(MessageBoardApp, { actor: "ada", request, board: "general" }));
     await screen.findByText("general message");
     fireEvent.click(screen.getByRole("button", { name: "Post message" }));
-    await waitFor(() => expect(request.post).toHaveBeenCalledTimes(1));
-    expect(request.post.mock.calls[0]?.[1]).toMatchObject({ username: "", text: "" });
+    await waitFor(() => expect(request.postCalls).toHaveBeenCalledTimes(1));
+    expect(request.postCalls.mock.calls[0]?.[1]).toMatchObject({ username: "", text: "" });
   });
 
   it("preserves entered whitespace for server-owned validation", async () => {
@@ -411,8 +480,8 @@ describe("MessageBoardApp", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Post message" }));
 
-    await waitFor(() => expect(request.post).toHaveBeenCalledTimes(1));
-    expect(request.post.mock.calls[0]?.[1]).toMatchObject({
+    await waitFor(() => expect(request.postCalls).toHaveBeenCalledTimes(1));
+    expect(request.postCalls.mock.calls[0]?.[1]).toMatchObject({
       username: " Ada ",
       text: " keep this text ",
     });
@@ -428,7 +497,7 @@ describe("MessageBoardApp", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Post message" }));
 
-    await waitFor(() => expect(request.post).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(request.postCalls).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
     request.query.resolveAt(1, responseRows("posted without update"));
     await screen.findByText("posted without update");
@@ -447,7 +516,7 @@ describe("MessageBoardApp", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Post message" }));
 
-    await waitFor(() => expect(request.post).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(request.postCalls).toHaveBeenCalledTimes(1));
     expect(request.send).toHaveBeenCalledTimes(1);
     request.subscription.emitUpdate(stateUpdate(view("posted live", "general", 2n)));
     await screen.findByText("posted live");
@@ -468,7 +537,7 @@ describe("MessageBoardApp", () => {
     await screen.findByText("Updating live");
     fillPost("disconnecting post");
     fireEvent.click(screen.getByRole("button", { name: "Post message" }));
-    await waitFor(() => expect(request.post).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(request.postCalls).toHaveBeenCalledTimes(1));
     request.subscription.emitLifecycle({
       state: "failed",
       generation: 1,
@@ -488,7 +557,7 @@ describe("MessageBoardApp", () => {
     await screen.findByText("initial");
     fillPost("connecting post");
     fireEvent.click(screen.getByRole("button", { name: "Post message" }));
-    await waitFor(() => expect(request.post).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(request.postCalls).toHaveBeenCalledTimes(1));
     request.subscription.emitLifecycle({ state: "connected", generation: 1 });
     await screen.findByText("Updating live");
 
@@ -589,7 +658,7 @@ describe("MessageBoardApp", () => {
     await waitFor(() => expect(error).toHaveBeenCalledTimes(1));
     fillPost("console message");
     fireEvent.click(screen.getByRole("button", { name: "Post message" }));
-    await waitFor(() => expect(request.post).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(request.postCalls).toHaveBeenCalledTimes(1));
     rendered.unmount();
 
     expect(info).toHaveBeenCalledWith(
@@ -676,17 +745,17 @@ describe("MessageBoardApp", () => {
 
     fillPost("first shortcut");
     fireEvent.keyDown(message, { key: "Enter" });
-    expect(request.post).not.toHaveBeenCalled();
+    expect(request.postCalls).not.toHaveBeenCalled();
     fireEvent.keyDown(message, { key: "Enter", metaKey: true });
-    await waitFor(() => expect(request.post).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(request.postCalls).toHaveBeenCalledTimes(1));
 
     fillPost("second shortcut");
     fireEvent.keyDown(message, { key: "Enter", ctrlKey: true });
-    await waitFor(() => expect(request.post).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(request.postCalls).toHaveBeenCalledTimes(2));
 
     fillPost("composing shortcut");
     fireEvent.keyDown(message, { key: "Enter", ctrlKey: true, isComposing: true });
-    expect(request.post).toHaveBeenCalledTimes(2);
+    expect(request.postCalls).toHaveBeenCalledTimes(2);
   });
 
   it("refreshes the authoritative board after shortcut posting with a failed subscription", async () => {
@@ -709,7 +778,7 @@ describe("MessageBoardApp", () => {
       metaKey: true,
     });
 
-    await waitFor(() => expect(request.post).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(request.postCalls).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
     request.query.resolveAt(1, responseRows("initial", "posted without subscription update"));
     await screen.findByText("posted without subscription update");
@@ -730,8 +799,10 @@ describe("MessageBoardApp", () => {
     fireEvent.click(screen.getByRole("button", { name: "Post message" }));
     await screen.findByRole("alert");
     fireEvent.click(screen.getByRole("button", { name: "Post message" }));
-    await waitFor(() => expect(request.post).toHaveBeenCalledTimes(2));
-    expect(request.post.mock.calls[1]?.[1]).toMatchObject(request.post.mock.calls[0]?.[1] as {});
+    await waitFor(() => expect(request.postCalls).toHaveBeenCalledTimes(2));
+    expect(request.postCalls.mock.calls[1]?.[1]).toMatchObject(
+      request.postCalls.mock.calls[0]?.[1] as {},
+    );
   });
 
   it("aborts a deferred post and suppresses its late completion after unmount", async () => {
@@ -742,8 +813,8 @@ describe("MessageBoardApp", () => {
     await screen.findByText("general message");
     fillPost("late post");
     fireEvent.click(screen.getByRole("button", { name: "Post message" }));
-    await waitFor(() => expect(request.post).toHaveBeenCalledTimes(1));
-    const options = postedOptions(request.post, 0);
+    await waitFor(() => expect(request.postCalls).toHaveBeenCalledTimes(1));
+    const options = postedOptions(request.postCalls, 0);
     rendered.unmount();
     expect(options.signal.aborted).toBe(true);
     request.postDeferred.resolve({ kind: "ok" });
@@ -783,8 +854,8 @@ describe("MessageBoardApp", () => {
     const refreshOptions = calledOptions(request.send, 1);
     fillPost("old message");
     fireEvent.click(screen.getByRole("button", { name: "Post message" }));
-    await waitFor(() => expect(request.post).toHaveBeenCalledTimes(1));
-    const postOptions = postedOptions(request.post, 0);
+    await waitFor(() => expect(request.postCalls).toHaveBeenCalledTimes(1));
+    const postOptions = postedOptions(request.postCalls, 0);
 
     rendered.rerender(createElement(MessageBoardApp, { actor: "ada", request, board: "board-b" }));
 
@@ -808,7 +879,7 @@ describe("MessageBoardApp", () => {
     expect(screen.getByText("board-b initial")).toBeTruthy();
     fillPost("new message");
     fireEvent.click(screen.getByRole("button", { name: "Post message" }));
-    await waitFor(() => expect(request.post).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(request.postCalls).toHaveBeenCalledTimes(2));
     request.subscription.emitUpdate();
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(4));
   });
@@ -841,12 +912,17 @@ function requestFixture(
     initialRows?: ReturnType<typeof responseRows>;
     deferredPost?: boolean;
     retainCancelledSubscription?: boolean;
+    deferredConfirmation?: boolean;
   } = {},
 ) {
   const queries = [Promise.withResolvers<ReturnType<typeof responseRows>>()];
-  const postDeferred = Promise.withResolvers<ClientOutcome>();
+  const postDeferred = Promise.withResolvers<CommandAcknowledgement>();
   const subscriptions: ReturnType<typeof subscriptionFixture>[] = [];
+  const postSubscriptions: ReturnType<typeof subscriptionFixture>[] = [];
+  const postCalls = fixturePost(fixtureOptions, postDeferred, postSubscriptions);
   return {
+    postCalls,
+    post: vi.fn<ClientRequest["post"]>(() => Promise.resolve({ kind: "ok" })),
     send: vi.fn<FixtureSend>(() => {
       if (fixtureOptions.deferredQuery) return queries[0]!.promise;
       if (fixtureOptions.queuedQueries) {
@@ -858,7 +934,19 @@ function requestFixture(
         fixtureOptions.initialRows ?? responseRows("general message", "other board message"),
       );
     }),
-    post: fixturePost(fixtureOptions, postDeferred),
+    postAndSubscribe<Schema extends GenMessage<Message>>(
+      schema: Schema,
+      message: MessageShape<Schema>,
+      options: PostAndSubscribeOptions,
+    ): Promise<PostAndSubscribeResult> {
+      if (schema.typeName !== PostMessageSchema.typeName)
+        return Promise.reject(new TypeError("Fixture expects a PostMessage Command."));
+      return postCalls(
+        PostMessageSchema,
+        fromBinary(PostMessageSchema, toBinary(schema, message)),
+        options,
+      );
+    },
     createSubscription: vi.fn(async (_topic, subscriptionOptions) => {
       const subscription = subscriptionFixture({
         cancelEnds: !fixtureOptions.retainCancelledSubscription,
@@ -871,6 +959,9 @@ function requestFixture(
     }),
     get subscription() {
       return subscriptions.at(-1)!;
+    },
+    get postSubscription() {
+      return postSubscriptions.at(-1)!;
     },
     query: {
       resolve(value: ReturnType<typeof responseRows>) {
@@ -984,22 +1075,96 @@ function fixturePost(
     readonly postResultFailure?: boolean;
     readonly validationFailure?: boolean;
     readonly postFailure?: boolean;
+    readonly deferredConfirmation?: boolean;
   },
-  deferred: PromiseWithResolvers<ClientOutcome>,
+  deferred: PromiseWithResolvers<CommandAcknowledgement>,
+  postSubscriptions: ReturnType<typeof subscriptionFixture>[],
 ) {
   let attempts = 0;
-  return vi.fn<FixturePost>(() => {
+  return vi.fn<FixturePost>(async (_schema, message) => {
     attempts += 1;
-    if (options.deferredPost) return deferred.promise;
-    if (options.validationFailure) return Promise.resolve(validationOutcome());
+    if (options.deferredPost)
+      return postResult(
+        await deferred.promise,
+        message,
+        postSubscriptions,
+        options.deferredConfirmation,
+      );
+    if (options.validationFailure)
+      return postResult(
+        validationOutcome(),
+        message,
+        postSubscriptions,
+        options.deferredConfirmation,
+      );
+    if (message.username.length === 0 || message.text.length === 0)
+      return postResult(
+        validationOutcome(),
+        message,
+        postSubscriptions,
+        options.deferredConfirmation,
+      );
     if (options.postResultFailure && attempts === 1)
-      return Promise.resolve({ kind: "rejection", rejection: {} as never });
-    if (options.postFailure && attempts === 1) return Promise.reject(new Error("post unavailable"));
-    return Promise.resolve({ kind: "ok" });
+      return postResult(
+        { kind: "rejection", rejection: {} as never },
+        message,
+        postSubscriptions,
+        options.deferredConfirmation,
+      );
+    if (options.postFailure && attempts === 1) throw new Error("post unavailable");
+    return postResult({ kind: "ok" }, message, postSubscriptions, options.deferredConfirmation);
   });
 }
 
-function validationOutcome(): ClientOutcome {
+function postResult(
+  acknowledgement: CommandAcknowledgement,
+  message: PostMessage,
+  postSubscriptions: ReturnType<typeof subscriptionFixture>[],
+  deferredConfirmation = false,
+): PostAndSubscribeResult {
+  if (acknowledgement.kind !== "ok") return { kind: "refused", acknowledgement };
+  const subscription = subscriptionFixture();
+  postSubscriptions.push(subscription);
+  if (!deferredConfirmation)
+    queueMicrotask(() =>
+      subscription.emitUpdate(
+        eventUpdate(
+          MessagePostedSchema,
+          create(MessagePostedSchema, {
+            id: message.id,
+            board: message.board,
+            author: message.author,
+            username: message.username,
+            text: message.text,
+            postedAt: message.postedAt,
+          }),
+        ),
+      ),
+    );
+  return { kind: "accepted", acknowledgement, subscription };
+}
+
+function eventUpdate(
+  schema: typeof MessagePostedSchema | typeof MessageAlreadyPostedSchema,
+  message:
+    | ReturnType<typeof create<typeof MessagePostedSchema>>
+    | ReturnType<typeof create<typeof MessageAlreadyPostedSchema>>,
+) {
+  return create(SubscriptionUpdateSchema, {
+    update: {
+      case: "eventUpdates",
+      value: create(EventUpdatesSchema, {
+        event: [
+          create(EventSchema, {
+            message: AnyMessages.pack(schema as typeof MessagePostedSchema, message as never),
+          }),
+        ],
+      }),
+    },
+  });
+}
+
+function validationOutcome(): CommandAcknowledgement {
   const details = create(ValidationErrorSchema, {
     constraintViolation: [
       create(ConstraintViolationSchema, {

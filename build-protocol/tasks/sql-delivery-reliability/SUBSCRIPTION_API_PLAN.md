@@ -1,12 +1,12 @@
 # Command outcome subscriptions and subscription startup timeouts
 
-Status: independently reviewed; all findings addressed. No product questions
-remain. Implementation has not started.
+Status: independently reviewed; all findings addressed. Implementation authorized
+and in progress. No product questions remain.
 
 This is an addition to the existing `sql-delivery-subscription-reliability`
 branch in its current worktree. Do not create another branch or worktree, reset
-to master, or change other agents' files. The scope of the current request is
-to write and independently review this plan, then ask any necessary questions.
+to master, or change other agents' files. The author approved implementation
+after independent review of this plan.
 
 ## Purpose and binding requirements
 
@@ -154,8 +154,8 @@ allowance for observing the Command's outcomes.
 The first actual matching update from any selected type satisfies the timer;
 the first valid Entity state delivery satisfies it for Entity subscriptions.
 Readiness acknowledgements, heartbeats, empty protocol envelopes, and lifecycle
-notices do not. Specify how authoritative Entity recovery deliveries count so
-the behavior remains consistent with the existing `updates` contract.
+notices do not. A successful authoritative Entity recovery delivery counts,
+including an empty result, consistent with the existing `updates` contract.
 
 Clear the timer at update receipt, not at application consumption. Preserve
 updates arriving before the posting acknowledgement. Never restart the timer
@@ -217,13 +217,19 @@ normal Protobuf value equality. Origin construction includes the signal
 identity, actor context, and preceding origin where present. It refers to the
 immediately preceding signal, not an invented root-chain match.
 
-The TS authentication gateway currently replaces the Command's ActorContext,
-including its timestamp. This can make the client-created expected origin
-differ from the origin attached to the Event. First reproduce that mismatch
-and establish the correct TS context-handling change while preserving existing
-authentication/authorization checks. Do not weaken matching to work around it
-or silently change trusted identity behavior. If resolving it reveals a genuine
-product/security decision, present the concrete evidence and alternatives.
+The starting gateway replaces the Command's ActorContext, including its
+timestamp, which makes the expected Origin differ from the Event's Origin.
+Preserve the original Command context after the existing authentication,
+authorization, context resolution, and actor/tenant checks. Queries and
+subscription Topic contexts keep their resolver-supplied context. Command
+creation time and locale remain caller-supplied request metadata; preserve
+isolation from mutable policy/resolver request views.
+
+Use stable Protobuf value equality for the complete supported Origin. Reject
+expected Origin filters containing unknown fields in their nested message
+structure; actual Origins with such fields do not match. Leave packed Any
+payloads opaque. This preserves JVM equality for supported filters without
+silently ignoring unknown fields or introducing a general comparator.
 
 Source baseline checked during analysis: core-jvm
 `1ebc52b91936cddb8c79de744ec2712e7dc6fe50`, `EventsAfterCommand.java`,
@@ -332,5 +338,4 @@ do not add a duplicate bump mechanically. No PR creation or merge is authorized.
 
 Estimated implementation effort: 10–16 hours for implementation, verification,
 examples, documentation, and review, plus CI waiting. The exact gateway context
-correction is the main uncertainty. The current request stops after plan review
-and any necessary questions; this estimate is not a claim work has started.
+correction is the main uncertainty.

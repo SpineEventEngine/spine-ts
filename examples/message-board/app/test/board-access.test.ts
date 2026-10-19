@@ -30,13 +30,18 @@ import {
   MessageIdSchema,
 } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/message_board_pb.js";
 import { PostMessageSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/commands_pb.js";
+import { MessagePostedSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/events_pb.js";
+import { MessageAlreadyPostedSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/rejections_pb.js";
 import { UserIdSchema as BoardUserIdSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/user_pb.js";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyMessages, type MessageSchema } from "@spine-event-engine/core";
 import {
   AckSchema,
   ActorContextSchema,
   CommandContextSchema,
   CommandSchema,
+  CommandIdSchema,
+  MessageIdSchema as CoreMessageIdSchema,
+  OriginSchema,
   TenantIdSchema,
   UserIdSchema,
 } from "@spine-event-engine/proto";
@@ -64,6 +69,75 @@ const principal: AuthenticatedPrincipal = {
 };
 
 describe("MessageBoard gateway policy", () => {
+  it("allows only a self-origin PostMessage outcome topic with matching tenant", async () => {
+    const policy = new BoardAccessPolicy();
+    const context = create(ActorContextSchema, {
+      actor: create(UserIdSchema, { value: "ada" }),
+      tenantId: create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } }),
+    });
+    const authenticated = { ...principal, attributes: { boards: "board-a", tenant: "tenant-a" } };
+    for (const schema of [MessagePostedSchema, MessageAlreadyPostedSchema])
+      await expect(policy.authorize(authenticated, outcomeRequest(schema, context))).resolves.toBe(
+        true,
+      );
+    await expect(
+      policy.authorize(
+        { id: "spine-gateway-public" },
+        outcomeRequest(MessagePostedSchema, publicContext(), { tenant: null }),
+      ),
+    ).resolves.toBe(true);
+    await expect(
+      policy.authorize(
+        authenticated,
+        outcomeRequest(
+          MessagePostedSchema,
+          create(ActorContextSchema, { actor: create(UserIdSchema, { value: "mallory" }) }),
+        ),
+      ),
+    ).resolves.toBe(false);
+    await expect(
+      policy.authorize(
+        authenticated,
+        outcomeRequest(MessagePostedSchema, context, { actor: "mallory" }),
+      ),
+    ).resolves.toBe(false);
+    await expect(
+      policy.authorize(
+        authenticated,
+        outcomeRequest(MessagePostedSchema, context, { tenant: "tenant-z" }),
+      ),
+    ).resolves.toBe(false);
+    await expect(
+      policy.authorize(
+        authenticated,
+        outcomeRequest(MessagePostedSchema, context, {
+          commandType: TypeUrls.derive(MessagePostedSchema),
+        }),
+      ),
+    ).resolves.toBe(false);
+    await expect(
+      policy.authorize(
+        authenticated,
+        outcomeRequest(MessagePostedSchema, context, { fieldPath: ["context", "origin"] }),
+      ),
+    ).resolves.toBe(false);
+    await expect(
+      policy.authorize(authenticated, outcomeRequest(PostMessageSchema, context)),
+    ).resolves.toBe(false);
+    const unscoped = outcomeRequest(MessagePostedSchema, context);
+    if (unscoped.kind !== "subscribe") throw new Error("Expected subscription request.");
+    const target = create(TargetSchema, {
+      ...unscoped.target,
+      criterion: { case: "includeAll", value: true },
+    });
+    await expect(
+      policy.authorize(authenticated, {
+        ...unscoped,
+        target,
+        topic: create(TopicSchema, { target, context }),
+      }),
+    ).resolves.toBe(false);
+  });
   it("composes publicAccess with request-derived actor context and no session fixture", async () => {
     const policy = new BoardAccessPolicy();
     const contexts = new BoardContextResolver();
@@ -152,10 +226,7 @@ describe("MessageBoard gateway policy", () => {
     expect(forwarded[0]).not.toHaveProperty("credential");
     expect(forwarded[0]).not.toHaveProperty("registry");
     const rewritten = fromBinary(CommandSchema, forwarded[0]?.value ?? new Uint8Array());
-    expect(rewritten.context?.actorContext).toMatchObject({
-      actor: { value: "ada" },
-      timestamp: { seconds: 42n },
-    });
+    expect(rewritten.context?.actorContext).toEqual(publicContext());
     const subscribed = await services.subscription.subscribe(
       createBoardTopic("general", publicContext),
       handler,
@@ -615,6 +686,62 @@ function commandRequest(author: string, board: string): IncomingRequest {
     messageType: PostMessageSchema.typeName,
     requestedContext: create(ActorContextSchema),
     transport: { service: "spine.client.CommandService", method: "Post" },
+  };
+}
+
+function outcomeRequest(
+  schema: MessageSchema,
+  context: ReturnType<typeof create<typeof ActorContextSchema>>,
+  changes: {
+    actor?: string;
+    tenant?: string | null;
+    commandType?: string;
+    fieldPath?: string[];
+  } = {},
+): IncomingRequest {
+  const origin = create(OriginSchema, {
+    message: create(CoreMessageIdSchema, {
+      id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "command-1" })),
+      typeUrl: changes.commandType ?? TypeUrls.derive(PostMessageSchema),
+    }),
+    actorContext: create(ActorContextSchema, {
+      actor: create(UserIdSchema, { value: changes.actor ?? "ada" }),
+      timestamp: create(TimestampSchema, { seconds: 1n }),
+      ...(changes.tenant === null
+        ? {}
+        : {
+            tenantId: create(TenantIdSchema, {
+              kind: { case: "value", value: changes.tenant ?? "tenant-a" },
+            }),
+          }),
+    }),
+  });
+  const target = create(TargetSchema, {
+    type: TypeUrls.derive(schema),
+    criterion: {
+      case: "filters",
+      value: create(TargetFiltersSchema, {
+        filter: [
+          create(CompositeFilterSchema, {
+            operator: CompositeFilter_CompositeOperator.ALL,
+            filter: [
+              create(FilterSchema, {
+                fieldPath: { fieldName: changes.fieldPath ?? ["context", "past_message"] },
+                operator: Filter_Operator.EQUAL,
+                value: AnyMessages.pack(OriginSchema, origin),
+              }),
+            ],
+          }),
+        ],
+      }),
+    },
+  });
+  return {
+    kind: "subscribe",
+    topic: create(TopicSchema, { target, context }),
+    target,
+    requestedContext: context,
+    transport: { service: "spine.client.SubscriptionService", method: "Subscribe" },
   };
 }
 

@@ -19,14 +19,14 @@ npm install.
 | `@spine-event-engine/auth`              | Gateway contracts, sessions, OIDC flow, authorization/context rewrite, subscription access checks                  | An HTTP listener, application policy, identity provisioning           |
 | Application gateway / HTTP adapter      | Listener lifecycle, credential extraction, cookies, callback/exchange endpoints, composition of auth collaborators | A direct browser-to-backend route by accident                         |
 | Envoy template                          | TLS, CORS, limits, public method routing, gRPC-Web and explicit binary Connect pass-through                        | Authentication or authorization                                       |
-| Spine TS or JVM backend                 | Domain services receiving a trusted rewritten `ActorContext`                                                       | Authentication routines                                               |
+| Spine TS or JVM backend                 | Domain services receiving requests with gateway-verified actor and tenant                                          | Authentication routines                                               |
 | Provider adapter and application stores | Provider verification/JWKS, user provisioning, durable/shared sessions, keys, revocation                           | Browser-visible provider tokens                                       |
 
 ```mermaid
 flowchart LR
   Browser["Browser: client-web / client-react"] -->|"gRPC-Web or explicit Connect"| Envoy
   Envoy["Envoy: TLS, CORS, routing"] --> Gateway
-  Gateway["Application standalone gateway\nauthenticate · authorize · resolve context"] -->|"native gRPC with trusted ActorContext"| Backend["Spine TS or JVM backend"]
+  Gateway["Application standalone gateway\nauthenticate · authorize · resolve context"] -->|"native gRPC with verified actor and tenant"| Backend["Spine TS or JVM backend"]
   Gateway <--> IdP["OIDC / Google / GitHub / custom provider"]
   Gateway <--> Stores["application session, policy, identity, revocation stores"]
 ```
@@ -77,10 +77,12 @@ are credentials.
 | Reconnect                     |        5 retries / 30,000 ms | Retry starts after the initial attempt; default delay is 250 ms exponential, ±20% jitter, capped at 5,000 ms. |
 | Remote Cancel                 |   1,000 ms per accepted wire | `cancel()` is idempotent and terminal. A reconnect can create more than one accepted wire to clean.           |
 
-The framework operations are `post`, `send`, `createSubscription`, `activate`,
-and `cancel`. Commands are never automatically retried. `updates` and
-`lifecycle` are separate single-consumer streams with no cross-stream ordering
-guarantee.
+Use `post` for Command acceptance and `postAndSubscribe` to observe its selected
+Event and rejection outcomes. Use `send` for queries. `createSubscription`
+accepts either a Topic or a list of Event/rejection schemas; `activate` starts
+the subscription and `cancel` stops it. Commands are never automatically
+retried. `updates` and `lifecycle` are separate single-consumer streams with no
+cross-stream ordering guarantee.
 
 ```mermaid
 stateDiagram-v2
@@ -115,28 +117,30 @@ updates, and emits `resynchronizing`. An event subscription emits
 `gapPossible` then continues. Application code must re-query after reconnect
 or an observed gap when its UI needs authoritative state.
 
-<!-- docs-snippet-path: examples/message-board/web/src/index.tsx -->
+### Observe updates without blocking the page
 
-```ts
-import type { ClientRequest } from "@spine-event-engine/client-web";
+Create a subscription, activate it, then consume `updates` in an asynchronous
+function with error handling. A `for await` loop suspends that function while
+waiting; it does not block the browser thread. Start the consumer without
+awaiting its eventual completion so the rest of the page can continue, and keep
+the handle for explicit cancellation. Consume `lifecycle` separately when the
+application needs connection, gap, or callback-failure notices.
 
-declare const request: ClientRequest;
-declare const topic: Parameters<ClientRequest["createSubscription"]>[0];
-declare const authoritativeQuery: Extract<
-  Parameters<ClientRequest["createSubscription"]>[1],
-  { kind: "entity" }
->["authoritativeQuery"];
+The [browser client walkthrough](../packages/client-web/README.md#observe-command-outcomes)
+contains complete generated-schema examples for ordinary subscriptions and
+`postAndSubscribe`. The helper activates every selected Event/rejection
+subscription before posting one Command. It returns the posting acknowledgement
+and a continuing subscription separately; acceptance is not a processing
+outcome. Several Event and rejection types are allowed, and updates continue
+until cancellation or terminal failure.
 
-const subscription = await request.createSubscription(topic, {
-  kind: "entity",
-  authoritativeQuery,
-});
-await subscription.activate();
-for await (const delivery of subscription.updates) {
-  if (delivery.kind === "resynchronization") void delivery.response;
-}
-await subscription.cancel();
-```
+`activationTimeoutMs` optionally limits initial setup. `firstUpdateTimeoutMs`
+notifies once through `onFirstUpdateTimeout` if the first actual update is late;
+it does not close the stream or restart between later updates. Neither has a
+default. The helper starts the first-update timer just before posting, after
+all selected subscriptions are ready. Gateway request limits and reconnect
+budgets remain separate. A delayed or lost notification never makes automatic
+Command resending safe.
 
 ## React boundary
 
@@ -179,9 +183,22 @@ Spine TS only follows the resulting membership. The supported shape has one
 Gateway; Cloud Run and multiple-Gateway operation are outside this guide's scope.
 
 The gateway authenticates and authorizes every incoming request independently,
-then resolves and injects a trusted context. Browser-visible actor/tenant is
-informational, not a credential. An application may request hints, but it may
-not establish actor, tenant, timestamp, zone, or language by presenting them.
+then resolves the permitted actor and tenant and checks the request against
+them. Browser-visible actor and tenant are informational, not credentials.
+Supplying them does not establish permission to act as that user.
+
+For a Command, the gateway preserves its original context after these checks.
+Its timestamp, zone, and language remain caller-supplied request metadata.
+This lets an Event refer to the exact Command that caused it and lets outcome
+subscriptions match that complete Origin, just as in Spine JVM. Query and
+subscription Topic contexts still use the gateway resolver's values. None of
+these requests bypasses authentication, authorization, or actor/tenant checks.
+
+Using `postAndSubscribe` also requires the application policy to permit the
+selected Event and rejection subscriptions. Permission to post a Command does
+not automatically grant permission to read Events. The Message Board policy
+shows how to restrict its outcome subscriptions to an exact `PostMessage`
+Origin for the permitted actor, alongside its existing board-view rules.
 
 <!-- docs-snippet-path: packages/auth/src/index.ts -->
 
@@ -226,7 +243,7 @@ or malformed `Any` remains a safe type-URL-only fact.
 | Gateway operation | Required gate                                     | Context rule                                                 | Forwarding rule                                                       |
 | ----------------- | ------------------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------- |
 | `resolve-context` | Valid session; no authorization-policy invocation | `resolveContext()` returns informational actor/tenant/expiry | No backend forward                                                    |
-| `command`         | Authorize every Post                              | Replace matching actor/tenant hint with resolver output      | Forward once, without credential                                      |
+| `command`         | Authorize every Post                              | Verify actor/tenant; preserve original Command context       | Forward once, without credential                                      |
 | `query`           | Authorize every Read                              | Replace matching actor/tenant hint                           | Forward once, without credential                                      |
 | `subscribe`       | Authorize every Subscribe                         | Reject stale hint before binding                             | Return the public Subscription                                        |
 | `activate`        | Authorize every Activate                          | Re-resolve request context                                   | Require stored owner; session mode also requires an unexpired session |

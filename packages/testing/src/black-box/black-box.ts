@@ -19,10 +19,13 @@ import {
   Client as NodeClient,
   type ClientKernel,
   type ClientOperationOptions,
-  type ClientOutcome,
+  type CommandAcknowledgement,
   type ClientRequest,
   type Subscription,
   type CreateSubscriptionOptions,
+  type PostAndSubscribeOptions,
+  type PostAndSubscribeResult,
+  type SubscriptionActivationOptions,
 } from "@spine-event-engine/client-node";
 import { SignalEnvelopes } from "@spine-event-engine/core";
 import {
@@ -823,9 +826,28 @@ class Request implements BlackBoxScope {
     schema: Schema,
     message: MessageShape<Schema>,
     options: ClientOperationOptions = {},
-  ): Promise<ClientOutcome> {
+  ): Promise<CommandAcknowledgement> {
     this.#internals.assertOpen();
     return this.#request.post(schema, message, options);
+  }
+
+  /**
+   * Posts a Command after selected Event streams are ready and tracks an accepted stream.
+   * @typeParam Schema The Command schema.
+   * @param schema The generated Command schema.
+   * @param message The Command payload.
+   * @param options The selected Events, rejections, and timing.
+   * @returns Admission and a tracked continuing stream when accepted.
+   */
+  async postAndSubscribe<Schema extends GenMessage<Message>>(
+    schema: Schema,
+    message: MessageShape<Schema>,
+    options: PostAndSubscribeOptions,
+  ): Promise<PostAndSubscribeResult> {
+    this.#internals.assertOpen();
+    const result = await this.#request.postAndSubscribe(schema, message, options);
+    if (result.kind === "refused") return result;
+    return { ...result, subscription: this.#trackSubscription(result.subscription) };
   }
 
   /**
@@ -889,12 +911,45 @@ class Request implements BlackBoxScope {
    * @param options The subscription kind, recovery query, and optional cancellation signal.
    * @returns The inactive tracked subscription.
    */
+  async createSubscription(topic: Topic, options: CreateSubscriptionOptions): Promise<Subscription>;
+
+  /**
+   * Creates an inactive logical Event group from generated schemas.
+   * @param schemas The selected Event and rejection schemas.
+   * @param options The Event group settings.
+   * @returns The tracked logical subscription.
+   */
   async createSubscription(
-    topic: Topic,
+    schemas: readonly GenMessage<Message>[],
+    options: Extract<CreateSubscriptionOptions, { readonly kind: "event" }>,
+  ): Promise<Subscription>;
+
+  /**
+   * Creates and tracks a topic or schema-list subscription.
+   * @param topicOrSchemas The topic or selected Event schemas.
+   * @param options The subscription settings.
+   * @returns The tracked inactive subscription.
+   */
+  async createSubscription(
+    topicOrSchemas: Topic | readonly GenMessage<Message>[],
     options: CreateSubscriptionOptions,
   ): Promise<Subscription> {
     this.#internals.assertOpen();
-    const subscription = await this.#request.createSubscription(topic, options);
+    const subscription = Array.isArray(topicOrSchemas)
+      ? await this.#request.createSubscription(
+          topicOrSchemas,
+          options as Extract<CreateSubscriptionOptions, { readonly kind: "event" }>,
+        )
+      : await this.#request.createSubscription(topicOrSchemas as Topic, options);
+    return this.#trackSubscription(subscription);
+  }
+
+  /**
+   * Registers a public subscription for BlackBox cleanup.
+   * @param subscription The public handle.
+   * @returns The tracked handle.
+   */
+  #trackSubscription(subscription: Subscription): Subscription {
     const tracked = new TrackedSubscription(subscription, () => {
       this.#internals.onRelease(tracked);
     });
@@ -949,7 +1004,7 @@ class TrackedSubscription implements Subscription {
    * @param options The optional signal that cancels activation.
    * @returns Completion after remote activation.
    */
-  activate(options?: ClientOperationOptions): Promise<void> {
+  activate(options?: SubscriptionActivationOptions): Promise<void> {
     return this.#handle.activate(options);
   }
 
@@ -962,8 +1017,10 @@ class TrackedSubscription implements Subscription {
     try {
       this.#cancellation ??= this.#handle.cancel();
       await this.#cancellation;
-    } finally {
       this.release();
+    } catch (error) {
+      this.#cancellation = undefined;
+      throw error;
     }
   }
 

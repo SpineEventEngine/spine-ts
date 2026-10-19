@@ -371,7 +371,9 @@ export interface AuthorizationPolicy {
 }
 
 /**
- * Gateway-owned trusted context supplied after authentication and authorization.
+ * Trusted actor and tenant resolution after authentication and authorization.
+ * The gateway forwards a validated Command's original actor context, including its
+ * request-time timestamp and locale; Query and subscription contexts use resolved values.
  */
 export interface AuthorizedRequestContext {
   // prettier-ignore
@@ -387,23 +389,24 @@ export interface AuthorizedRequestContext {
   readonly tenant?: TenantId;
 
   /**
-   * Records the trusted resolution time.
+   * Records the trusted resolution time used for Query and subscription contexts.
    */
   readonly timestamp: Timestamp;
 
   /**
-   * Identifies the actor's time zone when resolved.
+   * Identifies the actor's resolved time zone for Query and subscription contexts.
    */
   readonly zoneId?: ZoneId;
 
   /**
-   * Identifies the actor's language when resolved.
+   * Identifies the actor's resolved language for Query and subscription contexts.
    */
   readonly language?: Language;
 }
 
 /**
- * Application-owned actor and tenant resolution boundary.
+ * Application actor and tenant resolution boundary. Command actor and tenant must
+ * match this result; other validated Command context fields are preserved on forwarding.
  */
 export interface ContextResolver {
   // prettier-ignore
@@ -566,6 +569,11 @@ export interface CommandRequestInput {
 }
 
 interface TransportFactsApi {
+  /**
+   * Builds allowlisted transport facts without credentials.
+   * @param input The incoming transport fields.
+   * @returns The safe transport context.
+   */
   from(input: TransportFactsInput): TransportRequestContext;
 }
 
@@ -599,6 +607,11 @@ export const TransportFacts: Readonly<TransportFactsApi> = Object.freeze({
 });
 export { IncomingRequests } from "./request/index.js";
 const TransportFactsValues = Object.freeze({
+  /**
+   * Removes absent transport fields from a safe context.
+   * @param context The allowlisted transport fields.
+   * @returns The compact transport context.
+   */
   compact(
     context: Readonly<Record<string, string | undefined>> &
       Pick<TransportRequestContext, "service" | "method">,

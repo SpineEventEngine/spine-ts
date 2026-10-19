@@ -45,6 +45,12 @@ limit, policy, trusted-context resolver, clock, and forwarder. Every approved
 operation is independently admitted and authorized; forwarded data excludes
 credentials and untrusted transport headers.
 
+The gateway verifies each Command's actor and tenant against its resolved
+identity. It preserves that Command's original creation time and locale so
+Events can refer to the exact Command that caused them. Those metadata fields
+are supplied by the caller; they are not proof of identity. Queries and
+subscription Topics receive the context supplied by the gateway resolver.
+
 ## Browser and OIDC extensions
 
 The package does not provide HTTP routes, browser pages, users, permissions,

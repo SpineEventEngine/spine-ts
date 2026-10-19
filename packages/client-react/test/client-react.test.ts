@@ -23,7 +23,11 @@ import {
   useLayoutEffect,
 } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Subscription, SubscriptionDelivery } from "@spine-event-engine/client-web";
+import type {
+  Subscription,
+  SubscriptionDelivery,
+  SubscriptionLifecycle,
+} from "@spine-event-engine/client-web";
 
 import {
   SpineClientProvider,
@@ -491,6 +495,69 @@ describe("client-react", () => {
     expect(authoritativeQuery).not.toHaveBeenCalled();
   });
 
+  it("forwards Entity timing and calls only the latest committed first-update callback", async () => {
+    const handle = subscription();
+    const createSubscription = vi.fn((_topic: unknown, _options: unknown) => {
+      void _topic;
+      void _options;
+      return Promise.resolve(handle);
+    });
+    const first = vi.fn();
+    const latest = vi.fn();
+    const topic = {} as never;
+    const request = { createSubscription } as never;
+    function View({ onTimeout }: { onTimeout: (subscription: Subscription) => void }) {
+      useEntitySubscription(topic, createQuery, [], undefined, undefined, {
+        activationTimeoutMs: 31,
+        firstUpdateTimeoutMs: 19,
+        onFirstUpdateTimeout: onTimeout,
+      });
+      return null;
+    }
+    const rendered = render(
+      createElement(SpineClientProvider, { request }, createElement(View, { onTimeout: first })),
+    );
+    await waitFor(() => {
+      expect(handle.activate).toHaveBeenCalledWith({ activationTimeoutMs: 31 });
+    });
+    const options = createSubscription.mock.calls[0]?.[1] as never;
+    expect(options).toMatchObject({ kind: "entity", firstUpdateTimeoutMs: 19 });
+    rendered.rerender(
+      createElement(SpineClientProvider, { request }, createElement(View, { onTimeout: latest })),
+    );
+    expect(createSubscription).toHaveBeenCalledTimes(1);
+    const onFirstUpdateTimeout = (
+      options as { onFirstUpdateTimeout: (handle: Subscription) => void }
+    ).onFirstUpdateTimeout;
+    onFirstUpdateTimeout(handle);
+    expect(latest).toHaveBeenCalledWith(handle);
+    expect(first).not.toHaveBeenCalled();
+    rendered.unmount();
+    onFirstUpdateTimeout(handle);
+    expect(latest).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes an Event activation deadline and recreates on a changed deadline", async () => {
+    const first = subscription();
+    const second = subscription();
+    const createSubscription = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(second);
+    function View({ deadline }: { deadline: number }) {
+      useEventSubscription(createSubscription, [], undefined, undefined, {
+        activationTimeoutMs: deadline,
+      });
+      return null;
+    }
+    const rendered = render(createElement(View, { deadline: 13 }));
+    await waitFor(() => {
+      expect(first.activate).toHaveBeenCalledWith({ activationTimeoutMs: 13 });
+    });
+    rendered.rerender(createElement(View, { deadline: 29 }));
+    await waitFor(() => {
+      expect(second.activate).toHaveBeenCalledWith({ activationTimeoutMs: 29 });
+    });
+    expect(first.cancel).toHaveBeenCalledTimes(1);
+  });
+
   it("calls Entity delivery and lifecycle callbacks for every notice before coalescing", async () => {
     const handle = subscription();
     const createSubscription = vi.fn(() => Promise.resolve(handle));
@@ -525,6 +592,36 @@ describe("client-react", () => {
         "lifecycle:connecting",
         "lifecycle:connected",
       ]);
+    });
+  });
+
+  it("calls Event delivery and lifecycle callbacks for every notice before coalescing", async () => {
+    const handle = subscription();
+    const deliveries: SubscriptionDelivery[] = [];
+    const lifecycles: SubscriptionLifecycle[] = [];
+    function View() {
+      useEventSubscription(
+        () => Promise.resolve(handle),
+        [],
+        (delivery) => deliveries.push(delivery),
+        (lifecycle) => lifecycles.push(lifecycle),
+      );
+      return null;
+    }
+    render(createElement(View));
+    await waitFor(() => {
+      expect(handle.activate).toHaveBeenCalledTimes(1);
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    const first = { kind: "update", update: {} as never } as const;
+    const second = { kind: "update", update: {} as never } as const;
+    handle.emitDelivery(first);
+    handle.emitDelivery(second);
+    handle.emitLifecycle({ state: "connected", generation: 1 });
+    await waitFor(() => {
+      expect(deliveries).toEqual([first, second]);
+      expect(lifecycles).toEqual([{ state: "connected", generation: 1 }]);
     });
   });
 

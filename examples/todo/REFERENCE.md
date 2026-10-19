@@ -29,6 +29,15 @@ OK-acknowledged command admission results and are published separately as typed
 rejection events. Client-visible rejection updates redact rejected-command
 payload forms and throwable stacks.
 
+The runnable smoke client uses `@spine-event-engine/client-node` and
+`postAndSubscribe`; it does not construct Command envelopes. It selects multiple
+Event and rejection schemas, receives both outcomes of CreateTask with an
+assignee, distinguishes assignment alternatives and domain rejection, then
+checks the authoritative TaskList. Selected types are possible outcomes, not
+an expected count imposed by the helper. The client explicitly cancels after
+its scenario and closes its connection. Configured example timeouts do not
+establish framework defaults; both subscription startup timeouts are optional.
+
 ## Commands
 
 ```bash

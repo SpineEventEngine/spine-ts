@@ -66,8 +66,11 @@ try {
 
 The demo creates no browser credential. Its Gateway (from
 `@spine-event-engine/server/browser`) admits the public board and
-rebuilds the actor context from each decoded request before forwarding it. It
-does not copy browser-supplied tenant or other trusted fields.
+checks the declared actor and tenant before forwarding. A Command keeps its
+original context so the resulting Events match its outcome subscription;
+Queries and subscription Topics use the resolved context. Outcome subscriptions
+are restricted to the permitted actor's exact `PostMessage` Origin. Public-demo
+actor names are display identities, not authenticated credentials.
 
 ## 🧪 Test the application
 

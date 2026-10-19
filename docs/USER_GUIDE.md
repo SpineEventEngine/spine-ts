@@ -337,6 +337,34 @@ state, a reconnect, a possible best-effort gap, malformed data, or recovery
 after posting while disconnected; those recovery paths do not make ordinary
 stream termination acceptable.
 
+### Observe a Command's outcomes
+
+Use `postAndSubscribe` when the application needs to observe Events or rejections
+caused by a particular Command. Pass the generated Command schema and message,
+plus arrays of possible Event and rejection schemas. The client creates one
+Command, activates the subscriptions, then posts it once. An accepted result
+contains the acknowledgement and a continuing subscription. It does not wait
+for one Event or stop after the first outcome.
+
+Consume `subscription.updates` in an asynchronous function with error handling.
+Waiting for an update suspends that function, not the browser thread or Node
+event loop. In React, use the subscription hook's `onDelivery` callback when
+every update matters; latest-value state can combine several updates into one
+render. Post Commands from user actions, not effects that React may restart.
+
+Both startup timeouts are optional and absent by default. `activationTimeoutMs`
+limits setup; failure prevents the helper from posting. `firstUpdateTimeoutMs`
+notifies through `onFirstUpdateTimeout` if the first matching update is late.
+It leaves the subscription active, allows late updates, and never starts a new
+timer between later updates. A delayed notification does not establish Command
+failure or make resending safe.
+
+The [browser client examples](../packages/client-web/README.md) show the API and
+update consumers. Message Board uses it in its posting form while keeping its
+board-view subscription active. The [Todo smoke client](../examples/todo/scripts/smoke.mjs)
+receives multiple outcomes and separately checks Projection state. Explicitly
+cancel a subscription when the application no longer needs it.
+
 For a browser, put native services behind one authenticated Gateway. The
 Gateway resolves credentials into trusted context and forwards approved browser
 traffic; private backends do not receive browser credentials directly. Browser

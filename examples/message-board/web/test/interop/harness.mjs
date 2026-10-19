@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 
 import { fromBinary } from "../../../../../packages/proto/node_modules/@bufbuild/protobuf/dist/esm/index.js";
+import { timestampFromDate } from "../../../../../packages/proto/node_modules/@bufbuild/protobuf/dist/esm/wkt/index.js";
 import {
   connectNodeAdapter,
   createGrpcTransport,
@@ -48,7 +49,7 @@ const image =
 /**
  * Starts only test-owned processes and always closes them in reverse dependency order.
  */
-export async function startTopology({ lifecycle = {} } = {}) {
+export async function startTopology({ lifecycle = {}, authenticated = false } = {}) {
   const runCommand = lifecycle.run ?? run;
   const application = new MessageBoardApplication();
   const startBackend =
@@ -177,10 +178,21 @@ export async function startTopology({ lifecycle = {} } = {}) {
     const policy = new BoardAccessPolicy();
     const contexts = new BoardContextResolver();
     const clock = new SystemClock();
+    const sessions = {
+      resolve: (credential) =>
+        Promise.resolve(
+          credential?.kind === "bearer" && credential.value === "interop-session"
+            ? {
+                principal: { id: "ada", attributes: { boards: "general" } },
+                expiresAt: timestampFromDate(new Date(Date.now() + 3_600_000)),
+              }
+            : undefined,
+        ),
+    };
     const unary = new UnaryGateway({
       registry: typeRegistry,
       maxRequestBytes: 1_048_576,
-      publicAccess: true,
+      ...(authenticated ? { sessions } : { publicAccess: true }),
       authorize: policy.authorize.bind(policy),
       contexts,
       clock,
@@ -191,7 +203,7 @@ export async function startTopology({ lifecycle = {} } = {}) {
           request.method === "Post"
             ? fromBinary(CommandSchema, request.value).context?.actorContext
             : fromBinary(QuerySchema, request.value).context;
-        forwardedContexts.push(contextSummary(context));
+        forwardedContexts.push({ method: request.method, ...contextSummary(context) });
         return nativeCreator.forward(request);
       },
     });
@@ -206,7 +218,7 @@ export async function startTopology({ lifecycle = {} } = {}) {
     cleanup.add("subscription bindings", 80, () => bindings.close());
     const subscriptions = createSubscriptions({
       bindings,
-      publicAccess: true,
+      ...(authenticated ? { sessions } : { publicAccess: true }),
       authorize: policy.authorize.bind(policy),
       contexts,
       clock,
@@ -217,7 +229,10 @@ export async function startTopology({ lifecycle = {} } = {}) {
       unary,
       subscriptions,
       requests: {
-        credential: () => undefined,
+        credential: (context) =>
+          context.requestHeader.get("authorization") === "Bearer interop-session"
+            ? { kind: "bearer", value: "interop-session" }
+            : undefined,
         transport: (context) =>
           TransportFacts.from({
             service: "browser",
@@ -287,6 +302,7 @@ export async function startTopology({ lifecycle = {} } = {}) {
     cleanup.add("Envoy container", 100, () => runCommand("docker", ["rm", "-f", container]));
     await awaitReady(container);
     return {
+      authenticated,
       baseUrl: "https://127.0.0.1:8443",
       nativeBaseUrl: backend.baseUrl,
       tls: Object.freeze({ key: join(directory, "key.pem"), cert: join(directory, "cert.pem") }),

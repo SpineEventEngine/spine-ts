@@ -28,6 +28,13 @@ another terminal:
 pnpm --filter @spine-event-engine/example-todo smoke
 ```
 
+The [smoke client](scripts/smoke.mjs) uses `postAndSubscribe` to observe
+Command outcomes. It receives both `TaskCreated` and `TaskAssigned` for a task
+created with an assignee, selects alternative assignment Events and rejections,
+and checks a real rejection. It still reads the TaskList Projection to verify
+that the business state has caught up. Each subscription continues until the
+client explicitly cancels it.
+
 ```mermaid
 flowchart LR
   Client[Smoke client] --> App[One To-Do process]
@@ -56,8 +63,8 @@ pnpm --filter @spine-event-engine/example-todo start:postgresql
 ```
 
 With either server running, `pnpm --filter @spine-event-engine/example-todo smoke`
-posts a real To-Do command and reads the resulting task-list query through the
-selected backend. These are opt-in live checks: they use the database URL you
+runs the same Command/outcome scenarios and reads the resulting TaskList
+through the selected backend. These are opt-in live checks: they use the database URL you
 supply and do not create or start database containers.
 
 `TODO_STORAGE=memory` is explicit but optional because it is the default. The

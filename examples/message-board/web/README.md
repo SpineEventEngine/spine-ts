@@ -17,6 +17,20 @@ is down, the UI reports the failure.
 - ✅ One live-status badge: `Updating live` only for a connected subscription,
   otherwise `No live updates`.
 
+## Posting and continuing updates
+
+The [posting form](src/post-form.tsx) uses `postAndSubscribe` to select `MessagePosted`
+and `MessageAlreadyPosted` before sending `PostMessage`. It distinguishes
+acceptance from the later outcome. If the first update is late, it shows a
+waiting notice and continues listening; it does not resend the Command.
+Activation failure prevents the Command from being posted.
+
+The form cancels its per-post subscription after handling the outcome or leaving
+the page. The board's Entity subscription has a different lifetime: it keeps
+receiving successive Projection updates while the page is open. An idle board
+is normal, so it does not have a first-update warning. These are independent
+subscriptions, and the local single-process UI needs no shared Delivery server.
+
 ## 🚀 Start the UI
 
 Start the [Message Board server](../app/README.md) first. Then run:
@@ -45,13 +59,13 @@ remains a new line. The shortcut does not post while an input method editor is
 composing text.
 
 The live-status badge only says `Updating live` when the subscription lifecycle
-is exactly connected. It otherwise says `No live updates`. A disconnected or
-exhausted subscription does not prevent commands: posts and their authoritative
-refresh are independent client operations.
+is exactly connected. It otherwise says `No live updates`. A disconnected board-view subscription does not itself prevent posting. Each
+post activates its separate outcome subscription first; if that activation
+fails, the form reports the error without sending the Command.
 
 React-specific `use...` names are hooks from
 `@spine-event-engine/client-react`. The framework-neutral browser client keeps
-the action verbs `post`, `send`, `createSubscription`, `activate`, and `cancel`.
+the action verbs `post`, `postAndSubscribe`, `send`, `createSubscription`, `activate`, and `cancel`.
 
 Open the browser console while learning locally to see structured messages for
 activation, connection, reconnects, received server updates, command sending,
@@ -59,9 +73,9 @@ and command results. They include the board, subscription target, complete
 local command/outcome, and received server update so a beginner can inspect the
 flow; they never include request metadata. Treat the
 local console like other local diagnostics because commands and updates may
-contain user-visible message text. One initial `Activate` belongs to the page's
-logical subscription; another means a reconnect. Each accepted server
-subscription is cancelled once when it is replaced or the page closes.
+contain user-visible message text. The board view has one continuing logical subscription. Each post also activates
+its selected outcome subscriptions; these extra activations are expected.
+Cancellation releases them when their application-selected lifetime ends.
 
 ## ✅ Validation belongs to the server
 
@@ -104,7 +118,7 @@ Install Playwright browsers once with
 
 ## Public demo
 
-The visible demo creates no browser credential. It sends the selected actor in each request, and the Gateway rebuilds that actor context before forwarding it. Production hosts choose their own admission policy.
+The visible demo creates no browser credential. It sends the selected actor in each request. The Gateway checks that actor and tenant against its resolver before forwarding; it preserves Command creation metadata for outcome matching. Production hosts choose the admission policy.
 
 ## 🔗 Learn more
 

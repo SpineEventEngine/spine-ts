@@ -2,7 +2,7 @@
   "formatVersion": 2,
   "generationId": "c1f85ac0-6b05-420b-89fd-e58bb6e00eec",
   "packageName": "@spine-event-engine/server-test-fixtures",
-  "packageVersion": "2.0.0-snapshot.23",
+  "packageVersion": "2.0.0-snapshot.25",
   "protoFiles": [
     "entity-metadata/empty.proto",
     "entity-metadata/invalid-column.proto",

@@ -9,7 +9,15 @@ The package supplies provider-neutral gateway building blocks. An application pl
 
 `TransportFacts.from()` exposes only allowlisted request facts. Credentials are passed only to `Authenticator` or `SessionResolver`; they are not included in `IncomingRequest`. `IncomingRequest` is a discriminated union for command, query, subscription creation, activation, and cancellation. Command facts can include a decoded message when a `TypeRegistryLookup` knows its packed type; unknown and malformed `Any` values remain type-URL-only facts.
 
-`AuthorizationPolicy.authorize()` is evaluated separately for each incoming request. `ContextResolver.resolve()` returns the trusted actor, optional tenant, timestamp, zone, and language. The caller-provided `ActorContext` must match that resolved actor and tenant, otherwise `UnaryGateway` rejects the request as `context-stale`. Backends can trust the forwarded, gateway-replaced context only when the deployment routes traffic through an application-selected gateway.
+`AuthorizationPolicy.authorize()` is evaluated separately for each incoming request. `ContextResolver.resolve()` returns the trusted actor, optional tenant, timestamp, zone, and language. The caller-provided `ActorContext` must match that resolved actor and tenant, otherwise `UnaryGateway` rejects the request as `context-stale`. Backends may rely on these identity checks only when the deployment routes traffic through an application-selected gateway.
+
+After those checks, Post preserves the original Command's `ActorContext`,
+including its creation timestamp, zone, and language. These fields describe the
+caller's request; they are not gateway-attested metadata. Preserving them keeps
+the Event's complete `past_message` Origin equal to the originating Command's
+Origin, as in Spine JVM. Authorization and context resolution receive isolated
+request views; changes to those views cannot change the forwarded Command.
+Read and subscription Topic requests still receive the resolver's context.
 
 ## Dynamic subscription membership
 

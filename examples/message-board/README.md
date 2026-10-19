@@ -13,6 +13,20 @@ context, and a query-side view fit together.
   gRPC remains private.
 - ✅ How normal complete subscription payloads update rows locally and when to recover by query.
 
+## Posting and continuing updates
+
+The [posting form](web/src/post-form.tsx) uses `postAndSubscribe` to select `MessagePosted`
+and `MessageAlreadyPosted` before sending `PostMessage`. It distinguishes
+acceptance from the later outcome. If the first update is late, it shows a
+waiting notice and continues listening; it does not resend the Command.
+Activation failure prevents the Command from being posted.
+
+The form cancels its per-post subscription after handling the outcome or leaving
+the page. The board's Entity subscription has a different lifetime: it keeps
+receiving successive Projection updates while the page is open. An idle board
+is normal, so it does not have a first-update warning. These are independent
+subscriptions, and the local single-process UI needs no shared Delivery server.
+
 ## 🗺️ Application map
 
 ```text
@@ -115,8 +129,9 @@ flowchart LR
 The browser never receives the native backend address. For local development,
 `BrowserServer` from `@spine-event-engine/server/browser` starts a private
 native HTTP/2 backend and a public loopback browser gateway on port 8090. The
-public-demo Gateway rebuilds the selected actor context
-from the request actor and forwards only approved traffic; the bounded context
+public-demo Gateway checks the selected actor and tenant and forwards only
+approved traffic. Commands retain their original context for outcome matching;
+Queries and subscription Topics use the resolved context. The bounded context
 does not read browser credentials. The React client may use either gRPC-Web or
 Connect at that public boundary.
 

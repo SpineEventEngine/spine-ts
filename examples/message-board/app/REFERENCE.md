@@ -20,6 +20,13 @@ The server defaults to loopback and an ephemeral public port; the local CLI
 selects 8090. The native backend remains on an internal ephemeral loopback
 port. The service permits at most 1,000 active subscriptions.
 
+`BoardAccessPolicy` checks the board and author of each `PostMessage`, and
+requires board filters for Projection reads and subscriptions. The form also
+subscribes to `MessagePosted` and `MessageAlreadyPosted` for an exact
+`PostMessage` Origin belonging to the permitted actor. It does not receive an
+unrestricted stream of these Events. The gateway still checks actor and tenant
+before forwarding every request.
+
 ## Generated code
 
 `spine-proto compose` writes `src/model-registry.ts` from `spine-proto.json`.

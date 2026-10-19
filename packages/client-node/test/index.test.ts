@@ -30,9 +30,11 @@ import type {
   ClientKernel,
   ClientOperationOptions,
   ClientOptions,
-  ClientOutcome,
+  CommandAcknowledgement,
   ClientRequest,
   ClientTransport,
+  EntitySubscriptionOptions,
+  EventSubscriptionOptions,
   Subscription,
 } from "../src/index.js";
 
@@ -88,7 +90,13 @@ describe("@spine-event-engine/client-node", () => {
     }>();
     expectTypeOf<ClientOperationOptions>().toExtend<{ readonly signal?: AbortSignal }>();
     expectTypeOf<ClientOptions["tenant"]>().toEqualTypeOf<string | TenantId | undefined>();
-    expectTypeOf<ClientOutcome>().toExtend<{ readonly kind: string }>();
+    expectTypeOf<CommandAcknowledgement>().toExtend<{ readonly kind: string }>();
+    expectTypeOf<EventSubscriptionOptions>().toEqualTypeOf<
+      import("@spine-event-engine/client-web").EventSubscriptionOptions
+    >();
+    expectTypeOf<EntitySubscriptionOptions>().toEqualTypeOf<
+      import("@spine-event-engine/client-web").EntitySubscriptionOptions
+    >();
     expectTypeOf<ClientTransport>().not.toExtend<{ createRequestId(): string }>();
     expectTypeOf<Subscription>().toExtend<{
       activate(): Promise<void>;

@@ -29,6 +29,7 @@ import {
   TenantIdSchema,
   UserIdSchema,
   ZoneIdSchema,
+  type Command,
 } from "@spine-event-engine/proto";
 import {
   QueryResponseSchema,
@@ -41,6 +42,7 @@ import {
   SubscriptionSchema,
   SubscriptionIdSchema,
   SubscriptionUpdateSchema,
+  type SubscriptionUpdate,
   EntityUpdatesSchema,
   EntityStateUpdateSchema,
   type Subscription,
@@ -53,12 +55,19 @@ import { beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import {
   Client,
+  ClientProtocolError,
+  SubscriptionActivationTimeoutError,
   type BrowserClientOptions,
   type CreateSubscriptionOptions,
   type SubscriptionLifecycle,
   type SubscriptionRetryPolicy,
 } from "../src/index.js";
 import { ProjectOverviewStateSchema } from "../../server/test-fixtures/generated/entity-metadata/project_states_pb.js";
+import {
+  ProjectCreatedSchema,
+  ProjectRegisteredSchema,
+} from "../../server/test-fixtures/generated/repository-routing/project_events_pb.js";
+import { CreateProjectSchema } from "../../server/test-fixtures/generated/repository-routing/project_commands_pb.js";
 // prettier-ignore
 import {
   ProjectOverviewStateQuery,
@@ -76,6 +85,606 @@ vi.mock("@connectrpc/connect-web", () => ({
 }));
 
 describe("Client", () => {
+  it("activates each distinct selected Event type before one Command post", async () => {
+    const calls: string[] = [];
+    const topics: Topic[] = [];
+    const client = Client.usingTransport({ transport: groupedTransport(calls, topics) });
+    const result = await client.asGuest().postAndSubscribe(
+      CreateProjectSchema,
+      create(CreateProjectSchema, {
+        id: "project-1",
+        name: "First project",
+      }),
+      {
+        events: [ProjectCreatedSchema, ProjectRegisteredSchema, ProjectCreatedSchema],
+      },
+    );
+    expect(result.kind).toBe("accepted");
+    expect(calls.filter((method) => method === "Subscribe")).toHaveLength(2);
+    expect(calls.filter((method) => method === "Activate")).toHaveLength(2);
+    expect(calls.filter((method) => method === "Post")).toHaveLength(1);
+    expect(calls.at(-1)).toBe("Post");
+    expect(topics).toHaveLength(2);
+    expect(topics.every((topic) => topic.target?.criterion.case === "filters")).toBe(true);
+    if (result.kind === "accepted") await result.subscription.cancel();
+    await client.close();
+  });
+
+  it("returns posting refusal without an update handle and cancels every selected stream", async () => {
+    const calls: string[] = [];
+    const client = Client.usingTransport({ transport: groupedTransport(calls, [], "error") });
+    const result = await client
+      .asGuest()
+      .postAndSubscribe(
+        CreateProjectSchema,
+        create(CreateProjectSchema, { id: "project-2", name: "Refused" }),
+        {
+          events: [ProjectCreatedSchema, ProjectRegisteredSchema],
+        },
+      );
+    expect(result).toMatchObject({ kind: "refused", acknowledgement: { kind: "error" } });
+    expect("subscription" in result).toBe(false);
+    await vi.waitFor(() => {
+      expect(calls.filter((method) => method === "Cancel")).toHaveLength(2);
+    });
+    await client.close();
+  });
+
+  it("fails a grouped consumer and cancels siblings when one member terminates", async () => {
+    const calls: string[] = [];
+    const client = Client.usingTransport({
+      transport: groupedTransport(calls, [], "ok", ProjectCreatedSchema.typeName),
+    });
+    const handle = await client
+      .asGuest()
+      .createSubscription([ProjectCreatedSchema, ProjectRegisteredSchema], { kind: "event" });
+    await handle.activate();
+    await expect(handle.updates[Symbol.asyncIterator]().next()).rejects.toThrow("member failed");
+    await vi.waitFor(() => {
+      expect(calls.filter((method) => method === "Cancel")).toHaveLength(2);
+    });
+    await client.close();
+  });
+
+  it("closes a grouped consumer deliberately when the client closes", async () => {
+    const calls: string[] = [];
+    const client = Client.usingTransport({ transport: groupedTransport(calls, []) });
+    const handle = await client
+      .asGuest()
+      .createSubscription([ProjectCreatedSchema, ProjectRegisteredSchema], { kind: "event" });
+    await handle.activate();
+    const lifecycle = handle.lifecycle[Symbol.asyncIterator]();
+    await client.close();
+    const notices = [];
+    for (;;) {
+      const next = await lifecycle.next();
+      if (next.done) break;
+      notices.push(next.value.state);
+    }
+    expect(notices.at(-1)).toBe("closed");
+    expect(notices).not.toContain("failed");
+    expect(calls.filter((method) => method === "Cancel")).toHaveLength(2);
+  });
+
+  it("rejects a pre-aborted group without starting any remote work", async () => {
+    const calls: string[] = [];
+    const client = Client.usingTransport({ transport: groupedTransport(calls, []) });
+    const handle = await client
+      .asGuest()
+      .createSubscription([ProjectCreatedSchema, ProjectRegisteredSchema], { kind: "event" });
+    const controller = new AbortController();
+    const reason = new Error("group activation stopped");
+    controller.abort(reason);
+    await expect(handle.activate({ signal: controller.signal })).rejects.toBe(reason);
+    expect(calls).toEqual([]);
+    await client.close();
+  });
+
+  it("starts the group first-update timer on receipt rather than consumer iteration", async () => {
+    vi.useFakeTimers();
+    let wire: Subscription | undefined;
+    const notify = vi.fn();
+    const client = Client.usingTransport({
+      transport: unaryTransport(
+        (method, input) => {
+          if (method.name === "Subscribe") {
+            wire = create(SubscriptionSchema, {
+              id: create(SubscriptionIdSchema, { value: "received-before-read" }),
+              topic: input as Topic,
+            });
+            return wire;
+          }
+          return create(ResponseSchema);
+        },
+        undefined,
+        () =>
+          outcomeThenIdle(
+            projectOutcome(requireValue(wire, "accepted subscription"), "received-early"),
+          ),
+      ),
+    });
+    const handle = await client.asGuest().createSubscription([ProjectCreatedSchema], {
+      kind: "event",
+      firstUpdateTimeoutMs: 10,
+      onFirstUpdateTimeout: notify,
+    });
+    await handle.activate();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(notify).not.toHaveBeenCalled();
+    await expect(handle.updates[Symbol.asyncIterator]().next()).resolves.toMatchObject({
+      value: { kind: "update", update: { update: { case: "eventUpdates" } } },
+    });
+    await handle.cancel();
+    await client.close();
+    vi.useRealTimers();
+  });
+
+  it("notifies one grouped first-update delay and keeps late Event delivery live", async () => {
+    vi.useFakeTimers();
+    let wire: Subscription | undefined;
+    const pending = Promise.withResolvers<SubscriptionUpdate>();
+    const notify = vi.fn();
+    const client = Client.usingTransport({
+      transport: unaryTransport(
+        (method, input) => {
+          if (method.name === "Subscribe") {
+            wire = create(SubscriptionSchema, {
+              id: create(SubscriptionIdSchema, { value: "late-group" }),
+              topic: input as Topic,
+            });
+            return wire;
+          }
+          return create(ResponseSchema);
+        },
+        undefined,
+        () => delayedOutcomeThenIdle(pending.promise),
+      ),
+    });
+    const handle = await client.asGuest().createSubscription([ProjectCreatedSchema], {
+      kind: "event",
+      firstUpdateTimeoutMs: 10,
+      onFirstUpdateTimeout: notify,
+    });
+    await handle.activate();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(notify).toHaveBeenCalledExactlyOnceWith(handle);
+    pending.resolve(projectOutcome(requireValue(wire, "accepted subscription"), "late-group"));
+    await expect(handle.updates[Symbol.asyncIterator]().next()).resolves.toMatchObject({
+      value: { kind: "update", update: { update: { case: "eventUpdates" } } },
+    });
+    await vi.advanceTimersByTimeAsync(20);
+    expect(notify).toHaveBeenCalledTimes(1);
+    await handle.cancel();
+    await client.close();
+    vi.useRealTimers();
+  });
+
+  it("buffers an outcome received after Post starts but before its acknowledgement", async () => {
+    let wire: Subscription | undefined;
+    const posted = Promise.withResolvers<Command>();
+    const acknowledge = Promise.withResolvers<undefined>();
+    const outcome = Promise.withResolvers<SubscriptionUpdate>();
+    const received = Promise.withResolvers<undefined>();
+    const client = Client.usingTransport({
+      transport: unaryTransport(
+        (method, input) => {
+          if (method.name === "Subscribe") {
+            wire = create(SubscriptionSchema, {
+              id: create(SubscriptionIdSchema, { value: "early-outcome" }),
+              topic: input as Topic,
+            });
+            return wire;
+          }
+          if (method.name === "Post") {
+            const command = input as Command;
+            posted.resolve(command);
+            return acknowledge.promise.then(() => acceptedAck(command));
+          }
+          return create(ResponseSchema);
+        },
+        undefined,
+        () =>
+          delayedOutcomeThenIdle(
+            outcome.promise.then((value) => {
+              received.resolve(undefined);
+              return value;
+            }),
+          ),
+      ),
+    });
+    const result = client
+      .asGuest()
+      .postAndSubscribe(
+        CreateProjectSchema,
+        create(CreateProjectSchema, { id: "project-early", name: "Early" }),
+        { events: [ProjectCreatedSchema] },
+      );
+    await posted.promise;
+    outcome.resolve(projectOutcome(requireValue(wire, "accepted subscription"), "before-ack"));
+    await received.promise;
+    let settled = false;
+    void result.then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    acknowledge.resolve(undefined);
+    const accepted = await result;
+    expect(accepted.kind).toBe("accepted");
+    if (accepted.kind !== "accepted") throw new Error("Expected Command acceptance.");
+    await expect(
+      accepted.subscription.updates[Symbol.asyncIterator]().next(),
+    ).resolves.toMatchObject({ value: { kind: "update" } });
+    await accepted.subscription.cancel();
+    await client.close();
+  });
+
+  it("keeps an accepted Post distinct when the late-update callback cancels before ACK", async () => {
+    vi.useFakeTimers();
+    const posted = Promise.withResolvers<Command>();
+    const acknowledge = Promise.withResolvers<undefined>();
+    const callbackDone = Promise.withResolvers<undefined>();
+    const client = Client.usingTransport({
+      transport: unaryTransport(
+        (method, input) => {
+          if (method.name === "Subscribe")
+            return create(SubscriptionSchema, {
+              id: create(SubscriptionIdSchema, { value: "cancel-before-ack" }),
+              topic: input as Topic,
+            });
+          if (method.name === "Post") {
+            const command = input as Command;
+            posted.resolve(command);
+            return acknowledge.promise.then(() => acceptedAck(command));
+          }
+          return create(ResponseSchema);
+        },
+        undefined,
+        neverEndingUpdates,
+      ),
+    });
+    const result = client
+      .asGuest()
+      .postAndSubscribe(
+        CreateProjectSchema,
+        create(CreateProjectSchema, { id: "project-cancel", name: "Cancel" }),
+        {
+          events: [ProjectCreatedSchema],
+          firstUpdateTimeoutMs: 10,
+          onFirstUpdateTimeout: async (subscription) => {
+            await subscription.cancel();
+            callbackDone.resolve(undefined);
+          },
+        },
+      );
+    await posted.promise;
+    await vi.advanceTimersByTimeAsync(10);
+    await callbackDone.promise;
+    acknowledge.resolve(undefined);
+    const accepted = await result;
+    expect(accepted.kind).toBe("accepted");
+    if (accepted.kind !== "accepted") throw new Error("Expected admission despite cancellation.");
+    await expect(
+      accepted.subscription.updates[Symbol.asyncIterator]().next(),
+    ).resolves.toMatchObject({ done: true });
+    await client.close();
+    vi.useRealTimers();
+  });
+
+  it("prevents Post after partial group setup failure and retains failed sibling cleanup", async () => {
+    const calls: string[] = [];
+    const client = Client.usingTransport(
+      {
+        transport: groupedTransport(calls, [], "ok", undefined, {
+          failSubscribeTypeName: ProjectRegisteredSchema.typeName,
+          failCancelOnce: true,
+        }),
+      },
+      {
+        subscriptions: {
+          retryPolicy: { maxAttempts: 1, maxElapsedMs: 1_000, delayMs: () => 1 },
+        },
+      },
+    );
+    const posting = client
+      .asGuest()
+      .postAndSubscribe(
+        CreateProjectSchema,
+        create(CreateProjectSchema, { id: "project-partial", name: "Partial" }),
+        { events: [ProjectCreatedSchema, ProjectRegisteredSchema] },
+      );
+    await vi.waitFor(() => {
+      expect(calls.filter((method) => method === "Subscribe")).toHaveLength(2);
+    });
+    await expect(posting).rejects.toThrow("selected Subscribe failed");
+    expect(calls).not.toContain("Post");
+    await vi.waitFor(() => {
+      expect(calls.filter((method) => method === "Cancel")).toHaveLength(1);
+    });
+    expect(client.cleanupFailures).toHaveLength(1);
+    await expect(client.close()).rejects.toThrow("Group cancellation failed");
+    await client.close();
+    expect(calls.filter((method) => method === "Cancel").length).toBeGreaterThanOrEqual(2);
+    expect(client.cleanupFailures).toHaveLength(0);
+  });
+
+  it("notifies once for a late first update while leaving the subscription live", async () => {
+    vi.useFakeTimers();
+    const topic = create(TopicSchema);
+    const wire = create(SubscriptionSchema, {
+      id: create(SubscriptionIdSchema, { value: "first-update" }),
+      topic,
+    });
+    const late = Promise.withResolvers<Message>();
+    const notify = vi.fn();
+    const client = Client.usingTransport({
+      transport: unaryTransport(
+        (method) => (method.name === "Subscribe" ? wire : create(ResponseSchema)),
+        undefined,
+        () =>
+          (async function* () {
+            yield create(SubscriptionUpdateSchema, {
+              subscription: wire,
+              update: {
+                case: "eventUpdates",
+                value: create(EventUpdatesSchema, {
+                  event: [create(EventSchema, { id: create(EventIdSchema, { value: "empty" }) })],
+                }),
+              },
+            });
+            yield await late.promise;
+          })(),
+      ),
+    });
+    const handle = await client.asGuest().createSubscription(topic, {
+      kind: "event",
+      firstUpdateTimeoutMs: 10,
+      onFirstUpdateTimeout: notify,
+    });
+    await handle.activate();
+    const updates = handle.updates[Symbol.asyncIterator]();
+    await expect(updates.next()).resolves.toMatchObject({ done: false });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(notify).toHaveBeenCalledExactlyOnceWith(handle);
+    late.resolve(
+      create(SubscriptionUpdateSchema, {
+        subscription: wire,
+        update: {
+          case: "eventUpdates",
+          value: create(EventUpdatesSchema, {
+            event: [
+              create(EventSchema, {
+                id: create(EventIdSchema, { value: "late" }),
+                context: create(EventContextSchema),
+                message: AnyMessages.pack(
+                  ProjectCreatedSchema,
+                  create(ProjectCreatedSchema, {
+                    id: "project-1",
+                    name: "Late project",
+                    priority: 1,
+                  }),
+                ),
+              }),
+            ],
+          }),
+        },
+      }),
+    );
+    await expect(updates.next()).resolves.toMatchObject({ done: false });
+    await vi.advanceTimersByTimeAsync(20);
+    expect(notify).toHaveBeenCalledTimes(1);
+    await handle.cancel();
+    await client.close();
+    vi.useRealTimers();
+  });
+
+  it("reports first-update callback rejection without ending later deliveries", async () => {
+    vi.useFakeTimers();
+    const topic = create(TopicSchema);
+    const wire = create(SubscriptionSchema, {
+      id: create(SubscriptionIdSchema, { value: "callback-reject" }),
+      topic,
+    });
+    const late = Promise.withResolvers<Message>();
+    const client = Client.usingTransport({
+      transport: unaryTransport(
+        (method) => (method.name === "Subscribe" ? wire : create(ResponseSchema)),
+        undefined,
+        () =>
+          (async function* () {
+            yield await late.promise;
+          })(),
+      ),
+    });
+    const handle = await client.asGuest().createSubscription(topic, {
+      kind: "event",
+      firstUpdateTimeoutMs: 10,
+      onFirstUpdateTimeout: () => {
+        throw new Error("notification failed");
+      },
+    });
+    await handle.activate();
+    const lifecycle = handle.lifecycle[Symbol.asyncIterator]();
+    await vi.advanceTimersByTimeAsync(10);
+    const notices = await Promise.all([lifecycle.next(), lifecycle.next(), lifecycle.next()]);
+    expect(
+      notices.map((notice) => (notice.value as SubscriptionLifecycle | undefined)?.state),
+    ).toContain("notificationFailed");
+    late.resolve(
+      create(SubscriptionUpdateSchema, {
+        subscription: wire,
+        update: {
+          case: "eventUpdates",
+          value: create(EventUpdatesSchema, {
+            event: [
+              create(EventSchema, {
+                id: create(EventIdSchema, { value: "after-notice" }),
+                message: AnyMessages.pack(
+                  ProjectCreatedSchema,
+                  create(ProjectCreatedSchema, {
+                    id: "project-3",
+                    name: "Still live",
+                    priority: 1,
+                  }),
+                ),
+              }),
+            ],
+          }),
+        },
+      }),
+    );
+    await expect(handle.updates[Symbol.asyncIterator]().next()).resolves.toMatchObject({
+      done: false,
+    });
+    await handle.cancel();
+    await client.close();
+    vi.useRealTimers();
+  });
+
+  it("limits initial activation through Subscribe and prevents a late accepted stream", async () => {
+    vi.useFakeTimers();
+    const pending = Promise.withResolvers<Subscription>();
+    const client = Client.usingTransport({
+      transport: unaryTransport((method) =>
+        method.name === "Subscribe" ? pending.promise : create(ResponseSchema),
+      ),
+    });
+    const handle = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), eventSubscription);
+    const first = expect(handle.activate({ activationTimeoutMs: 10 })).rejects.toBeInstanceOf(
+      SubscriptionActivationTimeoutError,
+    );
+    const concurrent = expect(handle.activate({ activationTimeoutMs: 100 })).rejects.toBeInstanceOf(
+      SubscriptionActivationTimeoutError,
+    );
+    await vi.advanceTimersByTimeAsync(10);
+    await first;
+    await concurrent;
+    pending.resolve(create(SubscriptionSchema, { topic: create(TopicSchema) }));
+    await handle.cancel();
+    await client.close();
+    vi.useRealTimers();
+  });
+
+  it("preserves activation timeout when accepted-wire cleanup fails", async () => {
+    vi.useFakeTimers();
+    const topic = create(TopicSchema);
+    let cancels = 0;
+    const client = Client.usingTransport({
+      transport: unaryTransport(
+        (method, input) => {
+          if (method.name === "Subscribe")
+            return create(SubscriptionSchema, {
+              id: create(SubscriptionIdSchema, { value: "timeout-cancel" }),
+              topic: input as Topic,
+            });
+          if (method.name === "Cancel" && ++cancels === 1) throw new Error("cancel unavailable");
+          return create(ResponseSchema);
+        },
+        undefined,
+        () => ({
+          [Symbol.asyncIterator]: () => ({
+            next: () => never<IteratorResult<Message>>(),
+          }),
+        }),
+        false,
+      ),
+    });
+    const handle = await client.asGuest().createSubscription(topic, eventSubscription);
+    const activation = expect(handle.activate({ activationTimeoutMs: 10 })).rejects.toBeInstanceOf(
+      SubscriptionActivationTimeoutError,
+    );
+    await vi.advanceTimersByTimeAsync(10);
+    await activation;
+    expect(client.cleanupFailures).toHaveLength(1);
+    await client.close();
+    expect(cancels).toBe(2);
+    expect(client.cleanupFailures).toHaveLength(0);
+    vi.useRealTimers();
+  });
+
+  it("settles a local activation deadline before a nonresponsive Cancel", async () => {
+    vi.useFakeTimers();
+    const topic = create(TopicSchema);
+    let cancels = 0;
+    const client = Client.usingTransport({
+      transport: unaryTransport(
+        (method, input) => {
+          if (method.name === "Subscribe")
+            return create(SubscriptionSchema, {
+              id: create(SubscriptionIdSchema, { value: "timeout-slow-cancel" }),
+              topic: input as Topic,
+            });
+          if (method.name === "Cancel" && ++cancels === 1) return never<Message>();
+          return create(ResponseSchema);
+        },
+        undefined,
+        neverEndingUpdates,
+        false,
+      ),
+    });
+    const handle = await client.asGuest().createSubscription(topic, eventSubscription);
+    let settled = false;
+    const failure = handle.activate({ activationTimeoutMs: 10 }).catch((error: unknown) => {
+      settled = true;
+      return error;
+    });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(settled).toBe(true);
+    expect(await failure).toBeInstanceOf(SubscriptionActivationTimeoutError);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(client.cleanupFailures).toHaveLength(1);
+    await client.close();
+    expect(cancels).toBe(2);
+    vi.useRealTimers();
+  });
+
+  it("waits for deadline cleanup when the client closes immediately", async () => {
+    vi.useFakeTimers();
+    const cancellation = Promise.withResolvers<Message>();
+    let cancels = 0;
+    let sourceCloses = 0;
+    const transport = unaryTransport(
+      (method, input) => {
+        if (method.name === "Subscribe")
+          return create(SubscriptionSchema, {
+            id: create(SubscriptionIdSchema, { value: "timeout-immediate-close" }),
+            topic: input as Topic,
+          });
+        if (method.name === "Cancel") {
+          cancels++;
+          return cancellation.promise;
+        }
+        return create(ResponseSchema);
+      },
+      undefined,
+      neverEndingUpdates,
+      false,
+    );
+    const client = Client.usingTransport({ transport, close: () => sourceCloses++ });
+    const handle = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), eventSubscription);
+    const failure = expect(handle.activate({ activationTimeoutMs: 10 })).rejects.toBeInstanceOf(
+      SubscriptionActivationTimeoutError,
+    );
+    await vi.advanceTimersByTimeAsync(10);
+    await failure;
+    let closed = false;
+    const closing = client.close().then(() => {
+      closed = true;
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(cancels).toBe(1);
+    expect(closed).toBe(false);
+    expect(sourceCloses).toBe(0);
+    cancellation.resolve(create(ResponseSchema));
+    await closing;
+    expect(sourceCloses).toBe(1);
+    vi.useRealTimers();
+  });
+
   it("stamps browser query context with the shared precise time", async () => {
     const instant = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 123_456_000 });
     const previousProvider = Time.setProvider({
@@ -145,6 +754,7 @@ describe("Client", () => {
     expectTypeOf<SubscriptionLifecycle>().toExtend<
       | { readonly state: "connecting"; readonly generation: number; readonly attempt: number }
       | { readonly state: "failed"; readonly generation: number; readonly error: Error }
+      | { readonly state: "notificationFailed"; readonly generation: number; readonly error: Error }
       | {
           readonly state: "connected" | "resynchronizing" | "gapPossible" | "closed";
           readonly generation: number;
@@ -2521,11 +3131,14 @@ describe("Client", () => {
       if (!(failure instanceof Error)) throw new Error("expected cancellation failure");
       expect(failure.message).toContain("timed out");
     });
-    await client.close().catch(() => undefined);
+    const closing = expect(client.close()).rejects.toThrow("timed out");
+    await vi.advanceTimersByTimeAsync(1_000);
+    await closing;
+    expect(client.cleanupFailures).toHaveLength(1);
     vi.useRealTimers();
   });
 
-  it("releases every owner and closes its source once after cleanup failures", async () => {
+  it("retains each failed cancellation and leaves the source available for retry", async () => {
     let closed = 0;
     const topic = create(TopicSchema);
     const client = Client.usingTransport({
@@ -2545,11 +3158,13 @@ describe("Client", () => {
     await first.activate();
     await second.activate();
     await expect(client.close()).rejects.toThrow("cancel failed");
-    expect(closed).toBe(1);
+    expect(closed).toBe(0);
+    expect(client.cleanupFailures).toHaveLength(2);
     await expect(client.close()).rejects.toThrow("cancel failed");
+    expect(closed).toBe(0);
   });
 
-  it("releases invalid activation ownership when compensating cancellation fails", async () => {
+  it("preserves an invalid activation failure when compensating cancellation fails", async () => {
     let cancels = 0;
     let closed = 0;
     const client = Client.usingTransport({
@@ -2571,17 +3186,14 @@ describe("Client", () => {
       .asGuest()
       .createSubscription(create(TopicSchema), eventSubscription);
     const failure = await subscription.activate().catch((error: unknown) => error);
-    expect(failure).toBeInstanceOf(AggregateError);
-    const errors = (failure as AggregateError).errors;
-    expect(errors).toHaveLength(2);
-    expect(errors[0]).toBeInstanceOf(Error);
-    expect(errors[1]).toBeInstanceOf(Error);
-    expect((errors[0] as Error).message).toContain("subscription ID");
-    expect((errors[1] as Error).message).toBe("compensating cancel failed");
+    expect(failure).toBeInstanceOf(ClientProtocolError);
+    expect((failure as Error).message).toContain("subscription ID");
+    expect(client.cleanupFailures).toHaveLength(1);
+    expect(client.cleanupFailures[0]?.message).toBe("compensating cancel failed");
     expect(cancels).toBe(1);
-    await client.close();
-    expect(cancels).toBe(1);
-    expect(closed).toBe(1);
+    await expect(client.close()).rejects.toThrow("compensating cancel failed");
+    expect(cancels).toBe(2);
+    expect(closed).toBe(0);
   });
 
   it("serializes activation and cancels a late accepted subscription once", async () => {
@@ -2628,7 +3240,7 @@ describe("Client", () => {
     expect(cancels).toBe(1);
   });
 
-  it("settles client close when Subscribe ignores abort without retaining the source", async () => {
+  it("settles close while retaining a source needed for a late Subscribe response", async () => {
     let closed = 0;
     const client = Client.usingTransport({
       transport: unaryTransport((method) =>
@@ -2642,8 +3254,9 @@ describe("Client", () => {
     void subscription.activate().catch(() => undefined);
     await Promise.resolve();
 
-    await expect(client.close()).resolves.toBeUndefined();
-    expect(closed).toBe(1);
+    await expect(client.close()).rejects.toThrow("late Subscribe response");
+    expect(client.cleanupFailures).toHaveLength(1);
+    expect(closed).toBe(0);
   });
 
   it("settles cancellation requested synchronously while Subscribe is dispatched", async () => {
@@ -2671,7 +3284,7 @@ describe("Client", () => {
     await expect(subscription.updates[Symbol.asyncIterator]().next()).resolves.toMatchObject({
       done: true,
     });
-    await client.close();
+    await expect(client.close()).rejects.toThrow("late Subscribe response");
   });
 
   it("cancels a wire accepted after client close exactly once", async () => {
@@ -2693,7 +3306,7 @@ describe("Client", () => {
       .createSubscription(create(TopicSchema), eventSubscription);
     void subscription.activate().catch(() => undefined);
     await Promise.resolve();
-    await client.close();
+    await expect(client.close()).rejects.toThrow("late Subscribe response");
 
     resolveSubscribe?.(
       create(SubscriptionSchema, {
@@ -2820,8 +3433,9 @@ describe("Client", () => {
     await client.close();
   });
 
-  it("aggregates subscription and source-close failures", async () => {
+  it("defers source closure when remote cancellation fails", async () => {
     const topic = create(TopicSchema);
+    let closed = 0;
     const client = Client.usingTransport({
       transport: unaryTransport((method, input) => {
         if (method.name === "Subscribe")
@@ -2833,17 +3447,14 @@ describe("Client", () => {
         return create(ResponseSchema);
       }),
       close: () => {
+        closed++;
         throw new Error("source close failed");
       },
     });
     const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
     await subscription.activate();
-    const failure = await client.close().catch((error: unknown) => error);
-    expect(failure).toBeInstanceOf(AggregateError);
-    expect((failure as AggregateError).errors).toMatchObject([
-      { message: "cancel failed" },
-      { message: "source close failed" },
-    ]);
+    await expect(client.close()).rejects.toThrow("cancel failed");
+    expect(closed).toBe(0);
   });
 
   it("fails activation without attempting cleanup when Subscribe rejects before a wire exists", async () => {
@@ -2929,8 +3540,9 @@ describe("Client", () => {
     await expect(pending).resolves.toMatchObject({ done: true });
   });
 
-  it("closes its source once when remote cancellation fails", async () => {
+  it("retains failed remote cleanup for a later explicit close retry", async () => {
     let closed = 0;
+    let cancels = 0;
     const topic = create(TopicSchema);
     const client = Client.usingTransport({
       transport: unaryTransport((method, input) => {
@@ -2939,7 +3551,7 @@ describe("Client", () => {
             id: create(SubscriptionIdSchema, { value: "s-fail" }),
             topic: input as Topic,
           });
-        if (method.name === "Cancel") throw new Error("cancel failed");
+        if (method.name === "Cancel" && ++cancels === 1) throw new Error("cancel failed");
         return create(ResponseSchema);
       }),
       close: () => closed++,
@@ -2947,7 +3559,11 @@ describe("Client", () => {
     const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
     await subscription.activate();
     await expect(client.close()).rejects.toThrow("cancel failed");
-    await expect(client.close()).rejects.toThrow("cancel failed");
+    expect(client.cleanupFailures).toHaveLength(1);
+    expect(closed).toBe(0);
+    await expect(client.close()).resolves.toBeUndefined();
+    expect(client.cleanupFailures).toHaveLength(0);
+    expect(cancels).toBe(2);
     expect(closed).toBe(1);
   });
 
@@ -3549,6 +4165,157 @@ describe("Client", () => {
     await client.close();
   });
 });
+
+function groupedTransport(
+  calls: string[],
+  topics: Topic[],
+  postStatus: "ok" | "error" = "ok",
+  failTypeName?: string,
+  control?: { readonly failSubscribeTypeName?: string; readonly failCancelOnce?: boolean },
+): Transport {
+  let cancels = 0;
+  return {
+    unary(method, _signal, _timeout, _headers, input) {
+      calls.push(method.name);
+      if (method.name === "Cancel" && control?.failCancelOnce && ++cancels === 1)
+        return Promise.reject(new Error("selected Cancel failed"));
+      let message: Message;
+      if (method.name === "Subscribe") {
+        const topic = input as Topic;
+        topics.push(topic);
+        if (
+          control?.failSubscribeTypeName !== undefined &&
+          topic.target?.type.endsWith(`/${control.failSubscribeTypeName}`)
+        )
+          return Promise.reject(new Error("selected Subscribe failed"));
+        message = create(SubscriptionSchema, {
+          id: create(SubscriptionIdSchema, { value: topic.id?.value ?? "missing" }),
+          topic,
+        });
+      } else if (method.name === "Post") {
+        const command = input as import("@spine-event-engine/proto").Command;
+        message = create(AckSchema, {
+          messageId: AnyMessages.pack(CommandIdSchema, command.id ?? create(CommandIdSchema)),
+          status: create(StatusSchema, {
+            status:
+              postStatus === "ok"
+                ? { case: "ok", value: {} }
+                : { case: "error", value: create(ErrorSchema, { message: "refused" }) },
+          }),
+        });
+      } else message = create(ResponseSchema);
+      return Promise.resolve({
+        stream: false,
+        method,
+        header: new Headers(),
+        trailer: new Headers(),
+        service: method.parent,
+        message,
+      } as never);
+    },
+    async stream(method, _signal, _timeout, _headers, input) {
+      calls.push(method.name);
+      const firstWire = await (input as AsyncIterable<Subscription>)[Symbol.asyncIterator]().next();
+      if (firstWire.done) throw new Error("Expected a subscription request.");
+      const wire = firstWire.value;
+      let first = true;
+      const message: AsyncIterable<Message> = {
+        [Symbol.asyncIterator]() {
+          return {
+            next: () =>
+              first
+                ? ((first = false),
+                  Promise.resolve({
+                    done: false,
+                    value: create(SubscriptionUpdateSchema, {
+                      subscription: wire,
+                      response: create(ResponseSchema, {
+                        status: create(StatusSchema, {
+                          status: { case: "ok", value: {} },
+                        }),
+                      }),
+                    }),
+                  }))
+                : failTypeName !== undefined &&
+                    wire.topic?.target?.type.endsWith(`/${failTypeName}`)
+                  ? Promise.reject(new ClientProtocolError("member failed"))
+                  : never<IteratorResult<Message>>(),
+            return: () => Promise.resolve({ done: true, value: undefined }),
+          };
+        },
+      };
+      return {
+        stream: true,
+        method,
+        header: new Headers(),
+        trailer: new Headers(),
+        service: method.parent,
+        message,
+      } as never;
+    },
+  };
+}
+
+function projectOutcome(wire: Subscription, id: string): SubscriptionUpdate {
+  return create(SubscriptionUpdateSchema, {
+    subscription: wire,
+    update: {
+      case: "eventUpdates",
+      value: create(EventUpdatesSchema, {
+        event: [
+          create(EventSchema, {
+            id: create(EventIdSchema, { value: id }),
+            message: AnyMessages.pack(
+              ProjectCreatedSchema,
+              create(ProjectCreatedSchema, {
+                id: `project-${id}`,
+                name: id,
+                priority: 1,
+              }),
+            ),
+          }),
+        ],
+      }),
+    },
+  });
+}
+
+function acceptedAck(command: Command) {
+  return create(AckSchema, {
+    messageId: AnyMessages.pack(CommandIdSchema, requireValue(command.id, "posted Command ID")),
+    status: create(StatusSchema, { status: { case: "ok", value: {} } }),
+  });
+}
+
+function outcomeThenIdle(outcome: SubscriptionUpdate): AsyncIterable<Message> {
+  return {
+    [Symbol.asyncIterator]() {
+      let first = true;
+      return {
+        next: () =>
+          first
+            ? ((first = false), Promise.resolve({ done: false as const, value: outcome }))
+            : never<IteratorResult<Message>>(),
+        return: () => Promise.resolve({ done: true as const, value: undefined }),
+      };
+    },
+  };
+}
+
+function delayedOutcomeThenIdle(pending: Promise<SubscriptionUpdate>): AsyncIterable<Message> {
+  return {
+    [Symbol.asyncIterator]() {
+      let first = true;
+      return {
+        next: () =>
+          first
+            ? ((first = false), pending.then((value) => ({ done: false as const, value })))
+            : never<IteratorResult<Message>>(),
+        return: () => Promise.resolve({ done: true as const, value: undefined }),
+      };
+    },
+  };
+}
 
 function unaryTransport(
   handler: (

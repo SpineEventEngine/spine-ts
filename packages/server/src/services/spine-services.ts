@@ -84,6 +84,7 @@ import {
   type Topic,
 } from "@spine-event-engine/proto/client";
 import { SubscriptionService } from "@spine-event-engine/proto/client";
+import { EventOriginFilters } from "../stand/event-origin-filter.js";
 import { AckSchema, type Ack } from "@spine-event-engine/proto";
 import {
   ResponseSchema,
@@ -638,25 +639,7 @@ export class SpineServices {
   }
 
   #createSubscriptionAttachment(record: SubscriptionRecord): SubscriptionAttachment {
-    if (record.kind === "event") {
-      const eventSubscription = boundedContextAccess.subscribeToEvent(
-        record.route.context,
-        record.route.typeUrl,
-        {
-          onEvent: (event) => {
-            if (!ServiceValues.eventTenantMatches(record, event)) {
-              return;
-            }
-            record.delivery.push(ServiceValues.createEventUpdate(record, event));
-            if (record.delivery.closed) {
-              this.#removeDetachedSubscription(record.id);
-            }
-          },
-        },
-      );
-      record.delivery.attach(eventSubscription);
-      return eventSubscription;
-    }
+    if (record.kind === "event") return this.#attachEventSubscription(record);
 
     const stateRecord = record;
     const standSubscription = stateRecord.route.context.stand().subscribe(
@@ -674,6 +657,28 @@ export class SpineServices {
     );
     stateRecord.delivery.attach(standSubscription);
     return standSubscription;
+  }
+
+  /**
+   * Attaches one filtered Event observer to its bounded context.
+   * @param record The tracked Event subscription.
+   * @returns The attached Event observer.
+   */
+  #attachEventSubscription(record: EventSubscriptionRecord): SubscriptionAttachment {
+    const eventSubscription = boundedContextAccess.subscribeToEvent(
+      record.route.context,
+      record.route.typeUrl,
+      {
+        onEvent: (event) => {
+          if (!ServiceValues.eventTenantMatches(record, event)) return;
+          if (record.eventMatcher !== undefined && !record.eventMatcher(event)) return;
+          record.delivery.push(ServiceValues.createEventUpdate(record, event));
+          if (record.delivery.closed) this.#removeDetachedSubscription(record.id);
+        },
+      },
+    );
+    record.delivery.attach(eventSubscription);
+    return eventSubscription;
   }
 
   #removeSubscription(id: string): Promise<void> {
@@ -911,6 +916,7 @@ type SubscriptionRecord = EventSubscriptionRecord | StateSubscriptionRecord;
 interface EventSubscriptionRecord extends SubscriptionRecordBase {
   readonly kind: "event";
   readonly route: EventRoute;
+  readonly eventMatcher?: (event: Event) => boolean;
 }
 
 interface StateSubscriptionRecord extends SubscriptionRecordBase {
@@ -927,6 +933,7 @@ type SubscriptionShape =
   | {
       readonly kind: "event";
       readonly route: EventRoute;
+      readonly eventMatcher?: (event: Event) => boolean;
     }
   | {
       readonly kind: "state";
@@ -1595,8 +1602,8 @@ function createSubscriptionShape(topic: Topic, route: SubscriptionRoute): Subscr
     throw new ConnectError("Subscription topic target is required.", Code.InvalidArgument);
   }
   if (route.kind === "event") {
-    validateEventSubscriptionTopic(target);
-    return { kind: "event", route };
+    const eventMatcher = validateEventSubscriptionTopic(target);
+    return { kind: "event", route, ...(eventMatcher === undefined ? {} : { eventMatcher }) };
   }
 
   switch (target.criterion.case) {
@@ -1625,7 +1632,7 @@ function createSubscriptionShape(topic: Topic, route: SubscriptionRoute): Subscr
 /**
  * Checks the supported event topic criteria.
  */
-function validateEventSubscriptionTopic(target: Target): void {
+function validateEventSubscriptionTopic(target: Target): ((event: Event) => boolean) | undefined {
   switch (target.criterion.case) {
     case "includeAll":
       if (!target.criterion.value) {
@@ -1634,12 +1641,9 @@ function validateEventSubscriptionTopic(target: Target): void {
           Code.InvalidArgument,
         );
       }
-      return;
+      return undefined;
     case "filters":
-      throw new ConnectError(
-        "SubscriptionService.Subscribe event topics support only include_all in this runtime slice.",
-        Code.InvalidArgument,
-      );
+      return EventOriginFilters.compile(target.criterion.value);
     default:
       throw new ConnectError(
         "SubscriptionService.Subscribe requires filters or include_all = true.",

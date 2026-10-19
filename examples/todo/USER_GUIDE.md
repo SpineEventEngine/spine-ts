@@ -272,9 +272,10 @@ Vitest without raw Connect or private server types.
 ## Post commands and inspect acknowledgements
 
 Use generated schemas and public clients. The checked-in `pnpm --filter
-@spine-event-engine/example-todo smoke` program is the executable CreateTask example: it
-uses an `Http2SessionManager`, bounds the command and eventual query, checks an
-OK acknowledgement, and aborts its session in `finally`.
+@spine-event-engine/example-todo smoke` program uses the public Node client. It subscribes to selected outcomes before
+posting, distinguishes acceptance from observed Events and rejections, and
+checks the authoritative TaskList Projection. It explicitly cancels its
+subscriptions and closes the client when finished.
 
 `CreateTask` needs a task ID, task-list ID, and non-empty title; an initial assignee is
 optional. `AssignTask` selects an assignee, emitting `TaskAssigned` initially
@@ -282,8 +283,9 @@ or `TaskReassigned` when changing to a different person. `ReassignTask` requires
 an existing assignee and emits `TaskReassigned`; `UnassignTask` removes the
 assignee. `RenameTask` changes the title; `CompleteTask` marks
 it done; `ReopenTask` marks it open. All use the same
-`CommandService.Post` envelope shape as the smoke program, replacing only the
-generated command schema/message.
+public `request.post()` or `request.postAndSubscribe()` API, passing the
+generated Command schema and message. The client constructs the envelope and
+Command ID internally.
 
 An OK acknowledgement confirms the immediate command path, not that an
 asynchronous projection is visible. Query or subscribe for that observable
@@ -299,7 +301,9 @@ effect.
   observation and does not change the OK acknowledgement.
 
 Client envelopes redact rejected-command payloads and throwable stacks.
-Technical failures remain non-OK acknowledgements.
+Admission errors can produce a non-OK acknowledgement; a transport failure
+rejects the client call. A failure after acceptance does not retroactively
+change that acknowledgement and may leave no observed outcome.
 
 ### Assignment rejections
 
@@ -350,7 +354,7 @@ console.log(rows[0].id.value, rows[0].tasks[0]?.title);
 '
 ```
 
-This command calls `TaskListReader` directly. The smoke program uses direct gRPC
+This command calls `TaskListReader` directly. The smoke program uses the public Node client over native gRPC
 and does not use that object.
 
 The following complete object reads an open list through the Node client.
@@ -425,208 +429,67 @@ An OK command Ack does not make projection delivery synchronous. When a query
 waits for a command consequence, repeat the bounded read only until an overall
 deadline, as the checked-in smoke does.
 
-## Subscribe safely
+## Subscribe to Command outcomes
 
-For a live view, create a `Topic` with the same `TaskList` target, subscribe,
-and activate the returned subscription. First run `pnpm typecheck:build` from
-the repository root, then save this complete ESM module as
-`examples/todo/scripts/subscription-client.mjs`. With `pnpm --filter
-@spine-event-engine/example-todo start` running in another terminal, execute it from the
-repository root with:
+The checked-in [smoke client](scripts/smoke.mjs) demonstrates the complete
+workflow through `Client.connectTo()` and `request.postAndSubscribe()`:
 
-```bash
-pnpm --filter @spine-event-engine/example-todo exec node scripts/subscription-client.mjs
-```
+1. Select Event and rejection schemas before posting the Command.
+2. Wait for every selected subscription to become ready.
+3. Post the Command once and inspect its acknowledgement.
+4. Receive continuing updates through the returned subscription.
+5. Cancel when this application has observed the outcomes it needs.
 
-It starts the iterator read before posting the command, applies the delivery
-deadline after that post, and decodes one exact-ID projection update.
+The helper performs the first three steps. It matches each update to the exact
+Command that caused it, using the complete Origin as Spine JVM does. The
+application supplies generated Command messages and schemas, without preparing
+an envelope or assigning a framework Command ID.
 
-On success, the `Subscription` is an opaque server-generated handle. The module
-cancels it, aborts the stream signal, returns the iterator, and aborts HTTP/2.
+The smoke client creates a task with an assignee and receives both `TaskCreated`
+and `TaskAssigned`. It also selects several assignment Events and rejections,
+including a real invalid transition. These arrays identify possible types;
+the helper does not assume that every selected type must occur, or cancel after
+one update. The smoke client decides when its particular scenario is finished.
 
-If the one-second creation deadline expires first, the client has no ID to
-cancel. Session abort still closes transport. A created but inactive definition
-remains pending for 30 seconds; active definitions have no framework TTL. The
-default registry uses application storage, while streams and queues are local.
-Cancel physically deletes the definition.
+After receiving Events, the client still queries the TaskList until its expected
+state is visible. An Event notification does not prove that the Projection has
+already processed it.
 
-```js
-import { log } from "node:console";
-import { randomUUID } from "node:crypto";
-import process from "node:process";
-import { clearTimeout, setTimeout } from "node:timers";
+### Optional timeouts
 
-import { create } from "@bufbuild/protobuf";
-import { createClient } from "@connectrpc/connect";
-import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
-import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
-import { UserIdSchema } from "@spine-event-engine/proto";
-import {
-  CommandService,
-  SubscriptionService,
-  TargetFiltersSchema,
-  TargetSchema,
-  TopicIdSchema,
-  TopicSchema,
-} from "@spine-event-engine/proto/client";
-import { SignalMetadata } from "@spine-event-engine/server";
+`activationTimeoutMs` limits subscription setup. Expiry reports an error and the
+helper does not post the Command. `firstUpdateTimeoutMs` calls
+`onFirstUpdateTimeout(subscription)` once if no first matching update arrives
+within the configured period after posting starts. The callback can update the
+application or explicitly cancel; the timeout itself keeps the stream active.
+A late Event remains deliverable. Silence after the first update has no timer.
+Neither timeout has a default.
 
-import { CreateTaskSchema } from "../dist/generated/spine/examples/todo/task_commands_pb.js";
-import {
-  TaskIdSchema,
-  TaskListIdSchema,
-} from "../dist/generated/spine/examples/todo/task_id_pb.js";
-import { TaskListSchema } from "../dist/generated/spine/examples/todo/task_list_pb.js";
+An activation acknowledgement is not a business update. A posting
+acknowledgement is acceptance, not a Command outcome. An observed rejection is
+an outcome and satisfies the first-update timer just as an Event does.
 
-const baseUrl = process.env.SPINE_TODO_BASE_URL ?? "http://127.0.0.1:8080";
-const session = new Http2SessionManager(baseUrl);
-const transport = createGrpcTransport({ baseUrl, sessionManager: session });
-const commands = createClient(CommandService, transport);
-const subscriptions = createClient(SubscriptionService, transport);
-const metadata = new SignalMetadata();
-const actorContext = metadata.actorContext({
-  actor: create(UserIdSchema, { value: "todo-subscription-user" }),
-});
-const suffix = randomUUID();
-const taskId = `subscription-task-${suffix}`;
-const target = create(TargetSchema, {
-  type: TypeUrls.derive(TaskListSchema),
-  criterion: {
-    case: "filters",
-    value: create(TargetFiltersSchema, {
-      idFilter: {
-        id: [AnyMessages.pack(TaskListIdSchema, create(TaskListIdSchema, { value: taskId }))],
-      },
-    }),
-  },
-});
+### Continuing views and cleanup
 
-try {
-  const subscription = await withTimeout(
-    subscriptions.subscribe(
-      create(TopicSchema, {
-        id: create(TopicIdSchema, { value: `subscription-topic-${suffix}` }),
-        target,
-        context: actorContext,
-      }),
-    ),
-    "subscription creation",
-    1_000,
-  );
-  let stream;
-  let iterator;
-  let pendingUpdate;
-  let canceled = false;
+For a live view, use an ordinary Entity subscription with an authoritative query
+for reconnects. For several Event types, use
+`request.createSubscription([EventSchema, OtherEventSchema], { kind: "event" })`.
+That subscription observes the selected types generally; `postAndSubscribe`
+adds the Command-specific Origin filter.
 
-  try {
-    stream = new AbortController();
-    iterator = subscriptions
-      .activate(subscription, { signal: stream.signal })
-      [Symbol.asyncIterator]();
-    pendingUpdate = iterator.next();
-    void pendingUpdate.catch(() => undefined);
-    const ack = await withTimeout(
-      commands.post(createTaskCommand(taskId)),
-      "CreateTask acknowledgement",
-      1_000,
-    );
-    if (ack.status?.status.case !== "ok") {
-      throw new Error("CreateTask was not acknowledged.");
-    }
+Receive updates in an asynchronous `for await` consumer and handle its rejected
+promise. Waiting suspends that function, leaving the Node event loop free for
+other work. Use one consumer for `updates` and a separate consumer for
+`lifecycle`. Cancel explicitly when observation ends. If remote cleanup fails,
+retry `subscription.cancel()` or `client.close()` and inspect
+`client.cleanupFailures`; failed client closure retains its transport for retry.
 
-    const delivered = await withTimeout(pendingUpdate, "subscription update", 1_000);
-    pendingUpdate = undefined;
-    if (delivered.done === true) {
-      throw new Error("Subscription ended before delivering an update.");
-    }
-    const list = taskListFrom(delivered.value);
-    if (list === undefined) {
-      throw new Error("Subscription update did not contain TaskList state.");
-    }
-    if (list.id?.value !== taskId) {
-      throw new Error(`Expected TaskList ${taskId}, received ${list.id?.value ?? "<missing>"}.`);
-    }
-    log(`subscription update: ${list.id.value}`);
-
-    const cancel = await withTimeout(
-      subscriptions.cancel(subscription),
-      "subscription cancellation",
-      1_000,
-    );
-    if (cancel.status?.status.case !== "ok") {
-      throw new Error("Subscription cancellation was not acknowledged.");
-    }
-    canceled = true;
-    stream.abort();
-    await withTimeout(
-      iterator.return?.() ?? Promise.resolve({ done: true }),
-      "iterator return",
-      1_000,
-    );
-    iterator = undefined;
-  } finally {
-    stream?.abort();
-    if (!canceled) {
-      await withTimeout(subscriptions.cancel(subscription), "subscription cleanup", 1_000).catch(
-        () => undefined,
-      );
-    }
-    if (pendingUpdate !== undefined) {
-      await withTimeout(pendingUpdate, "pending subscription read cleanup", 1_000).catch(
-        () => undefined,
-      );
-    }
-    if (iterator !== undefined) {
-      await withTimeout(
-        iterator.return?.() ?? Promise.resolve({ done: true }),
-        "iterator cleanup",
-        1_000,
-      ).catch(() => undefined);
-    }
-  }
-} finally {
-  session.abort();
-}
-
-function createTaskCommand(taskId) {
-  return SignalEnvelopes.command({
-    context: metadata.commandContext({ actorContext }),
-    schema: CreateTaskSchema,
-    message: create(CreateTaskSchema, {
-      id: create(TaskIdSchema, { value: taskId }),
-      title: "Observe the subscription",
-    }),
-  });
-}
-
-function taskListFrom(update) {
-  const entityUpdate =
-    update.update.case === "entityUpdates" ? update.update.value.update[0] : undefined;
-  if (entityUpdate?.kind.case !== "state") {
-    return undefined;
-  }
-  return AnyMessages.unpack(entityUpdate.kind.value, TaskListSchema);
-}
-
-async function withTimeout(promise, label, timeoutMs) {
-  let timeout;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise((_, reject) => {
-        timeout = setTimeout(() => reject(new Error(`${label} timed out.`)), timeoutMs);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-```
-
-The smoke deliberately does not subscribe; the black-box suite is the
-subscription acceptance proof. Active streams and queued updates are
-process-local, and this guide does not promise update replay after disconnect
-or restart.
+See the [browser client guide](../../packages/client-web/README.md) for the same
+API with full update-consumption examples. Node uses native gRPC but shares the
+subscription contract. Reconnect may lose notifications; no Event replay or
+automatic Command repost is provided. The server's pending-definition expiry,
+gateway request limits, and finite reconnect budget are separate from these
+optional client timeouts.
 
 ## Test the supported paths
 

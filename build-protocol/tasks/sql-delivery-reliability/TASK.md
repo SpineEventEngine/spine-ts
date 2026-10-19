@@ -26,7 +26,10 @@ The final monitor correction passed independent review, live reruns, and the
 full release profile. The PR checks record verification of the pushed commit.
 Disposable evidence stays out of Git.
 
-The requested [subscription API addition](SUBSCRIPTION_API_PLAN.md) is planned
-on this same branch. Independent review findings are addressed; no product
-questions remain. Documentation and formatting checks pass. Implementation has
-not started; the runtime verification summary above applies to existing changes.
+The requested [subscription API addition](SUBSCRIPTION_API_PLAN.md) is implemented
+on this same branch. API, reliability, documentation, test, and security reviews
+are resolved; full release verification is in progress. The
+runtime verification summary above applies to changes preceding this addition.
+Integration with official `master` needs a separate decision: its Agent recovery
+republishes saved Events, contrary to the author's prohibition. No merge has
+started. The branch now uses the unused snapshot 25 release version.

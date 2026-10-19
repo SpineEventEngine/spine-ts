@@ -56,6 +56,7 @@ import {
   EnrichmentSchema,
   Enrichment_ContainerSchema,
   type Event,
+  type Origin,
   type EventContext,
   EventContextSchema,
   EventIdSchema,
@@ -1854,6 +1855,28 @@ export const SignalEnvelopes = {
       id: create(EventIdSchema, { value: freshSignalId() }),
       message: AnyMessages.pack(input.schema, input.message, input),
       context: clone(EventContextSchema, input.context),
+    });
+  },
+
+  /**
+   * Builds the immediate origin that a Command-produced Event records.
+   * @param command The exact Command envelope being posted.
+   * @returns Its complete message, actor, and preceding origin.
+   */
+  originFromCommand(command: Command): Origin {
+    if (command.id?.uuid === undefined || command.id.uuid.trim().length === 0)
+      throw new TypeError("A Command origin requires a non-empty Command ID.");
+    return create(OriginSchema, {
+      message: create(MessageIdSchema, {
+        id: AnyMessages.pack(CommandIdSchema, command.id),
+        typeUrl: command.message?.typeUrl ?? "",
+      }),
+      ...(command.context?.actorContext === undefined
+        ? {}
+        : { actorContext: clone(ActorContextSchema, command.context.actorContext) }),
+      ...(command.context?.origin === undefined
+        ? {}
+        : { grandOrigin: clone(OriginSchema, command.context.origin) }),
     });
   },
 } as const;

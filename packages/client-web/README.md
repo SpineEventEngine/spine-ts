@@ -69,8 +69,9 @@ protocol and allow its origin.
 
 ## 📬 Post commands and send queries
 
-Use an actor or guest request scope. Commands return an application outcome;
-queries return the raw Spine response.
+Use an actor or guest request scope. Commands return an acknowledgement of
+acceptance; queries return the raw Spine response. Events and rejections from
+Command processing are its outcomes.
 
 <!-- docs-snippet-path: examples/message-board/web/src/docs/client-web-request-subscription.ts -->
 
@@ -116,9 +117,143 @@ cancel an admitted call.
 
 Command validation belongs to the server. The browser client serializes the
 submitted Proto value without enforcing its validation options locally, then
-returns the server's `error` outcome. This lets a form display the same
+returns the server's `error` acknowledgement. This lets a form display the same
 validation messages as every other client instead of maintaining browser-only
 rules.
+
+## Observe Command outcomes
+
+Use `postAndSubscribe` when you need to observe Events or rejections caused by
+a Command. It activates the selected subscriptions before posting, so a fast
+outcome can arrive safely before the posting acknowledgement. Both `events`
+and `rejections` accept several generated schemas.
+
+This example receives a generated Message Board Command from application code.
+It keeps listening after the first update; application code decides when to
+call `subscription.cancel()`. The actual [Message Board form](../../examples/message-board/web/src/post-form.tsx)
+uses the same API and cancels after it handles its post's outcome.
+
+<!-- docs-snippet-path: examples/message-board/web/src/post-form.tsx -->
+
+```ts
+import { AnyMessages } from "@spine-event-engine/core";
+import { Client, type Subscription } from "@spine-event-engine/client-web";
+import {
+  PostMessageSchema,
+  type PostMessage,
+} from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/commands_pb.js";
+import { MessagePostedSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/events_pb.js";
+import { MessageAlreadyPostedSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/rejections_pb.js";
+
+const client = Client.forGrpcWeb("http://127.0.0.1:8090");
+const request = client.onBehalfOf("alice");
+
+async function postMessage(command: PostMessage): Promise<Subscription | undefined> {
+  const result = await request.postAndSubscribe(PostMessageSchema, command, {
+    events: [MessagePostedSchema],
+    rejections: [MessageAlreadyPostedSchema],
+    activationTimeoutMs: 3_000,
+    firstUpdateTimeoutMs: 10_000,
+    onFirstUpdateTimeout: () => {
+      console.info("Still waiting for confirmation. The subscription remains active.");
+    },
+  });
+  if (result.kind === "refused") {
+    console.error("Command was not accepted:", result.acknowledgement);
+    return undefined;
+  }
+  console.info("Command accepted; its outcomes arrive separately.");
+  void receiveUpdates(result.subscription).catch(console.error);
+  void observeLifecycle(result.subscription).catch(console.error);
+  return result.subscription;
+}
+
+async function receiveUpdates(subscription: Subscription): Promise<void> {
+  for await (const delivery of subscription.updates) {
+    if (delivery.kind !== "update" || delivery.update.update.case !== "eventUpdates") continue;
+    for (const event of delivery.update.update.value.event) {
+      if (event.message === undefined) continue;
+      const posted = AnyMessages.unpack(event.message, MessagePostedSchema);
+      const rejected = AnyMessages.unpack(event.message, MessageAlreadyPostedSchema);
+      if (posted !== undefined) console.info("Message posted:", posted.text);
+      if (rejected !== undefined) console.info("Message was already posted:", rejected.id);
+    }
+  }
+}
+
+async function observeLifecycle(subscription: Subscription): Promise<void> {
+  for await (const notice of subscription.lifecycle) {
+    if (notice.state === "failed" || notice.state === "notificationFailed") {
+      console.error(notice.error);
+    }
+  }
+}
+
+// Call postMessage(command).catch(...) from a user action.
+// Keep its returned handle and await handle.cancel() when observation ends.
+// Await client.close() when the application releases this connection.
+void postMessage;
+```
+
+`postMessage()` rejects on activation, protocol, or transport failure; handle
+that error at the user action. The `for await` loops suspend only their
+asynchronous functions while waiting. The browser remains responsive, and the
+caller receives the subscription without waiting for the loops to finish.
+
+The example's three- and ten-second values are application choices.
+**Neither timeout has a default.** Activation timeout prevents posting if setup
+is not ready. First-update timeout calls the notification once and leaves the
+subscription active. The first matching update clears it at receipt; there is
+no timeout between subsequent updates. A rejection counts as an update. The
+callback can accept the subscription argument and explicitly cancel it if that
+is the application's policy.
+
+A successful acknowledgement means acceptance, not completed processing. A
+missing update does not prove failure. The helper never reposts a Command
+or replays Events. It matches the immediate Command Origin using Spine JVM's
+full comparison, including the actor context.
+
+## Observe several Event types without posting
+
+An ordinary subscription uses the same timing options and continuing updates:
+
+<!-- docs-snippet-path: examples/message-board/web/src/post-form.tsx -->
+
+```ts
+import { Client } from "@spine-event-engine/client-web";
+import { MessagePostedSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/events_pb.js";
+import { MessageAlreadyPostedSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/rejections_pb.js";
+
+const client = Client.forGrpcWeb("http://127.0.0.1:8090");
+const request = client.onBehalfOf("alice");
+const subscription = await request.createSubscription(
+  [MessagePostedSchema, MessageAlreadyPostedSchema],
+  {
+    kind: "event",
+    firstUpdateTimeoutMs: 10_000,
+    onFirstUpdateTimeout: () => console.info("No update yet; still listening."),
+  },
+);
+
+async function start(): Promise<void> {
+  await subscription.activate({ activationTimeoutMs: 3_000 });
+  for await (const update of subscription.updates) console.info(update);
+}
+
+void start().catch(console.error);
+// Keep the UI running. Its stop action can await subscription.cancel().
+// The application closes client when it releases this connection.
+```
+
+This observes those types generally. `postAndSubscribe` additionally selects
+outcomes caused by its particular Command. All selected types share one logical
+subscription; readiness requires every member, and a terminal member failure
+ends the group. No total ordering is promised across separate Event streams.
+
+If remote cleanup fails, retry `subscription.cancel()` or `client.close()`.
+`client.cleanupFailures` exposes retained errors even when failed setup never
+returned a handle. A failed `client.close()` keeps its transport available for
+retry and continues to reject new work.
 
 ## 🔄 Handle reconnects
 

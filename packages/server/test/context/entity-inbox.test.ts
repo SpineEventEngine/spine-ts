@@ -1648,6 +1648,68 @@ describe("LocalEntityInbox", () => {
     ).resolves.toBeDefined();
   });
 
+  it("runs every publication follow-up when one shard drain replays two commands", async () => {
+    const delivery = new Delivery({
+      context: { name: "FollowUpBatch", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      pageSize: 2,
+    });
+    const inbox = new LocalEntityInbox("FollowUpBatch");
+    const targetTypeUrl = "type.example.dev/Tasks.Aggregate";
+    const published: string[] = [];
+    inbox.register({
+      targetTypeUrl,
+      labels: ["HANDLE_COMMAND"],
+      replay(message) {
+        return Promise.resolve(() => {
+          published.push(message.signalId);
+          return Promise.resolve();
+        });
+      },
+    });
+    await inbox.receiveAll(delivery, [
+      processInput(targetTypeUrl, "first"),
+      processInput(targetTypeUrl, "second"),
+    ]);
+    await vi.waitFor(() => {
+      expect(published).toEqual(["signal-first", "signal-second"]);
+    });
+  });
+
+  it("attempts later initial publications after an earlier callback fails", async () => {
+    const delivery = new Delivery({
+      context: { name: "FollowUpFailure", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      pageSize: 2,
+    });
+    const inbox = new LocalEntityInbox("FollowUpFailure");
+    const targetTypeUrl = "type.example.dev/Tasks.Aggregate";
+    const attempted: string[] = [];
+    inbox.register({
+      targetTypeUrl,
+      labels: ["HANDLE_COMMAND"],
+      replay(message) {
+        return Promise.resolve(() => {
+          attempted.push(message.signalId);
+          return message.signalId === "signal-first"
+            ? Promise.reject(new Error("first publication unavailable"))
+            : Promise.resolve();
+        });
+      },
+    });
+    await inbox.receiveAll(delivery, [
+      processInput(targetTypeUrl, "first"),
+      processInput(targetTypeUrl, "second"),
+    ]);
+    await vi.waitFor(() => {
+      expect(attempted).toEqual(["signal-first", "signal-second"]);
+    });
+    await inbox.receive(delivery, processInput(targetTypeUrl, "later"));
+    await vi.waitFor(() => {
+      expect(attempted).toEqual(["signal-first", "signal-second", "signal-later"]);
+    });
+  });
+
   it("does not block a different tenant or shard behind a gated follow-up", async () => {
     const strategy = twoShardStrategy();
     const blockedDelivery = new Delivery({

@@ -5,9 +5,23 @@ Start with the [Node client overview](README.md) for the shortest connection pat
 
 ## Client construction
 
-`Client.connectTo(baseUrl, options)` creates a shared `client-web` `Client` with a Node Connect HTTP/2 session. `client.close()` closes subscriptions and then aborts that session. `Client.usingTransport(transport, options)` uses a Connect transport supplied by the caller; closing the returned client does not close the supplied transport. Each `post()` creates its Command through the shared core signal-envelope helper, which assigns a fresh secure UUID-based Command ID.
+`Client.connectTo(baseUrl, options)` creates a shared `client-web` `Client` with a Node Connect HTTP/2 session. `client.close()` stops local subscriptions and attempts remote cleanup before aborting that session. Failed cleanup rejects closure and retains the session for a later explicit `close()` retry; new operations remain rejected. `client.cleanupFailures` exposes currently retained cleanup errors. `Client.usingTransport(transport, options)` uses a Connect transport supplied by the caller; closing the returned client does not close the supplied transport. Each `post()` creates its Command through the shared core signal-envelope helper, which assigns a fresh secure UUID-based Command ID.
 
-The returned kernel supports `asGuest()` and `onBehalfOf(user)` request scopes. A scope has `post(schema, value, options)`, `send(query, options)`, and `createSubscription(topic, options)`. See the [client-web reference](../client-web/REFERENCE.md) for command outcomes, cancellation, subscription lifecycle, recovery, and terminal behavior shared by both clients.
+The returned kernel supports `asGuest()` and `onBehalfOf(user)` request scopes. A scope has `post(schema, value, options)`, `send(query, options)`, `createSubscription(topicOrSchemas, options)`, and `postAndSubscribe(schema, value, options)`. See the [client-web reference](../client-web/REFERENCE.md) for Command acknowledgements and outcomes, optional activation and first-update timeouts, cancellation, subscription lifecycle, recovery, and terminal behavior shared by both clients.
+
+## Continuing subscriptions
+
+Node uses the same subscription implementation and public types as the browser
+client. Both timeout options are absent by default. `postAndSubscribe` waits for
+all selected subscriptions to activate, posts once, and returns its immediate
+acknowledgement separately from the continuing update stream. Event and rejection
+schema arrays can each contain several types.
+
+Use `for await` in an asynchronous consumer with rejection handling. Waiting for
+an update suspends that function, leaving the Node event loop available for
+other work. Explicitly cancel when the application no longer needs updates.
+See the runnable [Todo client](../../examples/todo/scripts/smoke.mjs), which
+receives multiple outcomes and then checks the authoritative Projection.
 
 ## Entity query API
 

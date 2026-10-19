@@ -1,7 +1,7 @@
 # Spine client for Node.js
 
 Use this package from a Node.js ESM application to post commands, send queries,
-or create subscriptions for query-side views. It owns the Node HTTP/2 transport;
+or create subscriptions for query-side views. It manages the Node HTTP/2 transport;
 the request and subscription API is shared with the browser client.
 
 This is an experimental snapshot. Install the snapshot explicitly while its API
@@ -39,7 +39,7 @@ package name and generated export paths with the ones declared by its
 `package.json` and `spine-proto.json`.
 
 Create one client for the component that manages the connection. A client from
-`connectTo()` owns its HTTP/2 session, so always close it.
+`connectTo()` creates its HTTP/2 session, so always close it.
 
 <!-- docs-snippet-path: examples/message-board/app/src/index.ts -->
 
@@ -73,8 +73,26 @@ await client.close();
 
 The URL is an application gateway URL. It is not an instruction to expose a
 Spine server directly to the internet. A successful call is an observation that
-the local service accepted the command; handle rejection and error outcomes in
-your application instead of assuming every command succeeds.
+the local service accepted the command; handle admission failures and observe the relevant Events or rejections when
+your application needs to know the processing outcome.
+
+## Receive Events and rejections after a Command
+
+The returned request also provides `postAndSubscribe(schema, command, options)`.
+It activates every selected Event/rejection subscription, posts once, then
+returns an accepted/refused result. On acceptance, consume the returned
+subscription's continuing `updates` stream. Several types may be selected;
+receiving one update does not close the subscription.
+
+`activationTimeoutMs` and `firstUpdateTimeoutMs` are optional, with no defaults.
+The first-update callback is named `onFirstUpdateTimeout`; it notifies once and
+allows late updates to arrive. See the [complete browser-safe API examples](../client-web/README.md#observe-command-outcomes)
+for the same request methods and non-blocking update consumers. Change client
+construction to `Client.connectTo()` for native Node transport.
+
+The runnable [Todo smoke client](../../examples/todo/scripts/smoke.mjs) uses
+this API for actual Commands, multiple Events, and rejections, then checks the
+TaskList Projection. Run it using the [Todo instructions](../../examples/todo/README.md).
 
 ## 🔎 Query generated entities
 
@@ -91,13 +109,15 @@ rules.
 
 The client does not make a server safe for public access. Put the authenticated
 application gateway at the network boundary. Commands are not retried
-automatically, and an interrupted subscription must be recreated before the
-application re-reads current entity state.
+automatically. Entity subscriptions use their authoritative query after
+reconnection; Event subscriptions report possible gaps without replay.
 
-Node subscriptions use the same `createSubscription`, `activate`, and `cancel`
-API as the browser client; see the [client-web reference](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/client-web/REFERENCE.md)
+Node subscriptions use the same `createSubscription`, `postAndSubscribe`,
+`activate`, and `cancel` API as the browser client; see the [client-web reference](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/client-web/REFERENCE.md)
 for lifecycle and recovery limits. Close the client during process shutdown so
-its owned HTTP/2 session and subscriptions can finish cleanup.
+its HTTP/2 session and subscriptions can finish cleanup. If closure rejects
+because remote cleanup failed, inspect `client.cleanupFailures` and retry
+`close()` explicitly. The session remains available for that retry.
 
 ## 🔗 Learn more
 

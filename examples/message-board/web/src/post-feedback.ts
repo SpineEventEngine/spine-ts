@@ -12,7 +12,7 @@
  * the License.
  */
 
-import type { ClientOutcome } from "@spine-event-engine/client-web";
+import type { CommandAcknowledgement } from "@spine-event-engine/client-web";
 import { AnyMessages } from "@spine-event-engine/core";
 import { ErrorSchema, ValidationErrorSchema } from "@spine-event-engine/proto";
 
@@ -34,30 +34,30 @@ export interface PostFeedbackValue {
 }
 
 /**
- * Converts a command outcome into messages suitable for the post form.
+ * Converts a refused Command acknowledgement into messages suitable for the post form.
  */
 export const PostFeedback: Readonly<{
   // prettier-ignore
 
-  from(outcome: Exclude<ClientOutcome, { readonly kind: "ok" }>): PostFeedbackValue;
+  from(acknowledgement: Exclude<CommandAcknowledgement, { readonly kind: "ok" }>): PostFeedbackValue;
 }> = Object.freeze({
   // prettier-ignore
 
   /**
    * Extracts field messages from packed server validation details.
    *
-   * @param outcome The unsuccessful command outcome returned by the server.
+   * @param acknowledgement The refusal returned during Command admission.
    * @returns The field messages or a general retry notice.
    */
-  from(outcome: Exclude<ClientOutcome, { readonly kind: "ok" }>): PostFeedbackValue {
+  from(acknowledgement: Exclude<CommandAcknowledgement, { readonly kind: "ok" }>): PostFeedbackValue {
     const general: PostFeedbackValue = {
       fields: {},
       general: "Message was not posted. Please retry.",
     };
-    if (outcome.kind !== "error" || outcome.error.$typeName !== ErrorSchema.typeName)
+    if (acknowledgement.kind !== "error" || acknowledgement.error.$typeName !== ErrorSchema.typeName)
       return general;
     const details = (
-      outcome.error as { readonly details?: Parameters<typeof AnyMessages.unpack>[0] }
+      acknowledgement.error as { readonly details?: Parameters<typeof AnyMessages.unpack>[0] }
     ).details;
     const validation =
       details === undefined ? undefined : AnyMessages.unpack(details, ValidationErrorSchema);

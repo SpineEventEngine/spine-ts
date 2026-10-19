@@ -681,6 +681,21 @@ a starting time, and has no durable operation identity, progress, Inbox
 catch-up delivery, restart, resumption, or historical/live coordination. It is
 not JVM-equivalent Projection catch-up.
 
+Event Topics accept `include_all` or equality filters on the complete
+`context.past_message` Origin. The filter value must be a valid packed
+`spine.core.Origin`; other Event field paths, operators, ID filters, empty
+filter trees, and malformed values are rejected. Existing composite-filter
+limits apply. This is the immediate previous signal, not any ancestor in a
+causal chain. Tenant isolation remains independent of the filter.
+
+Origin filters use Protobuf value equality for the entire supported message,
+including actor context and grand-origin. Packed `Any` payloads retain their
+exact type URL and bytes. Expected Origins with unknown fields in their nested
+message structure are unsupported and rejected; actual Origins with such
+unknown fields cannot match. This avoids silently ignoring fields while keeping
+the same equality semantics as Spine JVM for supported filters. The same rule
+applies to direct and stored subscription definitions.
+
 Active subscription streams and queues are process-local. `Stand` serves
 authoritative queries from current state and Entity subscriptions observe
 committed `EntityStateChanged` messages on the paired System Context EventBus,
