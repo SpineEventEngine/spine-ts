@@ -596,6 +596,10 @@ importers:
       react:
         specifier: ^19.2.8
         version: 19.2.8
+    devDependencies:
+      '@bufbuild/protobuf':
+        specifier: 2.12.1
+        version: 2.12.1
 
   packages/client-web:
     dependencies:

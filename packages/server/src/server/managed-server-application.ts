@@ -1120,17 +1120,40 @@ export class ManagedServerCoordinator {
       ...[...this.#retired].map((replica) => this.#closeRetired(replica)),
     ];
     const children = Promise.allSettled(childCloses);
-    await this.#awaitDeliveryDrains(replicas, children);
-    await this.#nodeCoordinator?.closeSubscriptions();
-    for (const replica of replicas) {
-      if (replica.child.connected) replica.child.send({ type: "finish-close" }, () => undefined);
+    const failures = await this.#awaitDeliveryDrains(replicas);
+    await this.#finishClose(replicas, children, failures);
+  }
+
+  /**
+   * Cancels relays, releases children, and closes the Coordinator after a drain attempt.
+   * @param replicas The active children being closed.
+   * @param children The already-running bounded child close attempts.
+   * @param failures Errors collected from the drain phase.
+   */
+  async #finishClose(
+    replicas: readonly ReplicaRecord[],
+    children: Promise<PromiseSettledResult<void>[]>,
+    failures: unknown[],
+  ): Promise<void> {
+    try {
+      await this.#nodeCoordinator?.closeSubscriptions();
+    } catch (error) {
+      failures.push(error);
     }
-    const results = [
-      ...(await children),
-      ...(await Promise.allSettled([this.#nodeCoordinator?.close()])),
-    ];
-    const failures: unknown[] = [];
-    for (const result of results) if (result.status === "rejected") failures.push(result.reason);
+    for (const replica of replicas) {
+      try {
+        if (replica.child.connected) replica.child.send({ type: "finish-close" }, () => undefined);
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    const childResults = await children;
+    const coordinator = Promise.resolve().then(() => this.#nodeCoordinator?.close());
+    const [coordinatorResult] = await Promise.allSettled([coordinator]);
+    for (const result of childResults)
+      if (result.status === "rejected" && !failures.includes(result.reason))
+        failures.push(result.reason);
+    if (coordinatorResult.status === "rejected") failures.push(coordinatorResult.reason);
     if (this.#terminalChildFailure !== undefined && !failures.includes(this.#terminalChildFailure))
       failures.push(this.#terminalChildFailure);
     if (failures.length === 1) throw failures[0];
@@ -1139,27 +1162,19 @@ export class ManagedServerCoordinator {
   }
 
   /**
-   * Waits for actual child drains and retains failures from bounded child cleanup.
+   * Waits for actual child Delivery drains without awaiting final child exits.
    *
    * @param replicas The active child incarnations.
-   * @param children The already-running child close attempts.
-   * @returns Completion after Delivery drains or their bounded failures.
+   * @returns Drain failures to report after child and Coordinator cleanup.
    */
-  async #awaitDeliveryDrains(
-    replicas: readonly ReplicaRecord[],
-    children: Promise<PromiseSettledResult<void>[]>,
-  ): Promise<void> {
+  async #awaitDeliveryDrains(replicas: readonly ReplicaRecord[]): Promise<unknown[]> {
     const deliveryDrains = replicas.map(
       (replica) => replica.closeAttempt?.drained.promise ?? Promise.resolve(),
     );
     const results = await Promise.allSettled([this.#drainStart, ...deliveryDrains]);
     const failures: unknown[] = [];
     for (const result of results) if (result.status === "rejected") failures.push(result.reason);
-    if (failures.length === 0) return;
-    for (const result of await children)
-      if (result.status === "rejected") failures.push(result.reason);
-    if (failures.length === 1) throw failures[0];
-    throw new AggregateError(failures, "Managed child Delivery drain failed.");
+    return failures;
   }
 
   /**

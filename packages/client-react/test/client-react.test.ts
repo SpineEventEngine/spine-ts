@@ -13,6 +13,8 @@
  */
 
 // @vitest-environment jsdom
+import { create } from "@bufbuild/protobuf";
+import { anyPack } from "@bufbuild/protobuf/wkt";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import {
   createElement,
@@ -28,6 +30,9 @@ import type {
   SubscriptionDelivery,
   SubscriptionLifecycle,
 } from "@spine-event-engine/client-web";
+import { EventContextSchema, EventIdSchema, EventSchema } from "@spine-event-engine/proto";
+import { EventUpdatesSchema, SubscriptionUpdateSchema } from "@spine-event-engine/proto/client";
+import { ProjectCreatedSchema } from "../../server/test-fixtures/generated/repository-routing/project_events_pb.js";
 
 import {
   SpineClientProvider,
@@ -614,13 +619,40 @@ describe("client-react", () => {
     });
     await Promise.resolve();
     await Promise.resolve();
-    const first = { kind: "update", update: {} as never } as const;
-    const second = { kind: "update", update: {} as never } as const;
+    const delivery = (id: string) => ({
+      kind: "update" as const,
+      update: create(SubscriptionUpdateSchema, {
+        update: {
+          case: "eventUpdates",
+          value: create(EventUpdatesSchema, {
+            event: [
+              create(EventSchema, {
+                id: create(EventIdSchema, { value: id }),
+                context: create(EventContextSchema),
+                message: anyPack(
+                  ProjectCreatedSchema,
+                  create(ProjectCreatedSchema, { id, name: `Project ${id}`, priority: 1 }),
+                ),
+              }),
+            ],
+          }),
+        },
+      }),
+    });
+    const first = delivery("project-first");
+    const second = delivery("project-second");
     handle.emitDelivery(first);
     handle.emitDelivery(second);
     handle.emitLifecycle({ state: "connected", generation: 1 });
     await waitFor(() => {
       expect(deliveries).toEqual([first, second]);
+      expect(
+        deliveries.map((item) =>
+          item.kind === "update" && item.update.update.case === "eventUpdates"
+            ? item.update.update.value.event[0]?.id?.value
+            : undefined,
+        ),
+      ).toEqual(["project-first", "project-second"]);
       expect(lifecycles).toEqual([{ state: "connected", generation: 1 }]);
     });
   });

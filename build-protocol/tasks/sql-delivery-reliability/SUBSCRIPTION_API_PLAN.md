@@ -263,7 +263,9 @@ React state alone can coalesce rapid updates. Keep one consumer per stream.
 The Message Board posting form will consume its helper subscription directly
 from the user-triggered posting flow, with explicit error handling and component
 cleanup. Do not post Commands from an effect or feed that same stream to a hook.
-Test two rapid updates in both the hook and the posting flow.
+Test rapid continuing updates through the hook and client. The Message Board
+posting flow emits one `MessagePosted` or `MessageAlreadyPosted` outcome for each
+`PostMessage`, so test its matching confirmation or rejection and stream cleanup.
 
 ## Examples that will use the API
 

@@ -39,3 +39,9 @@ Agent Datastore checks passed; the pre-existing Datastore history-trimming test
 still times out with the emulator. Release checks are recorded in
 [PR #19](https://github.com/SpineEventEngine/spine-ts/pull/19/checks).
 Detailed verification records remain disposable and outside Git.
+
+Review corrections keep managed close cleanup active after drain and relay/IPC
+failures. The browser test checks both distinct per-post cancellations across
+nine posts; the React test uses distinct generated Events for rapid callbacks,
+while the Message Board form tests its single domain outcome. Full release checks,
+focused Vitest, Chromium, affected typechecks, formatting, and cleanup passed.
