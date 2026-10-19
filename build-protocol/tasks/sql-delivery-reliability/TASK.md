@@ -22,14 +22,25 @@ survive immediate retries and settle after each message completes.
 Independent runtime, API, documentation, and test reviews addressed the changed
 behavior. Focused tests, PostgreSQL 16/18, MySQL, MariaDB, two/eight-process
 configurations, crash scenarios, and real subscription transports have passed.
-The final monitor correction passed independent review, live reruns, and the
-full release profile. The PR checks record verification of the pushed commit.
+Before the subscription API addition, the monitor correction passed independent
+review, live reruns, the full release profile, and the then-current PR checks.
 Disposable evidence stays out of Git.
 
-The requested [subscription API addition](SUBSCRIPTION_API_PLAN.md) is implemented
-on this same branch. API, reliability, documentation, test, and security reviews
-are resolved; full release verification is in progress. The
-runtime verification summary above applies to changes preceding this addition.
-Integration with official `master` needs a separate decision: its Agent recovery
-republishes saved Events, contrary to the author's prohibition. No merge has
-started. The branch now uses the unused snapshot 25 release version.
+The [subscription API addition](SUBSCRIPTION_API_PLAN.md) is complete on this
+branch. `postAndSubscribe` observes multiple Event/rejection types using exact
+immediate Origin matching; existing subscriptions support optional activation
+and first-update timeouts, with no defaults. Subscriptions continue after the
+first update or its timeout. Browser, Node, React, BlackBox, public documentation,
+Message Board, and Todo use the supported APIs.
+
+Independent API, lifecycle, documentation, test, and security reviews are resolved.
+The full release checks passed with 5,383 tests and 90.00% branch coverage; three
+tests are intentionally skipped. Live PostgreSQL 16/18, MySQL, MariaDB, all 16
+process/Delivery configurations, and real browser transports passed. All 19
+snapshot 25 packages passed external-consumer checks and the offline release
+trial. No packages were published. Disposable evidence remains ignored.
+
+The PR still conflicts with newer official `master`; GitHub checks have not run
+on this addition. The new Agent recovery on `master` republishes saved Events,
+contrary to the author's prohibition, so integration needs a separate decision.
+No merge has started.

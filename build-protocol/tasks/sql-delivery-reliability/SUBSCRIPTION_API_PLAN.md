@@ -1,7 +1,8 @@
 # Command outcome subscriptions and subscription startup timeouts
 
-Status: independently reviewed; all findings addressed. Implementation authorized
-and in progress. No product questions remain.
+Status: implemented and independently reviewed; all accepted findings addressed.
+The release checks and package trial passed. The plan below records the approved
+scope; the short result summary is in [TASK.md](TASK.md).
 
 This is an addition to the existing `sql-delivery-subscription-reliability`
 branch in its current worktree. Do not create another branch or worktree, reset
